@@ -40,7 +40,7 @@ function passivity(G, omega, title :: String = "Passivity assessment")
     f = real(omega)./(2*pi)
 
     # Determine minimum real part of the eigenvalues of the matrix at each frequency
-    passivity_index = minimum.(real.(eigvals.(G)))
+    passivity_index = minimum.(real.(eigvals.(G .+ adjoint.(G))))
     # plotly() # To activate interactive plot
     p_plot = plot(f, passivity_index, linewidth = 3, c = :blue, label = "G(s)")  
     plot!([f[1],f[end]], [0,0], linewidth = 1.5, c = :red, line = :dash, label = "Zero")  

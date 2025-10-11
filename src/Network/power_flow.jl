@@ -38,7 +38,8 @@ function power_flow(net:: Network)
 
     #### 2. Run PowerModelsACDC power flow
     PowerModelsACDC.process_additional_data!(data)
-    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-6, "print_level" => 0, "max_iter" => 4000)
+    # TODO: Dirty fix of increasing tolerance with certain error. To be taken up with Hakan, Matteo or Giacomo.
+    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-4, "print_level" => 0, "max_iter" => 4000, "check_derivatives_for_naninf" => "yes")
     s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false)
     result = solve_acdcpf(data, ACPPowerModel, ipopt; setting = s)
     println(result["termination_status"])
