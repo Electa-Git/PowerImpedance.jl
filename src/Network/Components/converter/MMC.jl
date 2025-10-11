@@ -98,7 +98,7 @@ The MMC has three connection pins:
 
 # The implemented state space model is based on:
 [1] G. Bergna-Diaz, J. Freytes, X. Guillaud, S. D’Arco, and J. A. Suul, “Generalized Voltage-Based State-Space Modeling of Modular Multilevel Converters With Constant Equilibrium in Steady State,” IEEE Journal of Emerging and Selected Topics in Power Electronics, vol. 6, no. 2, pp. 707–725, Jun. 2018, doi: 10.1109/JESTPE.2018.2793159.
-The dq-frame convention is: d-leading, q-lagging.
+The dq-frame convention is: d-leading, q-lagging. The state-space is defined in the global frame defined by the slack buses (Powerflow)
 
 # Example construction: 
 ```julia
