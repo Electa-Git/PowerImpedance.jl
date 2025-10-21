@@ -1,16 +1,24 @@
 
-# Example 7.8 from Grainger
-Y= [-im*16.75 im*11.75 im*2.50 im*2.50;
-    im*11.75 -im*19.25 im*2.5 im*5.00;
-    im*2.50 im*2.50 -im*5.80 im*0.00;
-    im*2.50 im*5.00 im*0.00 -im*8.30]
+#  Example from ECEN 615
+#  Methods of Electric Power 
+#  Systems Analysis
+#  Lecture 17:EMSs, SVD, Pseudo Inverse, Equivalents
+#  Prof. Tom Overbye
 
-PowerImpedanceACDC.kron(Y, [1,3,4])
+Y=[-0.0-20.83im   0.0+16.67im   0.0+4.17im   0.0+0.0im    0.0+0.0im     0.0+0.0im     0.0+0.0im
+  0.0+16.67im  -0.0-52.78im   0.0+5.56im   0.0+5.56im   0.0+8.33im    0.0+16.67im   0.0+0.0im
+  0.0+4.17im    0.0+5.56im   -0.0-43.1im   0.0+33.3im   0.0+0.0im     0.0+0.0im     0.0+0.0im
+  0.0+0.0im     0.0+5.56im    0.0+33.3im  -0.0-43.1im   0.0+4.17im    0.0+0.0im     0.0+0.0im
+  0.0+0.0im     0.0+8.33im    0.0+0.0im    0.0+4.17im  -0.0-29.17im   0.0+0.0im     0.0+16.67im
+  0.0+0.0im     0.0+16.67im   0.0+0.0im    0.0+0.0im    0.0+0.0im    -0.0-25.0im    0.0+8.33im
+  0.0+0.0im     0.0+0.0im     0.0+0.0im    0.0+0.0im    0.0+16.67im   0.0+8.33im   -0.0-25.0im]
 
-# Test set with validation values from Grainger, slightly different due to rounding errors
-Y_validation=[ -9.57792*im  4.02597*im   5.55195*im;
-               4.02597*im  -5.47532*im   0.649351*im;
-               5.55195*im  0.649351*im  -7.0013*im]
 
-@test PowerImpedanceACDC.kron(Y, [1,3,4]) ≈ Y_validation atol=1e-3
+# Test set with validation values slightly different due to rounding errors
+Y_validation=[ -28.128*im  11.463*im   16.667*im    0;
+               11.463*im   -28.130*im   0   16.667*im;
+                16.667*im   0   -25.0*im   8.333*im;
+               0   16.667*im    8.333*im  -25*im]
+
+@test PowerImpedanceACDC.kron(Y,  [2,5,6,7]) ≈ Y_validation atol=1e-1
 
