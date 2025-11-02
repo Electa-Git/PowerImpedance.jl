@@ -39,7 +39,7 @@ function power_flow(net:: Network)
     #### 2. Run PowerModelsACDC power flow
     PowerModelsACDC.process_additional_data!(data)
     # TODO: Dirty fix of increasing tolerance with certain error. To be taken up with Hakan, Matteo or Giacomo.
-    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-4, "print_level" => 0, "max_iter" => 4000, "check_derivatives_for_naninf" => "yes")
+    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-8, "print_level" => 0, "max_iter" => 4000, "check_derivatives_for_naninf" => "yes")
     s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false)
     result = solve_acdcpf(data, ACPPowerModel, ipopt; setting = s)
     println(result["termination_status"])
@@ -65,7 +65,7 @@ function power_flow(net:: Network)
             Pdc = elem_dict["pdc"] * global_dict["S"] / 1e6
             Vm = (result["solution"]["bus"][string(ac_bus)]["vm"] * global_dict["V"] / 1e3) * sqrt(2) # Convert the LN-RMS voltage coming from the PF to LN-PK
             θ = result["solution"]["bus"][string(ac_bus)]["va"]
-            Vdc = 2*result["solution"]["busdc"][string(dc_bus)]["vm"] * global_dict["V"] / 1e3 # Convert the pole-ground voltage coming from PF to pole-pole voltage
+            Vdc = result["solution"]["busdc"][string(dc_bus)]["vm"] * (data["dcpol"] * global_dict["V"] / 1e3) # Convert the pole-ground voltage coming from PF to pole-pole voltage
             Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
             Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6 # Think about this!
 
@@ -88,6 +88,8 @@ function power_flow(net:: Network)
             println(θ)
             print(update_string * " DC Voltage [kV]: ")
             println(Vdc)
+            print(update_string * " DC Power [MW]: ")
+            println(Pdc)
 
         elseif is_generator(element) #ac bus is the one with no ground in it's name
             
@@ -147,13 +149,12 @@ function set_bus_type(bus_data, type)
 end
 
 function set_bus_type_dc(bus_data, type)
-
-    ## P(1) < Vdcdroop (3) < Vdc(2) < Vac_droop (4)
-    order = [1,3,2,4] # Change up order bcs cst Vdc is above droop
+    ## P(1) < Vdc droop with Pdc (3) < Vdc droop with Pac (4) < Vdc(2)
+    order = [1,3,4,2] # Change up order so DC voltage control has the highest priority, then droop and lastly constant power
     current_type = bus_data["bus_type"]
     imp_type = findfirst(isequal(type), order) # You parse type to integer and then find the index which gives its relative importance
     imp_current = findfirst(isequal(current_type), order)
-    if imp_type > imp_current # If new type has higher importance we put it n place
+    if imp_type > imp_current # If new type has higher importance we put it in place
         bus_data["bus_type"] = type
     end
     return bus_data
@@ -426,7 +427,7 @@ function data_init(data, global_dict)
     data["name"] = "network"
     data["source_version"] = "0.0.0"
     data["per_unit"] = true
-    data["dcpol"] = 2 # bipolar converter topologym check in the future
+    data["dcpol"] = 2 # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
     data["baseMVA"] = global_dict["S"] / 1e6
     data["bus"] = Dict{String, Any}()
     data["busdc"] = Dict{String, Any}()

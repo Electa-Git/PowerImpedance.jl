@@ -47,12 +47,14 @@ function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, ele
         ((data["convdc"])[string(key)])["type_ac"] = 1  # PQ ac bus TODO: Check if this makes sense in the presence of GFM
         ((data["convdc"])[string(key)])["Vtar"] = converter.Vₘ * 1e3 / global_dict["V"]
     end
-    if in(:p, keys(converter.controls))
-        ((data["convdc"])[string(key)])["type_dc"] = 1  # constant AC active power        
+
+    if in(:p, keys(converter.controls)) && in(:vdc_droop, keys(converter.controls))
+        ((data["convdc"])[string(key)])["type_dc"] = 4  # DC voltage droop using AC power
+        # ((data["convdc"])[string(key)])["type_dc"] = 3  # DC voltage droop using DC power
+    elseif in(:p, keys(converter.controls))
+        ((data["convdc"])[string(key)])["type_dc"] = 1  # Constant AC active power        
     elseif in(:dc, keys(converter.controls))
         ((data["convdc"])[string(key)])["type_dc"] = 2  # constant DC voltage
-    else
-        ((data["convdc"])[string(key)])["type_dc"] = 3  # DC voltage droop
     end
 
     if in(:vac_supp, keys(converter.controls))
@@ -63,11 +65,21 @@ function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, ele
         ((data["convdc"])[string(key)])["kq_droop"] = 0
     end
 
-    # droop control - not implemented
-    ((data["convdc"])[string(key)])["droop"] = 0
-    ((data["convdc"])[string(key)])["Pdcset"] = converter.P_dc
-    ((data["convdc"])[string(key)])["Vdcset"] = converter.Vᵈᶜ * 1e3 / global_dict["V"]/2
+    # Power-voltage droop control
+    if in(:vdc_droop, keys(converter.controls))
+        # Droop control
+        ((data["convdc"])[string(key)])["droop"] = 1/converter.controls[:vdc_droop].Kₚ * (converter.Vᵈᶜ /  (data["dcpol"]*global_dict["V"] / 1e3)) / (converter.Sbase *1e6 / global_dict["S"]) # In pu/pu
+        ((data["convdc"])[string(key)])["Vdcset"] = converter.controls[:vdc_droop].ref[1] * converter.Vᵈᶜ / (data["dcpol"]*global_dict["V"] / 1e3) # In pu
+        ((data["convdc"])[string(key)])["Pacset"] = - converter.P # Using AC-side power [MW]
+        ((data["convdc"])[string(key)])["Pdcset"] = converter.P_dc # Using DC-side power [MW]
+    else
+        # Constant power control or DC voltage control
+        ((data["convdc"])[string(key)])["droop"] = 0
+        ((data["convdc"])[string(key)])["Pdcset"] = converter.P_dc
+        ((data["convdc"])[string(key)])["Vdcset"] = converter.Vᵈᶜ / (data["dcpol"]*global_dict["V"] / 1e3)
+    end
     ((data["convdc"])[string(key)])["dVdcSet"] = 0
+    
     # LCC converter
     ((data["convdc"])[string(key)])["islcc"] = 0
 
@@ -120,10 +132,10 @@ function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, ele
         ((data["bus"])[string(ac_bus)])["vmin"] = 0.9 * data["bus"][string(ac_bus)]["vm"]
         ((data["bus"])[string(ac_bus)])["vmax"] = 1.1 * data["bus"][string(ac_bus)]["vm"]
     end
-    ((data["busdc"])[string(dc_bus)])["Vdc"] = 1/2* converter.Vᵈᶜ * 1e3 / global_dict["V"]  # Convert from pp to pg for PMACDC       #TODO: Make sense of this 
+    ((data["busdc"])[string(dc_bus)])["Vdc"] = converter.Vᵈᶜ / (data["dcpol"] * global_dict["V"] / 1e3)  # Convert from pp to pg for PMACDC
     ((data["busdc"])[string(dc_bus)])["Vdcmax"] = 1.1 * ((data["busdc"])[string(dc_bus)])["Vdc"]
     ((data["busdc"])[string(dc_bus)])["Vdcmin"] = 0.9 * ((data["busdc"])[string(dc_bus)])["Vdc"]
-    ((data["busdc"])[string(dc_bus)]) = set_bus_type_dc((data["busdc"])[string(dc_bus)], 1)
+    ((data["busdc"])[string(dc_bus)]) = set_bus_type_dc((data["busdc"])[string(dc_bus)], ((data["convdc"])[string(key)])["type_dc"])
 end
 
 function timeDelayPadeMatrices(padeOrderNum,padeOrderDen,t_delay,numberVars)
