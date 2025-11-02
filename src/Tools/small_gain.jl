@@ -1,6 +1,6 @@
 export small_gain
 """
-    small_gain(G1, G2, omega, title::String = "Small gain: SVD")
+    small_gain(G1, G2, omega, title::String = "Small gain theorem evaluation via SVD")
 
 Performs a small gain analysis by computing the maximum singular values of two system transfer function 
 matrices `G1` and `G2` across a range of frequencies `omega` and visualizing their product.
@@ -9,7 +9,7 @@ matrices `G1` and `G2` across a range of frequencies `omega` and visualizing the
 - `G1::Array{Matrix{Complex}}`: A collection of system matrices evaluated at different frequencies (first system).
 - `G2::Array{Matrix{Complex}}`: A collection of system matrices evaluated at different frequencies (second system).
 - `omega::Vector{Real}`: A vector of angular frequencies (in rad/s) at which `G1` and `G2` are evaluated.
-- `title::String`: (Optional) Title of the small gain plot. Default is `"Small gain: SVD"`.
+- `title::String`: (Optional) Title of the small gain plot. Default is `"Small gain theorem evaluation via SVD"`.
 
 ## Returns
 - `Vector{Float64}`: The maximum singular values of the product `G1(ω) * G2(ω)` at each frequency.
@@ -37,7 +37,7 @@ small_gain_index = small_gain(G1, G2, omega)
 println("Small Gain Index:\n", small_gain_index)
 ```
 """
-function small_gain(G1, G2, omega, title :: String = "Small gain: SVD")
+function small_gain(G1, G2, omega, title :: String = "Small gain theorem evaluation via SVD")
 
     f = real(omega)./(2*pi)
 
@@ -54,6 +54,6 @@ function small_gain(G1, G2, omega, title :: String = "Small gain: SVD")
     plot!(xlims = (minimum(f),maximum(f)), legend = :topleft)  #xticks = [10^-3, 10^-2, 10^-1, 10^0, 10^1, 10^2, 10^3, 10^4, 10^5, 10^6]
     plot!(size=(1000,1000))
     display(p_abs)
-    return passivity_index
+    return S12
 
 end
