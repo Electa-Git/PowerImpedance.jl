@@ -156,9 +156,10 @@ function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :
     x = real(Λ)
     y = imag(Λ)
 
-    # Counting of clockwise and counterclockwise encirclements 
+    # Counting of clockwise and counterclockwise encirclements and estimate the unstable frequencies
     cw = []
     ccw = []
+    unstable_modes = Float64[]
 
     for i in 1:λₙ
         cwi = 0      #Number of clockwise encirclements
@@ -168,6 +169,12 @@ function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :
                 cwi += 1
             elseif (y[j-1, i] > 0 && y[j, i] < 0  && x[j-1, i] < -1)
                 ccwi += 1
+            end
+        end
+        if abs(cwi - ccwi) > 0
+            # Compute the unstable frequency and add them to the list
+            for mode in unstable_frequency(Λ[:,i], omega)
+                push!(unstable_modes,mode)
             end
         end
         push!(cw, cwi)
@@ -187,6 +194,7 @@ function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :
     println("")
     if N > 0
         println("Result stability assessment: Unstable system \n")
+        println("Unstable frequencies around ",round.(unstable_modes; digits=2), " Hz")
     elseif N < 0
         println("Result stability assessment: Unstable subsystem \n")
     else

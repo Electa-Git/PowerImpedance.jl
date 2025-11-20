@@ -26,7 +26,7 @@ function make_y(net :: Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}}, s 
 function make_y(net :: Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}}, s :: Complex)
 
     n = length(dict[:node_list])
-    Y_matrix = zeros(Complex, n, n)
+    Y_matrix = zeros(ComplexF64, n, n)
     for element in dict[:element_list]
         element = net.elements[element]
             Y = get_y(element, s) 
