@@ -40,7 +40,7 @@ If you find PowerImpedanceACDC useful in your work, we kindly request that you c
 
 ## Contributors
 - Aleksandra Lekic & Özgür Can Sakinci: main developers
-- F. Garcia, J. Kircheis, A. Saad, R. Vander Eeckt: additional functionalities and validation
+- F. J. Cifuentes Garcia, J. Kircheis, A. Saad, R. Vander Eeckt: additional functionalities and validation
 
 ## License
 This is a free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. PowerImpedanceACDC is distributed in the hope that it will be useful, but without any warranty; without even the implied warranty of merchantability or fitness for a particular purpose. See the GNU General Public License for more details.
