@@ -223,10 +223,11 @@ function update!(converter :: MMC, Vm, θ, Pac, Qac, Vdc, Pdc) #Function to calc
             end
         elseif (key == :vac) || (key == :vac_supp)
             if (length(val.ref) == 1) && (val.ref[1] == 0)
-                
                 val.ref = [sqrt(2)*converter.Vₘ]
-
-
+            end
+        elseif (key == :vdc_droop)
+            if (length(val.ref) == 1) && (val.ref[1] == 0)
+                val.ref = [Vdc]
             end
         end
     end
@@ -429,6 +430,26 @@ function update!(converter :: MMC, Vm, θ, Pac, Qac, Vdc, Pdc) #Function to calc
                 ))
             
             index += 1
+        
+        
+        elseif isa(converter.controls[:p], PI_control) && !(converter.gfm) && in(:vdc_droop, keys(converter.controls)) # PI power control with GFL converter and DC voltage droop
+            # Active power reference is changed when in DC voltage droop
+            # converter.controls[:vdc_droop].ref[1] /= vDC_base # To per unit
+            push!(exp.args, :(
+                Δp_unfiltered = $(converter.controls[:vdc_droop].Kₚ)*($(converter.controls[:vdc_droop].ref[1]) - Vdc); # Delta power reference (before filtering)
+                F[$index+1] = $(converter.controls[:vdc_droop].ω_f) *(Δp_unfiltered - x[$index+1]); # First order LPF to the delta p reference
+                p_ref_DCdroop = $(converter.controls[:p].ref[1]) - x[$index+1] # Constanr power reference minus the filtered delta power reference
+                ))
+            index += 1 # LPF state
+
+            # Rest is as constant P control but using the updated reference power: p_ref_DCdroop
+            push!(exp.args, :(
+
+                iΔd_ref = ($(converter.controls[:p].Kₚ) * (p_ref_DCdroop - P_ac_f) + x[$index+1]);
+                F[$index+1] = $(converter.controls[:p].Kᵢ) *(p_ref_DCdroop - P_ac_f);
+                
+                ))
+            index += 1        
 
        end
 

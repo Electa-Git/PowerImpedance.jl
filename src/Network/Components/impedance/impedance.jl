@@ -140,7 +140,7 @@ function  make_power_flow!(imp:: Impedance, data, nodes2bus, bus2nodes, elem2com
         #TODO: Add two pin impedance case here as well --> Transformation from 2 --> 1 pin
         key = branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
         abcd = eval_abcd(imp, 1e-6*1im)
-        Z = abcd[1,2] / global_dict["Z"]
+        Z = abcd[1,2] * global_dict["S"] / global_dict["V"]^2 # To DC per unit system
         ((data["branchdc"])[string(key)])["r"] = real(Z)
     end
     
