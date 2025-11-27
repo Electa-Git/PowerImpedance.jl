@@ -419,7 +419,7 @@ function update!(converter :: MMC, Vm, θ, Pac, Qac, Vdc, Pdc) #Function to calc
 
 
 
-       elseif isa(converter.controls[:p], PI_control) && !(converter.gfm) #Typical PI control with grid-following converter
+       elseif isa(converter.controls[:p], PI_control) && !(converter.gfm) && !in(:vdc_droop, keys(converter.controls)) #Typical PI control with grid-following converter
         
             push!(exp.args, :(
 
@@ -742,40 +742,10 @@ function update!(converter :: MMC, Vm, θ, Pac, Qac, Vdc, Pdc) #Function to calc
         elseif (key == :energy)
             if !in(:p, keys(converter.controls)) # In this case we havent defined a P controller, so we need to define the Pacf for the energy controller
 
-                    push!(exp.args, :(
-                                P_ac = (Vᴳd * iΔd + Vᴳq * iΔq);))
-
-
-                    if ((converter.controls[:q].n_f)) >= 1 # Check whether power filters are generally used and apply same filter for Pac
-
-                    Abutt_p=Abutt_q
-                    Bbutt_p=Bbutt_q
-                    Cbutt_p=Cbutt_q
-                    Dbutt_p=Dbutt_q
-                    push!(exp.args, :(
-                        
-                        statesButt_p= x[$index + 1 : $index + 1*$(converter.controls[:q].n_f)]; 
-                        F[$index + 1 : $index + 1*$(converter.controls[:q].n_f)] = $Abutt_p*statesButt_p + $Bbutt_p*P_ac;
-                        P_ac_f=dot($Cbutt_p,statesButt_p)+$Dbutt_p*P_ac;
-                
-                    ))
-                    # init_x = [init_x;zeros(index-length(init_x))];
-                    # init_x = [init_x; 1*zeros(converter.controls[:p].n_f)];
-                    index += 1*(converter.controls[:q].n_f)
-                    else # No filtering of P_ac
                         push!(exp.args, :(
-
-                        P_ac_f=P_ac;
-
-                        ))
-                    end
-
-
+                                P_ac_f = (Vᴳd * iΔd + Vᴳq * iΔq);))
 
             end
-
-
-
 
             # zero energy control
             push!(exp.args, :(
@@ -1026,10 +996,12 @@ function eval_parameters(converter :: MMC, s :: Complex)
     I = Matrix{Complex}(Diagonal([1 for dummy in 1:size(converter.A,1)]))
     Y = converter.C * ((s*I-converter.A) \ converter.B) + converter.D # C*((sI-A)^-1)*B+D. This matrix is in pu
     
+    #Conversion of admittance from pu to SI
     Y[1,:] *= converter.iDCbase # DC current to SI
     Y[2:3,:] *= converter.iACbase * converter.turnsRatio # AC current to SI considering the transformer's turns ratio
     Y[:,1] /= converter.vDCbase # DC voltage to SI
     Y[:,2:3] /= converter.vACbase # AC voltage to SI
+    
     # Structure of Y
     #         Ydcdc   Ydcd   Ydcq
     #    Y=   Yddc    Ydd    Ydq
@@ -1037,8 +1009,6 @@ function eval_parameters(converter :: MMC, s :: Complex)
 
     return Y
 end
-
-
 
 
 
