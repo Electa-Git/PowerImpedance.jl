@@ -165,7 +165,7 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
     p_abs = plot(f, λ_mag_dB, linewidth = 3, c = :blue, label = "Lambda " * string(1))  
     plot!(xlabel = "Frequency [Hz]", ylabel = "abs(lambda) [dB]", framestyle = :box, xaxis = :log10) 
     plot!(xlims = (fmin, fmax), ylims = (20*log10(y_min)-10, 20*log10(y_max)+10), legend = :topleft) #xticks = [10^-3, 10^-2, 10^-1, 10^0, 10^1, 10^2, 10^3, 10^4, 10^5, 10^6]
-    color = palette(:default) #palette(:tab10)
+    color = palette(:default,λₙ) #palette(:tab10)
     for i in 2:λₙ
         λ_mag_dB = 20*log10.(abs.(Λ[:,i]))
         plot!(f, λ_mag_dB, linewidth = 3, c = color[i], label = "Lambda " * string(i))  
@@ -176,7 +176,7 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
     p_im = plot(f, λ_imag, linewidth = 3, c = :blue, label = "Lambda " * string(1))  
     plot!(xlabel = "Frequency [Hz]", ylabel = "Im(lambda)", framestyle = :box, xaxis = :log10) 
     plot!(xlims = (fmin, fmax),  legend = :topleft) 
-    color = palette(:default) #palette(:tab10)
+    color = palette(:default,λₙ) #palette(:tab10)
     for i in 2:λₙ
         λ_imag= imag.(Λ[:,i])
         plot!(f, λ_imag, linewidth = 3, c = color[i], label = "Lambda " * string(i))  

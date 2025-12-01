@@ -1,7 +1,7 @@
 export make_y_matrix
 """
     make_y_matrix(network::Network; elim_elements::Array{Symbol} = Symbol[], 
-                  input_pins::Array{Any}, omega_range=(-3, 5, 100))
+                  input_pins::Array{Any}, freq_range=(0.01, 10000, 2000))
 
 Computes the frequency-dependent admittance matrix (Y-matrix) for a given electrical network.  
 It determines the nodal admittance representation based on the specified input pins and frequency range.
@@ -10,17 +10,17 @@ It determines the nodal admittance representation based on the specified input p
 - `network::Network`: The electrical network model for which the admittance matrix is computed.
 - `elim_elements::Array{Symbol}` (default `[]`): List of elements to be excluded from the computation.
 - `input_pins::Array{Any}`: A list of input nodes (ports) that define the matrix rows/columns.
-- `omega_range::Tuple{Real, Real, Int}` (default `(-3, 5, 100)`):  
-  Defines the range of angular frequencies in logarithmic scale:
-  - `min_ω`: Minimum exponent (base 10) for frequency.
-  - `max_ω`: Maximum exponent (base 10) for frequency.
-  - `n_ω`: Number of frequency points.
+- `freq_range::Tuple{Real, Real, Int}` (default `(0.01, 10000, 2000)`):  
+  Defines the range of frequencies in Hz in logarithmic scale:
+  - `min_f`: Minimum frequency.
+  - `max_f`: Maximum frequency.
+  - `n_f`: Number of frequency points.
 
 # Behavior
 - Recursively explores the network from the input pins to determine the node and element connectivity.
 - Constructs the Y-matrix by eliminating specified elements and non-essential nodes.
-- Computes admittance matrices over a frequency range given by `omega_range`.
-- Frequencies are logarithmically spaced and converted to radians per second (`ω = 2πf`).
+- Computes admittance matrices over a frequency range given by `freq_range`.
+- Frequencies are logarithmically spaced and internally converted to rad/s (`ω = 2πf`).
 
 # Output
 - Returns `Ybus`, an array of admittance matrices (one per frequency point).
@@ -32,10 +32,10 @@ It determines the nodal admittance representation based on the specified input p
 # Example
 ```julia
 net = create_network(...)  # Assume a valid network object
-Y_matrices = make_y_matrix(net, input_pins=["N1", "N2"], omega_range=(-2, 4, 50))
+Y_matrices = make_y_matrix(net, input_pins=["N1", "N2"], freq_range=(0.01, 10000, 2000))
 ```
 """
-function make_y_matrix(network :: Network; elim_elements :: Array{Symbol} = Array{Symbol}(undef,0,0), input_pins :: Array{Any}, omega_range = (-3, 5, 100))
+function make_y_matrix(network :: Network; elim_elements :: Array{Symbol} = Array{Symbol}(undef,0,0), input_pins :: Array{Any}, freq_range = (0.01, 10000, 2000))
 
     function make_lists(net::Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}},
         elim_elements::Array{Symbol}, start_pins::Array{Symbol})
@@ -79,9 +79,11 @@ function make_y_matrix(network :: Network; elim_elements :: Array{Symbol} = Arra
     make_lists(network, dict, elim_elements, unique(input_pins))
 
     # make frequency range
-    (min_ω, max_ω, n_ω) = omega_range
-    n = (max_ω - min_ω) / n_ω
-    omegas= 2*pi* 10 .^range(min_ω, max_ω, length= n_ω) 
+    (min_f, max_f, n_f) = freq_range
+    if !isa(n_f,Int)
+        n_f = parse(Int, n_f) 
+    end
+    omegas= 2*pi* 10 .^range(log10(min_f), log10(max_f), length= n_f) 
 
     Ybus=[] 
 

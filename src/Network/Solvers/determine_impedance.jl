@@ -3,7 +3,7 @@ export determine_impedance
 """
     function determine_impedance(network::Network; input_pins :: Array{Any},
         output_pins :: Array{Any}, elim_elements :: Array{Symbol},
-         freq_range = (0.001, 10000, 100))
+         freq_range = (0.001, 10000, 2000))
 
 Estimation of the impedance visible from the port, between input and
 output pins. Port pins can possibly be connected to some elements, which
@@ -29,19 +29,19 @@ To determine impedance visible from the voltage source `vs`, the following comma
 should be called:
 ```
 imp, omega = determine_impedance(net, elim_elements = [:vs], input_pins = Any[:Node1], output_pins = Any[:gnd],
-         freq_range = (0.001, 10000, 100))
+         freq_range = (0.01, 10000, 2000))
 ```
 Impedance is determined inside network `net`, from the element `vs` and the port defined
 with `input_pins` as array consisting of `Node1` and the `output_pins` containing
-array with `gnd`. Impedance is estimated for the frequency in [rad/s] with the range
-0.1 to 1000000 in 10000 points.
+array with `gnd`. Impedance is estimated for the frequency in Hz within the range
+0.01 to 10000 over 2000 points.
 
 The function returns complex impedance map and two arrays: first is the impedance
 array and the second one is frequency array.
 """
 function determine_impedance(network :: Network; input_pins :: Array{Any},
     output_pins :: Array{Any}, elim_elements :: Array{Symbol},
-    freq_range = (0.001, 10000, 100))
+    freq_range = (0.001, 10000, 2000))
 
     """
     function make_lists(net::Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}},

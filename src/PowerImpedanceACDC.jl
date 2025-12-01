@@ -95,6 +95,7 @@ You should have received a copy of the GNU General Public License along with thi
     include("Tools/EVD.jl")
     include("Tools/bodeplot.jl")
     include("Tools/passivity.jl")
+    include("Tools/unstable_frequency.jl")
 
     
     
