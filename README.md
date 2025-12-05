@@ -39,12 +39,23 @@ If you find PowerImpedanceACDC useful in your work, we kindly request that you c
 ```
 
 ## Contributors
-- Aleksandra Lekic & Özgür Can Sakinci: main developers
-- F. J. Cifuentes Garcia, J. Kircheis, A. Saad, R. Vander Eeckt: additional functionalities and validation
+- Aleksandra Leki: First implementation, OHL, Cables, Transformer, MMC
+- Özgür Can Sakinci: MMC, Two-level converter, Synchronous generator, Time delays
+- Thomas Roose: Generalized Nyquist, Eigenvalue decomposition, Bus participation factors 
+- Francisco Garcia: Passivity analysis, Small gain, Oscillation mode identification, MMC
+- Jan Kircheis: MMC, Component validation, Multinodal stability analysis, Line interface, Transformer 
+- Robbe Vander Eeckt: Component validation, Two-level converter, Power flow
+- Amr Saad: Component validation
+
 
 ## License
 This is a free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. PowerImpedanceACDC is distributed in the hope that it will be useful, but without any warranty; without even the implied warranty of merchantability or fitness for a particular purpose. See the GNU General Public License for more details.
 
 ## Future work
+- Integration of blackbox EMT converter models
+- Bipolar DC 
 - $V_{ac}$-droop for two-level converter
 - $V_{ac}$-control for both converters
+- Compensated MMC modulation
+- Speed improvements
+  
