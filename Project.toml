@@ -1,6 +1,6 @@
 name = "PowerImpedanceACDC"
 uuid = "8bb8d9d3-c57e-5130-a7c9-cb214ef560ae"
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 ControlSystemsBase = "aaaaaaaa-a6ca-5380-bf3e-84a91bcd477e"
