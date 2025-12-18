@@ -65,6 +65,7 @@ You should have received a copy of the GNU General Public License along with thi
     include("Network/Components/converter/controller.jl")
     include("Network/Components/converter/MMC.jl")
     include("Network/Components/converter/TLC.jl")
+    include("Network/Components/converter/blackbox_MMC.jl")
 
     # Machines
     include("Network/Components/machine/machine.jl")
