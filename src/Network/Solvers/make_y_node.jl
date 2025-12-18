@@ -272,8 +272,6 @@ dict[:node_list]=node_list
 dict[:element_list]=element_list
 
 
-#TODO: Make sense of it
-# make frequency range
 (min_f, max_f, n_f) = freq_range
 if !isa(n_f,Int)
     n_f = parse(Int, n_f) #Make Int to work with range (error when 1e4)

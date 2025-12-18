@@ -110,6 +110,7 @@ The dq-frame convention is: d-leading, q-lagging. The state-space is defined in 
         p = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
         q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159)
         )  
+```
 """
 function mmc(;args...) #Constructor 
     converter = MMC()
