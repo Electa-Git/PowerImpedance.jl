@@ -128,7 +128,7 @@ function is_source(element :: Element)
 end
 
 function is_converter(element :: Element)
-    (isa(element.element_value, MMC) || isa(element.element_value, TLC))
+    (isa(element.element_value, MMC) || isa(element.element_value, TLC) || isa(element.element_value, Blackbox_MMC))
 end
 
 

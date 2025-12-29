@@ -44,8 +44,8 @@ function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, ele
         end
         data["bus"][string(ac_bus)]["vm"] = ((data["convdc"])[string(key)])["Vtar"]
     else
-        ((data["convdc"])[string(key)])["type_ac"] = 1  # PQ ac bus TODO: Check if this makes sense in the presence of GFM
-        ((data["convdc"])[string(key)])["Vtar"] = converter.Vₘ * 1e3 / global_dict["V"]
+        ((data["convdc"])[string(key)])["type_ac"] = 1  # PQ ac bus
+        ((data["convdc"])[string(key)])["Vtar"] = converter.Vₘ * 1e3 / global_dict["V"] # Not needed for PQ bus ?
     end
 
     if in(:p, keys(converter.controls)) && in(:vdc_droop, keys(converter.controls))
@@ -102,6 +102,10 @@ function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, ele
     if typeof(converter) == MMC
             ((data["convdc"])[string(key)])["rc"] = converter.turnsRatio^(-2)*(converter.Rᵣ + converter.Rₐᵣₘ / 2) / global_dict["Z"]
             ((data["convdc"])[string(key)])["xc"] = converter.turnsRatio^(-2)*(converter.Lᵣ + converter.Lₐᵣₘ / 2) * global_dict["omega"] / global_dict["Z"]
+    end
+    if typeof(converter) == Blackbox_MMC
+            ((data["convdc"])[string(key)])["rc"] = converter.Rₘₑ / global_dict["Z"]
+            ((data["convdc"])[string(key)])["xc"] = 0.0 # needed?!
     end
 
     converter.ω₀ = global_dict["omega"]

@@ -32,6 +32,7 @@ You should have received a copy of the GNU General Public License along with thi
 
     # For tools
     using Peaks
+    using LsqFit
 
     # Miscellaneous
     using Munkres
