@@ -218,7 +218,7 @@ function eval_parameters(converter :: Blackbox_MMC, s :: Complex)
 
     #println("MMC: Evaluating Y-parameters at Vpu=$Vpu, P=$(converter.P), Q=$(-converter.Q), f=$(real(s/(2pi*1im))) Hz")
     # Interpolate Y-parameters at given operating point and frequency
-    Y1 = converter.itp(Vpu, converter.P, -converter.Q, real(s/(2pi*1im))) # Flipping Q sign to match Q sign convention in scanned MMC data
+    Y1 = converter.itp(Vpu, converter.P, converter.Q, real(s/(2pi*1im))) 
 
     # Transform into global dq frame
 
