@@ -212,12 +212,12 @@ function eval_parameters(converter :: Blackbox_MMC, s :: Complex)
 
     # Operating point from power flow
 
-    Vpu=converter.Vₘ/(sqrt(2/3)*converter.vAC_base) # Convert from LN-PK to pu
+    Vpu=converter.Vₘ/(sqrt(2/3)*converter.vACbase) # Convert from LN-PK to pu
     # TODO: Include interpolation of Vdc as well
-    Vdc_pu=converter.Vᵈᶜ/converter.vDC_base # Convert from pole-pole to pu
+    Vdc_pu=converter.Vᵈᶜ/converter.vDCbase # Convert from pole-pole to pu
 
     # Interpolate Y-parameters at given operating point and frequency
-    Y1 = converter.itp(Vpu, converter.P, converter.Q, s/(2pi*1im)) 
+    Y1 = converter.itp(Vpu, converter.P, converter.Q, real(s/(2pi*1im))) 
 
     # Transform into global dq frame
 
