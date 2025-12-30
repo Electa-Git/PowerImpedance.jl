@@ -46,12 +46,13 @@ end
     Vₘ :: Union{Int, Float64} = 333             # AC voltage, amplitude [kV]
     Vᵈᶜ :: Union{Int, Float64} = 640            # DC-bus voltage [kV]
     vDCbase :: Union{Int, Float64} = 640        # DC voltage base [kV]
-    vACbase :: Union{Int, Float64} = 380        # AC voltage base, grid side [kV]
+    vACbase :: Union{Int, Float64} = 380        # AC voltage base LL-rms, grid side [kV]
     controls :: OrderedDict{Symbol, Controller} = OrderedDict{Symbol, Controller}() # Control structures, only to indicate the operating mode of the MMC !
 
-    Rₘₑ :: Float64  = 1.230972594           # matched equivalent resistance [Ohm]
+    Rₘₑ :: Float64  = 1.230972594                # matched equivalent resistance [Ohm]
+    itp :: Any = nothing                         # Interpolation object for the Y-parameters
 
-    # Black box data storagez
+    # Black box data storage
 
     path_f :: String = "" # absoulte path to the files containing the frequency vector
     path_MMC :: String = "" # absolute path to the files containing the MMC data
@@ -88,12 +89,12 @@ function blackbox_MMC(;args...)
     data = readdlm(converter.path_f , '\t', Float64)
     freq = data[:, 2]                                 
     Nf = length(freq)
-    println("Loaded $Nf frequency points")
+    println("MMC:Loaded $Nf frequency points")
 
     # Second: MMC data - Each row: Vdc_pu Vac_p Pref Qref Pdc Iac  then  Nf * 9 complex entries (flattened 3x3 per frequency, C-order)
     raw, header = readdlm(converter.path_MMC, Any; header=true)    # whitespace-delimited; header returned separately
     nrows, ncols = size(raw)
-    println("MMC: $nrows rows, $ncols columns (including 6 operating-point scalars and $(Nf*9) complex entries).")
+    println("MMC: $nrows operating points loaded from MMC data file")
 
     # Validate expected column count: 6 scalars + 9*Nf complex tokens
     expected_cols = 6 + 9*Nf
@@ -144,7 +145,43 @@ function blackbox_MMC(;args...)
 
     @. model(x,p)=3*p*x^2  # Power loss model for the MMC: 3*R_eq*I^2
     fit=curve_fit(model, x, y, [1.0])
-   converter.Rₘₑ = fit.param[1] # Matched equivalent resistance  [Ohm] @ grid side
+    converter.Rₘₑ = fit.param[1] # Matched equivalent resistance  [Ohm] @ grid side
+
+
+
+
+    # Construct interpolation object for the Y-parameters
+    #Y_mmc depends on Vac, Pref, Qref and frequency
+    # TODO: Extension for Vdc control
+    Vac_vals = unique([real(converter.data.Vac[i]) for i in 1:nrows])
+    Pref_vals = unique([real(converter.data.Pref[i]) for i in 1:nrows])
+    Qref_vals = unique([real(converter.data.Qref[i]) for i in 1:nrows])
+
+    sort!(Vac_vals)
+    sort!(Pref_vals)
+    sort!(Qref_vals)
+
+    # Initialize 4D array with appropriate size
+    Ymmc_4d = Array{Union{Matrix{ComplexF64}, Nothing}}(nothing, length(Vac_vals), length(Pref_vals), length(Qref_vals), Nf)
+
+    # Fill the 4D array by matching operating points
+    for i in 1:nrows
+        v_idx = findfirst(x -> x ==real(converter.data.Vac[i]), Vac_vals)
+        p_idx = findfirst(x -> x == real(converter.data.Pref[i]), Pref_vals)
+        q_idx = findfirst(x -> x == real(converter.data.Qref[i]), Qref_vals)
+
+        if !isnothing(v_idx) && !isnothing(p_idx) && !isnothing(q_idx)
+            for f_idx in 1:Nf
+                Ymmc_4d[v_idx, p_idx, q_idx, f_idx] = converter.data.Ymmc[i][f_idx]
+            end
+        end
+    end
+
+    println("Vac values: $Vac_vals")
+    println("Pref values: $Pref_vals")
+    println("Qref values: $Qref_vals")
+
+    converter.itp = interpolate((Vac_vals, Pref_vals, Qref_vals, freq), Ymmc_4d, Gridded(Linear()))
 
 
     # Return complete PowerImpedanceACDC element
@@ -157,11 +194,14 @@ end
 # then interpolate for the frequency variable in eval_parameters function to make things faster 
 function update!(converter :: Blackbox_MMC, Vm, θ, Pac, Qac, Vdc, Pdc)
 
-
     # Operating point from power flow
     converter.θ = θ
     converter.Vₘ = Vm
     converter.Vᵈᶜ = Vdc
+    converter.P = Pac
+    converter.Q = -Qac  # Correction for reactive power sign
+
+
 
 
 
@@ -172,9 +212,20 @@ function eval_parameters(converter :: Blackbox_MMC, s :: Complex)
 
     # Operating point from power flow
 
-    Vpu=converter.Vₘ/(sqrt(2/3)*converter.vAC_base)
-    Vdc_pu=converter.Vᵈᶜ/converter.vDC_base
+    Vpu=converter.Vₘ/(sqrt(2/3)*converter.vAC_base) # Convert from LN-PK to pu
+    # TODO: Include interpolation of Vdc as well
+    Vdc_pu=converter.Vᵈᶜ/converter.vDC_base # Convert from pole-pole to pu
 
+    # Interpolate Y-parameters at given operating point and frequency
+    Y1 = converter.itp(Vpu, converter.P, converter.Q, s/(2pi*1im)) 
+
+    # Transform into global dq frame
+
+    TdqDC_0 = [1 0 0; 0 cos(converter.θ) -sin(converter.θ); 0 sin(converter.θ) cos(converter.θ)]
+
+    Ymmc = inv(TdqDC_0)*Y1*TdqDC_0
+
+    return Ymmc
 
 
 end
