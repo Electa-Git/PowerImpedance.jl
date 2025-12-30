@@ -216,8 +216,9 @@ function eval_parameters(converter :: Blackbox_MMC, s :: Complex)
     # TODO: Include interpolation of Vdc as well
     Vdc_pu=converter.Vᵈᶜ/converter.vDCbase # Convert from pole-pole to pu
 
+    #println("MMC: Evaluating Y-parameters at Vpu=$Vpu, P=$(converter.P), Q=$(-converter.Q), f=$(real(s/(2pi*1im))) Hz")
     # Interpolate Y-parameters at given operating point and frequency
-    Y1 = converter.itp(Vpu, converter.P, converter.Q, real(s/(2pi*1im))) 
+    Y1 = converter.itp(Vpu, converter.P, -converter.Q, real(s/(2pi*1im))) # Flipping Q sign to match Q sign convention in scanned MMC data
 
     # Transform into global dq frame
 

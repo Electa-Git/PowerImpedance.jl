@@ -119,7 +119,7 @@ end
 
 ######################### Element type #############################
 function is_passive(element :: Element)
-    (isa(element.element_value, MMC) || isa(element.element_value, TLC) || isa(element.element_value, Source) || isa(element.element_value, SynchronousMachine)) && return false
+    (isa(element.element_value, MMC) || isa(element.element_value, Blackbox_MMC) || isa(element.element_value, TLC) || isa(element.element_value, Source) || isa(element.element_value, SynchronousMachine)) && return false
     true
 end
 
