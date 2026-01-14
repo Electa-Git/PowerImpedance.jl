@@ -393,7 +393,7 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
             P[k, i] = P[k, i]/Tot;   
         end  
     end
-    println("The participation factors of the buses in the critical eigenvalue based on PMD are ", round.(P[:,min_mode_PND]; digits = 2))
+    println("The participation factors of the buses in the critical eigenvalue based on PND are ", round.(P[:,min_mode_PND]; digits = 2))
 
     if determinant
         d = abs.(inv.(det.(Zcl_bus)))
