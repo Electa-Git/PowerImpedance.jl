@@ -134,7 +134,7 @@ function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :
             y = imag(λ)
             y_abs = abs.(y)
             y_max = maximum(y_abs)
-            color = palette(:default) #palette(:tab10)
+            color = palette(:default, λₙ) #palette(:tab10)
             plot!(x, y, linewidth = 3, c = color[i], label = "Lambda " * string(i))
             plot!(x, -y, linewidth = 3, c = color[i], linestyle = :dash, label = :none)
             index = findall(x -> x == y_max, y_abs)
