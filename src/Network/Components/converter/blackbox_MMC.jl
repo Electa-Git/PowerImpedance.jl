@@ -181,11 +181,11 @@ function blackbox_MMC(;args...)
     println("Pref values: $Pref_vals")
     println("Qref values: $Qref_vals")
 
-    converter.itp = interpolate((Vac_vals, Pref_vals, Qref_vals, freq), Ymmc_4d, Gridded(Linear()))
+    converter.itp = linear_interpolation((Vac_vals, Pref_vals, Qref_vals, freq), Ymmc_4d, extrapolation_bc=Line())
 
 
     # Return complete PowerImpedanceACDC element
-    elem = Element(input_pins = 1, output_pins = 2, element_value = converter)
+    elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false)
 
 end
 

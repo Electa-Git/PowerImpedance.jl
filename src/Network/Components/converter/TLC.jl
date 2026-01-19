@@ -99,8 +99,8 @@ function tlc(;args...)
             setfield!(converter, key, val)
         end
     end
-
-    elem = Element(input_pins = 1, output_pins = 2, element_value = converter)
+    # Transformation property set to false, as model is natively defined in dq-frame
+    elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false)
 end
 
 function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)

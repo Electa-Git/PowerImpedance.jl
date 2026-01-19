@@ -87,8 +87,8 @@ function synchronousmachine(;args...)
             throw(ArgumentError("Machine does not have a property $(key)."))
         end
     end
-
-    elem = Element(input_pins = 2, output_pins = 2, element_value = gen)
+    # Transformation property set to false, as model is natively defined in dq-frame
+    elem = Element(input_pins = 2, output_pins = 2, element_value = gen, transformation = false)
 end
 
 function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pac and Qac from this function, see if it will be necessary.

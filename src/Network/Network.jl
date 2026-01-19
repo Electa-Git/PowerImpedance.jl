@@ -9,14 +9,14 @@ import Base: delete!
 const Net = Vector{Tuple{Symbol,Symbol}} # pairs of element designator and pin name
 
 """
-```
+
 struct Network
     elements::OrderedDict{Symbol, Element}
     nets :: Dict{Symbol, Net}
     connections :: Dict{Symbol, Net}
     Network() = new(OrderedDict{Symbol, Element}(), Dict{Symbol, Net}(), Dict{Symbol, Vector{Int}}())
 end
-```
+
 """
 struct Network
     elements::OrderedDict{Symbol, Element}
@@ -26,14 +26,16 @@ struct Network
     Network() = new(OrderedDict{Symbol, Element}(), Dict{Symbol, Net}(), Dict{Symbol, Vector{Int}}(), [220/sqrt(3)])
 end
 
-# adding elements
+########################################################################################################################################################################################
+# add and delete function with various methods to handle -----------------> elements
 """
     add!(n::Network, elem::Element)
 Adds the element `elem` to the network `n`, creating and returning a new, unique
 reference designator, leaving its pins unconnected. #FP: It will be connected with the pin connection at the end of the code (usually at the end)
+Returns the element designator, if the element `elem` is already connected to the network `n`.
 """
 function add!(n::Network, elem::Element)
-    for (k, v) in n.elements #n.elements =
+    for (k, v) in n.elements 
         if v == elem
             return k
         end
@@ -52,20 +54,24 @@ Adds the element `elem` to the network `n` with the reference designator
 an element named `designator`, it is removed first.
 """
 function add!(n::Network, designator::Symbol, elem::Element)
+
+    
     if haskey(n.elements, designator) #haskey -> determine whether a collection (n.elements) has a mapping for a given key (designator)
         delete!(n, designator) #delete the element named designator from the network n (disconnecting all its pins)
     end
-    for pin in keys(elem.pins) #keys elem.pins returns an array of keys. Return an iterator over all keys in a dictionary
+    for pin in keys(elem.pins) #Grabs the pins of the element and add the resulting net (designator, pin) to the network "n"
         add!(n, (designator, pin))
     end
     add!(elem, :symbol, designator)
     n.elements[designator] = elem
 end
 
-# adding pins and nets
+#################################################################################################################################################################################
+# add and delete function with various methods to handle --------------------------> nets 
 """
     add!(n::Network, pin::Tuple{Symbol, Symbol})
-Adds the pin `pin` to the nets in `n.nets` with the generic name.
+Adds the net `pin` to the nets in `n.nets` with a generic name.
+Pin is a net, ie. pin::Tuple{designator, pin}.
 """
 function add!(n::Network, pin::Tuple{Symbol, Symbol})
     for (name, elem_pins) in n.nets
@@ -76,7 +82,11 @@ function add!(n::Network, pin::Tuple{Symbol, Symbol})
     n.nets[gensym()] = [pin]
 end
 add!(n::Network, p::Tuple{Symbol,Any}) = add!(n, (p[1], Symbol(p[2])))
-
+"""
+    add!(n::Network, name::Symbol, pins::Union{Tuple{Symbol,Any}}...)
+Adds the nets in `pins` to the nets in `n.nets` with the key/node name 
+`name`
+"""
 function add!(n::Network, name::Symbol, pins::Union{Tuple{Symbol,Any}}...)
     n.nets[name] = []
     for pin in pins
@@ -95,7 +105,12 @@ function delete!(n::Network, designator::Symbol)
     end
     delete!(n.elements, designator)
 end
-
+"""
+    netfor!(n::Network, p::Tuple{Symbol,Symbol})
+Returns the net `p` if it is an element of the network nets `n.nets`
+If not, throws an error.
+"""
+# Return the matching net in n "net" for the input net "p"
 function netfor!(n::Network, p::Tuple{Symbol,Symbol})
     for (name, net) in n.nets
         p ∈ net && return net
@@ -103,15 +118,22 @@ function netfor!(n::Network, p::Tuple{Symbol,Symbol})
     throw(ArgumentError("Unknown pin $p"))
 end
 netfor!(n::Network, p::Tuple{Symbol,Any}) = netfor!(n, (p[1], Symbol(p[2])))
-
-function netfor!(n::Network, name::Symbol) # Returns nets, eg. pairs of element designator and pin name for the given node name
+"""
+    netfor!(n::Network, name::Symbol) 
+Returns the nets `p` for the key `name` in `n.nets`.
+Create a new entry in n.nets if key doesnt yet exist in `n.nets`
+"""
+function netfor!(n::Network, name::Symbol) 
     if !haskey(n.nets, name)
         n.nets[name] = [] # Create new node if it does not exist!
     end
     n.nets[name]
 end
-
-# Check whether node exists in the network and return
+"""
+    netname(n::Network, name::Symbol)
+Checks whether key `name` is in the network `n` nets, `n.nets`.
+Throws an expection if not existent
+"""
 function netname(n::Network, name::Symbol)
     if haskey(n.nets, name)
         return name
@@ -119,12 +141,16 @@ function netname(n::Network, name::Symbol)
         throw(ArgumentError("Unknown net name $name."))
     end
 end
-# Returns the node for the given net (designator, pin)
+"""
+    netname(n::Network, pin::Tuple{Symbol,Symbol})
+Returns the key/node name `name` of the net `pin`.
+Throws an expection if `pin` is not element of `n.nets`
+"""
 function netname(n::Network, pin::Tuple{Symbol,Symbol})
     for (name, pins) in n.nets
         pin ∈ pins && return name
     end
-    #throw(ArgumentError("Unknown pin $pin."))
+    throw(ArgumentError("Unknown pin $pin."))
     return Symbol()
 end
 netname(n::Network, pin::Tuple{Symbol, Any}) = netname(n, Tuple(pin[1], Symbol(pin[2])))
@@ -133,10 +159,13 @@ function netname(n::Network, pins::Union{Symbol,Tuple{Symbol, Symbol}}...)
     for (name, net_pins) in n.nets
         all((isa(pin, Symbol) && (pin == name)) || (pin ∈ net_pins) for pin ∈ pins) && return name
     end
-    #throw(ArgumentError("Unknown net connected to pins $pins."))
+    throw(ArgumentError("Unknown net connected to pins $pins."))
     return Symbol()
 end
-
+"""
+    netname(n::Network, pins::Array{Tuple{Symbol, Symbol}})
+Returns the key/node names `name` of the nets `pins`.
+"""
 function netname(n::Network, pins::Array{Tuple{Symbol, Symbol}})
     for (name, net_pins) in n.nets
         all((pin ∈ net_pins) for pin ∈ pins) &&
@@ -157,16 +186,7 @@ function connect!(n::Network)
     end
 end
 
-# Doctest, should be added again to @doc block
-# ```jldoctest; output = false, setup = :(include("../src/PowerImpedanceACDC.jl"); using .PowerImpedanceACDC), filter = r"(PowerImpedanceACDC\.)?Network\(.*"s
-# network = Network()
-# add!(network, :r, impedance(z = 1e3, pins = 1))
-# add!(network, :src, dc_source(V = 5))
-# connect!(network, (:src, 2.1), (:r, 2.1), :gnd) # connect to gnd net
-# network
-# # output
-# Network(...)
-# ```
+
 
 @doc doc"""
     connect!(n::Network, pins::Union{Symbol,Tuple{Symbol,Any}}...)
@@ -180,7 +200,11 @@ a `Symbol` as needed.
 """
 function connect!(n::Network, pins::Union{Symbol,Tuple{Symbol,Any}}...)
     nets = []
+    #println("Print pins now: $pins")
+
+
     for net in unique([netfor!(n, pin) for pin in pins])
+        #println(net)
         append!(nets, net)
         delete!(n.nets, netname(n, net))
     end
@@ -229,42 +253,9 @@ function check_lumped_elements(net :: Network)
     end
 end
 
-"""
-    function power_flow(net :: Network)
-Forms the dictionary needed for solving the power flow problem using
-package PowerModelsACDC. After successful power flow solving, it updates
-the operating point of the power converter.
-"""
 
-# Doctest, should be added again to @doc block
-# ```jldoctest; output = false, setup = :(include("../src/PowerImpedanceACDC.jl"); using .PowerImpedanceACDC), filter = r"(PowerImpedanceACDC\.)?Network\(.*"s
-# @network begin
-#     src = dc_source(V = 5)
-#     r = impedance(z = 1000, pins = 1)
-#     src[1.1] ⟷ r[1.1]
-#     src[2.1] ⟷ r[2.1]
-# end
-# # output
-# Network(...)
-# ```
-
-# ```jldoctest; output = false, setup = :(include("../src/PowerImpedanceACDC.jl"); ImpedanceACDC), filter = r"(PowerImpedanceACDC\.)?Network\(.*"s
-# @network begin
-#     src = dc_source(V = 5)
-#     r = impedance(z = 1000, pins = 1), src[1.1] ⟷ [1.1], src[2.1] ⟷ [2.1]
-# end
-# # output
-# Network(...)
-# ```
-
-# ```jldoctest; output = false, setup = :(include("../src/PowerImpedanceACDC.jl"); ImpedanceACDC), filter = r"(PowerImpedanceACDC\.)?Network\(.*"s
-# @network begin
-#     src = dc_source(V = 5), [2.1] ⟷ gnd
-#     r = impedance(z = 1000, pins = 1), [1.1] ⟷ src[1.1], [2.1] ⟷ gnd
-# end
-# # output
-# Network(...)
-# ```
+#####################################################################################################################################################################################
+# Network macro
 
 @doc doc"""
     @network begin #= ... =# end
@@ -383,19 +374,8 @@ macro network(cdef)
     return ccode
 end
 
-# Doctest, should be added again to @doc
-# ```jldoctest; output = false, setup = :(include("../src/PowerImpedanceACDC.jl"); using .PowerImpedanceACDC), filter = r"(PowerImpedanceACDC\.)?Element\(.*"s
-# net = @network begin
-#    r1 = impedance(z = 10e3, pins = 1)
-#    r2 = impedance(z = 10e3, pins = 1), [1.1] == r1[2.1]
-#    c = impedance(z = 10e3, pins = 1), [1.1] == r2[1.1], [2.1] == r2[2.1]
-#    src = dc_source(V = 5), [1.1] == r1[1.1], [2.1] == r2[2.1]
-# end
-# composite_element(net, Any[(:r2, Symbol(1.1))], Any[(:r2, Symbol(2.1))])
-# # output
-
-# Element(...)
-# ```
+#################################################################################################################################################################################
+# Additional functions
 
 @doc doc"""
     function composite_element(subnet::Network, input_pins::Array{Any}, output_pins::Array{Any})

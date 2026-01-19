@@ -129,8 +129,8 @@ function mmc(;args...) #Constructor
     # :ccc needed
     # :occ needed if not VI-FFVI is used 
 
-
-    elem = Element(input_pins = 1, output_pins = 2, element_value = converter)
+    # Transformation property set to false, as model is natively defined in dq-frame
+    elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false)
 end
 
 function update!(converter :: MMC, Vm, θ, Pac, Qac, Vdc, Pdc) #Function to calculate state space and impedance of MMC with respect to power flow solution
