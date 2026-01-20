@@ -31,6 +31,7 @@ impedance(z = [1,s,3,4], pins = 2) # 2×2 impedance with all values defined
 """
 function impedance(;z :: Union{Int, Float64, Basic, Array{Basic}, Array{Int}} = 0, pins :: Int = 0,
         transformation = false)  #z define the value of the impedance pins define the n of pin -> integer
+    connection = true
     if !isempty(z) #if z has a value -> enter
         if (pins != 0) #if pins has a value different from 0 -> enter
             if (length(z) === pins)  #if the n of element in z is = to n of pin -> enter
@@ -75,7 +76,7 @@ function impedance(;z :: Union{Int, Float64, Basic, Array{Basic}, Array{Int}} = 
         imp.ABCD = inv(m1)*m2
 
         element = Element(element_value = imp, input_pins = pins, output_pins = pins,
-            transformation = transformation)
+            transformation = transformation, connection = connection)
     end
     element
 end

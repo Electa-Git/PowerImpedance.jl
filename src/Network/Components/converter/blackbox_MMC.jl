@@ -68,13 +68,15 @@ end
 function blackbox_MMC(;args...)
 
     converter = Blackbox_MMC()
-
+    connection = true
     # Fill element fields from input arguments
     for (key, val) in pairs(args)
         if isa(val, Controller)
             converter.controls[key] = val
         elseif in(key, propertynames(converter))
             setfield!(converter, key, val)
+        elseif (key == :connection)
+            connection = val
         else
             throw(ArgumentError("Unknown converter property name.")) #If no one of the value specified above -> display an error    
         end
@@ -185,7 +187,7 @@ function blackbox_MMC(;args...)
 
 
     # Return complete PowerImpedanceACDC element
-    elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false)
+    elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false, connection = connection)
 
 end
 

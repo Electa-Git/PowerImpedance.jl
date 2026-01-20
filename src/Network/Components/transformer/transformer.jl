@@ -69,11 +69,14 @@ Pins: `1.1`, `2.1` for single phase transformer and `1.1`, `1.2`, `1.3`, `2.1`,
 function transformer(;args...)
     t = Transformer() #mutable struct defined above
     transformation = false #dq transformation
+    connection = true      #connection to the network
     for (key, val) in pairs(args)
         if in(key, propertynames(t))
             setfield!(t, key, val)
         elseif (key == :transformation)
             transformation = val
+        elseif (key == :connection)
+            connection = val
         else
             throw(ArgumentError("Transformer does not have a property $(key)."))
         end
@@ -170,7 +173,7 @@ function transformer(;args...)
     end
 
     elem = Element(input_pins = t.pins, output_pins = t.pins, element_value = t,
-        transformation = transformation)
+        transformation = transformation, connection = connection)
 end
 
 function eval_abcd(t :: Transformer, s :: ComplexF64)

@@ -7,6 +7,7 @@ network using ABCD parameters. It consists of:
 - number of output pins - `output_pins`
 - component definition - `element_value`
 - transformation flag - `transformation`
+- connection flag - `connection`
 """
 mutable struct Element
   symbol::Symbol
@@ -15,6 +16,7 @@ mutable struct Element
   output_pins :: Int
   element_value :: Any  # component defined type
   transformation :: Bool
+  connection :: Bool # True = Element is connected, False= Element is disconnected 
 
   function Element(;args...)
     elem = new()

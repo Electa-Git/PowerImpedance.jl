@@ -59,11 +59,25 @@ function add!(n::Network, designator::Symbol, elem::Element)
     if haskey(n.elements, designator) #haskey -> determine whether a collection (n.elements) has a mapping for a given key (designator)
         delete!(n, designator) #delete the element named designator from the network n (disconnecting all its pins)
     end
-    for pin in keys(elem.pins) #Grabs the pins of the element and add the resulting net (designator, pin) to the network "n"
-        add!(n, (designator, pin))
+    
+    # Only add the element if connection is true
+    # TODO: Future improvement: add element to the elements dict, but not to the nets dict
+    # This will allow to keep track of all elements in the network, even if they are not connected
+    # Important to check compatibility with the rest of the codebase, espec. make_z, determining_impedance, make_y_node etc.
+    if elem.connection == true
+
+        for pin in keys(elem.pins) #Grabs the pins of the element and add the resulting net (designator, pin) to the network "n"
+            add!(n, (designator, pin))
+        end
+        
+        add!(elem, :symbol, designator)
+        n.elements[designator] = elem
+    # Do not add the element to the network if connection is false
+    elseif elem.connection == false
+        
+        println("Element $(designator) not added to the network as connection=false.") 
     end
-    add!(elem, :symbol, designator)
-    n.elements[designator] = elem
+
 end
 
 #################################################################################################################################################################################
@@ -200,8 +214,26 @@ a `Symbol` as needed.
 """
 function connect!(n::Network, pins::Union{Symbol,Tuple{Symbol,Any}}...)
     nets = []
-    #println("Print pins now: $pins")
+    
+    # Filter out nets of elements that are not in the element dict of the network
+    # Element dict of the network is initialized when adding elements to the network
+    filtered_pins=[]
+    for pin in pins
 
+        if isa(pin,Tuple{Symbol,Any})
+            if haskey(n.elements, pin[1])
+                
+                push!(filtered_pins, pin)
+
+            end
+        else
+            push!(filtered_pins, pin)
+
+        end
+
+    end
+
+    pins=Tuple(filtered_pins)
 
     for net in unique([netfor!(n, pin) for pin in pins])
         #println(net)

@@ -86,6 +86,7 @@ end
 function cable(;args...) # in parenthesis the input of the function julia uses "..." to describe a variable number of arguments. Variable because depends on the cable/insulator/sheath structure
     c = Cable() #variable c is become a mutable structure type-> Cable
     transformation = false #variable transformation is defined false (park transformation not operated)
+    connection = true
     for (key, val) in pairs(args)
         if key == :positions
             for v in val
@@ -99,6 +100,8 @@ function cable(;args...) # in parenthesis the input of the function julia uses "
             c.insulators[key] = val
         elseif (key == :transformation)
             transformation = val
+        elseif (key == :connection)
+            connection = val
         else
             throw(ArgumentError("Unknown cable property name.")) #If no one of the value specified above -> display an error
         end
@@ -245,7 +248,7 @@ function cable(;args...) # in parenthesis the input of the function julia uses "
     c.Z = Z
 
     elem = Element(input_pins = n, output_pins = n, element_value = c,
-            transformation = transformation)
+            transformation = transformation, connection = connection)
 end
 
 function eval_parameters(c :: Cable, s :: Complex) #function eval_parameters with in input two variables: cable c and s variable

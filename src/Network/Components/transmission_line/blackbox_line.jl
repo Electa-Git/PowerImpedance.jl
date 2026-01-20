@@ -25,11 +25,14 @@ function blackbox_line(;args...)
     
     bbl = Blackbox_line()
     transformation = false #variable transformation is defined false (park transformation not operated)
+    connection = true #variable connection is defined true (element is connected to the network)
     for (key, val) in pairs(args)
         if in(key, propertynames(bbl))
             setfield!(bbl, key, val) 
         elseif (key == :transformation)
             transformation = val
+        elseif (key == :connection)
+            connection = val
         else
             throw(ArgumentError("Unknown power line property name.")) #If no one of the value specified above -> display an error
         end
@@ -133,7 +136,7 @@ function blackbox_line(;args...)
 
 
     elem = Element(input_pins = bbl.n, output_pins = bbl.n, element_value = bbl,
-        transformation = transformation)
+        transformation = transformation, connection = connection)
     
 end
 

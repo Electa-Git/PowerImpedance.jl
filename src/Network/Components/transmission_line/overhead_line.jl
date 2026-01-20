@@ -93,11 +93,14 @@ groundwires = Groundwires(nᵍ = 2, Δxᵍ = 6.5, Δyᵍ = 7.5, Rᵍᵈᶜ = 0.9
 function overhead_line(;args...)
     tl = Overhead_line()
     transformation = false
+    connection = true
     for (key, val) in pairs(args)
         if in(key, propertynames(tl))
             setfield!(tl, key, val)
         elseif (key == :transformation)
             transformation = val
+        elseif (key == :connection)
+            connection = val
         else
             throw(ArgumentError("Unknown property $(key) of the overhead line."))
         end
@@ -280,7 +283,7 @@ function overhead_line(;args...)
     tl.Z = Z
 
     elem = Element(input_pins = tl.conductors.nᵇ, output_pins = tl.conductors.nᵇ, element_value = tl,
-                    transformation = transformation)
+                    transformation = transformation, connection = connection)
 
 
 end

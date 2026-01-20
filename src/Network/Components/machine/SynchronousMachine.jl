@@ -79,16 +79,18 @@ end
 
 function synchronousmachine(;args...)
     gen = SynchronousMachine()
-
+    connection = true
     for (key, val) in pairs(args)
         if in(key, propertynames(gen))
             setfield!(gen, key, val)
+        elseif (key == :connection)
+            connection = val
         else
             throw(ArgumentError("Machine does not have a property $(key)."))
         end
     end
     # Transformation property set to false, as model is natively defined in dq-frame
-    elem = Element(input_pins = 2, output_pins = 2, element_value = gen, transformation = false)
+    elem = Element(input_pins = 2, output_pins = 2, element_value = gen, transformation = false, connection = connection)
 end
 
 function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pac and Qac from this function, see if it will be necessary.

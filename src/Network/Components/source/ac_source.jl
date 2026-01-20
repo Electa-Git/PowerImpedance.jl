@@ -51,17 +51,20 @@ three_phase_source = ac_source(V = 1.0, P = 50, Q = 20, Z = 0.1, pins = 3)
 function ac_source(;args...)
     source = Source()
     transformation = false
+    connection = true
     for (key, val) in pairs(args)
         if in(key, propertynames(source))
             setfield!(source, key, val)
         elseif (key == :transformation)
             transformation = val
+        elseif (key == :connection)
+            connection = val
         else
             throw(ArgumentError("Source does not have a property $(key)."))
         end
     end
     make_abcd(source)
     elem = Element(input_pins = source.pins, output_pins = source.pins, element_value = source,
-        transformation = transformation)
+        transformation = transformation, connection = connection)
     elem
 end

@@ -88,7 +88,7 @@ following fields.
 """
 function tlc(;args...)
     converter = TLC()
-
+    connection = true
     for (key, val) in pairs(args)
         if isa(val, Controller)
             if key ∈ (:vac_supp, :v_ac)
@@ -97,10 +97,14 @@ function tlc(;args...)
             converter.controls[key] = val
         elseif in(key, propertynames(converter))
             setfield!(converter, key, val)
+        elseif (key == :connection)
+            connection = val
+        else
+            throw(ArgumentError("TLC does not have a property $(key)."))
         end
     end
     # Transformation property set to false, as model is natively defined in dq-frame
-    elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false)
+    elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false, connection = connection)
 end
 
 function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)

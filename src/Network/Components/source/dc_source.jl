@@ -31,17 +31,20 @@ Z :: Union{Float64, Int, Basic} = 0 # source series impedance [Ω]
 function dc_source(;args...)
     source = Source()
     transformation = false
+    connection = true
     for (key, val) in pairs(args)
         if in(key, propertynames(source))
             setfield!(source, key, val)
         elseif (key == :transformation)
             transformation = val
+        elseif (key == :connection)
+            connection = val
         else
             throw(ArgumentError("Source does not have a property $(key)."))
         end
     end
     make_abcd(source)
     elem = Element(input_pins = source.pins, output_pins = source.pins, element_value = source,
-        transformation = transformation)
+        transformation = transformation, connection = connection)
     elem
 end

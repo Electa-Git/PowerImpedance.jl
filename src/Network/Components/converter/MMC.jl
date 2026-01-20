@@ -114,12 +114,16 @@ The dq-frame convention is: d-leading, q-lagging. The state-space is defined in 
 """
 function mmc(;args...) #Constructor 
     converter = MMC()
-
+    connection = true
     for (key, val) in pairs(args)
         if isa(val, Controller)
             converter.controls[key] = val
         elseif in(key, propertynames(converter))
             setfield!(converter, key, val)
+        elseif (key == :connection)
+            connection = val
+        else
+            throw(ArgumentError("MMC does not have a property $(key)."))
         end
     end
 
@@ -130,7 +134,7 @@ function mmc(;args...) #Constructor
     # :occ needed if not VI-FFVI is used 
 
     # Transformation property set to false, as model is natively defined in dq-frame
-    elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false)
+    elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false, connection = connection)
 end
 
 function update!(converter :: MMC, Vm, θ, Pac, Qac, Vdc, Pdc) #Function to calculate state space and impedance of MMC with respect to power flow solution
