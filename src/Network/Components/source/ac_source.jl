@@ -1,7 +1,7 @@
 export ac_source
 
 """
-    ac_source(; args...)
+	ac_source(; args...)
 
 Creates an `n`-phase AC voltage source with configurable amplitude, phase shift, active and reactive power settings, 
 and optional series impedance. The source is defined with input and output pins that can be connected to a network.
@@ -19,7 +19,7 @@ To ground the source, connect a pin to the ground when constructing the network.
 
 ## Parameters
 ```julia
-Z     :: Union{Float64, Int, Basic} = 0  # Source series impedance [Ω]
+Z     :: Union{Float64, Int} = 0  # Source series impedance [Ω]
 V     :: Union{Float64, Int} = 0        # Voltage magnitude (or DC voltage) [kV]
 P     :: Union{Float64, Int} = 0        # Reference active power output [MW]
 Q     :: Union{Float64, Int} = 0        # Reference reactive power output [MVAr]
@@ -28,7 +28,7 @@ P_max :: Union{Float64, Int} = 0        # Maximum active power output [MW]
 Q_min :: Union{Float64, Int} = 0        # Minimum reactive power output [MVAr]
 Q_max :: Union{Float64, Int} = 0        # Maximum reactive power output [MVAr]
 pins  :: Int = 1                        # Number of pins for multiphase systems
-ABCD  :: Array{Basic} = Basic[]         # ABCD matrix representation (if applicable)
+ABCD :: Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
 ```
 
 ## Returns
@@ -48,23 +48,22 @@ three_phase_source = ac_source(V = 1.0, P = 50, Q = 20, Z = 0.1, pins = 3)
 - `transformation` is an internal parameter used in element construction.
 - Throws an `ArgumentError` if an unknown parameter is passed.
 """
-function ac_source(;args...)
-    source = Source()
-    transformation = false
+function ac_source(; args...)
+	source = Source()
+	transformation = false
     connection = true
-    for (key, val) in pairs(args)
-        if in(key, propertynames(source))
-            setfield!(source, key, val)
-        elseif (key == :transformation)
-            transformation = val
-        elseif (key == :connection)
-            connection = val
-        else
-            throw(ArgumentError("Source does not have a property $(key)."))
-        end
-    end
-    make_abcd(source)
-    elem = Element(input_pins = source.pins, output_pins = source.pins, element_value = source,
-        transformation = transformation, connection = connection)
-    elem
+	for (key, val) in pairs(args)
+		if in(key, propertynames(source))
+			setfield!(source, key, val)
+		elseif (key == :transformation)
+			transformation = val
+		else
+			throw(ArgumentError("Source does not have a property $(key)."))
+		end
+	end
+	make_abcd(source)
+
+	return Element(input_pins = source.pins, output_pins = source.pins,
+		element_value = source,
+		transformation = transformation, connection = connection)
 end
