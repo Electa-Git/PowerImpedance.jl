@@ -23,7 +23,6 @@ PowerModels = "c36e90e8-916a-50a6-bd94-075b64ef4655"
 PowerModelsACDC = "ff45984e-d068-5f4c-9e32-c4133509d236"
 RobustAndOptimalControl = "21fd56a4-db03-40ee-82ee-a87907bee541"
 SteadyStateDiffEq = "9672c7b4-1e72-59bd-8a11-6ac3964bc41f"
-SymEngine = "123dc426-2d89-5057-bbad-38513e3affd8"
 
 [compat]
 ControlSystemsBase = "^1.17.2"
@@ -46,7 +45,6 @@ PowerModels = "^0.21.5"
 PowerModelsACDC = "^0.9.1"
 RobustAndOptimalControl = "^0.4.41"
 SteadyStateDiffEq = "^2.5.0"
-SymEngine = "^0.12.0"
 julia = "1.10"
 
 [extras]
