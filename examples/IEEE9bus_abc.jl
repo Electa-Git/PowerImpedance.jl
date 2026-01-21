@@ -1,8 +1,7 @@
 using Revise
-using DelimitedFiles, SymEngine, PowerImpedanceACDC
+using DelimitedFiles, PowerImpedanceACDC
 # using Measurements
 
-s = symbols("s")
 
 
 function run_nets(L_arg)
@@ -137,9 +136,21 @@ function run_nets(L_arg)
 			transformation = false,
 		)
 
-		l5 = impedance(z = 1269.6 + 10.1s, pins = 3, transformation = false) # Nominal P 41.6667 MW, nominal Q 16.66667 MVar
-		l6 = impedance(z = 1763.3 + 16.84s, pins = 3, transformation = false) # Nominal P 30 MW, nominal Q 10 MVar
-		l8 = impedance(z = 1587.16 + 14.43s, pins = 3, transformation = false) # Nominal P 33.33 MW, nominal Q 11.6667 MVar
+		l5 = impedance(
+			z = (s::Complex)->(1269.6 + 10.1*s),
+			pins = 3,
+			transformation = false,
+		) # Nominal P 41.6667 MW, nominal Q 16.66667 MVar
+		l6 = impedance(
+			z = (s::Complex)->(1763.3 + 16.84*s),
+			pins = 3,
+			transformation = false,
+		) # Nominal P 30 MW, nominal Q 10 MVar
+		l8 = impedance(
+			z = (s::Complex)->(1587.16 + 14.43*s),
+			pins = 3,
+			transformation = false,
+		) # Nominal P 33.33 MW, nominal Q 11.6667 MVar
 
 		g1[2.1] == gnda
 		g1[2.2] == gndb
