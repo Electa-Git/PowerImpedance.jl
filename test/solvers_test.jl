@@ -15,10 +15,10 @@ Y=[-0.0-20.83*im   0.0+16.67*im   0.0+4.17*im   0.0+0.0*im    0.0+0.0*im     0.0
 
 
 # Test set with validation values slightly different due to rounding errors
-Y_validation=[ -28.128*im  11.463*im   16.667*im    0;
-               11.463*im   -28.130*im   0   16.667*im;
-                16.667*im   0   -25.0*im   8.333*im;
-               0   16.667*im    8.333*im  -25*im]
+Y_validation=[-28.128*im  11.463*im   16.667*im    0;
+	11.463*im   -28.130*im   0   16.667*im;
+	 16.667*im   0   -25.0*im   8.333*im;
+	0   16.667*im    8.333*im  -25*im]
 
-@test PowerImpedanceACDC.kron(Y,  [2,5,6,7]) ≈ Y_validation atol=1e-1
+@test PowerImpedanceACDC.kron(Y, [2, 5, 6, 7]) ≈ Y_validation atol=1e-1
 

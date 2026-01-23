@@ -1,114 +1,166 @@
-const Parameters_types = Union{Array{Basic}, Array{Complex},
-        Array{Int}, Array{Float64}, Array{ComplexF64}}
+# Anything numeric matrix-like; we internally compute in ComplexF64.
+const Parameters_types = AbstractMatrix{<:Number}
 
-function connect_series!(a::Parameters_types, b::Parameters_types)
-    return a*b
+function connect_series!(A::Parameters_types, B::Parameters_types)
+	return ComplexF64.(A) * ComplexF64.(B)
 end
 
 function connect_parallel!(ABCD₁::Parameters_types, ABCD₂::Parameters_types)
-    n = Int(size(ABCD₁, 1)/2)
-    (a₁, b₁, c₁, d₁) = (ABCD₁[1:n,1:n], ABCD₁[1:n,n+1:end], ABCD₁[n+1:end,1:n], ABCD₁[n+1:end, n+1:end])
-    (a₂, b₂, c₂, d₂) = (ABCD₂[1:n,1:n], ABCD₂[1:n,n+1:end], ABCD₂[n+1:end,1:n], ABCD₂[n+1:end, n+1:end])
+	M1 = ComplexF64.(ABCD₁)
+	M2 = ComplexF64.(ABCD₂)
 
-    if (n == 1)
-        a = (b₂[1] * a₁[1] + b₁[1] * a₂[1]) / (b₁[1] + b₂[1])
-        b = b₁[1] * b₂[1] / (b₁[1] + b₂[1])
-        c = c₁[1] + c₂[1] + (d₂[1] - d₁[1]) * (a₁[1] - a₂[1]) / (b₁[1] + b₂[1])
-        d = d₁[1] + (d₂[1] - d₁[1]) * b₁[1] / (b₁[1] + b₂[1])
-    else
-        I = convert(Array{Basic}, Diagonal([1 for dummy in 1:n]))
-        if all(b₁[i] == 0 for i in 1:n)
-            a = a₂
-            b = zeros(Basic, n, n)
-            c = c₁ + c₂ + (d₂ - d₁) * (b₂ \ (a₁ - a₂))
-            d = d₁
-        elseif all(b₂[i] == 0 for i in 1:n)
-            a = a₁
-            b = zeros(Basic, n, n)
-            c = c₁ + c₂ + (d₂ - d₁) * (b₁ \ (a₁ - a₂))
-            d = d₁
-        else
-            a = inv(inv(b₁) + inv(b₂))  * (inv(b₁) * a₁ + inv(b₂) * a₂)
-            b = inv(inv(b₁) + inv(b₂))
-            c = c₁ + c₂ + (d₂ - d₁) * inv(b₁ + b₂) * (a₁ - a₂)
-            d = d₁ + (d₂ - d₁) * inv(b₁ + b₂) * b₁
-        end
-    end
+	n = Int(size(M1, 1) ÷ 2)
 
-    ABCD = vcat(hcat(a,b), hcat(c,d))
-    return ABCD
+	a₁ = @view M1[1:n, 1:n]
+	b₁ = @view M1[1:n, (n+1):end]
+	c₁ = @view M1[(n+1):end, 1:n]
+	d₁ = @view M1[(n+1):end, (n+1):end]
+
+	a₂ = @view M2[1:n, 1:n]
+	b₂ = @view M2[1:n, (n+1):end]
+	c₂ = @view M2[(n+1):end, 1:n]
+	d₂ = @view M2[(n+1):end, (n+1):end]
+
+	if n == 1
+		b1 = b₁[1];
+		b2 = b₂[1]
+		denom = b1 + b2
+		a = (b2*a₁[1] + b1*a₂[1]) / denom
+		b = (b1*b2) / denom
+		c = c₁[1] + c₂[1] + (d₂[1] - d₁[1]) * (a₁[1] - a₂[1]) / denom
+		d = d₁[1] + (d₂[1] - d₁[1]) * b1 / denom
+		return ComplexF64[a b; c d]
+	end
+
+	# Multiport case
+	# Old code checked "all(b₁[i] == 0 for i in 1:n)" which is nonsense for matrices.
+	# Interpret it as "B block is (numerically) zero matrix".
+	iszeroB(B) = all(iszero, B)  # exact; if you want tolerance, use a norm-based check.
+
+	if iszeroB(b₁)
+		a = copy(a₂)
+		b = zeros(ComplexF64, n, n)
+		c = c₁ + c₂ + (d₂ - d₁) * (b₂ \ (a₁ - a₂))
+		d = copy(d₁)
+	elseif iszeroB(b₂)
+		a = copy(a₁)
+		b = zeros(ComplexF64, n, n)
+		c = c₁ + c₂ + (d₂ - d₁) * (b₁ \ (a₁ - a₂))
+		d = copy(d₁)
+	else
+		# Algebra-identical but without explicit inv(inv(.)).
+		# b = inv(inv(b₁)+inv(b₂))  =>  b = (b₁ \ I + b₂ \ I) \ I
+		I = Matrix{ComplexF64}(I, n, n)
+
+		S = (b₁ \ I) + (b₂ \ I)          # S = inv(b₁) + inv(b₂)
+		b = S \ I                         # b = inv(S)
+
+		a = b * ((b₁ \ a₁) + (b₂ \ a₂))    # a = inv(S) * (inv(b₁)a₁ + inv(b₂)a₂)
+		c = c₁ + c₂ + (d₂ - d₁) * ((b₁ + b₂) \ (a₁ - a₂))
+		d = d₁ + (d₂ - d₁) * ((b₁ + b₂) \ b₁)
+	end
+
+	return [a b; c d]
 end
 
-function closing_impedance(ABCD :: Array{Complex}, Zₜ :: Union{Array{Complex}, Int, Float64, Complex}, direction = :output)
-    n = Int(size(ABCD, 1)/2)
-    m = Int(size(ABCD, 2)/2)
-    (a, b, c, d) = (ABCD[1:n,1:m], ABCD[1:n,m+1:end], ABCD[n+1:end,1:m], ABCD[n+1:end, m+1:end])
+function closing_impedance(
+	ABCD::Parameters_types,
+	Zₜ::Union{Parameters_types, Number},
+	direction = :output,
+)
+	M = ComplexF64.(ABCD)
+	n = Int(size(M, 1) ÷ 2)
+	m = Int(size(M, 2) ÷ 2)
 
-    Zₑ = 0
-    if (length(Zₜ) == 1)
-        if (direction == :output)
-            Zₑ = (a .* Zₜ + b) ./ (c .* Zₜ + d)
-        else
-            Zₑ = (d .* Zₜ - b) ./ (c .* Zₜ - a)
-        end
-    else
-        I = convert(Array{Complex}, Diagonal([1 for dummy in 1:n]))
-        if (direction == :output)
-            Zₑ = (a * Zₜ + b) * pinv(c * Zₜ + d)
-        else
-            Zₑ = pinv(Zₜ * c - a) * (Zₜ * d - b)
-        end
-    end
-    return Zₑ
+	a = @view M[1:n, 1:m]
+	b = @view M[1:n, (m+1):end]
+	c = @view M[(n+1):end, 1:m]
+	d = @view M[(n+1):end, (m+1):end]
+
+	if Zₜ isa Number
+		Zt = ComplexF64(Zₜ)
+		if direction == :output
+			return (a .* Zt .+ b) ./ (c .* Zt .+ d)
+		else
+			return (d .* Zt .- b) ./ (c .* Zt .- a)
+		end
+	else
+		Zt = ComplexF64.(Zₜ)
+		if direction == :output
+			return (a * Zt + b) * pinv(c * Zt + d)
+		else
+			return pinv(Zt * c - a) * (Zt * d - b)
+		end
+	end
 end
 
 # making 2×2 matrix (modal domain) from 4×4 matrix (phase domain)
-function transformation_dc(ABCD :: Parameters_types)
-    n = Int(size(ABCD, 1)/2)
-    (a, b, c, d) = (ABCD[1:n,1:n], ABCD[1:n,n+1:end], ABCD[n+1:end,1:n], ABCD[n+1:end, n+1:end])
+function transformation_dc(ABCD::Parameters_types)
+	M = ComplexF64.(ABCD)
+	n = Int(size(M, 1) ÷ 2)
 
-    ABCD = [(a[1,1]+a[2,2]-a[1,2]-a[2,1])/2 (b[1,1]+b[2,2]-b[1,2]-b[2,1])
-            (c[1,1]+c[2,2]-c[1,2]-c[2,1])/4 (d[1,1]+d[2,2]-d[1,2]-d[2,1])/2]
+	a = @view M[1:n, 1:n]
+	b = @view M[1:n, (n+1):end]
+	c = @view M[(n+1):end, 1:n]
+	d = @view M[(n+1):end, (n+1):end]
+
+	return ComplexF64[
+		(a[1, 1] + a[2, 2] - a[1, 2] - a[2, 1]) / 2 (b[1, 1] + b[2, 2] - b[1, 2] - b[2, 1]);
+		(c[1, 1] + c[2, 2] - c[1, 2] - c[2, 1]) / 4 (d[1, 1] + d[2, 2] - d[1, 2] - d[2, 1]) / 2
+	]
 end
+
 # making 4×4 ABCD matrix (dq domain) from 6x6 ABCD matrix (phase domain)
-function transformation_dq(ABCD₁, ABCD₂)
-    n = Int(size(ABCD₁, 1)/2)
-    (a₁, b₁, c₁, d₁) = (ABCD₁[1:n,1:n], ABCD₁[1:n,n+1:end], ABCD₁[n+1:end,1:n], ABCD₁[n+1:end, n+1:end])
-    (a₂, b₂, c₂, d₂) = (ABCD₂[1:n,1:n], ABCD₂[1:n,n+1:end], ABCD₂[n+1:end,1:n], ABCD₂[n+1:end, n+1:end])
+function transformation_dq(ABCD₁::Parameters_types, ABCD₂::Parameters_types)
+	M1 = ComplexF64.(ABCD₁)
+	M2 = ComplexF64.(ABCD₂)
 
-    # ϕ = 2π/3
-    # e = exp(1im*ϕ)
-    # a = [1 e e^2;
-    #     1im 1im*e 1im*e^2;
-    #     0 0 0]
+	n = Int(size(M1, 1) ÷ 2)
 
-    # a_dq = (1/3 * (a * a₁ + conj(a) * a₂) * transpose(real(a)))[1:2,1:2]
-    # b_dq = (1/3 * (a * b₁ + conj(a) * b₂) * transpose(real(a)))[1:2,1:2]
-    # c_dq = (1/3 * (a * c₁ + conj(a) * c₂) * transpose(real(a)))[1:2,1:2]
-    # d_dq = (1/3 * (a * d₁ + conj(a) * d₂) * transpose(real(a)))[1:2,1:2]
-    # SOURCE: Impedance transformation from dq to alpha beta and positive negative sequence frame by Eros Avdiaj, Philippe De Rua
-    T = 0.5 * [1 -1im;-1im -1]
-    CK = (2/3)*[1 -1/2 -1/2;0 sqrt(3)/2 -sqrt(3)/2]
-    CKinv = [1 0;-1/2 sqrt(3)/2; -1/2 -sqrt(3)/2]
+	a₁ = @view M1[1:n, 1:n];
+	b₁ = @view M1[1:n, (n+1):end]
+	c₁ = @view M1[(n+1):end, 1:n];
+	d₁ = @view M1[(n+1):end, (n+1):end]
 
-    a_dq = T * CK * a₂ * CKinv * conj(T) + conj(T) * CK * a₁ * CKinv * T
-    b_dq = T * CK * b₂ * CKinv * conj(T) + conj(T) * CK * b₁ * CKinv * T
-    c_dq = T * CK * c₂ * CKinv * conj(T) + conj(T) * CK * c₁ * CKinv * T
-    d_dq = T * CK * d₂ * CKinv * conj(T) + conj(T) * CK * d₁ * CKinv * T
+	a₂ = @view M2[1:n, 1:n];
+	b₂ = @view M2[1:n, (n+1):end]
+	c₂ = @view M2[(n+1):end, 1:n];
+	d₂ = @view M2[(n+1):end, (n+1):end]
 
-    abcd = [a_dq b_dq; c_dq d_dq]
+	T = 0.5 * ComplexF64[1 -1im; -1im -1]
+	CK = (2/3) * ComplexF64[1 -1/2 -1/2; 0 sqrt(3)/2 -sqrt(3)/2]
+	CKinv = ComplexF64[1 0; -1/2 sqrt(3)/2; -1/2 -sqrt(3)/2]
+
+	a_dq = T*CK*a₂*CKinv*conj(T) + conj(T)*CK*a₁*CKinv*T
+	b_dq = T*CK*b₂*CKinv*conj(T) + conj(T)*CK*b₁*CKinv*T
+	c_dq = T*CK*c₂*CKinv*conj(T) + conj(T)*CK*c₁*CKinv*T
+	d_dq = T*CK*d₂*CKinv*conj(T) + conj(T)*CK*d₁*CKinv*T
+
+	return [a_dq b_dq; c_dq d_dq]
 end
 
-function y_to_abcd(Y :: Parameters_types)
-    n = Int(size(Y,1)/2)
-    (Yee, Yei, Yie, Yii) = (Y[1:n,1:n], Y[1:n,n+1:end], Y[n+1:end,1:n], Y[n+1:end,n+1:end])
-    Yie = inv(Yie)
-    abcd = [-Yie*Yii -Yie; Yei-Yee*Yie*Yii -Yie*Yee]
+function y_to_abcd(Y::Parameters_types)
+	M = ComplexF64.(Y)
+	n = Int(size(M, 1) ÷ 2)
+	Yee = @view M[1:n, 1:n]
+	Yei = @view M[1:n, (n+1):end]
+	Yie = @view M[(n+1):end, 1:n]
+	Yii = @view M[(n+1):end, (n+1):end]
+
+	Yie_inv = inv(Matrix(Yie))
+	return [        -Yie_inv*Yii  -Yie_inv;
+		Yei - Yee*Yie_inv*Yii   -Yie_inv*Yee]
 end
 
-function abcd_to_y(ABCD :: Parameters_types)
-    n = Int(size(ABCD,1)/2)
-    (a, b, c, d) = (ABCD[1:n,1:n], ABCD[1:n,n+1:end], ABCD[n+1:end,1:n], ABCD[n+1:end, n+1:end])
-    b = inv(b)
-    Y = [d*b c-d*b*a; -b b*a]
+function abcd_to_y(ABCD::Parameters_types)
+	M = ComplexF64.(ABCD)
+	n = Int(size(M, 1) ÷ 2)
+	a = @view M[1:n, 1:n]
+	b = @view M[1:n, (n+1):end]
+	c = @view M[(n+1):end, 1:n]
+	d = @view M[(n+1):end, (n+1):end]
+
+	b_inv = inv(Matrix(b))
+	return [    d*b_inv           c - d*b_inv*a;
+		-b_inv            b_inv*a]
 end
