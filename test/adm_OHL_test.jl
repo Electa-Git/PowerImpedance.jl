@@ -52,15 +52,15 @@ for k in eachindex(omegas)
 
 		for r ∈ 1:4
 
-
-			@test abs(Y_OHL[k][c, r]) ≈ abs(Y_validation[k][c, r]) rtol=0.01
-			@test angle(Y_OHL[k][c, r]) ≈ angle(Y_validation[k][c, r]) rtol=0.027
+			@test abs(Y_OHL[k][c, r]) ≈ abs(Y_validation[k][c, r]) rtol=0.01 # 1%
+			@test angle(Y_OHL[k][c, r]) ≈ angle(Y_validation[k][c, r]) atol=0.1*(pi/180) # degrees
 		end
-
-
 
 	end
 
-
-
 end
+
+
+# Plotting for visual inspection
+# plot(omegas./(2*pi), 20*log10.(abs.(getindex.(Y_OHL, 1, 1))),xlabel= "Frequency[Hz]",ylabel= "Admittance [dB]",minorgrid=true, legend=:none, xaxis = :log10)
+# plot!(omegas./(2*pi), 20*log10.(abs.(getindex.(Y_validation, 1, 1))),xlabel= "Frequency[Hz]",ylabel= "Admittance [dB]",minorgrid=true, legend=:none, xaxis = :log10, line=:dash)

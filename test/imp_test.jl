@@ -6,116 +6,168 @@ qC2 = 100
 
 net = @network begin
 
-        voltageBase = transmissionVoltage
-    
-        g1 = ac_source(V = transmissionVoltage, P = pHVDC1, P_min = -2000, P_max = 2000, Q_max = 1000, Q_min = -1000, pins = 3, transformation = true)
+	voltageBase = transmissionVoltage
 
-                                
-        # HVDC link 1
-        # MMC1 controls the DC voltage, and is situated at the remote end.
-        c1 = mmc(Vᵈᶜ = 800, vDCbase = 800, Vₘ = transmissionVoltage,
-                P_max = 1500, P_min = -1500, P = -pHVDC1, Q = qC1, Q_max = 500, Q_min = -500,
-                occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-                ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-                pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-                q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-                dc = PI_control(Kₚ = 5, Kᵢ = 15)
-                )
-        # MMC2 controls P&Q. It is connected to bus 7. Define the transformer impedance parameters at the converter side!
-        c2 = mmc(Vᵈᶜ = 800, vDCbase = 800, Vₘ = transmissionVoltage,
-                P_max = 1000, P_min = -1000, P = pHVDC1, Q = qC2, Q_max = 1000, Q_min = -1000,
-                vACbase_LL_RMS = 333, turnsRatio = 333/380, Lᵣ = 0.0461, Rᵣ = 0.4103,
-                occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-                ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-                pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-                p = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-                q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159)
-                )
-
-        dc_line = cable(length = 100e3, positions = [(-0.5,1), (0.5,1)],
-            C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8),
-            C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8),
-            C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10),
-            I1 = Insulator(rᵢ = 24.25e-3, rₒ = 41.75e-3, ϵᵣ = 2.3),
-            I2 = Insulator(rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
-            I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3), transformation = true)
-
-        g4 = ac_source(V = transmissionVoltage, P = pHVDC1, P_min = -2000, P_max = 2000, Q_max = 1000, Q_min = -1000, pins = 3, transformation = true)
+	g1 = ac_source(
+		V = transmissionVoltage,
+		P = pHVDC1,
+		P_min = -2000,
+		P_max = 2000,
+		Q_max = 1000,
+		Q_min = -1000,
+		pins = 3,
+		transformation = true,
+	)
 
 
-        tl1 = overhead_line(length = 25e3,
-                conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1, Rᵈᶜ = 0.063, rᶜ = 0.015,  yᵇᶜ = 30,
-                                Δyᵇᶜ = 0, Δxᵇᶜ = 10,  Δ̃xᵇᶜ = 0, dˢᵇ = 0,  dˢᵃᵍ = 10),
-                groundwires = Groundwires(nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062, Δxᵍ = 6.5, Δyᵍ = 7.5, dᵍˢᵃᵍ   = 10),
-                earth_parameters = (1,1,100), transformation = true)
+	# HVDC link 1
+	# MMC1 controls the DC voltage, and is situated at the remote end.
+	c1 = mmc(Vᵈᶜ = 800, vDCbase = 800, Vₘ = transmissionVoltage,
+		P_max = 1500, P_min = -1500, P = -pHVDC1, Q = qC1, Q_max = 500,
+		Q_min = -500,
+		occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
+		ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
+		pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
+		q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
+		dc = PI_control(Kₚ = 5, Kᵢ = 15),
+	)
+	# MMC2 controls P&Q. It is connected to bus 7. Define the transformer impedance parameters at the converter side!
+	c2 = mmc(Vᵈᶜ = 800, vDCbase = 800, Vₘ = transmissionVoltage,
+		P_max = 1000, P_min = -1000, P = pHVDC1, Q = qC2, Q_max = 1000,
+		Q_min = -1000,
+		vACbase_LL_RMS = 333, turnsRatio = 333/380, Lᵣ = 0.0461, Rᵣ = 0.4103,
+		occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
+		ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
+		pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
+		p = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
+		q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
+	)
 
-        tl78 = overhead_line(length = 90e3,
-                conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1, Rᵈᶜ = 0.063, rᶜ = 0.015,  yᵇᶜ = 30,
-                                Δyᵇᶜ = 0, Δxᵇᶜ = 10,  Δ̃xᵇᶜ = 0, dˢᵇ = 0,  dˢᵃᵍ = 10),
-                groundwires = Groundwires(nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062, Δxᵍ = 6.5, Δyᵍ = 7.5, dᵍˢᵃᵍ   = 10),
-                earth_parameters = (1,1,100), transformation = true)
+	dc_line = cable(length = 100e3, positions = [(-0.5, 1), (0.5, 1)],
+		C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8),
+		C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8),
+		C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10),
+		I1 = Insulator(rᵢ = 24.25e-3, rₒ = 41.75e-3, ϵᵣ = 2.3),
+		I2 = Insulator(rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
+		I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3),
+		transformation = true)
 
-        c1[2.1] ⟷ tl1[2.1] ⟷ B3d
-        c1[2.2] ⟷ tl1[2.2] ⟷ B3q
-
-        g4[1.1] ⟷ tl1[1.1] ⟷ B2d
-        g4[1.2] ⟷ tl1[1.2] ⟷ B2q
-
-
-
-        g4[2.1] ⟷ gndd
-        g4[2.2] ⟷ gndq
-        
-        c1[1.1] ⟷ dc_line[1.1] ⟷ B4
-        c2[1.1] ⟷ dc_line[2.1] ⟷ B5
+	g4 = ac_source(
+		V = transmissionVoltage,
+		P = pHVDC1,
+		P_min = -2000,
+		P_max = 2000,
+		Q_max = 1000,
+		Q_min = -1000,
+		pins = 3,
+		transformation = true,
+	)
 
 
-        c2[2.1] == tl78[1.1] == B6d
-        c2[2.2] == tl78[1.2] == B6q
-        g1[1.1] == tl78[2.1] == B7d
-        g1[1.2] == tl78[2.2] == B7q
+	tl1 = overhead_line(length = 25e3,
+		conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1, Rᵈᶜ = 0.063,
+			rᶜ = 0.015, yᵇᶜ = 30,
+			Δyᵇᶜ = 0, Δxᵇᶜ = 10, Δ̃xᵇᶜ = 0, dˢᵇ = 0, dˢᵃᵍ = 10),
+		groundwires = Groundwires(
+			nᵍ = 2,
+			Rᵍᵈᶜ = 0.92,
+			rᵍ = 0.0062,
+			Δxᵍ = 6.5,
+			Δyᵍ = 7.5,
+			dᵍˢᵃᵍ = 10,
+		),
+		earth_parameters = (1, 1, 100), transformation = true)
 
-        g1[2.1] == gndd
-        g1[2.2] == gndq
+	tl78 = overhead_line(length = 90e3,
+		conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1, Rᵈᶜ = 0.063,
+			rᶜ = 0.015, yᵇᶜ = 30,
+			Δyᵇᶜ = 0, Δxᵇᶜ = 10, Δ̃xᵇᶜ = 0, dˢᵇ = 0, dˢᵃᵍ = 10),
+		groundwires = Groundwires(
+			nᵍ = 2,
+			Rᵍᵈᶜ = 0.92,
+			rᵍ = 0.0062,
+			Δxᵍ = 6.5,
+			Δyᵍ = 7.5,
+			dᵍˢᵃᵍ = 10,
+		),
+		earth_parameters = (1, 1, 100), transformation = true)
+
+	c1[2.1] ⟷ tl1[2.1] ⟷ B3d
+	c1[2.2] ⟷ tl1[2.2] ⟷ B3q
+
+	g4[1.1] ⟷ tl1[1.1] ⟷ B2d
+	g4[1.2] ⟷ tl1[1.2] ⟷ B2q
+
+
+
+	g4[2.1] ⟷ gndd
+	g4[2.2] ⟷ gndq
+
+	c1[1.1] ⟷ dc_line[1.1] ⟷ B4
+	c2[1.1] ⟷ dc_line[2.1] ⟷ B5
+
+
+	c2[2.1] == tl78[1.1] == B6d
+	c2[2.2] == tl78[1.2] == B6q
+	g1[1.1] == tl78[2.1] == B7d
+	g1[1.2] == tl78[2.2] == B7q
+
+	g1[2.1] == gndd
+	g1[2.2] == gndq
 
 
 end
 
 # Read validation data from text file
 # Text file is generated by Ztool with PSCAD.
-lines=readlines("P2P_HVDC_1us#Y_AC#MMC2-1#.txt")
+# lines=readlines("P2P_HVDC_1us#Y_AC#MMC2-1#.txt")
+lines = readlines(joinpath(@__DIR__, "data", "P2P_HVDC_1us#Y_AC#MMC2-1#.txt"))
 validation_data = [split(line) for line in lines[2:end]]
-frequency = real([parse(Complex{Float64},  replace(row[1], "(" => "")) for row in validation_data])
+frequency =
+	real([parse(Complex{Float64}, replace(row[1], "(" => "")) for row in validation_data])
 omegas=2*pi*frequency
-matrices = [parse.(Complex{Float64}, replace.(row[2:end], "(" => "")) for row in validation_data]
+matrices =
+	[parse.(Complex{Float64}, replace.(row[2:end], "(" => "")) for row in validation_data]
 
 # Converter admittance data to impedance data
 Z_ac = Vector{Matrix{Complex{Float64}}}(undef, length(omegas))
+imp_ac = Vector{Matrix{Complex{Float64}}}(undef, length(omegas))
 for k in eachindex(omegas)
 
-        Z_ac[k]=inv([matrices[k][1] matrices[k][2]; matrices[k][3] matrices[k][4]])
+    omega=omegas[k]
+	Z_ac[k]=inv([matrices[k][1] matrices[k][2]; matrices[k][3] matrices[k][4]])
+	dummy, omega_ac =
+		determine_impedance(net, elim_elements = [:g1], input_pins = Any[:B7d, :B7q],
+			output_pins = Any[:gndd, :gndq],
+			freq_range = (omega/(2*pi), (omega+1)/(2*pi), 2))
+        imp_ac[k]=dummy[1]
 
-
-    
 end
 
 # Compare the impedance data with the data from the text file
-
 for k in eachindex(omegas)
-       
 
-        omega=omegas[k] 
-        imp_ac, omega_ac = determine_impedance(net, elim_elements=[:g1], input_pins=Any[:B7d,:B7q], 
-        output_pins=Any[:gndd,:gndq], freq_range = (omega/(2*pi),(omega+1)/(2*pi),2))
+	#println("Frequency: ", omegas[k]/(2*pi), " Hz. Index: ", k)
+	for c ∈ 1:2
 
-        @test real(imp_ac[1][1,1]) ≈ real(Z_ac[k][1,1]) rtol=3
-        @test real(imp_ac[1][1,2]) ≈ real(Z_ac[k][1,2]) rtol=3
-        @test real(imp_ac[1][2,1]) ≈ real(Z_ac[k][2,1]) rtol=3
-        @test real(imp_ac[1][2,2]) ≈ real(Z_ac[k][2,2]) rtol=3
-        @test imag(imp_ac[1][1,1]) ≈ imag(Z_ac[k][1,1]) rtol=3        
-        @test imag(imp_ac[1][1,2]) ≈ imag(Z_ac[k][1,2]) rtol=3
-        @test imag(imp_ac[1][2,1]) ≈ imag(Z_ac[k][2,1]) rtol=3
-        @test imag(imp_ac[1][2,2]) ≈ imag(Z_ac[k][2,2]) rtol=3
+		for r ∈ 1:2
+			@test abs(Z_ac[k][c, r]) ≈ abs(imp_ac[k][c, r]) rtol=0.18# Increased due to outliner @ 803 Hz
+			@test angle(Z_ac[k][c, r]) ≈ angle(imp_ac[k][c, r]) atol= 5*(pi/180) # Increased due to outliner @ 803 Hz
+		end
+
+
+
+	end
+
+
 
 end
 
+
+
+# Plotting for visual inspection
+
+# plot(omegas./(2*pi), rad2deg.(angle.(getindex.(imp_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Angle [degree]",minorgrid=true, legend=:none, xaxis = :log10)
+# plot!(omegas./(2*pi), rad2deg.(angle.(getindex.(Z_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Angle [degree]",minorgrid=true, legend=:none, xaxis = :log10, line=:dash)
+# plot(omegas./(2*pi), 20*log10.(abs.(getindex.(imp_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Y_11 [dB]",minorgrid=true, legend=:none, xaxis = :log10)
+# plot!(omegas./(2*pi), 20*log10.(abs.(getindex.(Z_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Y_11 [dB]",minorgrid=true, legend=:none, xaxis = :log10, line=:dash)
