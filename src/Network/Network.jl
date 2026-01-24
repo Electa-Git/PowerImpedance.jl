@@ -164,7 +164,7 @@ function netname(n::Network, pin::Tuple{Symbol,Symbol})
     for (name, pins) in n.nets
         pin ∈ pins && return name
     end
-    throw(ArgumentError("Unknown pin $pin."))
+    #throw(ArgumentError("Unknown pin $pin."))
     return Symbol()
 end
 netname(n::Network, pin::Tuple{Symbol, Any}) = netname(n, Tuple(pin[1], Symbol(pin[2])))

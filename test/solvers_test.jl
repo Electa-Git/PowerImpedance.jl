@@ -4,7 +4,7 @@
 #  Systems Analysis
 #  Lecture 17:EMSs, SVD, Pseudo Inverse, Equivalents
 #  Prof. Tom Overbye
-
+# TODO: Add testing of y_node and y_edge here :)
 Y=[-0.0-20.83*im   0.0+16.67*im   0.0+4.17*im   0.0+0.0*im    0.0+0.0*im     0.0+0.0*im     0.0+0.0*im
   0.0+16.67*im  -0.0-52.78*im   0.0+5.56*im   0.0+5.56*im   0.0+8.33*im    0.0+16.67*im   0.0+0.0*im
   0.0+4.17*im    0.0+5.56*im   -0.0-43.1*im   0.0+33.3*im   0.0+0.0*im     0.0+0.0*im     0.0+0.0*im

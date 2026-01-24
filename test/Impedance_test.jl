@@ -2,8 +2,6 @@
 
 # Z--> ABCD --> Two-port 
 # 1. RL 2. LC
-using SymEngine
-s = symbols("s")
 
 
 omegas = collect(range(2*pi*0.1, stop=2*pi*5000, step=10))
@@ -24,13 +22,13 @@ grid = Network()
 add!(
 	grid,
 	:labanimal_ind,
-    impedance(z = R + s*L, pins = 3, transformation = true)
+    impedance(z = (s::Complex)->(R + L*s), pins = 3, transformation = true)
 )
 
 add!(
 	grid,
 	:labanimal_cap,
-    impedance(z = R + 1/(s*C), pins = 3, transformation = true)
+    impedance(z = (s::Complex)->(R + 1/(s*C)), pins = 3, transformation = true)
 )
 
 

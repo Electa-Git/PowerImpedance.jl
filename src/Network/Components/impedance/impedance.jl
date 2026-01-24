@@ -122,7 +122,7 @@ function impedance(; z = 0, pins::Int = 0, transformation = false)
 	imp.ABCD  = _abcd_from_z(Z, pins_eff)
 
 	element = Element(element_value = imp, input_pins = pins_eff, output_pins = pins_eff,
-		transformation = transformation)
+		transformation = transformation,connection = connection)
 	return element
 end
 
