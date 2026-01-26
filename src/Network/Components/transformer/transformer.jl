@@ -236,7 +236,7 @@ function make_power_flow!(
 		abcd[(n+1):end, 1:n],
 		abcd[(n+1):end, (n+1):end],
 	)
-	Y = [d*inv(b) c-d*inv(b)*a; -inv(b) a*inv(b)] * global_dict["Z"]
+	Y = [d*inv(b) c-d*inv(b)*a; -inv(b) inv(b)*a] * global_dict["Z"]
 
 	tap = sqrt(real(Y[n+1, n+1]/Y[1, 1]))
 	ys = -Y[1, n+1]*tap
