@@ -39,8 +39,8 @@ array with `gnd`. Impedance is estimated for the frequency in Hz within the rang
 The function returns complex impedance map and two arrays: first is the impedance
 array and the second one is frequency array.
 """
-function determine_impedance(network :: Network; input_pins :: Array{Any},
-    output_pins :: Array{Any}, elim_elements :: Array{Symbol},
+function determine_impedance(network :: Network; input_pins :: Array{Symbol},
+    output_pins ::Array{Symbol}, elim_elements :: Array{Symbol},
     freq_range = (0.001, 10000, 2000))
 
     """
@@ -138,9 +138,16 @@ function determine_impedance(network :: Network; input_pins :: Array{Any},
     # omegas= 2*pi* [1e0:20:1e5;] # Only for debugging
 
     # Solving the network equations for the impedance between input and output pins with Z parameters. Default.
-    impedance = []
-    for omega in omegas
-        push!(impedance, make_z(network, dict, input_pins, output_pins, omega*1im))
+    # impedance = []
+    # for omega in omegas
+    #     push!(impedance, make_z(network, dict, input_pins, output_pins, omega*1im))
+    # end
+    #impedance = [make_z(network, dict, input_pins, output_pins, omega*1im) for omega in omegas]
+
+
+    impedance = Vector{Matrix{ComplexF64}}(undef, length(omegas))
+    for i in eachindex(omegas)
+        impedance[i] = make_z(network, dict, input_pins, output_pins, omegas[i]*1im)
     end
 
 
