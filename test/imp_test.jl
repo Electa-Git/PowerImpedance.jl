@@ -137,8 +137,8 @@ for k in eachindex(omegas)
     omega=omegas[k]
 	Z_ac[k]=inv([matrices[k][1] matrices[k][2]; matrices[k][3] matrices[k][4]])
 	dummy, omega_ac =
-		determine_impedance(net, elim_elements = [:g1], input_pins = Any[:B7d, :B7q],
-			output_pins = Any[:gndd, :gndq],
+		determine_impedance(net, elim_elements = [:g1], input_pins = [:B7d, :B7q],
+			output_pins = [:gndd, :gndq],
 			freq_range = (omega/(2*pi), (omega+1)/(2*pi), 2))
         imp_ac[k]=dummy[1]
 
