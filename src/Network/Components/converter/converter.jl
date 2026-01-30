@@ -105,7 +105,7 @@ function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, ele
     end
     if typeof(converter) == Blackbox_MMC
             ((data["convdc"])[string(key)])["rc"] = converter.Rₘₑ / global_dict["Z"]
-            ((data["convdc"])[string(key)])["xc"] = 0.0 # needed?!
+            ((data["convdc"])[string(key)])["xc"] = 0.0 
     end
 
     converter.ω₀ = global_dict["omega"]
