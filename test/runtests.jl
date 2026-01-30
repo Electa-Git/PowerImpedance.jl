@@ -11,6 +11,7 @@ using LinearAlgebra
         include("solvers_test.jl")
         include("adm_OHL_test.jl")
         include("adm_DC_cable_test.jl")
+        include("adm_TLC_test.jl")
         include("Impedance_test.jl")
         include("Source_test.jl")
         include("Transformer_test.jl")

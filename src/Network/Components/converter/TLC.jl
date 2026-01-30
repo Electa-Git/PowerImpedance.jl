@@ -91,8 +91,8 @@ function tlc(;args...)
     connection = true
     for (key, val) in pairs(args)
         if isa(val, Controller)
-            if key ∈ (:vac_supp, :v_ac)
-                error("AC voltage support is not yet implemented")
+            if key == :vac_supp
+                #error("AC voltage support is not yet implemented")
             end
             converter.controls[key] = val
         elseif in(key, propertynames(converter))
@@ -117,7 +117,10 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
     iDC_base = Sbase/vDC_base
     iAC_base = 2*Sbase/3/vAC_base
     zAC_base = (3/2)*vAC_base^2/Sbase
+    zDC_base = vDC_base/iDC_base
     lAC_base = zAC_base/wbase
+    lDC_base = zDC_base/wbase
+    cbase = 1/wbase/zDC_base
 
     converter.vACbase = vAC_base
     converter.iACbase = iAC_base
@@ -125,7 +128,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
 
     Lᵣ = converter.Lᵣ / lAC_base
     Rᵣ = converter.Rᵣ / zAC_base
-
+    Cₑ = 1e-6/ cbase #Helper cap to arrange equilibrium in case of DC voltage control
     ω₀ = converter.ω₀
 
     Qac *=-1 # Correction for reactive power sign
@@ -193,6 +196,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
     index = 2
     index_PLL_angle = 0
 
+    Idc_in = Pdc/Vdc
     init_x[1] = Pac
     init_x[2] = Qac
 
@@ -291,8 +295,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
             ))
     end
 
-    # DC voltage control not yet implemented!!
-    # TODO: Think about DC voltage control and generalize the case for the absence of power controllers
+    # TODO:  Generalize the case for the absence of power controllers
     if in(:p, keys(converter.controls))
         # add frequency support
         if in(:f_supp, keys(converter.controls))
@@ -312,6 +315,43 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
                          x[$index+1]);
             F[$index+1] = $(converter.controls[:p].Kᵢ) *(p_ref - P_ac)))
         index += 1
+    elseif in(:dc, keys(converter.controls)) # DC voltage control
+
+
+        if ((converter.controls[:dc].n_f)) >= 1 # Filtering of Vdc
+
+            Abutt_vdc, Bbutt_vdc, Cbutt_vdc, Dbutt_vdc =  butterworthMatrices(converter.controls[:dc].n_f, converter.controls[:dc].ω_f, 1);
+            push!(exp.args, :(
+                
+                statesButt_vdc= x[$index + 1 : $index + 1*$(converter.controls[:vdc].n_f)]; 
+                F[$index + 1 : $index + 1*$(converter.controls[:vdc].n_f)] = $Abutt_vdc*statesButt_vdc + $Bbutt_vdc*Vdc;
+                Vdc_f=dot($Cbutt_vdc,statesButt_vdc)+$Dbutt_vdc*Vdc;
+        
+            ))
+            # init_x = [init_x;zeros(index-length(init_x))];
+            # init_x = [init_x; 1*zeros(converter.controls[:dc].n_f)];
+            index += 1*(converter.controls[:dc].n_f)
+
+
+        else # No filtering of Vdc
+            push!(exp.args, :(
+
+            Vdc_f= Vdc;
+
+            ))
+            
+
+        end
+
+
+        # DC voltage controller equations
+        push!(exp.args, :(
+                F[$index+1] = $(converter.controls[:dc].Kᵢ) * ($(converter.controls[:dc].ref[1]) - Vdc_f);
+                    id_ref = -($(converter.controls[:dc].Kₚ) * ($(converter.controls[:dc].ref[1]) - Vdc_f) +
+                                 x[$index+1]);))
+        epsilon_vdc_index = index + 1
+        index += 1    
+
     end
     if in(:q, keys(converter.controls))
         # add voltage support
@@ -361,7 +401,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
                       mq = 0;))
     end
 
-    # TODO: Not yet finalized
+
     # add time delays here, if there are controllers implemented
     if (converter.timeDelay != 0.0) && (in(:occ, keys(converter.controls)))
         push!(exp.args,
@@ -409,7 +449,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
     # add outputs (DC current and dq currents)
     push!(exp.args,
     :(
-        F[$index+1] = (vMd * x[1] + vMq * x[2]) / Vdc ; # Power balance
+        F[$index+1] = (vMd * x[1] + vMq * x[2]) / Vdc ; # Idc derived based in AC-DC power balance
         F[$index+2] = x[1] ; 
         F[$index+3] = x[2] ; 
         ))
@@ -427,6 +467,16 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
 
     vector_inputs = [Vdc, Vᴳd, Vᴳq]
     init_x = [init_x; zeros(index-length(init_x))]
+
+    # If there is a dc voltage controller, add an additional equation to represent the dc voltage, only for the steady-state solution
+    if in(:dc, keys(converter.controls))  
+        init_x =[init_x;Vdc]
+        push!(exp_equilibrium.args,
+        :(
+            F[$index+1] = $wbase * ($Idc_in - ((vMd * x[1] + vMq * x[2]) / Vdc)) / $Cₑ;
+            F[$epsilon_vdc_index] = $(converter.controls[:dc].Kᵢ) * ($(converter.controls[:dc].ref[1]) - x[end]);
+        ))
+    end
     # if in(:v_meas_filt, keys(converter.controls))
     #     init_x[indexVᴳdf] =  Vᴳd
     #     init_x[indexVᴳqf] =  1e-3 # Initialize to a small non-zero value to avoid Inf or NaN problems with nlsolve
@@ -451,7 +501,12 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
         println("TLC steady-state solution not found!")
     end
     
-    converter.equilibrium = sol.u
+    # Delete solution for additional equation in case of DC voltage control
+    if in(:dc, keys(converter.controls))
+        converter.equilibrium = sol.u[1:end-1] 
+    else
+        converter.equilibrium = sol.u
+    end
 
     number_output = 3
     number_input =3
