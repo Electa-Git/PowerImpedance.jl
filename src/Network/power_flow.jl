@@ -559,29 +559,31 @@ function add_interm_bus_ac!(data, global_dict)
 	bus = parse(Int, bus)
 	return bus
 end
-const dcpol = 2 # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
-function data_init!(data, global_dict)
-	data["source_type"] = "matpower"
-	data["name"] = "network"
-	data["source_version"] = "0.0.0"
-	data["per_unit"] = true
-	data["dcpol"] = dcpol # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
-	data["baseMVA"] = global_dict["S"] / 1e6
-	data["bus"] = Dict{String, Any}()
-	data["im"] = Dict{String, Any}()
-	data["busdc"] = Dict{String, Any}()
-	data["shunt"] = Dict{String, Any}()     # empty
-	data["dcline"] = Dict{String, Any}()    # empty
-	data["storage"] = Dict{String, Any}()   # empty
-	data["switch"] = Dict{String, Any}()    # empty
-	data["load"] = Dict{String, Any}()      # empty
-	data["branch"] = Dict{String, Any}()
-	data["branchdc"] = Dict{String, Any}()
-	data["gen"] = Dict{String, Any}()
-	data["convdc"] = Dict{String, Any}()
-	data["pst"] = Dict{String, Any}() ## Empty (Phase shifting transformer)
-	data["gendc"] = Dict{String, Any}()
-	return data
+const dcpol = 2
+function data_init(data, global_dict)
+    data["source_type"] = "matpower"
+    data["name"] = "network"
+    data["source_version"] = "0.0.0"
+    data["per_unit"] = true
+    data["dcpol"] = dcpol # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
+    data["baseMVA"] = global_dict["S"] / 1e6
+    data["bus"] = Dict{String, Any}()
+    data["im"] = Dict{String, Any}()
+    data["busdc"] = Dict{String, Any}()
+    data["shunt"] = Dict{String, Any}()     # empty
+    data["dcline"] = Dict{String, Any}()    # empty
+    data["storage"] = Dict{String, Any}()   # empty
+    data["switch"] = Dict{String, Any}()    # empty
+    data["load"] = Dict{String, Any}()      # empty
+    data["branch"] = Dict{String, Any}()
+    data["branchdc"] = Dict{String, Any}()
+    data["gen"] = Dict{String, Any}()
+	ata["im"] = Dict{String, Any}()
+    data["sssc"] = Dict{String, Any}()  # empty (avoid warning from PMACDC)
+    data["convdc"] = Dict{String, Any}()
+    data["pst"] = Dict{String, Any}() ## Empty (Phase shifting transformer)
+    data["gendc"] = Dict{String, Any}()
+    return data
 end
 
 function make_non_ground_node(elem::Element, bus2nodes)

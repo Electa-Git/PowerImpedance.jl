@@ -9,4 +9,9 @@ function eval_y(machine :: Machine, s :: Complex)
     return Y
 end
 
+function transformer_connected(machine::Machine)
+    return (machine.rt !=0 || machine.lt !=0)
+end
+
+
 
