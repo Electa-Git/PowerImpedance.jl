@@ -15,7 +15,7 @@ function power_flow(net:: Network)
     nodes_dict = net.nets
     elem_dict = net.elements
 
-    ## No power flow when linear (no setpoint updates)
+    # No power flow when linear (no setpoint updates) 
     if is_linear(net)
         println("Network only consists of linear elements. Skipping power flow.")
         return
@@ -41,13 +41,41 @@ function power_flow(net:: Network)
         make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
     end
 
+    #### 1b. Check for slack busses (add one if none present) (3 is slack bus)
+    if !(3 in [data["bus"][index]["bus_type"] for index in keys(data["bus"])])
+        println("WARNING: No slack bus present. The first PV bus with generator will be set as reference")
+        for gen_index in keys(data["gen"])
+            bus_gen = data["gen"][gen_index]["gen_bus"]
+            if data["bus"][string(bus_gen)]["bus_type"] == 2 # PV-bus
+                set_bus_type(data["bus"][string(bus_gen)], 3)
+                break
+            end
+            error("No PV bus with generator found. Update your problem!")
+        end
+    end
+
+
     #### 2. Run PowerModelsACDC power flow
     PowerModelsACDC.process_additional_data!(data)
     # TODO: Dirty fix of increasing tolerance with certain error. To be taken up with Hakan, Matteo or Giacomo.
-    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-8, "print_level" => 0, "max_iter" => 4000, "check_derivatives_for_naninf" => "yes")
+    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-8, "print_level" => 5, "max_iter" => 4000, "check_derivatives_for_naninf" => "yes", "grad_f_constant"=>"yes", 
+                                                "bound_relax_factor" => 1e-8, "expect_infeasible_problem"=> "yes", "fixed_variable_treatment"=>"relax_bounds")
     s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false)
     result = solve_acdcpf(data, ACPPowerModel, ipopt; setting = s)
-    println(result["termination_status"])
+    
+    # Rerun power flow with relaxed constraints if no convergence
+    if result["termination_status"] == MOI.LOCALLY_SOLVED
+        println("Power flow converged succesfully.")
+    else
+        println("No convergence (try again with relaxation): ",result["termination_status"])
+        
+        result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
+        if result["termination_status"] == MOI.LOCALLY_SOLVED
+            println("Power flow solution found with relaxation")
+        else
+            error("Second iteration not succesful. Check your formulation")
+        end
+    end
 
     #### 3. Update setpoints of active elements
     for (key, element) in net.elements
@@ -435,6 +463,7 @@ function data_init(data, global_dict)
     data["dcpol"] = 2 # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
     data["baseMVA"] = global_dict["S"] / 1e6
     data["bus"] = Dict{String, Any}()
+    data["im"] = Dict{String, Any}()
     data["busdc"] = Dict{String, Any}()
     data["shunt"] = Dict{String, Any}()     # empty
     data["dcline"] = Dict{String, Any}()    # empty

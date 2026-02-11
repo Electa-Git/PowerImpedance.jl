@@ -184,7 +184,7 @@ function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pa
     # input4 - TH
     # input5 - TI
     # input6 - TL
-    push!(exp_init.args, :(
+    function state_space_equil!(F,x,inputs,gen)
         i_d         = x[1];        # d-axis stator current
         i_df        = x[2];        # Field current
         i_d1        = 0;        # d-axis damping winding current
@@ -222,26 +222,26 @@ function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pa
         # Same eqs. as Paul C. Krause book but with qd swaped by dq
         # In addition, Te is computed for generator operation 
 
-        flux_d = - $Ld*i_d + $gen.La_d*(i_df + i_d1); # d-axis flux
-        flux_q = - $Lq*i_q + $gen.La_q*(i_q1 + i_q2); # q-axis flux
+        flux_d = - Ld*i_d + gen.La_d*(i_df + i_d1); # d-axis flux
+        flux_q = - Lq*i_q + gen.La_q*(i_q1 + i_q2); # q-axis flux
 
         Te = -(flux_d*i_q - flux_q*i_d); # Generator operation electrical torque n_ppoles*w_m = w_e
 
-        L_D = [-$Ld       $gen.La_d   $gen.La_d; 
-            -$gen.La_d   $Lff_d      $Lf1_d;
-            -$gen.La_d   $Lf1_d      $L11_d];
+        L_D = [-Ld       gen.La_d   gen.La_d; 
+            -gen.La_d   Lff_d      Lf1_d;
+            -gen.La_d   Lf1_d      L11_d];
 
-        L_Q = [-$Lq       $gen.La_q    $gen.La_q; 
-            -$gen.La_q   $L11_q       $gen.La_q;
-            -$gen.La_q   $gen.La_q    $L22_q];
+        L_Q = [-Lq       gen.La_q   gen.La_q; 
+            -gen.La_q   L11_q       gen.La_q;
+            -gen.La_q   gen.La_q    L22_q];
 
-        RHS_D = $gen.wn*[(v_d  +	($gen.Ra+$gen.rt)*i_d	- w_pu*flux_q);
-                    (v_df -	$gen.Rf_d*i_df);
-                    (0    - $gen.R1_d*i_d1)];
+        RHS_D = gen.wn*[(v_d  +	(gen.Ra+gen.rt)*i_d	- w_pu*flux_q);
+                    (v_df -	gen.Rf_d*i_df);
+                    (0    - gen.R1_d*i_d1)];
 
-        RHS_Q = $gen.wn*[(v_q  +  ($gen.Ra+$gen.rt)*i_q + w_pu*flux_d);
-                    (0    -  $gen.R1_q*i_q1);
-                    (0    -  $gen.R2_q*i_q2)];
+        RHS_Q = gen.wn*[(v_q  +  (gen.Ra+gen.rt)*i_q + w_pu*flux_d);
+                    (0    -  gen.R1_q*i_q1);
+                    (0    -  gen.R2_q*i_q2)];
 
         did_dt = L_D \ RHS_D;
         diq_dt = L_Q \ RHS_Q;
@@ -249,20 +249,20 @@ function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pa
         F[1:2] =  did_dt[1:2];
         F[3] =  diq_dt[1];
 
-        T_turb = $gen.F_HP*TchHP + $gen.F_IP*TreIP + $gen.F_LP*TcrLP;
+        T_turb = gen.F_HP*TchHP +gen.F_IP*TreIP + gen.F_LP*TcrLP;
 
-        F[4] = (T_turb - Te)/(2*$gen.H);   # Newton's II Law
-        F[5] = $gen.wn*(w_pu - 1);
+        F[4] = (T_turb - Te)/(2*gen.H);   # Newton's II Law
+        F[5] = gen.wn*(w_pu - 1);
         
         # AVR and exciter
-        v_t = v_dq + $gen.rt*[i_d;i_q] + w_pu*$gen.lt*Wpu*[i_d;i_q] + $gen.lt/$gen.wn*[F[1];F[3]]; # Machine terminal voltage
+        v_t = v_dq + gen.rt*[i_d;i_q] + w_pu*gen.lt*Wpu*[i_d;i_q] + gen.lt/gen.wn*[F[1];F[3]]; # Machine terminal voltage
 
-        F[6] = 1/$gen.T_R*(sqrt(v_t[1]*v_t[1]+v_t[2]*v_t[2]) - v_f);        # Voltage magnitude measurement (LPF)
-        dv = $gen.vref_SG - v_f;                             # Error TODO: The voltage reference can be made an input to the state-space model.
-        F[7] = 1/$gen.T_B*(dv - x_AVR);                 # Lead-lag state
-        y_AVR = $gen.T_C/$gen.T_B*dv + (1 - $gen.T_C/$gen.T_B)*x_AVR;       # Lead-lag output 
-        F[8] = 1/$gen.T_A*( $gen.K_A*y_AVR*$gen.Rf_d/$gen.La_d - v_df)    
-    ))
+        F[6] = 1/gen.T_R*(sqrt(v_t[1]*v_t[1]+v_t[2]*v_t[2]) - v_f);        # Voltage magnitude measurement (LPF)
+        dv = gen.vref_SG - v_f;                             # Error TODO: The voltage reference can be made an input to the state-space model.
+        F[7] = 1/gen.T_B*(dv - x_AVR);                 # Lead-lag state
+        y_AVR = gen.T_C/gen.T_B*dv + (1 - gen.T_C/gen.T_B)*x_AVR;       # Lead-lag output 
+        F[8] = 1/gen.T_A*( gen.K_A*y_AVR*gen.Rf_d/gen.La_d - v_df)    
+    end
 
     inputs_init = [v_bus_d0;v_bus_q0;Tm0;Tm0;Tm0]    
 
@@ -272,10 +272,10 @@ function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pa
     end
     init_init = zeros(8,1)
     init_init[4] = 1
-    g!(du,u,p,t) = f!(exp_init, du, u, inputs_init) # g is the state-space formulation used to obtain the steady-state operation point, copy from f, see some lines above
+    g!(du,u,p) = state_space_equil!(du, u, p[1], p[2]) # g is the state-space formulation used to obtain the steady-state operation point, copy from f, see some lines above
     println("Starting to solve for Steady-State Solution!")
-    prob = SteadyStateProblem(g!, init_init)
-    sol=solve(prob,SSRootfind(TrustRegion()),maxiters=20,abstol = 1e-6,reltol = 1e-6)
+    prob = NonlinearProblem(g!, init_init, (inputs_init, gen))
+    sol=solve(prob;maxiters=20,abstol = 1e-6,reltol = 1e-6)
     if SciMLBase.successful_retcode(sol)
         println("SG steady-state solution found!")
     else
@@ -310,8 +310,8 @@ function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pa
     
     # add state variables
     exp_fin = Expr(:block)
-    push!(exp_fin.args,
-    :(
+    function state_space_jac!(F, x, inputs, gen)
+   
         i_d         = x[1];        # d-axis stator current
         i_df        = x[2];        # Field current
         i_d1        = x[3];        # d-axis damping winding current
@@ -334,8 +334,8 @@ function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pa
         x_AVR       = x[15];
         v_df        = x[16];
 
-        v_bus_d = inputs[1] /  ($gen.Vᵃᶜ_base * sqrt(2/3)); # d-axis grid voltage [pu]
-        v_bus_q = inputs[2] /  ($gen.Vᵃᶜ_base * sqrt(2/3)); # q-axis grid voltage [pu]
+        v_bus_d = inputs[1] /  (gen.Vᵃᶜ_base * sqrt(2/3)); # d-axis grid voltage [pu]
+        v_bus_q = inputs[2] /  (gen.Vᵃᶜ_base * sqrt(2/3)); # q-axis grid voltage [pu]
         Tm      = inputs[3];  # Initial torque [pu] # When the AVR is not implemented, this input is the field voltage e_df
 
         # Infinite bus
@@ -352,55 +352,55 @@ function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pa
         # SG (d-aligned, q-lagging)
         # Same eqs. as Paul C. Krause book but with qd swaped by dq
         # In addition, Te is computed for generator operation 
-        L_D = [-$Ld       $gen.La_d   $gen.La_d; 
-            -$gen.La_d   $Lff_d      $Lf1_d;
-            -$gen.La_d   $Lf1_d      $L11_d];
+        L_D = [-Ld       gen.La_d   gen.La_d; 
+            -gen.La_d   Lff_d      Lf1_d;
+            -gen.La_d   Lf1_d      L11_d];
 
-        L_Q = [-$Lq       $gen.La_q    $gen.La_q; 
-            -$gen.La_q   $L11_q       $gen.La_q;
-            -$gen.La_q   $gen.La_q    $L22_q];
+        L_Q = [-Lq       gen.La_q    gen.La_q; 
+            -gen.La_q   L11_q       gen.La_q;
+            -gen.La_q   gen.La_q    L22_q];
 
-        flux_d = - $Ld*i_d + $gen.La_d*(i_df + i_d1); # d-axis flux
-        flux_q = - $Lq*i_q + $gen.La_q*(i_q1 + i_q2); # q-axis flux
+        flux_d = - Ld*i_d + gen.La_d*(i_df + i_d1); # d-axis flux
+        flux_q = - Lq*i_q + gen.La_q*(i_q1 + i_q2); # q-axis flux
 
         Te = -(flux_d*i_q - flux_q*i_d); # Generator operation electrical torque n_ppoles*w_m = w_e
 
-        RHS_D = $gen.wn*[(v_d  +	($gen.Ra+$gen.rt)*i_d	- w_pu*flux_q);
-                    (v_df -	$gen.Rf_d*i_df);
-                    (0    - $gen.R1_d*i_d1)];
+        RHS_D = gen.wn*[(v_d  +	(gen.Ra+gen.rt)*i_d	- w_pu*flux_q);
+                    (v_df -	gen.Rf_d*i_df);
+                    (0    - gen.R1_d*i_d1)];
 
-        RHS_Q = $gen.wn*[(v_q  +  ($gen.Ra+$gen.rt)*i_q + w_pu*flux_d);
-                    (0    -  $gen.R1_q*i_q1);
-                    (0    -  $gen.R2_q*i_q2)];
+        RHS_Q = gen.wn*[(v_q  +  (gen.Ra+gen.rt)*i_q + w_pu*flux_d);
+                    (0    -  gen.R1_q*i_q1);
+                    (0    -  gen.R2_q*i_q2)];
 
         F[1:3] = L_D \ RHS_D;
         F[4:6] = L_Q \ RHS_Q;
 
-        T_turb = $gen.F_HP*TchHP + $gen.F_IP*TreIP + $gen.F_LP*TcrLP;
+        T_turb = gen.F_HP*TchHP + gen.F_IP*TreIP + gen.F_LP*TcrLP;
 
-        F[7] = (T_turb - Te)/(2*$gen.H);   # Newton's II Law
-        F[8] = $gen.wn*(w_pu - 1);
+        F[7] = (T_turb - Te)/(2*gen.H);   # Newton's II Law
+        F[8] = gen.wn*(w_pu - 1);
 
         # Mechanical equations for the governor
-        F[9] = 1/$gen.T_w*( 1 - w_pu  - dw_filt ); # Governor frequency filter
-        F[10] = 1/$gen.T_G*( dw_filt/$gen.R + Tm - flow); # Servo TF
+        F[9] = 1/gen.T_w*( 1 - w_pu  - dw_filt ); # Governor frequency filter
+        F[10] = 1/gen.T_G*( dw_filt/gen.R + Tm - flow); # Servo TF
 
-        F[11] = 1/$gen.T_CH*(flow  - TchHP); # HP turbine fraction
-        F[12] = 1/$gen.T_RH*(TchHP - TreIP); # IP turbine fraction
-        F[13] = 1/$gen.T_CO*(TreIP - TcrLP); # LP turbine fraction
+        F[11] = 1/gen.T_CH*(flow  - TchHP); # HP turbine fraction
+        F[12] = 1/gen.T_RH*(TchHP - TreIP); # IP turbine fraction
+        F[13] = 1/gen.T_CO*(TreIP - TcrLP); # LP turbine fraction
         
         # AVR and exciter
-        v_t = v_dq + $gen.rt*[i_d;i_q] + w_pu*$gen.lt*Wpu*[i_d;i_q] + $gen.lt/$gen.wn*[F[1];F[4]]; # Machine terminal voltage
+        v_t = v_dq +gen.rt*[i_d;i_q] + w_pu*gen.lt*Wpu*[i_d;i_q] + gen.lt/gen.wn*[F[1];F[4]]; # Machine terminal voltage
         
         # F[14] = 1/$gen.T_R*(sqrt(transpose(v_t)*v_t) - v_f);        # Voltage magnitude measurement (LPF)
-        F[14] = 1/$gen.T_R*(sqrt(v_t[1]*v_t[1]+v_t[2]*v_t[2]) - v_f);        # Voltage magnitude measurement (LPF)
-        dv = $gen.vref_SG - v_f;                             # Error TODO: The voltage reference can be made an input to the state-space model.
-        F[15] = 1/$gen.T_B*(dv - x_AVR);                 # Lead-lag state
-        y_AVR = $gen.T_C/$gen.T_B*dv + (1 - $gen.T_C/$gen.T_B)*x_AVR;       # Lead-lag output 
-        F[16] = 1/$gen.T_A*( $gen.K_A*y_AVR*$gen.Rf_d/$gen.La_d - v_df);
+        F[14] = 1/gen.T_R*(sqrt(v_t[1]*v_t[1]+v_t[2]*v_t[2]) - v_f);        # Voltage magnitude measurement (LPF)
+        dv = gen.vref_SG - v_f;                             # Error TODO: The voltage reference can be made an input to the state-space model.
+        F[15] = 1/gen.T_B*(dv - x_AVR);                 # Lead-lag state
+        y_AVR = gen.T_C/gen.T_B*dv + (1 - gen.T_C/gen.T_B)*x_AVR;       # Lead-lag output 
+        F[16] = 1/gen.T_A*( gen.K_A*y_AVR*gen.Rf_d/gen.La_d - v_df);
         F[17:18] = -T\[i_d;i_q]
-
-        ))
+    end
+        
 
     # Setting up the equilibrium point based on the initial solution
     gen.equilibrium = init_x
@@ -416,8 +416,8 @@ function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pa
     input_vars = 3 # vd, vq, Tm
     output_vars= 2
 
-    h(F,x) = f!(exp_fin, F, x[1:end-input_vars], x[end-input_vars+1:end])
-    ha = x -> (F = fill(zero(eltype(x)), state_vars+output_vars); h(F, x); return F)
+    h!(F,x) = state_space_jac!(F, x[1:end-input_vars], x[end-input_vars+1:end], gen)
+    ha = x -> (F = fill(zero(eltype(x)), state_vars+output_vars); h!(F, x); return F)
     jac = zeros(state_vars+output_vars, state_vars+input_vars)
     ForwardDiff.jacobian!(jac, ha, [gen.equilibrium[1:state_vars];vector_inputs])
 
