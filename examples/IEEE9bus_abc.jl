@@ -214,14 +214,14 @@ function run_nets(L_arg)
 	end
 
 	@time imp_ac1, omega_ac1 = determine_impedance(net, elim_elements = [:g1],
-		input_pins = Any[:Bus1a, :Bus1b, :Bus1c],
-		output_pins = Any[:gnda, :gndb, :gndc], freq_range = (100, 5000, 1000)) # impedance seen from Bus1
+		input_pins = [:Bus1a, :Bus1b, :Bus1c],
+		output_pins = [:gnda, :gndb, :gndc], freq_range = (100, 5000, 1000)) # impedance seen from Bus1
 	@time imp_ac2, omega_ac2 = determine_impedance(net, elim_elements = [:g2],
-		input_pins = Any[:Bus2a, :Bus2b, :Bus2c],
-		output_pins = Any[:gnda, :gndb, :gndc], freq_range = (100, 5000, 1000)) # impedance seen from Bus2
+		input_pins = [:Bus2a, :Bus2b, :Bus2c],
+		output_pins = [:gnda, :gndb, :gndc], freq_range = (100, 5000, 1000)) # impedance seen from Bus2
 	@time imp_ac3, omega_ac3 = determine_impedance(net, elim_elements = [:g3],
-		input_pins = Any[:Bus3a, :Bus3b, :Bus3c],
-		output_pins = Any[:gnda, :gndb, :gndc], freq_range = (100, 5000, 1000)) # impedance seen from Bus3
+		input_pins = [:Bus3a, :Bus3b, :Bus3c],
+		output_pins = [:gnda, :gndb, :gndc], freq_range = (100, 5000, 1000)) # impedance seen from Bus3
 
 	return imp_ac1, omega_ac1
 end
