@@ -4,7 +4,7 @@ export power_flow, result, data
 Forms the dictionary needed for solving the power flow problem using
 package PowerModelsACDC. After successful power flow solving, it updates
 the operating point of the active devices """
-function power_flow(net:: Network)
+function power_flow(net:: Network; debug=Dict{Symbol, Tuple{Float64, Float64, Float64, Float64, Float64, Float64}}(), line=:none, Q_ST=0.0, Vac_ref_ST=0.0)
     global ang_min, ang_max, result, nodes2bus, elem2comp, data
     global_dict = PowerModelsACDC.get_pu_bases(1000, net.voltageBase[1]) # 3-PH MVA, LL-RMS, Original setting was 100,320
     global_dict["omega"] = 2π * 50
@@ -58,20 +58,32 @@ function power_flow(net:: Network)
     #### 2. Run PowerModelsACDC power flow
     PowerModelsACDC.process_additional_data!(data)
     # TODO: Dirty fix of increasing tolerance with certain error. To be taken up with Hakan, Matteo or Giacomo.
-    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-8, "print_level" => 5, "max_iter" => 4000, "check_derivatives_for_naninf" => "yes", "grad_f_constant"=>"yes", 
+    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-8, "print_level" => 5, "max_iter" => 4000, "check_derivatives_for_naninf" => "yes", "grad_f_constant"=>"yes",
                                                 "bound_relax_factor" => 1e-8, "expect_infeasible_problem"=> "yes", "fixed_variable_treatment"=>"relax_bounds")
     s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false)
     result = solve_acdcpf(data, ACPPowerModel, ipopt; setting = s)
     
     # Rerun power flow with relaxed constraints if no convergence
+    println(result["termination_status"])
     if result["termination_status"] == MOI.LOCALLY_SOLVED
         println("Power flow converged succesfully.")
     else
         println("No convergence (try again with relaxation): ",result["termination_status"])
-        
+        bus=PowerImpedanceACDC.nodes2bus[Set([:Bus9d, :Bus9q])][2]
+        vm=PowerImpedanceACDC.result["solution"]["bus"][string(bus)]["vm"]
+        va=PowerImpedanceACDC.result["solution"]["bus"][string(bus)]["va"]
+        p=PowerImpedanceACDC.result["solution"]["convdc"]["1"]["pgrid"]
+        q=PowerImpedanceACDC.result["solution"]["convdc"]["1"]["qgrid"]
+        push!(debug, line => (Q_ST/269,Vac_ref_ST/(345*sqrt(2/3)),vm,va,p,q)) # Qset,Vset,V,θ,P,Q 
         result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
         if result["termination_status"] == MOI.LOCALLY_SOLVED
             println("Power flow solution found with relaxation")
+            vm=PowerImpedanceACDC.result["solution"]["bus"][string(bus)]["vm"]
+            va=PowerImpedanceACDC.result["solution"]["bus"][string(bus)]["va"]
+            p=PowerImpedanceACDC.result["solution"]["convdc"]["1"]["pgrid"]
+            q=PowerImpedanceACDC.result["solution"]["convdc"]["1"]["qgrid"]
+            push!(debug, Symbol("$line$(:relax)") => (Q_ST,Vac_ref_ST,vm,va,p,q)) # Qset,Vset,V,θ,P,Q 
+
         else
             error("Second iteration not succesful. Check your formulation")
         end
