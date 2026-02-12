@@ -24,9 +24,6 @@ PowerModelsACDC = "ff45984e-d068-5f4c-9e32-c4133509d236"
 RobustAndOptimalControl = "21fd56a4-db03-40ee-82ee-a87907bee541"
 SteadyStateDiffEq = "9672c7b4-1e72-59bd-8a11-6ac3964bc41f"
 
-[sources]
-PowerModelsACDC = {path = "C:\\Users\\rvandere\\.julia\\dev\\PowerModelsACDC"}
-
 [compat]
 ControlSystemsBase = "^1.17.2"
 DataStructures = "^0.18.22"
