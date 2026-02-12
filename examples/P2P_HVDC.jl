@@ -6,7 +6,7 @@ qC1 = 100
 qC2 = 100
 # The P and Q defined here are what is injected into the network. 
 
-net = @network begin
+@time net = @network begin
 
 	voltageBase = transmissionVoltage
 
@@ -119,9 +119,9 @@ net = @network begin
 end
 
 # Determine impedance seen at the AC side of the HVDC link
-imp_ac, omega_ac =
-	determine_impedance(net, elim_elements = [:g1], input_pins = Any[:B7d, :B7q],
-		output_pins = Any[:gndd, :gndq], freq_range = (100, 5000, 1000))
+@time imp_ac, omega_ac =
+	determine_impedance(net, elim_elements = [:g1], input_pins = [:B7d, :B7q],
+		output_pins = [:gndd, :gndq], freq_range = (100, 5000, 1000))
 
 # Plot Z_dd
 Z_dd = getindex.(imp_ac, 1, 1)

@@ -57,9 +57,9 @@ function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, ele
         ((data["convdc"])[string(key)])["type_dc"] = 2  # constant DC voltage
     end
 
-    if in(:vac_supp, keys(converter.controls))
+    if in(:vac_supp, keys(converter.controls)) # AC voltage droop control
         ((data["convdc"])[string(key)])["acq_droop"] = 1
-        ((data["convdc"])[string(key)])["kq_droop"] = (converter.controls[:vac_supp].Kₚ)# * (converter.Sbase *1e6 / global_dict["S"]) / (converter.vAC_base_LL_RMS / (global_dict["V"] * sqrt(3) / 1e3))
+        ((data["convdc"])[string(key)])["kq_droop"] = (converter.controls[:vac_supp].Kₚ*(converter.Sbase/(global_dict["S"]*1e-6))) # Adjust for PMACDC pu base
     else
         ((data["convdc"])[string(key)])["acq_droop"] = 0
         ((data["convdc"])[string(key)])["kq_droop"] = 0
