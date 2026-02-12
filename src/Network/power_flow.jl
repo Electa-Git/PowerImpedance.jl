@@ -489,3 +489,32 @@ function make_node(elem::Element, side::Int)
     pins = elem.pins
     return Set([pins[k] for k in sort(collect(keys(pins))) if startswith(string(k), "$(side).")]) # This is the node wherefore nodes_dict gives us all the pins connected to this node
 end
+
+
+### Relaxation function to see which constraints might be violated
+
+function solve_acdcpf_relax(data::Dict{String,Any}, model_type::Type, solver; kwargs...)
+    #PowerModels function that generates PowerModel
+    pm = _PM.instantiate_model(data, model_type,build_acdcpf; ref_extensions = [add_ref_dcgrid!, ref_add_pst!, ref_add_sssc!, ref_add_flex_load!, ref_add_gendc!, ref_add_im!], kwargs...)
+    
+    #Set the Ipopt optimizer
+    JuMP.set_optimizer(pm.model, solver)
+    
+    #Relax constraints with map indicating the values for the constraints
+    map = JuMP.relax_with_penalty!(pm.model;default=2.0)
+    # Copied from base.jl of InfrastructureModels
+    JuMP.optimize!(pm.model)
+    result = _IM.build_result(pm, JuMP.solve_time(pm.model))
+    pm.solution = result["solution"]
+    
+    # Check if a constraint got violated
+    for (con, penalty) in map
+        violation = JuMP.value(penalty)
+        if abs(violation) > 1e-6
+            println("ATTENTION! Constraint `$(JuMP.name(con))` is violated by $violation")
+            # error("Power flow constraints are violated.") TODO: Uncomment again
+        end
+    end
+
+    return result
+end

@@ -26,6 +26,9 @@ using ForwardDiff, NonlinearSolve, SteadyStateDiffEq  # solve diffs and nonlinea
 
 # Power flow
 using PowerModels, PowerModelsACDC
+import InfrastructureModels
+const _IM = InfrastructureModels
+const _PM = PowerModels
 using Ipopt
 using JuMP
 
