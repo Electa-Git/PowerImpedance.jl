@@ -85,15 +85,18 @@ end
 
 function inductionmachine(;args...)
     gen = InductionMachine()
+    connection = true
     for (key, val) in pairs(args)
         if in(key, propertynames(gen))
-            setfield!(gen, key, val)                                                        
+            setfield!(gen, key, val)    
+        elseif (key == :connection)
+            connection = val                                                    
         else
             throw(ArgumentError("Machine does not have a property $(key)."))
         end
     end
 
-    elem = Element(input_pins = 2, output_pins = 2, element_value = gen)
+    elem = Element(input_pins = 2, output_pins = 2, element_value = gen, connection=connection)
 end
 
 

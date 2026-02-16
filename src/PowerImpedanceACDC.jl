@@ -105,7 +105,7 @@ include("Network/Components/converter/blackbox_MMC.jl")
 # Machines
 include("Network/Components/machine/machine.jl")
 include("Network/Components/machine/SynchronousMachine.jl")
-
+include("Network/Components/machine/InductionMachine.jl")
 
 # Including network
 include("Network/Network.jl")
