@@ -1144,7 +1144,7 @@ function state_space!(F,x,inputs;converter, solver)
 ############################################ P control###################################################################################
     if in(:p, keys(converter.controls)) 
     
-        converter.controls[:p].ref[1] /= Sbase # conversion back to pu again
+        # converter.controls[:p].ref[1] /= Sbase # conversion back to pu again
         
                 P_ac = (Vᴳd * iΔd + Vᴳq * iΔq)
 
@@ -1281,7 +1281,7 @@ function state_space!(F,x,inputs;converter, solver)
 
 ################################################Q control###############################################################################
     if in(:q, keys(converter.controls))
-        converter.controls[:q].ref[1] /= Sbase # The minus sign corrects for the Q convention used in the model.
+        # converter.controls[:q].ref[1] /= Sbase # The minus sign corrects for the Q convention used in the model.
         
         
      
@@ -1313,7 +1313,7 @@ function state_space!(F,x,inputs;converter, solver)
 
 
         if in(:vac_supp, keys(converter.controls)) # Voltage droop control
-            converter.controls[:vac_supp].ref[1] /= (vAC_base / converter.turnsRatio)
+            # converter.controls[:vac_supp].ref[1] /= (vAC_base / converter.turnsRatio)
             
      
                 Vᴳ_mag = sqrt(Vᴳd^2+Vᴳq^2)
@@ -1374,7 +1374,7 @@ function state_space!(F,x,inputs;converter, solver)
 #TODO: Implement filter for voltage filtering here, discuss with Ozgur...🤐. I think the minus sign is missing here!
     elseif in(:vac, keys(converter.controls))
         
-        converter.controls[:vac].ref[1] /= (vAC_base / converter.turnsRatio)
+        # converter.controls[:vac].ref[1] /= (vAC_base / converter.turnsRatio)
         
       
             Vᴳ_mag = sqrt(Vᴳd^2+Vᴳq^2)
