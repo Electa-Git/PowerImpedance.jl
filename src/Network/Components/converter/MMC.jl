@@ -1785,7 +1785,7 @@ end
     if SciMLBase.successful_retcode(sol)
         println("MMC steady-state solution found!")
     else
-        println("MMC steady-state solution not found!")
+        error("MMC steady-state solution not found!")
     end
 
     # Delete solution for additional equation in case of DC voltage control

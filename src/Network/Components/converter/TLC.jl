@@ -227,7 +227,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
 
         # add voltage measurement filter
         if in(:v_meas_filt, keys(converter.controls))
-            Abutt, Bbutt, Cbutt, Dbutt =  butterworthMatrices(converter.controls[:v_meas_filt].n_f, converter.controls[:v_meas_filt].ω_f, 2);
+            
 
             voltagesIn = [Vᴳd;Vᴳq];
             statesButt= x[index + 1 : index + 2*(converter.controls[:v_meas_filt].n_f)]; 
@@ -248,7 +248,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
         # add PLL
         if in(:pll, keys(converter.controls))
             if (converter.controls[:pll].ω_f != 0) # A PLL filter is implemented
-                Abutt_pll, Bbutt_pll, Cbutt_pll, Dbutt_pll =  butterworthMatrices(converter.controls[:pll].n_f, converter.controls[:pll].ω_f, 1);
+                
             
                 statesButt_pll= x[index + 1 : index + 1*(converter.controls[:pll].n_f)]; 
                 F[index + 1 : index + 1*(converter.controls[:pll].n_f)] = Abutt_pll*statesButt_pll + Bbutt_pll*Vᴳq_f;
@@ -280,7 +280,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
 
         # add current measurement filter
         if in(:i_meas_filt, keys(converter.controls))
-            Abutt_i, Bbutt_i, Cbutt_i, Dbutt_i =  butterworthMatrices(converter.controls[:i_meas_filt].n_f, converter.controls[:i_meas_filt].ω_f, 2);
+            
 
             currentsIn = [i_d_pcc_c;i_q_pcc_c];
             statesButt_i= x[index + 1 : index + 2*(converter.controls[:i_meas_filt].n_f)]; 
@@ -327,7 +327,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
 
             if ((converter.controls[:dc].n_f)) >= 1 # Filtering of Vdc
 
-                Abutt_vdc, Bbutt_vdc, Cbutt_vdc, Dbutt_vdc =  butterworthMatrices(converter.controls[:dc].n_f, converter.controls[:dc].ω_f, 1);
+                
 
                 
                 statesButt_vdc= x[index + 1 : index + 1*(converter.controls[:vdc].n_f)]; 
@@ -360,7 +360,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
         if in(:q, keys(converter.controls))
             # add voltage support
             if in(:vac_supp, keys(converter.controls))
-                converter.controls[:vac_supp].ref[1] /= vAC_base #Per unitize voltage reference
+                #converter.controls[:vac_supp].ref[1] /= vAC_base #Per unitize voltage reference
                 
                 Vᴳ_mag = sqrt(Vᴳd_f^2 + Vᴳq_f^2);
                 Δq_unf = (converter.controls[:vac_supp].Kₚ)*((converter.controls[:vac_supp].ref[1])-Vᴳ_mag);
@@ -419,12 +419,6 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
                 
                 timeDelayIn = [md;mq];
                 statesDelay = x[index + 1 : index + 2*converter.padeOrderDen]; 
-                timeDelayOut = timeDelayPadeMatrices(converter.padeOrderNum,converter.padeOrderDen,converter.timeDelay,length(timeDelayIn));
-                
-                A_delay = timeDelayOut[1];
-                B_delay = timeDelayOut[2];
-                C_delay = timeDelayOut[3];
-                D_delay = timeDelayOut[4];
                 F[index + 1 : index + 2*converter.padeOrderDen] = A_delay*statesDelay + B_delay*timeDelayIn;
                 # timeDelayOut = C_delay*statesDelay + D_delay*timeDelayIn;
                 # Implement phase shifts by transforming the dq voltage references to alpha-beta
@@ -471,46 +465,16 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
     end
 
 
-
-    exp = Expr(:block)
-    # Represent measurements here before possible voltage filtering
-    if in(:pll, keys(converter.controls))
-        index_PLL_angle = index + 1*(converter.controls[:pll].n_f) +2
-        if in(:v_meas_filt, keys(converter.controls))
-            index_PLL_angle +=  2*(converter.controls[:v_meas_filt].n_f)  
-        end        
-        push!(exp.args, :(
-            T_θ = [cos(x[$index_PLL_angle]) -sin(x[$index_PLL_angle]); sin(x[$index_PLL_angle]) cos(x[$index_PLL_angle])];
-            I_θ = [cos(x[$index_PLL_angle]) sin(x[$index_PLL_angle]); -sin(x[$index_PLL_angle]) cos(x[$index_PLL_angle])];          
-        ))
-    else
-        push!(exp.args, :(
-            T_θ = [1 0; 0 1];
-            I_θ = [1 0; 0 1];
-        ))
-    end
-    push!(exp.args, :(
-        Vdc = inputs[1];
-        (Vᴳd, Vᴳq) = T_θ * [inputs[2]; inputs[3]];
-    ))
+    ##################################################################################################################################################################################################################
+    # Here we iterate over the existing controls in order to determine the dimensions of the state vector 
+    # Also we calculate the matrices of the butterworth filters
+    # TODO: Passing the matrices as a parameter to state_space!()?
 
     # add voltage measurement filter
     if in(:v_meas_filt, keys(converter.controls))
         Abutt, Bbutt, Cbutt, Dbutt =  butterworthMatrices(converter.controls[:v_meas_filt].n_f, converter.controls[:v_meas_filt].ω_f, 2);
-        push!(exp.args, :(
-            voltagesIn = [Vᴳd;Vᴳq];
-            statesButt= x[$index + 1 : $index + 2*$(converter.controls[:v_meas_filt].n_f)]; 
-            F[$index + 1 : $index + 2*$(converter.controls[:v_meas_filt].n_f)] = $Abutt*statesButt + $Bbutt*voltagesIn;
-            voltagesOut=$Cbutt*statesButt+$Dbutt*voltagesIn;
-            Vᴳd_f=voltagesOut[1];
-            Vᴳq_f=voltagesOut[2];
-            ))
         index += 2*(converter.controls[:v_meas_filt].n_f) 
         init_x = [init_x;Vᴳd;Vᴳq] #Initalize to avoid steady-state solver problems
-    else
-        push!(exp.args, :(
-            (Vᴳd_f, Vᴳq_f) = (Vᴳd, Vᴳq);
-            ))
     end
     
 
@@ -518,74 +482,33 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
     if in(:pll, keys(converter.controls))
         if (converter.controls[:pll].ω_f != 0) # A PLL filter is implemented
             Abutt_pll, Bbutt_pll, Cbutt_pll, Dbutt_pll =  butterworthMatrices(converter.controls[:pll].n_f, converter.controls[:pll].ω_f, 1);
-            push!(exp.args, :(               
-                statesButt_pll= x[$index + 1 : $index + 1*$(converter.controls[:pll].n_f)]; 
-                F[$index + 1 : $index + 1*$(converter.controls[:pll].n_f)] = $Abutt_pll*statesButt_pll + $Bbutt_pll*Vᴳq_f;
-                vₚₗₗ=dot($Cbutt_pll,statesButt_pll)+$Dbutt_pll*Vᴳq_f;# Get rid of 1-element array
-            ))
 
-           
             index += 1*(converter.controls[:pll].n_f)
             
-        else
-            push!(exp.args, :(
-                vₚₗₗ = Vᴳq
-            ))
         end
-        push!(exp.args, :(
-            F[$index+1] = -vₚₗₗ*$(converter.controls[:pll].Kᵢ);
-            Δω = $(converter.controls[:pll].Kₚ) * (-vₚₗₗ) + x[$index+1];
-            ω = $(converter.ω₀)/$wbase + Δω;
-            F[$index+2] = $wbase*Δω;
-        ))
+
         index += 2
-    else
-        push!(exp.args, :(
-            Δω = 0;
-        ))
     end
-    push!(exp.args, :((i_d_pcc_c, i_q_pcc_c) = T_θ * [x[1]; x[2]];))
+
 
     # add current measurement filter
     if in(:i_meas_filt, keys(converter.controls))
         Abutt_i, Bbutt_i, Cbutt_i, Dbutt_i =  butterworthMatrices(converter.controls[:i_meas_filt].n_f, converter.controls[:i_meas_filt].ω_f, 2);
-        push!(exp.args, :(
-            currentsIn = [i_d_pcc_c;i_q_pcc_c];
-            statesButt_i= x[$index + 1 : $index + 2*$(converter.controls[:i_meas_filt].n_f)]; 
-            F[$index + 1 : $index + 2*$(converter.controls[:i_meas_filt].n_f)] = $Abutt_i*statesButt_i + $Bbutt_i*currentsIn;
-            currentsOut=$Cbutt_i*statesButt_i+$Dbutt_i*currentsIn;
-            i_d_pcc_f=currentsOut[1];
-            i_q_pcc_f=currentsOut[2];
-            ))
-        # init_x = [init_x;zeros(index-length(init_x))]
-        index += 2*(converter.controls[:i_meas_filt].n_f)
-        # init_x = [init_x;Id;Iq]
 
-    else
-        push!(exp.args, :(
-            (i_d_pcc_f, i_q_pcc_f) = (i_d_pcc_c, i_q_pcc_c);
-            ))
+        index += 2*(converter.controls[:i_meas_filt].n_f)
+
     end
 
     # TODO:  Generalize the case for the absence of power controllers
     if in(:p, keys(converter.controls))
-        # add frequency support
+
         if in(:f_supp, keys(converter.controls))
-            push!(exp.args, :(
-                F[$index+1] = $(converter.controls[:f_supp].ω_f) *(-$(converter.controls[:f_supp].Kₚ)*Δω - x[$index+1]);
-                p_ref = $(converter.controls[:p].ref[1]) + x[$index+1]))
+
             index +=1
-        else
-            push!(exp.args, :(
-                p_ref = $(converter.controls[:p].ref[1])))
+
+
         end
-        # active power control
-        push!(exp.args, :(
-            P_ac = (Vᴳd_f * i_d_pcc_f + Vᴳq_f * i_q_pcc_f);
-            # iΔd_ref = (Kp_Pac * (Pac_ref - Pac) + Ki_Pac * xiPac);
-            id_ref = ($(converter.controls[:p].Kₚ) * (p_ref - P_ac) +
-                         x[$index+1]);
-            F[$index+1] = $(converter.controls[:p].Kᵢ) *(p_ref - P_ac)))
+
         index += 1
     elseif in(:dc, keys(converter.controls)) # DC voltage control
 
@@ -593,34 +516,10 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
         if ((converter.controls[:dc].n_f)) >= 1 # Filtering of Vdc
 
             Abutt_vdc, Bbutt_vdc, Cbutt_vdc, Dbutt_vdc =  butterworthMatrices(converter.controls[:dc].n_f, converter.controls[:dc].ω_f, 1);
-            push!(exp.args, :(
-                
-                statesButt_vdc= x[$index + 1 : $index + 1*$(converter.controls[:vdc].n_f)]; 
-                F[$index + 1 : $index + 1*$(converter.controls[:vdc].n_f)] = $Abutt_vdc*statesButt_vdc + $Bbutt_vdc*Vdc;
-                Vdc_f=dot($Cbutt_vdc,statesButt_vdc)+$Dbutt_vdc*Vdc;
-        
-            ))
-            # init_x = [init_x;zeros(index-length(init_x))];
-            # init_x = [init_x; 1*zeros(converter.controls[:dc].n_f)];
             index += 1*(converter.controls[:dc].n_f)
-
-
-        else # No filtering of Vdc
-            push!(exp.args, :(
-
-            Vdc_f= Vdc;
-
-            ))
-            
 
         end
 
-
-        # DC voltage controller equations
-        push!(exp.args, :(
-                F[$index+1] = $(converter.controls[:dc].Kᵢ) * ($(converter.controls[:dc].ref[1]) - Vdc_f);
-                    id_ref = -($(converter.controls[:dc].Kₚ) * ($(converter.controls[:dc].ref[1]) - Vdc_f) +
-                                 x[$index+1]);))
         epsilon_vdc_index = index + 1
         index += 1    
 
@@ -629,131 +528,48 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
         # add voltage support
         if in(:vac_supp, keys(converter.controls))
             converter.controls[:vac_supp].ref[1] /= vAC_base #Per unitize voltage reference
-            push!(exp.args, :(
-                Vᴳ_mag = sqrt(Vᴳd_f^2 + Vᴳq_f^2);
-                Δq_unf = $(converter.controls[:vac_supp].Kₚ)*($(converter.controls[:vac_supp].ref[1])-Vᴳ_mag);
-                F[$index+1] = $(converter.controls[:vac_supp].ω_f) *(Δq_unf - x[$index+1]);
-                q_ref = $(converter.controls[:q].ref[1]) + x[$index+1]))
-            # init_x = [init_x;zeros(index-length(init_x))] #Initalize states before voltage support to zero
+
             index +=1
-            # init_x = [init_x;converter.controls[:vac_supp].ref[1]]
-        else
-            push!(exp.args, :(
-                q_ref = $(converter.controls[:q].ref[1])))
+
         end
-        # reactive power control
-        push!(exp.args, :(
-            Q_ac =  (-Vᴳq_f * i_d_pcc_f + Vᴳd_f * i_q_pcc_f);
-            iq_ref = ($(converter.controls[:q].Kₚ) * (q_ref - Q_ac) +
-                         x[$index+1]);
-            F[$index+1] = $(converter.controls[:q].Kᵢ) *(q_ref - Q_ac)))
+
         index += 1
-         #Small value to converge
+
     end
     # add control equations
     for (key, val) in (converter.controls)                
         if (key == :occ)
-            # output current control
-            push!(exp.args, :(
-                        F[$index+1] = $(converter.controls[:occ].Kᵢ) * (id_ref - i_d_pcc_f);
-                        F[$index+2] = $(converter.controls[:occ].Kᵢ) * (iq_ref - i_q_pcc_f);
-
-                        md_c = 2 * ( x[$index+1] +
-                                    $(converter.controls[:occ].Kₚ) * (id_ref - i_d_pcc_f) + $Lᵣ * (1 + Δω) * i_q_pcc_f + Vᴳd_f) / Vdc; # 
-                        mq_c = 2 * ( x[$index+2] +
-                                    $(converter.controls[:occ].Kₚ) * (iq_ref - i_q_pcc_f) - $Lᵣ * (1 + Δω) * i_d_pcc_f + Vᴳq_f) / Vdc; # 
-                        (md, mq) = I_θ * [md_c; mq_c]))
             index += 2
         end
-    end
-
-    if !in(:occ, keys(converter.controls))
-        push!(exp.args,
-                    :(md = 0;
-                      mq = 0;))
     end
 
 
     # add time delays here, if there are controllers implemented
     if (converter.timeDelay != 0.0) && (in(:occ, keys(converter.controls)))
-        push!(exp.args,
-            :(
-            T_ab_dq=0.5*[1 im;-im 1];# from alpha-beta to dq
-            T_dq_ab=0.5*[1 -im;im 1];#from dq to alpha-beta
-            ))
-        if in(:occ, keys(converter.controls))
-            push!(exp.args,
-            :(
-                timeDelayIn = [md;mq];
-                statesDelay = x[$index + 1 : $index + 2*$converter.padeOrderDen]; 
-                timeDelayOut = timeDelayPadeMatrices($converter.padeOrderNum,$converter.padeOrderDen,$converter.timeDelay,length(timeDelayIn));
-                
-                A_delay = timeDelayOut[1];
-                B_delay = timeDelayOut[2];
-                C_delay = timeDelayOut[3];
-                D_delay = timeDelayOut[4];
-                F[$index + 1 : $index + 2*$converter.padeOrderDen] = A_delay*statesDelay + B_delay*timeDelayIn;
-                # timeDelayOut = C_delay*statesDelay + D_delay*timeDelayIn;
-                # Implement phase shifts by transforming the dq voltage references to alpha-beta
-                m_ab_ref = (cos($converter.ω₀*$converter.timeDelay)-sin($converter.ω₀*$converter.timeDelay)*im)*(T_dq_ab*(C_delay*statesDelay + D_delay*timeDelayIn));
-                m_dq_ref = real(T_ab_dq * conj(m_ab_ref) + conj(T_ab_dq) * m_ab_ref);
-                md = m_dq_ref[1];
-                mq = m_dq_ref[2];
-            ))
+
+            timeDelayOut = timeDelayPadeMatrices(converter.padeOrderNum,converter.padeOrderDen,converter.timeDelay,2);
+            
+            A_delay = timeDelayOut[1];
+            B_delay = timeDelayOut[2];
+            C_delay = timeDelayOut[3];
+            D_delay = timeDelayOut[4];
+
             index += 2*converter.padeOrderDen
-        end
-        
+
     end
 
-    # add state variables
-    push!(exp.args,
-    :(
-        (vMd, vMq) =  0.5* Vdc .* [md; mq]; # 0.5 
-        
-        # dw neglected here
-        F[1] = (vMd - inputs[2] - $Rᵣ*x[1] - $Lᵣ*x[2])/$Lᵣ;             
-        F[2] = (vMq - inputs[3] - $Rᵣ*x[2] + $Lᵣ*x[1])/$Lᵣ;       
-        F[1:2] *= $wbase;
-
-        ))
-
-    exp_equilibrium = copy(exp)
-    # add outputs (DC current and dq currents)
-    push!(exp.args,
-    :(
-        F[$index+1] = (vMd * x[1] + vMq * x[2]) / Vdc ; # Idc derived based in AC-DC power balance
-        F[$index+2] = x[1] ; 
-        F[$index+3] = x[2] ; 
-        ))
-
-    function f!(expr, F, x, inputs) # F derivative of state variable x state variable vector, inputs input vqlue expr equation of mmc
-       f = eval(:((F,x,inputs) -> $expr))
-       return Base.invokelatest(f, F,x,inputs)
-    end
-
-    function g(u)
-        du = similar(u)
-        f!(exp_equilibrium, du, u, vector_inputs)
-        return du
-    end
-
+   
+    # Arrange input and state vectors 
     vector_inputs = [Vdc, Vᴳd, Vᴳq]
-    init_x = [init_x;Vᴳd;Vᴳq] #Initalize to avoid steady-state solver problems
-    init_x = [init_x; zeros(index-length(init_x))]
+    #init_x = [init_x;Vᴳd;Vᴳq] #Initalize to avoid steady-state solver problems
+    init_x = [init_x; zeros(index-length(init_x))] # We need the index here to determining the number of states in x
 
     # If there is a dc voltage controller, add an additional equation to represent the dc voltage, only for the steady-state solution
     if in(:dc, keys(converter.controls))  
         init_x =[init_x;Vdc]
-        push!(exp_equilibrium.args,
-        :(
-            F[$index+1] = $wbase * ($Idc_in - ((vMd * x[1] + vMq * x[2]) / Vdc)) / $Cₑ;
-            F[$epsilon_vdc_index] = $(converter.controls[:dc].Kᵢ) * ($(converter.controls[:dc].ref[1]) - x[end]);
-        ))
+
     end
-    # if in(:v_meas_filt, keys(converter.controls))
-    #     init_x[indexVᴳdf] =  Vᴳd
-    #     init_x[indexVᴳqf] =  1e-3 # Initialize to a small non-zero value to avoid Inf or NaN problems with nlsolve
-    # end
+
     ##################################################Steady state solution###############################################################
     
     g!(du,u,p) = state_space!(p[1], du, u, p[2];solve=p[3]) # g is the state-space formulation used to obtain the steady-state operation point, copy from f, see some lines above
@@ -761,7 +577,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
 
     println("Starting to solve for Steady-State Solution!")
     prob = NonlinearProblem(g!, init_x, (converter, vector_inputs, :equilibrium))
-    sol=solve(prob,SSRootfind(TrustRegion()),maxiters=20,abstol = 1e-8,reltol = 1e-8)
+    sol=solve(prob,SSRootfind(TrustRegion()),maxiters=100,abstol = 1e-8,reltol = 1e-8, show_trace = Val(true))
 
     # steady_state_jacobian = ForwardDiff.jacobian(equil!, init_x)
     # converter.debug = [steady_state_jacobian, sol]
@@ -772,7 +588,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
     if SciMLBase.successful_retcode(sol)
         println("TLC steady-state solution found!")
     else
-        println("TLC steady-state solution not found!")
+       error("TLC steady-state solution not found!")
     end
     
     # Delete solution for additional equation in case of DC voltage control
