@@ -279,7 +279,7 @@ function update!(gen :: SynchronousMachine, Pac, Qac, Vm, θ) # TODO: Removed Pa
     if SciMLBase.successful_retcode(sol)
         println("SG steady-state solution found!")
     else
-        println("SG steady-state solution not found!")
+        error("SG steady-state solution not found!")
     end
     equilibrium_init = sol.u
 
