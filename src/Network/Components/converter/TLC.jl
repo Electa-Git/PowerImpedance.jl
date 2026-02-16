@@ -577,7 +577,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
 
     println("Starting to solve for Steady-State Solution!")
     prob = NonlinearProblem(g!, init_x, (converter, vector_inputs, :equilibrium))
-    sol=solve(prob,SSRootfind(TrustRegion()),maxiters=100,abstol = 1e-8,reltol = 1e-8, show_trace = Val(true))
+    sol=solve(prob,SSRootfind(TrustRegion()),maxiters=100,abstol = 1e-1,reltol = 1e-1)
 
     # steady_state_jacobian = ForwardDiff.jacobian(equil!, init_x)
     # converter.debug = [steady_state_jacobian, sol]
