@@ -57,26 +57,12 @@ function power_flow(net:: Network)
 
     #### 2. Run PowerModelsACDC power flow
     PowerModelsACDC.process_additional_data!(data)
-    # TODO: Dirty fix of increasing tolerance with certain error. To be taken up with Hakan, Matteo or Giacomo.
-    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-8, "print_level" => 5, "max_iter" => 4000, "check_derivatives_for_naninf" => "yes", "grad_f_constant"=>"yes", 
-                                                "bound_relax_factor" => 1e-8, "expect_infeasible_problem"=> "yes", "fixed_variable_treatment"=>"relax_bounds")
+    ipopt = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e2,"dual_inf_tol" => 1e-1, "constr_viol_tol" => 1e-3,"compl_inf_tol" => 1e3, "print_level" => 5, "max_iter" => 100, "grad_f_constant"=>"yes", 
+                                            "recalc_y"=>"yes","bound_relax_factor" => 1e-8, "expect_infeasible_problem"=> "yes")
     s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false)
-    result = solve_acdcpf(data, ACPPowerModel, ipopt; setting = s)
+    result = solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting=s)
     
-    # Rerun power flow with relaxed constraints if no convergence
-    if result["termination_status"] == MOI.LOCALLY_SOLVED
-        println("Power flow converged succesfully.")
-    else
-        println("No convergence (try again with relaxation): ",result["termination_status"])
         
-        result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
-        if result["termination_status"] == MOI.LOCALLY_SOLVED
-            println("Power flow solution found with relaxation")
-        else
-            error("Second iteration not succesful. Check your formulation")
-        end
-    end
-
     #### 3. Update setpoints of active elements
     for (key, element) in net.elements
 
@@ -414,8 +400,8 @@ function add_bus_ac!(data, nodes2bus, bus2nodes, node, global_dict)
         ((data["bus"])[bus])["bus_i"] = parse(Int, bus)
         ((data["bus"])[bus])["zone"] = 1
         ((data["bus"])[bus])["area"] = 1
-        ((data["bus"])[bus])["vmin"] = 0.9
-        ((data["bus"])[bus])["vmax"] = 1.1
+        ((data["bus"])[bus])["vmin"] = 0.85
+        ((data["bus"])[bus])["vmax"] = 1.2
         ((data["bus"])[bus])["vm"] = 1
         ((data["bus"])[bus])["va"] = 0
         ((data["bus"])[bus])["base_kv"] = global_dict["V"] / 1e3
@@ -445,8 +431,8 @@ function add_interm_bus_ac!(data, global_dict)
     ((data["bus"])[bus])["bus_i"] = parse(Int, bus)
     ((data["bus"])[bus])["zone"] = 1
     ((data["bus"])[bus])["area"] = 1
-    ((data["bus"])[bus])["vmin"] = 0.9
-    ((data["bus"])[bus])["vmax"] = 1.1
+    ((data["bus"])[bus])["vmin"] = 0.8
+    ((data["bus"])[bus])["vmax"] = 1.2
     ((data["bus"])[bus])["vm"] = 1
     ((data["bus"])[bus])["va"] = 0
     ((data["bus"])[bus])["base_kv"] = global_dict["V"] / 1e3
@@ -491,6 +477,166 @@ function make_node(elem::Element, side::Int)
 end
 
 
+function build_acdcpf(pm::_PM.AbstractPowerModel)
+    _PM.variable_bus_voltage(pm, bounded = false)
+    _PM.variable_gen_power(pm, bounded = false)
+    _PM.variable_branch_power(pm, bounded = false)
+    _PM.variable_storage_power(pm, bounded = false)
+
+    # dirty, should be improved in the future TODO
+    if typeof(pm) <: _PM.SOCBFPowerModel
+        _PM.variable_branch_current(pm, bounded = false)
+    end
+
+    _PMACDC.variable_active_dcbranch_flow(pm, bounded = false)
+    _PMACDC.variable_dcbranch_current(pm, bounded = false)
+    _PMACDC.variable_dc_converter(pm, bounded = false)
+    _PMACDC.variable_dcgrid_voltage_magnitude(pm, bounded = false)
+    _PMACDC.variable_dcgenerator_power(pm; bounded = false)
+    _PMACDC.variable_flexible_demand(pm, bounded = false)
+    _PMACDC.variable_pst(pm, bounded = false)
+    _PMACDC.variable_sssc(pm, bounded = false)
+
+    _PM.constraint_model_voltage(pm)
+    _PMACDC.constraint_voltage_dc(pm)
+
+
+    for (i,bus) in _PM.ref(pm, :ref_buses)
+        @assert bus["bus_type"] == 3
+        _PM.constraint_theta_ref(pm, i)
+        _PM.constraint_voltage_magnitude_setpoint(pm, i)
+    end
+
+    for (i, bus) in _PM.ref(pm, :bus)# _PM.ids(pm, :bus)
+        _PMACDC.constraint_power_balance_ac(pm, i)
+        # PV Bus Constraints
+        if length(_PM.ref(pm, :bus_gens, i)) > 0 && !(i in _PM.ids(pm,:ref_buses))
+            for j in _PM.ref(pm, :bus_gens, i)
+                _PM.constraint_gen_setpoint_active(pm, j)
+                if  bus["bus_type"] == 2
+                    _PM.constraint_voltage_magnitude_setpoint(pm, i)
+                elseif bus["bus_type"] == 1
+                    _PM.constraint_gen_setpoint_active(pm, j)
+                end
+            end
+        end
+    end
+
+    for i in _PM.ids(pm, :branch)
+        # dirty, should be improved in the future TODO
+        if typeof(pm) <: _PM.SOCBFPowerModel
+            _PM.constraint_power_losses(pm, i)
+            _PM.constraint_voltage_magnitude_difference(pm, i)
+            _PM.constraint_branch_current(pm, i)
+        else
+            _PM.constraint_ohms_yt_from(pm, i)
+            _PM.constraint_ohms_yt_to(pm, i)
+        end
+    end
+    for i in _PM.ids(pm, :flex_load)
+        _PMACDC.constraint_total_flexible_demand(pm, i)
+    end
+    
+    for i in _PM.ids(pm, :fixed_load) 
+        _PMACDC.constraint_total_fixed_demand(pm, i)
+    end
+
+    for i in _PM.ids(pm, :busdc)
+        _PMACDC.constraint_power_balance_dc(pm, i)
+    end
+    for i in _PM.ids(pm, :branchdc)
+        _PMACDC.constraint_ohms_dc_branch(pm, i)
+    end
+
+    if !isempty(_PM.ids(pm, :gendc)) 
+        for i in _PM.ids(pm, :gendc)
+            _PMACDC.constraint_dcgenerator_voltage_and_power(pm, i)
+        end
+    end
+
+    for (c, conv) in _PM.ref(pm, :convdc)
+        _PMACDC.constraint_conv_transformer(pm, c)
+        _PMACDC.constraint_conv_reactor(pm, c)
+        _PMACDC.constraint_conv_filter(pm, c)
+        if conv["type_dc"] == 2
+            _PMACDC.constraint_dc_voltage_magnitude_setpoint(pm, c)
+        elseif conv["type_dc"] == 3 || conv["type_dc"] == 4
+            if typeof(pm) <: _PM.AbstractACPModel || typeof(pm) <: _PM.AbstractACRModel
+                _PMACDC.constraint_dc_droop_control(pm, c)
+            else
+                Memento.warn(_PM._LOGGER, join(["Droop only defined for ACP and ACR formulations, converter ", c, " will be treated as type 2"]))
+                _PMACDC.constraint_dc_voltage_magnitude_setpoint(pm, c)
+            end
+        else
+            _PMACDC.constraint_active_conv_setpoint(pm, c)
+        end
+        if conv["type_ac"] == 2
+            if haskey(conv, "acq_droop") && conv["acq_droop"] == 1 # AC voltage droop control
+                _PMACDC.constraint_ac_voltage_droop_control(pm, c)
+            else # Constant AC voltage control
+                _PM.constraint_voltage_magnitude_setpoint(pm, conv["busac_i"])
+            end
+        else
+            _PMACDC.constraint_reactive_conv_setpoint(pm, c)
+        end
+        _PMACDC.constraint_converter_losses(pm, c)
+        _PMACDC.constraint_converter_current(pm, c)
+    end
+end
+
+function solve_acdcpf(data::Dict{String,Any}, model_type::Type, solver; kwargs...)
+    #PowerModels function that generates PowerModel
+    pm = _PM.instantiate_model(data, model_type,build_acdcpf; ref_extensions = [_PMACDC.add_ref_dcgrid!, _PMACDC.ref_add_pst!, _PMACDC.ref_add_sssc!, _PMACDC.ref_add_flex_load!, _PMACDC.ref_add_gendc!], kwargs...)
+    
+    #Set the Ipopt optimizer
+    JuMP.set_optimizer(pm.model, solver)
+    JuMP.optimize!(pm.model)
+    result = _IM.build_result(pm, JuMP.solve_time(pm.model))
+    println(result["termination_status"])
+    if result["termination_status"] == MOI.LOCALLY_SOLVED
+        println("Power flow converged succesfully.")
+    else
+        converged_feasible = false
+        has_violations = !isempty(primal_feasibility_report(pm.model; atol = 1e-4)) # Empty no violations for given tolerance
+        if has_violations
+                println("Violations reported. Entering power flow with increments of setpoints to find a solution.")
+                for r=1:5
+                        update_actives_setpoints!(data, -0.0001) # relative change of 0.01%
+                        pm=_PM.instantiate_model(data, model_type,build_acdcpf; ref_extensions = [_PMACDC.add_ref_dcgrid!, _PMACDC.ref_add_pst!, _PMACDC.ref_add_sssc!, _PMACDC.ref_add_flex_load!, _PMACDC.ref_add_gendc!], kwargs...)
+                        JuMP.set_optimizer(pm.model, solver)
+                        JuMP.optimize!(pm.model)
+                        result = _IM.build_result(pm, JuMP.solve_time(pm.model))
+                    if result["termination_status"] == MOI.LOCALLY_SOLVED
+                        println("Power flow converged succesfully after $r increment change.")
+                        converged_feasible = true
+                        break
+                    elseif isempty(primal_feasibility_report(pm.model; atol = 1e-4))
+                        println("Power flow converged succesfully after $r increment change. Point is feasible.")
+                        converged_feasible = true
+                        break
+                    else
+                        #nothing
+                    
+                    end
+                end
+                if !converged_feasible
+                    # Last resort relaxing constraints...experimental stage!
+                    println("Last resort: Relaxing constraints to find a solution and see which constraints are violated.")
+                    result=solve_acdcpf_relax(data, model_type, solver; kwargs...)
+                end
+        else # Constraints are satisfied
+            println("Power flow converged succesfully. Point is feasible")
+        end
+
+    end
+
+    return result
+
+end
+
+
+
+
 ### Relaxation function to see which constraints might be violated
 
 function solve_acdcpf_relax(data::Dict{String,Any}, model_type::Type, solver; kwargs...)
@@ -505,16 +651,40 @@ function solve_acdcpf_relax(data::Dict{String,Any}, model_type::Type, solver; kw
     # Copied from base.jl of InfrastructureModels
     JuMP.optimize!(pm.model)
     result = _IM.build_result(pm, JuMP.solve_time(pm.model))
-    pm.solution = result["solution"]
     
     # Check if a constraint got violated
     for (con, penalty) in map
         violation = JuMP.value(penalty)
         if abs(violation) > 1e-6
             println("ATTENTION! Constraint `$(JuMP.name(con))` is violated by $violation")
-            # error("Power flow constraints are violated.") TODO: Uncomment again
+            error("Power flow constraints are violated.")
         end
     end
 
     return result
 end
+
+# Function to slightly shift the setpoints of the active elements to nudge the solver towards a solution. "delta" = percentage change
+function update_actives_setpoints!(data,delta) 
+
+    # Slightly shift the reactive power setpoints for the converters, if any
+    if haskey(data, "convdc")
+        #TODO: Handle Vac control, if properly implemented
+        for conv_index in keys(data["convdc"])
+            
+            data["convdc"][conv_index]["Q_g"] !=0.0 ? data["convdc"][conv_index]["Q_g"] *= (1+delta) : data["convdc"][conv_index]["Q_g"] += delta# This will impact Q, QV-droop control
+        end
+    end
+    # Slightly shift the Vm setpoints for the synchronous machines, if any
+    for gen_index in keys(data["gen"])
+        bus_gen = data["gen"][gen_index]["gen_bus"]
+        if data["bus"][string(bus_gen)]["bus_type"] == 2 # PV-bus
+            data["gen"][gen_index]["vg"] *= (1+delta) # This will slightly shift the Voltage reference for the SG
+        end
+    end
+
+
+end
+
+
+
