@@ -400,8 +400,8 @@ function add_bus_ac!(data, nodes2bus, bus2nodes, node, global_dict)
         ((data["bus"])[bus])["bus_i"] = parse(Int, bus)
         ((data["bus"])[bus])["zone"] = 1
         ((data["bus"])[bus])["area"] = 1
-        ((data["bus"])[bus])["vmin"] = 0.85
-        ((data["bus"])[bus])["vmax"] = 1.2
+        ((data["bus"])[bus])["vmin"] = 0.9
+        ((data["bus"])[bus])["vmax"] = 1.1
         ((data["bus"])[bus])["vm"] = 1
         ((data["bus"])[bus])["va"] = 0
         ((data["bus"])[bus])["base_kv"] = global_dict["V"] / 1e3
@@ -431,8 +431,8 @@ function add_interm_bus_ac!(data, global_dict)
     ((data["bus"])[bus])["bus_i"] = parse(Int, bus)
     ((data["bus"])[bus])["zone"] = 1
     ((data["bus"])[bus])["area"] = 1
-    ((data["bus"])[bus])["vmin"] = 0.8
-    ((data["bus"])[bus])["vmax"] = 1.2
+    ((data["bus"])[bus])["vmin"] = 0.9
+    ((data["bus"])[bus])["vmax"] = 1.1
     ((data["bus"])[bus])["vm"] = 1
     ((data["bus"])[bus])["va"] = 0
     ((data["bus"])[bus])["base_kv"] = global_dict["V"] / 1e3
