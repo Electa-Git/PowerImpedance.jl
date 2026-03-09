@@ -41,10 +41,12 @@ using Munkres
 using Markdown
 using Interpolations
 using DelimitedFiles
+import NaNMath # Deal with out of domain erros in Nonlinearsolve
 
 
 # Including all components    
 include("Network/Components/AbstractElement.jl")
+include("Network/Components/AbstractStateSpace.jl")
 
 # Impedance
 include("Network/Components/impedance/impedance.jl")

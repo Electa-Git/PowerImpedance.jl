@@ -1,5 +1,5 @@
 
-@with_kw mutable struct Source
+@with_kw mutable struct Source <: AbstractMultiport
 	Z::Union{Float64, Int} = 0 # source series impedance [Ω]
 	V::Union{Float64, Int} = 0        # DC voltage or voltage magnitude [kV]
 
@@ -10,19 +10,19 @@
 	Q_min::Union{Float64, Int} = 0    # min reactive power output [MVA]
 	Q_max::Union{Float64, Int} = 0    # max reactive power output [MVA]
 
-	pins::Int = 1
-	ABCD::Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
+	# pins::Int = 1
+	# ABCD::Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
 end
 
-function make_abcd(source::Source)
-	p = source.pins
+function make_abcd(source::Source, p)
+	# p = np(elem)
 	A = Matrix{ComplexF64}(I, p, p)
 	B = Diagonal(fill(ComplexF64(source.Z), p)) |> Matrix
 	C = zeros(ComplexF64, p, p)
 	D = Matrix{ComplexF64}(I, p, p)
 
-	source.ABCD = [A B; C D]
-	return source
+	# elem.ABCD = ABCD(A, B, C, D)
+	return A,B,C,D
 end
 
 function eval_abcd(source::Source, s::Complex)
@@ -130,7 +130,7 @@ function dc_source_power_flow!(
 
 
 
-	((data["busdc"])[string(dc_bus)])["Vdc"] = elem.element_value.V * 1e3 / global_dict["V"]
+	((data["busdc"])[string(dc_bus)])["Vdc"] = elem.element_model.V * 1e3 / global_dict["V"]
 	((data["busdc"])[string(dc_bus)])["Vdcmax"] =
 		1.1 * ((data["busdc"])[string(dc_bus)])["Vdc"]
 	((data["busdc"])[string(dc_bus)])["Vdcmin"] =

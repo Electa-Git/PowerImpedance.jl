@@ -44,7 +44,7 @@ function make_y(net :: Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}}, s 
                 jₚ = findfirst(p -> p == val₂, dict[:node_list]) # Find column index of node in the admittance matrix
                 (jₚ === nothing) ? continue : nothing
                 # Add the element admittance to the admittance matrix
-                if i>= 2 && (isa(element.element_value, MMC) || isa(element.element_value, TLC)) # Flip sign for the AC elements of converters
+                if i>= 2 && (isa(element.element_model, MMC) || isa(element.element_model, TLC)) # Flip sign for the AC elements of converters
                     
                     Y[i,j] = -Y[i,j] 
                 end

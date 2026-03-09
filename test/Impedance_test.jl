@@ -44,7 +44,7 @@ for i in eachindex(omegas)
     # Extract the dq impedance from ABCD matrix in dq frame 🤘🏼
     push!(Z_numerical_ind, PowerImpedanceACDC.get_abcd(grid.elements[:labanimal_ind], 1im*ω)[1:2,3:4])
     # Extract the abc impedance from ABCD matrix in abc frame 🤘🏼
-    push!(Z_numerical_cap, PowerImpedanceACDC.eval_abcd(grid.elements[:labanimal_cap].element_value, 1im*ω)[1:3,4:6])
+    push!(Z_numerical_cap, PowerImpedanceACDC.eval_abcd(grid.elements[:labanimal_cap].element_model, 1im*ω)[1:3,4:6])
 
 
 end

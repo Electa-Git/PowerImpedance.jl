@@ -335,7 +335,7 @@ macro network(cdef)
         else
             if expr.args[1] == :voltageBase
                 push!(ccode.args, :(network.voltageBase[1] = $(esc(expr.args[2]))))
-                return
+                return #TODO: Such ugly code
             end
             elemspec = expr.args[2]
             conn_exprs = []

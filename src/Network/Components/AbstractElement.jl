@@ -1,3 +1,5 @@
+export SetPoint
+
 """
 Struct guarantees representation of the component like a multiport
 network using ABCD parameters. It consists of:
@@ -5,21 +7,64 @@ network using ABCD parameters. It consists of:
 - dictionary that maps pins inside the network (to network nodes) - `pins`
 - number of input pins - `input_pins`
 - number of output pins - `output_pins`
-- component definition - `element_value`
+- component definition - `element_model`
 - transformation flag - `transformation`
 - connection flag - `connection`
 """
+abstract type AbstractElementModel end
+
+abstract type AbstractMultiport <: AbstractElementModel end
+
+@with_kw struct SetPoint
+    
+    # Power flow results
+    Pac ::Float64 = 0              # active power [MW]
+    Qac ::Float64 = 0                # reactive power [MVA]
+    θac ::Float64 = 0
+    Vac ::Float64 = 220*sqrt(2/3)             # AC voltage, amplitude [kV]
+
+    # DC
+    Pdc::Float64 = 0.0
+    Vdc::Float64 = 0.0
+   
+end
+
+
+@with_kw struct Limits
+    #Limits 
+    P_min ::Float64 = 0.9         # min active power output [pu]
+    P_max ::Float64 = 1.1          # max active power output [pu]
+    Q_min ::Float64 = -0.5          # min reactive power output [pu]
+    Q_max ::Float64 = 0.5           # max reactive power output [pu]
+end
+
+
+
 mutable struct Element
-  symbol::Symbol
-  pins :: Dict{Symbol, Symbol}
-  input_pins :: Int
-  output_pins :: Int
-  element_value :: Any  # component defined type
+    symbol::Symbol
+    pins :: Dict{Symbol, Symbol}
+    input_pins :: Int
+    output_pins :: Int
+    element_model :: AbstractElementModel  # component defined type
+    A::Matrix{ComplexF64}  
+    B::Matrix{ComplexF64} 
+    C::Matrix{ComplexF64} 
+    D::Matrix{ComplexF64} 
+#   basevalues::BaseVal
   transformation :: Bool
   connection :: Bool # True = Element is connected, False= Element is disconnected 
-
-  function Element(;args...)
+  setpoint::SetPoint
+  limits::Limits
+  function Element(;element_model::AbstractElementModel, args...)
     elem = new()
+    
+    # Set default values
+
+    elem.element_model = element_model
+    elem.setpoint = SetPoint()
+    elem.limits = Limits()
+    elem.A,elem.B,elem.C,elem.D = fill(Array{ComplexF64}(undef, 0, 0), 4) 
+    # Fill up specified fields
     for (key, val) in pairs(args)
       if (key in propertynames(elem))
         setfield!(elem, key, val)
@@ -68,27 +113,40 @@ function get_nodes(element::Element, pin::Symbol) # Returns all nodes connected 
     return array
 end
 
+
+####### NEW GENERAL ELEMENT FUNCTIONS ###########################
+
+
+function eval_y(::AbstractStateSpace, elem :: Element, s :: Complex)
+    # numerical
+    I = Matrix{Complex}(Diagonal([1 for dummy in 1:size(gen.A,1)]))
+    Y = (gen.C*inv(s*I-gen.A))*gen.B + gen.D
+
+    return Y
+end
+
+
 ################### ABCD functions ################################
 function get_abcd(element::Element, s::Complex)
     
     if (element.transformation) # Transformation property is only used for passives!
         if np(element) == 2 # Transformation from two phase to single phase: 2 pins --> 1 pin
-            abcd = eval_abcd(element.element_value, s)
+            abcd = eval_abcd(element.element_model, s)
             return transformation_dc(abcd)
         elseif is_three_phase(element) # Transformation from abc to dq: 3 pins --> 2 pins
             ω₀ = 100*π
-            abcd₁ = eval_abcd(element.element_value, s + 1im*ω₀)
-            abcd₂ = eval_abcd(element.element_value, s - 1im*ω₀)
+            abcd₁ = eval_abcd(element.element_model, s + 1im*ω₀)
+            abcd₂ = eval_abcd(element.element_model, s - 1im*ω₀)
             return transformation_dq(abcd₁, abcd₂)
         end
     else # No transformation, return ABCD directly. In case of actives, return Y
-        abcd = eval_abcd(element.element_value, s)
+        abcd = eval_abcd(element.element_model, s)
     end
     return abcd
 end
 
 function nip_abcd(e::Element)
-    if isa(e.element_value, MMC) || isa(e.element_value, TLC)
+    if isa(e.element_model, MMC) || isa(e.element_model, TLC)
         return 3
     else
         return 2nip(e)
@@ -97,7 +155,7 @@ function nip_abcd(e::Element)
 end
 
 function nop_abcd(e::Element)
-    if isa(e.element_value, MMC) || isa(e.element_value, TLC)
+    if isa(e.element_model, MMC) || isa(e.element_model, TLC)
         return 3
     else
         return 2nop(e)
@@ -121,30 +179,30 @@ end
 
 ######################### Element type #############################
 function is_passive(element :: Element)
-    (isa(element.element_value, MMC) || isa(element.element_value, Blackbox_MMC) || isa(element.element_value, TLC) || isa(element.element_value, Source) || isa(element.element_value, SynchronousMachine)) && return false
+    (isa(element.element_model, MMC) || isa(element.element_model, Blackbox_MMC) || isa(element.element_model, TLC) || isa(element.element_model, Source) || isa(element.element_model, SynchronousMachine)) && return false
     true
 end
 
 function is_source(element :: Element)
-    isa(element.element_value, Source)
+    isa(element.element_model, Source)
 end
 
 function is_converter(element :: Element)
-    (isa(element.element_value, MMC) || isa(element.element_value, TLC) || isa(element.element_value, Blackbox_MMC))
+    (isa(element.element_model, MMC) || isa(element.element_model, TLC) || isa(element.element_model, Blackbox_MMC))
 end
 
 
 function is_generator(element :: Element)
-    isa(element.element_value, SynchronousMachine)
+    isa(element.element_model, SynchronousMachine)
 end
  
 
 function is_impedance(element :: Element)
-    isa(element.element_value, Impedance) && !any(occursin("gnd", string(x)) for x in element.pins)
+    isa(element.element_model, Impedance) && !any(occursin("gnd", string(x)) for x in element.pins)
 end
 
 function is_load(element :: Element)
-    isa(element.element_value, Impedance) && any(occursin("gnd", string(x)) for x in element.pins)
+    isa(element.element_model, Impedance) && any(occursin("gnd", string(x)) for x in element.pins)
 end
 
 function is_three_phase(element :: Element)

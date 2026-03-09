@@ -1,6 +1,6 @@
 export impedance
 
-@with_kw mutable struct Impedance
+@with_kw mutable struct Impedance <: AbstractMultiport
 	value::Any = nothing      # either Matrix{ComplexF64} or a function s::Complex -> Matrix{ComplexF64}
 	ABCD::Any  = nothing      # cached Matrix{ComplexF64} for constant impedances, otherwise nothing
 end
@@ -21,7 +21,7 @@ is given as an array `[val]` with one, `pins` or `pins × pins` number of elemen
 then the impedance has only diagonal nonzero values equal to `val`. In the case of `pins` number of elements,
 the impedance has only diagonal nonzero values equal to the values in an array `val`. If the array has the size
 `pin × pin`, impedance matrix has the size `pin × pin` and all its values defined.
-Examples:
+Examples (OUTDATED):
 ```julia
 impedance(z = [s], pins = 3)    # 3×3 impedance with diagonal values equal s
 impedance(z = [2,s,s/2], pins = 3) # 3×3 impedance with diagonal values equal 2, s, 0.5s, respectively
@@ -121,7 +121,7 @@ function impedance(; z = 0, pins::Int = 0, transformation = false)
 	imp.value = Z
 	imp.ABCD  = _abcd_from_z(Z, pins_eff)
 
-	element = Element(element_value = imp, input_pins = pins_eff, output_pins = pins_eff,
+	element = Element(element_model = imp, input_pins = pins_eff, output_pins = pins_eff,
 		transformation = transformation,connection = connection)
 	return element
 end

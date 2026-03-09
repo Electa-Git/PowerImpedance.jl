@@ -55,7 +55,7 @@ Y_validation=transpose.(matrices)
 # Obtain analytical data
 Y_MMC = []
 for k in eachindex(omegas)
-	Y1 = eval_abcd(grid.elements[:MMC1].element_value, 1im*omegas[k])
+	Y1 = eval_abcd(grid.elements[:MMC1].element_model, 1im*omegas[k])
 	push!(Y_MMC, [transpose(Y1[1, :]); transpose(-Y1[2, :]); transpose(-Y1[3, :])]) # Keep sign of Ydc, swapping sign of Yacs
 end
 

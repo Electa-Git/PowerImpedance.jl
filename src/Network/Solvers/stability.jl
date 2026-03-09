@@ -51,7 +51,7 @@ function check_stability(net :: Network, mmc :: Element; direction :: Symbol = :
         end
     end
 
-    if !(isa(mmc.element_value, MMC) || isa(mmc.element_value, SynchronousMachine)) #TODO: Generalize
+    if !(isa(mmc.element_model, MMC) || isa(mmc.element_model, SynchronousMachine)) #TODO: Generalize
         throw(ArgumentError("Cannot determine stability of the passive element."))
     end
 

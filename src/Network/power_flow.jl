@@ -102,13 +102,13 @@ function power_flow(net:: Network)
             Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
             Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6 # Think about this!
 
-            update!(element.element_value, Vm, θ, Pac, Qac, Vdc, Pdc)
-            # if isa(element.element_value, MMC)
+            update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
+            # if isa(element.element_model, MMC)
             #     update_string = "MMC #"
-            #     update_mmc(element.element_value, Vm, θ, Pac, Qac, Vdc, Pdc)
+            #     update_mmc(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
             # else
             #     update_string = "TLC #"
-            #     update_tlc(element.element_value, Vm, θ, Pac, Qac, Vdc, Pdc)
+            #     update_tlc(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
             # end
             update_string = string(key)
             print(update_string * " Active Power [MW]: ")
@@ -136,8 +136,8 @@ function power_flow(net:: Network)
             θ = result["solution"]["bus"][string(ac_bus)]["va"]
             update_string = string(key)
 
-            update!(element.element_value, Pgen, Qgen, Vm, θ)
-            
+            setpoint = SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+
             print(update_string * " Active Power [MW]: ")
             println(Pgen)
             print(update_string * " Reactive Power [MVar]: ")
@@ -146,6 +146,17 @@ function power_flow(net:: Network)
             println(result["solution"]["bus"][string(ac_bus )]["vm"])
             print(update_string * " AC Voltage Angle [rad]: ")
             println(θ)
+
+            update!(element, element.element_model, setpoint)
+            # Update fields element
+            # element.setpoint = setpoint #Update operating point
+            # element.A = A
+            # element.B = B
+            # element.C = C
+            # element.D = D
+            
+
+     
         end
     end
 
@@ -163,8 +174,12 @@ function is_linear(net::Network)
     return true
 end
 
-function get_AC_voltage(injecter::Union{SynchronousMachine, Source})
-    return injecter.V
+function get_AC_voltage(injecter::Element)
+    return injecter.setpoint.Vac
+end
+
+function get_AC_voltage(injecter::Source)
+    return injecter.Vac
 end
 
 function get_AC_voltage(injecter::TLC)
@@ -194,7 +209,7 @@ function set_bus_type_dc(bus_data, type)
 end
 
 ## THis function makes sure we dispatch on the right component
-make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict) = make_power_flow!(elem.element_value, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem,global_dict)
+make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict) = make_power_flow!(elem.element_model, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem,global_dict)
 
 function injection_initialization!(data, elem2comp, comp2elem, ac_bus, elem, global_dict)
     ## A lot of initialization for source and machine are the same so combined in here
@@ -228,15 +243,15 @@ function injection_initialization!(data, elem2comp, comp2elem, ac_bus, elem, glo
     ((data["gen"])[key])["source_id"] = Any["gen", parse(Int, key)]
     ((data["gen"])[key])["index"] = parse(Int, key)
 
-    injecter = elem.element_value
+    injecter = elem
     S_base = global_dict["S"] / 1e6
     V_base = global_dict["V"] / 1e3
-    ((data["gen"])[key])["pg"] = injecter.P / S_base
-    ((data["gen"])[key])["qg"] = injecter.Q / S_base
-    ((data["gen"])[key])["pmin"] = injecter.P_min / S_base
-    ((data["gen"])[key])["pmax"] = injecter.P_max / S_base
-    ((data["gen"])[key])["qmin"] = injecter.Q_min / S_base
-    ((data["gen"])[key])["qmax"] = injecter.Q_max / S_base
+    ((data["gen"])[key])["pg"] = injecter.setpoint.Pac / S_base
+    ((data["gen"])[key])["qg"] = injecter.setpoint.Qac / S_base
+    ((data["gen"])[key])["pmin"] = injecter.limits.P_min / S_base
+    ((data["gen"])[key])["pmax"] = injecter.limits.P_max / S_base
+    ((data["gen"])[key])["qmin"] = injecter.limits.Q_min / S_base
+    ((data["gen"])[key])["qmax"] = injecter.limits.Q_max / S_base
     ((data["gen"])[key])["vg"] = get_AC_voltage(injecter) / V_base #Accesor function to treat multiple field names for AC Voltage
 
     # not using
@@ -279,7 +294,7 @@ function injection_initialization_dc!(data, elem2comp, comp2elem, dc_bus, elem, 
     ((data["gendc"])[key])["source_id"] = Any["gen", parse(Int, key)]
     ((data["gendc"])[key])["index"] = parse(Int, key)
 
-    injecter = elem.element_value
+    injecter = elem.element_model
     S_base = global_dict["S"] / 1e6
     V_base = global_dict["V"] / 1e3
     ((data["gendc"])[key])["pgdcset"] = injecter.P / S_base

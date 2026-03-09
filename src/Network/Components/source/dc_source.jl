@@ -24,7 +24,7 @@ Parameters:
 	Q_min :: Union{Float64, Int} = 0    # min reactive power output [MVA]
 	Q_max :: Union{Float64, Int} = 0    # max reactive power output [MVA]
 
-	pins :: Int = 1
+	# pins :: Int = 1
 	ABCD :: Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
 ```
 """
@@ -32,11 +32,12 @@ function dc_source(; args...)
 	source = Source()
 	transformation = false
 	connection = true
+	elem_args = (;transformation, connection)
 	for (key, val) in pairs(args)
 		if in(key, propertynames(source))
 			setfield!(source, key, val)
-		elseif (key == :transformation)
-			transformation = val
+		elseif in(key, fieldnames(Element))
+			merge(elem_args, NamedTuple{key}(val))
 		else
 			throw(ArgumentError("Source does not have a property $(key)."))
 		end
