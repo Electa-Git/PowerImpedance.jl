@@ -586,8 +586,9 @@ end
 
 function solve_acdcpf(data::Dict{String,Any}, model_type::Type, solver; kwargs...)
     #PowerModels function that generates PowerModel
-    pm = _PM.instantiate_model(data, model_type,build_acdcpf; ref_extensions = [_PMACDC.add_ref_dcgrid!, _PMACDC.ref_add_pst!, _PMACDC.ref_add_sssc!, _PMACDC.ref_add_flex_load!, _PMACDC.ref_add_gendc!], kwargs...)
-    
+    ref_ext = [_PMACDC.add_ref_dcgrid!, _PMACDC.ref_add_pst!, _PMACDC.ref_add_sssc!, _PMACDC.ref_add_flex_load!, _PMACDC.ref_add_gendc!]
+    pm = _PM.instantiate_model(data, model_type,build_acdcpf; ref_extensions = ref_ext, kwargs...)
+
     #Set the Ipopt optimizer
     JuMP.set_optimizer(pm.model, solver)
     JuMP.optimize!(pm.model)
@@ -602,7 +603,7 @@ function solve_acdcpf(data::Dict{String,Any}, model_type::Type, solver; kwargs..
                 println("Violations reported. Entering power flow with increments of setpoints to find a solution.")
                 for r=1:5
                         update_actives_setpoints!(data, -0.0001) # relative change of 0.01%
-                        pm=_PM.instantiate_model(data, model_type,build_acdcpf; ref_extensions = [_PMACDC.add_ref_dcgrid!, _PMACDC.ref_add_pst!, _PMACDC.ref_add_sssc!, _PMACDC.ref_add_flex_load!, _PMACDC.ref_add_gendc!], kwargs...)
+                        pm=_PM.instantiate_model(data, model_type,build_acdcpf; ref_extensions = ref_ext, kwargs...)
                         JuMP.set_optimizer(pm.model, solver)
                         JuMP.optimize!(pm.model)
                         result = _IM.build_result(pm, JuMP.solve_time(pm.model))
@@ -641,8 +642,8 @@ end
 
 function solve_acdcpf_relax(data::Dict{String,Any}, model_type::Type, solver; kwargs...)
     #PowerModels function that generates PowerModel
-    pm = _PM.instantiate_model(data, model_type,build_acdcpf; ref_extensions = [add_ref_dcgrid!, ref_add_pst!, ref_add_sssc!, ref_add_flex_load!, ref_add_gendc!, ref_add_im!], kwargs...)
-    
+    ref_ext = [_PMACDC.add_ref_dcgrid!, _PMACDC.ref_add_pst!, _PMACDC.ref_add_sssc!, _PMACDC.ref_add_flex_load!, _PMACDC.ref_add_gendc!, _PMACDC.ref_add_im!]
+    pm = _PM.instantiate_model(data, model_type,build_acdcpf; ref_extensions = ref_ext, kwargs...)
     #Set the Ipopt optimizer
     JuMP.set_optimizer(pm.model, solver)
     
