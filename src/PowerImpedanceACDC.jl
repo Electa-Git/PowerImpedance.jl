@@ -69,7 +69,7 @@ include("Network/Components/source/ac_source.jl")
 include("Network/Components/converter/converter.jl")
 include("Network/Components/converter/controller.jl")
 include("Network/Components/converter/MMC.jl")
-include("Network/Components/converter/TLC.jl")
+include("Network/Components/converter/TLC/TLC.jl")
 include("Network/Components/converter/blackbox_MMC.jl")
 
 # Machines
