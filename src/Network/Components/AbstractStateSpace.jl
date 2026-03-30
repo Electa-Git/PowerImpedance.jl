@@ -39,6 +39,9 @@ dummynames(m::AbstractStateSpace) = (;)
 outputequations!(F,x,inputs,m::AbstractStateSpace) = nothing
 outputnames(m::AbstractStateSpace) = (;)
 
+equilibrium_state_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint) =
+    state_space!(F, x, inputs, m)
+
 function _state_space!(F, x, inputs, m::AbstractStateSpace, solvekind::AbstractSolveKind)
     
     # Convert vector states to NamedTuple with keys the statenames (we enforce the same order)
@@ -59,6 +62,19 @@ function _state_space!(F, x, inputs, m::AbstractStateSpace, solvekind::AbstractS
     return
 
 end
+
+function _equilibrium_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint)
+    x_names = statenames(m)
+    x_nt = NamedTuple{x_names}(x)
+    inputs_nt = NamedTuple{inputnames(m)}(inputs)
+
+    index_stsp = n_states(m)
+
+    equilibrium_state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, m, setpoint)
+    solvekindequations!(@view(F[index_stsp+1:end]), x_nt, inputs_nt, m, Equil())
+
+    return
+end
     
 function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
 
@@ -69,10 +85,10 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
     global init = orderedinitialvalues(m;setpoint, inputs)
 
     # Parameters for equilibirum with NonlinearSolve.jl
-    p_equil=(;inputs=inputs_vec, m, solvekind=Equil())
+    p_equil = (; inputs = inputs_vec, m, setpoint)
 
     # Initialize problem
-    f!(du,u,p) = _state_space!(du, u, p.inputs, p.m, p.solvekind)
+    f!(du, u, p) = _equilibrium_space!(du, u, p.inputs, p.m, p.setpoint)
     println("Starting to solve for steady-state solution")
     prob = NonlinearProblem(f!, collect(values(init)), p_equil)
     global sol=solve(prob;maxiters=20,abstol = 1e-6,reltol = 1e-6)
