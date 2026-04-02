@@ -32,7 +32,7 @@ end
 
 
 struct OuterActivePowerControl{S<:AbstractFrequencySupportTLC} <: AbstractOuterActiveTLC
-    pi_ctrl::PIControl = PIControl()
+    pi_ctrl::PIControl
     p_ref::Float64
     support::S
 end
