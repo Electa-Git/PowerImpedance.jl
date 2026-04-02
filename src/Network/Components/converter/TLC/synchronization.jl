@@ -1,4 +1,4 @@
-using Parameters
+using Parameters  # TODO: remove these and others after testing is completed.
 
 abstract type AbstractSynchronizationTLC <: AbstractStateSpace end
 
@@ -19,24 +19,21 @@ end
 
 state_space!(F, x, meas, ::NoSynchronization; conv::AbstractTLC) = nothing
 
-struct PLLSynchronization <: AbstractSynchronizationTLC
+struct PLLSynchronization{Filter<:AbstractMeasurementFilter} <: AbstractSynchronizationTLC
     ctrl::PIControl
+    filter::Filter
     A::Matrix{Float64}
     B::Matrix{Float64}
     C::Matrix{Float64}
     D::Matrix{Float64}
 end
 
-function PLLSynchronization(; ctrl::PIControl = PI_control())
-    filt =
-        (ctrl.n_f > 0 && ctrl.ω_f != 0) ?
-        Butterworth(order = ctrl.n_f, ωc = ctrl.ω_f) :
-        NoFilter()
+function PLLSynchronization(; ctrl::PIControl = PIControl(), filter::AbstractMeasurementFilter = NoFilter())
+    A, B, C, D = measurement_filter_ss(filter)
 
-    A, B, C, D = measurement_filter_ss(filt)
-
-    return PLLSynchronization(
+    return PLLSynchronization{typeof(filter)}(
         ctrl,
+        filter,
         Matrix{Float64}(A),
         Matrix{Float64}(B),
         Matrix{Float64}(C),
