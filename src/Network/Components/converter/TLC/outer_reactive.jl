@@ -42,17 +42,17 @@ end
 
 
 struct OuterReactiveQControl{S<:AbstractVoltageSupportTLC} <: AbstractOuterReactiveTLC
-    ctrl::PIControl
+    pi_ctrl::PIControl
     q_ref::Float64
     support::S
 end
 
 function OuterReactiveQControl(;
-    ctrl::PIControl = PIControl(),
+    pi_ctrl::PIControl = PIControl(),
     q_ref::Real = 0.0,
     support::AbstractVoltageSupportTLC = NoVoltageSupport(),
     )
-    return OuterReactiveQControl{typeof(support)}(ctrl, Float64(q_ref), support)
+    return OuterReactiveQControl{typeof(support)}(pi_ctrl, Float64(q_ref), support)
 end    
 
 function statenames(block::OuterReactiveQControl)
@@ -67,7 +67,7 @@ end
 function outerreactive(block::OuterReactiveQControl, x, meas, sync)
     Q_ac = -meas.v_q_f * meas.i_d_f + meas.v_d_f * meas.i_q_f
     q_ref_eff = block.q_ref + support_output(block.support, x, meas)
-    i_q_ref = block.ctrl.Kp * (q_ref_eff - Q_ac) + x.ξ_q
+    i_q_ref = block.pi_ctrl.Kp * (q_ref_eff - Q_ac) + x.ξ_q
 
     return (
         q_ref = q_ref_eff,
@@ -87,13 +87,13 @@ function state_space!(F, x, meas, sync, block::OuterReactiveQControl; conv::Abst
 
     Q_ac = -meas.v_q_f * meas.i_d_f + meas.v_d_f * meas.i_q_f
     q_ref_eff = block.q_ref + support_output(block.support, x, meas)
-    F[ns + 1] = block.ctrl.Ki * (q_ref_eff - Q_ac)
+    F[ns + 1] = block.pi_ctrl.Ki * (q_ref_eff - Q_ac)
 
     return nothing
 end
 
 @with_kw struct OuterReactiveVacControl <: AbstractOuterReactiveTLC
-    ctrl::PIControl = PIControl()
+    pi_ctrl::PIControl = PIControl()
 end
 
 statenames(::OuterReactiveVacControl) = (:ξ_vac,)
@@ -101,7 +101,7 @@ initialvalues(::OuterReactiveVacControl; kwargs...) = (ξ_vac = 0.0,)
 
 function outerreactive(block::OuterReactiveVacControl, x, meas, sync)
     Vac = sqrt(meas.v_d_f^2 + meas.v_q_f^2)
-    i_q_ref = block.ctrl.Kp * (block.vac_ref - Vac) + x.ξ_vac
+    i_q_ref = block.pi_ctrl.Kp * (block.vac_ref - Vac) + x.ξ_vac
 
     return (
         Vac = Vac,
@@ -111,6 +111,6 @@ end
 
 function state_space!(F, x, meas, sync, block::OuterReactiveVacControl; conv::AbstractTLC)
     Vac = sqrt(meas.v_d_f^2 + meas.v_q_f^2)
-    F[1] = block.ctrl.Ki * (block.vac_ref - Vac)
+    F[1] = block.pi_ctrl.Ki * (block.vac_ref - Vac)
     return nothing
 end
