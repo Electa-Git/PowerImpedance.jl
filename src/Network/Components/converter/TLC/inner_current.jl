@@ -14,7 +14,7 @@ innercurrent(::NoInnerCurrentControl, x, meas, sync, vloop, conv::AbstractTLC) =
 state_space!(F, x, meas, sync, vloop, ::NoInnerCurrentControl; conv::AbstractTLC) = nothing
 
 @with_kw struct InnerCurrentPIControl <: AbstractInnerCurrentTLC
-    ctrl::PIControl = PI_control()
+    ctrl::PIControl = PIControl()
 end
 
 statenames(::InnerCurrentPIControl) = (:ξ_id, :ξ_iq)
@@ -36,8 +36,8 @@ function state_space!(F, x, meas, sync, vloop, block::InnerCurrentPIControl; con
     e_d = vloop.i_d_ref - meas.i_d_f
     e_q = vloop.i_q_ref - meas.i_q_f
 
-    F[1] = block.ctrl.Kᵢ * e_d
-    F[2] = block.ctrl.Kᵢ * e_q
+    F[1] = block.ctrl.Ki * e_d
+    F[2] = block.ctrl.Ki * e_q
 
     return nothing
 end
@@ -61,8 +61,8 @@ function innercurrent(block::InnerCurrentPIControl, x, meas, sync, vloop, conv::
     e_d = i_d_ref - i_d
     e_q = i_q_ref - i_q
 
-    md_c = 2 * (x.ξ_id + block.ctrl.Kₚ * e_d + Lᵣ * (1 + Δω) * i_q + v_d) / meas.vdc_f
-    mq_c = 2 * (x.ξ_iq + block.ctrl.Kₚ * e_q - Lᵣ * (1 + Δω) * i_d + v_q) / meas.vdc_f
+    md_c = 2 * (x.ξ_id + block.ctrl.Kp * e_d + Lᵣ * (1 + Δω) * i_q + v_d) / meas.vdc_f
+    mq_c = 2 * (x.ξ_iq + block.ctrl.Kp * e_q - Lᵣ * (1 + Δω) * i_d + v_q) / meas.vdc_f
 
     θ = sync.θ_sync
     cθ = cos(θ)
