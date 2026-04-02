@@ -10,13 +10,19 @@ export tlc,
        NoSynchronization,
        PLLSynchronization,
        AbstractOuterActiveTLC,
+       AbstractFrequencySupportTLC,
        NoOuterActiveControl,
+       NoFrequencySupport,
        OuterActivePowerControl,
+       FrequencySupportLag,
        OuterActiveVdcControl,
        AbstractOuterReactiveTLC,
+       AbstractVoltageSupportTLC,
        NoOuterReactiveControl,
+       NoVoltageSupport,
        OuterReactiveQControl,
        OuterReactiveVacControl,
+       VoltageSupportLag,
        AbstractInnerVoltageTLC,
        NoInnerVoltageControl,
        AbstractInnerCurrentTLC,
@@ -237,6 +243,7 @@ function tlc(;
     innerCurrent::AbstractInnerCurrentTLC = NoInnerCurrentControl(),
     mod::AbstractModulationTLC = NoModulation(),
     setpoint::SetPoint = SetPoint(),
+    limits::Limits = Limits(),
     connection::Bool = true
 )
     conv = TLC(elec, meas, synch, outerActive, outerReactive, innerVoltage, innerCurrent, mod)
@@ -247,6 +254,7 @@ function tlc(;
         element_model = conv,
         transformation = false;
         connection,
-        setpoint
+        setpoint,
+        limits,
     )
 end
