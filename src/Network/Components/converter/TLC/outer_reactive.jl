@@ -3,23 +3,60 @@
 using Parameters
 
 abstract type AbstractOuterReactiveTLC <: AbstractStateSpace end
+abstract type AbstractVoltageSupportTLC <: AbstractStateSpace end
 
 struct NoOuterReactiveControl <: AbstractOuterReactiveTLC end
-
 statenames(::NoOuterReactiveControl) = ()
 initialvalues(::NoOuterReactiveControl; kwargs...) = (;)
-
 outerreactive(::NoOuterReactiveControl, x, meas, sync) = (; i_q_ref = 0.0)
-
 state_space!(F, x, meas, sync, ::NoOuterReactiveControl; conv::AbstractTLC) = nothing
 
-@with_kw struct OuterReactiveQControl <: AbstractOuterReactiveTLC
-    ctrl::PIControl = PI_control()
-    vac_supp::Union{Nothing, PIControl} = nothing
+
+struct NoVoltageSupport <:AbstractVoltageSupportTLC end
+statenames(::NoVoltageSupport) = ()
+initialvalues(::NoVoltageSupport; kwargs...) = (;)
+support_output(::NoVoltageSupport, x, meas) = 0.0
+state_space!(F, x, meas, ::NoVoltageSupport) = nothing
+
+@with_kw struct VoltageSupportLag <: AbstractVoltageSupportTLC
+    K::Float64 = 0.0
+    ωc::Float64 = 0.0
+    vac_ref::Float64 = 1.0
 end
 
+statenames(::VoltageSupportLag) = (:ξ_vac_supp,)
+initialvalues(::VoltageSupportLag; kwargs...) = (:ξ_vac_supp = 0.0,)
+support_output(::VoltageSupportLag, x, meas) = x.ξ_vac_supp
+function state_space!(F, x, meas, block::VoltageSupportLag)
+    Vac = sqrt(meas.v_d_f^2 + meas.v_q_f^2)
+    Δq_unf = block.K * (block.vac.ref - Vac)
+    F[1] = block.ωc * (Δq_unf - x.ξ_vac_supp)
+    return nothing
+end
+
+
+
+
+
+
+
+
+struct OuterReactiveQControl{S<:AbstractVoltageSupportTLC} <: AbstractOuterReactiveTLC
+    ctrl::PIControl
+    q_ref::Float64
+    support::S
+end
+
+function OuterReactiveQControl(;
+    ctrl::PIControl = PIControl(),
+    q_ref::Real = 0.0,
+    support::AbstractVoltageSupportTLC = NoVoltageSupport(),
+    )
+    return OuterReactiveQControl{typeof(support)}(ctrl, Float64(q_ref), support)
+end    
+
 function statenames(block::OuterReactiveQControl)
-    block.vac_supp === nothing ? (:ξ_q,) : (:ξ_vac_supp, :ξ_q)
+    return (stateneames(block.support)..., :ξ_q)
 end
 
 function initialvalues(block::OuterReactiveQControl; kwargs...)
@@ -28,44 +65,35 @@ function initialvalues(block::OuterReactiveQControl; kwargs...)
 end
 
 function outerreactive(block::OuterReactiveQControl, x, meas, sync)
-    q_ref = block.ctrl.ref[1]
     Q_ac = -meas.v_q_f * meas.i_d_f + meas.v_d_f * meas.i_q_f
-
-    if block.vac_supp === nothing
-        i_q_ref = block.ctrl.Kₚ * (q_ref - Q_ac) + x.ξ_q
-    else
-        q_ref = q_ref + x.ξ_vac_supp
-        i_q_ref = block.ctrl.Kₚ * (q_ref - Q_ac) + x.ξ_q
-    end
+    q_ref_eff = block.q_ref + support_output(block.support, x, meas)
+    i_q_ref = block.ctrl.Kp * (q_ref_eff - Q_ac) + x.ξ_q
 
     return (
-        q_ref = q_ref,
+        q_ref = q_ref_eff,
         Q_ac = Q_ac,
         i_q_ref = i_q_ref
     )
 end
 
 function state_space!(F, x, meas, sync, block::OuterReactiveQControl; conv::AbstractTLC)
-    q_ref = block.ctrl.ref[1]
-    Q_ac = -meas.v_q_f * meas.i_d_f + meas.v_d_f * meas.i_q_f
+    ns = n_states(block.support)
 
-    if block.vac_supp === nothing
-        F[1] = block.ctrl.Kᵢ * (q_ref - Q_ac)
-    else
-        # Legacy ordering: support state first, then Q integrator
-        V_mag = sqrt(meas.v_d_f^2 + meas.v_q_f^2)
-        Δq_unf = block.vac_supp.Kₚ * (block.vac_supp.ref[1] - V_mag)
-        F[1] = block.vac_supp.ω_f * (Δq_unf - x.ξ_vac_supp)
-
-        q_ref = q_ref + x.ξ_vac_supp
-        F[2] = block.ctrl.Kᵢ * (q_ref - Q_ac)
+    if ns  > 0
+        state_space!(@view(F[1:ns]), x, meas, block.support)
     end
+
+
+
+    Q_ac = -meas.v_q_f * meas.i_d_f + meas.v_d_f * meas.i_q_f
+    q_ref_eff = block.q_ref + support_output(block.support, x, meas)
+    F[ns + 1] = block.ctrl.Ki * (q_ref_eff - Q_ac)
 
     return nothing
 end
 
 @with_kw struct OuterReactiveVacControl <: AbstractOuterReactiveTLC
-    ctrl::PIControl = PI_control()
+    ctrl::PIControl = PIControl()
 end
 
 statenames(::OuterReactiveVacControl) = (:ξ_vac,)
@@ -73,7 +101,7 @@ initialvalues(::OuterReactiveVacControl; kwargs...) = (ξ_vac = 0.0,)
 
 function outerreactive(block::OuterReactiveVacControl, x, meas, sync)
     Vac = sqrt(meas.v_d_f^2 + meas.v_q_f^2)
-    i_q_ref = block.ctrl.Kₚ * (block.ctrl.ref[1] - Vac) + x.ξ_vac
+    i_q_ref = block.ctrl.Kp * (block.vac_ref - Vac) + x.ξ_vac
 
     return (
         Vac = Vac,
@@ -83,6 +111,6 @@ end
 
 function state_space!(F, x, meas, sync, block::OuterReactiveVacControl; conv::AbstractTLC)
     Vac = sqrt(meas.v_d_f^2 + meas.v_q_f^2)
-    F[1] = block.ctrl.Kᵢ * (block.ctrl.ref[1] - Vac)
+    F[1] = block.ctrl.Ki * (block.vac_ref - Vac)
     return nothing
 end
