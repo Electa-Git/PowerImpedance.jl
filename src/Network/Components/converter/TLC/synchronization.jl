@@ -1,4 +1,4 @@
-using Parameters
+using Parameters  # TODO: remove these and others after testing is completed.
 
 abstract type AbstractSynchronizationTLC <: AbstractStateSpace end
 
@@ -13,30 +13,27 @@ function synchronization(::NoSynchronization, x, meas)
     return (
         θ_sync = 0.0,
         ω_sync = 1.0,
-        Δω_sync = 0.0
+        Δω_sync = 0.0,
     )
 end
 
 state_space!(F, x, meas, ::NoSynchronization; conv::AbstractTLC) = nothing
 
-struct PLLSynchronization <: AbstractSynchronizationTLC
-    ctrl::PIControl
+struct PLLSynchronization{Filter<:AbstractMeasurementFilter} <: AbstractSynchronizationTLC
+    pi_ctrl::PIControl
+    filter::Filter
     A::Matrix{Float64}
     B::Matrix{Float64}
     C::Matrix{Float64}
     D::Matrix{Float64}
 end
 
-function PLLSynchronization(; ctrl::PIControl = PI_control())
-    filt =
-        (ctrl.n_f > 0 && ctrl.ω_f != 0) ?
-        Butterworth(order = ctrl.n_f, ωc = ctrl.ω_f) :
-        NoFilter()
+function PLLSynchronization(; pi_ctrl::PIControl = PIControl(), filter::AbstractMeasurementFilter = NoFilter())
+    A, B, C, D = measurement_filter_ss(filter)
 
-    A, B, C, D = measurement_filter_ss(filt)
-
-    return PLLSynchronization(
-        ctrl,
+    return PLLSynchronization{typeof(filter)}(
+        pi_ctrl,
+        filter,
         Matrix{Float64}(A),
         Matrix{Float64}(B),
         Matrix{Float64}(C),
@@ -51,7 +48,7 @@ function statenames(block::PLLSynchronization)
     return (
         ntuple(i -> Symbol("v_q_pll_f_x$i"), n)...,
         :ξ_pll,
-        :θ_pll
+        :θ_pll,
     )
 end
 
@@ -70,12 +67,12 @@ function synchronization(block::PLLSynchronization, x, meas)
     u = [meas.v_q_f]
 
     v_pll = (block.C * xf + block.D * u)[1]
-    Δω = -block.ctrl.Kₚ * v_pll + x.ξ_pll
+    Δω = -block.pi_ctrl.Kp * v_pll + x.ξ_pll
 
     return (
         θ_sync = x.θ_pll,
         ω_sync = 1.0 + Δω,
-        Δω_sync = Δω
+        Δω_sync = Δω,
     )
 end
 
@@ -86,13 +83,13 @@ function state_space!(F, x, meas, block::PLLSynchronization; conv::AbstractTLC)
 
     dx_f = block.A * xf + block.B * u
     v_pll = (block.C * xf + block.D * u)[1]
-    Δω = -block.ctrl.Kₚ * v_pll + x.ξ_pll
+    Δω = -block.pi_ctrl.Kp * v_pll + x.ξ_pll
 
     @inbounds for i in 1:n
         F[i] = dx_f[i]
     end
 
-    F[n + 1] = -block.ctrl.Kᵢ * v_pll
+    F[n + 1] = -block.pi_ctrl.Ki * v_pll
     F[n + 2] = conv.elec.ω₀ * Δω
 
     return nothing

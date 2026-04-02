@@ -5,9 +5,9 @@ using LinearAlgebra
 
 ############################  Single-signal measurement block  ############################
 
-@with_kw struct MeasurementSignal <: AbstractStateSpace
+@with_kw struct MeasurementSignal{F<:AbstractMeasurementFilter} <: AbstractStateSpace
     signal::Symbol
-    filter::AbstractMeasurementFilter = NoFilter()
+    filter::F = NoFilter()
     A::Matrix{Float64} = zeros(0, 0)
     B::Matrix{Float64} = zeros(0, 1)
     C::Matrix{Float64} = zeros(1, 0)
@@ -19,9 +19,9 @@ end
 
 Convenience constructor that builds the state-space matrices from the selected filter.
 """
-function MeasurementSignal(signal::Symbol, filter::AbstractMeasurementFilter)
+function MeasurementSignal(signal::Symbol, filter::F) where {F<:AbstractMeasurementFilter}
     A, B, C, D = measurement_filter_ss(filter)
-    return MeasurementSignal(signal=signal, filter=filter, A=A, B=B, C=C, D=D)
+    return MeasurementSignal{F}(signal=signal, filter=filter, A=A, B=B, C=C, D=D)
 end
 
 ############################  Interface for one signal  ############################

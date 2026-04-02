@@ -10,13 +10,19 @@ export tlc,
        NoSynchronization,
        PLLSynchronization,
        AbstractOuterActiveTLC,
+       AbstractFrequencySupportTLC,
        NoOuterActiveControl,
+       NoFrequencySupport,
        OuterActivePowerControl,
+       FrequencySupportLag,
        OuterActiveVdcControl,
        AbstractOuterReactiveTLC,
+       AbstractVoltageSupportTLC,
        NoOuterReactiveControl,
+       NoVoltageSupport,
        OuterReactiveQControl,
        OuterReactiveVacControl,
+       VoltageSupportLag,
        AbstractInnerVoltageTLC,
        NoInnerVoltageControl,
        AbstractInnerCurrentTLC,
@@ -38,15 +44,24 @@ include("inner_voltage.jl")
 include("inner_current.jl")
 include("modulation.jl")
 
-struct TLC <: AbstractTLC
-    elec::ElectricalTLC
-    meas::MeasurementTLC
-    synch::AbstractSynchronizationTLC
-    outerActive::AbstractOuterActiveTLC
-    outerReactive::AbstractOuterReactiveTLC
-    innerVoltage::AbstractInnerVoltageTLC
-    innerCurrent::AbstractInnerCurrentTLC
-    mod::AbstractModulationTLC
+struct TLC{
+    E<:ElectricalTLC,
+    Meas<:MeasurementTLC,
+    Synch<:AbstractSynchronizationTLC,
+    Active<:AbstractOuterActiveTLC,
+    Reactive<:AbstractOuterReactiveTLC,
+    IV<:AbstractInnerVoltageTLC,
+    IC<:AbstractInnerCurrentTLC,
+    Mod<:AbstractModulationTLC} <: AbstractTLC
+
+    elec::E
+    meas::Meas
+    synch::Synch
+    outerActive::Active
+    outerReactive::Reactive
+    innerVoltage::IV
+    innerCurrent::IC
+    mod::Mod
 end
 
 statenames(c::TLC) = (
@@ -229,6 +244,7 @@ function tlc(;
     innerCurrent::AbstractInnerCurrentTLC = NoInnerCurrentControl(),
     mod::AbstractModulationTLC = NoModulation(),
     setpoint::SetPoint = SetPoint(),
+    limits::Limits = Limits(),
     connection::Bool = true
 )
     conv = TLC(elec, meas, synch, outerActive, outerReactive, innerVoltage, innerCurrent, mod)
@@ -239,6 +255,7 @@ function tlc(;
         element_model = conv,
         transformation = false;
         connection,
-        setpoint
+        setpoint,
+        limits,
     )
 end

@@ -67,6 +67,7 @@ include("Network/Components/source/ac_source.jl")
 
 # Converter
 include("Network/Components/converter/converter.jl")
+include("Network/Components/converter/filter.jl")
 include("Network/Components/converter/controller.jl")
 include("Network/Components/converter/controller_old.jl") # TODO: To be removed, now necessary for black-box MMC
 
