@@ -23,7 +23,7 @@ state_space!(F, x, sync, ::NoFrequencySupport) = nothing
 end
 
 statenames(::FrequencySupportLag) = (:ξ_f_supp,)
-initialvalues(::NoFrequencySupport; kwargs...) = (ξ_d_supp = 0.0,)
+initialvalues(::FrequencySupportLag; kwargs...) = (ξ_d_supp = 0.0,)
 support_output(::FrequencySupportLag, x, sync) = x.ξ_f_supp
 function state_space!(F, x, sync, block::FrequencySupportLag)
     F[1] = block.ωc * (-block.Kω * sync.Δω_sync - x.ξ_f_supp)
@@ -32,9 +32,9 @@ end
 
 
 struct OuterActivePowerControl{S<:AbstractFrequencySupportTLC} <: AbstractOuterActiveTLC
-    pi_ctrl::PIControl = PI_control()
+    pi_ctrl::PIControl = PIControl()
     p_ref::Float64
-    f_supp::S
+    support::S
 end
 
 
@@ -60,8 +60,8 @@ end
 
 function outeractive(block::OuterActivePowerControl, x, meas, sync)
     P_ac = meas.v_d_f * meas.i_d_f + meas.v_q_f * meas.i_q_f
-    p_ref_eff = block.p_ref = support_output(block.support, x, sync)
-    i_d_ref = block.pi_ctrl.Kp * (p_ref_eff - P_ac) = x.ξ_p
+    p_ref_eff = block.p_ref + support_output(block.support, x, sync)
+    i_d_ref = block.pi_ctrl.Kp * (p_ref_eff - P_ac) + x.ξ_p
 
     return (
         p_ref = p_ref_eff,
@@ -77,14 +77,14 @@ function state_space!(F, x, meas, sync, block::OuterActivePowerControl; conv::Ab
     end
 
     P_ac = meas.v_d_f * meas.i_d_f + meas.v_q_f * meas.i_q_f
-    P_ref_eff = block.p_ref + support_output(block.support, x, sync)
+    p_ref_eff = block.p_ref + support_output(block.support, x, sync)
     F[ns + 1] = block.pi_ctrl.Ki * (p_ref_eff - P_ac)
 
     return nothing
 end
 
 @with_kw struct OuterActiveVdcControl <: AbstractOuterActiveTLC
-    pi_ctrl::PIControl = PI_control()
+    pi_ctrl::PIControl = PIControl()
     vdc_ref::Float64 = 1.0
 end
 
@@ -92,7 +92,7 @@ statenames(::OuterActiveVdcControl) = (:ξ_vdc,)
 initialvalues(::OuterActiveVdcControl; kwargs...) = (ξ_vdc = 0.0,)
 
 function outeractive(block::OuterActiveVdcControl, x, meas, sync)
-    i_d_ref = -(block.pi_ctrl.Kp * (vdc_ref - meas.vdc_f) + x.ξ_vdc)
+    i_d_ref = -(block.pi_ctrl.Kp * (block.vdc_ref - meas.vdc_f) + x.ξ_vdc)
 
     return (
         vdc_ref = block.vdc_ref,
