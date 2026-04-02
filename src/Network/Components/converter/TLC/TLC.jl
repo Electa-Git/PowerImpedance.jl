@@ -37,15 +37,24 @@ include("inner_voltage.jl")
 include("inner_current.jl")
 include("modulation.jl")
 
-struct TLC <: AbstractTLC
-    elec::ElectricalTLC
-    meas::MeasurementTLC
-    synch::AbstractSynchronizationTLC
-    outerActive::AbstractOuterActiveTLC
-    outerReactive::AbstractOuterReactiveTLC
-    innerVoltage::AbstractInnerVoltageTLC
-    innerCurrent::AbstractInnerCurrentTLC
-    mod::AbstractModulationTLC
+struct TLC{
+    E<:ElectricalTLC,
+    Meas<:MeasurementTLC,
+    Synch<:AbstractSynchronizationTLC,
+    Active<:AbstractOuterActiveTLC,
+    Reactive<:AbstractOuterReactiveTLC,
+    IV<:AbstractInnerVoltageTLC,
+    IC<:AbstractInnerCurrentTLC,
+    Mod<:AbstractModulationTLC} <: AbstractTLC
+
+    elec::E
+    meas::Meas
+    synch::Synch
+    outerActive::Active
+    outerReactive::Reactive
+    innerVoltage::IV
+    innerCurrent::IC
+    mod::Mod
 end
 
 statenames(c::TLC) = (
