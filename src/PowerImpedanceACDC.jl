@@ -68,6 +68,8 @@ include("Network/Components/source/ac_source.jl")
 # Converter
 include("Network/Components/converter/converter.jl")
 include("Network/Components/converter/controller.jl")
+include("Network/Components/converter/controller_old.jl") # TODO: To be removed, now necessary for black-box MMC
+
 include("Network/Components/converter/MMC.jl")
 include("Network/Components/converter/TLC/TLC.jl")
 include("Network/Components/converter/blackbox_MMC.jl")

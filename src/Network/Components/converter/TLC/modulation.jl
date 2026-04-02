@@ -2,7 +2,7 @@
 
 using Parameters
 using LinearAlgebra
-using ControlSystems
+using ControlSystemsBase
 
 ############################  Abstract modulation slot  ############################
 

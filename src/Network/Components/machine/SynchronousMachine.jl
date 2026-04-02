@@ -85,6 +85,7 @@ statenames(::GovernorSM) = (:δω_filt, :flow, :TchHP, :TreIP, :TcrLP)
 initialvalues(::GovernorSM;inputs) =  NamedTuple{(:flow, :TchHP, :TreIP, :TcrLP)}(ntuple(i -> inputs.Tm0, 4)) #Initalize those to same value
 
 
+
 ########################### AVR #############################
 
 @with_kw struct AVRSM <: AbstractStateSpace
@@ -127,7 +128,7 @@ function pftoinputs(m::SynchronousMachine, setpoint::SetPoint)
 end
 
 
-function outputequations!(F, x, inputs, gen::SynchronousMachine)
+function outputequations!(F, x, inputs, y, gen::SynchronousMachine)
     
     theta_grid = 0; # The angle of the global dq reference frame TODO: Check if this is correct
     d = get_state(:θ_sg, x) - theta_grid; # New reference frame angle - old RF angle

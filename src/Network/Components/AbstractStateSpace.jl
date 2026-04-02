@@ -23,20 +23,20 @@ struct Jac <: AbstractSolveKind end
 
 ### Dispatch on modeler functions
 # Equilib
-solvekindequations!(F,x,inputs,m::AbstractStateSpace, solvekind::Equil) = dummyequations!(F,x,inputs,m::AbstractStateSpace)
+solvekindequations!(F,x,inputs,y,m::AbstractStateSpace, solvekind::Equil) = dummyequations!(F,x,inputs,y,m::AbstractStateSpace)
 solvekindnames(m::AbstractStateSpace, solvekind::Equil) = dummynames(m::AbstractStateSpace)
 
-solvekindequations!(F,x,inputs,m::AbstractStateSpace, solvekind::Jac) = outputequations!(F,x,inputs,m::AbstractStateSpace)
+solvekindequations!(F,x,inputs,y,m::AbstractStateSpace, solvekind::Jac) = outputequations!(F,x,inputs,y,m::AbstractStateSpace)
 solvekindnames(m::AbstractStateSpace, solvekind::Jac) = outputnames(m::AbstractStateSpace)
 
 ### Define default functions (they don't do anything), if no specific method is defined
-solvekindequations!(F,x,inputs,m::AbstractStateSpace, solvekind::AbstractSolveKind) = nothing
+solvekindequations!(F,x,inputs,y,m::AbstractStateSpace, solvekind::AbstractSolveKind) = nothing
 solvekindnames(m::AbstractStateSpace, solvekind::AbstractSolveKind) = (;)
 
-dummyequations!(F,x,inputs,m::AbstractStateSpace) = nothing
+dummyequations!(F,x,inputs,y,m::AbstractStateSpace) = nothing
 dummynames(m::AbstractStateSpace) = (;)
 
-outputequations!(F,x,inputs,m::AbstractStateSpace) = nothing
+outputequations!(F,x,inputs,y,m::AbstractStateSpace) = nothing
 outputnames(m::AbstractStateSpace) = (;)
 
 equilibrium_state_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint) =
@@ -53,28 +53,28 @@ function _state_space!(F, x, inputs, m::AbstractStateSpace, solvekind::AbstractS
     # To where state space equations fill up F
     index_stsp = n_states(m)
 
-    # Call the modeler's state space functions
-    state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, m)
+    # Call the modeler's state space functions, certain algebr variables can be returned to be used by outputequations or dummyequations
+    y = state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, m)
     
     # Modify output/dummy equations
-    solvekindequations!(@view(F[index_stsp+1:end]),x_nt,inputs_nt, m, solvekind)
+    solvekindequations!(@view(F[index_stsp+1:end]),x_nt,inputs_nt, y, m, solvekind)
 
     return
 
 end
 
-function _equilibrium_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint)
-    x_names = statenames(m)
-    x_nt = NamedTuple{x_names}(x)
-    inputs_nt = NamedTuple{inputnames(m)}(inputs)
+# function _equilibrium_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint)
+#     x_names = statenames(m)
+#     x_nt = NamedTuple{x_names}(x)
+#     inputs_nt = NamedTuple{inputnames(m)}(inputs)
 
-    index_stsp = n_states(m)
+#     index_stsp = n_states(m)
 
-    equilibrium_state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, m, setpoint)
-    solvekindequations!(@view(F[index_stsp+1:end]), x_nt, inputs_nt, m, Equil())
+#     equilibrium_state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, m, setpoint)
+#     solvekindequations!(@view(F[index_stsp+1:end]), x_nt, inputs_nt, m, Equil())
 
-    return
-end
+#     return
+# end
     
 function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
 
@@ -85,10 +85,10 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
     global init = orderedinitialvalues(m;setpoint, inputs)
 
     # Parameters for equilibirum with NonlinearSolve.jl
-    p_equil = (; inputs = inputs_vec, m, setpoint)
+    p_equil=(;inputs=inputs_vec, m, solvekind=Equil())
 
     # Initialize problem
-    f!(du, u, p) = _equilibrium_space!(du, u, p.inputs, p.m, p.setpoint)
+    f!(du,u,p) = _state_space!(du, u, p.inputs, p.m, p.solvekind)
     println("Starting to solve for steady-state solution")
     prob = NonlinearProblem(f!, collect(values(init)), p_equil)
     global sol=solve(prob;maxiters=20,abstol = 1e-6,reltol = 1e-6)

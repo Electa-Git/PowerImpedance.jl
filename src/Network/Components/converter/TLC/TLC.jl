@@ -28,6 +28,7 @@ export tlc,
 
 abstract type AbstractTLC <: AbstractStateSpace end
 
+include("../filter.jl") #TODO: @Luis this was not included. Please resolve this (this is probably not the appropriate place)
 include("electrical.jl")
 include("measurement.jl")
 include("synchronization.jl")
