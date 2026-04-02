@@ -20,7 +20,7 @@ end
 state_space!(F, x, meas, ::NoSynchronization; conv::AbstractTLC) = nothing
 
 struct PLLSynchronization{Filter<:AbstractMeasurementFilter} <: AbstractSynchronizationTLC
-    ctrl::PIControl
+    pi_ctrl::PIControl
     filter::Filter
     A::Matrix{Float64}
     B::Matrix{Float64}
@@ -28,11 +28,11 @@ struct PLLSynchronization{Filter<:AbstractMeasurementFilter} <: AbstractSynchron
     D::Matrix{Float64}
 end
 
-function PLLSynchronization(; ctrl::PIControl = PIControl(), filter::AbstractMeasurementFilter = NoFilter())
+function PLLSynchronization(; pi_ctrl::PIControl = PIControl(), filter::AbstractMeasurementFilter = NoFilter())
     A, B, C, D = measurement_filter_ss(filter)
 
     return PLLSynchronization{typeof(filter)}(
-        ctrl,
+        pi_ctrl,
         filter,
         Matrix{Float64}(A),
         Matrix{Float64}(B),
@@ -67,7 +67,7 @@ function synchronization(block::PLLSynchronization, x, meas)
     u = [meas.v_q_f]
 
     v_pll = (block.C * xf + block.D * u)[1]
-    Δω = -block.ctrl.Kₚ * v_pll + x.ξ_pll
+    Δω = -block.pi_ctrl.Kp * v_pll + x.ξ_pll
 
     return (
         θ_sync = x.θ_pll,
@@ -83,13 +83,13 @@ function state_space!(F, x, meas, block::PLLSynchronization; conv::AbstractTLC)
 
     dx_f = block.A * xf + block.B * u
     v_pll = (block.C * xf + block.D * u)[1]
-    Δω = -block.ctrl.Kₚ * v_pll + x.ξ_pll
+    Δω = -block.pi_ctrl.Kp * v_pll + x.ξ_pll
 
     @inbounds for i in 1:n
         F[i] = dx_f[i]
     end
 
-    F[n + 1] = -block.ctrl.Kᵢ * v_pll
+    F[n + 1] = -block.pi_ctrl.Ki * v_pll
     F[n + 2] = conv.elec.ω₀ * Δω
 
     return nothing
