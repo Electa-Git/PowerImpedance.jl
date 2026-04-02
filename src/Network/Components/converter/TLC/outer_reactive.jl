@@ -25,11 +25,11 @@ state_space!(F, x, meas, ::NoVoltageSupport) = nothing
 end
 
 statenames(::VoltageSupportLag) = (:ξ_vac_supp,)
-initialvalues(::VoltageSupportLag; kwargs...) = (:ξ_vac_supp = 0.0,)
+initialvalues(::VoltageSupportLag; kwargs...) = (ξ_vac_supp = 0.0,)
 support_output(::VoltageSupportLag, x, meas) = x.ξ_vac_supp
 function state_space!(F, x, meas, block::VoltageSupportLag)
     Vac = sqrt(meas.v_d_f^2 + meas.v_q_f^2)
-    Δq_unf = block.K * (block.vac.ref - Vac)
+    Δq_unf = block.K * (block.vac_ref - Vac)
     F[1] = block.ωc * (Δq_unf - x.ξ_vac_supp)
     return nothing
 end
@@ -56,7 +56,7 @@ function OuterReactiveQControl(;
 end    
 
 function statenames(block::OuterReactiveQControl)
-    return (stateneames(block.support)..., :ξ_q)
+    return (statenames(block.support)..., :ξ_q)
 end
 
 function initialvalues(block::OuterReactiveQControl; kwargs...)
@@ -72,7 +72,7 @@ function outerreactive(block::OuterReactiveQControl, x, meas, sync)
     return (
         q_ref = q_ref_eff,
         Q_ac = Q_ac,
-        i_q_ref = i_q_ref
+        i_q_ref = i_q_ref,
     )
 end
 
@@ -94,6 +94,7 @@ end
 
 @with_kw struct OuterReactiveVacControl <: AbstractOuterReactiveTLC
     pi_ctrl::PIControl = PIControl()
+    vac_ref::Float64 = 1.0
 end
 
 statenames(::OuterReactiveVacControl) = (:ξ_vac,)
@@ -105,7 +106,7 @@ function outerreactive(block::OuterReactiveVacControl, x, meas, sync)
 
     return (
         Vac = Vac,
-        i_q_ref = i_q_ref
+        i_q_ref = i_q_ref,
     )
 end
 

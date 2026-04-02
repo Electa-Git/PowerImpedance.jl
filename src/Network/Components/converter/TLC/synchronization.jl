@@ -13,7 +13,7 @@ function synchronization(::NoSynchronization, x, meas)
     return (
         θ_sync = 0.0,
         ω_sync = 1.0,
-        Δω_sync = 0.0
+        Δω_sync = 0.0,
     )
 end
 
@@ -48,7 +48,7 @@ function statenames(block::PLLSynchronization)
     return (
         ntuple(i -> Symbol("v_q_pll_f_x$i"), n)...,
         :ξ_pll,
-        :θ_pll
+        :θ_pll,
     )
 end
 
@@ -72,7 +72,7 @@ function synchronization(block::PLLSynchronization, x, meas)
     return (
         θ_sync = x.θ_pll,
         ω_sync = 1.0 + Δω,
-        Δω_sync = Δω
+        Δω_sync = Δω,
     )
 end
 

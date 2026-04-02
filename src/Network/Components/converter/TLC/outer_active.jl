@@ -66,7 +66,7 @@ function outeractive(block::OuterActivePowerControl, x, meas, sync)
     return (
         p_ref = p_ref_eff,
         P_ac = P_ac,
-        i_d_ref = i_d_ref
+        i_d_ref = i_d_ref,
     )
 end
 
@@ -96,7 +96,7 @@ function outeractive(block::OuterActiveVdcControl, x, meas, sync)
 
     return (
         vdc_ref = block.vdc_ref,
-        i_d_ref = i_d_ref
+        i_d_ref = i_d_ref,
     )
 end
 
