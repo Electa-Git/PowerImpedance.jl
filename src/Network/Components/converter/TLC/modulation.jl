@@ -1,9 +1,5 @@
 ############################  modulation.jl  ############################
 
-using Parameters
-using LinearAlgebra
-using ControlSystemsBase
-
 ############################  Abstract modulation slot  ############################
 
 abstract type AbstractModulationTLC <: AbstractStateSpace end

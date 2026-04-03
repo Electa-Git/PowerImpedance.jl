@@ -1,7 +1,5 @@
 ############################  electrical.jl  ############################
 
-using Parameters
-
 @with_kw struct ElectricalTLC <: AbstractStateSpace
     ω₀::Float64 = 100 * π
 

@@ -1,7 +1,5 @@
 ############################  outer_active.jl  ############################
 
-using Parameters
-
 abstract type AbstractOuterActiveTLC <: AbstractStateSpace end
 abstract type AbstractFrequencySupportTLC <: AbstractStateSpace end
 

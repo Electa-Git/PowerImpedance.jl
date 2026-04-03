@@ -1,7 +1,5 @@
 ############################  inner_voltage.jl  ############################
 
-using Parameters
-
 abstract type AbstractInnerVoltageTLC <: AbstractStateSpace end
 
 struct NoInnerVoltageControl <: AbstractInnerVoltageTLC end

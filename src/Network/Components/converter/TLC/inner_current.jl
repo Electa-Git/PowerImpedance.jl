@@ -1,7 +1,5 @@
 ############################  inner_current.jl  ############################
 
-using Parameters
-
 abstract type AbstractInnerCurrentTLC <: AbstractStateSpace end
 
 struct NoInnerCurrentControl <: AbstractInnerCurrentTLC end

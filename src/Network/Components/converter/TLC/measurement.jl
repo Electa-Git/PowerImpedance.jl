@@ -1,8 +1,5 @@
 ############################  measurement.jl  ############################
 
-using Parameters
-using LinearAlgebra
-
 ############################  Single-signal measurement block  ############################
 
 @with_kw struct MeasurementSignal{F<:AbstractMeasurementFilter} <: AbstractStateSpace

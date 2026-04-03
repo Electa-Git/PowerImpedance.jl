@@ -1,9 +1,5 @@
 ############################  filter.jl  ############################
 
-using Parameters
-using ControlSystemsBase #TODO: @Luis Some of these are imported already : check PowerImpedance.jl
-using LinearAlgebra
-
 ############################  Filter types  ############################
 
 abstract type AbstractMeasurementFilter end

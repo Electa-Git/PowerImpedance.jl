@@ -1,5 +1,3 @@
-using Parameters  # TODO: remove these and others after testing is completed.
-
 abstract type AbstractSynchronizationTLC <: AbstractStateSpace end
 
 struct NoSynchronization <: AbstractSynchronizationTLC end

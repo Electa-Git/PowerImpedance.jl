@@ -1,7 +1,5 @@
 ############################  outer_reactive.jl  ############################
 
-using Parameters
-
 abstract type AbstractOuterReactiveTLC <: AbstractStateSpace end
 abstract type AbstractVoltageSupportTLC <: AbstractStateSpace end
 
