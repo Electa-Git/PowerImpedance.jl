@@ -90,7 +90,7 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
     # Initialize problem
     f!(du,u,p) = _state_space!(du, u, p.inputs, p.m, p.solvekind)
     println("Starting to solve for steady-state solution")
-    prob = NonlinearProblem(f!, collect(values(init)), p_equil)
+    prob = NonlinearProblem(f!, collect(promote(values(init)...)), p_equil)
     global sol=solve(prob;maxiters=20,abstol = 1e-6,reltol = 1e-6)
     
     # Solve nonlinear problem
