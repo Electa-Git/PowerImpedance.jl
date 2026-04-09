@@ -3,7 +3,8 @@ abstract type AbstractSynchronizationTLC <: AbstractStateSpace end
 struct NoSynchronization <: AbstractSynchronizationTLC end
 
 statenames(::NoSynchronization) = ()
-initialvalues(::NoSynchronization; kwargs...) = (;)
+# TODO: remove after testing
+#initialvalues(::NoSynchronization; kwargs...) = (;)
 
 syncangle(::NoSynchronization, x) = 0.0
 
@@ -50,14 +51,16 @@ function statenames(block::PLLSynchronization)
     )
 end
 
-function initialvalues(block::PLLSynchronization; setpoint = SetPoint(), kwargs...)
+# TODO: delete after testing
+#= function initialvalues(block::PLLSynchronization; setpoint = SetPoint(), kwargs...)
     n = size(block.A, 1)
     return NamedTuple{statenames(block)}((
         ntuple(_ -> 0.0, n)...,
         0.0,
         setpoint.θac
     ))
-end
+end =#
+
 
 function synchronization(block::PLLSynchronization, x, meas)
     n = size(block.A, 1)

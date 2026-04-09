@@ -5,14 +5,16 @@ abstract type AbstractFrequencySupportTLC <: AbstractStateSpace end
 
 struct NoOuterActiveControl <: AbstractOuterActiveTLC end
 statenames(::NoOuterActiveControl) = ()
-initialvalues(::NoOuterActiveControl; kwargs...) = (;)
 outeractive(::NoOuterActiveControl, x, meas, sync) = (; i_d_ref = 0.0)
+# TODO: Delete after testing
+#initialvalues(::NoOuterActiveControl; kwargs...) = (;)
 state_space!(F, x, meas, sync, ::NoOuterActiveControl; conv::AbstractTLC) = nothing
 
 struct NoFrequencySupport <: AbstractFrequencySupportTLC end
 statenames(::NoFrequencySupport) = ()
-initialvalues(::NoFrequencySupport; kwargs...) = (;)
 support_output(::NoFrequencySupport, x, sync) = 0.0
+# TODO: Delete after testing
+#initialvalues(::NoFrequencySupport; kwargs...) = (;)
 state_space!(F, x, sync, ::NoFrequencySupport) = nothing
 
 @with_kw struct FrequencySupportLag <: AbstractFrequencySupportTLC
@@ -21,20 +23,20 @@ state_space!(F, x, sync, ::NoFrequencySupport) = nothing
 end
 
 statenames(::FrequencySupportLag) = (:ξ_f_supp,)
-initialvalues(::FrequencySupportLag; kwargs...) = (ξ_d_supp = 0.0,)
 support_output(::FrequencySupportLag, x, sync) = x.ξ_f_supp
+# TODO: Delete after testing
+#initialvalues(::FrequencySupportLag; kwargs...) = (;)
+
 function state_space!(F, x, sync, block::FrequencySupportLag)
     F[1] = block.ωc * (-block.Kω * sync.Δω_sync - x.ξ_f_supp)
     return nothing
 end
-
 
 struct OuterActivePowerControl{S<:AbstractFrequencySupportTLC} <: AbstractOuterActiveTLC
     pi_ctrl::PIControl
     p_ref::Float64
     support::S
 end
-
 
 function OuterActivePowerControl(;
     pi_ctrl::PIControl = PIControl(),
@@ -44,16 +46,14 @@ function OuterActivePowerControl(;
     return OuterActivePowerControl{typeof(support)}(pi_ctrl, Float64(p_ref), support)
 end
 
-
 function statenames(block::OuterActivePowerControl)
     return (statenames(block.support)..., :ξ_p)
 end
 
-
-
+# Only propagate nonzero / nontrivial support initial values.
+# ξ_p is left to orderedinitialvalues(...), which fills missing states with zero.
 function initialvalues(block::OuterActivePowerControl; kwargs...)
-    names = statenames(block)
-    return NamedTuple{names}(ntuple(_ -> 0.0, length(names)))
+    return initialvalues(block.support; kwargs...)
 end
 
 function outeractive(block::OuterActivePowerControl, x, meas, sync)
@@ -87,7 +87,8 @@ end
 end
 
 statenames(::OuterActiveVdcControl) = (:ξ_vdc,)
-initialvalues(::OuterActiveVdcControl; kwargs...) = (ξ_vdc = 0.0,)
+# TODO: Delete after testing
+#initialvalues(::OuterActiveVdcControl; kwargs...) = (;)
 
 function outeractive(block::OuterActiveVdcControl, x, meas, sync)
     i_d_ref = -(block.pi_ctrl.Kp * (block.vdc_ref - meas.vdc_f) + x.ξ_vdc)

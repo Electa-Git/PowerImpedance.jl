@@ -5,15 +5,16 @@ abstract type AbstractVoltageSupportTLC <: AbstractStateSpace end
 
 struct NoOuterReactiveControl <: AbstractOuterReactiveTLC end
 statenames(::NoOuterReactiveControl) = ()
-initialvalues(::NoOuterReactiveControl; kwargs...) = (;)
 outerreactive(::NoOuterReactiveControl, x, meas, sync) = (; i_q_ref = 0.0)
+# TODO: Delete after testing:
+#initialvalues(::NoOuterReactiveControl; kwargs...) = (;)
 state_space!(F, x, meas, sync, ::NoOuterReactiveControl; conv::AbstractTLC) = nothing
 
-
-struct NoVoltageSupport <:AbstractVoltageSupportTLC end
+struct NoVoltageSupport <: AbstractVoltageSupportTLC end
 statenames(::NoVoltageSupport) = ()
-initialvalues(::NoVoltageSupport; kwargs...) = (;)
 support_output(::NoVoltageSupport, x, meas) = 0.0
+# TODO: Delete after testing
+#initialvalues(::NoVoltageSupport; kwargs...) = (;)
 state_space!(F, x, meas, ::NoVoltageSupport) = nothing
 
 @with_kw struct VoltageSupportLag <: AbstractVoltageSupportTLC
@@ -23,21 +24,16 @@ state_space!(F, x, meas, ::NoVoltageSupport) = nothing
 end
 
 statenames(::VoltageSupportLag) = (:ξ_vac_supp,)
-initialvalues(::VoltageSupportLag; kwargs...) = (ξ_vac_supp = 0.0,)
 support_output(::VoltageSupportLag, x, meas) = x.ξ_vac_supp
+# TODO: Delete after testing
+#initialvalues(::VoltageSupportLag; kwargs...) = (ξ_vac_supp = 0.0,)
+
 function state_space!(F, x, meas, block::VoltageSupportLag)
     Vac = sqrt(meas.v_d_f^2 + meas.v_q_f^2)
     Δq_unf = block.K * (block.vac_ref - Vac)
     F[1] = block.ωc * (Δq_unf - x.ξ_vac_supp)
     return nothing
 end
-
-
-
-
-
-
-
 
 struct OuterReactiveQControl{S<:AbstractVoltageSupportTLC} <: AbstractOuterReactiveTLC
     pi_ctrl::PIControl
@@ -49,17 +45,18 @@ function OuterReactiveQControl(;
     pi_ctrl::PIControl = PIControl(),
     q_ref::Real = 0.0,
     support::AbstractVoltageSupportTLC = NoVoltageSupport(),
-    )
+)
     return OuterReactiveQControl{typeof(support)}(pi_ctrl, Float64(q_ref), support)
-end    
+end
 
 function statenames(block::OuterReactiveQControl)
     return (statenames(block.support)..., :ξ_q)
 end
 
+# Only propagate nonzero / nontrivial support initial values.
+# ξ_q is left to orderedinitialvalues(...), which fills missing states with zero.
 function initialvalues(block::OuterReactiveQControl; kwargs...)
-    names = statenames(block)
-    return NamedTuple{names}(ntuple(_ -> 0.0, length(names)))
+    return initialvalues(block.support; kwargs...)
 end
 
 function outerreactive(block::OuterReactiveQControl, x, meas, sync)
@@ -77,11 +74,9 @@ end
 function state_space!(F, x, meas, sync, block::OuterReactiveQControl; conv::AbstractTLC)
     ns = n_states(block.support)
 
-    if ns  > 0
+    if ns > 0
         state_space!(@view(F[1:ns]), x, meas, block.support)
     end
-
-
 
     Q_ac = -meas.v_q_f * meas.i_d_f + meas.v_d_f * meas.i_q_f
     q_ref_eff = block.q_ref + support_output(block.support, x, meas)
@@ -96,7 +91,8 @@ end
 end
 
 statenames(::OuterReactiveVacControl) = (:ξ_vac,)
-initialvalues(::OuterReactiveVacControl; kwargs...) = (ξ_vac = 0.0,)
+# TODO: Delete after testing
+#initialvalues(::OuterReactiveVacControl; kwargs...) = (ξ_vac = 0.0,)
 
 function outerreactive(block::OuterReactiveVacControl, x, meas, sync)
     Vac = sqrt(meas.v_d_f^2 + meas.v_q_f^2)

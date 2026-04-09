@@ -90,7 +90,7 @@ function initialvalues(c::TLC; inputs, setpoint=SetPoint(), kwargs...)
         elec_init,
         initialvalues(c.meas; inputs=meas_inputs, setpoint, kwargs..., conv=c),
         initialvalues(c.synch; inputs=meas_inputs, setpoint, kwargs..., conv=c),
-        initialvalues(c.outerActive; inputs, setpoint, kwargs..., conv=c),
+        initialvalues(c.outerActive; inputs, setpoint, kwargs..., conv=c, elec_init=elec_init),
         initialvalues(c.outerReactive; inputs, setpoint, kwargs..., conv=c),
         initialvalues(c.innerVoltage; inputs, setpoint, kwargs..., conv=c),
         initialvalues(c.innerCurrent; inputs, setpoint, kwargs..., conv=c),
@@ -153,6 +153,7 @@ function outputequations!(F, x, inputs, c::TLC)
 end
 
 function state_space!(F, x, inputs, c::TLC)
+    
     meas_in = raw_measurements(c, x, inputs)
     meas  = measurement_outputs(x, meas_in, c.meas)
     sync  = synchronization(c.synch, x, meas)
@@ -198,8 +199,8 @@ function state_space!(F, x, inputs, c::TLC)
     return nothing
 end
 
-
-function equilibrium_state_space!(F, x, inputs, c::TLC, setpoint::SetPoint)
+# TODO: Remove after testing
+#= function equilibrium_state_space!(F, x, inputs, c::TLC, setpoint::SetPoint)
     equilibrium_state_space!(F, x, inputs, c, c.outerActive, setpoint)
     return nothing
 end
@@ -207,7 +208,7 @@ end
 function equilibrium_state_space!(F, x, inputs, c::TLC, ::AbstractOuterActiveTLC, setpoint::SetPoint)
     state_space!(F, x, inputs, c)
     return nothing
-end
+end =#
 
 function equilibrium_state_space!(F, x, inputs, c::TLC, ::OuterActiveVdcControl, setpoint::SetPoint)
     # Start from the ordinary TLC state equations

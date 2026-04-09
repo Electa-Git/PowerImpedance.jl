@@ -9,7 +9,8 @@ abstract type AbstractModulationTLC <: AbstractStateSpace end
 struct NoModulation <: AbstractModulationTLC end
 
 statenames(::NoModulation) = ()
-initialvalues(::NoModulation; kwargs...) = (;)
+# TODO: Delete after testing
+#initialvalues(::NoModulation; kwargs...) = (;)
 
 modulation(::NoModulation, x, iloop, conv::AbstractTLC) = (; m_d = iloop.m_d, m_q = iloop.m_q)
 
@@ -62,10 +63,11 @@ function statenames(block::PadeModulation)
     return ntuple(i -> Symbol("m_delay_x$i"), n)
 end
 
-function initialvalues(block::PadeModulation; kwargs...)
+# TODO: Delete after testing
+#= function initialvalues(block::PadeModulation; kwargs...)
     n = size(block.A, 1)
     return NamedTuple{statenames(block)}(ntuple(_ -> 0.0, n))
-end
+end =#
 
 function modulation(block::PadeModulation, x, iloop, conv::AbstractTLC)
     u = [iloop.m_d; iloop.m_q]

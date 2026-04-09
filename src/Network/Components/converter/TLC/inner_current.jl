@@ -5,7 +5,9 @@ abstract type AbstractInnerCurrentTLC <: AbstractStateSpace end
 struct NoInnerCurrentControl <: AbstractInnerCurrentTLC end
 
 statenames(::NoInnerCurrentControl) = ()
-initialvalues(::NoInnerCurrentControl; kwargs...) = (;)
+
+# TODO: Delete after testing
+#initialvalues(::NoInnerCurrentControl; kwargs...) = (;)
 
 innercurrent(::NoInnerCurrentControl, x, meas, sync, vloop, conv::AbstractTLC) = (; m_d = 0.0, m_q = 0.0)
 
@@ -16,6 +18,7 @@ state_space!(F, x, meas, sync, vloop, ::NoInnerCurrentControl; conv::AbstractTLC
 end
 
 statenames(::InnerCurrentPIControl) = (:ξ_id, :ξ_iq)
+
 function initialvalues(block::InnerCurrentPIControl; inputs, setpoint=SetPoint(), kwargs...)
     conv = kwargs[:conv]
     i0 = initialvalues(conv.elec; inputs, setpoint)
