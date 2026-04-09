@@ -111,7 +111,7 @@ end
 
 
 
-function raw_measurements(c::TLC, x, inputs)
+function input_signals(c::TLC, x, inputs)
     θ = syncangle(c.synch, x)
     cθ = cos(θ)
     sθ = sin(θ)
@@ -133,29 +133,16 @@ function raw_measurements(c::TLC, x, inputs)
     )
 end
 
-function outputequations!(F, x, inputs, c::TLC)
-    meas_in = raw_measurements(c, x, inputs)
-    meas  = measurement_outputs(x, meas_in, c.meas)
-    sync  = synchronization(c.synch, x, meas)
-    pact  = outeractive(c.outerActive, x, meas, sync)
-    qact  = outerreactive(c.outerReactive, x, meas, sync)
-    vloop = innervoltage(c.innerVoltage, x, meas, sync, pact, qact)
-    iloop = innercurrent(c.innerCurrent, x, meas, sync, vloop, c)
-    mod   = modulation(c.mod, x, iloop, c)
-
-    y = electrical_outputs(c.elec, x, inputs, mod)
-
-    F[1] = y.idc
-    F[2] = y.i_d
-    F[3] = y.i_q
-
+function outputequations!(F, x, inputs, y, c::TLC)
+    F[1] = y.elec.idc
+    F[2] = y.elec.i_d
+    F[3] = y.elec.i_q
     return nothing
 end
 
 function state_space!(F, x, inputs, c::TLC)
-    
-    meas_in = raw_measurements(c, x, inputs)
-    meas  = measurement_outputs(x, meas_in, c.meas)
+    sig_in = input_signals(c, x, inputs)
+    meas  = filter_outputs(x, sig_in, c.meas)
     sync  = synchronization(c.synch, x, meas)
     pact  = outeractive(c.outerActive, x, meas, sync)
     qact  = outerreactive(c.outerReactive, x, meas, sync)
@@ -170,7 +157,7 @@ function state_space!(F, x, inputs, c::TLC)
     i += n
 
     n = n_states(c.meas)
-    state_space!(@view(F[i:i+n-1]), x, meas_in, c.meas; conv=c)
+    state_space!(@view(F[i:i+n-1]), x, sig_in, c.meas; conv=c)
     i += n
 
     n = n_states(c.synch)
@@ -196,39 +183,39 @@ function state_space!(F, x, inputs, c::TLC)
     n = n_states(c.mod)
     state_space!(@view(F[i:i+n-1]), x, iloop, c.mod; conv=c)
 
-    return nothing
+    elec = electrical_outputs(c.elec, x, inputs, mod)
+
+    return (;
+        sig_in,
+        meas,
+        sync,
+        pact,
+        qact,
+        vloop,
+        iloop,
+        mod,
+        elec
+    )
 end
 
 # TODO: Remove after testing
-#= function equilibrium_state_space!(F, x, inputs, c::TLC, setpoint::SetPoint)
+function equilibrium_state_space!(F, x, inputs, c::TLC, setpoint::SetPoint)
     equilibrium_state_space!(F, x, inputs, c, c.outerActive, setpoint)
     return nothing
 end
 
 function equilibrium_state_space!(F, x, inputs, c::TLC, ::AbstractOuterActiveTLC, setpoint::SetPoint)
-    state_space!(F, x, inputs, c)
-    return nothing
-end =#
+    return state_space!(F, x, inputs, c)
+end
 
 function equilibrium_state_space!(F, x, inputs, c::TLC, ::OuterActiveVdcControl, setpoint::SetPoint)
-    # Start from the ordinary TLC state equations
-    state_space!(F, x, inputs, c)
+    y = state_space!(F, x, inputs, c)
 
-    # Replace the ξ_vdc residual by the legacy DC power-balance condition.
-    # This is the elimination of the helper-state formulation used in TLC_legacy.jl.
     idx_ξvdc = n_states(c.elec) + n_states(c.meas) + n_states(c.synch) + 1
-
-    T = promote_type(
-        mapreduce(typeof, promote_type, values(x)),
-        mapreduce(typeof, promote_type, values(inputs))
-    )
-    y = zeros(T, n_outputs(c))
-    outputequations!(y, x, inputs, c)
-
     Idc_in = (setpoint.Pdc / c.elec.Sbase) / inputs.vdc
-    F[idx_ξvdc] = Idc_in - y[1]
+    F[idx_ξvdc] = Idc_in - y.elec.idc
 
-    return nothing
+    return y
 end
 
 function tlc(;
@@ -255,4 +242,204 @@ function tlc(;
         setpoint,
         limits,
     )
+end
+
+############################  Power-flow integration  ############################
+
+
+function resolved_refs(c::TLC, setpoint::SetPoint)
+    vac_base_peak = c.elec.vACbase_LL_RMS * sqrt(2 / 3)
+
+    outerActive =
+        if c.outerActive isa OuterActivePowerControl
+            OuterActivePowerControl(
+                pi_ctrl = c.outerActive.pi_ctrl,
+                p_ref = iszero(c.outerActive.p_ref) ? setpoint.Pac / c.elec.Sbase : c.outerActive.p_ref,
+                support = c.outerActive.support,
+            )
+        elseif c.outerActive isa OuterActiveVdcControl
+            OuterActiveVdcControl(
+                pi_ctrl = c.outerActive.pi_ctrl,
+                vdc_ref = iszero(c.outerActive.vdc_ref) ? setpoint.Vdc / c.elec.vDCbase : c.outerActive.vdc_ref,
+            )
+        else
+            c.outerActive
+        end
+
+    outerReactive =
+        if c.outerReactive isa OuterReactiveQControl
+            supp =
+                if c.outerReactive.support isa VoltageSupportLag
+                    VoltageSupportLag(
+                        K = c.outerReactive.support.K,
+                        ωc = c.outerReactive.support.ωc,
+                        vac_ref = iszero(c.outerReactive.support.vac_ref) ?
+                                  setpoint.Vac / vac_base_peak :
+                                  c.outerReactive.support.vac_ref,
+                    )
+                else
+                    c.outerReactive.support
+                end
+
+            OuterReactiveQControl(
+                pi_ctrl = c.outerReactive.pi_ctrl,
+                q_ref = iszero(c.outerReactive.q_ref) ? (-setpoint.Qac / c.elec.Sbase) : c.outerReactive.q_ref,
+                support = supp,
+            )
+        elseif c.outerReactive isa OuterReactiveVacControl
+            OuterReactiveVacControl(
+                pi_ctrl = c.outerReactive.pi_ctrl,
+                vac_ref = iszero(c.outerReactive.vac_ref) ?
+                          setpoint.Vac / vac_base_peak :
+                          c.outerReactive.vac_ref,
+            )
+        else
+            c.outerReactive
+        end
+
+    return TLC(
+        c.elec,
+        c.meas,
+        c.synch,
+        outerActive,
+        outerReactive,
+        c.innerVoltage,
+        c.innerCurrent,
+        c.mod,
+    )
+end
+
+pf_type_ac(::NoOuterReactiveControl) = 1
+pf_type_ac(::OuterReactiveVacControl) = 2
+pf_type_ac(block::OuterReactiveQControl) = block.support isa NoVoltageSupport ? 1 : 2
+
+pf_type_dc(::NoOuterActiveControl) = 1
+pf_type_dc(::OuterActivePowerControl) = 1
+pf_type_dc(::OuterActiveVdcControl) = 2
+
+pf_acq_droop(::NoOuterReactiveControl) = (enabled = 0, kq = 0.0)
+pf_acq_droop(::OuterReactiveVacControl) = (enabled = 0, kq = 0.0)
+pf_acq_droop(block::OuterReactiveQControl) =
+    block.support isa VoltageSupportLag ? (
+        enabled = 1,
+        kq = block.support.K,
+    ) : (enabled = 0, kq = 0.0)
+
+function pf_vtar_pu(conv::TLC, elem::Element, global_dict)
+    Vbase_ln_rms = global_dict["V"] / 1e3
+    Vconv_peak_base = conv.elec.vACbase_LL_RMS * sqrt(2 / 3)
+
+    if conv.outerReactive isa OuterReactiveVacControl
+        Vac_peak = iszero(conv.outerReactive.vac_ref) ?
+                   elem.setpoint.Vac :
+                   conv.outerReactive.vac_ref * Vconv_peak_base
+        return (Vac_peak / sqrt(2)) / Vbase_ln_rms
+
+    elseif conv.outerReactive isa OuterReactiveQControl &&
+           conv.outerReactive.support isa VoltageSupportLag
+        supp = conv.outerReactive.support
+        Vac_peak = iszero(supp.vac_ref) ?
+                   elem.setpoint.Vac :
+                   supp.vac_ref * Vconv_peak_base
+        return (Vac_peak / sqrt(2)) / Vbase_ln_rms
+
+    else
+        # legacy PQ-bus initialization used converter.Vₘ directly (amplitude over phase-RMS base)
+        return elem.setpoint.Vac / Vbase_ln_rms
+    end
+end
+
+function pf_vdcset_pu(conv::TLC, elem::Element, global_dict, data)
+    return elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
+end
+
+function pf_pacset_mw(conv::TLC, elem::Element)
+    return elem.setpoint.Pac
+end
+
+function pf_pdcset_mw(conv::TLC, elem::Element)
+    return !iszero(elem.setpoint.Pdc) ? elem.setpoint.Pdc : -elem.setpoint.Pac
+end
+
+function make_power_flow!(conv::TLC, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+    dc_node = make_node(elem, 1)
+    ac_nodes = make_node(elem, 2)
+    dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_node, global_dict)
+    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
+
+    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "convdc")
+    key_str = string(key)
+
+    data["convdc"][key_str] = Dict{String, Any}()
+    convdc = data["convdc"][key_str]
+
+    convdc["busdc_i"] = dc_bus
+    convdc["busac_i"] = ac_bus
+    convdc["source_id"] = Any["convdc", key]
+    convdc["status"] = 1
+    convdc["index"] = key
+    convdc["basekVac"] = global_dict["V"] / 1e3
+
+    convdc["type_ac"] = pf_type_ac(conv.outerReactive)
+    convdc["Vtar"] = pf_vtar_pu(conv, elem, global_dict)
+    if convdc["type_ac"] == 2
+        data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
+        data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
+    end
+
+    convdc["type_dc"] = pf_type_dc(conv.outerActive)
+
+    droop = pf_acq_droop(conv.outerReactive)
+    convdc["acq_droop"] = droop.enabled
+    convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
+
+    convdc["droop"] = 0.0
+    convdc["Vdcset"] = pf_vdcset_pu(conv, elem, global_dict, data)
+    convdc["Pacset"] = -pf_pacset_mw(conv, elem)
+    convdc["Pdcset"] = pf_pdcset_mw(conv, elem)
+    convdc["dVdcSet"] = 0.0
+
+    convdc["islcc"] = 0
+    convdc["transformer"] = 0
+    convdc["rtf"] = 0.0
+    convdc["xtf"] = 0.0
+    convdc["tm"] = 1.0
+    convdc["filter"] = 0
+    convdc["bf"] = 0.0
+    convdc["reactor"] = 1
+
+    zbase = global_dict["Z"]
+    convdc["rc"] = conv.elec.Rᵣ / zbase
+    convdc["xc"] = conv.elec.Lᵣ * global_dict["omega"] / zbase
+
+    vm_rms_kV = elem.setpoint.Vac / sqrt(2)
+    convdc["Vmmax"] = 1.1 * vm_rms_kV * 1e3 / global_dict["V"]
+    convdc["Vmmin"] = 0.9 * vm_rms_kV * 1e3 / global_dict["V"]
+    convdc["Imax"] = 1.1 * max(abs(elem.limits.P_min), abs(elem.limits.P_max), abs(elem.setpoint.Pac)) / max(vm_rms_kV, eps())
+
+    convdc["P_g"] = elem.setpoint.Pac
+    convdc["Q_g"] = elem.setpoint.Qac
+
+    convdc["LossA"] = 0.0
+    convdc["LossB"] = 0.0
+    convdc["LossCrec"] = 0.0
+    convdc["LossCinv"] = 0.0
+
+    convdc["Qacmax"] = elem.limits.Q_max
+    convdc["Qacmin"] = elem.limits.Q_min
+    convdc["Pacmax"] = elem.limits.P_max
+    convdc["Pacmin"] = elem.limits.P_min
+
+    if data["bus"][string(ac_bus)]["bus_type"] == 1
+        data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
+        data["bus"][string(ac_bus)]["vmin"] = 0.9 * data["bus"][string(ac_bus)]["vm"]
+        data["bus"][string(ac_bus)]["vmax"] = 1.1 * data["bus"][string(ac_bus)]["vm"]
+    end
+
+    data["busdc"][string(dc_bus)]["Vdc"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
+    data["busdc"][string(dc_bus)]["Vdcmax"] = 1.1 * data["busdc"][string(dc_bus)]["Vdc"]
+    data["busdc"][string(dc_bus)]["Vdcmin"] = 0.9 * data["busdc"][string(dc_bus)]["Vdc"]
+    data["busdc"][string(dc_bus)] = set_bus_type_dc(data["busdc"][string(dc_bus)], convdc["type_dc"])
+
+    return nothing
 end

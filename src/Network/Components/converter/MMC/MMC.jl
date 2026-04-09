@@ -1,7 +1,7 @@
 export mmc, MMC, AbstractMMC, BuildMMC,             # MMC
     ΔdqControlGFL, ΔdqControlGFM, ΣdqzControlTEC,   # High level structures
 
-    NoFilter,                                       # Measurements
+    NoMeasurementFilter,                                       # Measurements
     PLL, VSEWithDamping, VSEWithoutDamping,         # Synchronization
     PControl,                                       # Outer active
     QControl,                                       # Outer reactive
@@ -175,7 +175,7 @@ end
 
 function mmc(;
     elec::ElectricalMMC = ElectricalMMC(),
-    measurements::AbstractMeasurement = NoFilter(),
+    measurements::AbstractMeasurement = NoMeasurementFilter(),
     synchronization::AbstractSynchronization,
     delta_control::AbstractΔdqControl,
     sigma_control::AbstractΣdqzControl,

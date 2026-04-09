@@ -173,7 +173,7 @@ end
 # Useful inside TLC.jl if you want the filtered signals as a NamedTuple
 # to pass them directly to the next internal state-space block.
 
-function measurement_outputs(x, inputs, m::MeasurementTLC)
+function filter_outputs(x, inputs, m::MeasurementTLC)
     T = promote_type(
         mapreduce(typeof, promote_type, values(x)),
         mapreduce(typeof, promote_type, values(inputs))

@@ -1,11 +1,11 @@
 abstract type AbstractMeasurement               <: AbstractStateSpace end
 
 
-struct NoFilter <: AbstractMeasurement end
-statenames(::NoFilter) = (;)
-initialvalues(::NoFilter, inputs) = (;) 
+struct NoMeasurementFilter <: AbstractMeasurement end
+statenames(::NoMeasurementFilter) = (;)
+initialvalues(::NoMeasurementFilter, inputs) = (;) 
 
-function state_space!(F, x, inputs, b::NoFilter, conv::AbstractMMC)
+function state_space!(F, x, inputs, b::NoMeasurementFilter, conv::AbstractMMC)
     iΔd, iΔq = get_states(x, :iΔd, :iΔq)
 
     P_ac = (inputs.Vᴳd * iΔd + inputs.Vᴳq * iΔq)

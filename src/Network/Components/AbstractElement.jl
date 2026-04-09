@@ -45,49 +45,60 @@ mutable struct Element
     pins :: Dict{Symbol, Symbol}
     input_pins :: Int
     output_pins :: Int
-    element_model :: AbstractElementModel  # component defined type
+    element_model :: Any #AbstractElementModel  # component defined type
     A::Matrix{ComplexF64}  
     B::Matrix{ComplexF64} 
     C::Matrix{ComplexF64} 
     D::Matrix{ComplexF64} 
-#   basevalues::BaseVal
-  transformation :: Bool
-  connection :: Bool # True = Element is connected, False= Element is disconnected 
-  setpoint::SetPoint
-  limits::Limits
-  function Element(;element_model::AbstractElementModel, args...)
-    elem = new()
-    
-    # Set default values
+    #   basevalues::BaseVal
+    transformation :: Bool
+    connection :: Bool # True = Element is connected, False= Element is disconnected 
+    setpoint::SetPoint
+    limits::Limits
+    function Element(; element_model=nothing, element_value=nothing, args...)
+        elem = new()
 
-    elem.element_model = element_model
-    elem.setpoint = SetPoint()
-    elem.limits = Limits()
-    elem.A,elem.B,elem.C,elem.D = fill(Array{ComplexF64}(undef, 0, 0), 4) 
-    # Fill up specified fields
-    for (key, val) in pairs(args)
-      if (key in propertynames(elem))
-        setfield!(elem, key, val)
-      else
-        throw(ArgumentError("The property name $(key) is not defined."))
-      end
-    end
+        model =
+            element_model !== nothing ? element_model :
+            element_value !== nothing ? element_value :
+            throw(UndefKeywordError(:element_model))
 
-    # definition of pins
-    if !isdefined(elem, :transformation)
-        elem.transformation = false
-    elseif (elem.transformation) #TODO: Not generalizable, only makes sense for 3-phase systems
-        elem.input_pins -= 1
-        elem.output_pins -= 1
-    end
-    if !isdefined(elem, :pins) # Initialize pins field with empty symbol, if not defined 
-      elem.pins = merge(Dict{Symbol, Symbol}(Symbol(string("1.",i)) => Symbol() for i in 1:nip(elem)),
-                        Dict{Symbol, Symbol}(Symbol(string("2.",i)) => Symbol() for i in 1:nop(elem)))
-    end
+        if element_model !== nothing && element_value !== nothing && !(element_model === element_value)
+            throw(ArgumentError("Both `element_model` and legacy `element_value` were provided with different values."))
+        end
 
-    elem
-  end
+        elem.element_model = model
+        elem.setpoint = SetPoint()
+        elem.limits = Limits()
+        elem.A, elem.B, elem.C, elem.D = fill(Array{ComplexF64}(undef, 0, 0), 4)
+
+        for (key, val) in pairs(args)
+            if key in propertynames(elem)
+                setfield!(elem, key, val)
+            else
+                throw(ArgumentError("The property name $(key) is not defined."))
+            end
+        end
+
+        if !isdefined(elem, :transformation)
+            elem.transformation = false
+        elseif elem.transformation
+            elem.input_pins -= 1
+            elem.output_pins -= 1
+        end
+
+        if !isdefined(elem, :pins)
+            elem.pins = merge(
+                Dict{Symbol, Symbol}(Symbol(string("1.", i)) => Symbol() for i in 1:nip(elem)),
+                Dict{Symbol, Symbol}(Symbol(string("2.", i)) => Symbol() for i in 1:nop(elem)),
+            )
+        end
+
+        return elem
+    end
 end
+
+
 
 for (n,m) in Dict(:nip => :input_pins, :nop => :output_pins)
   @eval ($n)(e::Element) = e.$m # creation of functions nip() and nop(), fetching the input_pins and output_pins parameters within the element structure
@@ -116,11 +127,38 @@ end
 
 ####### NEW GENERAL ELEMENT FUNCTIONS ###########################
 
+# this is p.u.
+#= function eval_y(elem::Element, s::Complex)
+    n = size(elem.A, 1)
+    Iₙ = Matrix{ComplexF64}(I, n, n)
+    return elem.C * ((s * Iₙ - elem.A) \ elem.B) + elem.D
+end =#
 
-function eval_y(::AbstractStateSpace, elem :: Element, s :: Complex)
-    # numerical
-    I = Matrix{Complex}(Diagonal([1 for dummy in 1:size(gen.A,1)]))
-    Y = (gen.C*inv(s*I-gen.A))*gen.B + gen.D
+# PSCAD requires SI results
+function eval_y(elem::Element, s::Complex)
+    n = size(elem.A, 1)
+    Iₙ = Matrix{ComplexF64}(I, n, n)
+    Y = elem.C * ((s * Iₙ - elem.A) \ elem.B) + elem.D
+
+    model = elem.element_model
+
+    if isa(model, TLC)
+        elec = model.elec
+
+        vACbase = elec.vACbase_LL_RMS * sqrt(2 / 3)
+        iACbase = 2 * elec.Sbase / (3 * vACbase)
+        iDCbase = elec.Sbase / elec.vDCbase
+
+        Y = Matrix{ComplexF64}(Y)
+
+        # row scaling = output current bases
+        Y[1, :]   .*= iDCbase
+        Y[2:3, :] .*= iACbase
+
+        # column scaling = input voltage bases
+        Y[:, 1]   ./= elec.vDCbase
+        Y[:, 2:3] ./= vACbase
+    end
 
     return Y
 end
@@ -128,18 +166,21 @@ end
 
 ################### ABCD functions ################################
 function get_abcd(element::Element, s::Complex)
-    
-    if (element.transformation) # Transformation property is only used for passives!
-        if np(element) == 2 # Transformation from two phase to single phase: 2 pins --> 1 pin
+    if isa(element.element_model, AbstractStateSpace) && !isempty(element.A)
+        return eval_y(element, s)
+    end
+
+    if element.transformation
+        if np(element) == 2
             abcd = eval_abcd(element.element_model, s)
             return transformation_dc(abcd)
-        elseif is_three_phase(element) # Transformation from abc to dq: 3 pins --> 2 pins
-            ω₀ = 100*π
-            abcd₁ = eval_abcd(element.element_model, s + 1im*ω₀)
-            abcd₂ = eval_abcd(element.element_model, s - 1im*ω₀)
+        elseif is_three_phase(element)
+            ω₀ = 100 * π
+            abcd₁ = eval_abcd(element.element_model, s + 1im * ω₀)
+            abcd₂ = eval_abcd(element.element_model, s - 1im * ω₀)
             return transformation_dq(abcd₁, abcd₂)
         end
-    else # No transformation, return ABCD directly. In case of actives, return Y
+    else
         abcd = eval_abcd(element.element_model, s)
     end
     return abcd

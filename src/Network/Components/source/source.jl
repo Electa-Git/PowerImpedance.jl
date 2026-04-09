@@ -1,4 +1,4 @@
-
+#= 
 @with_kw mutable struct Source <: AbstractMultiport
 	Z::Union{Float64, Int} = 0 # source series impedance [Ω]
 	V::Union{Float64, Int} = 0        # DC voltage or voltage magnitude [kV]
@@ -40,6 +40,51 @@ function eval_y(source::Source, s::Complex)
 	end
 
 	return abcd_to_y(abcd)
+end =#
+
+
+@with_kw mutable struct Source <: AbstractMultiport
+    Z::Union{Float64, Int} = 0
+    V::Union{Float64, Int} = 0
+
+    P::Union{Float64, Int}     = 0
+    Q::Union{Float64, Int}     = 0
+    P_min::Union{Float64, Int} = 0
+    P_max::Union{Float64, Int} = 0
+    Q_min::Union{Float64, Int} = 0
+    Q_max::Union{Float64, Int} = 0
+
+    pins::Int = 1
+    ABCD::Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
+end
+
+function make_abcd(source::Source, p)
+    source.pins = p
+
+    A = Matrix{ComplexF64}(I, p, p)
+    B = Diagonal(fill(ComplexF64(source.Z), p)) |> Matrix
+    C = zeros(ComplexF64, p, p)
+    D = Matrix{ComplexF64}(I, p, p)
+
+    source.ABCD = [A B; C D]
+    return A, B, C, D
+end
+
+function eval_abcd(source::Source, s::Complex)
+    isempty(source.ABCD) && make_abcd(source, source.pins)
+    return source.ABCD
+end
+
+function eval_y(source::Source, s::Complex)
+    abcd = eval_abcd(source, s)
+    p = source.pins
+
+    if source.Z == 0
+        abcd = copy(abcd)
+        abcd[1:p, (p+1):end] .= 1e-6 .* Matrix{ComplexF64}(I, p, p)
+    end
+
+    return abcd_to_y(abcd)
 end
 
 

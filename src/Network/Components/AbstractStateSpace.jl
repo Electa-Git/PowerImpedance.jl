@@ -5,33 +5,9 @@ abstract type AbstractStateSpace <: AbstractElementModel end
 # Function for ordering states & initialvalues. Puts all that are not defined to zero & discards initial values that do not appear in statenames 
 # Default: no explicit nonzero initial values; Fallback function, so that it is not necessary in all the modular parts to initialize.
 initialvalues(::AbstractStateSpace; kwargs...) = (;)
+dummyinitialvalues(::AbstractStateSpace; kwargs...) = (;)
 # TODO: Find proper name, add check for discrepancy statenames and initialvalues
-# TODO: @Robbe: I think the following line silently drops the keys if they are not matching. I had that issue while testing (ξ_d instead of ξ_f) and it took a long time to find. Should there maybe be an error message when the keys don't match?
-# What if we used something like this:
-
-        #= # Function for ordering states & initialvalues.
-        # All states not explicitly initialized are set to zero.
-        # Invalid keys in initialvalues(...) now throw instead of being silently dropped.
-        _zero_init_namedtuple(names::NTuple{N,Symbol}) where {N} =
-            NamedTuple{names}(ntuple(_ -> 0.0, N))
-
-        function orderedinitialvalues(m::AbstractStateSpace; kwargs...)
-            names = statenames(m)
-            init  = initialvalues(m; kwargs...)
-
-            invalid = Tuple(k for k in keys(init) if k ∉ names)
-            isempty(invalid) || throw(ArgumentError(
-                "initialvalues($(typeof(m))) returned keys not present in statenames($(typeof(m))): " *
-                string(invalid) * ". Valid keys are $(names)."
-            ))
-
-            return merge(_zero_init_namedtuple(names), init)
-        end
-        =#
-
-
-
-
+orderedinitialvalues(x;kwargs...) = NamedTuple{statenames(x)}((;NamedTuple{statenames(x)}(ntuple(i->0.0,length(statenames(x))))..., initialvalues(x;kwargs...)...))
 orderedinitialvalues(x;kwargs...) = NamedTuple{statenames(x)}((;NamedTuple{statenames(x)}(ntuple(i->0.0,length(statenames(x))))..., initialvalues(x;kwargs...)...))
 # statenamesmodular(m::AbstractStateSpace) = merge([statenames(getfield(m,n)) for n in fieldnames(typeof(m))]...)
 n_states(m::AbstractStateSpace) = length(statenames(m))
@@ -51,25 +27,26 @@ struct Jac <: AbstractSolveKind end
 
 ### Dispatch on modeler functions
 # Equilib
-solvekindequations!(F,x,inputs,y,m::AbstractStateSpace, solvekind::Equil) = dummyequations!(F,x,inputs,y,m::AbstractStateSpace)
-solvekindnames(m::AbstractStateSpace, solvekind::Equil) = dummynames(m::AbstractStateSpace)
+solvekindequations!(F, x, inputs, y, m::AbstractStateSpace, ::Equil) =
+    dummyequations!(F, x, inputs, y, m)
 
-solvekindequations!(F,x,inputs,y,m::AbstractStateSpace, solvekind::Jac) = outputequations!(F,x,inputs,y,m::AbstractStateSpace)
-solvekindnames(m::AbstractStateSpace, solvekind::Jac) = outputnames(m::AbstractStateSpace)
+solvekindnames(m::AbstractStateSpace, ::Equil) = dummynames(m)
 
-### Define default functions (they don't do anything), if no specific method is defined
-solvekindequations!(F,x,inputs,y,m::AbstractStateSpace, solvekind::AbstractSolveKind) = nothing
-solvekindnames(m::AbstractStateSpace, solvekind::AbstractSolveKind) = (;)
+solvekindequations!(F, x, inputs, y, m::AbstractStateSpace, ::Jac) =
+    outputequations!(F, x, inputs, y, m)
 
-dummyequations!(F,x,inputs,y,m::AbstractStateSpace) = nothing
-dummynames(m::AbstractStateSpace) = (;)
+solvekindnames(m::AbstractStateSpace, ::Jac) = outputnames(m)
 
-outputequations!(F,x,inputs,y,m::AbstractStateSpace) = nothing
-outputnames(m::AbstractStateSpace) = (;)
+solvekindequations!(F, x, inputs, y, m::AbstractStateSpace, ::AbstractSolveKind) = nothing
+
+dummyequations!(F, x, inputs, y, m::AbstractStateSpace) = nothing
+outputequations!(F, x, inputs, y, m::AbstractStateSpace) = nothing
 
 # TODO: Remove after testing
-#= equilibrium_state_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint) =
-    state_space!(F, x, inputs, m) =#
+equilibrium_state_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint) =
+    state_space!(F, x, inputs, m)
+
+    
 
 function _state_space!(F, x, inputs, m::AbstractStateSpace, solvekind::AbstractSolveKind)
     
@@ -93,20 +70,73 @@ function _state_space!(F, x, inputs, m::AbstractStateSpace, solvekind::AbstractS
 end
 
 # TODO: remove after testing
-#= function _equilibrium_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint)
+function _equilibrium_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint)
     x_names = statenames(m)
     x_nt = NamedTuple{x_names}(x)
     inputs_nt = NamedTuple{inputnames(m)}(inputs)
 
     index_stsp = n_states(m)
 
-    equilibrium_state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, m, setpoint)
-    solvekindequations!(@view(F[index_stsp+1:end]), x_nt, inputs_nt, m, Equil())
+    y = equilibrium_state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, m, setpoint)
+    solvekindequations!(@view(F[index_stsp+1:end]), x_nt, inputs_nt, y, m, Equil())
 
-    return
-end =#
+    return nothing
+end
     
+resolved_refs(m::AbstractStateSpace, setpoint::SetPoint) = m
+
 function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
+    m_eff = resolved_refs(m, setpoint)
+
+    # Power flow to inputs of state_space function
+    global inputs = pftoinputs(m_eff, setpoint)
+    inputs_vec = collect(values(inputs))
+
+    # Initial values
+    global init = orderedinitialvalues(m_eff; setpoint, inputs)
+
+    # Parameters for equilibirum with NonlinearSolve.jl
+    p_equil = (; inputs = inputs_vec, m = m_eff, setpoint)
+
+    # Initialize problem
+    f!(du, u, p) = _equilibrium_space!(du, u, p.inputs, p.m, p.setpoint)
+    println("Starting to solve for steady-state solution")
+    prob = NonlinearProblem(f!, collect(values(init)), p_equil)
+    global sol = solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+
+    name = isdefined(elem, :symbol) ? string(elem.symbol) : string(nameof(typeof(m_eff)))
+
+    if SciMLBase.successful_retcode(sol)
+        println("$name steady-state solution found!")
+    else
+        error("$name steady-state solution not found!")
+    end
+
+    global equilibrium = sol.u[1:n_states(m_eff)] # discard dummy states if any
+
+    nb_states = n_states(m_eff)
+    nb_inputs = n_inputs(m_eff)
+    nb_elec_inputs = n_elec_inputs(m_eff)
+    nb_addit_inputs = nb_inputs - nb_elec_inputs
+    nb_outputs = n_outputs(m_eff)
+
+    h!(F, x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end], m_eff, Jac())
+    ha = x -> (F = fill(zero(eltype(x)), nb_states + nb_outputs); h!(F, x); return F)
+    jac = zeros(nb_states + nb_outputs, nb_states + nb_inputs)
+    ForwardDiff.jacobian!(jac, ha, [equilibrium; inputs_vec])
+
+    elem.A = jac[1:nb_states, 1:nb_states]
+    elem.B = jac[1:nb_states, nb_states+1:end-nb_addit_inputs]
+    elem.C = jac[nb_states+1:end, 1:nb_states]
+    elem.D = jac[nb_states+1:end, nb_states+1:end-nb_addit_inputs]
+    elem.setpoint = setpoint
+    elem.element_model = m_eff
+
+    return elem
+end
+
+
+#= function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
 
     # Power flow to inputs of state_space function
     global inputs = pftoinputs(m, setpoint)
@@ -153,4 +183,4 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
 
 end
 
-
+ =#
