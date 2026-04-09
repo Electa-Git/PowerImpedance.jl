@@ -3,7 +3,35 @@
 abstract type AbstractStateSpace <: AbstractElementModel end
 
 # Function for ordering states & initialvalues. Puts all that are not defined to zero & discards initial values that do not appear in statenames 
+# Default: no explicit nonzero initial values; Fallback function, so that it is not necessary in all the modular parts to initialize.
+initialvalues(::AbstractStateSpace; kwargs...) = (;)
 # TODO: Find proper name, add check for discrepancy statenames and initialvalues
+# TODO: @Robbe: I think the following line silently drops the keys if they are not matching. I had that issue while testing (ξ_d instead of ξ_f) and it took a long time to find. Should there maybe be an error message when the keys don't match?
+# What if we used something like this:
+
+        #= # Function for ordering states & initialvalues.
+        # All states not explicitly initialized are set to zero.
+        # Invalid keys in initialvalues(...) now throw instead of being silently dropped.
+        _zero_init_namedtuple(names::NTuple{N,Symbol}) where {N} =
+            NamedTuple{names}(ntuple(_ -> 0.0, N))
+
+        function orderedinitialvalues(m::AbstractStateSpace; kwargs...)
+            names = statenames(m)
+            init  = initialvalues(m; kwargs...)
+
+            invalid = Tuple(k for k in keys(init) if k ∉ names)
+            isempty(invalid) || throw(ArgumentError(
+                "initialvalues($(typeof(m))) returned keys not present in statenames($(typeof(m))): " *
+                string(invalid) * ". Valid keys are $(names)."
+            ))
+
+            return merge(_zero_init_namedtuple(names), init)
+        end
+        =#
+
+
+
+
 orderedinitialvalues(x;kwargs...) = NamedTuple{statenames(x)}((;NamedTuple{statenames(x)}(ntuple(i->0.0,length(statenames(x))))..., initialvalues(x;kwargs...)...))
 # statenamesmodular(m::AbstractStateSpace) = merge([statenames(getfield(m,n)) for n in fieldnames(typeof(m))]...)
 n_states(m::AbstractStateSpace) = length(statenames(m))
@@ -39,8 +67,9 @@ dummynames(m::AbstractStateSpace) = (;)
 outputequations!(F,x,inputs,y,m::AbstractStateSpace) = nothing
 outputnames(m::AbstractStateSpace) = (;)
 
-equilibrium_state_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint) =
-    state_space!(F, x, inputs, m)
+# TODO: Remove after testing
+#= equilibrium_state_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint) =
+    state_space!(F, x, inputs, m) =#
 
 function _state_space!(F, x, inputs, m::AbstractStateSpace, solvekind::AbstractSolveKind)
     
@@ -63,18 +92,19 @@ function _state_space!(F, x, inputs, m::AbstractStateSpace, solvekind::AbstractS
 
 end
 
-# function _equilibrium_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint)
-#     x_names = statenames(m)
-#     x_nt = NamedTuple{x_names}(x)
-#     inputs_nt = NamedTuple{inputnames(m)}(inputs)
+# TODO: remove after testing
+#= function _equilibrium_space!(F, x, inputs, m::AbstractStateSpace, setpoint::SetPoint)
+    x_names = statenames(m)
+    x_nt = NamedTuple{x_names}(x)
+    inputs_nt = NamedTuple{inputnames(m)}(inputs)
 
-#     index_stsp = n_states(m)
+    index_stsp = n_states(m)
 
-#     equilibrium_state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, m, setpoint)
-#     solvekindequations!(@view(F[index_stsp+1:end]), x_nt, inputs_nt, m, Equil())
+    equilibrium_state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, m, setpoint)
+    solvekindequations!(@view(F[index_stsp+1:end]), x_nt, inputs_nt, m, Equil())
 
-#     return
-# end
+    return
+end =#
     
 function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
 
