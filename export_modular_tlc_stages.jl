@@ -10,7 +10,7 @@ using SciMLBase
 using Plots
 
 const DEFAULT_BRANCH = "pq"   # "dcq" or "pq"
-const DEFAULT_STAGE  = "support"  # "base", "filters", "pll", "delay", "support"
+const DEFAULT_STAGE  = "pll"  # "base", "filters", "pll", "delay", "support"
 
 const OUTDIR = joinpath(project_root, "validation_exports")
 mkpath(OUTDIR)
@@ -139,8 +139,8 @@ function linearize_tlc!(elem::PowerImpedanceACDC.Element,
         x_nt = NamedTuple{PowerImpedanceACDC.statenames(m)}(x)
         inputs_nt = NamedTuple{PowerImpedanceACDC.inputnames(m)}(u)
 
-        PowerImpedanceACDC.state_space!(@view(F[1:nb_states]), x_nt, inputs_nt, m)
-        PowerImpedanceACDC.outputequations!(@view(F[nb_states+1:end]), x_nt, inputs_nt, m)
+        y = PowerImpedanceACDC.state_space!(@view(F[1:nb_states]), x_nt, inputs_nt, m)
+        PowerImpedanceACDC.outputequations!(@view(F[nb_states+1:end]), x_nt, inputs_nt, y, m)
 
         return nothing
     end
@@ -387,4 +387,3 @@ function main()
 end
 
 Base.invokelatest(main)
-
