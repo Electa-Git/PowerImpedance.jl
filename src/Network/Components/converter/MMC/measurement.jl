@@ -6,7 +6,7 @@ statenames(::NoMeasurementFilter) = (;)
 initialvalues(::NoMeasurementFilter, inputs) = (;) 
 
 function state_space!(F, x, inputs, b::NoMeasurementFilter, conv::AbstractMMC)
-    iΔd, iΔq = get_states(x, :iΔd, :iΔq)
+    (; iΔd, iΔq) = x
 
     P_ac = (inputs.Vᴳd * iΔd + inputs.Vᴳq * iΔq)
     Q_ac =  (-inputs.Vᴳq * iΔd + inputs.Vᴳd * iΔq)

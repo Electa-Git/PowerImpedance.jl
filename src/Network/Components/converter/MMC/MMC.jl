@@ -1,7 +1,7 @@
 export mmc, MMC, AbstractMMC, BuildMMC,             # MMC
     ΔdqControlGFL, ΔdqControlGFM, ΣdqzControlTEC,   # High level structures
 
-    NoMeasurementFilter,                                       # Measurements
+    NoMeasurementFilter,                            # Measurements
     PLL, VSEWithDamping, VSEWithoutDamping,         # Synchronization
     PControl,                                       # Outer active
     QControl,                                       # Outer reactive
