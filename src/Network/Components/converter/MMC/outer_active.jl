@@ -11,7 +11,7 @@ initialvalues(::PControl, inputs) = (;)
 
 function state_space!(F, x, inputs, b::PControl, conv::AbstractMMC) 
     ## Get state, inputs and parameters
-    ξ_P_ac = get_state(:ξ_P_ac, x)
+    (; ξ_P_ac) = x
     P_ac_F = inputs.P_ac_F
     P_ac_ref = b.P_ac_ref
     

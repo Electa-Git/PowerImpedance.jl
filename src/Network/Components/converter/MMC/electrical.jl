@@ -71,7 +71,7 @@ initialvalues(e::ElectricalMMC, inputs) = (;
     
 function state_space!(F, x, inputs, b::ElectricalMMC, conv::AbstractMMC) 
     
-    iΔd, iΔq, iΣd, iΣq, iΣz, vCΔd, vCΔq, vCΔZd, vCΔZq, vCΣd, vCΣq, vCΣz = get_states(x, :iΔd, :iΔq, :iΣd, :iΣq, :iΣz, :vCΔd, :vCΔq, :vCΔZd, :vCΔZq, :vCΣd, :vCΣq, :vCΣz)
+    (; iΔd, iΔq, iΣd, iΣq, iΣz, vCΔd, vCΔq, vCΔZd, vCΔZq, vCΣd, vCΣq, vCΣz) = x
     (; mΔd, mΔq, mΔZd, mΔZq, mΣd, mΣq, mΣz) = inputs
     (; Vᴳd, Vᴳq) = inputs
 

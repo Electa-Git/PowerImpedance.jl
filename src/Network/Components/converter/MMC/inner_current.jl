@@ -23,7 +23,7 @@ initialvalues(::OutputCurrentControl, inputs) =  (;)
 ### Lower level structures ###
 #TODO: update the equations in comments to match the new version (including taking into account that modulation is now done in a specific function)
 function state_space!(F, x, inputs, b::CirculatingCurrentSuppressionControl, conv::AbstractMMC) 
-    ξ_iΣd, ξ_iΣq, iΣd, iΣq = get_states(x, :ξ_iΣd, :ξ_iΣq, :iΣd, :iΣq)
+    (; ξ_iΣd, ξ_iΣq, iΣd, iΣq) = x
     Δθ_c = inputs.Δθ_c
     iΣd_ref, iΣq_ref = 0, 0 # TODO add this as inputs/parameters if needed
 
@@ -43,7 +43,7 @@ function state_space!(F, x, inputs, b::CirculatingCurrentSuppressionControl, con
 end
 
 function state_space!(F, x, inputs, b::ZeroSequenceCurrentControl, conv::AbstractMMC)
-    ξ_iΣz, iΣz = get_states(x, :ξ_iΣz, :iΣz)
+    (; ξ_iΣz, iΣz) = x
     (;iΣz_ref, Vdc)  = inputs
 
     F[1] = b.pi_control.Ki * (iΣz_ref - iΣz);
@@ -53,7 +53,7 @@ end
 
 
 function state_space!(F, x, inputs, b::OutputCurrentControl, conv::AbstractMMC) 
-    ξ_iΔd, ξ_iΔq, iΔd, iΔq = get_states(x, :ξ_iΔd, :ξ_iΔq, :iΔd, :iΔq)
+    (; ξ_iΔd, ξ_iΔq, iΔd, iΔq) = x
     (; iΔd_ref, iΔq_ref, Vᴳd, Vᴳq, Δθ_c) = inputs 
 
     T_θ = [cos(Δθ_c) -sin(Δθ_c); sin(Δθ_c) cos(Δθ_c)]

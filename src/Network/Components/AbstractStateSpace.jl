@@ -149,13 +149,13 @@ end
 
     # Initialize problem
     f!(du,u,p) = _state_space!(du, u, p.inputs, p.m, p.solvekind)
-    println("Starting to solve for steady-state solution")
+    # println("Starting to solve for steady-state solution")
     prob = NonlinearProblem(f!, collect(promote(values(init)...)), p_equil)
     global sol=solve(prob;maxiters=20,abstol = 1e-6,reltol = 1e-6)
     
     # Solve nonlinear problem
     if SciMLBase.successful_retcode(sol)
-        println("$(elem.symbol) steady-state solution found!")
+        # println("$(elem.symbol) steady-state solution found!")
     else
         error("$(elem.symbol) steady-state solution not found!")
     end 
@@ -169,9 +169,12 @@ end
     nb_outputs = n_outputs(m) #id, iq
 
     h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end], m, Jac())
-    ha = x -> (F = fill(zero(eltype(x)), nb_states+nb_outputs); h!(F, x); return F)
     jac = zeros(nb_states+nb_outputs, nb_states+nb_inputs)
-    ForwardDiff.jacobian!(jac, ha, [equilibrium; inputs_vec])
+
+    x = [equilibrium; inputs_vec]; F = fill(zero(eltype(x)), nb_states+nb_outputs)
+    ForwardDiff.jacobian!(jac, h!, F, x)
+    # ha = x -> (F = fill(zero(eltype(x)), nb_states+nb_outputs); h!(F, x); return F)
+    # ForwardDiff.jacobian!(jac, ha, [equilibrium; inputs_vec])
 
     ### 5. New operating point
     elem.A=jac[1:nb_states, 1:nb_states]

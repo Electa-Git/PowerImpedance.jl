@@ -1,19 +1,19 @@
-export Controller, PI_control, VSE, CCQSEM, FFVI
+export Controller, PI_control, VSE_old, CCQSEM, FFVI
 
 abstract type Controller end
 
 
-# @with_kw mutable struct PI_control <: Controller
-#     bandwidth :: Union{Int, Float64}  = 0
-#     ζ :: Union{Int, Float64}  = 0
-#     Kₚ :: Union{Int, Float64}  = 0                     # proportional gain [pu]
-#     Kᵢ :: Union{Int, Float64}  = 0                     # integral gain [pu/s]
-#     ref :: Array{Union{Int, Float64}}  = [0]           # reference value
-#     n_f :: Int = 0                                     # Butterworth Filter order [-]
-#     ω_f  :: Union{Int, Float64}  = 0                   # Filter cutoff frequency [rad/s]
-# end
+@with_kw mutable struct PI_control <: Controller
+    bandwidth :: Union{Int, Float64}  = 0
+    ζ :: Union{Int, Float64}  = 0
+    Kₚ :: Union{Int, Float64}  = 0                     # proportional gain [pu]
+    Kᵢ :: Union{Int, Float64}  = 0                     # integral gain [pu/s]
+    ref :: Array{Union{Int, Float64}}  = [0]           # reference value
+    n_f :: Int = 0                                     # Butterworth Filter order [-]
+    ω_f  :: Union{Int, Float64}  = 0                   # Filter cutoff frequency [rad/s]
+end
 
-@with_kw mutable struct VSE <: Controller
+@with_kw mutable struct VSE_old <: Controller
     H :: Union{Int, Float64}  = 0                       # Virtual Inertia [s]
     K_d :: Union{Int, Float64}  = 0                     # Damping coefficient [-]
     K_ω    :: Union{Int, Float64}  = 0                  # Droop coefficient [-]

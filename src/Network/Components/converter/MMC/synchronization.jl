@@ -28,7 +28,7 @@ statenames(::VSEWithoutDamping) = (:ω_VSM, :Δθ_VSM)
 initialvalues(::VSEWithoutDamping, inputs) = (; ω_VSM=1, Δθ_VSM=inputs.θac)
 
 function state_space!(F, x, inputs, b::PLL, conv::AbstractMMC)
-    ξ_PLL, Δθ_PLL   = get_states(x, :ξ_PLL, :Δθ_PLL)
+    (; ξ_PLL, Δθ_PLL)   = x
     (; Vᴳd, Vᴳq)        = inputs
 
     T_θ_PLL = [cos(Δθ_PLL) -sin(Δθ_PLL); sin(Δθ_PLL) cos(Δθ_PLL)]
@@ -48,27 +48,27 @@ function state_space!(F, x, inputs, b::VSEWithDamping, conv::AbstractMMC)
     out_pll, idx = run_block!(F, x, inputs, b.pll, conv, idx)
 
     ω_PLL = out_pll.ω_c
-    ω_VSM, Δθ_VSM = get_states(x, :ω_VSM, :Δθ_VSM)
+    (; ω_VSM, Δθ_VSM) = x
     (;P_ac_F) = inputs
 
     # dω_VSM / dt = 
     F[idx] =(b.P_ac_ref - P_ac_F - b.K_d * (ω_VSM-ω_PLL) - b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H) 
 
     # dΔθ_VSM/dt
-    F[idx + 1] = conv.elec.wbase * (ω_VSM-1);     
+    F[idx + 1] = conv.elec.wbase * (ω_VSM-1)
     
     return (;Δθ_c = Δθ_VSM, ω_c = ω_VSM)
 end
                     
 function state_space!(F, x, inputs, b::VSEWithoutDamping, conv::AbstractMMC)
-    ω_VSM, Δθ_VSM = get_states(x, :ω_VSM, :Δθ_VSM)
+    (; ω_VSM, Δθ_VSM) = x
     (;P_ac_F) = inputs
 
     # dω_VSM / dt = 
     F[1] =(b.P_ac_ref - P_ac_F - b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H) 
 
     # dΔθ_VSM/dt
-    F[2] = conv.elec.wbase * (ω_VSM-1);     
+    F[2] = conv.elec.wbase * (ω_VSM-1)
     
     return (;Δθ_c = Δθ_VSM, ω_c = ω_VSM)
 end

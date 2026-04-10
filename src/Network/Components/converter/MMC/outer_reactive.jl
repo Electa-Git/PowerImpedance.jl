@@ -10,7 +10,7 @@ initialvalues(::QControl, inputs) = (;)
 
 
 function state_space!(F, x, inputs, b::QControl, conv::AbstractMMC) 
-    ξ_Q_ac = get_state(:ξ_Q_ac, x)
+    (; ξ_Q_ac) = x
     Q_ac_F = inputs.Q_ac_F
 
     F[1] = b.pi_control.Ki *(b.Q_ac_ref - Q_ac_F)

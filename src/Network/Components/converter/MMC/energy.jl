@@ -9,7 +9,7 @@ initialvalues(::TotalEnergyControl, inputs) = (;)
 
 
 function state_space!(F, x, inputs, b::TotalEnergyControl, conv::AbstractMMC)
-    ξ_Wtot, vCΔd, vCΔq, vCΔZd, vCΔZq, vCΣd, vCΣq, vCΣz = get_states(x, :ξ_Wtot, :vCΔd, :vCΔq, :vCΔZd, :vCΔZq, :vCΣd, :vCΣq, :vCΣz)
+    (; ξ_Wtot, vCΔd, vCΔq, vCΔZd, vCΔZq, vCΣd, vCΣq, vCΣz) = x
     (; P_ac_F, Vdc) = inputs
 
     # wΣz = (vCΔd^2 + vCΔq^2 + vCΔZd^2 + vCΔZq^2 + vCΣd^2 + vCΣq^2 + 2*vCΣz^2)/(2)

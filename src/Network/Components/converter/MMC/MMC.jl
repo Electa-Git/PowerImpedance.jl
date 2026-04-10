@@ -166,7 +166,7 @@ end
 
 function outputequations!(F, x, y, inputs, c::MMC)
     # NB: All electrical state variables are in grid dq frame (and not converter frame)
-    iΣz, iΔd, iΔq  = get_states(x, :iΣz, :iΔd, :iΔq)
+    (; iΣz, iΔd, iΔq)  = x
     F[1:3] = [3*iΣz, iΔd, iΔq]
 end
 
@@ -181,13 +181,17 @@ function mmc(;
     sigma_control::AbstractΣdqzControl,
     modulation::AbstractModulationMMC = UncompensatedModulation(),
     setpoint::SetPoint=SetPoint(),
+    limits::Limits = Limits(),
     connection::Bool = true)
 
-    return Element(input_pins = 1, 
+    return Element(
+        input_pins = 1, 
         output_pins = 2, 
         element_model = MMC(measurements, synchronization, delta_control, sigma_control, modulation, elec), 
         transformation = false; 
-        connection, setpoint)
+        connection,
+        setpoint,
+        limits)
 end
 
 
@@ -197,8 +201,4 @@ function run_block!(F, x, inputs, block, conv, idx)
     idx_end = idx + n_states(block) - 1
     out = state_space!(@view(F[idx:idx_end]), x, inputs, block, conv)
     return out, idx_end+1
-end
-
-function get_states(x, labels::Symbol...)
-    return map(lbl -> getfield(x, lbl), labels)
 end
