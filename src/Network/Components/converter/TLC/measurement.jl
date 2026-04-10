@@ -5,10 +5,6 @@
 @with_kw struct MeasurementSignal{F<:AbstractMeasurementFilter} <: AbstractStateSpace
     signal::Symbol
     filter::F = NoFilter()
-    A::Matrix{Float64} = zeros(0, 0)
-    B::Matrix{Float64} = zeros(0, 1)
-    C::Matrix{Float64} = zeros(1, 0)
-    D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
 end
 
 """
@@ -17,25 +13,25 @@ end
 Convenience constructor that builds the state-space matrices from the selected filter.
 """
 function MeasurementSignal(signal::Symbol, filter::F) where {F<:AbstractMeasurementFilter}
-    A, B, C, D = measurement_filter_ss(filter)
-    return MeasurementSignal{F}(signal=signal, filter=filter, A=A, B=B, C=C, D=D)
+    filter = measurement_filter_ss(filter)
+    return MeasurementSignal{F}(signal=signal, filter=filter)
 end
 
 ############################  Interface for one signal  ############################
 
 function statenames(m::MeasurementSignal)
-    nx = size(m.A, 1)
+    nx = size(m.filter.A, 1)
     return ntuple(i -> Symbol("$(m.signal)_f_x$i"), nx)
 end
 
 function initialvalues(m::MeasurementSignal; inputs=nothing, kwargs...)
     names = statenames(m)
-    nx = size(m.A, 1)
+    nx = size(m.filter.A, 1)
 
     nx == 0 && return NamedTuple{names}(())
 
     u0 = inputs === nothing ? 0.0 : getfield(inputs, m.signal)
-    x0 = -(m.A \ (m.B * [u0]))
+    x0 = -(m.filter.A \ (m.filter.B * [u0]))
     return NamedTuple{names}(Tuple(vec(x0)))
 end
 
@@ -43,7 +39,7 @@ inputnames(m::MeasurementSignal) = (m.signal,)
 outputnames(m::MeasurementSignal) = (Symbol("$(m.signal)_f"),)
 
 function state_space!(F, x, inputs, m::MeasurementSignal; kwargs...)
-    nx = size(m.A, 1)
+    nx = size(m.filter.A, 1)
 
     # NoFilter() -> zero-state pass-through, so no state equations
     nx == 0 && return nothing
@@ -52,7 +48,7 @@ function state_space!(F, x, inputs, m::MeasurementSignal; kwargs...)
     xv = collect(getfield(x, name) for name in names)
     u = [getfield(inputs, m.signal)]
 
-    dx = m.A * xv + m.B * u
+    dx = m.filter.A * xv + m.filter.B * u
 
     @inbounds for i in eachindex(dx)
         F[i] = dx[i]
@@ -62,7 +58,7 @@ function state_space!(F, x, inputs, m::MeasurementSignal; kwargs...)
 end
 
 function outputequations!(F, x, inputs, m::MeasurementSignal)
-    nx = size(m.A, 1)
+    nx = size(m.filter.A, 1)
 
     if nx == 0
         F[1] = getfield(inputs, m.signal)
@@ -73,7 +69,7 @@ function outputequations!(F, x, inputs, m::MeasurementSignal)
     xv = collect(getfield(x, name) for name in names)
     u = [getfield(inputs, m.signal)]
 
-    y = m.C * xv + m.D * u
+    y = m.filter.C * xv + m.filter.D * u
     F[1] = y[1]
 
     return nothing

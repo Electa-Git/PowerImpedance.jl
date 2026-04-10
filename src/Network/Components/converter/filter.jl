@@ -4,7 +4,12 @@
 
 abstract type AbstractMeasurementFilter end
 
-struct NoFilter <: AbstractMeasurementFilter end
+@with_kw mutable struct NoFilter <: AbstractMeasurementFilter
+    A::Matrix{Float64} = zeros(0, 0)
+    B::Matrix{Float64} = zeros(0, 1)
+    C::Matrix{Float64} = zeros(1, 0)
+    D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
+end
 
 ############################  Coefficient tables  ############################
 # Each entry corresponds to one overall filter order.
@@ -53,28 +58,44 @@ const CRITICAL_DAMPING_TABLE = (
 
 ############################  Table-based filter specs  ############################
 
-@with_kw struct Butterworth <: AbstractMeasurementFilter
+@with_kw mutable struct Butterworth <: AbstractMeasurementFilter
     order::Int = 1
     ωc::Float64 = 100 * π
     table::Tuple = BUTTERWORTH_TABLE
+    A::Matrix{Float64} = zeros(0, 0)
+    B::Matrix{Float64} = zeros(0, 1)
+    C::Matrix{Float64} = zeros(1, 0)
+    D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
 end
 
-@with_kw struct Chebyshev <: AbstractMeasurementFilter
+@with_kw mutable struct Chebyshev <: AbstractMeasurementFilter
     order::Int = 1
     ωc::Float64 = 100 * π
     table::Tuple = CHEBYSHEV_TABLE
+    A::Matrix{Float64} = zeros(0, 0)
+    B::Matrix{Float64} = zeros(0, 1)
+    C::Matrix{Float64} = zeros(1, 0)
+    D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
 end
 
-@with_kw struct Bessel <: AbstractMeasurementFilter
+@with_kw mutable struct Bessel <: AbstractMeasurementFilter
     order::Int = 1
     ωc::Float64 = 100 * π
     table::Tuple = BESSEL_TABLE
+    A::Matrix{Float64} = zeros(0, 0)
+    B::Matrix{Float64} = zeros(0, 1)
+    C::Matrix{Float64} = zeros(1, 0)
+    D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
 end
 
-@with_kw struct CriticalDamping <: AbstractMeasurementFilter
+@with_kw mutable struct CriticalDamping <: AbstractMeasurementFilter
     order::Int = 1
     ωc::Float64 = 100 * π
     table::Tuple = CRITICAL_DAMPING_TABLE
+    A::Matrix{Float64} = zeros(0, 0)
+    B::Matrix{Float64} = zeros(0, 1)
+    C::Matrix{Float64} = zeros(1, 0)
+    D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
 end
 
 
@@ -88,13 +109,13 @@ Return `(A, B, C, D)` for a single-channel measurement filter.
 - all other filters are built from the normalized table:
       G(S) = ∏ 1 / (bᵢ S² + aᵢ S + 1),   with S = s / ωf
 """
-function measurement_filter_ss(::NoFilter)
-    A = zeros(Float64, 0, 0)
-    B = zeros(Float64, 0, 1)
-    C = zeros(Float64, 1, 0)
-    D = Matrix{Float64}(I, 1, 1)
+function measurement_filter_ss(filter::NoFilter)
+    filter.A = zeros(Float64, 0, 0)
+    filter.B = zeros(Float64, 0, 1)
+    filter.C = zeros(Float64, 1, 0)
+    filter.D = Matrix{Float64}(I, 1, 1)
 
-    return A, B, C, D
+    return filter
 end
 
 function measurement_filter_ss(filter::AbstractMeasurementFilter)
@@ -114,8 +135,9 @@ function measurement_filter_ss(filter::AbstractMeasurementFilter)
     end
 
     sys = ss(G)
+    filter.A, filter.B, filter.C, filter.D = Matrix(sys.A), Matrix(sys.B), Matrix(sys.C), Matrix(sys.D)
 
-    return Matrix(sys.A), Matrix(sys.B), Matrix(sys.C), Matrix(sys.D)
+    return filter
 end
 
 
