@@ -119,7 +119,7 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
     nb_addit_inputs = nb_inputs - nb_elec_inputs
     nb_outputs = n_outputs(m_eff)
 
-    h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end], m, Jac())
+    h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end], m_eff, Jac())
     jac = zeros(nb_states+nb_outputs, nb_states+nb_inputs)
     x = [equilibrium; inputs_vec]; F = fill(zero(eltype(x)), nb_states+nb_outputs)
     ForwardDiff.jacobian!(jac, h!, F, x)
