@@ -5,17 +5,12 @@ abstract type AbstractFrequencySupportTLC <: AbstractStateSpace end
 
 struct NoOuterActiveControl <: AbstractOuterActiveTLC end
 statenames(::NoOuterActiveControl) = ()
-outeractive(::NoOuterActiveControl, x, meas, sync) = (; i_d_ref = 0.0)
-# TODO: Delete after testing
-#initialvalues(::NoOuterActiveControl; kwargs...) = (;)
-state_space!(F, x, meas, sync, ::NoOuterActiveControl; conv::AbstractTLC) = nothing
+state_space!(F, x, meas, sync, block::NoOuterActiveControl; conv::AbstractTLC) =
+    (; i_d_ref = 0.0)
 
 struct NoFrequencySupport <: AbstractFrequencySupportTLC end
 statenames(::NoFrequencySupport) = ()
-support_output(::NoFrequencySupport, x, sync) = 0.0
-# TODO: Delete after testing
-#initialvalues(::NoFrequencySupport; kwargs...) = (;)
-state_space!(F, x, sync, ::NoFrequencySupport) = nothing
+state_space!(F, x, sync, ::NoFrequencySupport) = (; p_support = 0.0)
 
 @with_kw struct FrequencySupportLag <: AbstractFrequencySupportTLC
     Kω::Float64 = 0.0
@@ -23,13 +18,10 @@ state_space!(F, x, sync, ::NoFrequencySupport) = nothing
 end
 
 statenames(::FrequencySupportLag) = (:ξ_f_supp,)
-support_output(::FrequencySupportLag, x, sync) = x.ξ_f_supp
-# TODO: Delete after testing
-#initialvalues(::FrequencySupportLag; kwargs...) = (;)
 
 function state_space!(F, x, sync, block::FrequencySupportLag)
     F[1] = block.ωc * (-block.Kω * sync.Δω_sync - x.ξ_f_supp)
-    return nothing
+    return (; p_support = x.ξ_f_supp)
 end
 
 struct OuterActivePowerControl{S<:AbstractFrequencySupportTLC} <: AbstractOuterActiveTLC
@@ -56,50 +48,40 @@ function initialvalues(block::OuterActivePowerControl; kwargs...)
     return initialvalues(block.support; kwargs...)
 end
 
-function outeractive(block::OuterActivePowerControl, x, meas, sync)
+function state_space!(F, x, meas, sync, block::OuterActivePowerControl; conv::AbstractTLC)
     P_ac = meas.v_d_f * meas.i_d_f + meas.v_q_f * meas.i_q_f
-    p_ref_eff = block.p_ref + support_output(block.support, x, sync)
-    i_d_ref = block.pi_ctrl.Kp * (p_ref_eff - P_ac) + x.ξ_p
+    ns = n_states(block.support)
+    support = state_space!(@view(F[1:ns]), x, sync, block.support)
+
+    p_ref_eff = block.p_ref + support.p_support
+    p_error = p_ref_eff - P_ac
+    i_d_ref = block.pi_ctrl.Kp * p_error + x.ξ_p
+    F[ns + 1] = block.pi_ctrl.Ki * p_error
 
     return (
         p_ref = p_ref_eff,
         P_ac = P_ac,
+        p_error = p_error,
         i_d_ref = i_d_ref,
     )
-end
-
-function state_space!(F, x, meas, sync, block::OuterActivePowerControl; conv::AbstractTLC)
-    ns = n_states(block.support)
-    if ns > 0
-        state_space!(@view(F[1:ns]), x, sync, block.support)
-    end
-
-    P_ac = meas.v_d_f * meas.i_d_f + meas.v_q_f * meas.i_q_f
-    p_ref_eff = block.p_ref + support_output(block.support, x, sync)
-    F[ns + 1] = block.pi_ctrl.Ki * (p_ref_eff - P_ac)
-
-    return nothing
 end
 
 @with_kw struct OuterActiveVdcControl <: AbstractOuterActiveTLC
     pi_ctrl::PIControl = PIControl()
     vdc_ref::Float64 = 1.0
+    idc_ref::Float64 = 0.0
 end
 
 statenames(::OuterActiveVdcControl) = (:ξ_vdc,)
-# TODO: Delete after testing
-#initialvalues(::OuterActiveVdcControl; kwargs...) = (;)
 
-function outeractive(block::OuterActiveVdcControl, x, meas, sync)
-    i_d_ref = -(block.pi_ctrl.Kp * (block.vdc_ref - meas.vdc_f) + x.ξ_vdc)
+function state_space!(F, x, meas, sync, block::OuterActiveVdcControl; conv::AbstractTLC)
+    vdc_error = block.vdc_ref - meas.vdc_f
+    i_d_ref = -(block.pi_ctrl.Kp * vdc_error + x.ξ_vdc)
+    F[1] = block.pi_ctrl.Ki * vdc_error
 
     return (
         vdc_ref = block.vdc_ref,
+        vdc_error = vdc_error,
         i_d_ref = i_d_ref,
     )
-end
-
-function state_space!(F, x, meas, sync, block::OuterActiveVdcControl; conv::AbstractTLC)
-    F[1] = block.pi_ctrl.Ki * (block.vdc_ref - meas.vdc_f)
-    return nothing
 end

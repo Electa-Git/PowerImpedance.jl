@@ -72,10 +72,8 @@ statenames(c::TLC) = (
 )
 
 function initialvalues(c::TLC; inputs, setpoint=SetPoint(), kwargs...)
-    # 1) electrical operating-point states
     elec_init = initialvalues(c.elec; inputs, setpoint, kwargs...)
 
-    # 2) raw measurement inputs seen by MeasurementTLC at initialization
     meas_inputs = (
         v_d = inputs.v_d,
         v_q = inputs.v_q,
@@ -101,15 +99,15 @@ end
 inputnames(::TLC) = (:vdc, :v_d, :v_q)
 outputnames(::TLC) = (:idc, :i_d, :i_q)
 
+dummynames(::TLC) = ()
+
 function pftoinputs(c::TLC, setpoint::SetPoint)
     vACbase = c.elec.vACbase_LL_RMS * sqrt(2 / 3)
     v_bus_d = setpoint.Vac * cos(setpoint.θac) / vACbase
     v_bus_q = -setpoint.Vac * sin(setpoint.θac) / vACbase
     vdc = setpoint.Vdc / c.elec.vDCbase
-    NamedTuple{inputnames(c)}((vdc, v_bus_d, v_bus_q))
+    return (; vdc, v_d = v_bus_d, v_q = v_bus_q)
 end
-
-
 
 function input_signals(c::TLC, x, inputs)
     θ = syncangle(c.synch, x)
@@ -133,57 +131,63 @@ function input_signals(c::TLC, x, inputs)
     )
 end
 
-function outputequations!(F, x, inputs, y, c::TLC)
+function outputequations!(F, x, inputs, y, ::TLC)
     F[1] = y.elec.idc
     F[2] = y.elec.i_d
     F[3] = y.elec.i_q
     return nothing
 end
 
+equilibrium_state_space!(F, x, inputs, c::TLC, setpoint::SetPoint) =
+    equilibrium_state_space!(F, x, inputs, c, c.outerActive, setpoint)
+
+equilibrium_state_space!(F, x, inputs, c::TLC, ::AbstractOuterActiveTLC, ::SetPoint) =
+    state_space!(F, x, inputs, c)
+
+function equilibrium_state_space!(F, x, inputs, c::TLC, block::OuterActiveVdcControl, setpoint::SetPoint)
+    y = state_space!(F, x, inputs, c)
+    idx_ξvdc = n_states(c.elec) + n_states(c.meas) + n_states(c.synch) + 1
+    idc_ref = iszero(block.idc_ref) ? (setpoint.Pdc / c.elec.Sbase) / inputs.vdc : block.idc_ref
+    F[idx_ξvdc] = idc_ref - y.elec.idc
+    return y
+end
+
 function state_space!(F, x, inputs, c::TLC)
     sig_in = input_signals(c, x, inputs)
-    meas  = filter_outputs(x, sig_in, c.meas)
-    sync  = synchronization(c.synch, x, meas)
-    pact  = outeractive(c.outerActive, x, meas, sync)
-    qact  = outerreactive(c.outerReactive, x, meas, sync)
-    vloop = innervoltage(c.innerVoltage, x, meas, sync, pact, qact)
-    iloop = innercurrent(c.innerCurrent, x, meas, sync, vloop, c)
-    mod   = modulation(c.mod, x, iloop, c)
-
-    i = 1
-
-    n = n_states(c.elec)
-    state_space!(@view(F[i:i+n-1]), x, inputs, mod, c.elec; conv=c)
-    i += n
+    elec_in = (
+        vdc = sig_in.vdc,
+        v_d = inputs.v_d,
+        v_q = inputs.v_q,
+    )
+    i = n_states(c.elec) + 1
 
     n = n_states(c.meas)
-    state_space!(@view(F[i:i+n-1]), x, sig_in, c.meas; conv=c)
+    meas = state_space!(@view(F[i:i+n-1]), x, sig_in, c.meas; conv=c)
     i += n
 
     n = n_states(c.synch)
-    state_space!(@view(F[i:i+n-1]), x, meas, c.synch; conv=c)
+    sync = state_space!(@view(F[i:i+n-1]), x, meas, c.synch; conv=c)
     i += n
 
     n = n_states(c.outerActive)
-    state_space!(@view(F[i:i+n-1]), x, meas, sync, c.outerActive; conv=c)
+    pact = state_space!(@view(F[i:i+n-1]), x, meas, sync, c.outerActive; conv=c)
     i += n
 
     n = n_states(c.outerReactive)
-    state_space!(@view(F[i:i+n-1]), x, meas, sync, c.outerReactive; conv=c)
+    qact = state_space!(@view(F[i:i+n-1]), x, meas, sync, c.outerReactive; conv=c)
     i += n
 
     n = n_states(c.innerVoltage)
-    state_space!(@view(F[i:i+n-1]), x, meas, sync, pact, qact, c.innerVoltage; conv=c)
+    vloop = state_space!(@view(F[i:i+n-1]), x, meas, sync, pact, qact, c.innerVoltage; conv=c)
     i += n
 
     n = n_states(c.innerCurrent)
-    state_space!(@view(F[i:i+n-1]), x, meas, sync, vloop, c.innerCurrent; conv=c)
+    iloop = state_space!(@view(F[i:i+n-1]), x, meas, sync, vloop, c.innerCurrent; conv=c)
     i += n
 
     n = n_states(c.mod)
-    state_space!(@view(F[i:i+n-1]), x, iloop, c.mod; conv=c)
-
-    elec = electrical_outputs(c.elec, x, inputs, mod)
+    mod = state_space!(@view(F[i:i+n-1]), x, iloop, c.mod; conv=c)
+    elec = state_space!(@view(F[1:n_states(c.elec)]), x, elec_in, mod, c.elec; conv=c)
 
     return (;
         sig_in,
@@ -196,26 +200,6 @@ function state_space!(F, x, inputs, c::TLC)
         mod,
         elec
     )
-end
-
-# TODO: Remove after testing
-function equilibrium_state_space!(F, x, inputs, c::TLC, setpoint::SetPoint)
-    equilibrium_state_space!(F, x, inputs, c, c.outerActive, setpoint)
-    return nothing
-end
-
-function equilibrium_state_space!(F, x, inputs, c::TLC, ::AbstractOuterActiveTLC, setpoint::SetPoint)
-    return state_space!(F, x, inputs, c)
-end
-
-function equilibrium_state_space!(F, x, inputs, c::TLC, ::OuterActiveVdcControl, setpoint::SetPoint)
-    y = state_space!(F, x, inputs, c)
-
-    idx_ξvdc = n_states(c.elec) + n_states(c.meas) + n_states(c.synch) + 1
-    Idc_in = (setpoint.Pdc / c.elec.Sbase) / inputs.vdc
-    F[idx_ξvdc] = Idc_in - y.elec.idc
-
-    return y
 end
 
 function tlc(;
@@ -243,12 +227,13 @@ function tlc(;
         limits,
     )
 end
-
 ############################  Power-flow integration  ############################
 
 
 function resolved_refs(c::TLC, setpoint::SetPoint)
     vac_base_peak = c.elec.vACbase_LL_RMS * sqrt(2 / 3)
+    vac_ref = setpoint.Vac / vac_base_peak
+    vdc_ref = setpoint.Vdc / c.elec.vDCbase
 
     outerActive =
         if c.outerActive isa OuterActivePowerControl
@@ -260,7 +245,8 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
         elseif c.outerActive isa OuterActiveVdcControl
             OuterActiveVdcControl(
                 pi_ctrl = c.outerActive.pi_ctrl,
-                vdc_ref = iszero(c.outerActive.vdc_ref) ? setpoint.Vdc / c.elec.vDCbase : c.outerActive.vdc_ref,
+                vdc_ref = iszero(c.outerActive.vdc_ref) ? vdc_ref : c.outerActive.vdc_ref,
+                idc_ref = (setpoint.Pdc / c.elec.Sbase) / vdc_ref,
             )
         else
             c.outerActive
@@ -274,7 +260,7 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
                         K = c.outerReactive.support.K,
                         ωc = c.outerReactive.support.ωc,
                         vac_ref = iszero(c.outerReactive.support.vac_ref) ?
-                                  setpoint.Vac / vac_base_peak :
+                                  vac_ref :
                                   c.outerReactive.support.vac_ref,
                     )
                 else
@@ -290,7 +276,7 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
             OuterReactiveVacControl(
                 pi_ctrl = c.outerReactive.pi_ctrl,
                 vac_ref = iszero(c.outerReactive.vac_ref) ?
-                          setpoint.Vac / vac_base_peak :
+                          vac_ref :
                           c.outerReactive.vac_ref,
             )
         else
@@ -326,26 +312,26 @@ pf_acq_droop(block::OuterReactiveQControl) =
     ) : (enabled = 0, kq = 0.0)
 
 function pf_vtar_pu(conv::TLC, elem::Element, global_dict)
-    Vbase_ln_rms = global_dict["V"] / 1e3
-    Vconv_peak_base = conv.elec.vACbase_LL_RMS * sqrt(2 / 3)
+    vbase_ln_rms = global_dict["V"] / 1e3
+    vconv_peak_base = conv.elec.vACbase_LL_RMS * sqrt(2 / 3)
 
     if conv.outerReactive isa OuterReactiveVacControl
         Vac_peak = iszero(conv.outerReactive.vac_ref) ?
                    elem.setpoint.Vac :
-                   conv.outerReactive.vac_ref * Vconv_peak_base
-        return (Vac_peak / sqrt(2)) / Vbase_ln_rms
+                   conv.outerReactive.vac_ref * vconv_peak_base
+        return (Vac_peak / sqrt(2)) / vbase_ln_rms
 
     elseif conv.outerReactive isa OuterReactiveQControl &&
            conv.outerReactive.support isa VoltageSupportLag
         supp = conv.outerReactive.support
         Vac_peak = iszero(supp.vac_ref) ?
                    elem.setpoint.Vac :
-                   supp.vac_ref * Vconv_peak_base
-        return (Vac_peak / sqrt(2)) / Vbase_ln_rms
+                   supp.vac_ref * vconv_peak_base
+        return (Vac_peak / sqrt(2)) / vbase_ln_rms
 
     else
         # legacy PQ-bus initialization used converter.Vₘ directly (amplitude over phase-RMS base)
-        return elem.setpoint.Vac / Vbase_ln_rms
+        return elem.setpoint.Vac / vbase_ln_rms
     end
 end
 

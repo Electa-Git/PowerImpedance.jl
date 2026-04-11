@@ -41,37 +41,26 @@ outputnames(m::MeasurementSignal) = (Symbol("$(m.signal)_f"),)
 function state_space!(F, x, inputs, m::MeasurementSignal; kwargs...)
     nx = size(m.filter.A, 1)
 
-    # NoFilter() -> zero-state pass-through, so no state equations
-    nx == 0 && return nothing
+    if nx == 0
+        return NamedTuple{outputnames(m)}((getfield(inputs, m.signal),))
+    end
 
     names = statenames(m)
     xv = collect(getfield(x, name) for name in names)
     u = [getfield(inputs, m.signal)]
 
     dx = m.filter.A * xv + m.filter.B * u
+    y = (m.filter.C * xv + m.filter.D * u)[1]
 
     @inbounds for i in eachindex(dx)
         F[i] = dx[i]
     end
 
-    return nothing
+    return NamedTuple{outputnames(m)}((y,))
 end
 
-function outputequations!(F, x, inputs, m::MeasurementSignal)
-    nx = size(m.filter.A, 1)
-
-    if nx == 0
-        F[1] = getfield(inputs, m.signal)
-        return nothing
-    end
-
-    names = statenames(m)
-    xv = collect(getfield(x, name) for name in names)
-    u = [getfield(inputs, m.signal)]
-
-    y = m.filter.C * xv + m.filter.D * u
-    F[1] = y[1]
-
+function outputequations!(F, x, inputs, y, m::MeasurementSignal)
+    F[1] = getfield(y, outputnames(m)[1])
     return nothing
 end
 
@@ -143,38 +132,43 @@ outputnames(::MeasurementTLC) = (:v_d_f, :v_q_f, :vdc_f, :i_d_f, :i_q_f, :idc_f,
 function state_space!(F, x, inputs, m::MeasurementTLC; kwargs...)
     index = 1
 
-    for block in (m.v_d, m.v_q, m.vdc, m.i_d, m.i_q, m.idc, m.θ)
-        nx = n_states(block)
-        if nx > 0
-            state_space!(@view(F[index:index+nx-1]), x, inputs, block)
-            index += nx
-        end
-    end
+    n = n_states(m.v_d)
+    v_d = state_space!(@view(F[index:index+n-1]), x, inputs, m.v_d)
+    index += n
 
-    return nothing
+    n = n_states(m.v_q)
+    v_q = state_space!(@view(F[index:index+n-1]), x, inputs, m.v_q)
+    index += n
+
+    n = n_states(m.vdc)
+    vdc = state_space!(@view(F[index:index+n-1]), x, inputs, m.vdc)
+    index += n
+
+    n = n_states(m.i_d)
+    i_d = state_space!(@view(F[index:index+n-1]), x, inputs, m.i_d)
+    index += n
+
+    n = n_states(m.i_q)
+    i_q = state_space!(@view(F[index:index+n-1]), x, inputs, m.i_q)
+    index += n
+
+    n = n_states(m.idc)
+    idc = state_space!(@view(F[index:index+n-1]), x, inputs, m.idc)
+    index += n
+
+    n = n_states(m.θ)
+    θ = state_space!(@view(F[index:index+n-1]), x, inputs, m.θ)
+
+    return merge(v_d, v_q, vdc, i_d, i_q, idc, θ)
 end
 
-function outputequations!(F, x, inputs, m::MeasurementTLC)
-    index = 1
-
-    for block in (m.v_d, m.v_q, m.vdc, m.i_d, m.i_q, m.idc, m.θ)
-        outputequations!(@view(F[index:index]), x, inputs, block)
-        index += 1
-    end
-
+function outputequations!(F, x, inputs, y, m::MeasurementTLC)
+    F[1] = y.v_d_f
+    F[2] = y.v_q_f
+    F[3] = y.vdc_f
+    F[4] = y.i_d_f
+    F[5] = y.i_q_f
+    F[6] = y.idc_f
+    F[7] = y.θ_f
     return nothing
-end
-
-############################  Optional convenience helper  ############################
-# Useful inside TLC.jl if you want the filtered signals as a NamedTuple
-# to pass them directly to the next internal state-space block.
-
-function filter_outputs(x, inputs, m::MeasurementTLC)
-    T = promote_type(
-        mapreduce(typeof, promote_type, values(x)),
-        mapreduce(typeof, promote_type, values(inputs))
-    )
-    y = zeros(T, n_outputs(m))
-    outputequations!(y, x, inputs, m)
-    return NamedTuple{outputnames(m)}(Tuple(y))
 end

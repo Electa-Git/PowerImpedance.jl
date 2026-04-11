@@ -37,35 +37,6 @@ function initialvalues(block::ElectricalTLC; inputs, setpoint=SetPoint(), kwargs
     return (i_d = i_d0, i_q = i_q0)
 end
 
-function electrical_outputs(block::ElectricalTLC, x, inputs, mod)
-    i_d = x.i_d
-    i_q = x.i_q
-
-    vMd = 0.5 * inputs.vdc * mod.m_d
-    vMq = 0.5 * inputs.vdc * mod.m_q
-
-    idc = iszero(inputs.vdc) ? 0.0 : (vMd * i_d + vMq * i_q) / inputs.vdc
-
-    return (
-        idc = idc,
-        i_d = i_d,
-        i_q = i_q
-    )
-end
-
-function measurements(block::ElectricalTLC, x, inputs, mod)
-    y = electrical_outputs(block, x, inputs, mod)
-
-    return (
-        v_d = inputs.v_d,
-        v_q = inputs.v_q,
-        vdc = inputs.vdc,
-        i_d = y.i_d,
-        i_q = y.i_q,
-        idc = y.idc,
-        θ   = block.θ
-    )
-end
 
 function state_space!(F, x, inputs, mod, block::ElectricalTLC; conv::AbstractTLC)
     vACbase = block.vACbase_LL_RMS * sqrt(2 / 3)
@@ -81,8 +52,14 @@ function state_space!(F, x, inputs, mod, block::ElectricalTLC; conv::AbstractTLC
     vMd = 0.5 * inputs.vdc * mod.m_d
     vMq = 0.5 * inputs.vdc * mod.m_q
 
+    idc = iszero(inputs.vdc) ? 0.0 : (vMd * i_d + vMq * i_q) / inputs.vdc
+
     F[1] = block.ω₀ * (vMd - inputs.v_d - Rᵣ * i_d - Lᵣ * i_q) / Lᵣ
     F[2] = block.ω₀ * (vMq - inputs.v_q - Rᵣ * i_q + Lᵣ * i_d) / Lᵣ
 
-    return nothing
+    return (
+        idc = idc,
+        i_d = i_d,
+        i_q = i_q
+    )
 end

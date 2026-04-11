@@ -9,12 +9,9 @@ abstract type AbstractModulationTLC <: AbstractStateSpace end
 struct NoModulation <: AbstractModulationTLC end
 
 statenames(::NoModulation) = ()
-# TODO: Delete after testing
-#initialvalues(::NoModulation; kwargs...) = (;)
 
-modulation(::NoModulation, x, iloop, conv::AbstractTLC) = (; m_d = iloop.m_d, m_q = iloop.m_q)
-
-state_space!(F, x, iloop, ::NoModulation; conv::AbstractTLC) = nothing
+state_space!(F, x, iloop, block::NoModulation; conv::AbstractTLC) =
+    (; m_d = iloop.m_d, m_q = iloop.m_q)
 
 ############################  Pade time-delay modulation  ############################
 
@@ -63,13 +60,7 @@ function statenames(block::PadeModulation)
     return ntuple(i -> Symbol("m_delay_x$i"), n)
 end
 
-# TODO: Delete after testing
-#= function initialvalues(block::PadeModulation; kwargs...)
-    n = size(block.A, 1)
-    return NamedTuple{statenames(block)}(ntuple(_ -> 0.0, n))
-end =#
-
-function modulation(block::PadeModulation, x, iloop, conv::AbstractTLC)
+function state_space!(F, x, iloop, block::PadeModulation; conv::AbstractTLC)
     u = [iloop.m_d; iloop.m_q]
     n = size(block.A, 1)
 
@@ -77,6 +68,12 @@ function modulation(block::PadeModulation, x, iloop, conv::AbstractTLC)
         n == 0 ? u :
         begin
             xd = collect(getfield(x, Symbol("m_delay_x$i")) for i in 1:n)
+            dx = block.A * xd + block.B * u
+
+            @inbounds for i in 1:n
+                F[i] = dx[i]
+            end
+
             block.C * xd + block.D * u
         end
 
@@ -94,20 +91,4 @@ function modulation(block::PadeModulation, x, iloop, conv::AbstractTLC)
         m_d = m_dq_ref[1],
         m_q = m_dq_ref[2]
     )
-end
-
-function state_space!(F, x, iloop, block::PadeModulation; conv::AbstractTLC)
-    n = size(block.A, 1)
-    n == 0 && return nothing
-
-    xd = collect(getfield(x, Symbol("m_delay_x$i")) for i in 1:n)
-    u = [iloop.m_d; iloop.m_q]
-
-    dx = block.A * xd + block.B * u
-
-    @inbounds for i in 1:n
-        F[i] = dx[i]
-    end
-
-    return nothing
 end
