@@ -1,94 +1,118 @@
 ############################  modulation.jl  ############################
 
+#=
+TLC modulation blocks.
+
+Modulation blocks convert inner-current-loop modulation references into the
+commands seen by the electrical plant. The generic delay dynamics are provided
+by `PadeDelay` in `common/kernels/delay.jl`; this file only adds TLC-specific
+phase compensation and modulation outputs.
+=#
+
+export AbstractModulationTLC,
+       NoModulation,
+       DelayModulation,
+       PadeModulation
+
 ############################  Abstract modulation slot  ############################
 
+"""
+Abstract supertype for TLC modulation blocks.
+"""
 abstract type AbstractModulationTLC <: AbstractStateSpace end
 
 ############################  No modulation / no delay  ############################
 
+"""
+Pass-through modulation block without delay.
+"""
 struct NoModulation <: AbstractModulationTLC end
 
+"""
+Return state names for no modulation.
+
+$(SIGNATURES)
+"""
 statenames(::NoModulation) = ()
 
+"""
+Forward inner-current modulation commands.
+
+$(SIGNATURES)
+"""
 state_space!(F, x, iloop, block::NoModulation; conv::AbstractTLC) =
     (; m_d = iloop.m_d, m_q = iloop.m_q)
 
-############################  Pade time-delay modulation  ############################
+############################  Time-delay modulation  ############################
 
-struct PadeModulation <: AbstractModulationTLC
-    timeDelay::Float64
-    padeOrderNum::Int
-    padeOrderDen::Int
+"""
+TLC modulation block backed by a generic Pade delay.
 
-    A::Matrix{Float64}
-    B::Matrix{Float64}
-    C::Matrix{Float64}
-    D::Matrix{Float64}
+$(TYPEDEF)
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
+struct DelayModulation{D<:PadeDelay} <: AbstractModulationTLC
+    delay::D
 end
 
-function PadeModulation(;
+"""
+Construct a TLC delay modulation block.
+
+$(SIGNATURES)
+
+# Details
+
+The internal [`PadeDelay`](@ref) uses two inputs and the `:m_delay` state prefix
+to preserve the historical TLC state names.
+"""
+function DelayModulation(;
     timeDelay::Real = 0.0,
     padeOrderNum::Int = 0,
     padeOrderDen::Int = 0
 )
-    if timeDelay == 0.0 || padeOrderDen == 0
-        A = zeros(0, 0)
-        B = zeros(0, 2)
-        C = zeros(2, 0)
-        D = Matrix{Float64}(I, 2, 2)
-    else
-        A, B, C, D = timeDelayPadeMatrices(padeOrderNum, padeOrderDen, timeDelay, 2)
-        A = Matrix{Float64}(A)
-        B = Matrix{Float64}(B)
-        C = Matrix{Float64}(C)
-        D = Matrix{Float64}(D)
-    end
-
-    return PadeModulation(
-        Float64(timeDelay),
-        padeOrderNum,
-        padeOrderDen,
-        A,
-        B,
-        C,
-        D
+    delay = PadeDelay(
+        timeDelay = timeDelay,
+        padeOrderNum = padeOrderNum,
+        padeOrderDen = padeOrderDen,
+        n_inputs = 2,
+        state_prefix = :m_delay,
     )
+    return DelayModulation{typeof(delay)}(delay)
 end
 
-function statenames(block::PadeModulation)
-    n = size(block.A, 1)
-    return ntuple(i -> Symbol("m_delay_x$i"), n)
-end
+"""
+Compatibility constructor for the previous TLC delay-modulation name.
 
-function state_space!(F, x, iloop, block::PadeModulation; conv::AbstractTLC)
-    u = [iloop.m_d; iloop.m_q]
-    n = size(block.A, 1)
+$(SIGNATURES)
+"""
+PadeModulation(; kwargs...) = DelayModulation(; kwargs...)
 
-    y =
-        n == 0 ? u :
-        begin
-            xd = collect(getfield(x, Symbol("m_delay_x$i")) for i in 1:n)
-            dx = block.A * xd + block.B * u
+"""
+Return state names of the modulation delay block.
 
-            @inbounds for i in 1:n
-                F[i] = dx[i]
-            end
+$(SIGNATURES)
+"""
+statenames(block::DelayModulation) = statenames(block.delay)
 
-            block.C * xd + block.D * u
-        end
+"""
+Evaluate delayed TLC modulation commands.
 
-    # Same dq/αβ phase compensation as in the old monolithic TLC
-    T_ab_dq = 0.5 * [1 im; -im 1]
-    T_dq_ab = 0.5 * [1 -im; im 1]
+$(SIGNATURES)
 
-    m_ab_ref =
-        (cos(conv.elec.ω₀ * block.timeDelay) - sin(conv.elec.ω₀ * block.timeDelay) * im) *
-        (T_dq_ab * y)
+# Details
 
-    m_dq_ref = real(T_ab_dq * conj(m_ab_ref) + conj(T_ab_dq) * m_ab_ref)
+The generic delay output is phase-compensated by `ω₀ * timeDelay` before being
+returned to the electrical plant.
+"""
+function state_space!(F, x, iloop, block::DelayModulation; conv::AbstractTLC)
+    y = state_space!(F, x, (iloop.m_d, iloop.m_q), block.delay)
+    m_dq_ref = phase_compensated_dq(y, conv.elec.ω₀ * block.delay.timeDelay)
 
     return (
-        m_d = m_dq_ref[1],
-        m_q = m_dq_ref[2]
+        m_d = m_dq_ref.d,
+        m_q = m_dq_ref.q
     )
 end

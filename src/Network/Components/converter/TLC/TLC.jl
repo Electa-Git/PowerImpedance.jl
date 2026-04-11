@@ -1,45 +1,44 @@
+#=
+Top-level modular two-level converter (TLC) assembly.
+
+This file wires the TLC electrical plant, measurement, synchronization, outer
+loops, inner loops, modulation, equilibrium handling, and power-flow adapter.
+Reusable control loops and primitives live in `converter/common`; TLC-specific
+plant and modulation behavior remains in this folder.
+=#
+
 export tlc,
        TLC,
-       AbstractTLC,
-       ElectricalTLC,
-       MeasurementTLC,
-       AbstractSynchronizationTLC,
-       NoSynchronization,
-       PLLSynchronization,
-       AbstractOuterActiveTLC,
-       AbstractFrequencySupportTLC,
-       NoOuterActiveControl,
-       NoFrequencySupport,
-       OuterActivePowerControl,
-       FrequencySupportLag,
-       OuterActiveVdcControl,
-       AbstractOuterReactiveTLC,
-       AbstractVoltageSupportTLC,
-       NoOuterReactiveControl,
-       NoVoltageSupport,
-       OuterReactiveQControl,
-       OuterReactiveVacControl,
-       VoltageSupportLag,
-       AbstractInnerVoltageTLC,
-       NoInnerVoltageControl,
-       AbstractInnerCurrentTLC,
-       NoInnerCurrentControl,
-       InnerCurrentPIControl,
-       AbstractModulationTLC,
-       NoModulation,
-       PadeModulation
+       AbstractTLC
 
+"""
+Abstract supertype for modular TLC state-space models.
+"""
 abstract type AbstractTLC <: AbstractStateSpace end
 
 include("electrical.jl")
-include("measurement.jl")
-include("synchronization.jl")
-include("outer_active.jl")
-include("outer_reactive.jl")
-include("inner_voltage.jl")
-include("inner_current.jl")
+include("../common/loops/measurement.jl")
+include("../common/loops/synchronization.jl")
+include("../common/loops/outer_active.jl")
+include("../common/loops/outer_reactive.jl")
+include("../common/loops/inner_voltage.jl")
+include("../common/loops/inner_current.jl")
 include("modulation.jl")
 
+"""
+Composite modular TLC model.
+
+$(TYPEDEF)
+
+# Fields
+
+$(TYPEDFIELDS)
+
+# Details
+
+The field order defines the state ordering used by [`statenames`](@ref) and the
+execution order used in [`state_space!`](@ref).
+"""
 struct TLC{
     E<:ElectricalTLC,
     Meas<:MeasurementTLC,
@@ -60,6 +59,11 @@ struct TLC{
     mod::Mod
 end
 
+"""
+Return all TLC state names in model execution order.
+
+$(SIGNATURES)
+"""
 statenames(c::TLC) = (
     statenames(c.elec)...,
     statenames(c.meas)...,
@@ -71,6 +75,16 @@ statenames(c::TLC) = (
     statenames(c.mod)...
 )
 
+"""
+Return initial values for the full TLC state vector.
+
+$(SIGNATURES)
+
+# Details
+
+Electrical currents are initialized first because measurement and controller
+initial conditions depend on the operating-point currents.
+"""
 function initialvalues(c::TLC; inputs, setpoint=SetPoint(), kwargs...)
     elec_init = initialvalues(c.elec; inputs, setpoint, kwargs...)
 
@@ -96,11 +110,32 @@ function initialvalues(c::TLC; inputs, setpoint=SetPoint(), kwargs...)
     )
 end
 
+"""
+Return TLC external input names.
+
+$(SIGNATURES)
+"""
 inputnames(::TLC) = (:vdc, :v_d, :v_q)
+
+"""
+Return TLC external output names.
+
+$(SIGNATURES)
+"""
 outputnames(::TLC) = (:idc, :i_d, :i_q)
 
+"""
+Return additional equilibrium dummy names.
+
+$(SIGNATURES)
+"""
 dummynames(::TLC) = ()
 
+"""
+Convert a power-flow setpoint into normalized TLC inputs.
+
+$(SIGNATURES)
+"""
 function pftoinputs(c::TLC, setpoint::SetPoint)
     vACbase = c.elec.vACbase_LL_RMS * sqrt(2 / 3)
     v_bus_d = setpoint.Vac * cos(setpoint.θac) / vACbase
@@ -109,28 +144,36 @@ function pftoinputs(c::TLC, setpoint::SetPoint)
     return (; vdc, v_d = v_bus_d, v_q = v_bus_q)
 end
 
+"""
+Build the raw internal signals seen by the measurement block.
+
+$(SIGNATURES)
+
+# Details
+
+The AC quantities are rotated into the synchronization frame before filtering.
+"""
 function input_signals(c::TLC, x, inputs)
     θ = syncangle(c.synch, x)
-    cθ = cos(θ)
-    sθ = sin(θ)
-
-    v_d =  cθ * inputs.v_d - sθ * inputs.v_q
-    v_q =  sθ * inputs.v_d + cθ * inputs.v_q
-
-    i_d =  cθ * x.i_d - sθ * x.i_q
-    i_q =  sθ * x.i_d + cθ * x.i_q
+    v = frame_transform(inputs.v_d, inputs.v_q, θ)
+    i = frame_transform(x.i_d, x.i_q, θ)
 
     return (
-        v_d = v_d,
-        v_q = v_q,
+        v_d = v.d,
+        v_q = v.q,
         vdc = inputs.vdc,
-        i_d = i_d,
-        i_q = i_q,
+        i_d = i.d,
+        i_q = i.q,
         idc = 0.0,
         θ   = θ
     )
 end
 
+"""
+Write TLC output equations.
+
+$(SIGNATURES)
+"""
 function outputequations!(F, x, inputs, y, ::TLC)
     F[1] = y.elec.idc
     F[2] = y.elec.i_d
@@ -138,12 +181,32 @@ function outputequations!(F, x, inputs, y, ::TLC)
     return nothing
 end
 
+"""
+Evaluate TLC equilibrium equations.
+
+$(SIGNATURES)
+"""
 equilibrium_state_space!(F, x, inputs, c::TLC, setpoint::SetPoint) =
     equilibrium_state_space!(F, x, inputs, c, c.outerActive, setpoint)
 
+"""
+Default TLC equilibrium equations for active-loop modes without DC-current balancing.
+
+$(SIGNATURES)
+"""
 equilibrium_state_space!(F, x, inputs, c::TLC, ::AbstractOuterActiveTLC, ::SetPoint) =
     state_space!(F, x, inputs, c)
 
+"""
+Evaluate TLC equilibrium equations for DC-voltage control.
+
+$(SIGNATURES)
+
+# Details
+
+The DC-voltage PI state equation is replaced with the DC-current balance used to
+solve the operating point.
+"""
 function equilibrium_state_space!(F, x, inputs, c::TLC, block::OuterActiveVdcControl, setpoint::SetPoint)
     y = state_space!(F, x, inputs, c)
     idx_ξvdc = n_states(c.elec) + n_states(c.meas) + n_states(c.synch) + 1
@@ -152,6 +215,16 @@ function equilibrium_state_space!(F, x, inputs, c::TLC, block::OuterActiveVdcCon
     return y
 end
 
+"""
+Evaluate the full TLC state-space model.
+
+$(SIGNATURES)
+
+# Details
+
+Subblocks are evaluated explicitly in dependency order. Electrical dynamics are
+written into the first state slice after modulation commands are available.
+"""
 function state_space!(F, x, inputs, c::TLC)
     sig_in = input_signals(c, x, inputs)
     elec_in = (
@@ -202,6 +275,11 @@ function state_space!(F, x, inputs, c::TLC)
     )
 end
 
+"""
+Construct a TLC `Element` with modular subblocks.
+
+$(SIGNATURES)
+"""
 function tlc(;
     elec::ElectricalTLC = ElectricalTLC(),
     meas::MeasurementTLC = MeasurementTLC(),
@@ -230,6 +308,11 @@ end
 ############################  Power-flow integration  ############################
 
 
+"""
+Resolve zero-valued control references from a power-flow setpoint.
+
+$(SIGNATURES)
+"""
 function resolved_refs(c::TLC, setpoint::SetPoint)
     vac_base_peak = c.elec.vACbase_LL_RMS * sqrt(2 / 3)
     vac_ref = setpoint.Vac / vac_base_peak
@@ -295,14 +378,29 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
     )
 end
 
+"""
+Return PowerModelsACDC AC converter type for a reactive outer loop.
+
+$(SIGNATURES)
+"""
 pf_type_ac(::NoOuterReactiveControl) = 1
 pf_type_ac(::OuterReactiveVacControl) = 2
 pf_type_ac(block::OuterReactiveQControl) = block.support isa NoVoltageSupport ? 1 : 2
 
+"""
+Return PowerModelsACDC DC converter type for an active outer loop.
+
+$(SIGNATURES)
+"""
 pf_type_dc(::NoOuterActiveControl) = 1
 pf_type_dc(::OuterActivePowerControl) = 1
 pf_type_dc(::OuterActiveVdcControl) = 2
 
+"""
+Return AC voltage droop settings for the power-flow converter entry.
+
+$(SIGNATURES)
+"""
 pf_acq_droop(::NoOuterReactiveControl) = (enabled = 0, kq = 0.0)
 pf_acq_droop(::OuterReactiveVacControl) = (enabled = 0, kq = 0.0)
 pf_acq_droop(block::OuterReactiveQControl) =
@@ -311,6 +409,11 @@ pf_acq_droop(block::OuterReactiveQControl) =
         kq = block.support.K,
     ) : (enabled = 0, kq = 0.0)
 
+"""
+Return AC voltage target in the PowerModelsACDC per-unit base.
+
+$(SIGNATURES)
+"""
 function pf_vtar_pu(conv::TLC, elem::Element, global_dict)
     vbase_ln_rms = global_dict["V"] / 1e3
     vconv_peak_base = conv.elec.vACbase_LL_RMS * sqrt(2 / 3)
@@ -335,18 +438,38 @@ function pf_vtar_pu(conv::TLC, elem::Element, global_dict)
     end
 end
 
+"""
+Return DC voltage setpoint in the PowerModelsACDC per-unit base.
+
+$(SIGNATURES)
+"""
 function pf_vdcset_pu(conv::TLC, elem::Element, global_dict, data)
     return elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
 end
 
+"""
+Return active-power AC setpoint in MW.
+
+$(SIGNATURES)
+"""
 function pf_pacset_mw(conv::TLC, elem::Element)
     return elem.setpoint.Pac
 end
 
+"""
+Return active-power DC setpoint in MW.
+
+$(SIGNATURES)
+"""
 function pf_pdcset_mw(conv::TLC, elem::Element)
     return !iszero(elem.setpoint.Pdc) ? elem.setpoint.Pdc : -elem.setpoint.Pac
 end
 
+"""
+Write the TLC converter entry into a PowerModelsACDC power-flow data dictionary.
+
+$(SIGNATURES)
+"""
 function make_power_flow!(conv::TLC, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
     dc_node = make_node(elem, 1)
     ac_nodes = make_node(elem, 2)

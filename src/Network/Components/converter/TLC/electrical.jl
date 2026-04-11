@@ -1,5 +1,24 @@
 ############################  electrical.jl  ############################
 
+#=
+Electrical plant model for the two-level converter (TLC).
+
+This file contains the converter-side electrical state equations and terminal
+output calculations. It is intentionally TLC-specific; reusable control and
+measurement primitives live under `converter/common`.
+=#
+
+export ElectricalTLC
+
+"""
+Electrical parameters and states of the TLC reactor model.
+
+$(TYPEDEF)
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
 @with_kw struct ElectricalTLC <: AbstractStateSpace
     ω₀::Float64 = 100 * π
 
@@ -19,8 +38,18 @@
     iACbase::Float64 = 0.0
 end
 
+"""
+Return electrical state names.
+
+$(SIGNATURES)
+"""
 statenames(::ElectricalTLC) = (:i_d, :i_q)
 
+"""
+Compute initial current states from power-flow inputs and setpoints.
+
+$(SIGNATURES)
+"""
 function initialvalues(block::ElectricalTLC; inputs, setpoint=SetPoint(), kwargs...)
     v_d = inputs.v_d
     v_q = inputs.v_q
@@ -38,6 +67,16 @@ function initialvalues(block::ElectricalTLC; inputs, setpoint=SetPoint(), kwargs
 end
 
 
+"""
+Evaluate the TLC reactor current dynamics and electrical outputs.
+
+$(SIGNATURES)
+
+# Details
+
+The method writes derivatives for `i_d` and `i_q` and returns the DC current
+and AC currents used by output equations and downstream reporting.
+"""
 function state_space!(F, x, inputs, mod, block::ElectricalTLC; conv::AbstractTLC)
     vACbase = block.vACbase_LL_RMS * sqrt(2 / 3)
     zACbase = (3 / 2) * vACbase^2 / block.Sbase
