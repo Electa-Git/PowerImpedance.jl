@@ -68,7 +68,7 @@ function PadeDelay(;
         A = Matrix{Float64}(A)
         B = Matrix{Float64}(B)
         C = Matrix{Float64}(C)
-        D = Matrix{Float64}(D)
+        D = D isa Number ? fill(Float64(D), 1, 1) : Matrix{Float64}(D) # This might be necessary for the bipolar MMC. Test for: "D = Matrix{Float64}(D)"
     end
 
     return PadeDelay(
