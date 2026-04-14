@@ -7,19 +7,19 @@ under `common/loops` so the same API can be reused by other converter
 implementations as they adopt the modular loop structure.
 =#
 
-export AbstractInnerCurrentTLC,
+export AbstractInnerCurrentControl,
        NoInnerCurrentControl,
        InnerCurrentPIControl
 
 """
 Abstract supertype for TLC inner-current controllers.
 """
-abstract type AbstractInnerCurrentTLC <: AbstractStateSpace end
+abstract type AbstractInnerCurrentControl <: AbstractStateSpace end
 
 """
 No inner-current control.
 """
-struct NoInnerCurrentControl <: AbstractInnerCurrentTLC end
+struct NoInnerCurrentControl <: AbstractInnerCurrentControl end
 
 """
 Return state names for no inner-current control.
@@ -45,7 +45,7 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-@with_kw struct InnerCurrentPIControl <: AbstractInnerCurrentTLC
+@with_kw struct InnerCurrentPIControl <: AbstractInnerCurrentControl
     pi_ctrl::PIControl = PIControl()
 end
 
@@ -61,13 +61,12 @@ Initialize inner-current PI integrator states.
 
 $(SIGNATURES)
 """
-function initialvalues(block::InnerCurrentPIControl; inputs, setpoint_pu=SetPoint(), kwargs...)
-    conv = kwargs[:conv]
-    i0 = initialvalues(conv.elec; inputs, setpoint_pu)
+function initialvalues(block::InnerCurrentPIControl; inputs, setpoint_pu=SetPoint(), conv::AbstractConverter)
+    iΔ_d, iΔ_q = initialvalues(conv.elec; inputs, setpoint_pu)
 
     return (
-        ξ_id = conv.elec.Rᵣ * i0.i_d,
-        ξ_iq = conv.elec.Rᵣ * i0.i_q
+        ξ_id = elec_resistance(conv.elec) * iΔ_d,
+        ξ_iq = elec_resistance(conv.elec) * iΔ_q
     )
 end
 
@@ -81,7 +80,7 @@ $(SIGNATURES)
 The method writes integrator derivatives and returns current errors plus
 stationary-frame modulation commands.
 """
-function state_space!(F, x, meas, sync, vloop, block::InnerCurrentPIControl; conv::AbstractConverter)
+function state_space!(F, x, (meas, sync, vloop), block::InnerCurrentPIControl, conv::AbstractConverter)
     i_d_ref = vloop.iΔ_d_ref
     i_q_ref = vloop.iΔ_q_ref
 
@@ -90,20 +89,15 @@ function state_space!(F, x, meas, sync, vloop, block::InnerCurrentPIControl; con
     v_d = meas.vG_d_f
     v_q = meas.vG_q_f
 
-    Lᵣ = conv.elec.Lᵣ 
+    Lᵣ = elec_inductance(conv.elec)
 
     e_d = i_d_ref - i_d
     e_q = i_q_ref - i_q
     F[1] = block.pi_ctrl.Ki * e_d
     F[2] = block.pi_ctrl.Ki * e_q
 
-    md_c = 2 * (x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * sync.ω_c * i_q + v_d) / meas.v_dc_f
-    mq_c = 2 * (x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * sync.ω_c * i_d + v_q) / meas.v_dc_f
+    vMΔd_ref_c = x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * sync.ω_c * i_q + v_d
+    vMΔq_ref_c = x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * sync.ω_c * i_d + v_q
 
-    m = inverse_frame_transform(md_c, mq_c, syncangle(conv.sync, x))
-
-    return (
-        m_d = m.d,
-        m_q = m.q
-    )
+    return (; vMΔd_ref_c, vMΔq_ref_c)
 end

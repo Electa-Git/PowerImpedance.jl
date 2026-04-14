@@ -147,8 +147,9 @@ function state_space!(F, x, meas, block::OuterReactiveQControl, conv::AbstractCo
 
     Q_ac_ref_eff = block.Q_ac_ref + support.Q_ac_support
     F[ns + 1] = block.pi_ctrl.Ki * (Q_ac_ref_eff - Q_ac_f)
-
-    return (iΔ_q_ref = block.pi_ctrl.Kp * (Q_ac_ref_eff - Q_ac_f) + x.ξ_Q_ac, )
+    
+    controller_output = block.pi_ctrl.Kp * (Q_ac_ref_eff - Q_ac_f) + x.ξ_Q_ac
+    return output_outer_reactive_control(conv, controller_output)
 end
 
 """
@@ -181,8 +182,6 @@ function state_space!(F, x, meas, sync, block::OuterReactiveVacControl, conv::Ab
     v_ac = sqrt(meas.vG_d_f^2 + meas.vG_q_f^2)
 
     F[1] = block.pi_ctrl.Ki * (block.v_ac_ref - v_ac)
-
-    return (
-        iΔ_q_ref = block.pi_ctrl.Kp * (block.v_ac_ref - v_ac) + x.ξ_v_ac,
-    )
+    controller_output = block.pi_ctrl.Kp * (block.v_ac_ref - v_ac) + x.ξ_v_ac 
+    return output_outer_reactive_control(conv, controller_output)
 end

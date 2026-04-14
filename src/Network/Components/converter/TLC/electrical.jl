@@ -34,6 +34,9 @@ struct ElectricalTLC <: AbstractStateSpace
     iACbase::Float64 
 end
 
+elec_inductance(block::ElectricalTLC) = block.Lᵣ
+elec_resistance(block::ElectricalTLC) = block.Rᵣ
+
 function ElectricalTLC(; 
     ωbase = 100 * π,
 
@@ -84,7 +87,7 @@ function initialvalues(block::ElectricalTLC; inputs, setpoint_pu=SetPoint())
     i_d0 = (v_d * p_ac + v_q * q_ac) / V2
     i_q0 = (v_q * p_ac - v_d * q_ac) / V2
 
-    return (i_d = i_d0, i_q = i_q0)
+    return (iΔ_d = i_d0, iΔ_q = i_q0)
 end
 
 
@@ -98,7 +101,7 @@ $(SIGNATURES)
 The method writes derivatives for `i_d` and `i_q` and returns the DC current
 and AC currents used by output equations and downstream reporting.
 """
-function state_space!(F, x, inputs, mod, block::ElectricalTLC; conv::AbstractTLC)
+function state_space!(F, x, (inputs, mod), block::ElectricalTLC, conv::AbstractTLC)
     Rᵣ = block.Rᵣ
     Lᵣ = block.Lᵣ
 

@@ -15,6 +15,7 @@ export tlc,
 Abstract supertype for modular TLC state-space models.
 """
 abstract type AbstractTLC <: AbstractConverter end
+output_outer_reactive_control(::AbstractTLC, out) = (iΔ_q_ref = out,) # TODO fix this (these functions shouldn't exist)
 
 include("electrical.jl")
 include("modulation.jl")
@@ -39,8 +40,8 @@ struct TLC{
     Sync<:AbstractSynchronization,
     Active<:AbstractOuterActiveControl,
     Reactive<:AbstractOuterReactiveControl,
-    IV<:AbstractInnerVoltageTLC,
-    IC<:AbstractInnerCurrentTLC,
+    IV<:AbstractInnerVoltage,
+    IC<:AbstractInnerCurrentControl,
     Mod<:AbstractModulationTLC} <: AbstractTLC
 
     elec::E
@@ -86,15 +87,15 @@ function initialvalues(c::TLC; inputs, setpoint_pu=SetPoint())
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
         v_dc = inputs.v_dc,
-        i_d = elec_init.i_d,
-        i_q = elec_init.i_q,
-        i_dc = 0.0,
+        i_d = elec_init.iΔ_d,
+        i_q = elec_init.iΔ_q,
+        i_dc = 0.0,             #TODO improve this initialization?
         θ   = setpoint_pu.θ_ac
     )
     return (;
         elec_init...,
-        initialvalues(c.meas, inputs=meas_inputs)...,
-        initialvalues(c.sync; inputs)...,
+        initialvalues(c.meas, inputs=meas_inputs)..., #TODO add other blocks
+        initialvalues(c.sync; setpoint_pu)...,
         initialvalues(c.innerCurrent; inputs, setpoint_pu, conv=c)...,
     )
 end
@@ -248,16 +249,17 @@ function state_space!(F, x, inputs, c::TLC)
     i += n
 
     n = n_states(c.innerVoltage)
-    vloop = state_space!(@view(F[i:i+n-1]), x, meas, sync, pact, qact, c.innerVoltage; conv=c)
+    vloop = state_space!(@view(F[i:i+n-1]), x, (meas, sync, pact, qact), c.innerVoltage, c)
     i += n
 
     n = n_states(c.innerCurrent)
-    iloop = state_space!(@view(F[i:i+n-1]), x, meas, sync, vloop, c.innerCurrent; conv=c)
+    iloop = state_space!(@view(F[i:i+n-1]), x, (meas, sync, vloop), c.innerCurrent, c)
     i += n
 
     n = n_states(c.mod)
-    mod = state_space!(@view(F[i:i+n-1]), x, iloop, c.mod; conv=c)
-    elec = state_space!(@view(F[1:n_states(c.elec)]), x, elec_in, mod, c.elec; conv=c)
+    mod = state_space!(@view(F[i:i+n-1]), x, (meas, iloop), c.mod; conv=c)
+
+    elec = state_space!(@view(F[1:n_states(c.elec)]), x, (elec_in, mod), c.elec, c)
 
     return (;
         sig_in,
@@ -283,8 +285,8 @@ function tlc(;
     sync::AbstractSynchronization = NoSynchronization(),
     outerActive::AbstractOuterActiveControl = NoOuterActiveControl(),
     outerReactive::AbstractOuterReactiveControl = NoOuterReactiveControl(),
-    innerVoltage::AbstractInnerVoltageTLC = NoInnerVoltageControl(),
-    innerCurrent::AbstractInnerCurrentTLC = NoInnerCurrentControl(),
+    innerVoltage::AbstractInnerVoltage = NoInnerVoltageControl(),
+    innerCurrent::AbstractInnerCurrentControl = NoInnerCurrentControl(),
     mod::AbstractModulationTLC = NoModulation(),
     setpoint::SetPoint = SetPoint(),
     limits::Limits = Limits(),

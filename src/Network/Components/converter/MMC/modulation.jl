@@ -40,7 +40,7 @@ struct CompensatedModulation <: AbstractModulationMMC end
 statenames(::CompensatedModulation) = (;)
 
 function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
-    (; vCΔd, vCΔq, vCΔZd, vCΔZq, vCΣd, vCΣq, vCΣz) = x
+    (; vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x
     (;Δθ_c, 
         vMΔd_ref_c, vMΔq_ref_c, vMΣd_ref_c, vMΣq_ref_c, vMΣz_ref) = inputs
     
@@ -51,13 +51,13 @@ function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
     vMΔd_ref, vMΔq_ref = I_θ * [vMΔd_ref_c, vMΔq_ref_c]
     vMΣd_ref, vMΣq_ref = I_2θ * [vMΣd_ref_c, vMΣq_ref_c] # Zero sequence is reference frame independent, so not transformed
 
-    VΣΔ_CmdqZ = 1/4 * [ 2 * vCΣz       0              2 * vCΣd               vCΔd + vCΔZd       vCΔZq - vCΔq       vCΔd       vCΔq
-                        0              2 * vCΣz       2 * vCΣq               -vCΔq - vCΔZq      vCΔZd - vCΔd       vCΔq       -vCΔd
-                        vCΣd           vCΣq           2 * vCΣz               vCΔd               vCΔq               vCΔZd      vCΔZq
-                        -vCΔd - vCΔZd  vCΔq + vCΔZq   -2 * vCΔd              -vCΣd - 2 * vCΣz   vCΣq               -vCΣd      vCΣq
-                        vCΔq - vCΔZq   vCΔd - vCΔZd   -2 * vCΔq              vCΣq               vCΣd - 2 * vCΣz    -vCΣq      -vCΣd
-                        -vCΔd          -vCΔq          -2 * vCΔZd             -vCΣd              -vCΣq              -2 * vCΣz  0
-                        -vCΔq          vCΔd           -2 * vCΔZq             vCΣq               -vCΣd              0          -2 * vCΣz]
+    VΣΔ_CmdqZ = 1/4 * [ 2 * vCΣ_z       0              2 * vCΣ_d               vCΔ_d + vCΔ_Zd       vCΔ_Zq - vCΔ_q       vCΔ_d       vCΔ_q
+                        0              2 * vCΣ_z       2 * vCΣ_q               -vCΔ_q - vCΔ_Zq      vCΔ_Zd - vCΔ_d       vCΔ_q       -vCΔ_d
+                        vCΣ_d           vCΣ_q           2 * vCΣ_z               vCΔ_d               vCΔ_q               vCΔ_Zd      vCΔ_Zq
+                        -vCΔ_d - vCΔ_Zd  vCΔ_q + vCΔ_Zq   -2 * vCΔ_d              -vCΣ_d - 2 * vCΣ_z   vCΣ_q               -vCΣ_d      vCΣ_q
+                        vCΔ_q - vCΔ_Zq   vCΔ_d - vCΔ_Zd   -2 * vCΔ_q              vCΣ_q               vCΣ_d - 2 * vCΣ_z    -vCΣ_q      -vCΣ_d
+                        -vCΔ_d          -vCΔ_q          -2 * vCΔ_Zd             -vCΣ_d              -vCΣ_q              -2 * vCΣ_z  0
+                        -vCΔ_q          vCΔ_d           -2 * vCΔ_Zq             vCΣ_q               -vCΣ_d              0          -2 * vCΣ_z]
     
     # For optimization, the matrix VΣΔ_CmdqZ could be inversed or factorized (symbolically) beforehand. But is it needed?
     (mΣd, mΣq, mΣz, mΔd, mΔq, mΔZd, mΔZq) = [fill(1, 3); fill(conv.elec.baseConv1, 4)] .*  # Δ variables multiplied by baseConv1 (DC -> AC base conversion)

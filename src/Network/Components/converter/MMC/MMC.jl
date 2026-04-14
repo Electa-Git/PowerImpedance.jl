@@ -20,13 +20,8 @@ abstract type AbstractΔdqControl                <: AbstractStateSpace end
 abstract type AbstractΣdqzControl               <: AbstractStateSpace end
 
 ### Include files ###
-
 include("electrical.jl")
-# include("synchronization.jl")
-# include("outer_active.jl")
-#include("outer_reactive.jl")
 include("energy.jl")
-include("inner_voltage.jl")
 include("inner_current.jl")
 include("modulation.jl")
 
@@ -45,7 +40,7 @@ include("modulation.jl")
 end
 
 statenames(c::MMC)                      = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.elec)...) 
-initialvalues(c::MMC; inputs, setpoint_pu) = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync)..., initialvalues(c.delta_control)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
+initialvalues(c::MMC; inputs, setpoint_pu) = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
 inputnames(::MMC)                       = (:v_dc, :vG_d, :vG_q)
 outputnames(::MMC)                      = (:i_dc, :iΔ_d, :iΔ_q) 
 elecinputnames(c::MMC)                   = inputnames(c)
@@ -59,7 +54,7 @@ elecinputnames(c::MMC)                   = inputnames(c)
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFL) = (statenames(c.outer_active)..., statenames(c.outer_reactive)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFL) = (; initialvalues(c.outer_active)..., initialvalues(c.outer_reactive)..., initialvalues(c.occ)...) 
+initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_active)..., initialvalues(c.outer_reactive)..., initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
 
 @with_kw struct ΔdqControlGFM{R<:AbstractOuterReactiveControl, V<:AbstractVirtualImpedance, I<:AbstractInnerCurrentControl, } <: AbstractΔdqControl 
     outer_reactive::R
@@ -67,14 +62,15 @@ initialvalues(c::ΔdqControlGFL) = (; initialvalues(c.outer_active)..., initialv
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.vi)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFM) = (; initialvalues(c.outer_reactive)..., initialvalues(c.vi)..., initialvalues(c.occ)...) 
+initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive)..., initialvalues(c.vi)..., initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
 struct DeltaControlInputs
     meas
     sync
 end
-# TODO: fix this (these functions shouldn't exist)
-out_q_control(::ΔdqControlGFL, out) = (; iΔ_q_ref = out)
-out_q_control(::ΔdqControlGFM, out) = (; Vⱽd_ref = out)
+
+output_outer_reactive_control(conv::AbstractMMC, out) = output_outer_reactive_control(conv.delta_control, out)
+output_outer_reactive_control(::ΔdqControlGFL, out) = (iΔ_q_ref = out,)
+output_outer_reactive_control(::ΔdqControlGFM, out) = (vgfm_d_ref = out,)
 
 @with_kw struct ΣdqzControlTEC{E<:AbstractEnergyControl, I1<:AbstractInnerCurrentControl, I2<:AbstractInnerCurrentControl} <: AbstractΣdqzControl
     tec::E      # Total Energy Control
@@ -126,26 +122,25 @@ function state_space!(F, x, inputs, b::ΣdqzControlTEC, c::MMC)
     return merge(out_ccsc, out_zscc)
 end
 
-function state_space!(F, x, inputs, b::ΔdqControlGFL, c::MMC)
+function state_space!(F, x, inputs::DeltaControlInputs, b::ΔdqControlGFL, c::MMC)
     # -- Outer Loop -------------------------------------------------------------------------------
     out_active, i = run_block!(F, x, OuterActiveControlInputs(inputs.meas, inputs.sync), b.outer_active, c, 1)
     out_reactive, i = run_block!(F, x, inputs.meas, b.outer_reactive, c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_occ, _= run_block!(F, x, (merge(out_active, out_reactive), inputs.meas), b.occ, c, i)
+    out_occ, _= run_block!(F, x, (inputs.meas, inputs.sync, (;out_active..., out_reactive...)), b.occ, c, i)
 
     return out_occ
 end
 
-function state_space!(F, x, inputs, b::ΔdqControlGFM, c::MMC)
+function state_space!(F, x, inputs::DeltaControlInputs, b::ΔdqControlGFM, c::MMC)
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_reactive, i = run_block!(F, x, inputs, b.outer_reactive, c, 1)
-    inputs = merge(inputs, out_reactive)
+    out_reactive, i = run_block!(F, x, inputs.meas, b.outer_reactive, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_vi, i = run_block!(F, x, inputs, b.vi, c, i)
-    inputs = merge(inputs, out_vi)
-    out_occ, _= run_block!(F, x, inputs, b.occ, c, i)
+    out_vi, i = run_block!(F, x, (inputs.meas, inputs.sync, out_reactive), b.vi, c, i)
+
+    out_occ, _= run_block!(F, x, (inputs.meas, inputs.sync, out_vi), b.occ, c, i)
 
     return out_occ
 end
@@ -179,15 +174,15 @@ function input_signals(c::MMC, x, inputs)
         v_dc = inputs.v_dc,
         i_d = i.d,
         i_q = i.q,
-        i_dc = 3 * x.iΣz,
+        i_dc = 3 * x.iΣ_z,
         θ = θ
     )
 end
 
 function outputequations!(F, x, y, inputs, c::MMC)
     # NB: All electrical state variables are in grid dq frame (and not converter frame)
-    (; iΣz, iΔ_d, iΔ_q)  = x
-    F[1:3] = [3*iΣz, iΔ_d, iΔ_q]
+    (; iΣ_z, iΔ_d, iΔ_q)  = x
+    F[1:3] = [3*iΣ_z, iΔ_d, iΔ_q]
 end
 
 

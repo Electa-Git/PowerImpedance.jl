@@ -10,7 +10,8 @@ no-synchronization pass-through and a filtered PLL.
 
 export AbstractSynchronization,
        NoSynchronization,
-       PLLSynchronization
+       PLLSynchronization,
+       VSEWithDamping
 
 """
 Abstract supertype for TLC-compatible synchronization blocks.
@@ -105,7 +106,7 @@ $(SIGNATURES)
 function state_space!(F, x, meas, block::PLLSynchronization, conv::AbstractConverter)
     n = size(block.filter.A, 1)
     xf = collect(getfield(x, Symbol("v_q_pll_f_x$i")) for i in 1:n)
-    vG_d_g_f, vG_q_g_f = inverse_frame_transform(meas.vG_d_f, meas.vG_q_f, x.Δθ_pll)
+    vG_d_g_f, vG_q_g_f = inverse_frame_transform(meas.vG_d_f, meas.vG_q_f, syncangle(conv.sync, x))
     _, vG_q_pll_f = frame_transform(vG_d_g_f, vG_q_g_f, x.Δθ_pll)
     u = [vG_q_pll_f]
     # u = [meas.vG_q_f] #TODO change this (this is just a test)
@@ -123,3 +124,40 @@ function state_space!(F, x, meas, block::PLLSynchronization, conv::AbstractConve
 
     return (ω_c = Δω + 1,)
 end
+
+
+@with_kw struct VSEWithDamping <: AbstractSynchronization   # VSE = Virtual Swing Equation
+    H::Float64 = 5          # Virtual Inertia [s]
+    K_d::Float64 = 100      # Damping coefficient [-]
+    K_ω::Float64 = 10       # Droop coefficient [-]
+    P_ac_ref::Float64 = 0   # Active power reference [pu]
+    ω_ref::Float64 = 1      # Angular frequency reference [pu]
+    pll::PLLSynchronization # PLL
+end
+statenames(b::VSEWithDamping) = (statenames(b.pll)..., :ω_VSM, :Δθ_VSM) # Careful: the order matters!
+initialvalues(b::VSEWithDamping, setpoint_pu) = (; initialvalues(b.pll)..., (; ω_VSM=1, Δθ_VSM=setpoint_pu.θac)...)
+
+function state_space!(F, x, meas, b::VSEWithDamping, conv::AbstractConverter)
+    i = 1
+    n = n_states(b.pll)
+
+    out_pll = state_space!(@view(F[i:i+n-1]), x, meas, b.pll, conv)
+    i += n
+
+    ω_PLL = out_pll.ω_c
+    
+    ω_VSM = x.ω_VSM
+
+    P_ac_f = meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f
+    
+    # dω_VSM / dt = ...
+    F[i] = (b.P_ac_ref - P_ac_f - b.K_d * (ω_VSM-ω_PLL) - b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H) 
+
+    # dΔθ_VSM/dt
+    F[i+1] = conv.elec.ωbase * (ω_VSM-1)
+    
+    return (; ω_c = ω_VSM)
+end
+
+syncangle(::VSEWithDamping, x) = x.Δθ_VSM
+       
