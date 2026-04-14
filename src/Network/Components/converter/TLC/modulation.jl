@@ -107,7 +107,7 @@ $(SIGNATURES)
 The generic delay output is phase-compensated by `ωbase * timeDelay` before being
 returned to the electrical plant.
 """
-function state_space!(F, x, (meas, iloop), block::DelayModulation; conv::AbstractTLC)
+function state_space!(F, x, (meas, iloop), block::DelayModulation, conv::AbstractTLC)
     
     md_c = (2 / meas.v_dc_f) * iloop.vMΔd_ref_c
     mq_c = (2 / meas.v_dc_f) * iloop.vMΔq_ref_c 

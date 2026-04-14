@@ -106,10 +106,8 @@ $(SIGNATURES)
 function state_space!(F, x, meas, block::PLLSynchronization, conv::AbstractConverter)
     n = size(block.filter.A, 1)
     xf = collect(getfield(x, Symbol("v_q_pll_f_x$i")) for i in 1:n)
-    vG_d_g_f, vG_q_g_f = inverse_frame_transform(meas.vG_d_f, meas.vG_q_f, syncangle(conv.sync, x))
-    _, vG_q_pll_f = frame_transform(vG_d_g_f, vG_q_g_f, x.Δθ_pll)
+    _, vG_q_pll_f = frame_transform(meas.vG_d_f, meas.vG_q_f, (x.Δθ_pll - syncangle(conv.sync, x))) # Ensuring that voltage is in PLL reference frame (it is not the converter reference frame in GFM)
     u = [vG_q_pll_f]
-    # u = [meas.vG_q_f] #TODO change this (this is just a test)
 
     dx_f = block.filter.A * xf + block.filter.B * u
     v_pll = (block.filter.C * xf + block.filter.D * u)[1]
@@ -135,7 +133,7 @@ end
     pll::PLLSynchronization # PLL
 end
 statenames(b::VSEWithDamping) = (statenames(b.pll)..., :ω_VSM, :Δθ_VSM) # Careful: the order matters!
-initialvalues(b::VSEWithDamping, setpoint_pu) = (; initialvalues(b.pll)..., (; ω_VSM=1, Δθ_VSM=setpoint_pu.θac)...)
+initialvalues(b::VSEWithDamping; setpoint_pu) = (; initialvalues(b.pll)..., (; ω_VSM=1, Δθ_VSM=setpoint_pu.θ_ac)...)
 
 function state_space!(F, x, meas, b::VSEWithDamping, conv::AbstractConverter)
     i = 1

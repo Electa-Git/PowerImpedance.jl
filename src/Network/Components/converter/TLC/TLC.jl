@@ -60,14 +60,14 @@ Return all TLC state names in model execution order.
 $(SIGNATURES)
 """
 statenames(c::TLC) = (
-    statenames(c.elec)...,
     statenames(c.meas)...,
     statenames(c.sync)...,
     statenames(c.outerActive)...,
     statenames(c.outerReactive)...,
     statenames(c.innerVoltage)...,
     statenames(c.innerCurrent)...,
-    statenames(c.mod)...
+    statenames(c.mod)...,
+    statenames(c.elec)...
 )
 
 """
@@ -137,7 +137,7 @@ function pftoinputs(c::TLC, setpoint::SetPoint)
     p_dc = setpoint.Pdc / c.elec.Sbase
     
     return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),
-        SetpointPU(p_ac, q_ac, p_dc, setpoint.θac) #TODO per-unitize
+        SetpointPU(p_ac, q_ac, p_dc, setpoint.θac)
 end
 
 """
@@ -207,7 +207,7 @@ solve the operating point.
 """
 function equilibrium_state_space!(F, x, inputs, c::TLC, block::OuterActiveVdcControl, setpoint::SetPoint)
     y = state_space!(F, x, inputs, c)
-    idx_ξvdc = n_states(c.elec) + n_states(c.meas) + n_states(c.sync) + 1
+    idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
     i_dc_ref = (setpoint.Pdc / c.elec.Sbase) / inputs.v_dc
     F[idx_ξvdc] = i_dc_ref - y.elec.i_dc
     return y
@@ -230,7 +230,7 @@ function state_space!(F, x, inputs, c::TLC)
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
     )
-    i = n_states(c.elec) + 1
+    i = 1
 
     n = n_states(c.meas)
     meas = state_space!(@view(F[i:i+n-1]), x, sig_in, c.meas, c)
@@ -257,9 +257,11 @@ function state_space!(F, x, inputs, c::TLC)
     i += n
 
     n = n_states(c.mod)
-    mod = state_space!(@view(F[i:i+n-1]), x, (meas, iloop), c.mod; conv=c)
+    mod = state_space!(@view(F[i:i+n-1]), x, (meas, iloop), c.mod, c)
+    i += n
 
-    elec = state_space!(@view(F[1:n_states(c.elec)]), x, (elec_in, mod), c.elec, c)
+    n = n_states(c.elec)
+    elec = state_space!(@view(F[i:i+n-1]), x, (elec_in, mod), c.elec, c)
 
     return (;
         sig_in,

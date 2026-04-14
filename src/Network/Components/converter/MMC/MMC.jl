@@ -31,7 +31,7 @@ include("modulation.jl")
 ### MMC ###
 @with_kw struct MMC{S<:AbstractSynchronization, Δ<:AbstractΔdqControl, Σ<:AbstractΣdqzControl, Mod<:AbstractModulationMMC} <: AbstractMMC
     #### Blocks composing the MMC model:
-    meas::Measurement #TODO change to MMC
+    meas::Measurement
     sync::S
     delta_control::Δ
     sigma_control::Σ
@@ -39,11 +39,11 @@ include("modulation.jl")
     elec::ElectricalMMC
 end
 
-statenames(c::MMC)                      = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.elec)...) 
-initialvalues(c::MMC; inputs, setpoint_pu) = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
-inputnames(::MMC)                       = (:v_dc, :vG_d, :vG_q)
-outputnames(::MMC)                      = (:i_dc, :iΔ_d, :iΔ_q) 
-elecinputnames(c::MMC)                   = inputnames(c)
+statenames(c::MMC)                          = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.elec)...) 
+initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
+inputnames(::MMC)                           = (:v_dc, :vG_d, :vG_q)
+outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q) 
+elecinputnames(c::MMC)                      = inputnames(c)
 
 
 ### High level structures ###
@@ -181,8 +181,7 @@ end
 
 function outputequations!(F, x, y, inputs, c::MMC)
     # NB: All electrical state variables are in grid dq frame (and not converter frame)
-    (; iΣ_z, iΔ_d, iΔ_q)  = x
-    F[1:3] = [3*iΣ_z, iΔ_d, iΔ_q]
+    F[1:3] = [3*x.iΣ_z, x.iΔ_d, x.iΔ_q]
 end
 
 

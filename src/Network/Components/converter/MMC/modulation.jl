@@ -14,14 +14,10 @@ function state_space!(F, x, inputs::ModulationInputs, b::UncompensatedModulation
     (; vMΔd_ref_c, vMΔq_ref_c) = inputs.vMΔ_ref_c
     (; vMΣd_ref_c, vMΣq_ref_c, vMΣz_ref) = inputs.vMΣ_ref_c
 
-    Δθ_c = syncangle(conv.sync, x)
     # First, the references are converter to grid reference framoe
-    I_θ = [cos(Δθ_c) sin(Δθ_c); -sin(Δθ_c) cos(Δθ_c)];
-    I_2θ = [cos(-2Δθ_c) sin(-2Δθ_c); -sin(-2Δθ_c) cos(-2Δθ_c)];
-
-    vMΔd_ref, vMΔq_ref = I_θ * [vMΔd_ref_c, vMΔq_ref_c]
-    vMΣd_ref, vMΣq_ref = I_2θ * [vMΣd_ref_c, vMΣq_ref_c] # Zero sequence is reference frame independent, so not transformed
-
+    Δθ_c = syncangle(conv.sync, x)
+    vMΔd_ref, vMΔq_ref = inverse_frame_transform(vMΔd_ref_c, vMΔq_ref_c, Δθ_c)
+    vMΣd_ref, vMΣq_ref = inverse_frame_transform(vMΣd_ref_c, vMΣq_ref_c, -2*Δθ_c) # Zero sequence is reference frame independent, so not transformed
 
     # Δ variables multiplied by -1 * baseConv1 * 2/v_dc_f
     mΔd = -conv.elec.baseConv1 * 2/v_dc_f * vMΔd_ref 
@@ -41,15 +37,13 @@ statenames(::CompensatedModulation) = (;)
 
 function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
     (; vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x
-    (;Δθ_c, 
-        vMΔd_ref_c, vMΔq_ref_c, vMΣd_ref_c, vMΣq_ref_c, vMΣz_ref) = inputs
+    (; vMΔd_ref_c, vMΔq_ref_c) = inputs.vMΔ_ref_c
+    (; vMΣd_ref_c, vMΣq_ref_c, vMΣz_ref) = inputs.vMΣ_ref_c
     
     # First, the references are converter to grid reference framoe
-    I_θ = [cos(Δθ_c) sin(Δθ_c); -sin(Δθ_c) cos(Δθ_c)];
-    I_2θ = [cos(-2Δθ_c) sin(-2Δθ_c); -sin(-2Δθ_c) cos(-2Δθ_c)];
-
-    vMΔd_ref, vMΔq_ref = I_θ * [vMΔd_ref_c, vMΔq_ref_c]
-    vMΣd_ref, vMΣq_ref = I_2θ * [vMΣd_ref_c, vMΣq_ref_c] # Zero sequence is reference frame independent, so not transformed
+    Δθ_c = syncangle(conv.sync, x)
+    vMΔd_ref, vMΔq_ref = inverse_frame_transform(vMΔd_ref_c, vMΔq_ref_c, Δθ_c)
+    vMΣd_ref, vMΣq_ref = inverse_frame_transform(vMΣd_ref_c, vMΣq_ref_c, -2*Δθ_c) # Zero sequence is reference frame independent, so not transformed
 
     VΣΔ_CmdqZ = 1/4 * [ 2 * vCΣ_z       0              2 * vCΣ_d               vCΔ_d + vCΔ_Zd       vCΔ_Zq - vCΔ_q       vCΔ_d       vCΔ_q
                         0              2 * vCΣ_z       2 * vCΣ_q               -vCΔ_q - vCΔ_Zq      vCΔ_Zd - vCΔ_d       vCΔ_q       -vCΔ_d

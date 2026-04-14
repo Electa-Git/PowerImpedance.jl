@@ -62,11 +62,11 @@ Initialize inner-current PI integrator states.
 $(SIGNATURES)
 """
 function initialvalues(block::InnerCurrentPIControl; inputs, setpoint_pu=SetPoint(), conv::AbstractConverter)
-    iΔ_d, iΔ_q = initialvalues(conv.elec; inputs, setpoint_pu)
+    #iΔ_d, iΔ_q = initialvalues(conv.elec; inputs, setpoint_pu)
 
     return (
-        ξ_id = elec_resistance(conv.elec) * iΔ_d,
-        ξ_iq = elec_resistance(conv.elec) * iΔ_q
+        ξ_id = 0,#lec_resistance(conv.elec) * iΔ_d,
+        ξ_iq = 0#elec_resistance(conv.elec) * iΔ_q
     )
 end
 
