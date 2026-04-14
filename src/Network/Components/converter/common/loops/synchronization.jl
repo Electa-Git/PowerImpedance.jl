@@ -8,19 +8,19 @@ used by downstream outer and inner loops. The current implementations cover a
 no-synchronization pass-through and a filtered PLL.
 =#
 
-export AbstractSynchronizationTLC,
+export AbstractSynchronization,
        NoSynchronization,
        PLLSynchronization
 
 """
 Abstract supertype for TLC-compatible synchronization blocks.
 """
-abstract type AbstractSynchronizationTLC <: AbstractStateSpace end
+abstract type AbstractSynchronization <: AbstractStateSpace end
 
 """
 Synchronization block that fixes the control frame to the stationary frame.
 """
-struct NoSynchronization <: AbstractSynchronizationTLC end
+struct NoSynchronization <: AbstractSynchronization end
 
 """
 Return state names for no synchronization.
@@ -41,13 +41,7 @@ Return nominal synchronization outputs without state equations.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, meas, block::NoSynchronization; conv::AbstractTLC)
-    return (
-        θ_sync = 0.0,
-        ω_sync = 1.0,
-        Δω_sync = 0.0,
-    )
-end
+state_space!(F, x, meas, block::NoSynchronization; conv::AbstractConverter) = (ω_c = 1.0,)
 
 """
 Phase-locked-loop synchronization block.
@@ -58,7 +52,7 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-struct PLLSynchronization{Filter<:AbstractMeasurementFilter} <: AbstractSynchronizationTLC
+struct PLLSynchronization{Filter<:AbstractMeasurementFilter} <: AbstractSynchronization
     pi_ctrl::PIControl
     filter::Filter
 end
@@ -87,7 +81,7 @@ Return the PLL angle used before measurement filtering.
 
 $(SIGNATURES)
 """
-syncangle(::PLLSynchronization, x) = x.θ_pll
+syncangle(::PLLSynchronization, x) = x.Δθ_pll
 
 """
 Return PLL state names.
@@ -99,7 +93,7 @@ function statenames(block::PLLSynchronization)
     return (
         ntuple(i -> Symbol("v_q_pll_f_x$i"), n)...,
         :ξ_pll,
-        :θ_pll,
+        :Δθ_pll,
     )
 end
 
@@ -108,10 +102,13 @@ Evaluate PLL filter, PI integrator, and angle state equations.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, meas, block::PLLSynchronization; conv::AbstractTLC)
+function state_space!(F, x, meas, block::PLLSynchronization, conv::AbstractConverter)
     n = size(block.filter.A, 1)
     xf = collect(getfield(x, Symbol("v_q_pll_f_x$i")) for i in 1:n)
-    u = [meas.v_q_f]
+    vG_d_g_f, vG_q_g_f = inverse_frame_transform(meas.vG_d_f, meas.vG_q_f, x.Δθ_pll)
+    _, vG_q_pll_f = frame_transform(vG_d_g_f, vG_q_g_f, x.Δθ_pll)
+    u = [vG_q_pll_f]
+    # u = [meas.vG_q_f] #TODO change this (this is just a test)
 
     dx_f = block.filter.A * xf + block.filter.B * u
     v_pll = (block.filter.C * xf + block.filter.D * u)[1]
@@ -122,12 +119,7 @@ function state_space!(F, x, meas, block::PLLSynchronization; conv::AbstractTLC)
     end
 
     F[n + 1] = -block.pi_ctrl.Ki * v_pll
-    F[n + 2] = conv.elec.ω₀ * Δω
+    F[n + 2] = conv.elec.ωbase * Δω
 
-    return (
-        v_pll = v_pll,
-        θ_sync = x.θ_pll,
-        ω_sync = 1.0 + Δω,
-        Δω_sync = Δω,
-    )
+    return (ω_c = Δω + 1,)
 end

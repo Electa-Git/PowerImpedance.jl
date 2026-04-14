@@ -33,7 +33,7 @@ Return zero modulation commands.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, sync, vloop, block::NoInnerCurrentControl; conv::AbstractTLC) =
+state_space!(F, x, meas, sync, vloop, block::NoInnerCurrentControl; conv::AbstractConverter) =
     (; m_d = 0.0, m_q = 0.0)
 
 """
@@ -61,17 +61,13 @@ Initialize inner-current PI integrator states.
 
 $(SIGNATURES)
 """
-function initialvalues(block::InnerCurrentPIControl; inputs, setpoint=SetPoint(), kwargs...)
+function initialvalues(block::InnerCurrentPIControl; inputs, setpoint_pu=SetPoint(), kwargs...)
     conv = kwargs[:conv]
-    i0 = initialvalues(conv.elec; inputs, setpoint)
-
-    vACbase = conv.elec.vACbase_LL_RMS * sqrt(2 / 3)
-    zACbase = (3 / 2) * vACbase^2 / conv.elec.Sbase
-    Rr = conv.elec.Rᵣ / zACbase
+    i0 = initialvalues(conv.elec; inputs, setpoint_pu)
 
     return (
-        ξ_id = Rr * i0.i_d,
-        ξ_iq = Rr * i0.i_q
+        ξ_id = conv.elec.Rᵣ * i0.i_d,
+        ξ_iq = conv.elec.Rᵣ * i0.i_q
     )
 end
 
@@ -85,37 +81,28 @@ $(SIGNATURES)
 The method writes integrator derivatives and returns current errors plus
 stationary-frame modulation commands.
 """
-function state_space!(F, x, meas, sync, vloop, block::InnerCurrentPIControl; conv::AbstractTLC)
-    i_d_ref = vloop.i_d_ref
-    i_q_ref = vloop.i_q_ref
+function state_space!(F, x, meas, sync, vloop, block::InnerCurrentPIControl; conv::AbstractConverter)
+    i_d_ref = vloop.iΔ_d_ref
+    i_q_ref = vloop.iΔ_q_ref
 
     i_d = meas.i_d_f
     i_q = meas.i_q_f
-    v_d = meas.v_d_f
-    v_q = meas.v_q_f
-    Δω = sync.Δω_sync
+    v_d = meas.vG_d_f
+    v_q = meas.vG_q_f
 
-    vACbase = conv.elec.vACbase_LL_RMS * sqrt(2 / 3)
-    zACbase = (3 / 2) * vACbase^2 / conv.elec.Sbase
-    lACbase = zACbase / conv.elec.ω₀
-
-    Lᵣ = conv.elec.Lᵣ / lACbase
+    Lᵣ = conv.elec.Lᵣ 
 
     e_d = i_d_ref - i_d
     e_q = i_q_ref - i_q
     F[1] = block.pi_ctrl.Ki * e_d
     F[2] = block.pi_ctrl.Ki * e_q
 
-    md_c = 2 * (x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * (1 + Δω) * i_q + v_d) / meas.vdc_f
-    mq_c = 2 * (x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * (1 + Δω) * i_d + v_q) / meas.vdc_f
+    md_c = 2 * (x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * sync.ω_c * i_q + v_d) / meas.v_dc_f
+    mq_c = 2 * (x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * sync.ω_c * i_d + v_q) / meas.v_dc_f
 
-    m = inverse_frame_transform(md_c, mq_c, sync.θ_sync)
+    m = inverse_frame_transform(md_c, mq_c, syncangle(conv.sync, x))
 
     return (
-        i_d_ref = i_d_ref,
-        i_q_ref = i_q_ref,
-        e_d = e_d,
-        e_q = e_q,
         m_d = m.d,
         m_q = m.q
     )

@@ -4,27 +4,23 @@ struct ZeroSequenceCurrentControl <: AbstractInnerCurrentControl
     pi_control::PIControl
 end
 statenames(::ZeroSequenceCurrentControl) = (:ξ_iΣz,)
-initialvalues(::ZeroSequenceCurrentControl, inputs) = (;) 
 
 struct CirculatingCurrentSuppressionControl <: AbstractInnerCurrentControl
     pi_control::PIControl
 end
 statenames(::CirculatingCurrentSuppressionControl) = (:ξ_iΣd, :ξ_iΣq)
-initialvalues(::CirculatingCurrentSuppressionControl, inputs) = (;) 
 
 struct OutputCurrentControl <: AbstractInnerCurrentControl 
     pi_control::PIControl
 end
-statenames(::OutputCurrentControl) = (:ξ_iΔd, :ξ_iΔq)
-initialvalues(::OutputCurrentControl, inputs) =  (;)
-
+statenames(::OutputCurrentControl) = (:ξ_iΔ_d, :ξ_iΔ_q)
 
 
 ### Lower level structures ###
 #TODO: update the equations in comments to match the new version (including taking into account that modulation is now done in a specific function)
 function state_space!(F, x, inputs, b::CirculatingCurrentSuppressionControl, conv::AbstractMMC) 
     (; ξ_iΣd, ξ_iΣq, iΣd, iΣq) = x
-    Δθ_c = inputs.Δθ_c
+    Δθ_c = syncangle(conv.sync, x)
     iΣd_ref, iΣq_ref = 0, 0 # TODO add this as inputs/parameters if needed
 
     T_2θ = [cos(-2Δθ_c) -sin(-2Δθ_c); sin(-2Δθ_c) cos(-2Δθ_c)];
@@ -44,35 +40,33 @@ end
 
 function state_space!(F, x, inputs, b::ZeroSequenceCurrentControl, conv::AbstractMMC)
     (; ξ_iΣz, iΣz) = x
-    (;iΣz_ref, Vdc)  = inputs
+    (;iΣz_ref, v_dc_f)  = inputs
 
     F[1] = b.pi_control.Ki * (iΣz_ref - iΣz);
     # vMΣz_ref = 2/Vdc*(Vdc/2 - Kp_Σz*(iΣz_ref - iΣz) - Ki_Σz * xiΣz),
-    return ( vMΣz_ref = (Vdc/2 - b.pi_control.Kp *(iΣz_ref - iΣz) - ξ_iΣz), )
+    return ( vMΣz_ref = (v_dc_f/2 - b.pi_control.Kp *(iΣz_ref - iΣz) - ξ_iΣz), )
 end
 
 
-function state_space!(F, x, inputs, b::OutputCurrentControl, conv::AbstractMMC) 
-    (; ξ_iΔd, ξ_iΔq, iΔd, iΔq) = x
-    (; iΔd_ref, iΔq_ref, Vᴳd, Vᴳq, Δθ_c) = inputs 
+function state_space!(F, x, (inputs, meas), b::OutputCurrentControl, conv::AbstractMMC) 
+    (; ξ_iΔ_d, ξ_iΔ_q, iΔ_d, iΔ_q) = x
+    (; iΔ_d_ref, iΔ_q_ref) = inputs 
+    (; vG_d_f, vG_q_f) = meas
+    Δθ_c = syncangle(conv.sync, x)
 
     T_θ = [cos(Δθ_c) -sin(Δθ_c); sin(Δθ_c) cos(Δθ_c)]
-    iΔd_c, iΔq_c = T_θ * [iΔd, iΔq]
-    Vᴳd_c, Vᴳq_c = T_θ * [Vᴳd; Vᴳq] * conv.elec.turnsRatio
+    iΔ_d_c, iΔ_q_c = T_θ * [iΔ_d, iΔ_q]
 
-    Vᴳd_fc = Vᴳd_c # if voltage is filtered, change this #TODO
-    Vᴳq_fc = Vᴳq_c # if voltage is filtered!
-
-    F[1] = b.pi_control.Ki * (iΔd_ref - iΔd_c)
-    F[2] = b.pi_control.Ki * (iΔq_ref - iΔq_c)
+    F[1] = b.pi_control.Ki * (iΔ_d_ref - iΔ_d_c)
+    F[2] = b.pi_control.Ki * (iΔ_q_ref - iΔ_q_c)
     
     # TODO: add omega in these equations! (here, uses approximation w=1)
-    # vMΔd_ref = 2/Vdc*(Ki_Δ * xiΔd + Kp_Δ * (iΔd_ref -  iΔd) + Leqac*iΔq + Vᴳd)
-    # vMΔq_ref = 2/Vdc*(Ki_Δ * xiΔq + Kp_Δ * (iΔq_ref -  iΔq) - Leqac*iΔd + Vᴳq)
-    vMΔd_ref_c = ( ξ_iΔd +
-                b.pi_control.Kp * (iΔd_ref - iΔd_c) + conv.elec.Lₑ * iΔq_c + 1*Vᴳd_fc);
-    vMΔq_ref_c = (ξ_iΔq +
-                b.pi_control.Kp * (iΔq_ref - iΔq_c) - conv.elec.Lₑ * iΔd_c + 1*Vᴳq_fc);
+    # vMΔd_ref = 2/Vdc*(Ki_Δ * xiΔ_d + Kp_Δ * (iΔ_d_ref -  iΔ_d) + Leqac*iΔ_q + vG_d)
+    # vMΔq_ref = 2/Vdc*(Ki_Δ * xiΔ_q + Kp_Δ * (iΔ_q_ref -  iΔ_q) - Leqac*iΔ_d + vG_q)
+    vMΔd_ref_c = ( ξ_iΔ_d +
+                b.pi_control.Kp * (iΔ_d_ref - iΔ_d_c) + conv.elec.Lₑ * iΔ_q_c + 1*vG_d_f);
+    vMΔq_ref_c = (ξ_iΔ_q +
+                b.pi_control.Kp * (iΔ_q_ref - iΔ_q_c) - conv.elec.Lₑ * iΔ_d_c + 1*vG_q_f);
 
     
     # Output are in converter reference frame!

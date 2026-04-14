@@ -4,13 +4,13 @@
 Shared converter measurement blocks.
 
 The measurement layer converts raw converter signals into filtered signals used
-by synchronization and control loops. The composite `MeasurementTLC` type is
+by synchronization and control loops. The composite `Measurement` type is
 currently named for TLC compatibility, but the individual `MeasurementSignal`
 building block is topology-independent.
 =#
 
 export MeasurementSignal,
-       MeasurementTLC
+       Measurement
 
 ############################  Single-signal measurement block  ############################
 
@@ -60,7 +60,7 @@ Return steady-state initial filter states for a measured signal.
 
 $(SIGNATURES)
 """
-function initialvalues(m::MeasurementSignal; inputs=nothing, kwargs...)
+function initialvalues(m::MeasurementSignal; inputs=nothing)
     names = statenames(m)
     nx = size(m.filter.A, 1)
 
@@ -95,7 +95,7 @@ $(SIGNATURES)
 For `NoFilter`, this is a zero-state pass-through and returns the raw input
 under the filtered output name.
 """
-function state_space!(F, x, inputs, m::MeasurementSignal; kwargs...)
+function state_space!(F, x, inputs, m::MeasurementSignal)
     nx = size(m.filter.A, 1)
 
     if nx == 0
@@ -137,13 +137,13 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-struct MeasurementTLC <: AbstractStateSpace
-    v_d::MeasurementSignal
-    v_q::MeasurementSignal
-    vdc::MeasurementSignal
+struct Measurement <: AbstractStateSpace
+    vG_d::MeasurementSignal
+    vG_q::MeasurementSignal
+    v_dc::MeasurementSignal
     i_d::MeasurementSignal
     i_q::MeasurementSignal
-    idc::MeasurementSignal
+    i_dc::MeasurementSignal
     θ::MeasurementSignal
 end
 
@@ -154,23 +154,23 @@ $(SIGNATURES)
 
 # Details
 
-The `vac` filter is applied to `v_d` and `v_q`; the `iac` filter is applied to
-`i_d` and `i_q`; scalar filters are used for `vdc`, `idc`, and `θ`.
+The `v_ac` filter is applied to `vG_d` and `vG_q`; the `i_ac` filter is applied to
+`i_d` and `i_q`; scalar filters are used for `v_dc`, `i_dc`, and `θ`.
 """
-function MeasurementTLC(;
-    vac::AbstractMeasurementFilter = NoFilter(),
-    iac::AbstractMeasurementFilter = NoFilter(),
-    vdc::AbstractMeasurementFilter = NoFilter(),
-    idc::AbstractMeasurementFilter = NoFilter(),
+function Measurement(;
+    v_ac::AbstractMeasurementFilter = NoFilter(),
+    i_ac::AbstractMeasurementFilter = NoFilter(),
+    v_dc::AbstractMeasurementFilter = NoFilter(),
+    i_dc::AbstractMeasurementFilter = NoFilter(),
     θ::AbstractMeasurementFilter   = NoFilter()
 )
-    return MeasurementTLC(
-        MeasurementSignal(:v_d, vac),
-        MeasurementSignal(:v_q, vac),
-        MeasurementSignal(:vdc, vdc),
-        MeasurementSignal(:i_d, iac),
-        MeasurementSignal(:i_q, iac),
-        MeasurementSignal(:idc, idc),
+    return Measurement(
+        MeasurementSignal(:vG_d, v_ac),
+        MeasurementSignal(:vG_q, v_ac),
+        MeasurementSignal(:v_dc, v_dc),
+        MeasurementSignal(:i_d, i_ac),
+        MeasurementSignal(:i_q, i_ac),
+        MeasurementSignal(:i_dc, i_dc),
         MeasurementSignal(:θ,   θ)
     )
 end
@@ -182,13 +182,13 @@ Return all measurement state names in execution order.
 
 $(SIGNATURES)
 """
-statenames(m::MeasurementTLC) = (
-    statenames(m.v_d)...,
-    statenames(m.v_q)...,
-    statenames(m.vdc)...,
+statenames(m::Measurement) = (
+    statenames(m.vG_d)...,
+    statenames(m.vG_q)...,
+    statenames(m.v_dc)...,
     statenames(m.i_d)...,
     statenames(m.i_q)...,
-    statenames(m.idc)...,
+    statenames(m.i_dc)...,
     statenames(m.θ)...
 )
 
@@ -197,15 +197,15 @@ Return initial values for every measurement filter.
 
 $(SIGNATURES)
 """
-function initialvalues(m::MeasurementTLC; inputs=nothing, kwargs...)
-    return merge(
-        initialvalues(m.v_d; inputs, kwargs...),
-        initialvalues(m.v_q; inputs, kwargs...),
-        initialvalues(m.vdc; inputs, kwargs...),
-        initialvalues(m.i_d; inputs, kwargs...),
-        initialvalues(m.i_q; inputs, kwargs...),
-        initialvalues(m.idc; inputs, kwargs...),
-        initialvalues(m.θ; inputs, kwargs...)
+function initialvalues(m::Measurement; inputs=nothing)
+    return (;
+        initialvalues(m.vG_d; inputs)...,
+        initialvalues(m.vG_q; inputs)...,
+        initialvalues(m.v_dc; inputs)...,
+        initialvalues(m.i_d; inputs)...,
+        initialvalues(m.i_q; inputs)...,
+        initialvalues(m.i_dc; inputs)...,
+        initialvalues(m.θ; inputs)...
     )
 end
 
@@ -214,33 +214,33 @@ Return raw input names for the composite measurement block.
 
 $(SIGNATURES)
 """
-inputnames(::MeasurementTLC) = (:v_d, :v_q, :vdc, :i_d, :i_q, :idc, :θ)
+inputnames(::Measurement) = (:vG_d, :vG_q, :v_dc, :i_d, :i_q, :i_dc, :θ)
 
 """
 Return filtered output names for the composite measurement block.
 
 $(SIGNATURES)
 """
-outputnames(::MeasurementTLC) = (:v_d_f, :v_q_f, :vdc_f, :i_d_f, :i_q_f, :idc_f, :θ_f)
+outputnames(::Measurement) = (:vG_d_f, :vG_q_f, :v_dc_f, :i_d_f, :i_q_f, :i_dc_f, :θ_f)
 
 """
 Evaluate all measurement filters and return their filtered outputs.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, inputs, m::MeasurementTLC; kwargs...)
+function state_space!(F, x, inputs, m::Measurement, ::AbstractConverter)
     index = 1
 
-    n = n_states(m.v_d)
-    v_d = state_space!(@view(F[index:index+n-1]), x, inputs, m.v_d)
+    n = n_states(m.vG_d)
+    vG_d = state_space!(@view(F[index:index+n-1]), x, inputs, m.vG_d)
     index += n
 
-    n = n_states(m.v_q)
-    v_q = state_space!(@view(F[index:index+n-1]), x, inputs, m.v_q)
+    n = n_states(m.vG_q)
+    vG_q = state_space!(@view(F[index:index+n-1]), x, inputs, m.vG_q)
     index += n
 
-    n = n_states(m.vdc)
-    vdc = state_space!(@view(F[index:index+n-1]), x, inputs, m.vdc)
+    n = n_states(m.v_dc)
+    v_dc = state_space!(@view(F[index:index+n-1]), x, inputs, m.v_dc)
     index += n
 
     n = n_states(m.i_d)
@@ -251,14 +251,14 @@ function state_space!(F, x, inputs, m::MeasurementTLC; kwargs...)
     i_q = state_space!(@view(F[index:index+n-1]), x, inputs, m.i_q)
     index += n
 
-    n = n_states(m.idc)
-    idc = state_space!(@view(F[index:index+n-1]), x, inputs, m.idc)
+    n = n_states(m.i_dc)
+    i_dc = state_space!(@view(F[index:index+n-1]), x, inputs, m.i_dc)
     index += n
 
     n = n_states(m.θ)
     θ = state_space!(@view(F[index:index+n-1]), x, inputs, m.θ)
 
-    return merge(v_d, v_q, vdc, i_d, i_q, idc, θ)
+    return merge(vG_d, vG_q, v_dc, i_d, i_q, i_dc, θ)
 end
 
 """
@@ -266,13 +266,13 @@ Write composite measurement output equations.
 
 $(SIGNATURES)
 """
-function outputequations!(F, x, inputs, y, m::MeasurementTLC)
-    F[1] = y.v_d_f
-    F[2] = y.v_q_f
-    F[3] = y.vdc_f
+function outputequations!(F, x, inputs, y, m::Measurement)
+    F[1] = y.vG_d_f
+    F[2] = y.vG_q_f
+    F[3] = y.v_dc_f
     F[4] = y.i_d_f
     F[5] = y.i_q_f
-    F[6] = y.idc_f
+    F[6] = y.i_dc_f
     F[7] = y.θ_f
     return nothing
 end

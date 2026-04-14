@@ -29,6 +29,13 @@ abstract type AbstractMultiport <: AbstractElementModel end
    
 end
 
+struct SetpointPU # Per-unitized setpoint used internally
+    p_ac::Float64
+    q_ac::Float64
+    p_dc::Float64
+    θ_ac::Float64
+end
+
 
 @with_kw struct Limits
     #Limits 

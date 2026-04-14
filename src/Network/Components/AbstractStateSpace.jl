@@ -88,11 +88,11 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::SetPoint)
     m_eff = resolved_refs(m, setpoint)
 
     # Power flow to inputs of state_space function
-    global inputs = pftoinputs(m_eff, setpoint)
+    global inputs, setpoint_pu = pftoinputs(m_eff, setpoint)
     inputs_vec = collect(values(inputs))
 
     # Initial values
-    global init = orderedinitialvalues(m_eff; setpoint, inputs)
+    global init = orderedinitialvalues(m_eff; setpoint_pu, inputs)
 
     # Parameters for equilibirum with NonlinearSolve.jl
     p_equil = (; inputs = inputs_vec, m = m_eff, setpoint)

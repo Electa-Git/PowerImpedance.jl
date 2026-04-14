@@ -28,19 +28,19 @@ statenames(::VSEWithoutDamping) = (:ω_VSM, :Δθ_VSM)
 initialvalues(::VSEWithoutDamping, inputs) = (; ω_VSM=1, Δθ_VSM=inputs.θac)
 
 function state_space!(F, x, inputs, b::PLL, conv::AbstractMMC)
-    (; ξ_PLL, Δθ_PLL)   = x
-    (; Vᴳd, Vᴳq)        = inputs
+    (; ξ_PLL, Δθ_PLL) = x
+    (; vG_d_g, vG_q_g) = inputs
 
     T_θ_PLL = [cos(Δθ_PLL) -sin(Δθ_PLL); sin(Δθ_PLL) cos(Δθ_PLL)]
-    (_, Vᴳq_pll) = T_θ_PLL * [Vᴳd, Vᴳq] * conv.elec.turnsRatio              #TODO check if really needed to multiply by turnratio?
-    Vᴳq_pll_f = -1*Vᴳq_pll     #TODO implement filter
+    (_, vG_q_pll) = T_θ_PLL * [vG_d_g, vG_q_g] * conv.elec.turnsRatio              #TODO check if really needed to multiply by turnratio?
+    vG_q_f_pll = -1*vG_q_pll     #TODO implement filter
 
-    Δω_PLL = b.pi_control.Kp * Vᴳq_pll_f + ξ_PLL #Delta omega_pll [pu]
+    Δω_PLL = b.pi_control.Kp * vG_q_f_pll + ξ_PLL #Delta omega_pll [pu]
     
-    F[1] = Vᴳq_pll_f * b.pi_control.Ki
-    F[2] = conv.elec.wbase * Δω_PLL
+    F[1] = vG_q_f_pll * b.pi_control.Ki
+    F[2] = conv.elec.ωbase * Δω_PLL
     
-    return (;Δθ_c = Δθ_PLL, ω_c = Δω_PLL + 1) # returns the synchronisation angle
+    return (; ω_c = Δω_PLL + 1) # returns the synchronisation angle
 end 
 
 function state_space!(F, x, inputs, b::VSEWithDamping, conv::AbstractMMC)
@@ -55,7 +55,7 @@ function state_space!(F, x, inputs, b::VSEWithDamping, conv::AbstractMMC)
     F[idx] =(b.P_ac_ref - P_ac_F - b.K_d * (ω_VSM-ω_PLL) - b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H) 
 
     # dΔθ_VSM/dt
-    F[idx + 1] = conv.elec.wbase * (ω_VSM-1)
+    F[idx + 1] = conv.elec.ωbase * (ω_VSM-1)
     
     return (;Δθ_c = Δθ_VSM, ω_c = ω_VSM)
 end
@@ -68,7 +68,9 @@ function state_space!(F, x, inputs, b::VSEWithoutDamping, conv::AbstractMMC)
     F[1] =(b.P_ac_ref - P_ac_F - b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H) 
 
     # dΔθ_VSM/dt
-    F[2] = conv.elec.wbase * (ω_VSM-1)
+    F[2] = conv.elec.ωbase * (ω_VSM-1)
     
     return (;Δθ_c = Δθ_VSM, ω_c = ω_VSM)
 end
+
+syncangle(::PLL, x) = x.Δθ_PLL

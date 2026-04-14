@@ -8,22 +8,23 @@ export mmc, MMC, AbstractMMC, BuildMMC,             # MMC
     TotalEnergyControl,                             # Energy
     CCVI,                                           # Inner voltage
     CirculatingCurrentSuppressionControl, ZeroSequenceCurrentControl, OutputCurrentControl,     # Inner current
-    UncompensatedModulation,                        # Modulation
+    UncompensatedModulation, CompensatedModulation,  # Modulation
 
     statenames, inputnames, initialvalues,          # Functions
     state_space!, pftoinputs
 
+
 ### Abstract types ###
-abstract type AbstractMMC                       <: AbstractStateSpace end
+abstract type AbstractMMC                       <: AbstractConverter end
 abstract type AbstractΔdqControl                <: AbstractStateSpace end
 abstract type AbstractΣdqzControl               <: AbstractStateSpace end
 
 ### Include files ###
+
 include("electrical.jl")
-include("measurement.jl")
-include("synchronization.jl")
-include("outer_active.jl")
-include("outer_reactive.jl")
+# include("synchronization.jl")
+# include("outer_active.jl")
+#include("outer_reactive.jl")
 include("energy.jl")
 include("inner_voltage.jl")
 include("inner_current.jl")
@@ -32,7 +33,25 @@ include("modulation.jl")
 
 ################## Structs #####################
 
-### Higher level structures ###
+### MMC ###
+@with_kw struct MMC{S<:AbstractSynchronization, Δ<:AbstractΔdqControl, Σ<:AbstractΣdqzControl, Mod<:AbstractModulationMMC} <: AbstractMMC
+    #### Blocks composing the MMC model:
+    meas::Measurement #TODO change to MMC
+    sync::S
+    delta_control::Δ
+    sigma_control::Σ
+    modulation::Mod                      
+    elec::ElectricalMMC
+end
+
+statenames(c::MMC)                      = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.elec)...) 
+initialvalues(c::MMC; inputs, setpoint_pu) = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync)..., initialvalues(c.delta_control)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
+inputnames(::MMC)                       = (:v_dc, :vG_d, :vG_q)
+outputnames(::MMC)                      = (:i_dc, :iΔ_d, :iΔ_q) 
+elecinputnames(c::MMC)                   = inputnames(c)
+
+
+### High level structures ###
 
 @with_kw struct ΔdqControlGFL{A<:AbstractOuterActiveControl, R<:AbstractOuterReactiveControl, I<:AbstractInnerCurrentControl, } <: AbstractΔdqControl 
     outer_active::A
@@ -40,7 +59,7 @@ include("modulation.jl")
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFL) = (statenames(c.outer_active)..., statenames(c.outer_reactive)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFL, inputs) = merge(initialvalues(c.outer_active, inputs),initialvalues(c.outer_reactive, inputs), initialvalues(c.occ, inputs)) 
+initialvalues(c::ΔdqControlGFL) = (; initialvalues(c.outer_active)..., initialvalues(c.outer_reactive)..., initialvalues(c.occ)...) 
 
 @with_kw struct ΔdqControlGFM{R<:AbstractOuterReactiveControl, V<:AbstractVirtualImpedance, I<:AbstractInnerCurrentControl, } <: AbstractΔdqControl 
     outer_reactive::R
@@ -48,10 +67,13 @@ initialvalues(c::ΔdqControlGFL, inputs) = merge(initialvalues(c.outer_active, i
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.vi)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFM, inputs) = merge(initialvalues(c.outer_reactive, inputs),initialvalues(c.vi, inputs), initialvalues(c.occ, inputs)) 
-
+initialvalues(c::ΔdqControlGFM) = (; initialvalues(c.outer_reactive)..., initialvalues(c.vi)..., initialvalues(c.occ)...) 
+struct DeltaControlInputs
+    meas
+    sync
+end
 # TODO: fix this (these functions shouldn't exist)
-out_q_control(::ΔdqControlGFL, out) = (; iΔq_ref = out)
+out_q_control(::ΔdqControlGFL, out) = (; iΔ_q_ref = out)
 out_q_control(::ΔdqControlGFM, out) = (; Vⱽd_ref = out)
 
 @with_kw struct ΣdqzControlTEC{E<:AbstractEnergyControl, I1<:AbstractInnerCurrentControl, I2<:AbstractInnerCurrentControl} <: AbstractΣdqzControl
@@ -60,50 +82,31 @@ out_q_control(::ΔdqControlGFM, out) = (; Vⱽd_ref = out)
     ccsc::I2    # Circulating Current Suppression Control
 end
 statenames(c::ΣdqzControlTEC) = (statenames(c.tec)..., statenames(c.zscc)..., statenames(c.ccsc)...)
-initialvalues(c::ΣdqzControlTEC, inputs) = merge(initialvalues(c.tec, inputs),initialvalues(c.zscc, inputs), initialvalues(c.ccsc, inputs)) 
-
-### MMC ###
-@with_kw struct MMC{Meas<:AbstractMeasurement, S<:AbstractSynchronization, Δ<:AbstractΔdqControl, Σ<:AbstractΣdqzControl, Mod<:AbstractModulationMMC} <: AbstractMMC
-    #### Blocks composing the MMC model:
-    measurements::Meas
-    synchronization::S
-    delta_control::Δ
-    sigma_control::Σ
-    modulation::Mod                      
-    elec::ElectricalMMC
-end
-
-statenames(c::MMC)                      = (statenames(c.measurements)..., statenames(c.synchronization)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.elec)...) 
-initialvalues(c::MMC;inputs, kwargs...) = merge(initialvalues(c.measurements, inputs), initialvalues(c.synchronization, inputs), initialvalues(c.delta_control, inputs), initialvalues(c.sigma_control, inputs), initialvalues(c.elec, inputs))
-inputnames(::MMC)                      = (:Vdc, :Vᴳd, :Vᴳq, :Pac ,:Qac, :Pdc, :θac)
-outputnames(::MMC)                     = (:idc, :iΔd, :iΔq) 
-elecinputnames(::MMC)                  = (:Vdc, :Vᴳd, :Vᴳq)
+initialvalues(c::ΣdqzControlTEC) = (; initialvalues(c.tec)..., initialvalues(c.zscc)..., initialvalues(c.ccsc)...) 
 
 
 ################## State-space equations #####################
 
 ### MMC ###
 
-function state_space!(F, x, inputs, conv::MMC)
+function state_space!(F, x, inputs, c::MMC)
     # -- Signal Processing ------------------------------------------------------------------------    
-    out_measurements, i = run_block!(F, x, inputs, conv.measurements, conv, 1)
-    inputs = merge(inputs, out_measurements)
-    out_synchronization, i = run_block!(F, x, inputs, conv.synchronization, conv, i)
-    inputs = merge(inputs, out_synchronization)
+    sig_in = input_signals(c, x, inputs)
+
+    meas, i = run_block!(F, x, sig_in, c.meas, c, 1)
+    sync, i = run_block!(F, x, meas, c.sync, c, i)
 
     # -- Delta and Sigma control ------------------------------------------------------------------
-    out_delta, i = run_block!(F, x, inputs, conv.delta_control, conv, i)
-    out_sigma, i = run_block!(F, x, inputs, conv.sigma_control, conv, i)
-
-    inputs = merge(inputs, out_delta, out_sigma)
+    out_delta, i = run_block!(F, x, DeltaControlInputs(meas, sync), c.delta_control, c, i)
+    out_sigma, i = run_block!(F, x, meas, c.sigma_control, c, i)
 
     # -- Modulation -------------------------------------------------------------------------------
-    # Going back to grid reference frame
-    out_modulation, _ = run_block!(F, x, inputs, conv.modulation, conv, i)
-    inputs = merge(inputs, out_modulation)
+    in = ModulationInputs(meas, out_delta, out_sigma)
+    out_modulation, i = run_block!(F, x, in, c.modulation, c, i)
 
     # -- Electrical model -------------------------------------------------------------------------
-    run_block!(F, x, inputs, conv.elec, conv, i)
+    in = ElectricalMMCInputs(out_modulation, sig_in, inputs)
+    run_block!(F, x, in, c.elec, c, i)
 
     return nothing
 end
@@ -111,39 +114,38 @@ end
 
 ### Higher level structures ###
 
-function state_space!(F, x, inputs, b::ΣdqzControlTEC, conv::MMC) 
+function state_space!(F, x, inputs, b::ΣdqzControlTEC, c::MMC) 
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_Wtot, i = run_block!(F, x, inputs, b.tec, conv, 1)
+    out_Wtot, i = run_block!(F, x, inputs, b.tec, c, 1)
     inputs = merge(inputs, out_Wtot)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_zscc, i = run_block!(F, x, inputs, b.zscc, conv, i)
-    out_ccsc, i = run_block!(F, x, inputs, b.ccsc, conv, i)
+    out_zscc, i = run_block!(F, x, inputs, b.zscc, c, i)
+    out_ccsc, i = run_block!(F, x, inputs, b.ccsc, c, i)
 
     return merge(out_ccsc, out_zscc)
 end
 
-function state_space!(F, x, inputs, b::ΔdqControlGFL, conv::MMC)
+function state_space!(F, x, inputs, b::ΔdqControlGFL, c::MMC)
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_active, i = run_block!(F, x, inputs, b.outer_active, conv, 1)
-    out_reactive, i = run_block!(F, x, inputs, b.outer_reactive, conv, i)
-    inputs = merge(inputs, out_active, out_reactive)
+    out_active, i = run_block!(F, x, OuterActiveControlInputs(inputs.meas, inputs.sync), b.outer_active, c, 1)
+    out_reactive, i = run_block!(F, x, inputs.meas, b.outer_reactive, c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_occ, _= run_block!(F, x, inputs, b.occ, conv, i)
+    out_occ, _= run_block!(F, x, (merge(out_active, out_reactive), inputs.meas), b.occ, c, i)
 
     return out_occ
 end
 
-function state_space!(F, x, inputs, b::ΔdqControlGFM, conv::MMC)
+function state_space!(F, x, inputs, b::ΔdqControlGFM, c::MMC)
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_reactive, i = run_block!(F, x, inputs, b.outer_reactive, conv, 1)
+    out_reactive, i = run_block!(F, x, inputs, b.outer_reactive, c, 1)
     inputs = merge(inputs, out_reactive)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_vi, i = run_block!(F, x, inputs, b.vi, conv, i)
+    out_vi, i = run_block!(F, x, inputs, b.vi, c, i)
     inputs = merge(inputs, out_vi)
-    out_occ, _= run_block!(F, x, inputs, b.occ, conv, i)
+    out_occ, _= run_block!(F, x, inputs, b.occ, c, i)
 
     return out_occ
 end
@@ -152,22 +154,40 @@ end
 
 function pftoinputs(c::MMC, setpoint::SetPoint) 
     Vm  = setpoint.Vac / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
-    Vdc = setpoint.Vdc / c.elec.vDC_base
-    Pac = setpoint.Pac / c.elec.Sbase
-    Qac = - setpoint.Qac / c.elec.Sbase   # TODO check if this minus sign is really needed/relevant
-    Pdc = setpoint.Pdc / c.elec.Sbase
+    v_dc = setpoint.Vdc / c.elec.vDC_base
+    p_ac = setpoint.Pac / c.elec.Sbase
+    q_ac = - setpoint.Qac / c.elec.Sbase   # TODO check if this minus sign is really needed/relevant
+    p_dc = setpoint.Pdc / c.elec.Sbase
     
-    Vᴳd = Vm * cos(setpoint.θac)   # d component of the grid voltage in the grid frame  
-    Vᴳq = -Vm * sin(setpoint.θac)  # q component of the grid voltage in the grid frame
+    vG_d = Vm * cos(setpoint.θac)   # d component of the grid voltage in the grid frame  
+    vG_q = -Vm * sin(setpoint.θac)  # q component of the grid voltage in the grid frame
 
-    return NamedTuple{inputnames(c)}((Vdc, Vᴳd, Vᴳq, Pac, Qac, Pdc, setpoint.θac))
+    return (v_dc = v_dc, vG_d = vG_d, vG_q = vG_q), 
+        SetpointPU(p_ac, q_ac, p_dc, setpoint.θac)
 end
 
+function input_signals(c::MMC, x, inputs)
+    θ = syncangle(c.sync, x)
+    v = frame_transform(inputs.vG_d, inputs.vG_q, θ)
+    i = frame_transform(x.iΔ_d, x.iΔ_q, θ)
+
+    return ( # If not speficied otherwise, all fields are in converter reference frame 
+        vG_d = v.d,
+        vG_q = v.q,
+        vG_d_g = inputs.vG_d, # grid reference frame
+        vG_q_g = inputs.vG_q, # grid reference frame
+        v_dc = inputs.v_dc,
+        i_d = i.d,
+        i_q = i.q,
+        i_dc = 3 * x.iΣz,
+        θ = θ
+    )
+end
 
 function outputequations!(F, x, y, inputs, c::MMC)
     # NB: All electrical state variables are in grid dq frame (and not converter frame)
-    (; iΣz, iΔd, iΔq)  = x
-    F[1:3] = [3*iΣz, iΔd, iΔq]
+    (; iΣz, iΔ_d, iΔ_q)  = x
+    F[1:3] = [3*iΣz, iΔ_d, iΔ_q]
 end
 
 
@@ -175,8 +195,8 @@ end
 
 function mmc(;
     elec::ElectricalMMC = ElectricalMMC(),
-    measurements::AbstractMeasurement = NoMeasurementFilter(),
-    synchronization::AbstractSynchronization,
+    meas::Measurement = Measurement(),
+    sync::AbstractSynchronization,
     delta_control::AbstractΔdqControl,
     sigma_control::AbstractΣdqzControl,
     modulation::AbstractModulationMMC = UncompensatedModulation(),
@@ -187,7 +207,7 @@ function mmc(;
     return Element(
         input_pins = 1, 
         output_pins = 2, 
-        element_model = MMC(measurements, synchronization, delta_control, sigma_control, modulation, elec), 
+        element_model = MMC(meas, sync, delta_control, sigma_control, modulation, elec), 
         transformation = false; 
         connection,
         setpoint,

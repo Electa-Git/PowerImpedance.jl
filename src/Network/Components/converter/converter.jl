@@ -1,16 +1,16 @@
-abstract type Converter end
+abstract type AbstractConverter <: AbstractStateSpace end
 
-function eval_abcd(converter :: Converter, s :: Complex)
+function eval_abcd(converter :: AbstractConverter, s :: Complex)
     return eval_y(converter, s)
 end
 
-function eval_y(converter :: Converter, s :: Complex)
+function eval_y(converter :: AbstractConverter, s :: Complex)
     Y = eval_parameters(converter, s)
     return Y
 end
 
 
-function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+function make_power_flow!(converter:: AbstractConverter, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
     
     pins = elem.pins
 

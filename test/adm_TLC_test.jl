@@ -33,17 +33,13 @@ function element_y(elem, s::Complex)
     conv = elem.element_model
     elec = conv.elec
 
-    vACbase = elec.vACbase_LL_RMS * sqrt(2 / 3)
-    iACbase = 2 * elec.Sbase / (3 * vACbase)
-    iDCbase = elec.Sbase / elec.vDCbase
-
     Y = Matrix{ComplexF64}(Y)
 
-    Y[1, :] .*= iDCbase
+    Y[1, :] .*= elec.iDCbase
     Y[:, 1] ./= elec.vDCbase
 
-    Y[2:3, :] .*= iACbase
-    Y[:, 2:3] ./= vACbase
+    Y[2:3, :] .*= elec.iACbase
+    Y[:, 2:3] ./= elec.vACbase
 
     return Y
 end
@@ -54,8 +50,6 @@ end
 
 function common_tlc_blocks(; Vm, Vdc, Lf, Rf)
     elec = PowerImpedanceACDC.ElectricalTLC(
-        Vᵈᶜ = Vdc,
-        Vₘ = Vm,
         Lᵣ = Lf,
         Rᵣ = Rf,
         Sbase = 100.0,
@@ -63,12 +57,12 @@ function common_tlc_blocks(; Vm, Vdc, Lf, Rf)
         vDCbase = Vdc,
     )
 
-    meas = PowerImpedanceACDC.MeasurementTLC(
-        vac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
-        iac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+    meas = PowerImpedanceACDC.Measurement(
+        v_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+        i_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
     )
 
-    synch = PowerImpedanceACDC.PLLSynchronization(
+    sync = PowerImpedanceACDC.PLLSynchronization(
         pi_ctrl = PowerImpedanceACDC.PIControl(
             Kp = 0.397887357729738,
             Ki = 7.957747154594767,
@@ -98,7 +92,7 @@ function common_tlc_blocks(; Vm, Vdc, Lf, Rf)
         Q_max = 1000.0,
     )
 
-    return elec, meas, synch, innerVoltage, innerCurrent, mod, limits
+    return elec, meas, sync, innerVoltage, innerCurrent, mod, limits
 end
 
 function build_case1_grid()
@@ -112,12 +106,12 @@ function build_case1_grid()
     Lf = 0.08 * Ztrafo_base / (2π * 50)
     Rf = 0.01 * 0.08 * Ztrafo_base
 
-    elec, meas, synch, innerVoltage, innerCurrent, mod, limits =
+    elec, meas, sync, innerVoltage, innerCurrent, mod, limits =
         common_tlc_blocks(; Vm, Vdc, Lf, Rf)
 
     q_ref_pu = -Qowf / elec.Sbase
     vdc_ref_pu = Vdc / elec.vDCbase
-    vac_ref_pu = Vac_peak / (elec.vACbase_LL_RMS * sqrt(2 / 3))
+    vac_ref_pu = Vac_peak / (elec.vACbase)
 
     limits = PowerImpedanceACDC.Limits(
         P_min = -100.0,
@@ -126,11 +120,11 @@ function build_case1_grid()
         Q_max = 50.0,
     )
 
-    vac_ref_pu = Vac_peak / (elec.vACbase_LL_RMS * sqrt(2 / 3))
+    vac_ref_pu = Vac_peak / (elec.vACbase)
 
     outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
-        vdc_ref = 0.0,   # legacy behavior: resolve from PF operating point
+        v_dc_ref = 0.0,   # legacy behavior: resolve from PF operating point
     )
 
     outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
@@ -138,7 +132,7 @@ function build_case1_grid()
         support = PowerImpedanceACDC.VoltageSupportLag(
             K = 5.0,
             ωc = 1 / 0.5,
-            vac_ref = vac_ref_pu,
+            v_ac_ref = vac_ref_pu,
         ),
     )
 
@@ -154,7 +148,7 @@ function build_case1_grid()
     dut = PowerImpedanceACDC.tlc(
         elec = elec,
         meas = meas,
-        synch = synch,
+        sync = sync,
         outerActive = outerActive,
         outerReactive = outerReactive,
         innerVoltage = innerVoltage,
@@ -206,7 +200,7 @@ function build_case2_grid()
     Lf = 0.08 * Ztrafo_base / (2π * 50)
     Rf = 0.01 * 0.08 * Ztrafo_base
 
-    elec, meas, synch, innerVoltage, innerCurrent, mod, limits =
+    elec, meas, sync, innerVoltage, innerCurrent, mod, limits =
         common_tlc_blocks(; Vm, Vdc, Lf, Rf)
 
     p_ref_pu = Powf / elec.Sbase
@@ -243,7 +237,7 @@ function build_case2_grid()
     dut = PowerImpedanceACDC.tlc(
         elec = elec,
         meas = meas,
-        synch = synch,
+        sync = sync,
         outerActive = outerActive,
         outerReactive = outerReactive,
         innerVoltage = innerVoltage,

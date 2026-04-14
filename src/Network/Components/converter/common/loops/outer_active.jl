@@ -8,8 +8,8 @@ current loops. Optional frequency support is represented as a nested state-space
 block so the outer loop remains composable.
 =#
 
-export AbstractOuterActiveTLC,
-       AbstractFrequencySupportTLC,
+export AbstractOuterActiveControl,
+       AbstractFrequencySupport,
        NoOuterActiveControl,
        NoFrequencySupport,
        OuterActivePowerControl,
@@ -19,17 +19,20 @@ export AbstractOuterActiveTLC,
 """
 Abstract supertype for active-power outer-loop controllers.
 """
-abstract type AbstractOuterActiveTLC <: AbstractStateSpace end
-
+abstract type AbstractOuterActiveControl <: AbstractStateSpace end
+struct OuterActiveControlInputs
+    meas
+    sync
+end
 """
 Abstract supertype for active-power support terms.
 """
-abstract type AbstractFrequencySupportTLC <: AbstractStateSpace end
+abstract type AbstractFrequencySupport <: AbstractStateSpace end
 
 """
 No active-power outer-loop control.
 """
-struct NoOuterActiveControl <: AbstractOuterActiveTLC end
+struct NoOuterActiveControl <: AbstractOuterActiveControl end
 
 """
 Return state names for no active control.
@@ -43,13 +46,13 @@ Return a zero d-axis current reference.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, sync, block::NoOuterActiveControl; conv::AbstractTLC) =
+state_space!(F, x, meas, sync, block::NoOuterActiveControl; conv::AbstractConverter) =
     (; i_d_ref = 0.0)
 
 """
 No frequency-support contribution.
 """
-struct NoFrequencySupport <: AbstractFrequencySupportTLC end
+struct NoFrequencySupport <: AbstractFrequencySupport end
 
 """
 Return state names for no frequency support.
@@ -63,7 +66,7 @@ Return zero active-power support.
 
 $(SIGNATURES)
 """
-state_space!(F, x, sync, ::NoFrequencySupport) = (; p_support = 0.0)
+state_space!(F, x, sync, ::NoFrequencySupport) = (; P_ac_support = 0.0)
 
 """
 Lagged frequency-support active-power contribution.
@@ -74,7 +77,7 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-@with_kw struct FrequencySupportLag <: AbstractFrequencySupportTLC
+@with_kw struct FrequencySupportLag <: AbstractFrequencySupport
     Kω::Float64 = 0.0
     ωc::Float64 = 0.0
 end
@@ -92,8 +95,8 @@ Evaluate the frequency-support lag equation.
 $(SIGNATURES)
 """
 function state_space!(F, x, sync, block::FrequencySupportLag)
-    F[1] = block.ωc * (-block.Kω * sync.Δω_sync - x.ξ_f_supp)
-    return (; p_support = x.ξ_f_supp)
+    F[1] = block.ωc * (-block.Kω * (sync.ω_c - 1) - x.ξ_f_supp)
+    return (; P_ac_support = x.ξ_f_supp)
 end
 
 """
@@ -105,9 +108,9 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-struct OuterActivePowerControl{S<:AbstractFrequencySupportTLC} <: AbstractOuterActiveTLC
+struct OuterActivePowerControl{S<:AbstractFrequencySupport} <: AbstractOuterActiveControl
     pi_ctrl::PIControl
-    p_ref::Float64
+    P_ac_ref::Float64
     support::S
 end
 
@@ -118,10 +121,10 @@ $(SIGNATURES)
 """
 function OuterActivePowerControl(;
     pi_ctrl::PIControl = PIControl(),
-    p_ref::Real = 0.0,
-    support::AbstractFrequencySupportTLC = NoFrequencySupport(),
+    P_ac_ref::Real = 0.0,
+    support::AbstractFrequencySupport = NoFrequencySupport(),
 )
-    return OuterActivePowerControl{typeof(support)}(pi_ctrl, Float64(p_ref), support)
+    return OuterActivePowerControl{typeof(support)}(pi_ctrl, Float64(P_ac_ref), support)
 end
 
 """
@@ -130,39 +133,26 @@ Return active-power controller state names.
 $(SIGNATURES)
 """
 function statenames(block::OuterActivePowerControl)
-    return (statenames(block.support)..., :ξ_p)
+    return (statenames(block.support)..., :ξ_P_ac)
 end
 
-"""
-Return initial values for nested frequency support.
-
-$(SIGNATURES)
-"""
-function initialvalues(block::OuterActivePowerControl; kwargs...)
-    return initialvalues(block.support; kwargs...)
-end
 
 """
 Evaluate active-power control and its support dynamics.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, meas, sync, block::OuterActivePowerControl; conv::AbstractTLC)
-    P_ac = meas.v_d_f * meas.i_d_f + meas.v_q_f * meas.i_q_f
+function state_space!(F, x, inputs::OuterActiveControlInputs, block::OuterActivePowerControl, conv::AbstractConverter)
+    meas, sync = inputs.meas, inputs.sync
+    P_ac_f = meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f
     ns = n_states(block.support)
     support = state_space!(@view(F[1:ns]), x, sync, block.support)
 
-    p_ref_eff = block.p_ref + support.p_support
-    p_error = p_ref_eff - P_ac
-    i_d_ref = block.pi_ctrl.Kp * p_error + x.ξ_p
-    F[ns + 1] = block.pi_ctrl.Ki * p_error
+    Peff_ref = block.P_ac_ref + support.P_ac_support
 
-    return (
-        p_ref = p_ref_eff,
-        P_ac = P_ac,
-        p_error = p_error,
-        i_d_ref = i_d_ref,
-    )
+    F[ns + 1] = block.pi_ctrl.Ki * (Peff_ref - P_ac_f)
+
+    return (iΔ_d_ref = block.pi_ctrl.Kp * (Peff_ref - P_ac_f) + x.ξ_P_ac, )
 end
 
 """
@@ -174,10 +164,10 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-@with_kw struct OuterActiveVdcControl <: AbstractOuterActiveTLC
+@with_kw struct OuterActiveVdcControl <: AbstractOuterActiveControl
     pi_ctrl::PIControl = PIControl()
-    vdc_ref::Float64 = 1.0
-    idc_ref::Float64 = 0.0
+    v_dc_ref::Float64 = 1.0
+    i_dc_ref::Float64 = 0.0
 end
 
 """
@@ -185,21 +175,17 @@ Return DC-voltage controller state names.
 
 $(SIGNATURES)
 """
-statenames(::OuterActiveVdcControl) = (:ξ_vdc,)
+statenames(::OuterActiveVdcControl) = (:ξ_v_dc,)
 
 """
 Evaluate DC-voltage PI control.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, meas, sync, block::OuterActiveVdcControl; conv::AbstractTLC)
-    vdc_error = block.vdc_ref - meas.vdc_f
-    i_d_ref = -(block.pi_ctrl.Kp * vdc_error + x.ξ_vdc)
-    F[1] = block.pi_ctrl.Ki * vdc_error
+function state_space!(F, x, inputs::OuterActiveControlInputs, block::OuterActiveVdcControl, conv::AbstractConverter)
+    meas, sync = inputs.meas, inputs.sync
 
-    return (
-        vdc_ref = block.vdc_ref,
-        vdc_error = vdc_error,
-        i_d_ref = i_d_ref,
-    )
+    F[1] = block.pi_ctrl.Ki * (block.v_dc_ref - meas.v_dc_f)
+
+    return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (block.v_dc_ref - meas.v_dc_f) + x.ξ_v_dc), )
 end

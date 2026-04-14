@@ -14,15 +14,9 @@ export tlc,
 """
 Abstract supertype for modular TLC state-space models.
 """
-abstract type AbstractTLC <: AbstractStateSpace end
+abstract type AbstractTLC <: AbstractConverter end
 
 include("electrical.jl")
-include("../common/loops/measurement.jl")
-include("../common/loops/synchronization.jl")
-include("../common/loops/outer_active.jl")
-include("../common/loops/outer_reactive.jl")
-include("../common/loops/inner_voltage.jl")
-include("../common/loops/inner_current.jl")
 include("modulation.jl")
 
 """
@@ -41,17 +35,17 @@ execution order used in [`state_space!`](@ref).
 """
 struct TLC{
     E<:ElectricalTLC,
-    Meas<:MeasurementTLC,
-    Synch<:AbstractSynchronizationTLC,
-    Active<:AbstractOuterActiveTLC,
-    Reactive<:AbstractOuterReactiveTLC,
+    Meas<:Measurement,
+    Sync<:AbstractSynchronization,
+    Active<:AbstractOuterActiveControl,
+    Reactive<:AbstractOuterReactiveControl,
     IV<:AbstractInnerVoltageTLC,
     IC<:AbstractInnerCurrentTLC,
     Mod<:AbstractModulationTLC} <: AbstractTLC
 
     elec::E
     meas::Meas
-    synch::Synch
+    sync::Sync
     outerActive::Active
     outerReactive::Reactive
     innerVoltage::IV
@@ -67,7 +61,7 @@ $(SIGNATURES)
 statenames(c::TLC) = (
     statenames(c.elec)...,
     statenames(c.meas)...,
-    statenames(c.synch)...,
+    statenames(c.sync)...,
     statenames(c.outerActive)...,
     statenames(c.outerReactive)...,
     statenames(c.innerVoltage)...,
@@ -85,28 +79,23 @@ $(SIGNATURES)
 Electrical currents are initialized first because measurement and controller
 initial conditions depend on the operating-point currents.
 """
-function initialvalues(c::TLC; inputs, setpoint=SetPoint(), kwargs...)
-    elec_init = initialvalues(c.elec; inputs, setpoint, kwargs...)
+function initialvalues(c::TLC; inputs, setpoint_pu=SetPoint())
+    elec_init = initialvalues(c.elec; inputs, setpoint_pu)
 
     meas_inputs = (
-        v_d = inputs.v_d,
-        v_q = inputs.v_q,
-        vdc = inputs.vdc,
+        vG_d = inputs.vG_d,
+        vG_q = inputs.vG_q,
+        v_dc = inputs.v_dc,
         i_d = elec_init.i_d,
         i_q = elec_init.i_q,
-        idc = 0.0,
-        θ   = setpoint.θac
+        i_dc = 0.0,
+        θ   = setpoint_pu.θ_ac
     )
-
-    return merge(
-        elec_init,
-        initialvalues(c.meas; inputs=meas_inputs, setpoint, kwargs..., conv=c),
-        initialvalues(c.synch; inputs=meas_inputs, setpoint, kwargs..., conv=c),
-        initialvalues(c.outerActive; inputs, setpoint, kwargs..., conv=c, elec_init=elec_init),
-        initialvalues(c.outerReactive; inputs, setpoint, kwargs..., conv=c),
-        initialvalues(c.innerVoltage; inputs, setpoint, kwargs..., conv=c),
-        initialvalues(c.innerCurrent; inputs, setpoint, kwargs..., conv=c),
-        initialvalues(c.mod; inputs, setpoint, kwargs..., conv=c)
+    return (;
+        elec_init...,
+        initialvalues(c.meas, inputs=meas_inputs)...,
+        initialvalues(c.sync; inputs)...,
+        initialvalues(c.innerCurrent; inputs, setpoint_pu, conv=c)...,
     )
 end
 
@@ -115,14 +104,14 @@ Return TLC external input names.
 
 $(SIGNATURES)
 """
-inputnames(::TLC) = (:vdc, :v_d, :v_q)
+inputnames(::TLC) = (:v_dc, :vG_d, :vG_q)
 
 """
 Return TLC external output names.
 
 $(SIGNATURES)
 """
-outputnames(::TLC) = (:idc, :i_d, :i_q)
+outputnames(::TLC) = (:i_dc, :i_d, :i_q)
 
 """
 Return additional equilibrium dummy names.
@@ -137,11 +126,17 @@ Convert a power-flow setpoint into normalized TLC inputs.
 $(SIGNATURES)
 """
 function pftoinputs(c::TLC, setpoint::SetPoint)
-    vACbase = c.elec.vACbase_LL_RMS * sqrt(2 / 3)
+    vACbase = c.elec.vACbase
     v_bus_d = setpoint.Vac * cos(setpoint.θac) / vACbase
     v_bus_q = -setpoint.Vac * sin(setpoint.θac) / vACbase
-    vdc = setpoint.Vdc / c.elec.vDCbase
-    return (; vdc, v_d = v_bus_d, v_q = v_bus_q)
+    v_dc = setpoint.Vdc / c.elec.vDCbase
+
+    p_ac = setpoint.Pac / c.elec.Sbase
+    q_ac = - setpoint.Qac / c.elec.Sbase  
+    p_dc = setpoint.Pdc / c.elec.Sbase
+    
+    return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),
+        SetpointPU(p_ac, q_ac, p_dc, setpoint.θac) #TODO per-unitize
 end
 
 """
@@ -154,17 +149,19 @@ $(SIGNATURES)
 The AC quantities are rotated into the synchronization frame before filtering.
 """
 function input_signals(c::TLC, x, inputs)
-    θ = syncangle(c.synch, x)
-    v = frame_transform(inputs.v_d, inputs.v_q, θ)
+    θ = syncangle(c.sync, x)
+    v = frame_transform(inputs.vG_d, inputs.vG_q, θ)
     i = frame_transform(x.i_d, x.i_q, θ)
 
     return (
-        v_d = v.d,
-        v_q = v.q,
-        vdc = inputs.vdc,
+        vG_d = v.d,
+        vG_q = v.q,
+        vG_d_g = inputs.vG_d, # grid reference frame
+        vG_q_g = inputs.vG_q, # grid reference frame
+        v_dc = inputs.v_dc,
         i_d = i.d,
         i_q = i.q,
-        idc = 0.0,
+        i_dc = 0.0,
         θ   = θ
     )
 end
@@ -175,7 +172,7 @@ Write TLC output equations.
 $(SIGNATURES)
 """
 function outputequations!(F, x, inputs, y, ::TLC)
-    F[1] = y.elec.idc
+    F[1] = y.elec.i_dc
     F[2] = y.elec.i_d
     F[3] = y.elec.i_q
     return nothing
@@ -194,7 +191,7 @@ Default TLC equilibrium equations for active-loop modes without DC-current balan
 
 $(SIGNATURES)
 """
-equilibrium_state_space!(F, x, inputs, c::TLC, ::AbstractOuterActiveTLC, ::SetPoint) =
+equilibrium_state_space!(F, x, inputs, c::TLC, ::AbstractOuterActiveControl, ::SetPoint) =
     state_space!(F, x, inputs, c)
 
 """
@@ -209,9 +206,9 @@ solve the operating point.
 """
 function equilibrium_state_space!(F, x, inputs, c::TLC, block::OuterActiveVdcControl, setpoint::SetPoint)
     y = state_space!(F, x, inputs, c)
-    idx_ξvdc = n_states(c.elec) + n_states(c.meas) + n_states(c.synch) + 1
-    idc_ref = iszero(block.idc_ref) ? (setpoint.Pdc / c.elec.Sbase) / inputs.vdc : block.idc_ref
-    F[idx_ξvdc] = idc_ref - y.elec.idc
+    idx_ξvdc = n_states(c.elec) + n_states(c.meas) + n_states(c.sync) + 1
+    i_dc_ref = (setpoint.Pdc / c.elec.Sbase) / inputs.v_dc
+    F[idx_ξvdc] = i_dc_ref - y.elec.i_dc
     return y
 end
 
@@ -228,26 +225,26 @@ written into the first state slice after modulation commands are available.
 function state_space!(F, x, inputs, c::TLC)
     sig_in = input_signals(c, x, inputs)
     elec_in = (
-        vdc = sig_in.vdc,
-        v_d = inputs.v_d,
-        v_q = inputs.v_q,
+        v_dc = sig_in.v_dc,
+        vG_d = inputs.vG_d,
+        vG_q = inputs.vG_q,
     )
     i = n_states(c.elec) + 1
 
     n = n_states(c.meas)
-    meas = state_space!(@view(F[i:i+n-1]), x, sig_in, c.meas; conv=c)
+    meas = state_space!(@view(F[i:i+n-1]), x, sig_in, c.meas, c)
     i += n
 
-    n = n_states(c.synch)
-    sync = state_space!(@view(F[i:i+n-1]), x, meas, c.synch; conv=c)
+    n = n_states(c.sync)
+    sync = state_space!(@view(F[i:i+n-1]), x, meas, c.sync, c)
     i += n
 
     n = n_states(c.outerActive)
-    pact = state_space!(@view(F[i:i+n-1]), x, meas, sync, c.outerActive; conv=c)
+    pact = state_space!(@view(F[i:i+n-1]), x, OuterActiveControlInputs(meas, sync), c.outerActive, c)
     i += n
 
     n = n_states(c.outerReactive)
-    qact = state_space!(@view(F[i:i+n-1]), x, meas, sync, c.outerReactive; conv=c)
+    qact = state_space!(@view(F[i:i+n-1]), x, meas, c.outerReactive, c)
     i += n
 
     n = n_states(c.innerVoltage)
@@ -282,10 +279,10 @@ $(SIGNATURES)
 """
 function tlc(;
     elec::ElectricalTLC = ElectricalTLC(),
-    meas::MeasurementTLC = MeasurementTLC(),
-    synch::AbstractSynchronizationTLC = NoSynchronization(),
-    outerActive::AbstractOuterActiveTLC = NoOuterActiveControl(),
-    outerReactive::AbstractOuterReactiveTLC = NoOuterReactiveControl(),
+    meas::Measurement = Measurement(),
+    sync::AbstractSynchronization = NoSynchronization(),
+    outerActive::AbstractOuterActiveControl = NoOuterActiveControl(),
+    outerReactive::AbstractOuterReactiveControl = NoOuterReactiveControl(),
     innerVoltage::AbstractInnerVoltageTLC = NoInnerVoltageControl(),
     innerCurrent::AbstractInnerCurrentTLC = NoInnerCurrentControl(),
     mod::AbstractModulationTLC = NoModulation(),
@@ -293,7 +290,7 @@ function tlc(;
     limits::Limits = Limits(),
     connection::Bool = true
 )
-    conv = TLC(elec, meas, synch, outerActive, outerReactive, innerVoltage, innerCurrent, mod)
+    conv = TLC(elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent, mod)
 
     return Element(
         input_pins = 1,
@@ -314,22 +311,21 @@ Resolve zero-valued control references from a power-flow setpoint.
 $(SIGNATURES)
 """
 function resolved_refs(c::TLC, setpoint::SetPoint)
-    vac_base_peak = c.elec.vACbase_LL_RMS * sqrt(2 / 3)
-    vac_ref = setpoint.Vac / vac_base_peak
-    vdc_ref = setpoint.Vdc / c.elec.vDCbase
+    v_ac_ref = setpoint.Vac / c.elec.vACbase
+    v_dc_ref = setpoint.Vdc / c.elec.vDCbase
 
     outerActive =
         if c.outerActive isa OuterActivePowerControl
             OuterActivePowerControl(
                 pi_ctrl = c.outerActive.pi_ctrl,
-                p_ref = iszero(c.outerActive.p_ref) ? setpoint.Pac / c.elec.Sbase : c.outerActive.p_ref,
+                P_ac_ref = iszero(c.outerActive.P_ac_ref) ? setpoint.Pac / c.elec.Sbase : c.outerActive.P_ac_ref,
                 support = c.outerActive.support,
             )
         elseif c.outerActive isa OuterActiveVdcControl
             OuterActiveVdcControl(
                 pi_ctrl = c.outerActive.pi_ctrl,
-                vdc_ref = iszero(c.outerActive.vdc_ref) ? vdc_ref : c.outerActive.vdc_ref,
-                idc_ref = (setpoint.Pdc / c.elec.Sbase) / vdc_ref,
+                v_dc_ref = iszero(c.outerActive.v_dc_ref) ? v_dc_ref : c.outerActive.v_dc_ref,
+                i_dc_ref = (setpoint.Pdc / c.elec.Sbase) / v_dc_ref,
             )
         else
             c.outerActive
@@ -342,9 +338,9 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
                     VoltageSupportLag(
                         K = c.outerReactive.support.K,
                         ωc = c.outerReactive.support.ωc,
-                        vac_ref = iszero(c.outerReactive.support.vac_ref) ?
-                                  vac_ref :
-                                  c.outerReactive.support.vac_ref,
+                        v_ac_ref = iszero(c.outerReactive.support.v_ac_ref) ?
+                                  v_ac_ref :
+                                  c.outerReactive.support.v_ac_ref,
                     )
                 else
                     c.outerReactive.support
@@ -352,15 +348,15 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
 
             OuterReactiveQControl(
                 pi_ctrl = c.outerReactive.pi_ctrl,
-                q_ref = iszero(c.outerReactive.q_ref) ? (-setpoint.Qac / c.elec.Sbase) : c.outerReactive.q_ref,
+                Q_ac_ref = iszero(c.outerReactive.Q_ac_ref) ? (-setpoint.Qac / c.elec.Sbase) : c.outerReactive.Q_ac_ref,
                 support = supp,
             )
         elseif c.outerReactive isa OuterReactiveVacControl
             OuterReactiveVacControl(
                 pi_ctrl = c.outerReactive.pi_ctrl,
-                vac_ref = iszero(c.outerReactive.vac_ref) ?
-                          vac_ref :
-                          c.outerReactive.vac_ref,
+                v_ac_ref = iszero(c.outerReactive.v_ac_ref) ?
+                          v_ac_ref :
+                          c.outerReactive.v_ac_ref,
             )
         else
             c.outerReactive
@@ -369,7 +365,7 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
     return TLC(
         c.elec,
         c.meas,
-        c.synch,
+        c.sync,
         outerActive,
         outerReactive,
         c.innerVoltage,
@@ -416,20 +412,19 @@ $(SIGNATURES)
 """
 function pf_vtar_pu(conv::TLC, elem::Element, global_dict)
     vbase_ln_rms = global_dict["V"] / 1e3
-    vconv_peak_base = conv.elec.vACbase_LL_RMS * sqrt(2 / 3)
 
     if conv.outerReactive isa OuterReactiveVacControl
-        Vac_peak = iszero(conv.outerReactive.vac_ref) ?
+        Vac_peak = iszero(conv.outerReactive.v_ac_ref) ?
                    elem.setpoint.Vac :
-                   conv.outerReactive.vac_ref * vconv_peak_base
+                   conv.outerReactive.v_ac_ref * conv.elec.vACbase
         return (Vac_peak / sqrt(2)) / vbase_ln_rms
 
     elseif conv.outerReactive isa OuterReactiveQControl &&
            conv.outerReactive.support isa VoltageSupportLag
         supp = conv.outerReactive.support
-        Vac_peak = iszero(supp.vac_ref) ?
+        Vac_peak = iszero(supp.v_ac_ref) ?
                    elem.setpoint.Vac :
-                   supp.vac_ref * vconv_peak_base
+                   supp.v_ac_ref * conv.elec.vACbase
         return (Vac_peak / sqrt(2)) / vbase_ln_rms
 
     else
@@ -518,8 +513,8 @@ function make_power_flow!(conv::TLC, data, nodes2bus, bus2nodes, elem2comp, comp
     convdc["reactor"] = 1
 
     zbase = global_dict["Z"]
-    convdc["rc"] = conv.elec.Rᵣ / zbase
-    convdc["xc"] = conv.elec.Lᵣ * global_dict["omega"] / zbase
+    convdc["rc"] = (conv.elec.Rᵣ*conv.elec.zACbase) / zbase
+    convdc["xc"] = (conv.elec.Lᵣ*conv.elec.zACbase) * global_dict["omega"] / zbase
 
     vm_rms_kV = elem.setpoint.Vac / sqrt(2)
     convdc["Vmmax"] = 1.1 * vm_rms_kV * 1e3 / global_dict["V"]

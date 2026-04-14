@@ -104,12 +104,12 @@ $(SIGNATURES)
 
 # Details
 
-The generic delay output is phase-compensated by `ω₀ * timeDelay` before being
+The generic delay output is phase-compensated by `ωbase * timeDelay` before being
 returned to the electrical plant.
 """
 function state_space!(F, x, iloop, block::DelayModulation; conv::AbstractTLC)
     y = state_space!(F, x, (iloop.m_d, iloop.m_q), block.delay)
-    m_dq_ref = phase_compensated_dq(y, conv.elec.ω₀ * block.delay.timeDelay)
+    m_dq_ref = phase_compensated_dq(y, conv.elec.ωbase * block.delay.timeDelay)
 
     return (
         m_d = m_dq_ref.d,

@@ -33,5 +33,5 @@ Forward outer-loop current references.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, sync, pact, qact, block::NoInnerVoltageControl; conv::AbstractTLC) =
-    (; i_d_ref = pact.i_d_ref, i_q_ref = qact.i_q_ref)
+state_space!(F, x, meas, sync, pact, qact, block::NoInnerVoltageControl; conv::AbstractConverter) =
+    (; iΔ_d_ref = pact.iΔ_d_ref, iΔ_q_ref = qact.iΔ_q_ref)

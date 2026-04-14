@@ -7,21 +7,19 @@ abstract type AbstractVirtualImpedance          <: AbstractStateSpace end
     Vq_ref::Float64 = 0     # Vq voltage reference [pu]
 end
 statenames(::CCVI) = ()
-initialvalues(::CCVI, inputs) = (;) 
-
 
 function state_space!(F, x, inputs, b::CCVI, conv::AbstractMMC)
     (;R_v, L_v, Vd_ref, Vq_ref) = b
-    (;Vᴳd, Vᴳq, Vⱽd_ref, ω_c, Δθ_c) = inputs
+    (;vG_d, vG_q, Vⱽd_ref, ω_c, Δθ_c) = inputs
 
     T_θ = [cos(Δθ_c) -sin(Δθ_c); sin(Δθ_c) cos(Δθ_c)]
-    Vᴳd_c, Vᴳq_c = T_θ * [Vᴳd; Vᴳq] * conv.elec.turnsRatio
+    vG_d_c, vG_q_c = T_θ * [vG_d; vG_q] * conv.elec.turnsRatio
 
-    Vᴳd_f = Vᴳd_c # if voltage is filtered, change this #TODO
-    Vᴳq_f = Vᴳq_c # if voltage is filtered!
+    vG_d_f = vG_d_c # if voltage is filtered, change this #TODO
+    vG_q_f = vG_q_c # if voltage is filtered!
 
     den = (R_v^2 + ω_c^2*L_v^2)
-    return (iΔd_ref=(R_v * (Vd_ref+Vⱽd_ref-Vᴳd_f) + ω_c * L_v * (Vᴳq_f-Vq_ref)) /den,
-            iΔq_ref=(R_v * (Vq_ref-Vᴳq_f) + ω_c * L_v * (-Vᴳd_f+Vd_ref+Vⱽd_ref)) /den)
+    return (iΔ_d_ref=(R_v * (Vd_ref+Vⱽd_ref-vG_d_f) + ω_c * L_v * (vG_q_f-Vq_ref)) /den,
+            iΔ_q_ref=(R_v * (Vq_ref-vG_q_f) + ω_c * L_v * (-vG_d_f+Vd_ref+Vⱽd_ref)) /den)
 
 end
