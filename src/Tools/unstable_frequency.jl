@@ -1,6 +1,6 @@
 export unstable_frequency
 """
-    unstable_frequency(L, omega, make_plot::Bool = true, title::String = "Unstable oscillatory frequency")
+    unstable_frequency(L, omega, order_maxima::Int = 5, make_plot::Bool = true, title::String = "Unstable oscillatory frequency")
 
 Compute the unstable oscillatory frequency based on the eigenvalues of the loop-gain matrix `L` showing encirclement.
 The damping at the unstable mode is estimated based on the sign of the phase angle derivative around the poles of 1/(1+L).
@@ -10,6 +10,7 @@ Lastly, phase shift analysis is applied at these frequencies to determine the st
 # Arguments
 - L::Vector{Float64}: The eigen-locus with critical point encirclements. It should have dimensions omegaₙ, 
 - omega::Vector{Float64}: A vector of frequency points (in radians per second) at which the eigenvalues of `L` are evaluated.
+- order_maxima::Int: (optional) Each maxima at index "m" needs to be larger than its surrounding number of samples given by `order_maxima`, i.e. ymax[m] >= y[m-order_maxima:m+order_maxima]. Default is 5.
 - make_plot::Bool: (optional) Generate a Bode plot of 1/(1+L) indicating the unstable modes.
 - title::String: (optional) The title of the plot. Default is "Unstable oscillatory frequency".
 
@@ -26,14 +27,16 @@ L = [ K/(1.0im*w + 1)^3 for w in omega]  # Example open-loop function (locus)
 unstable_frequency(L, omega)
 
 """
-function unstable_frequency(L, omega; make_plot :: Bool = true, title :: String = "Unstable oscillatory frequency")
+function unstable_frequency(L, omega; order_maxima::Int = 5, make_plot :: Bool = true, title :: String = "Unstable oscillatory frequency")
     f = real(omega)./(2*pi)
 
     # Determine the maximum of 1/(1+L)
     G = 1 ./(ones(Complex{Float64},length(omega)) .+ L)
     G_mag = abs.(G)
     G_ph = angle.(G)
-    critical_points = argmaxima(G_mag)
+    G_ph_unwrapped = copy(G_ph)
+    unwrap!(G_ph_unwrapped) # Unwrap the phase to avoid discontinuities around -180° and 180° affecting the derivative estimation
+    critical_points = argmaxima(G_mag, order_maxima)
     unstable_freqs = Float64[]
     
     if length(critical_points)>0
@@ -44,11 +47,11 @@ function unstable_frequency(L, omega; make_plot :: Bool = true, title :: String 
             c_minus = -d2 / ( d1*(d1+d2) )
             c_zero  =  (d2 - d1) / ( d1*d2 )
             c_plus  =  d1 / ( d2*(d1+d2) )
-            dtheta_dw = c_minus*G_ph[point-1] + c_zero*G_ph[point] + c_plus*G_ph[point+1]
+            dtheta_dw = c_minus*G_ph_unwrapped[point-1] + c_zero*G_ph_unwrapped[point] + c_plus*G_ph_unwrapped[point+1]
             
             # # Optional: check that the first order approximations also hold around the critical point
-            # dtheta1_dw = (G_ph[point] - G_ph[point-1]) / (omega[point] - omega[point-1])
-            # dtheta2_dw = (G_ph[point+1] - G_ph[point]) / (omega[point+1] - omega[point])
+            # dtheta1_dw = (G_ph_unwrapped[point] - G_ph_unwrapped[point-1]) / (omega[point] - omega[point-1])
+            # dtheta2_dw = (G_ph_unwrapped[point+1] - G_ph_unwrapped[point]) / (omega[point+1] - omega[point])
             # if signbit(dtheta_dw) == signbit(dtheta1_dw) && signbit(dtheta1_dw) == signbit(dtheta2_dw)
                 # Phase angle shift analysis: dθ/dωₘ ≈ -1/(ωₘζ) > 0 → ζ < 0 → unstable mode at ωₘ
                 if signbit(dtheta_dw) == false # If the derivative is positive the mode is unstable
@@ -70,14 +73,15 @@ function unstable_frequency(L, omega; make_plot :: Bool = true, title :: String 
         else
             ylims_mag = (maximum(G_mag_dB)-10, maximum(G_mag_dB)+10)
         end
+        
         new_plot= plot(layout=(2,1))
         plot!(new_plot[1], f, G_mag_dB, label = "1/(1+λ)", linewidth = 3, c = :blue, linestyle = :auto, minorgrid=false)
-        plot!(new_plot[1],ylabel = "Magnitude [dB]", framestyle = :box, xaxis = :log10)
-        plot!(new_plot[1],xlims = (f[1],f[end]), ylims = ylims_mag)
+        plot!(new_plot[1], ylabel = "Magnitude [dB]", title = title, framestyle = :box, xaxis = :log10)
+        plot!(new_plot[1], xlims = (f[1],f[end]), ylims = ylims_mag)
         plot!(new_plot[2], f, G_ph.*(180/π), label =:none, linewidth = 3, c = :blue, linestyle = :auto, minorgrid=false)
-        plot!(new_plot[2],xlabel = "Frequency [Hz]", ylabel = "Phase [deg]", framestyle = :box, legend = :none, xaxis = :log10)
-        plot!(new_plot[2],xlims = (f[1],f[end]), ylims = (-180,180))
-        plot!(new_plot[2],yticks = -360:90:360)
+        plot!(new_plot[2], xlabel = "Frequency [Hz]", ylabel = "Phase [deg]", framestyle = :box, legend = :none, xaxis = :log10)
+        plot!(new_plot[2], xlims = (f[1],f[end]), ylims = (-180,180))
+        plot!(new_plot[2], yticks = -360:90:360)
         if length(unstable_freqs)>0
             plot!(new_plot[1], unstable_freqs, seriestype="vline", linestyle=:dash, label = "Unstable mode", legend = :topleft)
             plot!(new_plot[2], unstable_freqs, seriestype="vline", linestyle=:dash, label = :none, legend = :topleft)
@@ -86,4 +90,14 @@ function unstable_frequency(L, omega; make_plot :: Bool = true, title :: String 
     end
 
     return unstable_freqs
+end
+
+# Thanks to the user lucas711642 (https://discourse.julialang.org/u/lucas711642) for the short angle unwrap function :D
+function unwrap!(x, period = 2π)
+	y = convert(eltype(x), period)
+	v = first(x)
+	@inbounds for k = eachindex(x)
+		x[k] = v = v + rem(x[k] - v,  y, RoundNearest)
+	end
+    return
 end
