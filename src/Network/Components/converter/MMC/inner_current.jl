@@ -10,7 +10,7 @@ statenames(::CirculatingCurrentSuppressionControl) = (:ξ_iΣ_d, :ξ_iΣ_q)
 
 ### Lower level structures ###
 #TODO: update the equations in comments to match the new version (including taking into account that modulation is now done in a specific function)
-function state_space!(F, x, inputs, b::CirculatingCurrentSuppressionControl, conv::AbstractMMC) 
+function state_space!(F, x, meas, b::CirculatingCurrentSuppressionControl, conv::AbstractMMC) 
     (; ξ_iΣ_d, ξ_iΣ_q, iΣ_d, iΣ_q) = x
     Δθ_c = syncangle(conv.sync, x)
     iΣ_d_ref, iΣ_q_ref = 0, 0 # TODO add this as inputs/parameters if needed
@@ -30,9 +30,9 @@ function state_space!(F, x, inputs, b::CirculatingCurrentSuppressionControl, con
     return (vMΣd_ref_c=vMΣd_ref_c, vMΣq_ref_c=vMΣq_ref_c)
 end
 
-function state_space!(F, x, inputs, b::ZeroSequenceCurrentControl, conv::AbstractMMC)
+function state_space!(F, x, (meas, out_Wtot), b::ZeroSequenceCurrentControl, conv::AbstractMMC)
     (; ξ_iΣ_z, iΣ_z) = x
-    (;iΣ_z_ref, v_dc_f)  = inputs
+    iΣ_z_ref, v_dc_f = out_Wtot.iΣ_z_ref, meas.v_dc_f
 
     F[1] = b.pi_control.Ki * (iΣ_z_ref - iΣ_z);
     # vMΣz_ref = 2/Vdc*(Vdc/2 - Kp_Σz*(iΣ_z_ref - iΣ_z) - Ki_Σz * xiΣ_z),

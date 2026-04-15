@@ -63,10 +63,6 @@ initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c
 end
 statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.vi)..., statenames(c.occ)...)
 initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive)..., initialvalues(c.vi)..., initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
-struct DeltaControlInputs
-    meas
-    sync
-end
 
 output_outer_reactive_control(conv::AbstractMMC, out) = output_outer_reactive_control(conv.delta_control, out)
 output_outer_reactive_control(::ΔdqControlGFL, out) = (iΔ_q_ref = out,)
@@ -93,16 +89,14 @@ function state_space!(F, x, inputs, c::MMC)
     sync, i = run_block!(F, x, meas, c.sync, c, i)
 
     # -- Delta and Sigma control ------------------------------------------------------------------
-    out_delta, i = run_block!(F, x, DeltaControlInputs(meas, sync), c.delta_control, c, i)
+    out_delta, i = run_block!(F, x, (meas, sync), c.delta_control, c, i)
     out_sigma, i = run_block!(F, x, meas, c.sigma_control, c, i)
 
     # -- Modulation -------------------------------------------------------------------------------
-    in = ModulationInputs(meas, out_delta, out_sigma)
-    out_modulation, i = run_block!(F, x, in, c.modulation, c, i)
+    out_modulation, i = run_block!(F, x, (meas, out_delta, out_sigma), c.modulation, c, i)
 
     # -- Electrical model -------------------------------------------------------------------------
-    in = ElectricalMMCInputs(out_modulation, sig_in, inputs)
-    run_block!(F, x, in, c.elec, c, i)
+    run_block!(F, x, (out_modulation, sig_in, inputs), c.elec, c, i)
 
     return nothing
 end
@@ -110,37 +104,36 @@ end
 
 ### Higher level structures ###
 
-function state_space!(F, x, inputs, b::ΣdqzControlTEC, c::MMC) 
+function state_space!(F, x, meas, b::ΣdqzControlTEC, c::MMC) 
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_Wtot, i = run_block!(F, x, inputs, b.tec, c, 1)
-    inputs = merge(inputs, out_Wtot)
+    out_Wtot, i = run_block!(F, x, meas, b.tec, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_zscc, i = run_block!(F, x, inputs, b.zscc, c, i)
-    out_ccsc, i = run_block!(F, x, inputs, b.ccsc, c, i)
+    out_zscc, i = run_block!(F, x, (meas, out_Wtot), b.zscc, c, i)
+    out_ccsc, i = run_block!(F, x, meas, b.ccsc, c, i)
 
     return merge(out_ccsc, out_zscc)
 end
 
-function state_space!(F, x, inputs::DeltaControlInputs, b::ΔdqControlGFL, c::MMC)
+function state_space!(F, x, (meas, sync), b::ΔdqControlGFL, c::MMC)
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_active, i = run_block!(F, x, OuterActiveControlInputs(inputs.meas, inputs.sync), b.outer_active, c, 1)
-    out_reactive, i = run_block!(F, x, inputs.meas, b.outer_reactive, c, i)
+    out_active, i = run_block!(F, x, (meas, sync), b.outer_active, c, 1)
+    out_reactive, i = run_block!(F, x, meas, b.outer_reactive, c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_occ, _= run_block!(F, x, (inputs.meas, inputs.sync, (;out_active..., out_reactive...)), b.occ, c, i)
+    out_occ, _= run_block!(F, x, (meas, sync, (;out_active..., out_reactive...)), b.occ, c, i)
 
     return out_occ
 end
 
-function state_space!(F, x, inputs::DeltaControlInputs, b::ΔdqControlGFM, c::MMC)
+function state_space!(F, x, (meas, sync), b::ΔdqControlGFM, c::MMC)
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_reactive, i = run_block!(F, x, inputs.meas, b.outer_reactive, c, 1)
+    out_reactive, i = run_block!(F, x, meas, b.outer_reactive, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_vi, i = run_block!(F, x, (inputs.meas, inputs.sync, out_reactive), b.vi, c, i)
+    out_vi, i = run_block!(F, x, (meas, sync, out_reactive), b.vi, c, i)
 
-    out_occ, _= run_block!(F, x, (inputs.meas, inputs.sync, out_vi), b.occ, c, i)
+    out_occ, _= run_block!(F, x, (meas, sync, out_vi), b.occ, c, i)
 
     return out_occ
 end

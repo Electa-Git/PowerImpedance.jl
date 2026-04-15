@@ -63,12 +63,6 @@ function ElectricalMMC(
     return ElectricalMMC(Lₐᵣₘ, Rₐᵣₘ, Cₐᵣₘ, N, turnsRatio, ωbase, vAC_base, vDC_base, Sbase, baseConv1, baseConv2, baseConv3, Lₑ, Rₑ)
 end
 
-struct ElectricalMMCInputs
-    modulation
-    input_signals
-    MMC_inputs
-end
-
 statenames(::ElectricalMMC) = (:iΔ_d, :iΔ_q, :iΣ_d, :iΣ_q, :iΣ_z, :vCΔ_d, :vCΔ_q, :vCΔ_Zd, :vCΔ_Zq, :vCΣ_d, :vCΣ_q, :vCΣ_z)
 initialvalues(e::ElectricalMMC; inputs, setpoint_pu) = (; 
     iΔ_d = (inputs.vG_d * e.turnsRatio * setpoint_pu.p_ac - inputs.vG_q * e.turnsRatio * setpoint_pu.q_ac) / ( (inputs.vG_d * e.turnsRatio)^2 + (inputs.vG_q * e.turnsRatio)^2 ),
@@ -78,12 +72,12 @@ initialvalues(e::ElectricalMMC; inputs, setpoint_pu) = (;
 
 
     
-function state_space!(F, x, inputs::ElectricalMMCInputs, b::ElectricalMMC, conv::AbstractMMC) 
+function state_space!(F, x, (out_modulation, sig_in, inputs), b::ElectricalMMC, conv::AbstractMMC) 
     
     (; iΔ_d, iΔ_q, iΣ_d, iΣ_q, iΣ_z, vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x
-    (; mΔd, mΔq, mΔZd, mΔZq, mΣd, mΣq, mΣz) = inputs.modulation
-    v_dc = inputs.MMC_inputs.v_dc
-    (; vG_d_g, vG_q_g) = inputs.input_signals 
+    (; mΔd, mΔq, mΔZd, mΔZq, mΣd, mΣq, mΣz) = out_modulation
+    v_dc = inputs.v_dc
+    (; vG_d_g, vG_q_g) = sig_in
     vG_d, vG_q = vG_d_g, vG_q_g # Everything in grid reference frame for the electrical equations
 
     # Matrix from Freytes thesis

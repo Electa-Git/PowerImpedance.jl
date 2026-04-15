@@ -20,10 +20,7 @@ export AbstractOuterActiveControl,
 Abstract supertype for active-power outer-loop controllers.
 """
 abstract type AbstractOuterActiveControl <: AbstractStateSpace end
-struct OuterActiveControlInputs
-    meas
-    sync
-end
+
 """
 Abstract supertype for active-power support terms.
 """
@@ -142,8 +139,7 @@ Evaluate active-power control and its support dynamics.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, inputs::OuterActiveControlInputs, block::OuterActivePowerControl, conv::AbstractConverter)
-    meas, sync = inputs.meas, inputs.sync
+function state_space!(F, x, (meas, sync), block::OuterActivePowerControl, conv::AbstractConverter)
     P_ac_f = meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f
     ns = n_states(block.support)
     support = state_space!(@view(F[1:ns]), x, sync, block.support)
@@ -167,7 +163,6 @@ $(TYPEDFIELDS)
 @with_kw struct OuterActiveVdcControl <: AbstractOuterActiveControl
     pi_ctrl::PIControl = PIControl()
     v_dc_ref::Float64 = 1.0
-    i_dc_ref::Float64 = 0.0
 end
 
 """
@@ -182,9 +177,7 @@ Evaluate DC-voltage PI control.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, inputs::OuterActiveControlInputs, block::OuterActiveVdcControl, conv::AbstractConverter)
-    meas, sync = inputs.meas, inputs.sync
-
+function state_space!(F, x, (meas, sync), block::OuterActiveVdcControl, conv::AbstractConverter)
     F[1] = block.pi_ctrl.Ki * (block.v_dc_ref - meas.v_dc_f)
 
     return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (block.v_dc_ref - meas.v_dc_f) + x.ξ_v_dc), )

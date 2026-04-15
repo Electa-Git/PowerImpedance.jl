@@ -1,18 +1,32 @@
 abstract type AbstractModulationMMC               <: AbstractStateSpace end 
-struct ModulationInputs
-    meas
-    vMΔ_ref_c
-    vMΣ_ref_c
-end
-
 
 struct UncompensatedModulation <: AbstractModulationMMC end
 statenames(::UncompensatedModulation) = (;)
 
-function state_space!(F, x, inputs::ModulationInputs, b::UncompensatedModulation, conv::AbstractMMC)
-    (;v_dc_f) = inputs.meas
-    (; vMΔd_ref_c, vMΔq_ref_c) = inputs.vMΔ_ref_c
-    (; vMΣd_ref_c, vMΣq_ref_c, vMΣz_ref) = inputs.vMΣ_ref_c
+struct UncompensatedModulationDelay{D<:PadeDelay} <: AbstractModulationMMC 
+    delay::D
+end
+
+function UncompensatedModulationDelay(;
+    timeDelay::Real = 0.0,
+    padeOrderNum::Int = 0,
+    padeOrderDen::Int = 0
+)
+    delay = PadeDelay(
+        timeDelay = timeDelay,
+        padeOrderNum = padeOrderNum,
+        padeOrderDen = padeOrderDen,
+        n_inputs = 2,
+        state_prefix = :m_delay,
+    )
+    return DelayModulation{PadeDelay}(delay)
+end
+
+
+function state_space!(F, x, (meas, out_delta, out_sigma), b::UncompensatedModulation, conv::AbstractMMC)
+    (;v_dc_f) = meas
+    (; vMΔd_ref_c, vMΔq_ref_c) = out_delta
+    (; vMΣd_ref_c, vMΣq_ref_c, vMΣz_ref) = out_sigma
 
     # First, the references are converter to grid reference framoe
     Δθ_c = syncangle(conv.sync, x)
@@ -35,7 +49,7 @@ end
 struct CompensatedModulation <: AbstractModulationMMC end
 statenames(::CompensatedModulation) = (;)
 
-function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
+function state_space!(F, x, (meas, out_delta, out_sigma), b::CompensatedModulation, conv::AbstractMMC)
     (; vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x
     (; vMΔd_ref_c, vMΔq_ref_c) = inputs.vMΔ_ref_c
     (; vMΣd_ref_c, vMΣq_ref_c, vMΣz_ref) = inputs.vMΣ_ref_c

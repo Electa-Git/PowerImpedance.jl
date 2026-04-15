@@ -225,11 +225,7 @@ written into the first state slice after modulation commands are available.
 """
 function state_space!(F, x, inputs, c::TLC)
     sig_in = input_signals(c, x, inputs)
-    elec_in = (
-        v_dc = sig_in.v_dc,
-        vG_d = inputs.vG_d,
-        vG_q = inputs.vG_q,
-    )
+
     i = 1
 
     n = n_states(c.meas)
@@ -241,7 +237,7 @@ function state_space!(F, x, inputs, c::TLC)
     i += n
 
     n = n_states(c.outerActive)
-    pact = state_space!(@view(F[i:i+n-1]), x, OuterActiveControlInputs(meas, sync), c.outerActive, c)
+    pact = state_space!(@view(F[i:i+n-1]), x, (meas, sync), c.outerActive, c)
     i += n
 
     n = n_states(c.outerReactive)
@@ -260,6 +256,11 @@ function state_space!(F, x, inputs, c::TLC)
     mod = state_space!(@view(F[i:i+n-1]), x, (meas, iloop), c.mod, c)
     i += n
 
+    elec_in = (
+        v_dc = sig_in.v_dc,
+        vG_d = inputs.vG_d,
+        vG_q = inputs.vG_q,
+    )
     n = n_states(c.elec)
     elec = state_space!(@view(F[i:i+n-1]), x, (elec_in, mod), c.elec, c)
 
@@ -329,7 +330,6 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
             OuterActiveVdcControl(
                 pi_ctrl = c.outerActive.pi_ctrl,
                 v_dc_ref = iszero(c.outerActive.v_dc_ref) ? v_dc_ref : c.outerActive.v_dc_ref,
-                i_dc_ref = (setpoint.Pdc / c.elec.Sbase) / v_dc_ref,
             )
         else
             c.outerActive

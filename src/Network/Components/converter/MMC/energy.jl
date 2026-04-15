@@ -15,7 +15,7 @@ function state_space!(F, x, meas, b::TotalEnergyControl, conv::AbstractMMC)
     
     F[1] = b.pi_control.Ki * (b.ref - wΣz)
     #iΣ_z_ref = (Kp_wΣ * (wΣz_ref - wΣz) + Ki_wΣ * xwΣz + Pac_f) / 3 / Vdc,
-    return ( (iΣ_z_ref = (b.pi_control.Kp * (b.ref - wΣz) + ξ_Wtot + P_ac_f) / 3 / v_dc_f ),)
+    return ( iΣ_z_ref = ( (b.pi_control.Kp * (b.ref - wΣz) + ξ_Wtot + P_ac_f) / 3 / v_dc_f ),)
 end
 
 @with_kw struct ΣEnergyControl <: AbstractEnergyControl
