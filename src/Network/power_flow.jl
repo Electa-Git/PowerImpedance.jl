@@ -63,7 +63,7 @@ function power_flow(net:: Network)
         "dual_inf_tol" => 1e-1,
         "constr_viol_tol" => 1e-3,
         "compl_inf_tol" => 1e3,
-        "print_level" => 5,
+        "print_level" => 0, # was set to 5 for more verbose output
         "max_iter" => 100,
         "grad_f_constant" => "yes",
         "recalc_y" => "yes",
@@ -83,7 +83,6 @@ function power_flow(net:: Network)
         #Find the corresponding PowerModels component
         comp_type, key = elem2comp[element.symbol]
         elem_dict = result["solution"][comp_type][string(key)]
-        pins = element.pins
         
         if is_converter(element) # In converter bus1 is DC and bus2 is AC
             dc_node = make_node(element, 1) 

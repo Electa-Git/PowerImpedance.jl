@@ -1,8 +1,7 @@
 export mmc, MMC, AbstractMMC, BuildMMC,             # MMC
     ΔdqControlGFL, ΔdqControlGFM, ΣdqzControlTEC,   # High level structures
 
-    NoMeasurementFilter,                            # Measurements
-    PLL, VSEWithDamping, VSEWithoutDamping,         # Synchronization
+    VSEWithDamping,                                 # Synchronization
     PControl,                                       # Outer active
     QControl,                                       # Outer reactive
     TotalEnergyControl,                             # Energy
@@ -19,6 +18,7 @@ export mmc, MMC, AbstractMMC, BuildMMC,             # MMC
 abstract type AbstractMMC                       <: AbstractConverter end
 abstract type AbstractΔdqControl                <: AbstractStateSpace end
 abstract type AbstractΣdqzControl               <: AbstractStateSpace end
+voltage_filter_ratio(conv::AbstractMMC) = conv.elec.turnsRatio
 
 ### Include files ###
 include("electrical.jl")
@@ -55,7 +55,9 @@ elecinputnames(c::MMC)                      = inputnames(c)
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFL) = (statenames(c.outer_active)..., statenames(c.outer_reactive)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_active)..., initialvalues(c.outer_reactive)..., initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
+initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_active; inputs, setpoint_pu, conv)...,
+                                                                initialvalues(c.outer_reactive; inputs, setpoint_pu, conv)...,
+                                                                initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
 
 @with_kw struct ΔdqControlGFM{R<:AbstractOuterReactiveControl, V<:AbstractVirtualImpedance, I<:AbstractInnerCurrentControl, } <: AbstractΔdqControl 
     outer_reactive::R
@@ -63,7 +65,9 @@ initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.vi)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive)..., initialvalues(c.vi)..., initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
+initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; inputs, setpoint_pu, conv)...,
+                                                                initialvalues(c.vi; inputs, setpoint_pu, conv)...,
+                                                                initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
 
 output_outer_reactive_control(conv::AbstractMMC, out) = output_outer_reactive_control(conv.delta_control, out)
 output_outer_reactive_control(::ΔdqControlGFL, out) = (iΔ_q_ref = out,)
@@ -87,11 +91,12 @@ function state_space!(F, x, inputs, c::MMC)
     sig_in = input_signals(c, x, inputs)
 
     meas, i = run_block!(F, x, sig_in, c.meas, c, 1)
-    sync, i = run_block!(F, x, meas, c.sync, c, i)
+    sync_out, i = run_block!(F, x, meas, c.sync, c, i)
 
     # -- Delta and Sigma control ------------------------------------------------------------------
-    out_delta, i = run_block!(F, x, (meas, sync), c.delta_control, c, i)
-    out_sigma, i = run_block!(F, x, meas, c.sigma_control, c, i)
+    out_delta, i = run_block!(F, x, (meas, sync_out), c.delta_control, c, i)
+    power = (P_ac_f = energy_active_power(meas, sync_out, out_delta, c.delta_control, c.sync),)
+    out_sigma, i = run_block!(F, x, (; meas, power), c.sigma_control, c, i)
 
     # -- Modulation -------------------------------------------------------------------------------
     out_modulation, i = run_block!(F, x, (meas, out_delta, out_sigma), c.modulation, c, i)
@@ -105,9 +110,10 @@ end
 
 ### Higher level structures ###
 
-function state_space!(F, x, meas, b::ΣdqzControlTEC, c::MMC) 
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power)}, b::ΣdqzControlTEC, c::MMC) 
+    (; meas, power) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_Wtot, i = run_block!(F, x, meas, b.tec, c, 1)
+    out_Wtot, i = run_block!(F, x, (; meas, power), b.tec, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
     out_zscc, i = run_block!(F, x, (meas, out_Wtot), b.zscc, c, i)
@@ -124,7 +130,7 @@ function state_space!(F, x, (meas, sync), b::ΔdqControlGFL, c::MMC)
     # -- Inner Loop -------------------------------------------------------------------------------
     out_occ, _= run_block!(F, x, (meas, sync, (;out_active..., out_reactive...)), b.occ, c, i)
 
-    return out_occ
+    return merge(out_active, out_occ)
 end
 
 function state_space!(F, x, (meas, sync), b::ΔdqControlGFM, c::MMC)
@@ -138,6 +144,18 @@ function state_space!(F, x, (meas, sync), b::ΔdqControlGFM, c::MMC)
 
     return out_occ
 end
+
+measured_active_power(meas) = meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f
+
+energy_active_power(meas, sync_out, out_delta, ::ΔdqControlGFM, ::VSEWithDamping) = sync_out.P_ac_f
+energy_active_power(meas, sync_out, out_delta, ::ΔdqControlGFM, ::AbstractSynchronization) = measured_active_power(meas)
+
+energy_active_power(meas, sync_out, out_delta, b::ΔdqControlGFL, ::AbstractSynchronization) =
+    energy_active_power(meas, out_delta, b.outer_active)
+
+energy_active_power(meas, out_delta, ::OuterActivePowerControl) = out_delta.P_ac_f
+energy_active_power(meas, out_delta, ::AbstractOuterActiveControl) = measured_active_power(meas)
+
 
 ################## Handling of inputs and outputs ############
 
@@ -209,4 +227,164 @@ function run_block!(F, x, inputs, block, conv, idx)
     idx_end = idx + n_states(block) - 1
     out = state_space!(@view(F[idx:idx_end]), x, inputs, block, conv)
     return out, idx_end+1
+end
+
+
+
+
+############################  Power-flow integration MMC ############################
+
+"""
+Resolve zero-valued MMC control references from a power-flow setpoint.
+
+$(SIGNATURES)
+"""
+function resolved_refs(c::MMC, setpoint::SetPoint)
+    sync =
+        if c.sync isa VSEWithDamping
+            VSEWithDamping(
+                H = c.sync.H,
+                K_d = c.sync.K_d,
+                K_ω = c.sync.K_ω,
+                P_ac_ref = iszero(c.sync.P_ac_ref) ? setpoint.Pac / c.elec.Sbase : c.sync.P_ac_ref,
+                ω_ref = c.sync.ω_ref,
+                pll = c.sync.pll,
+                filter = c.sync.filter,
+            )
+        else
+            c.sync
+        end
+
+    delta_control =
+        if c.delta_control isa ΔdqControlGFL
+            outer_active =
+                if c.delta_control.outer_active isa OuterActivePowerControl
+                    OuterActivePowerControl(
+                        pi_ctrl = c.delta_control.outer_active.pi_ctrl,
+                        P_ac_ref = iszero(c.delta_control.outer_active.P_ac_ref) ?
+                                   setpoint.Pac / c.elec.Sbase :
+                                   c.delta_control.outer_active.P_ac_ref,
+                        support = c.delta_control.outer_active.support,
+                        filter = c.delta_control.outer_active.filter,
+                    )
+                elseif c.delta_control.outer_active isa OuterActiveVdcControl
+                    OuterActiveVdcControl(
+                        pi_ctrl = c.delta_control.outer_active.pi_ctrl,
+                        v_dc_ref = iszero(c.delta_control.outer_active.v_dc_ref) ?
+                                   setpoint.Vdc / c.elec.vDC_base :
+                                   c.delta_control.outer_active.v_dc_ref,
+                    )
+                else
+                    c.delta_control.outer_active
+                end
+            outer_reactive = resolved_outer_reactive(c.delta_control.outer_reactive, c, setpoint)
+            ΔdqControlGFL(outer_active, outer_reactive, c.delta_control.occ)
+        elseif c.delta_control isa ΔdqControlGFM
+            outer_reactive = resolved_outer_reactive(c.delta_control.outer_reactive, c, setpoint)
+            ΔdqControlGFM(outer_reactive, c.delta_control.vi, c.delta_control.occ)
+        else
+            c.delta_control
+        end
+
+    return MMC(c.meas, sync, delta_control, c.sigma_control, c.modulation, c.elec)
+end
+
+function resolved_outer_reactive(block::OuterReactiveQControl, c::MMC, setpoint::SetPoint)
+    return OuterReactiveQControl(
+        pi_ctrl = block.pi_ctrl,
+        Q_ac_ref = iszero(block.Q_ac_ref) ? -setpoint.Qac / c.elec.Sbase : block.Q_ac_ref,
+        support = block.support,
+        filter = block.filter,
+    )
+end
+resolved_outer_reactive(block::AbstractOuterReactiveControl, c::MMC, setpoint::SetPoint) = block
+
+pf_type_ac(::ΔdqControlGFL) = 1
+pf_type_ac(block::ΔdqControlGFM) = pf_type_ac(block.outer_reactive)
+
+pf_type_dc(::VSEWithDamping) = 1
+pf_type_dc(::NoSynchronization) = 1
+pf_type_dc(::PLLSynchronization) = 1
+pf_type_dc(block::ΔdqControlGFL, sync::AbstractSynchronization) = pf_type_dc(block.outer_active)
+pf_type_dc(::ΔdqControlGFM, sync::AbstractSynchronization) = pf_type_dc(sync)
+
+function pf_vtar_pu(conv::MMC, elem::Element, global_dict)
+    vbase_ln_rms = global_dict["V"] / 1e3
+    return elem.setpoint.Vac / vbase_ln_rms
+end
+
+function make_power_flow!(conv::MMC, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+    dc_node = make_node(elem, 1)
+    ac_nodes = make_node(elem, 2)
+    dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_node, global_dict)
+    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
+
+    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "convdc")
+    key_str = string(key)
+
+    data["convdc"][key_str] = Dict{String, Any}()
+    convdc = data["convdc"][key_str]
+
+    convdc["busdc_i"] = dc_bus
+    convdc["busac_i"] = ac_bus
+    convdc["source_id"] = Any["convdc", key]
+    convdc["status"] = 1
+    convdc["index"] = key
+    convdc["basekVac"] = global_dict["V"] / 1e3
+
+    convdc["type_ac"] = pf_type_ac(conv.delta_control)
+    convdc["Vtar"] = pf_vtar_pu(conv, elem, global_dict)
+    if convdc["type_ac"] == 2
+        data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
+        data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
+    end
+    convdc["type_dc"] = pf_type_dc(conv.delta_control, conv.sync)
+    convdc["acq_droop"] = 0
+    convdc["kq_droop"] = 0.0
+    convdc["droop"] = 0.0
+    convdc["Vdcset"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
+    convdc["Pacset"] = -elem.setpoint.Pac
+    convdc["Pdcset"] = !iszero(elem.setpoint.Pdc) ? elem.setpoint.Pdc : elem.setpoint.Pac
+    convdc["dVdcSet"] = 0.0
+
+    convdc["islcc"] = 0
+    convdc["transformer"] = 0
+    convdc["rtf"] = 0.0
+    convdc["xtf"] = 0.0
+    convdc["tm"] = 1.0
+    convdc["filter"] = 0
+    convdc["bf"] = 0.0
+    convdc["reactor"] = 1
+
+    z_ac_base = (3 / 2) * conv.elec.vAC_base^2 / conv.elec.Sbase
+    convdc["rc"] = conv.elec.turnsRatio^(-2) * conv.elec.Rₑ * z_ac_base / global_dict["Z"]
+    convdc["xc"] = conv.elec.turnsRatio^(-2) * conv.elec.Lₑ * z_ac_base * global_dict["omega"] / conv.elec.ωbase / global_dict["Z"]
+
+    convdc["Vmmax"] = 1.1 * elem.setpoint.Vac * 1e3 / global_dict["V"]
+    convdc["Vmmin"] = 0.9 * elem.setpoint.Vac * 1e3 / global_dict["V"]
+    convdc["Imax"] = 1.1 * max(abs(elem.limits.P_min), abs(elem.limits.P_max), abs(elem.setpoint.Pac)) / max(elem.setpoint.Vac, eps())
+
+    convdc["P_g"] = elem.setpoint.Pac
+    convdc["Q_g"] = elem.setpoint.Qac
+    convdc["LossA"] = 0.0
+    convdc["LossB"] = 0.0
+    convdc["LossCrec"] = 0.0
+    convdc["LossCinv"] = 0.0
+    convdc["Qacmax"] = elem.limits.Q_max
+    convdc["Qacmin"] = elem.limits.Q_min
+    convdc["Pacmax"] = elem.limits.P_max
+    convdc["Pacmin"] = elem.limits.P_min
+
+    if data["bus"][string(ac_bus)]["bus_type"] == 1
+        data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
+        data["bus"][string(ac_bus)]["vmin"] = 0.9 * data["bus"][string(ac_bus)]["vm"]
+        data["bus"][string(ac_bus)]["vmax"] = 1.1 * data["bus"][string(ac_bus)]["vm"]
+    end
+
+    data["busdc"][string(dc_bus)]["Vdc"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
+    data["busdc"][string(dc_bus)]["Vdcmax"] = 1.1 * data["busdc"][string(dc_bus)]["Vdc"]
+    data["busdc"][string(dc_bus)]["Vdcmin"] = 0.9 * data["busdc"][string(dc_bus)]["Vdc"]
+    data["busdc"][string(dc_bus)] = set_bus_type_dc(data["busdc"][string(dc_bus)], convdc["type_dc"])
+
+    return nothing
 end

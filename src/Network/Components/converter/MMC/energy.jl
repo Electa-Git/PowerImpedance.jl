@@ -6,10 +6,11 @@ abstract type AbstractEnergyControl             <: AbstractStateSpace end
 end
 statenames(::TotalEnergyControl) = (:ξ_Wtot,)
 
-function state_space!(F, x, meas, b::TotalEnergyControl, conv::AbstractMMC)
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power)}, b::TotalEnergyControl, conv::AbstractMMC)
+    (; meas, power) = inputs
     (; ξ_Wtot, vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x
     (; v_dc_f) = meas
-    P_ac_f = meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f
+    (; P_ac_f) = power
     # wΣz = (vCΔ_d^2 + vCΔ_q^2 + vCΔ_Zd^2 + vCΔ_Zq^2 + vCΣ_d^2 + vCΣ_q^2 + 2*vCΣ_z^2)/(2)
     wΣz = (vCΔ_d^2 + vCΔ_q^2 + vCΔ_Zd^2 + vCΔ_Zq^2 + vCΣ_d^2 + vCΣ_q^2 + 2*vCΣ_z^2)/2;
     

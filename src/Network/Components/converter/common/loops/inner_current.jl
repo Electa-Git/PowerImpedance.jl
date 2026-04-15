@@ -45,16 +45,29 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-@with_kw struct InnerCurrentPIControl <: AbstractInnerCurrentControl
-    pi_ctrl::PIControl = PIControl()
+struct InnerCurrentPIControl{F<:AbstractMeasurementFilter} <: AbstractInnerCurrentControl
+    pi_ctrl::PIControl
+    filter::F
 end
+
+function InnerCurrentPIControl(;
+    pi_ctrl::PIControl = PIControl(),
+    filter::AbstractMeasurementFilter = NoFilter(),
+)
+    filter = measurement_filter_ss(filter)
+    return InnerCurrentPIControl{typeof(filter)}(pi_ctrl, filter)
+end
+
+InnerCurrentPIControl(pi_ctrl::PIControl) = InnerCurrentPIControl(pi_ctrl = pi_ctrl)
 
 """
 Return inner-current controller state names.
 
 $(SIGNATURES)
 """
-statenames(::InnerCurrentPIControl) = (:ξ_id, :ξ_iq)
+function statenames(block::InnerCurrentPIControl)
+    return (filter_statenames(:vG_d_occ_f, block.filter)..., filter_statenames(:vG_q_occ_f, block.filter)..., :ξ_id, :ξ_iq)
+end
 
 """
 Initialize inner-current PI integrator states.
@@ -62,11 +75,17 @@ Initialize inner-current PI integrator states.
 $(SIGNATURES)
 """
 function initialvalues(block::InnerCurrentPIControl; inputs, setpoint_pu=SetPoint(), conv::AbstractConverter)
-    #iΔ_d, iΔ_q = initialvalues(conv.elec; inputs, setpoint_pu)
+    ratio = voltage_filter_ratio(conv)
+    vG_d0 = inputs.vG_d * ratio
+    vG_q0 = inputs.vG_q * ratio
+    dnames = filter_statenames(:vG_d_occ_f, block.filter)
+    qnames = filter_statenames(:vG_q_occ_f, block.filter)
 
-    return (
-        ξ_id = 0,#lec_resistance(conv.elec) * iΔ_d,
-        ξ_iq = 0#elec_resistance(conv.elec) * iΔ_q
+    return (;
+        filter_initialvalues(block.filter, dnames, vG_d0)...,
+        filter_initialvalues(block.filter, qnames, vG_q0)...,
+        ξ_id = 0,
+        ξ_iq = 0,
     )
 end
 
@@ -86,15 +105,15 @@ function state_space!(F, x, (meas, sync, vloop), block::InnerCurrentPIControl, c
 
     i_d = meas.i_d_f
     i_q = meas.i_q_f
-    v_d = meas.vG_d_f
-    v_q = meas.vG_q_f
+    v_d, i = filter_step!(F, 1, x, block.filter, filter_statenames(:vG_d_occ_f, block.filter), meas.vG_d_f)
+    v_q, i = filter_step!(F, i, x, block.filter, filter_statenames(:vG_q_occ_f, block.filter), meas.vG_q_f)
 
     Lᵣ = elec_inductance(conv.elec)
 
     e_d = i_d_ref - i_d
     e_q = i_q_ref - i_q
-    F[1] = block.pi_ctrl.Ki * e_d
-    F[2] = block.pi_ctrl.Ki * e_q
+    F[i] = block.pi_ctrl.Ki * e_d
+    F[i + 1] = block.pi_ctrl.Ki * e_q
 
     vMΔd_ref_c = x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * sync.ω_c * i_q + v_d
     vMΔq_ref_c = x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * sync.ω_c * i_d + v_q

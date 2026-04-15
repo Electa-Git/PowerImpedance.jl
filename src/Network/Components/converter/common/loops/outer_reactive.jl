@@ -107,10 +107,11 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-struct OuterReactiveQControl{S<:AbstractVoltageSupportTLC} <: AbstractOuterReactiveControl
+struct OuterReactiveQControl{S<:AbstractVoltageSupportTLC,F<:AbstractMeasurementFilter} <: AbstractOuterReactiveControl
     pi_ctrl::PIControl
     Q_ac_ref::Float64
     support::S
+    filter::F
 end
 
 """
@@ -122,8 +123,10 @@ function OuterReactiveQControl(;
     pi_ctrl::PIControl = PIControl(),
     Q_ac_ref::Real = 0.0,
     support::AbstractVoltageSupportTLC = NoVoltageSupport(),
+    filter::AbstractMeasurementFilter = NoFilter(),
 )
-    return OuterReactiveQControl{typeof(support)}(pi_ctrl, Float64(Q_ac_ref), support)
+    filter = measurement_filter_ss(filter)
+    return OuterReactiveQControl{typeof(support),typeof(filter)}(pi_ctrl, Float64(Q_ac_ref), support, filter)
 end
 
 """
@@ -132,7 +135,12 @@ Return reactive-power controller state names.
 $(SIGNATURES)
 """
 function statenames(block::OuterReactiveQControl)
-    return (statenames(block.support)..., :ξ_Q_ac)
+    return (statenames(block.support)..., filter_statenames(:Q_ac_f, block.filter)..., :ξ_Q_ac)
+end
+
+function initialvalues(block::OuterReactiveQControl; setpoint_pu=SetpointPU(0, 0, 0, 0), kwargs...)
+    names = filter_statenames(:Q_ac_f, block.filter)
+    return (; initialvalues(block.support; kwargs...)..., filter_initialvalues(block.filter, names, setpoint_pu.q_ac)...)
 end
 
 """
@@ -141,12 +149,13 @@ Evaluate reactive-power control and support dynamics.
 $(SIGNATURES)
 """
 function state_space!(F, x, meas, block::OuterReactiveQControl, conv::AbstractConverter)
-    Q_ac_f = -meas.vG_q_f * meas.i_d_f + meas.vG_d_f * meas.i_q_f
+    Q_ac = -meas.vG_q_f * meas.i_d_f + meas.vG_d_f * meas.i_q_f
     ns = n_states(block.support)
     support = state_space!(@view(F[1:ns]), x, meas, block.support)
+    Q_ac_f, i = filter_step!(F, ns + 1, x, block.filter, filter_statenames(:Q_ac_f, block.filter), Q_ac)
 
     Q_ac_ref_eff = block.Q_ac_ref + support.Q_ac_support
-    F[ns + 1] = block.pi_ctrl.Ki * (Q_ac_ref_eff - Q_ac_f)
+    F[i] = block.pi_ctrl.Ki * (Q_ac_ref_eff - Q_ac_f)
     
     controller_output = block.pi_ctrl.Kp * (Q_ac_ref_eff - Q_ac_f) + x.ξ_Q_ac
     return output_outer_reactive_control(conv, controller_output)

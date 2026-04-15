@@ -40,21 +40,44 @@ state_space!(F, x, (meas, sync, pact, qact), block::NoInnerVoltageControl, conv:
 
 abstract type AbstractVirtualImpedance          <: AbstractInnerVoltage end
 
-@with_kw struct CCVI <: AbstractVirtualImpedance
-    R_v::Float64 = 0.01     # Virtual Resistance [pu]
-    L_v::Float64 = 0.25     # Virtual inductance [pu]
-    V_d_ref::Float64 = 1     # Vd voltage reference [pu]
-    V_q_ref::Float64 = 0     # Vq voltage reference [pu]
+struct CCVI{F<:AbstractMeasurementFilter} <: AbstractVirtualImpedance
+    R_v::Float64     # Virtual Resistance [pu]
+    L_v::Float64     # Virtual inductance [pu]
+    V_d_ref::Float64 # Vd voltage reference [pu]
+    V_q_ref::Float64 # Vq voltage reference [pu]
+    filter::F
 end
-statenames(::CCVI) = ()
+
+function CCVI(;
+    R_v::Real = 0.01,
+    L_v::Real = 0.25,
+    V_d_ref::Real = 1,
+    V_q_ref::Real = 0,
+    filter::AbstractMeasurementFilter = NoFilter(),
+)
+    filter = measurement_filter_ss(filter)
+    return CCVI{typeof(filter)}(Float64(R_v), Float64(L_v), Float64(V_d_ref), Float64(V_q_ref), filter)
+end
+
+function statenames(b::CCVI)
+    return (filter_statenames(:vG_d_vi_f, b.filter)..., filter_statenames(:vG_q_vi_f, b.filter)...)
+end
+
+function initialvalues(b::CCVI; inputs, conv=nothing, kwargs...)
+    ratio = voltage_filter_ratio(conv)
+    vG_d0 = inputs.vG_d * ratio
+    vG_q0 = inputs.vG_q * ratio
+    dnames = filter_statenames(:vG_d_vi_f, b.filter)
+    qnames = filter_statenames(:vG_q_vi_f, b.filter)
+    return (; filter_initialvalues(b.filter, dnames, vG_d0)..., filter_initialvalues(b.filter, qnames, vG_q0)...)
+end
 
 function state_space!(F, x, (meas, sync, out_reactive), b::CCVI, conv::AbstractConverter)
     (;R_v, L_v, V_d_ref, V_q_ref) = b
-    (;vG_d_f, vG_q_f) = meas
     ω_c = sync.ω_c
     vgfm_d_ref = out_reactive.vgfm_d_ref
-
-    #TODO: check if turnRatio is needed (it was used in old code)
+    vG_d_f, i = filter_step!(F, 1, x, b.filter, filter_statenames(:vG_d_vi_f, b.filter), meas.vG_d_f)
+    vG_q_f, _ = filter_step!(F, i, x, b.filter, filter_statenames(:vG_q_vi_f, b.filter), meas.vG_q_f)
 
     den = (R_v^2 + ω_c^2*L_v^2)
     return (iΔ_d_ref=(R_v * (V_d_ref+vgfm_d_ref-vG_d_f) + ω_c * L_v * (vG_q_f-V_q_ref)) /den,

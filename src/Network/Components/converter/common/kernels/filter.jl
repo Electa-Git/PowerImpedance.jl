@@ -215,3 +215,41 @@ function measurement_filter_ss(filter::AbstractMeasurementFilter)
 
     return filter
 end
+
+filter_statenames(prefix::Symbol, filter::AbstractMeasurementFilter) =
+    ntuple(i -> Symbol("$(prefix)_x$i"), size(filter.A, 1))
+
+voltage_filter_ratio(::Nothing) = 1.0
+voltage_filter_ratio(::AbstractConverter) = 1.0
+
+function filter_initialvalues(filter::NoFilter, names::NTuple{N, Symbol}, u0) where {N}
+    return NamedTuple{names}(())
+end
+
+function filter_initialvalues(filter::AbstractMeasurementFilter, names::NTuple{N, Symbol}, u0) where {N}
+    x0 = Tuple(vec(-(filter.A \ (filter.B * [u0]))))
+    return NamedTuple{names}(x0)
+end
+
+function filter_step!(F, offset::Integer, x, filter::NoFilter, names::NTuple{N, Symbol}, u) where {N}
+    return u, offset
+end
+
+function filter_step!(F, offset::Integer, x, filter::AbstractMeasurementFilter, names::NTuple{N, Symbol}, u) where {N}
+    xf = ntuple(i -> getfield(x, names[i]), Val(N))
+
+    y = filter.D[1, 1] * u
+    @inbounds for col in 1:N
+        y += filter.C[1, col] * xf[col]
+    end
+
+    @inbounds for row in 1:N
+        dx = filter.B[row, 1] * u
+        for col in 1:N
+            dx += filter.A[row, col] * xf[col]
+        end
+        F[offset + row - 1] = dx
+    end
+
+    return y, offset + N
+end

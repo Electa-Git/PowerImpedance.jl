@@ -27,20 +27,20 @@ elec_resistance(block::ElectricalMMC) = block.Rₑ
 
 
 function ElectricalMMC(;
-        ## Elec params
-        Lₐᵣₘ = 50e-3,        # arm inductance [H]
-        Rₐᵣₘ = 1.07,         # equivalent arm resistance[Ω]
-        Cₐᵣₘ = 10e-3,        # capacitance per submodule [F]
-        N = 400,             # number of submodules per arm [-]
-        turnsRatio  = 1,     # Turns ratio of the converter transformer, converter side/AC side [-]
-        Lᵣ = 60e-3,          # inductance of the converter transformer at the converter side [H]
-        Rᵣ = 0.535,          # resistance of the converter transformer at the converter side [Ω]
+    ## Elec params
+    Lₐᵣₘ = 50e-3,        # arm inductance [H]
+    Rₐᵣₘ = 1.07,         # equivalent arm resistance[Ω]
+    Cₐᵣₘ = 10e-3,        # capacitance per submodule [F]
+    N = 400,             # number of submodules per arm [-]
+    turnsRatio  = 1,     # Turns ratio of the converter transformer, converter side/AC side [-]
+    Lᵣ = 60e-3,          # inductance of the converter transformer at the converter side [H]
+    Rᵣ = 0.535,          # resistance of the converter transformer at the converter side [Ω]
 
-        ## Base values
-        ωbase = 100π,
-        vACbase_LL_RMS = 380,   # Voltage base LL converter side [kV]
-        Sbase = 1000,           # Power base [MW]
-        vDC_base = 640)          # DC voltage base [kV])
+    ## Base values
+    ωbase = 100π,
+    vACbase_LL_RMS = 380,   # Voltage base LL converter side [kV]
+    Sbase = 1000,           # Power base [MW]
+    vDC_base = 640)          # DC voltage base [kV])
     
     vAC_base = vACbase_LL_RMS*sqrt(2/3)
     iAC_base = 2*Sbase/3/vAC_base
