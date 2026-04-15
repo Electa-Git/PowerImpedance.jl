@@ -26,7 +26,7 @@ elec_inductance(block::ElectricalMMC) = block.Lₑ
 elec_resistance(block::ElectricalMMC) = block.Rₑ
 
 
-function ElectricalMMC(
+function ElectricalMMC(;
         ## Elec params
         Lₐᵣₘ = 50e-3,        # arm inductance [H]
         Rₐᵣₘ = 1.07,         # equivalent arm resistance[Ω]
@@ -108,9 +108,9 @@ function state_space!(F, x, (out_modulation, sig_in, inputs), b::ElectricalMMC, 
 
 
     # diΔ_d_dt =-(vG_d - vMΔd + Rₑ*iΔ_d + Lₑ*iΔ_q*w)/Lₑ, grid frame
-    F[1] = -(vG_d * conv.elec.turnsRatio - vMΔd + conv.elec.Rₑ*iΔ_d + conv.elec.Lₑ*iΔ_q)/conv.elec.Lₑ;                 
+    F[1] = -(vG_d - vMΔd + conv.elec.Rₑ*iΔ_d + conv.elec.Lₑ*iΔ_q)/conv.elec.Lₑ;                 
     # diΔ_q_dt =-(vG_q - vMΔq + Rₑ*iΔ_q - Lₑ*iΔ_d*w)/Lₑ, grid frame
-    F[2] = -(vG_q * conv.elec.turnsRatio - vMΔq + conv.elec.Rₑ*iΔ_q - conv.elec.Lₑ*iΔ_d)/conv.elec.Lₑ;                 
+    F[2] = -(vG_q - vMΔq + conv.elec.Rₑ*iΔ_q - conv.elec.Lₑ*iΔ_d)/conv.elec.Lₑ;                 
     # diΣ_d_dt =-(vMΣd + Rₐᵣₘ*iΣ_d - 2*Lₐᵣₘ*iΣ_q*w)/Lₐᵣₘ, grid 2w frame
     F[3] = -(vMΣd + conv.elec.Rₐᵣₘ*iΣ_d - 2*conv.elec.Lₐᵣₘ*iΣ_q)/conv.elec.Lₐᵣₘ;                                 
     # diΣ_q_dt =-(vMΣq + Rₐᵣₘ*iΣ_q + 2*Lₐᵣₘ*iΣ_d*w)/Lₐᵣₘ,  grid 2w frame

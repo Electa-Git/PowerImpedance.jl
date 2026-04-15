@@ -9,6 +9,7 @@ export mmc, MMC, AbstractMMC, BuildMMC,             # MMC
     CCVI,                                           # Inner voltage
     CirculatingCurrentSuppressionControl, ZeroSequenceCurrentControl, OutputCurrentControl,     # Inner current
     UncompensatedModulation, CompensatedModulation,  # Modulation
+    ElectricalMMC,
 
     statenames, inputnames, initialvalues,          # Functions
     state_space!, pftoinputs
@@ -39,7 +40,7 @@ include("modulation.jl")
     elec::ElectricalMMC
 end
 
-statenames(c::MMC)                          = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.elec)...) 
+statenames(c::MMC)                          = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
 initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
 inputnames(::MMC)                           = (:v_dc, :vG_d, :vG_q)
 outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q) 
@@ -160,10 +161,10 @@ function input_signals(c::MMC, x, inputs)
     i = frame_transform(x.iΔ_d, x.iΔ_q, θ)
 
     return ( # If not speficied otherwise, all fields are in converter reference frame 
-        vG_d = v.d,
-        vG_q = v.q,
-        vG_d_g = inputs.vG_d, # grid reference frame
-        vG_q_g = inputs.vG_q, # grid reference frame
+        vG_d = v.d * c.elec.turnsRatio,
+        vG_q = v.q * c.elec.turnsRatio,
+        vG_d_g = inputs.vG_d * c.elec.turnsRatio, # grid reference frame
+        vG_q_g = inputs.vG_q * c.elec.turnsRatio, # grid reference frame
         v_dc = inputs.v_dc,
         i_d = i.d,
         i_q = i.q,

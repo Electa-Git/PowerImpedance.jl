@@ -1,25 +1,40 @@
 abstract type AbstractModulationMMC               <: AbstractStateSpace end 
 
-struct UncompensatedModulation <: AbstractModulationMMC end
-statenames(::UncompensatedModulation) = (;)
 
-struct UncompensatedModulationDelay{D<:PadeDelay} <: AbstractModulationMMC 
-    delay::D
+struct UncompensatedModulation{D<:PadeDelay} <: AbstractModulationMMC 
+    delay1::D
+    delay2::D
+    delay3::D
 end
+statenames(m::UncompensatedModulation) = (statenames(m.delay1)..., statenames(m.delay2)..., statenames(m.delay3)...)
 
-function UncompensatedModulationDelay(;
+function UncompensatedModulation(;
     timeDelay::Real = 0.0,
     padeOrderNum::Int = 0,
     padeOrderDen::Int = 0
 )
-    delay = PadeDelay(
+    delay1 = PadeDelay(
         timeDelay = timeDelay,
         padeOrderNum = padeOrderNum,
         padeOrderDen = padeOrderDen,
         n_inputs = 2,
-        state_prefix = :m_delay,
+        state_prefix = :mΔ_delay,
     )
-    return DelayModulation{PadeDelay}(delay)
+    delay2 = PadeDelay(
+        timeDelay = timeDelay,
+        padeOrderNum = padeOrderNum,
+        padeOrderDen = padeOrderDen,
+        n_inputs = 2,
+        state_prefix = :mΣ_delay,
+    )
+    delay3 = PadeDelay(
+        timeDelay = timeDelay,
+        padeOrderNum = padeOrderNum,
+        padeOrderDen = padeOrderDen,
+        n_inputs = 1,
+        state_prefix = :mΣ_z_delay,
+    )
+    return UncompensatedModulation{PadeDelay}(delay1, delay2, delay3)
 end
 
 
@@ -41,6 +56,21 @@ function state_space!(F, x, (meas, out_delta, out_sigma), b::UncompensatedModula
     mΣd = 2/v_dc_f * vMΣd_ref
     mΣq = 2/v_dc_f * vMΣq_ref
     mΣz = 2/v_dc_f * vMΣz_ref          # zero-sequence is reference-frame independent
+
+    # Pade delays
+    i = 1
+    n = n_states(b.delay1)
+    y = state_space!(@view(F[i:i+n-1]), x, (mΔd, mΔq), b.delay1)
+    i += n    
+    mΔd, mΔq = phase_compensated_dq(y, conv.elec.ωbase * b.delay1.timeDelay)
+
+    n = n_states(b.delay2)
+    y = state_space!(@view(F[i:i+n-1]), x, (mΣd, mΣq), b.delay2)
+    i += n
+    mΣd, mΣq = phase_compensated_dq(y, -2*conv.elec.ωbase * b.delay2.timeDelay)
+
+    n = n_states(b.delay3)
+    mΣz = state_space!(@view(F[i:i+n-1]), x, (mΣz, ), b.delay3)[1]
 
     return (mΔd = mΔd, mΔq = mΔq, mΔZd = 0, mΔZq = 0,
         mΣd = mΣd, mΣq = mΣq, mΣz = mΣz)
