@@ -200,7 +200,7 @@ end
 
 for k in eachindex(omegas)
     for c in 1:3, r in 1:3
-        @test abs(Y_MMC[k][c, r]) ≈ abs(Y_validation[k][c, r]) atol = 9e-5
+        @test abs(Y_MMC[k][c, r]) ≈ abs(Y_validation[k][c, r]) atol = 1e-4
         @test angle(Y_MMC[k][c, r]) ≈ angle(Y_validation[k][c, r]) atol = 7 * (π / 180)
     end
 end

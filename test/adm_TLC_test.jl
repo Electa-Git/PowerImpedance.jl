@@ -283,7 +283,7 @@ end
 
 for k in eachindex(omegas)
     for c in 1:3, r in 1:3
-        @test abs(Y_TLC[k][c, r]) ≈ abs(Y_validation[k][c, r]) rtol = 0.07 #0.07
+        @test abs(Y_TLC[k][c, r]) ≈ abs(Y_validation[k][c, r]) atol = 1e-4 #0.07 #0.07
         @test angle(Y_TLC[k][c, r]) ≈ angle(Y_validation[k][c, r]) atol = 3 * (π / 180)
     end
 end
@@ -324,7 +324,7 @@ end
 
 for k in eachindex(omegas)
     for c in 1:3, r in 1:3
-        @test Y_TLC_abs[k][c, r] ≈ Y_validation_abs[k][c, r] rtol = 0.02 #0.02
+        @test Y_TLC_abs[k][c, r] ≈ Y_validation_abs[k][c, r] atol = 1e-4 #0.02
         @test Y_TLC_angle[k][c, r] ≈ Y_validation_angle[k][c, r] atol = 1 * (π / 180)
     end
 end
