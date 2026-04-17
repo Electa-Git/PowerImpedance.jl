@@ -44,10 +44,10 @@ using Interpolations
 using DelimitedFiles
 import NaNMath # Deal with out of domain erros in Nonlinearsolve
 
-#= # Include PowerModelsMCDC as a local package, due to dependencies
+# Include PowerModelsMCDC as a local package, due to dependencies
 include("Packages/PowerModelsMCDC.jl/src/PowerModelsMCDC.jl")
 import .PowerModelsMCDC
-const _PMMCDC = PowerModelsMCDC =#
+const _PMMCDC = PowerModelsMCDC
 
 
 # Including all components    
