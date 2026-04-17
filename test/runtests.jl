@@ -7,7 +7,7 @@ using LinearAlgebra
 @testset "PowerImpedanceACDC" begin
         
         #include("imp_test.jl")
-        #include("adm_MMC_test.jl")
+        include("adm_MMC_test.jl")
         #include("solvers_test.jl")
         #include("adm_OHL_test.jl")
         #include("adm_DC_cable_test.jl")
@@ -16,7 +16,6 @@ using LinearAlgebra
         #include("Source_test.jl")
         #include("Transformer_test.jl")
         #include("power_flow_test.jl")
-
-
+        
 end
 
