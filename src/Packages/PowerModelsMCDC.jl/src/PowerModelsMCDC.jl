@@ -3,7 +3,6 @@ module PowerModelsMCDC
 
 ## Imports
 
-#import Memento
 import JuMP
 import InfrastructureModels as _IM
 import PowerModels as _PM
@@ -13,11 +12,13 @@ import PowerModelsACDC as _PMACDC
 ## Memento settings
 
 # Create our module level logger (this will get precompiled)
-#const _LOGGER = Memento.getlogger(@__MODULE__)
+const Memento = _PM.Memento
+const _Memento = Memento
+const _LOGGER = _PM._LOGGER
 
 # Register the module level logger at runtime so that folks can access the logger via `getlogger(PowerModelsMCDC)`
 # NOTE: If this line is not included then the precompiled `PowerModelsMCDC._LOGGER` won't be registered at runtime.
-#__init__() = Memento.register(_LOGGER)
+__init__() = nothing
 
 
 ## Includes
