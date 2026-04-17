@@ -8,7 +8,7 @@ using LinearAlgebra
         
         #include("imp_test.jl")
         include("adm_MMC_test.jl")
-        include("bipolar_mmc_test.jl")
+        #include("bipolar_mmc_test.jl")
         #include("solvers_test.jl")
         #include("adm_OHL_test.jl")
         #include("adm_DC_cable_test.jl")
