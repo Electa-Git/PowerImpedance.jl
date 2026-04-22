@@ -62,13 +62,13 @@ function state_space!(F, x, inputs, b::UncompensatedModulation, conv::AbstractMM
     mΣz = 2/v_dc_f * vMΣ_z_ref          # zero-sequence is reference-frame independent
 
     # Pade delays
-    y, i = state_space!(F, x, (mΔd, mΔq), b.delay1, conv, 1)
+    y, i = state_space_block!(F, x, (mΔd, mΔq), b.delay1, conv, 1)
     mΔd, mΔq = phase_compensated_dq(y, conv.elec.ωbase * b.delay1.timeDelay)
 
-    y, i = state_space!(F, x, (mΣd, mΣq), b.delay2, conv, i)
+    y, i = state_space_block!(F, x, (mΣd, mΣq), b.delay2, conv, i)
     mΣd, mΣq = phase_compensated_dq(y, -2*conv.elec.ωbase * b.delay2.timeDelay)
 
-    mΣz = state_space!(F, x, (mΣz, ), b.delay3, conv, i)[1][1]
+    mΣz = state_space_block!(F, x, (mΣz, ), b.delay3, conv, i)[1][1]
 
     return (mΔd = mΔd, mΔq = mΔq, mΔZd = 0, mΔZq = 0,
         mΣd = mΣd, mΣq = mΣq, mΣz = mΣz)

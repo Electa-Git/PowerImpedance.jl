@@ -95,7 +95,7 @@ $(SIGNATURES)
 For `NoFilter`, this is a zero-state pass-through and returns the raw input
 under the filtered output name.
 """
-function state_space!(F, x, inputs, m::MeasurementSignal, ::AbstractConverter)
+function state_space!(F, x, inputs, m::MeasurementSignal)
     nx = size(m.filter.A, 1)
 
     if nx == 0

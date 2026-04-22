@@ -150,7 +150,7 @@ function initialvalues(b::VSEWithDamping; setpoint_pu)
 end
 
 function state_space!(F, x, meas, b::VSEWithDamping, conv::AbstractConverter)
-    out_pll, i = state_space!(F, x, meas, b.pll, conv, 1)
+    out_pll, i = state_space_block!(F, x, meas, b.pll, conv, 1)
 
     ω_PLL = out_pll.ω_c
 
