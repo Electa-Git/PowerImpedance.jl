@@ -63,7 +63,7 @@ function statenames(b::CCVI)
     return (filter_statenames(:vG_d_vi_f, b.filter)..., filter_statenames(:vG_q_vi_f, b.filter)...)
 end
 
-function initialvalues(b::CCVI; inputs, conv=nothing, kwargs...)
+function initialvalues(b::CCVI; inputs, conv=nothing)
     ratio = voltage_filter_ratio(conv)
     vG_d0 = inputs.vG_d * ratio
     vG_q0 = inputs.vG_q * ratio

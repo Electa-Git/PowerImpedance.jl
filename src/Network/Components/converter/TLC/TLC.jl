@@ -94,9 +94,13 @@ function initialvalues(c::TLC; inputs, setpoint_pu=SetPoint())
     )
     return (;
         elec_init...,
-        initialvalues(c.meas, inputs=meas_inputs)..., #TODO add other blocks
+        initialvalues(c.meas, inputs=meas_inputs)..., 
         initialvalues(c.sync; setpoint_pu)...,
-        initialvalues(c.innerCurrent; inputs, setpoint_pu, conv=c)...,
+        initialvalues(c.outerActive; setpoint_pu)...,
+        initialvalues(c.outerReactive; setpoint_pu)...,
+        initialvalues(c.innerVoltage; inputs, setpoint_pu)...,
+        initialvalues(c.innerCurrent; inputs, conv=c)...,
+        initialvalues(c.mod; inputs, setpoint_pu)...
     )
 end
 

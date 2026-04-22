@@ -138,9 +138,9 @@ function statenames(block::OuterReactiveQControl)
     return (statenames(block.support)..., filter_statenames(:Q_ac_f, block.filter)..., :ξ_Q_ac)
 end
 
-function initialvalues(block::OuterReactiveQControl; setpoint_pu=SetpointPU(0, 0, 0, 0), kwargs...)
+function initialvalues(block::OuterReactiveQControl; setpoint_pu=SetpointPU(0, 0, 0, 0))
     names = filter_statenames(:Q_ac_f, block.filter)
-    return (; initialvalues(block.support; kwargs...)..., filter_initialvalues(block.filter, names, setpoint_pu.q_ac)...)
+    return (; initialvalues(block.support)..., filter_initialvalues(block.filter, names, setpoint_pu.q_ac)...)
 end
 
 """

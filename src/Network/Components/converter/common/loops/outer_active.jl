@@ -136,9 +136,9 @@ function statenames(block::OuterActivePowerControl)
     return (statenames(block.support)..., filter_statenames(:P_ac_f, block.filter)..., :ξ_P_ac)
 end
 
-function initialvalues(block::OuterActivePowerControl; setpoint_pu=SetpointPU(0, 0, 0, 0), kwargs...)
+function initialvalues(block::OuterActivePowerControl; setpoint_pu=SetpointPU(0, 0, 0, 0))
     names = filter_statenames(:P_ac_f, block.filter)
-    return (; initialvalues(block.support; kwargs...)..., filter_initialvalues(block.filter, names, setpoint_pu.p_ac)...)
+    return (; initialvalues(block.support)..., filter_initialvalues(block.filter, names, setpoint_pu.p_ac)...)
 end
 
 

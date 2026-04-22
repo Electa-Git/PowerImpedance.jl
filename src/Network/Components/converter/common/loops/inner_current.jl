@@ -74,7 +74,7 @@ Initialize inner-current PI integrator states.
 
 $(SIGNATURES)
 """
-function initialvalues(block::InnerCurrentPIControl; inputs, setpoint_pu=SetPoint(), conv::AbstractConverter)
+function initialvalues(block::InnerCurrentPIControl; inputs, conv::AbstractConverter)
     ratio = voltage_filter_ratio(conv)
     vG_d0 = inputs.vG_d * ratio
     vG_q0 = inputs.vG_q * ratio

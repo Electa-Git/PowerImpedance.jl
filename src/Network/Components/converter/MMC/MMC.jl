@@ -29,24 +29,21 @@ include("modulation.jl")
     elec::ElectricalMMC
 end
 
-statenames(c::MMC)                          = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
-initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
-inputnames(::MMC)                           = (:v_dc, :vG_d, :vG_q)
-outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q) 
-elecinputnames(c::MMC)                      = inputnames(c)
-
+statenames(c::MMC)      = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
+initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv = c)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...)
+inputnames(::MMC)       = (:v_dc, :vG_d, :vG_q)
+outputnames(::MMC)      = (:i_dc, :iΔ_d, :iΔ_q) 
 
 ### High level structures ###
-
 @with_kw struct ΔdqControlGFL{A<:AbstractOuterActiveControl, R<:AbstractOuterReactiveControl, I<:AbstractInnerCurrentControl, } <: AbstractΔdqControl 
     outer_active::A
     outer_reactive::R
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFL) = (statenames(c.outer_active)..., statenames(c.outer_reactive)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_active; inputs, setpoint_pu, conv)...,
-                                                                initialvalues(c.outer_reactive; inputs, setpoint_pu, conv)...,
-                                                                initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
+initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_active; setpoint_pu)...,
+                                                                initialvalues(c.outer_reactive; setpoint_pu)...,
+                                                                initialvalues(c.occ; inputs, conv)...) 
 
 @with_kw struct ΔdqControlGFM{R<:AbstractOuterReactiveControl, V<:AbstractVirtualImpedance, I<:AbstractInnerCurrentControl, } <: AbstractΔdqControl 
     outer_reactive::R
@@ -54,13 +51,10 @@ initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.vi)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; inputs, setpoint_pu, conv)...,
-                                                                initialvalues(c.vi; inputs, setpoint_pu, conv)...,
-                                                                initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
+initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; setpoint_pu)...,
+                                                                initialvalues(c.vi; inputs, conv)...,
+                                                                initialvalues(c.occ; inputs, conv)...) 
 
-output_outer_reactive_control(conv::AbstractMMC, out) = output_outer_reactive_control(conv.delta_control, out)
-output_outer_reactive_control(::ΔdqControlGFL, out) = (iΔ_q_ref = out,)
-output_outer_reactive_control(::ΔdqControlGFM, out) = (vgfm_d_ref = out,)
 
 @with_kw struct ΣdqzControlTEC{E<:AbstractEnergyControl, I1<:AbstractInnerCurrentControl, I2<:AbstractInnerCurrentControl} <: AbstractΣdqzControl
     tec::E      # Total Energy Control
@@ -82,7 +76,6 @@ initialvalues(c::ΣdqzControlLEC) = (; initialvalues(c.wsigma)..., initialvalues
 ################## State-space equations #####################
 
 ### MMC ###
-
 function state_space!(F, x, inputs, c::MMC)
     # -- Signal Processing ------------------------------------------------------------------------    
     sig_in = input_signals(c, x, inputs)
