@@ -308,7 +308,6 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
                 pi_ctrl = c.outerActive.pi_ctrl,
                 P_ac_ref = iszero(c.outerActive.P_ac_ref) ? setpoint.Pac / c.elec.Sbase : c.outerActive.P_ac_ref,
                 support = c.outerActive.support,
-                filter = c.outerActive.filter,
             )
         elseif c.outerActive isa OuterActiveVdcControl
             OuterActiveVdcControl(
@@ -338,7 +337,6 @@ function resolved_refs(c::TLC, setpoint::SetPoint)
                 pi_ctrl = c.outerReactive.pi_ctrl,
                 Q_ac_ref = iszero(c.outerReactive.Q_ac_ref) ? (-setpoint.Qac / c.elec.Sbase) : c.outerReactive.Q_ac_ref,
                 support = supp,
-                filter = c.outerReactive.filter,
             )
         elseif c.outerReactive isa OuterReactiveVacControl
             OuterReactiveVacControl(

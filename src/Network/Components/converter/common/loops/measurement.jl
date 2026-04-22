@@ -4,9 +4,9 @@
 Shared converter measurement blocks.
 
 The measurement layer converts raw converter signals into filtered signals used
-by synchronization and control loops. The composite `Measurement` type is
-currently named for TLC compatibility, but the individual `MeasurementSignal`
-building block is topology-independent.
+by synchronization and control loops. Power measurements are derived from the
+filtered voltage and current measurements before their own optional filters are
+applied.
 =#
 
 export MeasurementSignal,
@@ -145,24 +145,31 @@ struct Measurement <: AbstractStateSpace
     i_q::MeasurementSignal
     i_dc::MeasurementSignal
     θ::MeasurementSignal
+    P_ac::MeasurementSignal
+    Q_ac::MeasurementSignal
+    P_dc::MeasurementSignal
 end
 
 """
-Construct the TLC measurement block from filter specifications.
+Construct the converter measurement block from filter specifications.
 
 $(SIGNATURES)
 
 # Details
 
 The `v_ac` filter is applied to `vG_d` and `vG_q`; the `i_ac` filter is applied to
-`i_d` and `i_q`; scalar filters are used for `v_dc`, `i_dc`, and `θ`.
+`i_d` and `i_q`; scalar filters are used for `v_dc`, `i_dc`, `θ`, `P_ac`, `Q_ac`,
+and `P_dc`.
 """
 function Measurement(;
     v_ac::AbstractMeasurementFilter = NoFilter(),
     i_ac::AbstractMeasurementFilter = NoFilter(),
     v_dc::AbstractMeasurementFilter = NoFilter(),
     i_dc::AbstractMeasurementFilter = NoFilter(),
-    θ::AbstractMeasurementFilter   = NoFilter()
+    θ::AbstractMeasurementFilter   = NoFilter(),
+    P_ac::AbstractMeasurementFilter = NoFilter(),
+    Q_ac::AbstractMeasurementFilter = NoFilter(),
+    P_dc::AbstractMeasurementFilter = NoFilter(),
 )
     return Measurement(
         MeasurementSignal(:vG_d, v_ac),
@@ -171,7 +178,10 @@ function Measurement(;
         MeasurementSignal(:i_d, i_ac),
         MeasurementSignal(:i_q, i_ac),
         MeasurementSignal(:i_dc, i_dc),
-        MeasurementSignal(:θ,   θ)
+        MeasurementSignal(:θ,   θ),
+        MeasurementSignal(:P_ac, P_ac),
+        MeasurementSignal(:Q_ac, Q_ac),
+        MeasurementSignal(:P_dc, P_dc),
     )
 end
 
@@ -189,13 +199,19 @@ statenames(m::Measurement) = (
     statenames(m.i_d)...,
     statenames(m.i_q)...,
     statenames(m.i_dc)...,
-    statenames(m.θ)...
+    statenames(m.θ)...,
+    statenames(m.P_ac)...,
+    statenames(m.Q_ac)...,
+    statenames(m.P_dc)...
 )
 
 """
-Return initial values for every measurement filter.
+Return steady-state initial values for the measurement filters.
 
-$(SIGNATURES)
+The `Measurement` struct stores filter definitions, not measured operating-point
+values. When `inputs` are provided, each filter is initialized at the
+corresponding operating-point signal; otherwise the generic zero fallback is
+used.
 """
 function initialvalues(m::Measurement; inputs=nothing)
     return (;
@@ -205,7 +221,7 @@ function initialvalues(m::Measurement; inputs=nothing)
         initialvalues(m.i_d; inputs)...,
         initialvalues(m.i_q; inputs)...,
         initialvalues(m.i_dc; inputs)...,
-        initialvalues(m.θ; inputs)...
+        initialvalues(m.θ; inputs)...,
     )
 end
 
@@ -221,7 +237,18 @@ Return filtered output names for the composite measurement block.
 
 $(SIGNATURES)
 """
-outputnames(::Measurement) = (:vG_d_f, :vG_q_f, :v_dc_f, :i_d_f, :i_q_f, :i_dc_f, :θ_f)
+outputnames(::Measurement) = (
+    :vG_d_f,
+    :vG_q_f,
+    :v_dc_f,
+    :i_d_f,
+    :i_q_f,
+    :i_dc_f,
+    :θ_f,
+    :P_ac_f,
+    :Q_ac_f,
+    :P_dc_f,
+)
 
 """
 Evaluate all measurement filters and return their filtered outputs.
@@ -236,8 +263,25 @@ function state_space!(F, x, inputs, m::Measurement, c::AbstractConverter)
     i_q, i = state_space!(F, x, inputs, m.i_q, c, i)
     i_dc, i = state_space!(F, x, inputs, m.i_dc, c, i)
     θ, _ = state_space!(F, x, inputs, m.θ, c, i)
-    return merge(vG_d, vG_q, v_dc, i_d, i_q, i_dc, θ)
-end
+    measured = merge(vG_d, vG_q, v_dc, i_d, i_q, i_dc, θ)
+    power_inputs = merge(inputs, (;
+        P_ac = measured.vG_d_f * measured.i_d_f + measured.vG_q_f * measured.i_q_f,
+        Q_ac = -measured.vG_q_f * measured.i_d_f + measured.vG_d_f * measured.i_q_f,
+        P_dc = measured.v_dc_f * measured.i_dc_f,
+    ))
+
+    n = n_states(m.P_ac)
+    P_ac = state_space!(@view(F[index:index+n-1]), x, power_inputs, m.P_ac)
+    index += n
+
+    n = n_states(m.Q_ac)
+    Q_ac = state_space!(@view(F[index:index+n-1]), x, power_inputs, m.Q_ac)
+    index += n
+
+    n = n_states(m.P_dc)
+    P_dc = state_space!(@view(F[index:index+n-1]), x, power_inputs, m.P_dc)
+
+    return merge(measured, P_ac, Q_ac, P_dc)end
 
 """
 Write composite measurement output equations.
@@ -252,5 +296,8 @@ function outputequations!(F, x, inputs, y, m::Measurement)
     F[5] = y.i_q_f
     F[6] = y.i_dc_f
     F[7] = y.θ_f
+    F[8] = y.P_ac_f
+    F[9] = y.Q_ac_f
+    F[10] = y.P_dc_f
     return nothing
 end

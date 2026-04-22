@@ -85,8 +85,7 @@ function state_space!(F, x, inputs, c::MMC)
 
     # -- Delta and Sigma control ------------------------------------------------------------------
     out_delta, i = state_space!(F, x, (meas, sync_out), c.delta_control, c, i)
-    power = (P_ac_f = energy_active_power(meas, sync_out, out_delta, c.delta_control, c.sync),)
-    out_sigma, i = state_space!(F, x, (; meas, power, sync=sync_out), c.sigma_control, c, i)
+    out_sigma, i = state_space!(F, x, (meas = meas, power = meas.P_ac_f, sync = sync_out), c.sigma_control, c, i)
 
     # -- Modulation -------------------------------------------------------------------------------
     out_modulation, i = state_space!(F, x, (meas, out_delta, out_sigma), c.modulation, c, i)
@@ -101,9 +100,9 @@ end
 ### Higher level structures ###
 
 function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΣdqzControlTEC, c::MMC) 
-    (; meas, power) = inputs
+    (; meas) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_Wtot, i = state_space!(F, x, (; meas, power), b.tec, c, 1)
+    out_Wtot, i = state_space!(F, x, meas, b.tec, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
     out_zscc, i = state_space!(F, x, (meas, out_Wtot), b.zscc, c, i)
@@ -147,17 +146,6 @@ function state_space!(F, x, (meas, sync), b::ΔdqControlGFM, c::MMC)
 
     return out_occ
 end
-
-measured_active_power(meas) = meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f
-
-energy_active_power(meas, sync_out, out_delta, ::ΔdqControlGFM, ::VSEWithDamping) = sync_out.P_ac_f
-energy_active_power(meas, sync_out, out_delta, ::ΔdqControlGFM, ::AbstractSynchronization) = measured_active_power(meas)
-
-energy_active_power(meas, sync_out, out_delta, b::ΔdqControlGFL, ::AbstractSynchronization) =
-    energy_active_power(meas, out_delta, b.outer_active)
-
-energy_active_power(meas, out_delta, ::OuterActivePowerControl) = out_delta.P_ac_f
-energy_active_power(meas, out_delta, ::AbstractOuterActiveControl) = measured_active_power(meas)
 
 
 ################## Handling of inputs and outputs ############
@@ -240,7 +228,6 @@ function resolved_refs(c::MMC, setpoint::SetPoint)
                 P_ac_ref = iszero(c.sync.P_ac_ref) ? setpoint.Pac / c.elec.Sbase : c.sync.P_ac_ref,
                 ω_ref = c.sync.ω_ref,
                 pll = c.sync.pll,
-                filter = c.sync.filter,
             )
         else
             c.sync
@@ -256,7 +243,6 @@ function resolved_refs(c::MMC, setpoint::SetPoint)
                                    setpoint.Pac / c.elec.Sbase :
                                    c.delta_control.outer_active.P_ac_ref,
                         support = c.delta_control.outer_active.support,
-                        filter = c.delta_control.outer_active.filter,
                     )
                 elseif c.delta_control.outer_active isa OuterActiveVdcControl
                     OuterActiveVdcControl(
@@ -285,7 +271,6 @@ function resolved_outer_reactive(block::OuterReactiveQControl, c::MMC, setpoint:
         pi_ctrl = block.pi_ctrl,
         Q_ac_ref = iszero(block.Q_ac_ref) ? -setpoint.Qac / c.elec.Sbase : block.Q_ac_ref,
         support = block.support,
-        filter = block.filter,
     )
 end
 resolved_outer_reactive(block::AbstractOuterReactiveControl, c::MMC, setpoint::SetPoint) = block
