@@ -109,8 +109,8 @@ returned to the electrical plant.
 """
 function state_space!(F, x, (meas, iloop), block::DelayModulation, conv::AbstractTLC)
     
-    md_c = (2 / meas.v_dc_f) * iloop.vMΔd_ref_c
-    mq_c = (2 / meas.v_dc_f) * iloop.vMΔq_ref_c 
+    md_c = (2 / meas.v_dc_f) * iloop.vMΔ_d_ref_c
+    mq_c = (2 / meas.v_dc_f) * iloop.vMΔ_q_ref_c 
     
     m_d, m_q = inverse_frame_transform(md_c, mq_c, syncangle(conv.sync, x))
 
