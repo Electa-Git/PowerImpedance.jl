@@ -1,5 +1,15 @@
 abstract type AbstractConverter <: AbstractStateSpace end
 
+# State-Space helper functions
+function state_space_block!(F, x, inputs, block, args...)
+    idx = args[end]
+    block_args = Base.front(args)
+    idx_end = idx + n_states(block) - 1
+    out = state_space!(@view(F[idx:idx_end]), x, inputs, block, block_args...)
+    return out, idx_end + 1
+end
+
+
 function eval_abcd(converter :: AbstractConverter, s :: Complex)
     return eval_y(converter, s)
 end

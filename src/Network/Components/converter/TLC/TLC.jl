@@ -229,20 +229,20 @@ written into the first state slice after modulation commands are available.
 function state_space!(F, x, inputs, c::TLC)
     sig_in = input_signals(c, x, inputs)
 
-    meas, i = state_space!(F, x, sig_in, c.meas, c, 1)
-    sync, i = state_space!(F, x, meas, c.sync, c, i)
-    pact, i = state_space!(F, x, (; meas, sync), c.outerActive, c, i)
-    qact, i = state_space!(F, x, (; meas, sync), c.outerReactive, c, i)
-    vloop, i = state_space!(F, x, (; meas, sync, pact, qact), c.innerVoltage, c, i)
-    iloop, i = state_space!(F, x, (; meas, sync, vloop), c.innerCurrent, c, i)
-    mod, i = state_space!(F, x, (; meas, iloop), c.mod, c, i)
+    meas, i = state_space_block!(F, x, sig_in, c.meas, c, 1)
+    sync, i = state_space_block!(F, x, meas, c.sync, c, i)
+    pact, i = state_space_block!(F, x, (; meas, sync), c.outerActive, c, i)
+    qact, i = state_space_block!(F, x, (; meas, sync), c.outerReactive, c, i)
+    vloop, i = state_space_block!(F, x, (; meas, sync, pact, qact), c.innerVoltage, c, i)
+    iloop, i = state_space_block!(F, x, (; meas, sync, vloop), c.innerCurrent, c, i)
+    mod, i = state_space_block!(F, x, (; meas, iloop), c.mod, c, i)
 
     elec_in = (
         v_dc = sig_in.v_dc,
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
     )
-    elec, _ = state_space!(F, x, (inputs = elec_in, mod = mod), c.elec, c, i)
+    elec, _ = state_space_block!(F, x, (inputs = elec_in, mod = mod), c.elec, c, i)
 
     return (;
         sig_in,
