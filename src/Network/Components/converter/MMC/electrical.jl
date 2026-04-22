@@ -1,3 +1,5 @@
+export ElectricalMMC
+
 struct ElectricalMMC <: AbstractStateSpace
     ## Electrical parameters
     Lₐᵣₘ :: Float64        # arm inductance [pu]
@@ -63,7 +65,8 @@ function ElectricalMMC(;
     return ElectricalMMC(Lₐᵣₘ, Rₐᵣₘ, Cₐᵣₘ, N, turnsRatio, ωbase, vAC_base, vDC_base, Sbase, baseConv1, baseConv2, baseConv3, Lₑ, Rₑ)
 end
 
-statenames(::ElectricalMMC) = (:iΔ_d, :iΔ_q, :iΣ_d, :iΣ_q, :iΣ_z, :vCΔ_d, :vCΔ_q, :vCΔ_Zd, :vCΔ_Zq, :vCΣ_d, :vCΣ_q, :vCΣ_z)
+statenames(::ElectricalMMC) = (:iΔ_d, :iΔ_q, :iΣ_d, :iΣ_q, :iΣ_z, 
+                    :vCΔ_d, :vCΔ_q, :vCΔ_Zd, :vCΔ_Zq, :vCΣ_d, :vCΣ_q, :vCΣ_z) # Per-unit base for capacitor voltages is vDC_base
 initialvalues(e::ElectricalMMC; inputs, setpoint_pu) = (; 
     iΔ_d = (inputs.vG_d * e.turnsRatio * setpoint_pu.p_ac - inputs.vG_q * e.turnsRatio * setpoint_pu.q_ac) / ( (inputs.vG_d * e.turnsRatio)^2 + (inputs.vG_q * e.turnsRatio)^2 ),
     iΔ_q = (inputs.vG_q * e.turnsRatio * setpoint_pu.p_ac + inputs.vG_d * e.turnsRatio * setpoint_pu.q_ac) / ( (inputs.vG_d * e.turnsRatio)^2 + (inputs.vG_q * e.turnsRatio)^2 ),

@@ -115,8 +115,8 @@ function state_space!(F, x, (meas, sync, vloop), block::InnerCurrentPIControl, c
     F[i] = block.pi_ctrl.Ki * e_d
     F[i + 1] = block.pi_ctrl.Ki * e_q
 
-    vMΔd_ref_c = x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * sync.ω_c * i_q + v_d
-    vMΔq_ref_c = x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * sync.ω_c * i_d + v_q
+    vMΔ_d_ref_c = x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * sync.ω_c * i_q + v_d
+    vMΔ_q_ref_c = x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * sync.ω_c * i_d + v_q
 
-    return (; vMΔd_ref_c, vMΔq_ref_c)
+    return (; vMΔ_d_ref_c, vMΔ_q_ref_c)
 end

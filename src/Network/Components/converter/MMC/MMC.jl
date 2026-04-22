@@ -1,17 +1,6 @@
-export mmc, MMC, AbstractMMC, BuildMMC,             # MMC
-    ΔdqControlGFL, ΔdqControlGFM, ΣdqzControlTEC,   # High level structures
-
-    VSEWithDamping,                                 # Synchronization
-    PControl,                                       # Outer active
-    QControl,                                       # Outer reactive
-    TotalEnergyControl,                             # Energy
-    CCVI,                                           # Inner voltage
-    CirculatingCurrentSuppressionControl, ZeroSequenceCurrentControl, OutputCurrentControl,     # Inner current
-    UncompensatedModulation, CompensatedModulation,  # Modulation
-    ElectricalMMC,
-
-    statenames, inputnames, initialvalues,          # Functions
-    state_space!, pftoinputs
+export mmc, MMC, AbstractMMC,       # MMC
+    ΔdqControlGFL, ΔdqControlGFM,   # High level structures
+    ΣdqzControlTEC, ΣdqzControlLEC
 
 
 ### Abstract types ###
@@ -81,6 +70,14 @@ end
 statenames(c::ΣdqzControlTEC) = (statenames(c.tec)..., statenames(c.zscc)..., statenames(c.ccsc)...)
 initialvalues(c::ΣdqzControlTEC) = (; initialvalues(c.tec)..., initialvalues(c.zscc)..., initialvalues(c.ccsc)...) 
 
+@with_kw struct ΣdqzControlLEC{E1<:AbstractEnergyControl, E2<:AbstractEnergyControl, I<:AbstractInnerCurrentControl} <: AbstractΣdqzControl
+    wsigma::E1      # Sum Energy Control
+    wdelta::E2      # Delta Energy Control
+    ccc::I          # Circulating Current Control
+end
+statenames(c::ΣdqzControlLEC) = (statenames(c.wsigma)..., statenames(c.wdelta)..., statenames(c.ccc)...)
+initialvalues(c::ΣdqzControlLEC) = (; initialvalues(c.wsigma)..., initialvalues(c.wdelta)..., initialvalues(c.ccc)...) 
+
 
 ################## State-space equations #####################
 
@@ -90,19 +87,19 @@ function state_space!(F, x, inputs, c::MMC)
     # -- Signal Processing ------------------------------------------------------------------------    
     sig_in = input_signals(c, x, inputs)
 
-    meas, i = run_block!(F, x, sig_in, c.meas, c, 1)
-    sync_out, i = run_block!(F, x, meas, c.sync, c, i)
+    meas, i = state_space!(F, x, sig_in, c.meas, c, 1)
+    sync_out, i = state_space!(F, x, meas, c.sync, c, i)
 
     # -- Delta and Sigma control ------------------------------------------------------------------
-    out_delta, i = run_block!(F, x, (meas, sync_out), c.delta_control, c, i)
+    out_delta, i = state_space!(F, x, (meas, sync_out), c.delta_control, c, i)
     power = (P_ac_f = energy_active_power(meas, sync_out, out_delta, c.delta_control, c.sync),)
-    out_sigma, i = run_block!(F, x, (; meas, power), c.sigma_control, c, i)
+    out_sigma, i = state_space!(F, x, (; meas, power, sync=sync_out), c.sigma_control, c, i)
 
     # -- Modulation -------------------------------------------------------------------------------
-    out_modulation, i = run_block!(F, x, (meas, out_delta, out_sigma), c.modulation, c, i)
+    out_modulation, i = state_space!(F, x, (meas, out_delta, out_sigma), c.modulation, c, i)
 
     # -- Electrical model -------------------------------------------------------------------------
-    run_block!(F, x, (out_modulation, sig_in, inputs), c.elec, c, i)
+    state_space!(F, x, (out_modulation, sig_in, inputs), c.elec, c, i)
 
     return nothing
 end
@@ -110,37 +107,50 @@ end
 
 ### Higher level structures ###
 
-function state_space!(F, x, inputs::NamedTuple{(:meas, :power)}, b::ΣdqzControlTEC, c::MMC) 
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΣdqzControlTEC, c::MMC) 
     (; meas, power) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_Wtot, i = run_block!(F, x, (; meas, power), b.tec, c, 1)
+    out_Wtot, i = state_space!(F, x, (; meas, power), b.tec, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_zscc, i = run_block!(F, x, (meas, out_Wtot), b.zscc, c, i)
-    out_ccsc, i = run_block!(F, x, meas, b.ccsc, c, i)
+    out_zscc, i = state_space!(F, x, (meas, out_Wtot), b.zscc, c, i)
+    out_ccsc, i = state_space!(F, x, meas, b.ccsc, c, i)
 
     return merge(out_ccsc, out_zscc)
 end
 
-function state_space!(F, x, (meas, sync), b::ΔdqControlGFL, c::MMC)
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΣdqzControlLEC, c::MMC) 
+    (; meas, power, sync) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_active, i = run_block!(F, x, (meas, sync), b.outer_active, c, 1)
-    out_reactive, i = run_block!(F, x, meas, b.outer_reactive, c, i)
+    out_wsigma, i = state_space!(F, x, (; meas, power, sync), b.wsigma, c, 1)
+    out_wdelta, i = state_space!(F, x, (; meas, power, sync), b.wdelta, c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_occ, _= run_block!(F, x, (meas, sync, (;out_active..., out_reactive...)), b.occ, c, i)
+    out_ccc, _ = state_space!(F, x, (meas, sync, out_wsigma, out_wdelta), b.ccc, c, i)
+
+    return out_ccc
+end
+
+function state_space!(F, x, (meas, sync), b::ΔdqControlGFL, c::MMC)
+    # -- Outer Loop -------------------------------------------------------------------------------
+    out_active, i = state_space!(F, x, (meas, sync), b.outer_active, c, 1)
+    out_reactive, i = state_space!(F, x, meas, b.outer_reactive, c, i)
+
+    # -- Inner Loop -------------------------------------------------------------------------------
+    
+    out_occ, _= state_space!(F, x, (meas, sync, (;out_active..., iΔ_d_ref = out_reactive.q_ctrl_ref )), b.occ, c, i)
 
     return merge(out_active, out_occ)
 end
 
 function state_space!(F, x, (meas, sync), b::ΔdqControlGFM, c::MMC)
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_reactive, i = run_block!(F, x, meas, b.outer_reactive, c, 1)
+    out_reactive, i = state_space!(F, x, meas, b.outer_reactive, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_vi, i = run_block!(F, x, (meas, sync, out_reactive), b.vi, c, i)
+    out_vi, i = state_space!(F, x, (meas, sync, out_reactive), b.vi, c, i)
 
-    out_occ, _= run_block!(F, x, (meas, sync, out_vi), b.occ, c, i)
+    out_occ, _= state_space!(F, x, (meas, sync, out_vi), b.occ, c, i)
 
     return out_occ
 end
@@ -223,7 +233,7 @@ end
 
 
 ################## Helper functions ##########################
-function run_block!(F, x, inputs, block, conv, idx)
+function state_space!(F, x, inputs, block, conv, idx)
     idx_end = idx + n_states(block) - 1
     out = state_space!(@view(F[idx:idx_end]), x, inputs, block, conv)
     return out, idx_end+1
