@@ -140,7 +140,7 @@ function state_space!(F, x, (meas, sync), b::ΔdqControlGFL, c::MMC)
 
     # -- Inner Loop -------------------------------------------------------------------------------
     
-    out_occ, _= state_space!(F, x, (meas, sync, (;out_active..., iΔ_d_ref = out_reactive.q_ctrl_ref )), b.occ, c, i)
+    out_occ, _= state_space!(F, x, (meas, sync, (;out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref )), b.occ, c, i)
 
     return merge(out_active, out_occ)
 end
