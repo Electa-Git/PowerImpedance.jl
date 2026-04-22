@@ -95,8 +95,7 @@ function state_space!(F, x, inputs, c::MMC)
 
     # -- Delta and Sigma control ------------------------------------------------------------------
     out_delta, i = state_space!(F, x, (meas, sync_out), c.delta_control, c, i)
-    power = (P_ac_f = energy_active_power(meas, sync_out, out_delta, c.delta_control, c.sync),)
-    out_sigma, i = state_space!(F, x, (; meas, power, sync=sync_out), c.sigma_control, c, i)
+    out_sigma, i = state_space!(F, x, (meas = meas, power = meas.P_ac_f, sync = sync_out), c.sigma_control, c, i)
 
     # -- Modulation -------------------------------------------------------------------------------
     out_modulation, i = state_space!(F, x, (meas, out_delta, out_sigma), c.modulation, c, i)
@@ -111,9 +110,9 @@ end
 ### Higher level structures ###
 
 function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΣdqzControlTEC, c::MMC) 
-    (; meas, power) = inputs
+    (; meas) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_Wtot, i = state_space!(F, x, (; meas, power), b.tec, c, 1)
+    out_Wtot, i = state_space!(F, x, meas, b.tec, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
     out_zscc, i = state_space!(F, x, (meas, out_Wtot), b.zscc, c, i)
