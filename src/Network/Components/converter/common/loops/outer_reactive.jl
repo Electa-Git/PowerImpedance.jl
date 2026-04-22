@@ -135,8 +135,8 @@ function statenames(block::OuterReactiveQControl)
     return (statenames(block.support)..., :ξ_Q_ac)
 end
 
-function initialvalues(block::OuterReactiveQControl; setpoint_pu=SetpointPU(0, 0, 0, 0), kwargs...)
-    return (; initialvalues(block.support; kwargs...)...)
+function initialvalues(block::OuterReactiveQControl; setpoint_pu=SetpointPU(0, 0, 0, 0))
+    return (; initialvalues(block.support)...)
 end
 
 """

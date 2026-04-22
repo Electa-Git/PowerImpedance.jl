@@ -133,8 +133,8 @@ function statenames(block::OuterActivePowerControl)
     return (statenames(block.support)..., :ξ_P_ac)
 end
 
-function initialvalues(block::OuterActivePowerControl; setpoint_pu=SetpointPU(0, 0, 0, 0), kwargs...)
-    return (; initialvalues(block.support; kwargs...)...)
+function initialvalues(block::OuterActivePowerControl; setpoint_pu=SetpointPU(0, 0, 0, 0))
+    return (; initialvalues(block.support)...)
 end
 
 
