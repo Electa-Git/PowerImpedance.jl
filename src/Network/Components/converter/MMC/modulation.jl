@@ -41,7 +41,8 @@ function UncompensatedModulation(;
 end
 
 
-function state_space!(F, x, (meas, out_delta, out_sigma), b::UncompensatedModulation, conv::AbstractMMC)
+function state_space!(F, x, inputs, b::UncompensatedModulation, conv::AbstractMMC)
+    (; meas, out_delta, out_sigma) = inputs
     (;v_dc_f) = meas
     (; vMΔ_d_ref_c, vMΔ_q_ref_c) = out_delta
     (; vMΣ_d_ref_c, vMΣ_q_ref_c, vMΣ_z_ref) = out_sigma
@@ -82,7 +83,8 @@ end
 struct CompensatedModulation <: AbstractModulationMMC end
 statenames(::CompensatedModulation) = (;)
 
-function state_space!(F, x, (meas, out_delta, out_sigma), b::CompensatedModulation, conv::AbstractMMC)
+function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
+    (; meas, out_delta, out_sigma) = inputs
     (; vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x
     (; vMΔ_d_ref_c, vMΔ_q_ref_c) = out_delta
     (; vMΣ_d_ref_c, vMΣ_q_ref_c, vMΣ_z_ref) = out_sigma

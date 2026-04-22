@@ -32,7 +32,8 @@ function state_space!(F, x, meas, b::CirculatingCurrentSuppressionControl, conv:
     return (vMΣ_d_ref_c=vMΣ_d_ref_c, vMΣ_q_ref_c=vMΣ_q_ref_c)
 end
 
-function state_space!(F, x, (meas, out_Wtot), b::ZeroSequenceCurrentControl, conv::AbstractMMC)
+function state_space!(F, x, inputs, b::ZeroSequenceCurrentControl, conv::AbstractMMC)
+    (; meas, out_Wtot) = inputs
     (; ξ_iΣ_z, iΣ_z) = x
     iΣ_z_ref, v_dc_f = out_Wtot.iΣ_z_ref, meas.v_dc_f
 
@@ -47,7 +48,8 @@ struct CirculatingCurrentControl <: AbstractInnerCurrentControl
 end
 statenames(::CirculatingCurrentControl) = (:ξ_iΣ_d, :ξ_iΣ_q, :ξ_iΣ_z)
 
-function state_space!(F, x, (meas, sync, out_wΣ, out_wΔ), b::CirculatingCurrentControl, conv::AbstractMMC)
+function state_space!(F, x, inputs, b::CirculatingCurrentControl, conv::AbstractMMC)
+    (; sync, out_wΣ, out_wΔ) = inputs
     ξ_iΣ = [x.ξ_iΣ_d, x.ξ_iΣ_q, x.ξ_iΣ_z]
     iΣ = [x.iΣ_d, x.iΣ_q, x.iΣ_z] #TODO implement filters?
     iΣ_ref = [out_wΣ.iΣ_d_dc_ref + out_wΔ.iΣ_d_ac_ref, out_wΣ.iΣ_q_dc_ref + out_wΔ.iΣ_q_ac_ref, out_wΣ.iΣ_z_dc_ref + out_wΔ.iΣ_z_ac_ref]    

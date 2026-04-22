@@ -43,8 +43,8 @@ Return a zero d-axis current reference.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, sync, block::NoOuterActiveControl; conv::AbstractConverter) =
-    (; i_d_ref = 0.0)
+state_space!(F, x, inputs, block::NoOuterActiveControl, conv::AbstractConverter) =
+    (; iΔ_d_ref = 0.0)
 
 """
 No frequency-support contribution.
@@ -143,7 +143,8 @@ Evaluate active-power control and its support dynamics.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, (meas, sync), block::OuterActivePowerControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, block::OuterActivePowerControl, conv::AbstractConverter)
+    (; meas, sync) = inputs
     ns = n_states(block.support)
     support = state_space!(@view(F[1:ns]), x, sync, block.support)
     P_ac_f = meas.P_ac_f
@@ -181,7 +182,8 @@ Evaluate DC-voltage PI control.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, (meas, sync), block::OuterActiveVdcControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, block::OuterActiveVdcControl, conv::AbstractConverter)
+    (; meas) = inputs
     F[1] = block.pi_ctrl.Ki * (block.v_dc_ref - meas.v_dc_f)
 
     return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (block.v_dc_ref - meas.v_dc_f) + x.ξ_v_dc), )

@@ -30,10 +30,7 @@ include("modulation.jl")
 end
 
 statenames(c::MMC) = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
-initialvalues(c::MMC; inputs, setpoint_pu) = (;
-    initialvalues(c.sync; setpoint_pu)...,
-    initialvalues(c.elec; inputs, setpoint_pu)...,
-)
+initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
 inputnames(::MMC)                           = (:v_dc, :vG_d, :vG_q)
 outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q) 
 elecinputnames(c::MMC)                      = inputnames(c)
@@ -60,10 +57,6 @@ statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.v
 initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; inputs, setpoint_pu, conv)...,
                                                                 initialvalues(c.vi; inputs, setpoint_pu, conv)...,
                                                                 initialvalues(c.occ; inputs, setpoint_pu, conv)...) 
-
-output_outer_reactive_control(conv::AbstractMMC, out) = output_outer_reactive_control(conv.delta_control, out)
-output_outer_reactive_control(::ΔdqControlGFL, out) = (iΔ_q_ref = out,)
-output_outer_reactive_control(::ΔdqControlGFM, out) = (vgfm_d_ref = out,)
 
 @with_kw struct ΣdqzControlTEC{E<:AbstractEnergyControl, I1<:AbstractInnerCurrentControl, I2<:AbstractInnerCurrentControl} <: AbstractΣdqzControl
     tec::E      # Total Energy Control
@@ -94,14 +87,14 @@ function state_space!(F, x, inputs, c::MMC)
     sync_out, i = state_space!(F, x, meas, c.sync, c, i)
 
     # -- Delta and Sigma control ------------------------------------------------------------------
-    out_delta, i = state_space!(F, x, (meas, sync_out), c.delta_control, c, i)
-    out_sigma, i = state_space!(F, x, (meas = meas, power = meas.P_ac_f, sync = sync_out), c.sigma_control, c, i)
+    out_delta, i = state_space!(F, x, (; meas, sync = sync_out), c.delta_control, c, i)
+    out_sigma, i = state_space!(F, x, (meas = meas, power = (P_ac_f = meas.P_ac_f,), sync = sync_out), c.sigma_control, c, i)
 
     # -- Modulation -------------------------------------------------------------------------------
-    out_modulation, i = state_space!(F, x, (meas, out_delta, out_sigma), c.modulation, c, i)
+    out_modulation, i = state_space!(F, x, (; meas, out_delta, out_sigma), c.modulation, c, i)
 
     # -- Electrical model -------------------------------------------------------------------------
-    state_space!(F, x, (out_modulation, sig_in, inputs), c.elec, c, i)
+    state_space!(F, x, (; out_modulation, sig_in, inputs), c.elec, c, i)
 
     return nothing
 end
@@ -115,7 +108,7 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::Σdqz
     out_Wtot, i = state_space!(F, x, meas, b.tec, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_zscc, i = state_space!(F, x, (meas, out_Wtot), b.zscc, c, i)
+    out_zscc, i = state_space!(F, x, (; meas, out_Wtot), b.zscc, c, i)
     out_ccsc, i = state_space!(F, x, meas, b.ccsc, c, i)
 
     return merge(out_ccsc, out_zscc)
@@ -128,31 +121,33 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::Σdqz
     out_wdelta, i = state_space!(F, x, (; meas, power, sync), b.wdelta, c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_ccc, _ = state_space!(F, x, (meas, sync, out_wsigma, out_wdelta), b.ccc, c, i)
+    out_ccc, _ = state_space!(F, x, (; meas, sync, out_wΣ = out_wsigma, out_wΔ = out_wdelta), b.ccc, c, i)
 
     return out_ccc
 end
 
-function state_space!(F, x, (meas, sync), b::ΔdqControlGFL, c::MMC)
+function state_space!(F, x, inputs, b::ΔdqControlGFL, c::MMC)
+    (; meas, sync) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_active, i = state_space!(F, x, (meas, sync), b.outer_active, c, 1)
-    out_reactive, i = state_space!(F, x, meas, b.outer_reactive, c, i)
+    out_active, i = state_space!(F, x, (; meas, sync), b.outer_active, c, 1)
+    out_reactive, i = state_space!(F, x, (; meas, sync), b.outer_reactive, c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
     
-    out_occ, _= state_space!(F, x, (meas, sync, (;out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref )), b.occ, c, i)
+    out_occ, _= state_space!(F, x, (; meas, sync, vloop = (; out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref)), b.occ, c, i)
 
     return merge(out_active, out_occ)
 end
 
-function state_space!(F, x, (meas, sync), b::ΔdqControlGFM, c::MMC)
+function state_space!(F, x, inputs, b::ΔdqControlGFM, c::MMC)
+    (; meas, sync) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_reactive, i = state_space!(F, x, meas, b.outer_reactive, c, 1)
+    out_reactive, i = state_space!(F, x, (; meas, sync), b.outer_reactive, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_vi, i = state_space!(F, x, (meas, sync, out_reactive), b.vi, c, i)
+    out_vi, i = state_space!(F, x, (; meas, sync, out_reactive), b.vi, c, i)
 
-    out_occ, _= state_space!(F, x, (meas, sync, out_vi), b.occ, c, i)
+    out_occ, _= state_space!(F, x, (; meas, sync, vloop = out_vi), b.occ, c, i)
 
     return out_occ
 end
