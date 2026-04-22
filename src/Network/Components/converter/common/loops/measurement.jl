@@ -269,19 +269,11 @@ function state_space!(F, x, inputs, m::Measurement, c::AbstractConverter)
         Q_ac = -measured.vG_q_f * measured.i_d_f + measured.vG_d_f * measured.i_q_f,
         P_dc = measured.v_dc_f * measured.i_dc_f,
     ))
-
-    n = n_states(m.P_ac)
-    P_ac = state_space!(@view(F[index:index+n-1]), x, power_inputs, m.P_ac)
-    index += n
-
-    n = n_states(m.Q_ac)
-    Q_ac = state_space!(@view(F[index:index+n-1]), x, power_inputs, m.Q_ac)
-    index += n
-
-    n = n_states(m.P_dc)
-    P_dc = state_space!(@view(F[index:index+n-1]), x, power_inputs, m.P_dc)
-
-    return merge(measured, P_ac, Q_ac, P_dc)end
+    P_ac, i = state_space!(F, x, power_inputs, m.P_ac, c, i)
+    Q_ac, i = state_space!(F, x, power_inputs, m.Q_ac, c, i)
+    P_dc, _ = state_space!(F, x, power_inputs, m.P_dc, c, i)
+    return merge(measured, P_ac, Q_ac, P_dc)
+end
 
 """
 Write composite measurement output equations.
