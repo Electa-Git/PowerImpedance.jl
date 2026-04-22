@@ -223,18 +223,6 @@ function mmc(;
         limits)
 end
 
-
-
-################## Helper functions ##########################
-function state_space!(F, x, inputs, block, conv, idx)
-    idx_end = idx + n_states(block) - 1
-    out = state_space!(@view(F[idx:idx_end]), x, inputs, block, conv)
-    return out, idx_end+1
-end
-
-
-
-
 ############################  Power-flow integration MMC ############################
 
 """

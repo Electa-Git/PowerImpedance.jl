@@ -61,19 +61,13 @@ function state_space!(F, x, (meas, out_delta, out_sigma), b::UncompensatedModula
     mΣz = 2/v_dc_f * vMΣ_z_ref          # zero-sequence is reference-frame independent
 
     # Pade delays
-    i = 1
-    n = n_states(b.delay1)
-    y = state_space!(@view(F[i:i+n-1]), x, (mΔd, mΔq), b.delay1)
-    i += n    
+    y, i = state_space!(F, x, (mΔd, mΔq), b.delay1, conv, 1)
     mΔd, mΔq = phase_compensated_dq(y, conv.elec.ωbase * b.delay1.timeDelay)
 
-    n = n_states(b.delay2)
-    y = state_space!(@view(F[i:i+n-1]), x, (mΣd, mΣq), b.delay2)
-    i += n
+    y, i = state_space!(F, x, (mΣd, mΣq), b.delay2, conv, i)
     mΣd, mΣq = phase_compensated_dq(y, -2*conv.elec.ωbase * b.delay2.timeDelay)
 
-    n = n_states(b.delay3)
-    mΣz = state_space!(@view(F[i:i+n-1]), x, (mΣz, ), b.delay3)[1]
+    mΣz = state_space!(F, x, (mΣz, ), b.delay3, conv, i)[1][1]
 
     return (mΔd = mΔd, mΔq = mΔq, mΔZd = 0, mΔZq = 0,
         mΣd = mΣd, mΣq = mΣq, mΣz = mΣz)

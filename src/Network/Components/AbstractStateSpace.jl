@@ -18,6 +18,13 @@ n_elec_inputs(m::AbstractStateSpace) = length(elecinputnames(m))
 elecinputnames(m::AbstractStateSpace) = inputnames(m)
 
 
+function state_space!(F, x, inputs, block, m, idx)
+    idx_end = idx + n_states(block) - 1
+    out = state_space!(@view(F[idx:idx_end]), x, inputs, block, m)
+    return out, idx_end+1
+end
+
+
 ### Solution methods (additional equations dummyequations or outputequations)
 abstract type AbstractSolveKind end
 # Types for form of state-space equations

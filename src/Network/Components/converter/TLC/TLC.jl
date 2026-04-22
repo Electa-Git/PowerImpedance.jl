@@ -98,7 +98,7 @@ function initialvalues(c::TLC; inputs, setpoint_pu=SetPoint())
         initialvalues(c.sync; setpoint_pu)...,
         initialvalues(c.outerActive; setpoint_pu)...,
         initialvalues(c.outerReactive; setpoint_pu)...,
-        initialvalues(c.innerVoltage; inputs, setpoint_pu)...,
+        initialvalues(c.innerVoltage; inputs, conv=c)...,
         initialvalues(c.innerCurrent; inputs, conv=c)...,
         initialvalues(c.mod; inputs, setpoint_pu)...
     )
@@ -230,43 +230,20 @@ written into the first state slice after modulation commands are available.
 function state_space!(F, x, inputs, c::TLC)
     sig_in = input_signals(c, x, inputs)
 
-    i = 1
-
-    n = n_states(c.meas)
-    meas = state_space!(@view(F[i:i+n-1]), x, sig_in, c.meas, c)
-    i += n
-
-    n = n_states(c.sync)
-    sync = state_space!(@view(F[i:i+n-1]), x, meas, c.sync, c)
-    i += n
-
-    n = n_states(c.outerActive)
-    pact = state_space!(@view(F[i:i+n-1]), x, (meas, sync), c.outerActive, c)
-    i += n
-
-    n = n_states(c.outerReactive)
-    qact = state_space!(@view(F[i:i+n-1]), x, meas, c.outerReactive, c)
-    i += n
-
-    n = n_states(c.innerVoltage)
-    vloop = state_space!(@view(F[i:i+n-1]), x, (meas, sync, pact, qact), c.innerVoltage, c)
-    i += n
-
-    n = n_states(c.innerCurrent)
-    iloop = state_space!(@view(F[i:i+n-1]), x, (meas, sync, vloop), c.innerCurrent, c)
-    i += n
-
-    n = n_states(c.mod)
-    mod = state_space!(@view(F[i:i+n-1]), x, (meas, iloop), c.mod, c)
-    i += n
+    meas, i = state_space!(F, x, sig_in, c.meas, c, 1)
+    sync, i = state_space!(F, x, meas, c.sync, c, i)
+    pact, i = state_space!(F, x, (meas, sync), c.outerActive, c, i)
+    qact, i = state_space!(F, x, meas, c.outerReactive, c, i)
+    vloop, i = state_space!(F, x, (meas, sync, pact, qact), c.innerVoltage, c, i)
+    iloop, i = state_space!(F, x, (meas, sync, vloop), c.innerCurrent, c, i)
+    mod, i = state_space!(F, x, (meas, iloop), c.mod, c, i)
 
     elec_in = (
         v_dc = sig_in.v_dc,
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
     )
-    n = n_states(c.elec)
-    elec = state_space!(@view(F[i:i+n-1]), x, (elec_in, mod), c.elec, c)
+    elec, _ = state_space!(F, x, (elec_in, mod), c.elec, c, i)
 
     return (;
         sig_in,

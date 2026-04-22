@@ -95,7 +95,7 @@ $(SIGNATURES)
 For `NoFilter`, this is a zero-state pass-through and returns the raw input
 under the filtered output name.
 """
-function state_space!(F, x, inputs, m::MeasurementSignal)
+function state_space!(F, x, inputs, m::MeasurementSignal, ::AbstractConverter)
     nx = size(m.filter.A, 1)
 
     if nx == 0
@@ -228,36 +228,14 @@ Evaluate all measurement filters and return their filtered outputs.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, inputs, m::Measurement, ::AbstractConverter)
-    index = 1
-
-    n = n_states(m.vG_d)
-    vG_d = state_space!(@view(F[index:index+n-1]), x, inputs, m.vG_d)
-    index += n
-
-    n = n_states(m.vG_q)
-    vG_q = state_space!(@view(F[index:index+n-1]), x, inputs, m.vG_q)
-    index += n
-
-    n = n_states(m.v_dc)
-    v_dc = state_space!(@view(F[index:index+n-1]), x, inputs, m.v_dc)
-    index += n
-
-    n = n_states(m.i_d)
-    i_d = state_space!(@view(F[index:index+n-1]), x, inputs, m.i_d)
-    index += n
-
-    n = n_states(m.i_q)
-    i_q = state_space!(@view(F[index:index+n-1]), x, inputs, m.i_q)
-    index += n
-
-    n = n_states(m.i_dc)
-    i_dc = state_space!(@view(F[index:index+n-1]), x, inputs, m.i_dc)
-    index += n
-
-    n = n_states(m.θ)
-    θ = state_space!(@view(F[index:index+n-1]), x, inputs, m.θ)
-
+function state_space!(F, x, inputs, m::Measurement, c::AbstractConverter)
+    vG_d, i = state_space!(F, x, inputs, m.vG_d, c, 1)
+    vG_q, i = state_space!(F, x, inputs, m.vG_q, c, i)
+    v_dc, i = state_space!(F, x, inputs, m.v_dc, c, i)
+    i_d, i = state_space!(F, x, inputs, m.i_d, c, i)
+    i_q, i = state_space!(F, x, inputs, m.i_q, c, i)
+    i_dc, i = state_space!(F, x, inputs, m.i_dc, c, i)
+    θ, _ = state_space!(F, x, inputs, m.θ, c, i)
     return merge(vG_d, vG_q, v_dc, i_d, i_q, i_dc, θ)
 end
 

@@ -104,7 +104,7 @@ $(SIGNATURES)
 `inputs` must contain `block.n_inputs` values. The returned vector is the
 delayed output. The method writes delay-state derivatives into `F`.
 """
-function state_space!(F, x, inputs, block::PadeDelay; kwargs...)
+function state_space!(F, x, inputs, block::PadeDelay, conv::AbstractConverter)
     u = collect(inputs)
     length(u) == block.n_inputs || throw(DimensionMismatch(
         "PadeDelay expected $(block.n_inputs) inputs, got $(length(u))"
