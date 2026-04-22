@@ -1,15 +1,24 @@
 abstract type AbstractConverter <: AbstractStateSpace end
 
-# State-Space helper functions
-function state_space_block!(F, x, inputs, block, args...)
-    idx = args[end]
-    block_args = Base.front(args)
+
+### Helper functions ###
+
+# State-Space helper functions for the measurements state-space.
+function state_space_block!(F, x, inputs, block, idx::Integer)
     idx_end = idx + n_states(block) - 1
-    out = state_space!(@view(F[idx:idx_end]), x, inputs, block, block_args...)
+    out = state_space!(@view(F[idx:idx_end]), x, inputs, block)
+    return out, idx_end + 1
+end
+
+# Helper function for the converter state-space assembly
+function state_space_block!(F, x, inputs, block, conv::AbstractConverter, idx::Integer)
+    idx_end = idx + n_states(block) - 1
+    out = state_space!(@view(F[idx:idx_end]), x, inputs, block, conv)
     return out, idx_end + 1
 end
 
 
+# Evaluating the admittance of the converter
 function eval_abcd(converter :: AbstractConverter, s :: Complex)
     return eval_y(converter, s)
 end
