@@ -42,7 +42,7 @@ Return nominal synchronization outputs without state equations.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, block::NoSynchronization; conv::AbstractConverter) = (ω_c = 1.0,)
+state_space!(F, x, meas, block::NoSynchronization, conv::AbstractConverter) = (ω_c = 1.0,)
 
 """
 Phase-locked-loop synchronization block.

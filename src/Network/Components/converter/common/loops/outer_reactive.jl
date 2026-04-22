@@ -42,8 +42,8 @@ Return a zero q-axis current reference.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, sync, block::NoOuterReactiveControl; conv::AbstractConverter) =
-    (; i_q_ref = 0.0)
+state_space!(F, x, inputs, block::NoOuterReactiveControl, conv::AbstractConverter) =
+    (; q_ctrl_ref = 0.0)
 
 """
 No voltage-support contribution.
@@ -144,7 +144,8 @@ Evaluate reactive-power control and support dynamics.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, meas, block::OuterReactiveQControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, block::OuterReactiveQControl, conv::AbstractConverter)
+    (; meas) = inputs
     ns = n_states(block.support)
     support = state_space!(@view(F[1:ns]), x, meas, block.support)
     Q_ac_f = meas.Q_ac_f
@@ -181,10 +182,11 @@ Evaluate AC-voltage PI control.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, meas, sync, block::OuterReactiveVacControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, block::OuterReactiveVacControl, conv::AbstractConverter)
+    (; meas) = inputs
     v_ac = sqrt(meas.vG_d_f^2 + meas.vG_q_f^2)
 
     F[1] = block.pi_ctrl.Ki * (block.v_ac_ref - v_ac)
     controller_output = block.pi_ctrl.Kp * (block.v_ac_ref - v_ac) + x.ξ_v_ac 
-    return output_outer_reactive_control(conv, controller_output)
+    return (; q_ctrl_ref = controller_output)
 end

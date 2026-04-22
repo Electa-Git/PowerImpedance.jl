@@ -33,8 +33,8 @@ Return zero modulation commands.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, sync, vloop, block::NoInnerCurrentControl; conv::AbstractConverter) =
-    (; m_d = 0.0, m_q = 0.0)
+state_space!(F, x, inputs, block::NoInnerCurrentControl, conv::AbstractConverter) =
+    (; vMΔ_d_ref_c = 0.0, vMΔ_q_ref_c = 0.0)
 
 """
 PI inner-current controller for TLC modulation commands.
@@ -99,7 +99,8 @@ $(SIGNATURES)
 The method writes integrator derivatives and returns current errors plus
 stationary-frame modulation commands.
 """
-function state_space!(F, x, (meas, sync, vloop), block::InnerCurrentPIControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, block::InnerCurrentPIControl, conv::AbstractConverter)
+    (; meas, sync, vloop) = inputs
     i_d_ref = vloop.iΔ_d_ref
     i_q_ref = vloop.iΔ_q_ref
 

@@ -58,7 +58,10 @@ function common_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
         N = 400,
     )
 
-    meas = PowerImpedanceACDC.Measurement()
+    meas = PowerImpedanceACDC.Measurement(
+        P_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+        Q_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+    )
 
     pll = PowerImpedanceACDC.PLLSynchronization(
         pi_ctrl = PowerImpedanceACDC.PIControl(
@@ -74,13 +77,11 @@ function common_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
         K_ω = 10.0,
         P_ac_ref = Pmmc / 1060.0,
         pll = pll,
-        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
     )
 
     outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.0, Ki = 30.0),
         Q_ac_ref = -Qmmc / 1060.0,
-        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
     )
 
     innerVoltage = PowerImpedanceACDC.CCVI(

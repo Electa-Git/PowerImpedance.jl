@@ -34,8 +34,10 @@ Forward outer-loop current references.
 
 $(SIGNATURES)
 """
-state_space!(F, x, (meas, sync, pact, qact), block::NoInnerVoltageControl, conv::AbstractConverter) =
-    (; iΔ_d_ref = pact.iΔ_d_ref, iΔ_q_ref = qact.q_ctrl_ref)
+function state_space!(F, x, inputs, block::NoInnerVoltageControl, conv::AbstractConverter)
+    (; pact, qact) = inputs
+    return (; iΔ_d_ref = pact.iΔ_d_ref, iΔ_q_ref = qact.q_ctrl_ref)
+end
 
 
 abstract type AbstractVirtualImpedance          <: AbstractInnerVoltage end
@@ -72,7 +74,8 @@ function initialvalues(b::CCVI; inputs, conv=nothing)
     return (; filter_initialvalues(b.filter, dnames, vG_d0)..., filter_initialvalues(b.filter, qnames, vG_q0)...)
 end
 
-function state_space!(F, x, (meas, sync, out_reactive), b::CCVI, conv::AbstractConverter)
+function state_space!(F, x, inputs, b::CCVI, conv::AbstractConverter)
+    (; meas, sync, out_reactive) = inputs
     (;R_v, L_v, V_d_ref, V_q_ref) = b
     ω_c = sync.ω_c
     vgfm_d_ref = out_reactive.q_ctrl_ref

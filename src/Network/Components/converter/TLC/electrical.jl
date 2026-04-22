@@ -101,7 +101,8 @@ $(SIGNATURES)
 The method writes derivatives for `i_d` and `i_q` and returns the DC current
 and AC currents used by output equations and downstream reporting.
 """
-function state_space!(F, x, (inputs, mod), block::ElectricalTLC, conv::AbstractTLC)
+function state_space!(F, x, data, block::ElectricalTLC, conv::AbstractTLC)
+    (; inputs, mod) = data
     Rᵣ = block.Rᵣ
     Lᵣ = block.Lᵣ
 

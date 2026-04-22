@@ -75,7 +75,8 @@ initialvalues(e::ElectricalMMC; inputs, setpoint_pu) = (;
 
 
     
-function state_space!(F, x, (out_modulation, sig_in, inputs), b::ElectricalMMC, conv::AbstractMMC) 
+function state_space!(F, x, data, b::ElectricalMMC, conv::AbstractMMC) 
+    (; out_modulation, sig_in, inputs) = data
     
     (; iΔ_d, iΔ_q, iΣ_d, iΣ_q, iΣ_z, vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x
     (; mΔd, mΔq, mΔZd, mΔZq, mΣd, mΣq, mΣz) = out_modulation

@@ -15,7 +15,6 @@ export tlc,
 Abstract supertype for modular TLC state-space models.
 """
 abstract type AbstractTLC <: AbstractConverter end
-output_outer_reactive_control(::AbstractTLC, out) = (iΔ_q_ref = out,) # TODO fix this (these functions shouldn't exist)
 
 include("electrical.jl")
 include("modulation.jl")
@@ -232,18 +231,18 @@ function state_space!(F, x, inputs, c::TLC)
 
     meas, i = state_space!(F, x, sig_in, c.meas, c, 1)
     sync, i = state_space!(F, x, meas, c.sync, c, i)
-    pact, i = state_space!(F, x, (meas, sync), c.outerActive, c, i)
-    qact, i = state_space!(F, x, meas, c.outerReactive, c, i)
-    vloop, i = state_space!(F, x, (meas, sync, pact, qact), c.innerVoltage, c, i)
-    iloop, i = state_space!(F, x, (meas, sync, vloop), c.innerCurrent, c, i)
-    mod, i = state_space!(F, x, (meas, iloop), c.mod, c, i)
+    pact, i = state_space!(F, x, (; meas, sync), c.outerActive, c, i)
+    qact, i = state_space!(F, x, (; meas, sync), c.outerReactive, c, i)
+    vloop, i = state_space!(F, x, (; meas, sync, pact, qact), c.innerVoltage, c, i)
+    iloop, i = state_space!(F, x, (; meas, sync, vloop), c.innerCurrent, c, i)
+    mod, i = state_space!(F, x, (; meas, iloop), c.mod, c, i)
 
     elec_in = (
         v_dc = sig_in.v_dc,
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
     )
-    elec, _ = state_space!(F, x, (elec_in, mod), c.elec, c, i)
+    elec, _ = state_space!(F, x, (inputs = elec_in, mod = mod), c.elec, c, i)
 
     return (;
         sig_in,
