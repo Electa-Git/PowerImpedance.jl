@@ -124,7 +124,7 @@ function pftoinputs(m::SynchronousMachine, setpoint::SetPoint)
     v_bus_q = -setpoint.Vac * sin(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
     Tm0 = setpoint.Pac / m.elec.S_base # You use setpoint power as mechanical torque (cst torque and ω is 1pu  ), TODO: Provide power of generator and should be fine    
 
-    return NamedTuple{inputnames(m)}((v_bus_d, v_bus_q, Tm0))
+    return NamedTuple{inputnames(m)}((v_bus_d, v_bus_q, Tm0)), nothing
 end
 
 
