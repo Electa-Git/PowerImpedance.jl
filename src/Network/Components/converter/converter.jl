@@ -10,10 +10,11 @@ function eval_y(converter :: AbstractConverter, s :: Complex)
 end
 
 
-function make_power_flow!(converter:: AbstractConverter, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+function convert!(data,elem::Element{AbstractConverter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
+    converter = elem.element_model
     pins = elem.pins
-
+    
     # Busses interface (dc_bus --> 1.1 & ac_bus --> 2.1 and 2.2)
     dc_node = make_node(elem, 1) 
     ac_nodes = make_node(elem,2) #Similar AC bus

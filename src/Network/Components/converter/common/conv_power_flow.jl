@@ -47,7 +47,9 @@ $(SIGNATURES)
 The method creates the AC/DC buses, converter component entry, operating-point
 setpoints, limits, and reactor parameters expected by PowerModelsACDC.
 """
-function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+function convert!(data,elem::Element{Converter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+    
+    converter = elem.element_model
     
     pins = elem.pins
 
