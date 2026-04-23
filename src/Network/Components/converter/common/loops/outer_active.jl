@@ -43,8 +43,8 @@ Return a zero d-axis current reference.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, sync, block::NoOuterActiveControl; conv::AbstractConverter) =
-    (; i_d_ref = 0.0)
+state_space!(F, x, inputs, block::NoOuterActiveControl, conv::AbstractConverter) =
+    (; iΔ_d_ref = 0.0)
 
 """
 No frequency-support contribution.
@@ -105,11 +105,10 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-struct OuterActivePowerControl{S<:AbstractFrequencySupport,F<:AbstractMeasurementFilter} <: AbstractOuterActiveControl
+struct OuterActivePowerControl{S<:AbstractFrequencySupport} <: AbstractOuterActiveControl
     pi_ctrl::PIControl
     P_ac_ref::Float64
     support::S
-    filter::F
 end
 
 """
@@ -121,10 +120,8 @@ function OuterActivePowerControl(;
     pi_ctrl::PIControl = PIControl(),
     P_ac_ref::Real = 0.0,
     support::AbstractFrequencySupport = NoFrequencySupport(),
-    filter::AbstractMeasurementFilter = NoFilter(),
 )
-    filter = measurement_filter_ss(filter)
-    return OuterActivePowerControl{typeof(support),typeof(filter)}(pi_ctrl, Float64(P_ac_ref), support, filter)
+    return OuterActivePowerControl{typeof(support)}(pi_ctrl, Float64(P_ac_ref), support)
 end
 
 """
@@ -133,12 +130,11 @@ Return active-power controller state names.
 $(SIGNATURES)
 """
 function statenames(block::OuterActivePowerControl)
-    return (statenames(block.support)..., filter_statenames(:P_ac_f, block.filter)..., :ξ_P_ac)
+    return (statenames(block.support)..., :ξ_P_ac)
 end
 
-function initialvalues(block::OuterActivePowerControl; setpoint_pu=SetpointPU(0, 0, 0, 0), kwargs...)
-    names = filter_statenames(:P_ac_f, block.filter)
-    return (; initialvalues(block.support; kwargs...)..., filter_initialvalues(block.filter, names, setpoint_pu.p_ac)...)
+function initialvalues(block::OuterActivePowerControl; setpoint_pu=SetpointPU(0, 0, 0, 0))
+    return (; initialvalues(block.support)...)
 end
 
 
@@ -147,15 +143,15 @@ Evaluate active-power control and its support dynamics.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, (meas, sync), block::OuterActivePowerControl, conv::AbstractConverter)
-    P_ac = meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f
+function state_space!(F, x, inputs, block::OuterActivePowerControl, conv::AbstractConverter)
+    (; meas, sync) = inputs
     ns = n_states(block.support)
     support = state_space!(@view(F[1:ns]), x, sync, block.support)
-    P_ac_f, i = filter_step!(F, ns + 1, x, block.filter, filter_statenames(:P_ac_f, block.filter), P_ac)
+    P_ac_f = meas.P_ac_f
 
     Peff_ref = block.P_ac_ref + support.P_ac_support
 
-    F[i] = block.pi_ctrl.Ki * (Peff_ref - P_ac_f)
+    F[ns + 1] = block.pi_ctrl.Ki * (Peff_ref - P_ac_f)
 
     return (iΔ_d_ref = block.pi_ctrl.Kp * (Peff_ref - P_ac_f) + x.ξ_P_ac, P_ac_f = P_ac_f)
 end
@@ -186,7 +182,8 @@ Evaluate DC-voltage PI control.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, (meas, sync), block::OuterActiveVdcControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, block::OuterActiveVdcControl, conv::AbstractConverter)
+    (; meas) = inputs
     F[1] = block.pi_ctrl.Ki * (block.v_dc_ref - meas.v_dc_f)
 
     return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (block.v_dc_ref - meas.v_dc_f) + x.ξ_v_dc), )

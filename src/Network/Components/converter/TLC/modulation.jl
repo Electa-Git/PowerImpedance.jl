@@ -40,8 +40,16 @@ Forward inner-current modulation commands.
 
 $(SIGNATURES)
 """
-state_space!(F, x, iloop, block::NoModulation; conv::AbstractTLC) =
-    (; m_d = iloop.m_d, m_q = iloop.m_q)
+function state_space!(F, x, inputs, block::NoModulation, conv::AbstractTLC)
+    (; meas, iloop) = inputs
+
+    md_c = (2 / meas.v_dc_f) * iloop.vMΔ_d_ref_c
+    mq_c = (2 / meas.v_dc_f) * iloop.vMΔ_q_ref_c
+
+    m_d, m_q = inverse_frame_transform(md_c, mq_c, syncangle(conv.sync, x))
+
+    return (; m_d, m_q)
+end
 
 ############################  Time-delay modulation  ############################
 
@@ -107,14 +115,15 @@ $(SIGNATURES)
 The generic delay output is phase-compensated by `ωbase * timeDelay` before being
 returned to the electrical plant.
 """
-function state_space!(F, x, (meas, iloop), block::DelayModulation, conv::AbstractTLC)
+function state_space!(F, x, inputs, block::DelayModulation, conv::AbstractTLC)
+    (; meas, iloop) = inputs
     
-    md_c = (2 / meas.v_dc_f) * iloop.vMΔd_ref_c
-    mq_c = (2 / meas.v_dc_f) * iloop.vMΔq_ref_c 
+    md_c = (2 / meas.v_dc_f) * iloop.vMΔ_d_ref_c
+    mq_c = (2 / meas.v_dc_f) * iloop.vMΔ_q_ref_c 
     
     m_d, m_q = inverse_frame_transform(md_c, mq_c, syncangle(conv.sync, x))
 
-    y = state_space!(F, x, (m_d, m_q), block.delay)
+    y = state_space!(F, x, (m_d, m_q), block.delay, conv)
     m_dq_ref = phase_compensated_dq(y, conv.elec.ωbase * block.delay.timeDelay)
 
     return (

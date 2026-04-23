@@ -1,5 +1,7 @@
 abstract type AbstractConverter <: AbstractStateSpace end
 
+
+# Evaluating the admittance of the converter
 function eval_abcd(converter :: AbstractConverter, s :: Complex)
     return eval_y(converter, s)
 end

@@ -42,7 +42,7 @@ Return nominal synchronization outputs without state equations.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, block::NoSynchronization; conv::AbstractConverter) = (ω_c = 1.0,)
+state_space!(F, x, meas, block::NoSynchronization, conv::AbstractConverter) = (ω_c = 1.0,)
 
 """
 Phase-locked-loop synchronization block.
@@ -114,14 +114,13 @@ function state_space!(F, x, meas, block::PLLSynchronization, conv::AbstractConve
 end
 
 
-struct VSEWithDamping{F<:AbstractMeasurementFilter} <: AbstractSynchronization   # VSE = Virtual Swing Equation
+struct VSEWithDamping <: AbstractSynchronization   # VSE = Virtual Swing Equation
     H::Float64          # Virtual Inertia [s]
     K_d::Float64        # Damping coefficient [-]
     K_ω::Float64        # Droop coefficient [-]
     P_ac_ref::Float64   # Active power reference [pu]
     ω_ref::Float64      # Angular frequency reference [pu]
     pll::PLLSynchronization # PLL
-    filter::F
 end
 
 function VSEWithDamping(;
@@ -131,40 +130,31 @@ function VSEWithDamping(;
     P_ac_ref::Real = 0,
     ω_ref::Real = 1,
     pll::PLLSynchronization,
-    filter::AbstractMeasurementFilter = NoFilter(),
 )
-    filter = measurement_filter_ss(filter)
-    return VSEWithDamping{typeof(filter)}(
+    return VSEWithDamping(
         Float64(H),
         Float64(K_d),
         Float64(K_ω),
         Float64(P_ac_ref),
         Float64(ω_ref),
         pll,
-        filter,
     )
 end
 
 function statenames(b::VSEWithDamping)
-    return (statenames(b.pll)..., filter_statenames(:P_ac_vse_f, b.filter)..., :ω_VSM, :Δθ_VSM)
+    return (statenames(b.pll)..., :ω_VSM, :Δθ_VSM)
 end
 
 function initialvalues(b::VSEWithDamping; setpoint_pu)
-    names = filter_statenames(:P_ac_vse_f, b.filter)
-    return (; initialvalues(b.pll)..., filter_initialvalues(b.filter, names, setpoint_pu.p_ac)..., ω_VSM=1, Δθ_VSM=setpoint_pu.θ_ac)
+    return (; initialvalues(b.pll)..., ω_VSM=1, Δθ_VSM=setpoint_pu.θ_ac)
 end
 
 function state_space!(F, x, meas, b::VSEWithDamping, conv::AbstractConverter)
-    i = 1
-    n = n_states(b.pll)
-
-    out_pll = state_space!(@view(F[i:i+n-1]), x, meas, b.pll, conv)
-    i += n
+    out_pll, i = state_space_block!(F, x, meas, b.pll, conv, 1)
 
     ω_PLL = out_pll.ω_c
 
-    P_ac = meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f
-    P_ac_f, i = filter_step!(F, i, x, b.filter, filter_statenames(:P_ac_vse_f, b.filter), P_ac)
+    P_ac_f = meas.P_ac_f
 
     ω_VSM = x.ω_VSM
     

@@ -1,6 +1,39 @@
 export make_y_node
 
+function _node_from_pin(network::Network, designator::Symbol, pin::Symbol)
+    return PowerImpedanceACDC.netname(network, (designator, pin))
+end
 
+function _converter_nodes_in_order(network::Network, designator::Symbol, element::Element)
+    if element.element_model isa BipolarMMC
+        # Bipolar converter ordering: [p, r, n, d, q]
+        return Symbol[
+            _node_from_pin(network, designator, Symbol("1.1")),
+            _node_from_pin(network, designator, Symbol("1.2")),
+            _node_from_pin(network, designator, Symbol("1.3")),
+            _node_from_pin(network, designator, Symbol("2.1")),
+            _node_from_pin(network, designator, Symbol("2.2")),
+        ]
+    end
+
+    # Monopolar converter ordering: [dc, d, q]
+    return Symbol[
+        _node_from_pin(network, designator, Symbol("1.1")),
+        _node_from_pin(network, designator, Symbol("2.1")),
+        _node_from_pin(network, designator, Symbol("2.2")),
+    ]
+end
+
+function _is_source_connected_node(network::Network, node::Symbol; exclude::Symbol = Symbol(""))
+    node == Symbol("") && return false
+    for (designator, _) in netfor!(network, node)
+        designator == exclude && continue
+        if is_source(network.elements[designator])
+            return true
+        end
+    end
+    return false
+end
 
 function make_y_node(network::Network; nodelist = [], freq_range = (1,1e3, 1000))
 
@@ -138,61 +171,52 @@ if nodelist == []
                     end
 
                 end
-                if is_converter(element) 
-                    triplet=Array{Union{Symbol}}(undef,3) # [DC, ACd, ACq]
-                    for (pin,node) in element.pins
+                if is_converter(element)
+                    ordered_nodes = _converter_nodes_in_order(network, designator, element)
+                    if element.element_model isa BipolarMMC
+                        dc_nodes = collect(ordered_nodes[1:3]) # [p, r, n]
+                        ac_nodes = collect(ordered_nodes[4:5]) # [d, q]
+                    else
+                        dc_nodes = collect(ordered_nodes[1:1]) # [dc]
+                        ac_nodes = collect(ordered_nodes[2:3]) # [d, q]
+                    end
 
+                    dc_nodes = [
+                        node for node in dc_nodes
+                        if node != Symbol("") &&
+                           !_is_source_connected_node(network, node; exclude = designator)
+                    ]
+                    ac_nodes = [node for node in ac_nodes if node != Symbol("")]
+                    isempty(ac_nodes) && continue
 
-                        if occursin(".2", string(pin)) # Check whether the pin is a AC pin
-                            
-                            triplet[3]=node 
-
+                    ac_index = nothing
+                    for ac_node in ac_nodes
+                        idx = findfirst(==(ac_node), node_list)
+                        if idx !== nothing
+                            ac_index = idx
+                            break
                         end
+                    end
 
-
-                        if occursin(".1", string(pin)) 
-                            
-                            ACpin=replace(string(pin), ".1" => ".2") # Replace .1 with .2 to search for the other AC pin if existent
-
-
-                            ACpin=Symbol(ACpin)
-
-                            if PowerImpedanceACDC.netname(network, (designator,ACpin)) === Symbol("") # Check whether this net (designator, pin) exists
-                            
-                                triplet[1]=node
-                            else
-                                triplet[2]=node
+                    if ac_index === nothing
+                        for dc_node in dc_nodes
+                            dc_node ∉ node_list && push!(node_list, dc_node)
+                        end
+                        for ac_node in ac_nodes
+                            ac_node ∉ node_list && push!(node_list, ac_node)
+                        end
+                    else
+                        insert_idx = ac_index
+                        for dc_node in dc_nodes
+                            if dc_node ∉ node_list
+                                insert!(node_list, insert_idx, dc_node)
+                                insert_idx += 1
                             end
-
                         end
-
-
-                    end
-                    # Double-check whether DC source is connected to DC node
-                    for (designator2,pin) in netfor!(network,triplet[1])
-
-                        if is_source(network.elements[designator2])
-                            triplet[1]=Symbol("") # No DC node needed
+                        for ac_node in ac_nodes
+                            ac_node ∉ node_list && push!(node_list, ac_node)
                         end
-
-
                     end
-
-                    # Check whether the AC nodes are already in the node list
-                    # TODO: Generalize for DC source as well
-                    index = findfirst(p -> p == triplet[2], node_list) 
-                    if index === nothing # AC nodes are not in the list add the entire triplet :) 
-                        triplet[1]!=Symbol("") && push!(node_list, triplet[1]) # If DC node is not needed
-                        push!(node_list, triplet[2])
-                        push!(node_list, triplet[3])
-                    else # AC nodes are in the list, place the DC node at the correction position
-                        
-                        triplet[1]!=Symbol("") && insert!(node_list, index, triplet[1]) # Insert the DC node at the correct position (when DC node needed)
-                    end
-
-
-
-
                 end
 
 

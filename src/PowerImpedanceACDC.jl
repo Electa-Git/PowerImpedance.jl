@@ -47,6 +47,11 @@ using Interpolations
 using DelimitedFiles
 import NaNMath # Deal with out of domain erros in Nonlinearsolve
 
+# Include PowerModelsMCDC as a local package, due to dependencies
+include("Packages/PowerModelsMCDC.jl/src/PowerModelsMCDC.jl")
+import .PowerModelsMCDC
+const _PMMCDC = PowerModelsMCDC
+
 
 # Including all components    
 include("Network/Components/AbstractElement.jl")
@@ -89,6 +94,7 @@ include("Network/Components/converter/common/loops/inner_current.jl")
 include("Network/Components/converter/MMC/MMC.jl")
 include("Network/Components/converter/TLC/TLC.jl")
 include("Network/Components/converter/blackbox_MMC.jl")
+include("Network/Components/converter/BipolarMMC.jl")
 
 # Machines
 include("Network/Components/machine/machine.jl")

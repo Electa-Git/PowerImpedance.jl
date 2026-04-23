@@ -247,7 +247,12 @@ end
 
 ######################### Element type #############################
 function is_passive(element :: Element)
-    (isa(element.element_model, MMC) || isa(element.element_model, Blackbox_MMC) || isa(element.element_model, TLC) || isa(element.element_model, Source) || isa(element.element_model, SynchronousMachine)) && return false
+    (isa(element.element_model, MMC) ||
+     isa(element.element_model, BipolarMMC) ||
+     isa(element.element_model, Blackbox_MMC) ||
+     isa(element.element_model, TLC) ||
+     isa(element.element_model, Source) ||
+     isa(element.element_model, SynchronousMachine)) && return false
     true
 end
 
@@ -256,7 +261,10 @@ function is_source(element :: Element)
 end
 
 function is_converter(element :: Element)
-    (isa(element.element_model, MMC) || isa(element.element_model, TLC) || isa(element.element_model, Blackbox_MMC))
+    (isa(element.element_model, MMC) ||
+     isa(element.element_model, BipolarMMC) ||
+     isa(element.element_model, TLC) ||
+     isa(element.element_model, Blackbox_MMC))
 end
 
 
@@ -277,7 +285,3 @@ function is_three_phase(element :: Element)
     (np(element) == 6) || (np(element) == 4 && (element.transformation) && !is_converter(element)) && return true
     return false
 end
-
-
-
-

@@ -34,8 +34,10 @@ Forward outer-loop current references.
 
 $(SIGNATURES)
 """
-state_space!(F, x, (meas, sync, pact, qact), block::NoInnerVoltageControl, conv::AbstractConverter) =
-    (; iΔ_d_ref = pact.iΔ_d_ref, iΔ_q_ref = qact.iΔ_q_ref)
+function state_space!(F, x, inputs, block::NoInnerVoltageControl, conv::AbstractConverter)
+    (; pact, qact) = inputs
+    return (; iΔ_d_ref = pact.iΔ_d_ref, iΔ_q_ref = qact.q_ctrl_ref)
+end
 
 
 abstract type AbstractVirtualImpedance          <: AbstractInnerVoltage end
@@ -63,7 +65,7 @@ function statenames(b::CCVI)
     return (filter_statenames(:vG_d_vi_f, b.filter)..., filter_statenames(:vG_q_vi_f, b.filter)...)
 end
 
-function initialvalues(b::CCVI; inputs, conv=nothing, kwargs...)
+function initialvalues(b::CCVI; inputs, conv=nothing)
     ratio = voltage_filter_ratio(conv)
     vG_d0 = inputs.vG_d * ratio
     vG_q0 = inputs.vG_q * ratio
@@ -72,10 +74,11 @@ function initialvalues(b::CCVI; inputs, conv=nothing, kwargs...)
     return (; filter_initialvalues(b.filter, dnames, vG_d0)..., filter_initialvalues(b.filter, qnames, vG_q0)...)
 end
 
-function state_space!(F, x, (meas, sync, out_reactive), b::CCVI, conv::AbstractConverter)
+function state_space!(F, x, inputs, b::CCVI, conv::AbstractConverter)
+    (; meas, sync, out_reactive) = inputs
     (;R_v, L_v, V_d_ref, V_q_ref) = b
     ω_c = sync.ω_c
-    vgfm_d_ref = out_reactive.vgfm_d_ref
+    vgfm_d_ref = out_reactive.q_ctrl_ref
     vG_d_f, i = filter_step!(F, 1, x, b.filter, filter_statenames(:vG_d_vi_f, b.filter), meas.vG_d_f)
     vG_q_f, _ = filter_step!(F, i, x, b.filter, filter_statenames(:vG_q_vi_f, b.filter), meas.vG_q_f)
 

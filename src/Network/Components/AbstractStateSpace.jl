@@ -18,6 +18,24 @@ n_elec_inputs(m::AbstractStateSpace) = length(elecinputnames(m))
 elecinputnames(m::AbstractStateSpace) = inputnames(m)
 
 
+### Helper functions ###
+
+# State-Space helper functions for the measurements state-space.
+function state_space_block!(F, x, inputs, block, idx::Integer)
+    idx_end = idx + n_states(block) - 1
+    out = state_space!(@view(F[idx:idx_end]), x, inputs, block)
+    return out, idx_end + 1
+end
+
+# Helper function for the converter state-space assembly
+function state_space_block!(F, x, inputs, block, m::AbstractStateSpace, idx::Integer)
+    idx_end = idx + n_states(block) - 1
+    out = state_space!(@view(F[idx:idx_end]), x, inputs, block, m)
+    return out, idx_end + 1
+end
+
+
+
 ### Solution methods (additional equations dummyequations or outputequations)
 abstract type AbstractSolveKind end
 # Types for form of state-space equations

@@ -33,8 +33,8 @@ Return zero modulation commands.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, sync, vloop, block::NoInnerCurrentControl; conv::AbstractConverter) =
-    (; m_d = 0.0, m_q = 0.0)
+state_space!(F, x, inputs, block::NoInnerCurrentControl, conv::AbstractConverter) =
+    (; vMΔ_d_ref_c = 0.0, vMΔ_q_ref_c = 0.0)
 
 """
 PI inner-current controller for TLC modulation commands.
@@ -74,7 +74,7 @@ Initialize inner-current PI integrator states.
 
 $(SIGNATURES)
 """
-function initialvalues(block::InnerCurrentPIControl; inputs, setpoint_pu=SetPoint(), conv::AbstractConverter)
+function initialvalues(block::InnerCurrentPIControl; inputs, conv::AbstractConverter)
     ratio = voltage_filter_ratio(conv)
     vG_d0 = inputs.vG_d * ratio
     vG_q0 = inputs.vG_q * ratio
@@ -99,7 +99,8 @@ $(SIGNATURES)
 The method writes integrator derivatives and returns current errors plus
 stationary-frame modulation commands.
 """
-function state_space!(F, x, (meas, sync, vloop), block::InnerCurrentPIControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, block::InnerCurrentPIControl, conv::AbstractConverter)
+    (; meas, sync, vloop) = inputs
     i_d_ref = vloop.iΔ_d_ref
     i_q_ref = vloop.iΔ_q_ref
 
@@ -115,8 +116,8 @@ function state_space!(F, x, (meas, sync, vloop), block::InnerCurrentPIControl, c
     F[i] = block.pi_ctrl.Ki * e_d
     F[i + 1] = block.pi_ctrl.Ki * e_q
 
-    vMΔd_ref_c = x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * sync.ω_c * i_q + v_d
-    vMΔq_ref_c = x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * sync.ω_c * i_d + v_q
+    vMΔ_d_ref_c = x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * sync.ω_c * i_q + v_d
+    vMΔ_q_ref_c = x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * sync.ω_c * i_d + v_q
 
-    return (; vMΔd_ref_c, vMΔq_ref_c)
+    return (; vMΔ_d_ref_c, vMΔ_q_ref_c)
 end
