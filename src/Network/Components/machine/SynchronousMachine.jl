@@ -773,8 +773,9 @@ function eval_y(gen :: SynchronousMachine, s :: Complex)
 end
 
 
-function make_power_flow!(machine:: SynchronousMachine, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
-
+function convert!(data,elem::Element{SynchronousMachine},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+    
+    machine = elem.element_model
     # Check if AC or DC source (second one not implemented)
     # is_three_phase(elem) ? nothing : error("DC sources are currently not implemented")
 

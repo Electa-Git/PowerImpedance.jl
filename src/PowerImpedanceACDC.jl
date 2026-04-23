@@ -26,6 +26,9 @@ using LaTeXStrings
 using LinearAlgebra
 using ForwardDiff, NonlinearSolve, SteadyStateDiffEq  # solve diffs and nonlinear equations
 
+#PowerBlocks
+import PowerBlocks as PB
+
 # Power flow
 import PowerModels, PowerModelsACDC
 import InfrastructureModels
@@ -102,6 +105,10 @@ include("Network/Components/machine/SynchronousMachine.jl")
 
 # Including network
 include("Network/Network.jl")
+
+# Refactoring attempt
+include("core/base.jl")
+include("core/convert.jl")
 
 # New power flow
 include("Network/power_flow.jl")

@@ -250,13 +250,13 @@ function power_flow(net::Network)
 	#### 3. Update setpoints of active elements
 	for (key, element) in net.elements
 
-        # Check if it is an active component
-        if !(is_converter(element) || is_generator(element))
-            continue ## Skip iteration if it is active
-        end
-        #Find the corresponding PowerModels component
-        comp_type, key = elem2comp[element.symbol]
-        elem_dict = result["solution"][comp_type][string(key)]
+#         # Check if it is an active component
+#         if !(is_converter(element) || is_generator(element))
+#             continue ## Skip iteration if it is active
+#         end
+#         #Find the corresponding PowerModels component
+#         comp_type, key = elem2comp[element.symbol]
+#         elem_dict = result["solution"][comp_type][string(key)]
         
         if is_converter(element) # In converter bus1 is DC and bus2 is AC
             dc_node = make_node(element, 1) 
@@ -383,33 +383,33 @@ function power_flow(net::Network)
 			θ = result["solution"]["bus"][string(ac_bus)]["va"]
 			update_string = string(key)
 
-            setpoint = SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+#             setpoint = SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
 
-            print(update_string * " Active Power [MW]: ")
-            println(Pgen)
-            print(update_string * " Reactive Power [MVar]: ")
-            println(Qgen)
-            print(update_string * " AC Voltage Magnitude [pu]: ")
-            println(result["solution"]["bus"][string(ac_bus )]["vm"])
-            print(update_string * " AC Voltage Angle [rad]: ")
-            println(θ)
+#             print(update_string * " Active Power [MW]: ")
+#             println(Pgen)
+#             print(update_string * " Reactive Power [MVar]: ")
+#             println(Qgen)
+#             print(update_string * " AC Voltage Magnitude [pu]: ")
+#             println(result["solution"]["bus"][string(ac_bus )]["vm"])
+#             print(update_string * " AC Voltage Angle [rad]: ")
+#             println(θ)
 
-            update!(element, element.element_model, setpoint)
-            # Update fields element
-            # element.setpoint = setpoint #Update operating point
-            # element.A = A
-            # element.B = B
-            # element.C = C
-            # element.D = D
+#             update!(element, element.element_model, setpoint)
+#             # Update fields element
+#             # element.setpoint = setpoint #Update operating point
+#             # element.A = A
+#             # element.B = B
+#             # element.C = C
+#             # element.D = D
             
 
      
-        end
-    end
+#         end
+#     end
 
 	return result, data, nodes2bus, elem2comp
 
-end
+# end
 
 function is_linear(net::Network)
 	## Only if no converter or SM, return true
