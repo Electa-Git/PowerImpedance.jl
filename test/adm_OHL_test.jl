@@ -20,6 +20,23 @@ add!(
 		earth_parameters = (1, 1, 100), transformation = true),
 )
 
+bundled_ohl = overhead_line(length = 50e3,
+	conductors = Conductors(
+		organization = :flat, nᵇ = 2, nˢᵇ = 2, Rᵈᶜ = 0.0598, rᶜ = 30.42e-3 / 2,
+		yᵇᶜ = 18.0, Δyᵇᶜ = 0, Δxᵇᶜ = 7.3, Δ̃xᵇᶜ = 0, dˢᵇ = 0.45, dˢᵃᵍ = 6.0),
+	groundwires = Groundwires(
+		nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062, Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0),
+	earth_parameters = (1, 1, 100),
+	transformation = true,
+)
+
+(Z_bundled, Y_bundled) = PowerImpedanceACDC.eval_parameters(
+	bundled_ohl.element_value, 1im*2π*50)
+@test size(Z_bundled) == (2, 2)
+@test size(Y_bundled) == (2, 2)
+@test all(isfinite, Z_bundled)
+@test all(isfinite, Y_bundled)
+
 
 
 

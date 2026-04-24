@@ -4,7 +4,73 @@ transmissionVoltage = 380 / sqrt(3)
 pHVDC1 = 600
 qC1 = 100
 qC2 = 100
+Vdc = 640
 # The P and Q defined here are what is injected into the network. 
+
+w=1im*2*pi*50
+rho=100.0
+ohl_model = overhead_line(
+	length = 50e3,
+	conductors = Conductors(
+		organization = :flat,
+		# two DC poles: +320 kV and -320 kV
+		nᵇ = 2,
+		# intentional: one physical conductor per pole
+		nˢᵇ = 1,
+		# ACSR Bluebird 2156 kcmil, 84/19
+		# Nexans: Rdc20 = 0.0266 Ω/km, ampacity ≈ 1630 A
+		Rᵈᶜ = 0.0266, rᶜ = 44.8e-3 / 2,
+		# compact ±320 kV HVDC bipole-ish geometry
+		yᵇᶜ = 18.0, Δyᵇᶜ = 0.0, Δxᵇᶜ = 7.3, Δ̃xᵇᶜ = 0.0,
+		# irrelevant for nˢᵇ = 1, but left explicit
+		dˢᵇ = 0.0,
+		# representative sag offset
+		dˢᵃᵍ = 6.0,
+	),
+	groundwires = Groundwires(
+		nᵍ = 2,
+		# keep your existing shield-wire class
+		Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
+		# two shield wires approximately above/around the pole positions
+		Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0,
+	), earth_parameters = (1, 1, rho),
+	transformation = true,
+)
+gtest = Network()
+add!(
+	gtest,
+	:labanimal,
+	ohl_model,
+)
+@show z_ohl =
+	PowerImpedanceACDC.y_to_abcd(PowerImpedanceACDC.get_y(gtest.elements[:labanimal], w))
+
+ugc_model = cable(
+	length = 50e3,
+	positions = [(-0.5, 1), (0.5, 1)],
+	# core conductor
+	C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
+	# main insulation
+		I1 = Insulator(rᵢ = 0.02622, rₒ = 0.06006, ϵᵣ = 2.67, μᵣ = 1.469),
+	# sheath
+	C2 = Conductor(rᵢ = 0.06006, rₒ = 0.06336, ρ = 2.14e-7, μᵣ = 1.0),
+	# sheath/jacket insulation
+		I2 = Insulator(rᵢ = 0.06336, rₒ = 0.06636, ϵᵣ = 2.3, μᵣ = 1.0),
+	# aluminium water-blocking foil
+	C3 = Conductor(rᵢ = 0.06636, rₒ = 0.06651, ρ = 2.826e-8, μᵣ = 1.0),
+	# outer jacket
+		I3 = Insulator(rᵢ = 0.06651, rₒ = 0.07256, ϵᵣ = 2.3, μᵣ = 1.0),
+	earth_parameters = (1, 1, rho),
+	transformation = true,
+)
+gtest = Network()
+add!(
+	gtest,
+	:labanimal,
+	ugc_model,
+)
+@show z_ugc =
+	PowerImpedanceACDC.y_to_abcd(PowerImpedanceACDC.get_y(gtest.elements[:labanimal], w))
 
 @time net = @network begin
 
@@ -21,10 +87,9 @@ qC2 = 100
 		transformation = true,
 	)
 
-
 	# HVDC link 1
 	# MMC1 controls the DC voltage, and is situated at the remote end.
-	c1 = mmc(Vᵈᶜ = 800, vDCbase = 800, Vₘ = transmissionVoltage,
+	c1 = mmc(Vᵈᶜ = Vdc, vDCbase = Vdc, Vₘ = transmissionVoltage,
 		P_max = 100, P_min = -100, P = -pHVDC1, Q = qC1, Q_max = 500, Q_min = -500,
 		occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
 		ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
@@ -33,7 +98,7 @@ qC2 = 100
 		dc = PI_control(Kₚ = 5, Kᵢ = 15),
 	)
 	# MMC2 controls P&Q. It is connected to bus 7. Define the transformer impedance parameters at the converter side!
-	c2 = mmc(Vᵈᶜ = 800, vDCbase = 800, Vₘ = transmissionVoltage,
+	c2 = mmc(Vᵈᶜ = Vdc, vDCbase = Vdc, Vₘ = transmissionVoltage,
 		P_max = 100, P_min = -100, P = pHVDC1, Q = qC2, Q_max = 1000, Q_min = -1000,
 		vACbase_LL_RMS = 333, turnsRatio = 333/380, Lᵣ = 0.0461, Rᵣ = 0.4103,
 		occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
@@ -43,14 +108,9 @@ qC2 = 100
 		q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
 	)
 
-	dc_line = cable(length = 100e3, positions = [(-0.5, 1), (0.5, 1)],
-		C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8),
-		C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8),
-		C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10),
-		I1 = Insulator(rᵢ = 24.25e-3, rₒ = 41.75e-3, ϵᵣ = 2.3),
-		I2 = Insulator(rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
-		I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3),
-		transformation = true)
+	ugc = ugc_model
+
+	ohl = ohl_model
 
 	g4 = ac_source(
 		V = transmissionVoltage,
@@ -99,13 +159,13 @@ qC2 = 100
 	g4[1.2] ⟷ tl1[1.2] ⟷ B2q
 
 
-
 	g4[2.1] ⟷ gndd
 	g4[2.2] ⟷ gndq
 
-	c1[1.1] ⟷ dc_line[1.1] ⟷ B4
-	c2[1.1] ⟷ dc_line[2.1] ⟷ B5
-
+	# component[(ac or dc side) . (1 = d, 2 = q)]
+	c1[1.1] ⟷ ugc[1.1] ⟷ B4
+	ugc[2.1] ⟷ ohl[1.1] ⟷ BX # point at length x along the DC line 
+	c2[1.1] ⟷ ohl[2.1] ⟷ B5
 
 	c2[2.1] == tl78[1.1] == B6d
 	c2[2.2] == tl78[1.2] == B6q
@@ -114,8 +174,6 @@ qC2 = 100
 
 	g1[2.1] == gndd
 	g1[2.2] == gndq
-
-
 end
 
 # Determine impedance seen at the AC side of the HVDC link
