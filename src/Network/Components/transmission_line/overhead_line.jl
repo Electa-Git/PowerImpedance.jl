@@ -240,14 +240,14 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 		if iseven(nsub)
 			ϕₛ += ϕ/2
 		end
-		x = Vector{Float64}(undef, nsub)
-		y = Vector{Float64}(undef, nsub)
+		x_sub = Vector{Float64}(undef, nsub)
+		y_sub = Vector{Float64}(undef, nsub)
 		for i in 1:nsub
-			x[i] = r * cos(ϕₛ)
-			y[i] = r * sin(ϕₛ)
+			x_sub[i] = r * cos(ϕₛ)
+			y_sub[i] = r * sin(ϕₛ)
 			ϕₛ += ϕ
 		end
-		return (x, y)
+		return (x_sub, y_sub)
 	end
 
 	# ---------- constants ----------
