@@ -19,6 +19,8 @@ and arrows indicating the direction of each eigenlocus.
     - "GM" for gain margin
     - "VM" for vector margin
 - `title::String`: (optional) The title of the plot. Default is `"Nyquist plot"`.
+- `indentations::Vector{Float64}`: (optional) Frequencies at which to add indentations to the Nyquist contour corresponding to open-loop purely imaginary poles.
+- order_maxima::Int: (optional) Only used for unstable frequency indetification. Each maxima at index "m" needs to be larger than its surrounding number of samples given by `order_maxima`, i.e. ymax[m] >= y[m-order_maxima:m+order_maxima]. Default is 5.
 
 # Returns
 The function returns a plot of the Nyquist diagram showing the eigenvalues of `L` as loci in the complex plane. 
@@ -42,7 +44,7 @@ omega = 1:0.1:10  # Frequency range from 1 to 10 rad/s
 nyquistplot(L, omega, zoom="yes", title="Custom Nyquist Plot")
 ```
 """
-function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :: String = "Nyquist plot")
+function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :: String = "Nyquist plot", indentations :: Vector{Float64} = Float64[], order_maxima :: Int = 5)
 
     # Determine eigenvalues of the loop gain matrix at each frequency point 
     Λ = eigvals.(L)
@@ -52,6 +54,18 @@ function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :
     # Number of eigenvalues for each frequency point
     λₙ = size(Λ[1], 1)
     # L has dimensions λₙxλₙxomegaₙ 
+
+    # Form the indexes of the indentations in the Nyquist contour to avoid open-loop purely imaginary poles
+    valid_indent = (indentations .> first(omega)) .& (indentations .< last(omega))  # Consider only indentations strictly in the omega range
+    inds = indentations[valid_indent]
+    j = searchsortedfirst.(Ref(omega), inds) # Candidate neighbor omega
+    is_match = omega[j] .== inds
+    # Indices to the left of or at the indentations, and to the right of it
+    left_idx  = ifelse.(is_match, j,     j .- 1)
+    left_idx = clamp.(left_idx, 1, length(omega))
+    right_idx = ifelse.(is_match, j .+ 1, j)
+    idx_pairs = hcat(left_idx, right_idx) # Stack index pairs column-wise (each row = one indentation)
+    idx_indentations = vec(idx_pairs) # Save the two omega indices closest to each indentation
 
     # Sorting algorithm of eigenvalues to create continuous eigenloci in Nyquist plot 
     # Create empty matrix for sorted eigenvalues 
@@ -132,11 +146,17 @@ function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :
             λ = Λ[:,i]
             x = real(λ)
             y = imag(λ)
+            x_indent = copy(x)
+            y_indent = copy(y)
+            @inbounds for idx in idx_indentations
+                x_indent[idx, :] .= NaN
+                y_indent[idx, :] .= NaN
+            end
             y_abs = abs.(y)
             y_max = maximum(y_abs)
             color = palette(:default, λₙ) #palette(:tab10)
-            plot!(x, y, linewidth = 3, c = color[i], label = "Lambda " * string(i))
-            plot!(x, -y, linewidth = 3, c = color[i], linestyle = :dash, label = :none)
+            plot!(x_indent, y_indent, linewidth = 3, c = color[i], label = "Lambda " * string(i))
+            plot!(x_indent, -y_indent, linewidth = 3, c = color[i], linestyle = :dash, label = :none)
             index = findall(x -> x == y_max, y_abs)
             index = index[1]
             # Arrows added to show direction of each eigenloci
@@ -173,7 +193,7 @@ function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :
         end
         if abs(cwi - ccwi) > 0
             # Compute the unstable frequency and add them to the list
-            for mode in unstable_frequency(Λ[:,i], omega)
+            for mode in unstable_frequency(Λ[:,i], omega, order_maxima = order_maxima)
                 push!(unstable_modes,mode)
             end
         end

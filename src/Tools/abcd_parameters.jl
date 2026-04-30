@@ -50,10 +50,10 @@ function connect_parallel!(ABCD₁::Parameters_types, ABCD₂::Parameters_types)
 	else
 		# Algebra-identical but without explicit inv(inv(.)).
 		# b = inv(inv(b₁)+inv(b₂))  =>  b = (b₁ \ I + b₂ \ I) \ I
-		I = Matrix{ComplexF64}(I, n, n)
+		id = Matrix{ComplexF64}(I, n, n)
 
-		S = (b₁ \ I) + (b₂ \ I)          # S = inv(b₁) + inv(b₂)
-		b = S \ I                         # b = inv(S)
+		S = (b₁ \ id) + (b₂ \ id)          # S = inv(b₁) + inv(b₂)
+		b = S \ id                         # b = inv(S)
 
 		a = b * ((b₁ \ a₁) + (b₂ \ a₂))    # a = inv(S) * (inv(b₁)a₁ + inv(b₂)a₂)
 		c = c₁ + c₂ + (d₂ - d₁) * ((b₁ + b₂) \ (a₁ - a₂))

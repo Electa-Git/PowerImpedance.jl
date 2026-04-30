@@ -33,7 +33,7 @@ function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, ele
     ((data["convdc"])[string(key)])["basekVac"] = global_dict["V"] / 1e3
 
     if in(:vac, keys(converter.controls)) || in(:vac_supp, keys(converter.controls)) 
-        ((data["convdc"])[string(key)])["type_ac"] = 2  # PV ac bus
+        ((data["convdc"])[string(key)])["type_ac"] = 2  # V ac bus
         data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
         # TODO: The line below sometimes gives errors during power flow (NUMERICAL_ERROR)
          # Not entirely sure if this is necessary. ΔQ = kp*ΔV -> new pu base kp_new = kppu
@@ -44,7 +44,7 @@ function make_power_flow!(converter:: Converter, data, nodes2bus, bus2nodes, ele
         end
         data["bus"][string(ac_bus)]["vm"] = ((data["convdc"])[string(key)])["Vtar"]
     else
-        ((data["convdc"])[string(key)])["type_ac"] = 1  # PQ ac bus
+        ((data["convdc"])[string(key)])["type_ac"] = 1  # Q ac bus
         ((data["convdc"])[string(key)])["Vtar"] = converter.Vₘ * 1e3 / global_dict["V"] # Not needed for PQ bus ?
     end
 

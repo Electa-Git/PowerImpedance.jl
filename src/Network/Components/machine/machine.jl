@@ -54,12 +54,9 @@ function make_power_flow!(machine:: Machine, data, nodes2bus, bus2nodes, elem2co
     ((data["branch"])[key_branch_str])["g_to"] = 0
     ((data["branch"])[key_branch_str])["b_to"] = 0
 
-    # Change type of final bus, intermediate bus is PQ-bus
-    if isapprox(machine.P_max, machine.P)
-        ((data["bus"])[string(interm_bus)]) = set_bus_type((data["bus"])[string(interm_bus)], 1)
-    else
-        ((data["bus"])[string(interm_bus)]) = set_bus_type((data["bus"])[string(interm_bus)], 2)
-    end
+    # Change type of intermediate bus to PV (2)
+    ((data["bus"])[string(interm_bus)]) = set_bus_type((data["bus"])[string(interm_bus)], 2)
+
 
     ((data["bus"])[string(interm_bus)])["vm"] = ((data["gen"])[key])["vg"]
     ((data["bus"])[string(interm_bus)])["vmin"] =  0.9*((data["gen"])[key])["vg"]
