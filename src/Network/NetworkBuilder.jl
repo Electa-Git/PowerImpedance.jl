@@ -68,23 +68,97 @@ end
 
 function solve(builder::BuilderState)
 	powerflow = solve_powerflow(builder.network, builder.options)
-	builder.powerflow = powerflow
 
 	if powerflow !== nothing
 		apply_powerflow_setpoints!(builder.network, powerflow)
+		powerflow = cache_active_setpoint_values(builder.network, powerflow)
 	end
 
+	builder.powerflow = powerflow
 	return (network = builder.network, powerflow = builder.powerflow)
 end
+
 
 function set_point!(builder::BuilderState; powerflow = builder.powerflow)
 	builder.powerflow = powerflow
 
 	if powerflow !== nothing
-		apply_powerflow_setpoints!(builder.network, powerflow)
+		restore_active_setpoint_values!(builder.network, powerflow)
 	end
 
 	return (network = builder.network, powerflow = builder.powerflow)
+end
+
+function cache_active_setpoint_values(network::P.Network, powerflow::NamedTuple)
+	return merge(powerflow, (; active_setpoint_values = active_setpoint_values(network)))
+end
+
+function active_setpoint_values(network::P.Network)
+	values = Dict{Symbol, Any}()
+
+	for (name, element) in pairs(network.elements)
+		if P.is_converter(element) || P.is_generator(element)
+			values[name] = deepcopy(element.element_value)
+		end
+	end
+
+	return values
+end
+
+function restore_active_setpoint_values!(network::P.Network, powerflow::NamedTuple)
+	hasproperty(powerflow, :active_setpoint_values) ||
+		throw(
+			ArgumentError(
+				"Cached power flow does not contain active setpoint values. " *
+				"Run NetworkBuilder.solve(builder) first and reuse the returned powerflow.",
+			),
+		)
+
+	for (name, element) in pairs(network.elements)
+		if (P.is_converter(element) || P.is_generator(element)) &&
+		   !haskey(powerflow.active_setpoint_values, name)
+			throw(
+				ArgumentError("Cached power flow has no active setpoint value for :$name."),
+			)
+		end
+	end
+
+	for (name, cached_value) in pairs(powerflow.active_setpoint_values)
+		haskey(network.elements, name) ||
+			throw(
+				ArgumentError(
+					"Cached power flow references missing active element :$name.",
+				),
+			)
+
+		element = network.elements[name]
+
+		(P.is_converter(element) || P.is_generator(element)) ||
+			throw(
+				ArgumentError("Cached power flow expected :$name to be an active element."),
+			)
+
+		typeof(element.element_value) === typeof(cached_value) ||
+			throw(
+				ArgumentError(
+					"Cached active setpoint value for :$name has type $(typeof(cached_value)), " *
+					"but the rebuilt element has type $(typeof(element.element_value)).",
+				),
+			)
+
+		element.element_value = deepcopy(cached_value)
+	end
+
+	sync_parent_powerflow_globals!(powerflow)
+	return network
+end
+
+function sync_parent_powerflow_globals!(powerflow::NamedTuple)
+	set_parent_global!(:result, powerflow.result)
+	set_parent_global!(:data, powerflow.data)
+	set_parent_global!(:nodes2bus, powerflow.nodes2bus)
+	set_parent_global!(:elem2comp, powerflow.elem2comp)
+	return powerflow
 end
 
 function build_network(elements::NamedTuple, connections::Tuple, options::NamedTuple)
@@ -100,7 +174,10 @@ function build_network(elements::NamedTuple, connections::Tuple, options::NamedT
 	for connection in connections
 		connection isa Connection ||
 			throw(ArgumentError("NetworkBuilder connections must be created with ⟷ or ↔."))
-		P.connect!(network, (network_endpoint(network, endpoint) for endpoint in connection.endpoints)...)
+		P.connect!(
+			network,
+			(network_endpoint(network, endpoint) for endpoint in connection.endpoints)...,
+		)
 	end
 
 	P.check_lumped_elements(network)
@@ -112,7 +189,9 @@ function network_endpoint(network::P.Network, endpoint::Pin)
 	haskey(network.elements, endpoint.element) ||
 		throw(ArgumentError("Unknown element :$(endpoint.element) in connection endpoint."))
 	haskey(network.elements[endpoint.element].pins, endpoint.name) ||
-		throw(ArgumentError("Unknown pin $(endpoint.name) on element :$(endpoint.element)."))
+		throw(
+			ArgumentError("Unknown pin $(endpoint.name) on element :$(endpoint.element)."),
+		)
 	return (endpoint.element, endpoint.name)
 end
 
@@ -152,7 +231,15 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 	push!(bus2nodes, "gnd" => ground_nodes)
 
 	for element in values(network.elements)
-		P.make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, element, global_dict)
+		P.make_powerflow!(
+			data,
+			nodes2bus,
+			bus2nodes,
+			elem2comp,
+			comp2elem,
+			element,
+			global_dict,
+		)
 	end
 
 	ensure_slack_bus!(data)
@@ -179,7 +266,9 @@ function ensure_slack_bus!(data)
 		return data
 	end
 
-	println("WARNING: No slack bus present. The first PV bus with generator will be set as reference")
+	println(
+		"WARNING: No slack bus present. The first PV bus with generator will be set as reference",
+	)
 	for gen_index in keys(data["gen"])
 		bus_gen = data["gen"][gen_index]["gen_bus"]
 		if data["bus"][string(bus_gen)]["bus_type"] == 2
@@ -229,26 +318,56 @@ end
 function powerflow_setting(options::NamedTuple)
 	setting = option_value(powerflow_options(options), :setting, nothing)
 	return setting === nothing ?
-	       Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false) :
-	       setting
+		   Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false) :
+		   setting
 end
 
 function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
-	P._PM.variable_bus_voltage(pm, bounded = variable_bounded(variables, :bus_voltage, true))
+	P._PM.variable_bus_voltage(
+		pm,
+		bounded = variable_bounded(variables, :bus_voltage, true),
+	)
 	P._PM.variable_gen_power(pm, bounded = variable_bounded(variables, :gen_power, false))
-	P._PM.variable_branch_power(pm, bounded = variable_bounded(variables, :branch_power, false))
-	P._PM.variable_storage_power(pm, bounded = variable_bounded(variables, :storage_power, false))
+	P._PM.variable_branch_power(
+		pm,
+		bounded = variable_bounded(variables, :branch_power, false),
+	)
+	P._PM.variable_storage_power(
+		pm,
+		bounded = variable_bounded(variables, :storage_power, false),
+	)
 
 	if typeof(pm) <: P._PM.SOCBFPowerModel
-		P._PM.variable_branch_current(pm, bounded = variable_bounded(variables, :branch_current, false))
+		P._PM.variable_branch_current(
+			pm,
+			bounded = variable_bounded(variables, :branch_current, false),
+		)
 	end
 
-	P._PMACDC.variable_active_dcbranch_flow(pm, bounded = variable_bounded(variables, :active_dcbranch_flow, false))
-	P._PMACDC.variable_dcbranch_current(pm, bounded = variable_bounded(variables, :dcbranch_current, false))
-	P._PMACDC.variable_dc_converter(pm, bounded = variable_bounded(variables, :dc_converter, false))
-	P._PMACDC.variable_dcgrid_voltage_magnitude(pm, bounded = variable_bounded(variables, :dcgrid_voltage_magnitude, false))
-	P._PMACDC.variable_dcgenerator_power(pm; bounded = variable_bounded(variables, :dcgenerator_power, false))
-	P._PMACDC.variable_flexible_demand(pm, bounded = variable_bounded(variables, :flexible_demand, false))
+	P._PMACDC.variable_active_dcbranch_flow(
+		pm,
+		bounded = variable_bounded(variables, :active_dcbranch_flow, false),
+	)
+	P._PMACDC.variable_dcbranch_current(
+		pm,
+		bounded = variable_bounded(variables, :dcbranch_current, false),
+	)
+	P._PMACDC.variable_dc_converter(
+		pm,
+		bounded = variable_bounded(variables, :dc_converter, false),
+	)
+	P._PMACDC.variable_dcgrid_voltage_magnitude(
+		pm,
+		bounded = variable_bounded(variables, :dcgrid_voltage_magnitude, false),
+	)
+	P._PMACDC.variable_dcgenerator_power(
+		pm;
+		bounded = variable_bounded(variables, :dcgenerator_power, false),
+	)
+	P._PMACDC.variable_flexible_demand(
+		pm,
+		bounded = variable_bounded(variables, :flexible_demand, false),
+	)
 	P._PMACDC.variable_pst(pm, bounded = variable_bounded(variables, :pst, false))
 	P._PMACDC.variable_sssc(pm, bounded = variable_bounded(variables, :sssc, false))
 
@@ -345,7 +464,13 @@ function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
 	end
 end
 
-function solve_acdcpf(data::Dict{String, Any}, model_type::Type, optimizer, variables::NamedTuple; kwargs...)
+function solve_acdcpf(
+	data::Dict{String, Any},
+	model_type::Type,
+	optimizer,
+	variables::NamedTuple;
+	kwargs...,
+)
 	ref_ext = [
 		P._PMACDC.add_ref_dcgrid!,
 		P._PMACDC.ref_add_pst!,
@@ -354,7 +479,13 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, optimizer, vari
 		P._PMACDC.ref_add_gendc!,
 	]
 	build_method = pm -> build_acdcpf(pm, variables)
-	pm = P._PM.instantiate_model(data, model_type, build_method; ref_extensions = ref_ext, kwargs...)
+	pm = P._PM.instantiate_model(
+		data,
+		model_type,
+		build_method;
+		ref_extensions = ref_ext,
+		kwargs...,
+	)
 
 	P.JuMP.set_optimizer(pm.model, optimizer)
 	P.JuMP.optimize!(pm.model)
@@ -366,10 +497,18 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, optimizer, vari
 		converged_feasible = false
 		has_violations = !isempty(P.JuMP.primal_feasibility_report(pm.model; atol = 1e-4))
 		if has_violations
-			println("Violations reported. Entering power flow with increments of setpoints to find a solution.")
+			println(
+				"Violations reported. Entering power flow with increments of setpoints to find a solution.",
+			)
 			for r ∈ 1:5
 				P.update_actives_setpoints!(data, -0.0001)
-				pm = P._PM.instantiate_model(data, model_type, build_method; ref_extensions = ref_ext, kwargs...)
+				pm = P._PM.instantiate_model(
+					data,
+					model_type,
+					build_method;
+					ref_extensions = ref_ext,
+					kwargs...,
+				)
 				P.JuMP.set_optimizer(pm.model, optimizer)
 				P.JuMP.optimize!(pm.model)
 				result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
@@ -378,14 +517,19 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, optimizer, vari
 					converged_feasible = true
 					break
 				elseif isempty(P.JuMP.primal_feasibility_report(pm.model; atol = 1e-4))
-					println("Power flow converged succesfully after $r increment change. Point is feasible.")
+					println(
+						"Power flow converged succesfully after $r increment change. Point is feasible.",
+					)
 					converged_feasible = true
 					break
 				end
 			end
 			if !converged_feasible
-				println("Last resort: Relaxing constraints to find a solution and see which constraints are violated.")
-				result = solve_acdcpf_relax(data, model_type, optimizer, variables; kwargs...)
+				println(
+					"Last resort: Relaxing constraints to find a solution and see which constraints are violated.",
+				)
+				result =
+					solve_acdcpf_relax(data, model_type, optimizer, variables; kwargs...)
 			end
 		else
 			println("Power flow converged succesfully. Point is feasible")
@@ -395,7 +539,13 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, optimizer, vari
 	return result
 end
 
-function solve_acdcpf_relax(data::Dict{String, Any}, model_type::Type, optimizer, variables::NamedTuple; kwargs...)
+function solve_acdcpf_relax(
+	data::Dict{String, Any},
+	model_type::Type,
+	optimizer,
+	variables::NamedTuple;
+	kwargs...,
+)
 	ref_ext = [
 		P._PMACDC.add_ref_dcgrid!,
 		P._PMACDC.ref_add_pst!,
@@ -405,7 +555,13 @@ function solve_acdcpf_relax(data::Dict{String, Any}, model_type::Type, optimizer
 		P._PMACDC.ref_add_im!,
 	]
 	build_method = pm -> build_acdcpf(pm, variables)
-	pm = P._PM.instantiate_model(data, model_type, build_method; ref_extensions = ref_ext, kwargs...)
+	pm = P._PM.instantiate_model(
+		data,
+		model_type,
+		build_method;
+		ref_extensions = ref_ext,
+		kwargs...,
+	)
 	P.JuMP.set_optimizer(pm.model, optimizer)
 
 	map = P.JuMP.relax_with_penalty!(pm.model; default = 2.0)
@@ -437,48 +593,71 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 		end
 
 		haskey(elem2comp, element.symbol) ||
-			throw(ArgumentError("Cached power flow has no component mapping for :$(element.symbol)."))
+			throw(
+				ArgumentError(
+					"Cached power flow has no component mapping for :$(element.symbol).",
+				),
+			)
+
 		comp_type, key = elem2comp[element.symbol]
 		elem_dict = result["solution"][comp_type][string(key)]
 
 		if P.is_converter(element)
 			dc_node = P.make_node(element, 1)
 			ac_node = P.make_node(element, 2)
+
 			haskey(nodes2bus, dc_node) ||
-				throw(ArgumentError("Cached power flow has no DC bus mapping for :$(element.symbol)."))
+				throw(
+					ArgumentError(
+						"Cached power flow has no DC bus mapping for :$(element.symbol).",
+					),
+				)
 			haskey(nodes2bus, ac_node) ||
-				throw(ArgumentError("Cached power flow has no AC bus mapping for :$(element.symbol)."))
+				throw(
+					ArgumentError(
+						"Cached power flow has no AC bus mapping for :$(element.symbol).",
+					),
+				)
+
 			_, dc_bus = nodes2bus[dc_node]
 			_, ac_bus = nodes2bus[ac_node]
 
 			Pdc = elem_dict["pdc"] * global_dict["S"] / 1e6
-			Vm = (result["solution"]["bus"][string(ac_bus)]["vm"] * global_dict["V"] / 1e3) * sqrt(2)
+			Vm =
+				(result["solution"]["bus"][string(ac_bus)]["vm"] * global_dict["V"] / 1e3) *
+				sqrt(2)
 			θ = result["solution"]["bus"][string(ac_bus)]["va"]
-			Vdc = result["solution"]["busdc"][string(dc_bus)]["vm"] *
-			      (data["dcpol"] * global_dict["V"] / 1e3)
+			Vdc =
+				result["solution"]["busdc"][string(dc_bus)]["vm"] *
+				(data["dcpol"] * global_dict["V"] / 1e3)
 			Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
 			Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6
 
 			P.update!(element.element_value, Vm, θ, Pac, Qac, Vdc, Pdc)
 		elseif P.is_generator(element)
 			ac_node = non_ground_node(element, nodes2bus)
+
 			haskey(nodes2bus, ac_node) ||
-				throw(ArgumentError("Cached power flow has no AC bus mapping for :$(element.symbol)."))
+				throw(
+					ArgumentError(
+						"Cached power flow has no AC bus mapping for :$(element.symbol).",
+					),
+				)
+
 			_, ac_bus = nodes2bus[ac_node]
 
 			Pgen = elem_dict["pg"] * global_dict["S"] / 1e6
 			Qgen = elem_dict["qg"] * global_dict["S"] / 1e6
-			Vm = (result["solution"]["bus"][string(ac_bus)]["vm"] * global_dict["V"] / 1e3) * sqrt(2)
+			Vm =
+				(result["solution"]["bus"][string(ac_bus)]["vm"] * global_dict["V"] / 1e3) *
+				sqrt(2)
 			θ = result["solution"]["bus"][string(ac_bus)]["va"]
 
 			P.update!(element.element_value, Pgen, Qgen, Vm, θ)
 		end
 	end
 
-	set_parent_global!(:result, result)
-	set_parent_global!(:data, data)
-	set_parent_global!(:nodes2bus, nodes2bus)
-	set_parent_global!(:elem2comp, elem2comp)
+	sync_parent_powerflow_globals!(powerflow)
 	return network
 end
 

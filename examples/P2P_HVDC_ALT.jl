@@ -1,5 +1,6 @@
 using PowerImpedanceACDC
 using PowerImpedanceACDC.NetworkBuilder: pin, ⟷
+using Plots
 
 # The P and Q defined here are what is injected into the network.
 transmissionVoltage = 380 / sqrt(3)
@@ -179,11 +180,136 @@ function show_transition_abcd(elements)
 		)
 end
 
-function run_transition_study()
+function transition_bode_sample(x, zgrid, omega_ac)
+	Zg = getindex.(zgrid, 1, 1)
+
+	f = real.(omega_ac ./ (2π))
+	mag_dB = 20 .* log10.(abs.(Zg))
+	phase_deg = angle.(Zg) .* (180 / π)
+
+	return (;
+		x = x,
+		f = f,
+		mag_dB = mag_dB,
+		phase_deg = phase_deg,
+	)
+end
+
+function padded_limits(values; padding = 0.08)
+	finite_values = values[isfinite.(values)]
+
+	isempty(finite_values) &&
+		error("Cannot determine plot limits from non-finite values.")
+
+	vmin = minimum(finite_values)
+	vmax = maximum(finite_values)
+
+	if vmin == vmax
+		delta = max(abs(vmin), 1.0)
+		return (vmin - delta, vmax + delta)
+	end
+
+	delta = padding * (vmax - vmin)
+	return (vmin - delta, vmax + delta)
+end
+
+function transition_bode_frame(sample; mag_ylims, phase_ylims = (-180, 180))
+	label = "Z @B5, UGC = $(round(sample.x * 100; digits = 2)) %"
+
+	plt = plot(
+		layout = (2, 1),
+		size = (950, 700),
+		legend = :topright,
+	)
+
+	plot!(
+		plt[1],
+		sample.f,
+		sample.mag_dB;
+		xaxis = :log10,
+		ylabel = "Magnitude [dB]",
+		label = label,
+		linewidth = 2,
+		minorgrid = true,
+		framestyle = :box,
+		xlims = (minimum(sample.f), maximum(sample.f)),
+		ylims = mag_ylims,
+		title = "Impedance seen at B5 during UGC/OHL transition",
+	)
+
+	plot!(
+		plt[2],
+		sample.f,
+		sample.phase_deg;
+		xaxis = :log10,
+		xlabel = "Frequency [Hz]",
+		ylabel = "Phase [deg]",
+		label = "",
+		legend = :none,
+		linewidth = 2,
+		minorgrid = true,
+		framestyle = :box,
+		xlims = (minimum(sample.f), maximum(sample.f)),
+		ylims = phase_ylims,
+		yticks = -360:90:360,
+	)
+
+	return plt
+end
+
+# function save_transition_animation(
+# 	samples;
+# 	filename = "transition_harmonic_peaks.gif",
+# 	fps = 8,
+# )
+# 	isempty(samples) && error("No transition samples were generated.")
+
+# 	all_mag = reduce(vcat, (sample.mag_dB for sample in samples))
+# 	mag_ylims = padded_limits(all_mag)
+
+# 	anim = Plots.Animation()
+
+# 	for sample in samples
+# 		plt = transition_bode_frame(sample; mag_ylims = mag_ylims)
+# 		Plots.frame(anim, plt)
+# 	end
+
+# 	Plots.gif(anim, filename; fps = fps)
+# 	return filename
+# end
+
+function save_transition_animation(
+	samples;
+	filename = "transition_harmonic_peaks.mp4",
+	fps = 8,
+)
+	isempty(samples) && error("No transition samples were generated.")
+
+	all_mag = reduce(vcat, (sample.mag_dB for sample in samples))
+	mag_ylims = padded_limits(all_mag)
+
+	anim = Plots.Animation()
+
+	for sample in samples
+		plt = transition_bode_frame(sample; mag_ylims = mag_ylims)
+		Plots.frame(anim, plt)
+	end
+
+	Plots.mp4(anim, filename; fps = fps)
+	return filename
+end
+
+function run_transition_study(;
+	x_values = 0.0:0.02:1.0,
+	animation_filename = "transition_harmonic_peaks.gif",
+	animation_fps = 8,
+	show_static_plots = false,
+)
 	builder = nothing
 	cached_powerflow = nothing
+	samples = NamedTuple[]
 
-	for x in 0.0:0.1:1.0
+	for x in x_values
 		elements = transition_elements(x)
 		show_transition_abcd(elements)
 
@@ -194,6 +320,7 @@ function run_transition_study()
 				solved = NetworkBuilder.solve(builder)
 				cached_powerflow = solved.powerflow
 			end
+
 			cached_powerflow === nothing &&
 				error("Expected power-flow results from an active network.")
 		else
@@ -206,17 +333,41 @@ function run_transition_study()
 
 		net = builder.network
 
-		# Determine impedance seen at the AC side of the HVDC link
 		@time zgrid, omega_ac =
-			determine_impedance(net, elim_elements = [:c2], input_pins = [:B5],
-				output_pins = [:gndd], freq_range = (100, 5000, 1000))
+			determine_impedance(
+				net;
+				elim_elements = [:c2],
+				input_pins = [:B5],
+				output_pins = [:gndd],
+				freq_range = (100, 5000, 1000),
+			)
 
-		# Plot Z_dd
-		Zg = getindex.(zgrid, 1, 1) #getindex.(imp_ac, 2, 2) qq, off diag qd
-		display(
-			bodeplot(Zg, omega_ac, legend = "Z @B5, UGC=$(round(x * 100; digits = 2)) %"),
-		)
+		sample = transition_bode_sample(x, zgrid, omega_ac)
+		push!(samples, sample)
+
+		if show_static_plots
+			Zg = getindex.(zgrid, 1, 1)
+			display(
+				bodeplot(
+					Zg,
+					omega_ac;
+					legend = "Z @B5, UGC=$(round(x * 100; digits = 2)) %",
+				),
+			)
+		end
 	end
+
+	save_transition_animation(
+		samples;
+		filename = animation_filename,
+		fps = animation_fps,
+	)
+
+	return samples
 end
 
-@time run_transition_study()
+@time samples = run_transition_study(
+	x_values = 0.0:0.02:1.0,
+	animation_filename = "transition_harmonic_peaks.mp4",
+	animation_fps = 8,
+)
