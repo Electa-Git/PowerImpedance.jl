@@ -1,16 +1,20 @@
+using Revise
 using PowerImpedanceACDC
 
+# The P and Q defined here are what is injected into the network. 
 transmissionVoltage = 380 / sqrt(3)
 pHVDC1 = 600
 qC1 = 100
 qC2 = 100
 Vdc = 640
-# The P and Q defined here are what is injected into the network. 
 
-w=1im*2*pi*50
+
+L = 100e3
+x = 0.10 # per cent
+
 rho=100.0
 ohl_model = overhead_line(
-	length = 50e3,
+	length = L*(1-x),
 	conductors = Conductors(
 		organization = :flat,
 		# two DC poles: +320 kV and -320 kV
@@ -36,17 +40,9 @@ ohl_model = overhead_line(
 	), earth_parameters = (1, 1, rho),
 	transformation = true,
 )
-gtest = Network()
-add!(
-	gtest,
-	:labanimal,
-	ohl_model,
-)
-@show z_ohl =
-	PowerImpedanceACDC.y_to_abcd(PowerImpedanceACDC.get_y(gtest.elements[:labanimal], w))
 
 ugc_model = cable(
-	length = 50e3,
+	length = L*x,
 	positions = [(-0.5, 1), (0.5, 1)],
 	# core conductor
 	C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
@@ -63,6 +59,17 @@ ugc_model = cable(
 	earth_parameters = (1, 1, rho),
 	transformation = true,
 )
+
+w=1im*2*pi*50
+
+gtest = Network()
+add!(
+	gtest,
+	:labanimal,
+	ohl_model,
+)
+@show z_ohl =
+	PowerImpedanceACDC.y_to_abcd(PowerImpedanceACDC.get_y(gtest.elements[:labanimal], w))
 gtest = Network()
 add!(
 	gtest,
@@ -182,5 +189,5 @@ end
 		output_pins = [:gndd, :gndq], freq_range = (100, 5000, 1000))
 
 # Plot Z_dd
-Z_dd = getindex.(imp_ac, 1, 1)
+Z_dd = getindex.(imp_ac, 1, 1) #getindex.(imp_ac, 2, 2) qq, off diag qd
 bodeplot(Z_dd, omega_ac, legend = "Z_dd")
