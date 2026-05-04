@@ -36,12 +36,24 @@ const TODO_SRC = joinpath(ROOT_DIR, "TODO.md")
 const TODO_DOC = joinpath(DOCS_SRC_DIR, "TODO.md")
 const BIBLIOGRAPHY_FILE = joinpath(DOCS_SRC_DIR, "bibliography.bib")
 
-const HAS_LITERATE_TUTORIALS = isdir(EXAMPLES_SRC)
 const HAS_CHANGELOG = isfile(CHANGELOG_SRC)
 const HAS_TODO = isfile(TODO_SRC)
 const HAS_BIBLIOGRAPHY = isfile(BIBLIOGRAPHY_FILE)
 
-if HAS_LITERATE_TUTORIALS
+const LITERATE_EXAMPLE_FILES = (
+	"P2P_HVDC_ALT.jl",
+)
+
+const LITERATE_EXAMPLE_PATHS = [
+	joinpath(EXAMPLES_SRC, file)
+	for file in LITERATE_EXAMPLE_FILES
+	if isfile(joinpath(EXAMPLES_SRC, file))
+]
+
+const HAS_LITERATE_EXAMPLES = !isempty(LITERATE_EXAMPLE_PATHS)
+
+
+if HAS_LITERATE_EXAMPLES
 	using Literate
 end
 
@@ -128,16 +140,15 @@ function write_tutorial_index!(examples)
 	write(joinpath(EXAMPLES_DOC, "index.md"), join(lines, "\n") * "\n")
 end
 
-function build_tutorial_pages()
-	HAS_LITERATE_TUTORIALS || return nothing
+function build_example_pages()
+	HAS_LITERATE_EXAMPLES || return nothing
 
 	rm(EXAMPLES_DOC; recursive = true, force = true)
 	mkpath(EXAMPLES_DOC)
 
-	for file in sort(readdir(EXAMPLES_SRC))
-		endswith(file, ".jl") || continue
+	for path in sort(LITERATE_EXAMPLE_PATHS)
 		Literate.markdown(
-			joinpath(EXAMPLES_SRC, file),
+			path,
 			EXAMPLES_DOC;
 			documenter = true,
 			postprocess = postprocess_literate_markdown,
@@ -160,13 +171,13 @@ function build_tutorial_pages()
 
 	write_tutorial_index!(examples)
 
-	tutorial_pages = Any["Overview"=>"examples/index.md"]
+	example_pages = Any["Overview"=>"examples/index.md"]
 
 	for (title, relative_path) in examples
-		push!(tutorial_pages, title => "examples/$relative_path")
+		push!(example_pages, title => "examples/$relative_path")
 	end
 
-	return "Examples" => tutorial_pages
+	return "Examples" => example_pages
 end
 
 function generate_changelog!()
@@ -204,7 +215,7 @@ end
 function build_pages()
 	pages = Any["Home"=>"index.md"]
 
-	tutorials_page = build_tutorial_pages()
+	tutorials_page = build_example_pages()
 	isnothing(tutorials_page) || push!(pages, tutorials_page)
 
 	if isfile(joinpath(DOCS_SRC_DIR, "reference.md"))

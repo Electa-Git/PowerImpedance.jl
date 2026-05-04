@@ -2245,10 +2245,20 @@ function ieee39bus_connections()
 end
 
 function build_ieee39bus_with_networkbuilder()
+
+	builder_options = (;
+		voltageBase = Vm1,
+		power_flow = (;
+			is_bounded = (;
+				bus_voltage = true,
+			),
+		),
+	)
+
 	builder = NetworkBuilder.define(
 		ieee39bus_elements(),
 		ieee39bus_connections();
-		options = (; voltageBase = Vm1),
+		options = builder_options,
 	)
 	solved = NetworkBuilder.solve(builder)
 	return (; builder, solved, network = builder.network)

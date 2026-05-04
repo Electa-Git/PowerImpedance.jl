@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = PowerBlocks
+CurrentModule = PowerImpedanceACDC
 ```
 
-# PowerBlocks
+# PowerImpedanceACDC
 
-Documentation for [PowerBlocks](https://github.com/Electa-Git/PowerBlocks.jl).
+Documentation for [PowerImpedanceACDC](https://gitlab.kuleuven.be/electa/controlgroup/hvdcstability_dev.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [PowerBlocks]
+Modules = [PowerImpedanceACDC]
 ```

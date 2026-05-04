@@ -283,7 +283,7 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 		data,
 		P._PM.ACPPowerModel,
 		powerflow_optimizer(options),
-		variable_options(options);
+		is_bounded_options(options);
 		setting = powerflow_setting(options),
 	)
 
@@ -319,8 +319,8 @@ function powerflow_options(options::NamedTuple)
 	return option_value(options, :power_flow, (;))
 end
 
-function variable_options(options::NamedTuple)
-	return option_value(powerflow_options(options), :variables, (;))
+function is_bounded_options(options::NamedTuple)
+	return option_value(powerflow_options(options), :is_bounded, (;))
 end
 
 function variable_bounded(variables::NamedTuple, name::Symbol, default::Bool)
@@ -359,7 +359,7 @@ end
 function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
 	P._PM.variable_bus_voltage(
 		pm,
-		bounded = variable_bounded(variables, :bus_voltage, true),
+		bounded = variable_bounded(variables, :bus_voltage, false),
 	)
 	P._PM.variable_gen_power(pm, bounded = variable_bounded(variables, :gen_power, false))
 	P._PM.variable_branch_power(

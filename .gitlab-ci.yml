@@ -1,5 +1,6 @@
 stages:
   - test
+  - docs
   - deploy
 
 variables:
@@ -9,12 +10,10 @@ variables:
 test:
   image: julia:1.11.2-bookworm
   stage: test
-
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates
     - rm -rf /var/lib/apt/lists/*
-
   script:
     - julia --version
     - git --version
@@ -26,20 +25,42 @@ test:
         Pkg.instantiate()
         Pkg.test()
       '
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
-  only:
-    - main
-    - merge_requests
+docs_check:
+  image: julia:1.11.2-bookworm
+  stage: docs
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - julia --version
+    - git --version
+    - |
+      julia --project=docs --compiled-modules=existing -e '
+        using Pkg
+        Pkg.Registry.add("General")
+        Pkg.Registry.update()
+        Pkg.develop(PackageSpec(path=pwd()))
+        Pkg.instantiate()
+        using Documenter: doctest
+        using PowerImpedanceACDC
+        doctest(PowerImpedanceACDC)
+        include("docs/make.jl")
+      '
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 pages:
   image: julia:1.11.2-bookworm
   stage: deploy
-
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates openssh-client
     - rm -rf /var/lib/apt/lists/*
-
   script:
     - julia --version
     - git --version
@@ -59,10 +80,8 @@ pages:
     - mkdir -p public
     - cp -a docs/build/. public/
     - find public -maxdepth 3 -type f | sort
-
   artifacts:
     paths:
       - public
-
-  only:
-    - main
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'

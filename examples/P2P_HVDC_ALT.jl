@@ -1,3 +1,9 @@
+# # P2P HVDC parametric OHL/UGC transition
+#
+# This example demonstrates the `NetworkBuilder` workflow for reusing a cached
+# power-flow solution while sweeping the relative share of overhead line and
+# underground cable in a point-to-point HVDC system.
+
 using PowerImpedanceACDC
 using PowerImpedanceACDC.NetworkBuilder: pin, ⟷
 using Plots
@@ -11,13 +17,12 @@ qC2 = 100
 rho = 100.0
 L = 100e3
 
+# Connections between elements follow the same pattern as the `@network` semantics, but we need a `pin(...)`` wrapper to avoid the macro overkill:
 connections = (
 	pin(:c1, 2.1) ⟷ pin(:tl1, 2.1) ⟷ :B3d,
 	pin(:c1, 2.2) ⟷ pin(:tl1, 2.2) ⟷ :B3q, pin(:g4, 1.1) ⟷ pin(:tl1, 1.1) ⟷ :B2d,
 	pin(:g4, 1.2) ⟷ pin(:tl1, 1.2) ⟷ :B2q, pin(:g4, 2.1) ⟷ :gndd,
 	pin(:g4, 2.2) ⟷ :gndq,
-
-	# component[(ac or dc side) . (1 = d, 2 = q)]
 	pin(:c1, 1.1) ⟷ pin(:ugc, 1.1) ⟷ :B4,
 	pin(:ugc, 2.1) ⟷ pin(:ohl, 1.1) ⟷ :BX,
 	pin(:c2, 1.1) ⟷ pin(:ohl, 2.1) ⟷ :B5, pin(:c2, 2.1) ⟷ pin(:tl78, 1.1) ⟷ :B6d,
@@ -27,32 +32,32 @@ connections = (
 	pin(:g1, 2.2) ⟷ :gndq,
 )
 
-builder_options = (; voltageBase = transmissionVoltage)
+# Pro-tip: define bounded quantities directly from the top-level API, rather than hacking through the build_acdcpf options.
+builder_options = (;
+	voltageBase = transmissionVoltage,
+	power_flow = (;
+		is_bounded = (;
+			bus_voltage = true,
+		),
+	),
+)
 
-function transition_elements(x)
+# Wrap the network components into a function that can be called with different values of `x` to sweep the OHL/UGC transition, returning a tuple of elements:
+function ohl_to_ugc(x)
 	ohl_model = overhead_line(
 		length = L * (1 - (x + 1e-3)),
 		conductors = Conductors(
 			organization = :flat,
-			# two DC poles: +320 kV and -320 kV
 			nᵇ = 2,
-			# intentional: one physical conductor per pole
 			nˢᵇ = 1,
-			# ACSR Bluebird 2156 kcmil, 84/19
-			# Nexans: Rdc20 = 0.0266 Ω/km, ampacity ≈ 1630 A
 			Rᵈᶜ = 0.0266, rᶜ = 44.8e-3 / 2,
-			# compact ±320 kV HVDC bipole-ish geometry
 			yᵇᶜ = 18.0, Δyᵇᶜ = 0.0, Δxᵇᶜ = 7.3, Δ̃xᵇᶜ = 0.0,
-			# irrelevant for nˢᵇ = 1, but left explicit
 			dˢᵇ = 0.0,
-			# representative sag offset
 			dˢᵃᵍ = 6.0,
 		),
 		groundwires = Groundwires(
 			nᵍ = 2,
-			# keep your existing shield-wire class
 			Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
-			# two shield wires approximately above/around the pole positions
 			Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0,
 		), earth_parameters = (1, 1, rho),
 		transformation = true,
@@ -61,17 +66,11 @@ function transition_elements(x)
 	ugc_model = cable(
 		length = L * (x + 1e-3),
 		positions = [(-0.5, 1), (0.5, 1)],
-		# core conductor
 		C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
-		# main insulation
 		I1 = Insulator(rᵢ = 0.02622, rₒ = 0.06006, ϵᵣ = 2.67, μᵣ = 1.469),
-		# sheath
 		C2 = Conductor(rᵢ = 0.06006, rₒ = 0.06336, ρ = 2.14e-7, μᵣ = 1.0),
-		# sheath/jacket insulation
 		I2 = Insulator(rᵢ = 0.06336, rₒ = 0.06636, ϵᵣ = 2.3, μᵣ = 1.0),
-		# aluminium water-blocking foil
 		C3 = Conductor(rᵢ = 0.06636, rₒ = 0.06651, ρ = 2.826e-8, μᵣ = 1.0),
-		# outer jacket
 		I3 = Insulator(rᵢ = 0.06651, rₒ = 0.07256, ϵᵣ = 2.3, μᵣ = 1.0),
 		earth_parameters = (1, 1, rho),
 		transformation = true,
@@ -89,8 +88,6 @@ function transition_elements(x)
 			transformation = true,
 		),
 
-		# HVDC link 1
-		# MMC1 controls the DC voltage, and is situated at the remote end.
 		c1 = mmc(Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
 			P_max = 1500, P_min = -1500, P = -pHVDC1, Q = qC1, Q_max = 500,
 			Q_min = -500,
@@ -102,7 +99,6 @@ function transition_elements(x)
 			padeOrderDen = 5,
 		),
 
-		# MMC2 controls P&Q. It is connected to bus 7. Define the transformer impedance parameters at the converter side!
 		c2 = mmc(Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
 			P_max = 1000, P_min = -1000, P = pHVDC1, Q = qC2, Q_max = 1000,
 			Q_min = -1000,
@@ -162,24 +158,7 @@ function transition_elements(x)
 	)
 end
 
-function show_transition_abcd(elements)
-	w = 1im * 2 * pi * 50
-
-	gtest = Network()
-	add!(gtest, :labanimal, elements.ohl)
-	@show z_ohl =
-		PowerImpedanceACDC.y_to_abcd(
-			PowerImpedanceACDC.get_y(gtest.elements[:labanimal], w),
-		)
-
-	gtest = Network()
-	add!(gtest, :labanimal, elements.ugc)
-	@show z_ugc =
-		PowerImpedanceACDC.y_to_abcd(
-			PowerImpedanceACDC.get_y(gtest.elements[:labanimal], w),
-		)
-end
-
+# Some plots and eye-candy:
 function transition_bode_sample(x, zgrid, omega_ac)
 	Zg = getindex.(zgrid, 1, 1)
 
@@ -257,27 +236,6 @@ function transition_bode_frame(sample; mag_ylims, phase_ylims = (-180, 180))
 	return plt
 end
 
-# function save_transition_animation(
-# 	samples;
-# 	filename = "transition_harmonic_peaks.gif",
-# 	fps = 8,
-# )
-# 	isempty(samples) && error("No transition samples were generated.")
-
-# 	all_mag = reduce(vcat, (sample.mag_dB for sample in samples))
-# 	mag_ylims = padded_limits(all_mag)
-
-# 	anim = Plots.Animation()
-
-# 	for sample in samples
-# 		plt = transition_bode_frame(sample; mag_ylims = mag_ylims)
-# 		Plots.frame(anim, plt)
-# 	end
-
-# 	Plots.gif(anim, filename; fps = fps)
-# 	return filename
-# end
-
 function save_transition_animation(
 	samples;
 	filename = "transition_harmonic_peaks.mp4",
@@ -299,9 +257,10 @@ function save_transition_animation(
 	return filename
 end
 
+# Welcome to the new world order:
 function run_transition_study(;
 	x_values = 0.0:0.02:1.0,
-	animation_filename = "transition_harmonic_peaks.gif",
+	animation_filename = "transition_harmonic_peaks.mp4",
 	animation_fps = 8,
 	show_static_plots = false,
 )
@@ -310,8 +269,7 @@ function run_transition_study(;
 	samples = NamedTuple[]
 
 	for x in x_values
-		elements = transition_elements(x)
-		show_transition_abcd(elements)
+		elements = ohl_to_ugc(x)
 
 		if builder === nothing
 			@time begin
@@ -366,8 +324,11 @@ function run_transition_study(;
 	return samples
 end
 
-@time samples = run_transition_study(
-	x_values = 0.0:0.02:1.0,
-	animation_filename = "transition_harmonic_peaks.mp4",
-	animation_fps = 8,
-)
+# This runs locally, but we are not creating MP4 animations inside a CI pipeline, innit?
+if abspath(PROGRAM_FILE) == @__FILE__
+	@time samples = run_transition_study(
+		x_values = 0.0:0.02:1.0,
+		animation_filename = "transition_harmonic_peaks.mp4",
+		animation_fps = 8,
+	)
+end
