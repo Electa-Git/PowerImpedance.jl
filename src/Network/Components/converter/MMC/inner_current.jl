@@ -49,7 +49,7 @@ end
 statenames(::CirculatingCurrentControl) = (:ξ_iΣ_d, :ξ_iΣ_q, :ξ_iΣ_z)
 
 function state_space!(F, x, inputs, b::CirculatingCurrentControl, conv::AbstractMMC)
-    (; sync, out_wΣ, out_wΔ) = inputs
+    (; sync, meas, out_wΣ, out_wΔ) = inputs
     ξ_iΣ = [x.ξ_iΣ_d, x.ξ_iΣ_q, x.ξ_iΣ_z]
     iΣ = [x.iΣ_d, x.iΣ_q, x.iΣ_z] #TODO implement filters?
     iΣ_ref = [out_wΣ.iΣ_d_dc_ref + out_wΔ.iΣ_d_ac_ref, out_wΣ.iΣ_q_dc_ref + out_wΔ.iΣ_q_ac_ref, out_wΣ.iΣ_z_dc_ref + out_wΔ.iΣ_z_ac_ref]    
@@ -63,8 +63,8 @@ function state_space!(F, x, inputs, b::CirculatingCurrentControl, conv::Abstract
 
     F[1:3] = Ki_iΣ * (iΣ_ref - iΣ) - J_min2ω * ξ_iΣ
 
-    vMΣ_ref = ξ_iΣ + b.pi_control.Kp * (iΣ_ref - iΣ) 
-    
+    vMΣ_ref = -1 * ( ξ_iΣ + b.pi_control.Kp * (iΣ_ref - iΣ) ) + [0, 0, meas.v_dc_f/2] # This last term is added to match PSCAD implementation (the minus sign & + v_dc_f/2 is in the modulation block in PSCAD)
+
     return (vMΣ_d_ref_c = vMΣ_ref[1], vMΣ_q_ref_c = vMΣ_ref[2], vMΣ_z_ref = vMΣ_ref[3])
     
 end

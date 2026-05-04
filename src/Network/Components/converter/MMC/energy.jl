@@ -39,15 +39,15 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΣEne
 
     # notch filter. Expressed in dqz in -2ω_c reference frame.
     ω_n = 2 * conv.elec.ωbase # TODO change by actual frequency? (depends on how it is implemented in PSCAD)
-    ζ = 0.7    
+    ζ = sqrt(2)/2    
     FΣ1 = [x.FΣ1_d, x.FΣ1_q, x.FΣ1_z]; FΣ2 = [x.FΣ2_d, x.FΣ2_q, x.FΣ2_z]; wΣ = [wΣd, wΣq, wΣz] # Defining the vectors
     J = [ 0 1 0
          -1 0 0
           0 0 0]
     J_min2ω = -2 * ω_c * J # Here the actual frequency must be used as it is linked to reference frame transformations
 
-    F[1:3] = FΣ2 - 2 * ζ * ω_n * (FΣ1 + wΣ) - J_min2ω * FΣ1
-    F[4:6] = -ω_n^2 * FΣ1 - J_min2ω * FΣ2
+    F[1:3] = FΣ2 - 2 * ζ * ω_n * (FΣ1 + wΣ) - J_min2ω * FΣ1 * conv.elec.ωbase
+    F[4:6] = -ω_n^2 * FΣ1 - J_min2ω * FΣ2 * conv.elec.ωbase
     wΣ_f = FΣ1 + wΣ
 
     # PI controllers
@@ -55,7 +55,7 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΣEne
     Ki_wΣ = b.pi_control.Ki
     F[7:9] = Ki_wΣ * (wΣ_f_ref - wΣ_f) - J_min2ω * ξ_wΣ
 
-    iΣ_dc_ref = ( [0, 0, P_ac_f/3] - ξ_wΣ + b.pi_control.Kp * (wΣ_f_ref - wΣ_f) ) / v_dc_f #TODO check Eros implementation (there are small differences, including here) 
+    iΣ_dc_ref = ( ξ_wΣ + b.pi_control.Kp * (wΣ_f_ref - wΣ_f) + [0, 0, P_ac_f/3]) / v_dc_f #TODO check Eros implementation (there are small differences, including here) 
 
     return (iΣ_d_dc_ref = iΣ_dc_ref[1], iΣ_q_dc_ref = iΣ_dc_ref[2], iΣ_z_dc_ref = iΣ_dc_ref[3])
 
@@ -80,15 +80,15 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΔEne
 
     # notch filter. Expressed in dqz in ω_c reference frame
     ω_n = conv.elec.ωbase # TODO change by actual frequency? (depends on how it is implemented in PSCAD)
-    ζ = 0.7
-    FΔ1 = [x.FΔ1_d, x.FΔ1_q, x.FΔ1_Zd, x.FΔ1_Zq]; FΔ2 = [x.FΔ2_d, x.FΔ2_q, x.FΔ2_Zd, x.FΔ2_Zq]; wΔ = [wΔd, wΔq, wΔZd, wΔZq]
+    ζ = sqrt(2)/2
+    FΔ1 = [x.FΔ1_d, x.FΔ1_q, x.FΔ1_Zd, x.FΔ1_Zq]; FΔ2 = [x.FΔ2_d, x.FΔ2_q, x.FΔ2_Zd, x.FΔ2_Zq]; wΔ = -1 .* [wΔd, wΔq, wΔZd, wΔZq] # PSCAD implementation has a minus sign for wΔ TODO check if it is a problem?
     J_dq = [ 0 1
             -1 0]
     J_G = [ J_dq * ω_c zeros(2,2)
             zeros(2,2) J_dq * (-3ω_c)] # The minus sign comes from the convention used in Freytes thesis (could this be updated to a more consistent one?)
 
-    F[1:4] = FΔ2 - 2 * ζ * ω_n * (FΔ1 + wΔ) - J_G * FΔ1
-    F[5:8] = -ω_n^2 * FΔ1 - J_G * FΔ2
+    F[1:4] = FΔ2 - 2 * ζ * ω_n * (FΔ1 + wΔ) - J_G * FΔ1 * conv.elec.ωbase
+    F[5:8] = -ω_n^2 * FΔ1 - J_G * FΔ2 * conv.elec.ωbase
     wΔ_f = wΔ + FΔ1
 
     # PI controllers
@@ -96,8 +96,8 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΔEne
     Ki_wΔ = b.pi_control.Ki
     F[9:12] = Ki_wΔ * (wΔ_f_ref - wΔ_f) - J_G * ξ_wΔ
     
-    d, q, Zd, Zq = -1*(ξ_wΔ + b.pi_control.Kp * (wΔ_f_ref - wΔ_f)) #TODO check Eros implementation (there are small differences, including here)
-    iΣ_dqZ_ac_ref = 3/(2√2) * [d + Zd, q + Zq, 0]
+    d, q, Zd, Zq = (ξ_wΔ + b.pi_control.Kp * (wΔ_f_ref - wΔ_f)) # Different from Freytes thesis: the division by -Vac (see Freytes thesis) is not done in PSCAD implementation.
+    iΣ_dqZ_ac_ref = 3/4 * [d + Zd, - (q + Zq), 0] # Different from Freytes thesis: the multiplication by sqrt(2) in matrix R (see Freytes thesis) is not done in PSCAD implementation. The -1 for the q-axis comes from different dq frame conventions
 
     return (iΣ_d_ac_ref = iΣ_dqZ_ac_ref[1], iΣ_q_ac_ref = iΣ_dqZ_ac_ref[2], iΣ_z_ac_ref = iΣ_dqZ_ac_ref[3])
 end
