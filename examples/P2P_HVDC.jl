@@ -5,6 +5,7 @@ transmissionVoltage = 380 / sqrt(3)
 pHVDC1 = 100
 qC1 = 100
 qC2 = 100
+Vdc = 640
 # The P and Q defined here are what is injected into the network. 
 
 rho=100.0

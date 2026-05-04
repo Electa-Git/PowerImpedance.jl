@@ -6,26 +6,16 @@
 export blackbox_MMC
 
 mutable struct OP
-    Vdc::Vector{ComplexF64}             # DC voltage [pu]
-    Vac::Vector{ComplexF64}             # AC voltage [pu]    
-    Pref::Vector{ComplexF64}            # Active power reference [MW]
-    Qref::Vector{ComplexF64}            # Reactive power reference [MVAR]
-    Vdcref::Vector{ComplexF64}          # DC voltage reference [pu]
-    Pdc::Vector{ComplexF64}             # DC power [MW]
-    Iac::Vector{ComplexF64}             # AC current [A]
-    Ymmc::Vector{Vector{Matrix{ComplexF64}}}
+    Vdc::Float64        # DC voltage [pu]
+    Vac::Float64        # AC voltage [pu]    
+    Pac::Float64        # Active power  [MW]
+    Qac::Float64        # Reactive power [MVAR]
+    Pdc::Float64        # DC power [MW]
+    Iac::Float64        # AC current [kA]
+    Ymmc::Vector{Matrix{ComplexF64}}
     
-    function OP(n::Int, Nf::Int)
-        new(
-            Vector{ComplexF64}(undef, n),
-            Vector{ComplexF64}(undef, n),
-            Vector{ComplexF64}(undef, n),
-            Vector{ComplexF64}(undef, n),
-            Vector{ComplexF64}(undef, n),
-            Vector{ComplexF64}(undef, n),
-            Vector{ComplexF64}(undef, n),
-            [Vector{Matrix{ComplexF64}}(undef, Nf) for _ in 1:n]
-        )
+    function OP(Vdc, Vac, Pac, Qac, Pdc, Iac, n, Nf)
+        new(Vdc, Vac, Pac, Qac, Pdc, Iac, [zeros(ComplexF64, n, n) for _ in 1:Nf])
     end
 end
 
@@ -56,7 +46,7 @@ end
 
     path_f :: String = "" # absoulte path to the files containing the frequency vector
     path_MMC :: String = "" # absolute path to the files containing the MMC data
-    data :: OP = OP(1,1) # Placeholder for operating point data and Y-parameters
+    data :: Vector{OP} = OP[] # Placeholder for operating point data and Y-parameters
 
 end
 
@@ -97,93 +87,118 @@ function blackbox_MMC(;args...)
     raw, header = readdlm(converter.path_MMC, Any; header=true)    # whitespace-delimited; header returned separately
     nrows, ncols = size(raw)
     println("MMC: $nrows operating points loaded from MMC data file")
+    
+    #TODO: Can be further generalized based on the controller dict, and then infer column count and matrix dimensions
 
-    # Validate expected column count: 6 scalars + 9*Nf complex tokens
     expected_cols = 6 + 9*Nf
     if ncols != expected_cols
         error("Column count mismatch: expected $expected_cols, found $ncols. ",
             "Check that frequency points and MMC data correspond to the same scan.")
     end
 
-    converter.data=OP(nrows, Nf)
+    converter.data = Vector{OP}(undef, nrows)
 
     for i in 1:nrows
+        # Fill in OPs
+        vdc = real(parse(ComplexF64, replace(raw[i, 1], "(" => "")))
+        vac = real(parse(ComplexF64, replace(raw[i, 2], "(" => "")))
+        pac = real(parse(ComplexF64, replace(raw[i, 3], "(" => "")))
+        qac = real(parse(ComplexF64, replace(raw[i, 4], "(" => "")))
+        pdc = real(parse(ComplexF64, replace(raw[i, 5], "(" => "")))
+        iac = real(parse(ComplexF64, replace(raw[i, 6], "(" => "")))
 
-    # Fill OP struct
-    converter.data.Vdc[i] = parse(ComplexF64, replace(raw[i, 1], "(" => ""))
-    converter.data.Vac[i] = parse(ComplexF64, replace(raw[i, 2], "(" => ""))
-    converter.data.Pref[i] = parse(ComplexF64, replace(raw[i, 3], "(" => ""))
-    converter.data.Qref[i] = parse(ComplexF64, replace(raw[i, 4], "(" => ""))
-    converter.data.Pdc[i] = parse(ComplexF64, replace(raw[i, 5], "(" => ""))
-    converter.data.Iac[i] = parse(ComplexF64, replace(raw[i, 6], "(" => ""))
+        # Create OP object
+        op = OP(vdc, vac, pac, qac, pdc, iac, 3, Nf) # Assuming Vdcref is 0.0 and n=3
 
-    # Fill Ymmc matrices
-    for k in 1:Nf
-        start_idx = 6 + (k-1)*9 + 1
-        stop_idx  = start_idx + 9 - 1
-        vec9 = Vector{ComplexF64}(undef, 9)
-        for j in 1:9
-            vec9[j] = parse(ComplexF64, replace(raw[i, start_idx + j - 1], "(" => ""))
+        # Fill Ymmc matrices
+        for k in 1:Nf
+            start_idx = 6 + (k-1)*9 + 1
+            vec9 = Vector{ComplexF64}(undef, 9)
+            for j in 1:9
+                vec9[j] = parse(ComplexF64, replace(raw[i, start_idx + j - 1], "(" => ""))
+            end
+            # Reshape to 3x3 (column-major), then permute dims to emulate row-major (C) ordering
+            op.Ymmc[k] = permutedims(reshape(vec9, 3, 3))
         end
-        # Reshape to 3x3 (column-major), then permute dims to emulate row-major (C) ordering
-        converter.data.Ymmc[i][k] = permutedims(reshape(vec9, 3, 3))
-    end
-
+        converter.data[i] = op
     end
 
 
-
+    # TODO: Based on prior discremination if statement whether matching is actually needed 
     # Match an equivalent resistance based on the operating point 
 
     y=[]  # Power losses [W]
     x=[]  # AC current [A]
 
 
-    for i in 1:nrows
-        push!(y, (converter.data.Pdc[i]-converter.data.Pref[i])*1e6)  # in W
-        push!(x, converter.data.Iac[i]*1e3)                  # in A
+    # If DC-controlling then: Losses Pdc-(sqrt(3)*Vac*Iac-Qref)
+    if haskey(converter.controls, :dc) 
+
+        for i in 1:nrows
+            S=sqrt(3)*(1e3*converter.data[i].Iac)*(converter.data[i].Vac*converter.vACbase*1e3) # Apparent power in VA
+            Q=converter.data[i].Qac * 1e6  # Reactive power in VAR
+            if S < Q # Sanity check 
+                continue
+            end
+            Pac=sqrt(S^2 - Q^2)  # AC-side active power in W
+            push!(y, abs(converter.data[i].Pdc*1e6 - Pac))  # in W
+            push!(x, converter.data[i].Iac*1e3)                  # in A
+        end
+
+    else # Pac-controlling: Losses Pdc-Pac
+
+        for i in 1:nrows
+            push!(y, (converter.data[i].Pdc - converter.data[i].Pac)*1e6)  # in W
+            push!(x, converter.data[i].Iac*1e3)                  # in A
+        end
+
     end
 
 
+
+
     @. model(x,p)=3*p*x^2  # Power loss model for the MMC: 3*R_eq*I^2
-    fit=curve_fit(model, x, y, [1.0])
+    fit=curve_fit(model, x, y, [1.0]) # Initial guess for R_eq is 1.0 Ohm and uniform weights of 1 
     converter.Rₘₑ = fit.param[1] # Matched equivalent resistance  [Ohm] @ grid side
 
 
 
 
     # Construct interpolation object for the Y-parameters
-    #Y_mmc depends on Vac, Pref, Qref and frequency
-    # TODO: Extension for Vdc control
-    Vac_vals = unique([real(converter.data.Vac[i]) for i in 1:nrows])
-    Pref_vals = unique([real(converter.data.Pref[i]) for i in 1:nrows])
-    Qref_vals = unique([real(converter.data.Qref[i]) for i in 1:nrows])
+    #Y_mmc depends on Vdc, Vac, Pref, Qref and frequency
+    Vdc_vals = unique([real(converter.data[i].Vdc) for i in 1:nrows])
+    Vac_vals = unique([real(converter.data[i].Vac) for i in 1:nrows])
+    Pac_vals = unique([real(converter.data[i].Pac) for i in 1:nrows])
+    Qac_vals = unique([real(converter.data[i].Qac) for i in 1:nrows])
 
+    sort!(Vdc_vals)
     sort!(Vac_vals)
-    sort!(Pref_vals)
-    sort!(Qref_vals)
+    sort!(Pac_vals)
+    sort!(Qac_vals)
 
     # Initialize 4D array with appropriate size
-    Ymmc_4d = Array{Union{Matrix{ComplexF64}, Nothing}}(nothing, length(Vac_vals), length(Pref_vals), length(Qref_vals), Nf)
+    Ymmc_4d = Array{Matrix{ComplexF64}}(undef, length(Vac_vals), length(Pac_vals), length(Qac_vals), Nf)
 
     # Fill the 4D array by matching operating points
     for i in 1:nrows
-        v_idx = findfirst(x -> x ==real(converter.data.Vac[i]), Vac_vals)
-        p_idx = findfirst(x -> x == real(converter.data.Pref[i]), Pref_vals)
-        q_idx = findfirst(x -> x == real(converter.data.Qref[i]), Qref_vals)
+        vac_idx = findfirst(x -> x ==real(converter.data[i].Vac), Vac_vals)
+        p_idx = findfirst(x -> x == real(converter.data[i].Pac), Pac_vals)
+        q_idx = findfirst(x -> x == real(converter.data[i].Qac), Qac_vals)
+        
 
-        if !isnothing(v_idx) && !isnothing(p_idx) && !isnothing(q_idx)
+        if !isnothing(vac_idx) && !isnothing(p_idx) && !isnothing(q_idx)
             for f_idx in 1:Nf
-                Ymmc_4d[v_idx, p_idx, q_idx, f_idx] = converter.data.Ymmc[i][f_idx]
+                Ymmc_4d[vac_idx, p_idx, q_idx, f_idx] = converter.data[i].Ymmc[f_idx]
             end
         end
     end
 
+    println("Vdc values: $Vdc_vals")
     println("Vac values: $Vac_vals")
-    println("Pref values: $Pref_vals")
-    println("Qref values: $Qref_vals")
+    println("Pac values: $Pac_vals")
+    println("Qac values: $Qac_vals")
 
-    converter.itp = linear_interpolation((Vac_vals, Pref_vals, Qref_vals, freq), Ymmc_4d, extrapolation_bc=Line())
+    converter.itp = linear_interpolation((Vac_vals, Pac_vals, Qac_vals, freq), Ymmc_4d, extrapolation_bc=Line())
 
 
     # Return complete PowerImpedanceACDC element
