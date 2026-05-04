@@ -189,7 +189,7 @@ Vac_ref_ST=0.9 #pu
 const IEEE39_INPUT_PINS = [:Bus9d, :Bus9q]
 const IEEE39_OUTPUT_PINS = [:gndD, :gndQ]
 const IEEE39_ELIM_ELEMENTS = [:STATCOM]
-const IEEE39_FREQ_RANGE = (1e0, 5e3, 5000)
+const IEEE39_FREQ_RANGE = (1e0, 5e3, 10)
 
 function build_ieee39bus_with_macro()
 	return @network begin
