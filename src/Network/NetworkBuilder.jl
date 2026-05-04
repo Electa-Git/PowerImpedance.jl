@@ -174,10 +174,11 @@ function build_network(elements::NamedTuple, connections::Tuple, options::NamedT
 	for connection in connections
 		connection isa Connection ||
 			throw(ArgumentError("NetworkBuilder connections must be created with ⟷ or ↔."))
-		P.connect!(
-			network,
-			(network_endpoint(network, endpoint) for endpoint in connection.endpoints)...,
-		)
+
+		endpoints = network_endpoints(network, elements, connection)
+		isempty(endpoints) && continue
+
+		P.connect!(network, endpoints...)
 	end
 
 	P.check_lumped_elements(network)
@@ -185,17 +186,50 @@ function build_network(elements::NamedTuple, connections::Tuple, options::NamedT
 	return network
 end
 
-function network_endpoint(network::P.Network, endpoint::Pin)
-	haskey(network.elements, endpoint.element) ||
+function network_endpoints(
+	network::P.Network,
+	elements::NamedTuple,
+	connection::Connection,
+)
+	endpoints = Any[]
+
+	for endpoint in connection.endpoints
+		resolved = network_endpoint(network, elements, endpoint)
+		resolved === nothing || push!(endpoints, resolved)
+	end
+
+	return Tuple(endpoints)
+end
+
+function network_endpoint(
+	network::P.Network,
+	elements::NamedTuple,
+	endpoint::Pin,
+)
+	hasproperty(elements, endpoint.element) ||
 		throw(ArgumentError("Unknown element :$(endpoint.element) in connection endpoint."))
+
+	if !haskey(network.elements, endpoint.element)
+		element = getproperty(elements, endpoint.element)
+
+		element.connection == false && return nothing
+
+		throw(
+			ArgumentError(
+				"Element :$(endpoint.element) was declared but was not added to the network.",
+			),
+		)
+	end
+
 	haskey(network.elements[endpoint.element].pins, endpoint.name) ||
 		throw(
 			ArgumentError("Unknown pin $(endpoint.name) on element :$(endpoint.element)."),
 		)
+
 	return (endpoint.element, endpoint.name)
 end
 
-function network_endpoint(::P.Network, endpoint::Symbol)
+function network_endpoint(::P.Network, ::NamedTuple, endpoint::Symbol)
 	return endpoint
 end
 

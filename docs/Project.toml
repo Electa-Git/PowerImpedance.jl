@@ -1,0 +1,11 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+PowerImpedanceACDC = "8bb8d9d3-c57e-5130-a7c9-cb214ef560ae"
+Changelog = "5217a498-cd5d-4ec6-b8c2-9b85a09b6e3e"
+DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
+Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
+Git = "d7ba0133-e1db-5d97-8f8c-041e4b3a1eb2"
+
+[compat]
+Documenter = "1.17"
+
