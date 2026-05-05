@@ -1,4 +1,4 @@
-using JuMP
+# using JuMP: MOI.LOCALLY_SOLVED Should not be necessary, using called in PIACDC
 using DelimitedFiles
 
 function build_test_mmc_pole(; Vac = 220 * sqrt(2 / 3), Vdc = 320.0)
@@ -98,7 +98,7 @@ end
     @test haskey(conv, "status")
     @test conv["status"] isa Dict
 
-    @test PowerImpedanceACDC.result["termination_status"] == JuMP.MOI.LOCALLY_SOLVED
+    @test PowerImpedanceACDC.result["termination_status"] == PIACDC.JuMP.MOI.LOCALLY_SOLVED # Uses that JuMP is a dependency of PIACDC
 end
 
 function read_bipolar_validation_data(path::AbstractString)
