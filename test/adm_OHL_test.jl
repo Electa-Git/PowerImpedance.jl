@@ -31,7 +31,7 @@ bundled_ohl = overhead_line(length = 50e3,
 )
 
 (Z_bundled, Y_bundled) = PowerImpedanceACDC.eval_parameters(
-	bundled_ohl.element_value, 1im*2π*50)
+	bundled_ohl.element_model, 1im*2π*50)
 @test size(Z_bundled) == (2, 2)
 @test size(Y_bundled) == (2, 2)
 @test all(isfinite, Z_bundled)

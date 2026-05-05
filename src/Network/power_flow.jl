@@ -233,19 +233,19 @@ function power_flow(net::Network)
         solve_mcdcpf(data, _PM.ACPPowerModel, ipopt; setting = s) :
         solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting = s)
     
-    # Rerun power flow with relaxed constraints if no convergence
-    if result["termination_status"] == MOI.LOCALLY_SOLVED
-        println("Power flow converged succesfully.")
-    else
-        println("No convergence (try again with relaxation): ",result["termination_status"])
+    # # Rerun power flow with relaxed constraints if no convergence
+    # if result["termination_status"] == MOI.LOCALLY_SOLVED
+    #     println("Power flow converged succesfully.")
+    # else
+    #     println("No convergence (try again with relaxation): ",result["termination_status"])
         
-        result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
-        if result["termination_status"] == MOI.LOCALLY_SOLVED
-            println("Power flow solution found with relaxation")
-        else
-            error("Second iteration not succesful. Check your formulation")
-        end
-    end
+    #     result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
+    #     if result["termination_status"] == MOI.LOCALLY_SOLVED
+    #         println("Power flow solution found with relaxation")
+    #     else
+    #         error("Second iteration not succesful. Check your formulation")
+    #     end
+    # end
 
 	#### 3. Update setpoints of active elements
 	for (key, element) in net.elements
@@ -454,7 +454,7 @@ end
 ## THis function makes sure we dispatch on the right component
 make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict) =
 	make_power_flow!(
-		elem.element_value,
+		elem.element_model,
 		data,
 		nodes2bus,
 		bus2nodes,
@@ -547,7 +547,7 @@ function injection_initialization_dc!(data, elem2comp, comp2elem, dc_bus, elem, 
 	((data["gendc"])[key])["source_id"] = Any["gen", parse(Int, key)]
 	((data["gendc"])[key])["index"] = parse(Int, key)
 
-	injecter = elem.element_value
+	injecter = elem.element_model
 	S_base = global_dict["S"] / 1e6
 	V_base = global_dict["V"] / 1e3
 	((data["gendc"])[key])["pgdcset"] = injecter.P / S_base
