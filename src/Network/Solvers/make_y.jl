@@ -1,3 +1,37 @@
+function _pin_side_index(pin::Symbol)
+    parts = split(string(pin), ".")
+    length(parts) == 2 || throw(ArgumentError("Unexpected pin format `$pin`."))
+    return parse(Int, parts[1]), parse(Int, parts[2])
+end
+
+function _admittance_index(element::Element, pin::Symbol, phase::Int)
+    side, idx = _pin_side_index(pin)
+
+    if is_converter(element)
+        # Converter admittances are ordered by pin number:
+        # first all side-1 pins, then all side-2 pins.
+        return side == 1 ? idx : nip(element) + idx
+    end
+
+    return (side - 1) * phase + idx
+end
+
+function _ac_row_start_for_sign_flip(element::Element)
+    model = element.element_model
+
+    if model isa BipolarMMC
+        # Bipolar ordering: [p, r, n, d, q]
+        return 4
+    end
+
+    if model isa MMC || model isa TLC
+        # Monopolar ordering: [dc, d, q]
+        return 2
+    end
+
+    return typemax(Int)
+end
+
 """
 function make_y(net :: Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}}, s :: Complex)
     Creates y matrix of the (sub)network using data written in dictionary dict.
@@ -20,8 +54,6 @@ function make_y(net :: Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}}, s 
 
     # Create the y matrix with respect to the elements and nodes defined in dictACDC
     dummy=PowerImpedanceACDC.make_y(net,dictACDC)
-
-
 """
 function make_y(net :: Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}}, s :: Complex)
 
@@ -29,27 +61,29 @@ function make_y(net :: Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}}, s 
     Y_matrix = zeros(ComplexF64, n, n)
     for element in dict[:element_list]
         element = net.elements[element]
-            Y = get_y(element, s) 
-            phase = 1 
-            if is_passive(element) 
-                (phase = Int(length(element.pins) / 2)) # Required to achieve correct indexing with different domains for passives: dq & abc
+        Y = get_y(element, s)
+        phase = 1
+        if is_passive(element)
+            # Required to achieve correct indexing with different domains for passives: dq & abc
+            phase = Int(length(element.pins) / 2)
+        end
+        ac_row_start = _ac_row_start_for_sign_flip(element)
+        for (key₁, val₁) in element.pins, (key₂, val₂) in element.pins # key is the pin name, val is the node name
+            # Find the i,j element in the element admittance matrix for (key₁, key₂)
+            i = _admittance_index(element, key₁, phase)
+            j = _admittance_index(element, key₂, phase)
+            # Element in the admittance matrix found, now check if the nodes are in the node list
+            iₚ = findfirst(p -> p == val₁, dict[:node_list])
+            iₚ === nothing && continue
+            jₚ = findfirst(p -> p == val₂, dict[:node_list])
+            jₚ === nothing && continue
+            # Add the element admittance to the admittance matrix
+            yij = Y[i, j]
+            if i >= ac_row_start # Flip sign for converter AC current rows
+                yij = -yij
             end
-            for (key₁, val₁) in element.pins, (key₂, val₂) in element.pins # key is the pin name, val is the node name
-                # Find the i,j element in the element admittance matrix for (key₁, key₂)
-                i = (parse(Int, string(key₁)[1]) - 1) * phase + parse(Int, string(key₁)[3]) # Find row index 
-                j = (parse(Int, string(key₂)[1]) - 1) * phase + parse(Int, string(key₂)[3]) # Find column index
-                # Element in the admittance matrix found, now check if the nodes are in the node list
-                iₚ = findfirst(p -> p == val₁, dict[:node_list]) # Find row index of node in the admittance matrix
-                (iₚ === nothing) ? continue : nothing # If the node is not in the node list, skip it
-                jₚ = findfirst(p -> p == val₂, dict[:node_list]) # Find column index of node in the admittance matrix
-                (jₚ === nothing) ? continue : nothing
-                # Add the element admittance to the admittance matrix
-                if i>= 2 && (isa(element.element_value, MMC) || isa(element.element_value, TLC)) # Flip sign for the AC elements of converters
-                    
-                    Y[i,j] = -Y[i,j] 
-                end
-                Y_matrix[iₚ, jₚ] += Y[i,j]
-            end
+            Y_matrix[iₚ, jₚ] += yij
+        end
     end
 
     return Y_matrix

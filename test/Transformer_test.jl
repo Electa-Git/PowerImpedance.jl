@@ -60,7 +60,7 @@ for i in eachindex(omegas)
 
     # Analytical transformer model
     push!(ABCD_analytical, ABCD_p*ABCD_core*ABCD_n*ABCD_s)
-    push!(ABCD_numerical, PowerImpedanceACDC.eval_abcd(grid.elements[:labanimal].element_value, 1im*ω))
+    push!(ABCD_numerical, PowerImpedanceACDC.eval_abcd(grid.elements[:labanimal].element_model, 1im*ω))
 
 
 

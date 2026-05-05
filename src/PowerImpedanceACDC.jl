@@ -13,6 +13,7 @@ You should have received a copy of the GNU General Public License along with thi
 # Default struct values
 using Parameters
 using DataStructures
+using DocStringExtensions
 
 # Time delays
 using ControlSystemsBase, RobustAndOptimalControl
@@ -43,10 +44,17 @@ using Munkres
 using Markdown
 using Interpolations
 using DelimitedFiles
+import NaNMath # Deal with out of domain erros in Nonlinearsolve
+
+# Include PowerModelsMCDC as a local package, due to dependencies
+include("Packages/PowerModelsMCDC.jl/src/PowerModelsMCDC.jl")
+import .PowerModelsMCDC
+const _PMMCDC = PowerModelsMCDC
 
 
 # Including all components    
 include("Network/Components/AbstractElement.jl")
+include("Network/Components/AbstractStateSpace.jl")
 
 # Impedance
 include("Network/Components/impedance/impedance.jl")
@@ -66,11 +74,26 @@ include("Network/Components/source/dc_source.jl")
 include("Network/Components/source/ac_source.jl")
 
 # Converter
+include("Network/Components/converter/common/conv_power_flow.jl")
+include("Network/Components/converter/controller_old.jl") # TODO: To be removed, now necessary for black-box MMC
 include("Network/Components/converter/converter.jl")
-include("Network/Components/converter/controller.jl")
-include("Network/Components/converter/MMC.jl")
-include("Network/Components/converter/TLC.jl")
+
+include("Network/Components/converter/common/kernels/filter.jl")
+include("Network/Components/converter/common/kernels/controller.jl")
+include("Network/Components/converter/common/kernels/delay.jl")
+include("Network/Components/converter/common/kernels/reference_frames.jl")
+
+include("Network/Components/converter/common/loops/measurement.jl")
+include("Network/Components/converter/common/loops/synchronization.jl")
+include("Network/Components/converter/common/loops/outer_active.jl")
+include("Network/Components/converter/common/loops/outer_reactive.jl")
+include("Network/Components/converter/common/loops/inner_voltage.jl")
+include("Network/Components/converter/common/loops/inner_current.jl")
+
+include("Network/Components/converter/MMC/MMC.jl")
+include("Network/Components/converter/TLC/TLC.jl")
 include("Network/Components/converter/blackbox_MMC.jl")
+include("Network/Components/converter/BipolarMMC.jl")
 
 # Machines
 include("Network/Components/machine/machine.jl")

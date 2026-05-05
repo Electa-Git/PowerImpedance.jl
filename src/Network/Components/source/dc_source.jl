@@ -24,19 +24,20 @@ Parameters:
 	Q_min :: Union{Float64, Int} = 0    # min reactive power output [MVA]
 	Q_max :: Union{Float64, Int} = 0    # max reactive power output [MVA]
 
-	pins :: Int = 1
+	# pins :: Int = 1
 	ABCD :: Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
 ```
 """
-function dc_source(; args...)
+#= function dc_source(; args...)
 	source = Source()
 	transformation = false
 	connection = true
+	elem_args = (;transformation, connection)
 	for (key, val) in pairs(args)
 		if in(key, propertynames(source))
 			setfield!(source, key, val)
-		elseif (key == :transformation)
-			transformation = val
+		elseif in(key, fieldnames(Element))
+			merge(elem_args, NamedTuple{key}(val))
 		else
 			throw(ArgumentError("Source does not have a property $(key)."))
 		end
@@ -46,4 +47,34 @@ function dc_source(; args...)
 	return Element(input_pins = source.pins, output_pins = source.pins,
 		element_value = source,
 		transformation = transformation, connection = connection)
+end =#
+
+function dc_source(; pins=1, transformation=false, connection=true, args...)
+    source = Source()
+
+    for (key, val) in pairs(args)
+        if key in propertynames(source)
+            setfield!(source, key, val)
+        elseif key == :transformation
+            transformation = val
+        elseif key == :connection
+            connection = val
+        else
+            throw(ArgumentError("Source does not have a property $(key)."))
+        end
+    end
+
+    A, B, C, D = make_abcd(source, pins)
+
+    return Element(
+        input_pins = pins,
+        output_pins = pins,
+        element_model = source,
+        A = A,
+        B = B,
+        C = C,
+        D = D,
+        transformation = transformation,
+        connection = connection,
+    )
 end

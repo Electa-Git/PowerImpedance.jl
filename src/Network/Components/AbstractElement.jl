@@ -1,3 +1,5 @@
+export SetPoint
+
 """
 Struct guarantees representation of the component like a multiport
 network using ABCD parameters. It consists of:
@@ -5,44 +7,105 @@ network using ABCD parameters. It consists of:
 - dictionary that maps pins inside the network (to network nodes) - `pins`
 - number of input pins - `input_pins`
 - number of output pins - `output_pins`
-- component definition - `element_value`
+- component definition - `element_model`
 - transformation flag - `transformation`
 - connection flag - `connection`
 """
-mutable struct Element
-  symbol::Symbol
-  pins :: Dict{Symbol, Symbol}
-  input_pins :: Int
-  output_pins :: Int
-  element_value :: Any  # component defined type
-  transformation :: Bool
-  connection :: Bool # True = Element is connected, False= Element is disconnected 
+abstract type AbstractElementModel end
 
-  function Element(;args...)
-    elem = new()
-    for (key, val) in pairs(args)
-      if (key in propertynames(elem))
-        setfield!(elem, key, val)
-      else
-        throw(ArgumentError("The property name $(key) is not defined."))
-      end
-    end
+abstract type AbstractMultiport <: AbstractElementModel end
 
-    # definition of pins
-    if !isdefined(elem, :transformation)
-        elem.transformation = false
-    elseif (elem.transformation) #TODO: Not generalizable, only makes sense for 3-phase systems
-        elem.input_pins -= 1
-        elem.output_pins -= 1
-    end
-    if !isdefined(elem, :pins) # Initialize pins field with empty symbol, if not defined 
-      elem.pins = merge(Dict{Symbol, Symbol}(Symbol(string("1.",i)) => Symbol() for i in 1:nip(elem)),
-                        Dict{Symbol, Symbol}(Symbol(string("2.",i)) => Symbol() for i in 1:nop(elem)))
-    end
+@with_kw struct SetPoint
+    
+    # Power flow results
+    Pac ::Float64 = 0              # active power [MW]
+    Qac ::Float64 = 0                # reactive power [MVA]
+    θac ::Float64 = 0
+    Vac ::Float64 = 220*sqrt(2/3)             # AC voltage, amplitude [kV]
 
-    elem
-  end
+    # DC
+    Pdc::Float64 = 0.0
+    Vdc::Float64 = 0.0
+   
 end
+
+struct SetpointPU # Per-unitized setpoint used internally
+    p_ac::Float64
+    q_ac::Float64
+    p_dc::Float64
+    θ_ac::Float64
+end
+
+
+@with_kw struct Limits
+    #Limits 
+    P_min ::Float64 = 0.9         # min active power output [pu]
+    P_max ::Float64 = 1.1          # max active power output [pu]
+    Q_min ::Float64 = -0.5          # min reactive power output [pu]
+    Q_max ::Float64 = 0.5           # max reactive power output [pu]
+end
+
+
+
+mutable struct Element
+    symbol::Symbol
+    pins :: Dict{Symbol, Symbol}
+    input_pins :: Int
+    output_pins :: Int
+    element_model :: Any #AbstractElementModel  # component defined type
+    A::Matrix{ComplexF64}  
+    B::Matrix{ComplexF64} 
+    C::Matrix{ComplexF64} 
+    D::Matrix{ComplexF64} 
+    #   basevalues::BaseVal
+    transformation :: Bool
+    connection :: Bool # True = Element is connected, False= Element is disconnected 
+    setpoint::SetPoint
+    limits::Limits
+    function Element(; element_model=nothing, element_value=nothing, args...)
+        elem = new()
+
+        model =
+            element_model !== nothing ? element_model :
+            element_value !== nothing ? element_value :
+            throw(UndefKeywordError(:element_model))
+
+        if element_model !== nothing && element_value !== nothing && !(element_model === element_value)
+            throw(ArgumentError("Both `element_model` and legacy `element_value` were provided with different values."))
+        end
+
+        elem.element_model = model
+        elem.setpoint = SetPoint()
+        elem.limits = Limits()
+        elem.A, elem.B, elem.C, elem.D = fill(Array{ComplexF64}(undef, 0, 0), 4)
+
+        for (key, val) in pairs(args)
+            if key in propertynames(elem)
+                setfield!(elem, key, val)
+            else
+                throw(ArgumentError("The property name $(key) is not defined."))
+            end
+        end
+
+        if !isdefined(elem, :transformation)
+            elem.transformation = false
+        elseif elem.transformation
+            elem.input_pins -= 1
+            elem.output_pins -= 1
+        end
+
+        if !isdefined(elem, :pins)
+            elem.pins = merge(
+                Dict{Symbol, Symbol}(Symbol(string("1.", i)) => Symbol() for i in 1:nip(elem)),
+                Dict{Symbol, Symbol}(Symbol(string("2.", i)) => Symbol() for i in 1:nop(elem)),
+            )
+        end
+
+        return elem
+    end
+end
+
+
 
 for (n,m) in Dict(:nip => :input_pins, :nop => :output_pins)
   @eval ($n)(e::Element) = e.$m # creation of functions nip() and nop(), fetching the input_pins and output_pins parameters within the element structure
@@ -68,27 +131,70 @@ function get_nodes(element::Element, pin::Symbol) # Returns all nodes connected 
     return array
 end
 
+
+####### NEW GENERAL ELEMENT FUNCTIONS ###########################
+
+# this is p.u.
+#= function eval_y(elem::Element, s::Complex)
+    n = size(elem.A, 1)
+    Iₙ = Matrix{ComplexF64}(I, n, n)
+    return elem.C * ((s * Iₙ - elem.A) \ elem.B) + elem.D
+end =#
+
+# PSCAD requires SI results
+function eval_y(elem::Element, s::Complex)
+    n = size(elem.A, 1)
+    Iₙ = Matrix{ComplexF64}(I, n, n)
+    Y = elem.C * ((s * Iₙ - elem.A) \ elem.B) + elem.D
+
+    model = elem.element_model
+
+    if isa(model, TLC)
+        elec = model.elec
+
+        vACbase = elec.vACbase_LL_RMS * sqrt(2 / 3)
+        iACbase = 2 * elec.Sbase / (3 * vACbase)
+        iDCbase = elec.Sbase / elec.vDCbase
+
+        Y = Matrix{ComplexF64}(Y)
+
+        # row scaling = output current bases
+        Y[1, :]   .*= iDCbase
+        Y[2:3, :] .*= iACbase
+
+        # column scaling = input voltage bases
+        Y[:, 1]   ./= elec.vDCbase
+        Y[:, 2:3] ./= vACbase
+    end
+
+    return Y
+end
+
+
 ################### ABCD functions ################################
 function get_abcd(element::Element, s::Complex)
-    
-    if (element.transformation) # Transformation property is only used for passives!
-        if np(element) == 2 # Transformation from two phase to single phase: 2 pins --> 1 pin
-            abcd = eval_abcd(element.element_value, s)
+    if isa(element.element_model, AbstractStateSpace) && !isempty(element.A)
+        return eval_y(element, s)
+    end
+
+    if element.transformation
+        if np(element) == 2
+            abcd = eval_abcd(element.element_model, s)
             return transformation_dc(abcd)
-        elseif is_three_phase(element) # Transformation from abc to dq: 3 pins --> 2 pins
-            ω₀ = 100*π
-            abcd₁ = eval_abcd(element.element_value, s + 1im*ω₀)
-            abcd₂ = eval_abcd(element.element_value, s - 1im*ω₀)
+        elseif is_three_phase(element)
+            ω₀ = 100 * π
+            abcd₁ = eval_abcd(element.element_model, s + 1im * ω₀)
+            abcd₂ = eval_abcd(element.element_model, s - 1im * ω₀)
             return transformation_dq(abcd₁, abcd₂)
         end
-    else # No transformation, return ABCD directly. In case of actives, return Y
-        abcd = eval_abcd(element.element_value, s)
+    else
+        abcd = eval_abcd(element.element_model, s)
     end
     return abcd
 end
 
 function nip_abcd(e::Element)
-    if isa(e.element_value, MMC) || isa(e.element_value, TLC)
+    if isa(e.element_model, MMC) || isa(e.element_model, TLC)
         return 3
     else
         return 2nip(e)
@@ -97,7 +203,7 @@ function nip_abcd(e::Element)
 end
 
 function nop_abcd(e::Element)
-    if isa(e.element_value, MMC) || isa(e.element_value, TLC)
+    if isa(e.element_model, MMC) || isa(e.element_model, TLC)
         return 3
     else
         return 2nop(e)
@@ -121,37 +227,41 @@ end
 
 ######################### Element type #############################
 function is_passive(element :: Element)
-    (isa(element.element_value, MMC) || isa(element.element_value, Blackbox_MMC) || isa(element.element_value, TLC) || isa(element.element_value, Source) || isa(element.element_value, SynchronousMachine)) && return false
+    (isa(element.element_model, MMC) ||
+     isa(element.element_model, BipolarMMC) ||
+     isa(element.element_model, Blackbox_MMC) ||
+     isa(element.element_model, TLC) ||
+     isa(element.element_model, Source) ||
+     isa(element.element_model, SynchronousMachine)) && return false
     true
 end
 
 function is_source(element :: Element)
-    isa(element.element_value, Source)
+    isa(element.element_model, Source)
 end
 
 function is_converter(element :: Element)
-    (isa(element.element_value, MMC) || isa(element.element_value, TLC) || isa(element.element_value, Blackbox_MMC))
+    (isa(element.element_model, MMC) ||
+     isa(element.element_model, BipolarMMC) ||
+     isa(element.element_model, TLC) ||
+     isa(element.element_model, Blackbox_MMC))
 end
 
 
 function is_generator(element :: Element)
-    isa(element.element_value, SynchronousMachine)
+    isa(element.element_model, SynchronousMachine)
 end
  
 
 function is_impedance(element :: Element)
-    isa(element.element_value, Impedance) && !any(occursin("gnd", string(x)) for x in element.pins)
+    isa(element.element_model, Impedance) && !any(occursin("gnd", string(x)) for x in element.pins)
 end
 
 function is_load(element :: Element)
-    isa(element.element_value, Impedance) && any(occursin("gnd", string(x)) for x in element.pins)
+    isa(element.element_model, Impedance) && any(occursin("gnd", string(x)) for x in element.pins)
 end
 
 function is_three_phase(element :: Element)
     (np(element) == 6) || (np(element) == 4 && (element.transformation) && !is_converter(element)) && return true
     return false
 end
-
-
-
-

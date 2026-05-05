@@ -48,7 +48,7 @@ three_phase_source = ac_source(V = 1.0, P = 50, Q = 20, Z = 0.1, pins = 3)
 - `transformation` is an internal parameter used in element construction.
 - Throws an `ArgumentError` if an unknown parameter is passed.
 """
-function ac_source(; args...)
+#= function ac_source(; pins=1, args...)
 	source = Source()
 	transformation = false
     connection = true
@@ -61,9 +61,40 @@ function ac_source(; args...)
 			throw(ArgumentError("Source does not have a property $(key)."))
 		end
 	end
-	make_abcd(source)
+	A,B,C,D = make_abcd(source, pins)
 
-	return Element(input_pins = source.pins, output_pins = source.pins,
-		element_value = source,
+	return Element(;input_pins = pins, output_pins = pins,
+		element_model = source, A,B,C,D, 
 		transformation = transformation, connection = connection)
+end
+ =#
+
+function ac_source(; pins=1, transformation=false, connection=true, args...)
+    source = Source()
+
+    for (key, val) in pairs(args)
+        if key in propertynames(source)
+            setfield!(source, key, val)
+        elseif key == :transformation
+            transformation = val
+        elseif key == :connection
+            connection = val
+        else
+            throw(ArgumentError("Source does not have a property $(key)."))
+        end
+    end
+
+    A, B, C, D = make_abcd(source, pins)
+
+    return Element(
+        input_pins = pins,
+        output_pins = pins,
+        element_model = source,
+        A = A,
+        B = B,
+        C = C,
+        D = D,
+        transformation = transformation,
+        connection = connection,
+    )
 end

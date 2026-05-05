@@ -34,7 +34,7 @@ function make_abcd(net::Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}},
     nₑₛ = nᵥ + nᵢ   # element output positions
     for element in dict[:element_list]
 
-        if isa(net.elements[element].element_value, MMC)
+        if isa(net.elements[element].element_model, MMC)
             Y = get_abcd(net.elements[element], s)
             pₚ = nip_abcd(net.elements[element])  # element input pins
             I = convert(Array{ComplexF64}, Diagonal([1 for dummy in 1:pₚ]))
@@ -61,7 +61,7 @@ function make_abcd(net::Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}},
                 end
             end
         else
-            if isa(net.elements[element].element_value, SynchronousMachine)
+            if isa(net.elements[element].element_model, SynchronousMachine)
                 # TODO: Generalize this. Check instead if the component has an ABCD or a Y representation.
                 pₚ = 2          # element input pins
                 pₛ = 2          # element output pins

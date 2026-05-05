@@ -62,7 +62,7 @@ function make_z(net::Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}},
     nₑₛ = nᵥ + nₒ   # element output positions
     for element in dict[:element_list]
 
-        # if isa(net.elements[element].element_value, MMC) || isa(net.elements[element].element_value, TLC) #TODO: This check can be generalized for converters.
+        # if isa(net.elements[element].element_model, MMC) || isa(net.elements[element].element_model, TLC) #TODO: This check can be generalized for converters.
         if is_converter(net.elements[element]) #TODO: Check if this generalization works.
             Y = get_abcd(net.elements[element], s)
             pₚ = nip_abcd(net.elements[element])  # element input pins
@@ -86,7 +86,7 @@ function make_z(net::Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}},
                 end
             end
         else
-            if isa(net.elements[element].element_value, SynchronousMachine) # Synchronous machine, ABCD representation exists
+            if isa(net.elements[element].element_model, SynchronousMachine) # Synchronous machine, ABCD representation exists
                 # TODO: Generalize this. Check instead if the component has an ABCD or a Y representation.
                 pₚ = 2          # element input pins
                 pₛ = 2          # element output pins
