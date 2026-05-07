@@ -152,7 +152,7 @@ function eval_y(elem::Element, s::Complex)
     if isa(model, TLC)
         elec = model.elec
 
-        vACbase = elec.vACbase_LL_RMS * sqrt(2 / 3)
+        vACbase = elec.vACbase * sqrt(2 / 3)
         iACbase = 2 * elec.Sbase / (3 * vACbase)
         iDCbase = elec.Sbase / elec.vDCbase
 

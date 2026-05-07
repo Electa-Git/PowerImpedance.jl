@@ -67,6 +67,441 @@ n_f=100 # Discretization of the frequency, high value needed for PMD
 
 Vm=380/sqrt(3)
 
+# MMCs
+MMC1 = PowerImpedanceACDC.mmc(
+        elec = PowerImpedanceACDC.ElectricalMMC(
+                Lᵣ = 0.18 * (333^2 / 1000) / (2 * pi * 50),
+                Rᵣ = 0.001 * (333^2 / 1000),
+                Rₐᵣₘ = 0.4,
+                Lₐᵣₘ = 46.125e-3,
+                Cₐᵣₘ = 11.3867e-3,
+                N = 400,
+                turnsRatio = 333 / 380,
+                vACbase_LL_RMS = 333,
+                Sbase = 1000,
+                vDC_base = 640,
+        ),
+        meas = PowerImpedanceACDC.Measurement(
+                P_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+                Q_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+        ),
+        sync = PowerImpedanceACDC.VSEWithDamping(
+                H = 5,
+                K_d = 100,
+                K_ω = 10,
+                P_ac_ref = P_MMC1 / 1000.0,
+                ω_ref = 1.0,
+                pll = PowerImpedanceACDC.PLLSynchronization(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
+                        filter = PowerImpedanceACDC.Butterworth(order = 1, ωc = 75 * 2π),
+                ),
+        ),
+        delta_control = PowerImpedanceACDC.ΔdqControlGFM(
+                outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.0, Ki = 3),
+                        Q_ac_ref = 0.0,
+                        support = PowerImpedanceACDC.NoVoltageSupport(),
+                ),
+                vi = PowerImpedanceACDC.CCVI(
+                        R_v = 0.01,
+                        L_v = 0.25,
+                        V_d_ref = 1,
+                        V_q_ref = 0,
+                        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 200),
+                ),
+                occ = PowerImpedanceACDC.InnerCurrentPIControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.6532, Ki = 281.1370),
+                        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 200 * 2π),
+                ),
+        ),
+        sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
+                tec = PowerImpedanceACDC.TotalEnergyControl(
+                        pi_control = PowerImpedanceACDC.PIControl(Kp = 1.469, Ki = 31.4819),
+                ),
+                zscc = PowerImpedanceACDC.ZeroSequenceCurrentControl(
+                        PowerImpedanceACDC.PIControl(Kp = 0.0936, Ki = 40.5396),
+                ),
+                ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
+                        PowerImpedanceACDC.PIControl(Kp = 0.0936, Ki = 40.5396),
+                ),
+        ),
+        modulation = PowerImpedanceACDC.UncompensatedModulation(
+                timeDelay = 200e-6,
+                padeOrderNum = 5,
+                padeOrderDen = 5,
+        ),
+        setpoint = PowerImpedanceACDC.SetPoint(
+                Pac = P_MMC1,
+                Qac = Q_MMC1,
+                θac = 0.0,
+                Vac = Vm,
+                Pdc = P_MMC1,
+                Vdc = 640,
+        ),
+        limits = PowerImpedanceACDC.Limits(
+                P_min = -1500.0,
+                P_max = 1500.0,
+                Q_min = -1000.0,
+                Q_max = 1000.0,
+        ),
+)
+
+MMC2 = PowerImpedanceACDC.mmc(
+        elec = PowerImpedanceACDC.ElectricalMMC(
+                Lᵣ = 0.18 * (333^2 / 1000) / (2 * pi * 50),
+                Rᵣ = 0.001 * (333^2 / 1000),
+                Rₐᵣₘ = 0.4,
+                Lₐᵣₘ = 46.125e-3,
+                Cₐᵣₘ = 11.3867e-3,
+                N = 400,
+                turnsRatio = 333 / 380,
+                vACbase_LL_RMS = 333,
+                Sbase = 1000,
+                vDC_base = 640,
+        ),
+        meas = PowerImpedanceACDC.Measurement(
+                P_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+                Q_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+        ),
+        sync = PowerImpedanceACDC.VSEWithDamping(
+                H = 5,
+                K_d = 100,
+                K_ω = 10,
+                P_ac_ref = P_MMC2 / 1000.0,
+                ω_ref = 1.0,
+                pll = PowerImpedanceACDC.PLLSynchronization(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
+                        filter = PowerImpedanceACDC.Butterworth(order = 1, ωc = 75 * 2π),
+                ),
+        ),
+        delta_control = PowerImpedanceACDC.ΔdqControlGFM(
+                outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.0, Ki = 3),
+                        Q_ac_ref = Q_MMC2/1000.0,
+                        support = PowerImpedanceACDC.NoVoltageSupport(),
+                ),
+                vi = PowerImpedanceACDC.CCVI(
+                        R_v = 0.0,
+                        L_v = 0.4,
+                        V_d_ref = 1,
+                        V_q_ref = 0,
+                        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 200),
+                ),
+                occ = PowerImpedanceACDC.InnerCurrentPIControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.6532, Ki = 281.1370),
+                        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 400 * 2π),
+                ),
+        ),
+        sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
+                tec = PowerImpedanceACDC.TotalEnergyControl(
+                        pi_control = PowerImpedanceACDC.PIControl(Kp = 1.469, Ki = 31.4819),
+                ),
+                zscc = PowerImpedanceACDC.ZeroSequenceCurrentControl(
+                        PowerImpedanceACDC.PIControl(Kp = 0.0936, Ki = 40.5396),
+                ),
+                ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
+                        PowerImpedanceACDC.PIControl(Kp = 0.0936, Ki = 40.5396),
+                ),
+        ),
+        modulation = PowerImpedanceACDC.UncompensatedModulation(
+                timeDelay = 200e-6,
+                padeOrderNum = 5,
+                padeOrderDen = 5,
+        ),
+        setpoint = PowerImpedanceACDC.SetPoint(
+                Pac = P_MMC2,
+                Qac = Q_MMC2,
+                θac = 0.0,
+                Vac = Vm,
+                Pdc = P_MMC2,
+                Vdc = 640,
+        ),
+        limits = PowerImpedanceACDC.Limits(
+                P_min = -1500.0,
+                P_max = 1500.0,
+                Q_min = -1000.0,
+                Q_max = 1000.0,
+        ),
+)
+
+MMC3 = PowerImpedanceACDC.mmc(
+        elec = PowerImpedanceACDC.ElectricalMMC(
+                Lᵣ = 0.1305 * (333^2 / 1000) / (2 * pi * 50),
+                Rᵣ = 0.0037 * (333^2 / 1000),
+                Rₐᵣₘ = 0.4,
+                Lₐᵣₘ = 46.125e-3,
+                Cₐᵣₘ = 11.3867e-3,
+                N = 400,
+                turnsRatio = 333 / 380,
+                vACbase_LL_RMS = 333,
+                Sbase = 1000,
+                vDC_base = 640,
+        ),
+        meas = PowerImpedanceACDC.Measurement(
+                P_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+                Q_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+        ),
+        sync = PowerImpedanceACDC.PLLSynchronization(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
+                filter = PowerImpedanceACDC.Butterworth(order = 1, ωc = 80 * 2π),
+        ),
+        delta_control = PowerImpedanceACDC.ΔdqControlGFL(
+                outer_active = PowerImpedanceACDC.OuterActiveVdcControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5, Ki = 15),
+                        v_dc_ref = 1.0,
+                ),
+                outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
+                        Q_ac_ref = Q_MMC3/1000.0,
+                        support = PowerImpedanceACDC.NoVoltageSupport(),
+                ),
+                occ = PowerImpedanceACDC.InnerCurrentPIControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
+                        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 600 * 2π),
+                ),
+        ),
+        sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
+                tec = PowerImpedanceACDC.TotalEnergyControl(
+                        pi_control = PowerImpedanceACDC.PIControl(Kp = 1.2894, Ki = 27.63),
+                ),
+                zscc = PowerImpedanceACDC.ZeroSequenceCurrentControl(
+                        PowerImpedanceACDC.PIControl(Kp = 0.0992, Ki = 42.9719),
+                ),
+                ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
+                        PowerImpedanceACDC.PIControl(Kp = 0.0992, Ki = 42.9719),
+                ),
+        ),
+        modulation = PowerImpedanceACDC.UncompensatedModulation(
+                timeDelay = 250e-6,
+                padeOrderNum = 5,
+                padeOrderDen = 5,
+        ),
+        setpoint = PowerImpedanceACDC.SetPoint(
+                Pac = 0.0,
+                Qac = Q_MMC3,
+                θac = 0.0,
+                Vac = Vm,
+                Pdc = 0.0,
+                Vdc = 640,
+        ),
+        limits = PowerImpedanceACDC.Limits(
+                P_min = -1500.0,
+                P_max = 1500.0,
+                Q_min = -1000.0,
+                Q_max = 1000.0,
+        ),
+)
+
+MMC4 = PowerImpedanceACDC.mmc(
+        elec = PowerImpedanceACDC.ElectricalMMC(
+                Lᵣ = 0.1305 * (333^2 / 1000) / (2 * pi * 50),
+                Rᵣ = 0.0037 * (333^2 / 1000),
+                Rₐᵣₘ = 0.4,
+                Lₐᵣₘ = 46.125e-3,
+                Cₐᵣₘ = 11.3867e-3,
+                N = 400,
+                turnsRatio = 333 / 380,
+                vACbase_LL_RMS = 333,
+                Sbase = 1000,
+                vDC_base = 640,
+        ),
+        meas = PowerImpedanceACDC.Measurement(
+                P_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+                Q_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+        ),
+        sync = PowerImpedanceACDC.PLLSynchronization(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
+                filter = PowerImpedanceACDC.Butterworth(order = 1, ωc = 80 * 2π),
+        ),
+        delta_control = PowerImpedanceACDC.ΔdqControlGFL(
+                outer_active = PowerImpedanceACDC.OuterActiveVdcControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5, Ki = 15),
+                        v_dc_ref = 1.0,
+                ),
+                outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
+                        Q_ac_ref = Q_MMC4/1000.0,
+                        support = PowerImpedanceACDC.NoVoltageSupport(),
+                ),
+                occ = PowerImpedanceACDC.InnerCurrentPIControl(
+                        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
+                        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 100 * 2π),
+                ),
+        ),
+        sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
+                tec = PowerImpedanceACDC.TotalEnergyControl(
+                        pi_control = PowerImpedanceACDC.PIControl(Kp = 1.2894, Ki = 27.63),
+                ),
+                zscc = PowerImpedanceACDC.ZeroSequenceCurrentControl(
+                        PowerImpedanceACDC.PIControl(Kp = 0.0992, Ki = 42.9719),
+                ),
+                ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
+                        PowerImpedanceACDC.PIControl(Kp = 0.0992, Ki = 42.9719),
+                ),
+        ),
+        modulation = PowerImpedanceACDC.UncompensatedModulation(
+                timeDelay = 200e-6,
+                padeOrderNum = 5,
+                padeOrderDen = 5,
+        ),
+        setpoint = PowerImpedanceACDC.SetPoint(
+                Pac = 0.0,
+                Qac = Q_MMC4,
+                θac = 0.0,
+                Vac = Vm,
+                Pdc = 0.0,
+                Vdc = 640,
+        ),
+        limits = PowerImpedanceACDC.Limits(
+                P_min = -1500.0,
+                P_max = 1500.0,
+                Q_min = -1000.0,
+                Q_max = 1000.0,
+        ),
+)
+
+# TLCs
+WF1 = PowerImpedanceACDC.tlc(
+        elec = PowerImpedanceACDC.ElectricalTLC(
+                Lᵣ = 0.08 * (380^2 / 600) / (2 * pi * 50),
+                Rᵣ = 0.0008 * (380^2 / 600),
+                Sbase = 600,
+                vACbase_LL_RMS = 380,
+                vDCbase = 640,
+        ),
+        meas = PowerImpedanceACDC.Measurement(
+                v_ac = PowerImpedanceACDC.Butterworth(order = 1, ωc = 1e4),
+                i_ac = PowerImpedanceACDC.Butterworth(order = 1, ωc = 1e4),
+        ),
+        sync = PowerImpedanceACDC.PLLSynchronization(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.3978, Ki = 7.9577),
+                filter = PowerImpedanceACDC.Butterworth(order = 1, ωc = 2 * pi * 50),
+        ),
+        outerActive = PowerImpedanceACDC.OuterActivePowerControl(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
+                P_ac_ref = 0.0,
+                support = PowerImpedanceACDC.NoFrequencySupport(),
+        ),
+        outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
+                Q_ac_ref = 0.0,
+                support = PowerImpedanceACDC.NoVoltageSupport(),
+        ),
+        innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl(),
+        innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.254647908947033, Ki = 0.8),
+        ),
+        mod = PowerImpedanceACDC.NoModulation(),
+        setpoint = PowerImpedanceACDC.SetPoint(
+                Pac = Pwf,
+                Qac = Qwf,
+                θac = 0.0,
+                Vac = Vm * sqrt(2),
+                Pdc = Pwf,
+                Vdc = 640,
+        ),
+        limits = PowerImpedanceACDC.Limits(
+                P_min = -1000.0,
+                P_max = 1000.0,
+                Q_min = -1000.0,
+                Q_max = 1000.0,
+        ),
+)
+
+WF2 = PowerImpedanceACDC.tlc(
+        elec = PowerImpedanceACDC.ElectricalTLC(
+                Lᵣ = 0.08 * (380^2 / 600) / (2 * pi * 50),
+                Rᵣ = 0.0008 * (380^2 / 600),
+                Sbase = 600,
+                vACbase_LL_RMS = 380,
+                vDCbase = 640,
+        ),
+        meas = PowerImpedanceACDC.Measurement(
+                v_ac = PowerImpedanceACDC.Butterworth(order = 1, ωc = 1e4),
+                i_ac = PowerImpedanceACDC.Butterworth(order = 1, ωc = 1e4),
+        ),
+        sync = PowerImpedanceACDC.PLLSynchronization(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.3978, Ki = 7.9577),
+                filter = PowerImpedanceACDC.Butterworth(order = 1, ωc = 2 * pi * 80),
+        ),
+        outerActive = PowerImpedanceACDC.OuterActivePowerControl(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
+                P_ac_ref = 0.0,
+                support = PowerImpedanceACDC.NoFrequencySupport(),
+        ),
+        outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
+                Q_ac_ref = 0.0,
+                support = PowerImpedanceACDC.NoVoltageSupport(),
+        ),
+        innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl(),
+        innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.254647908947033, Ki = 0.8),
+        ),
+        mod = PowerImpedanceACDC.NoModulation(),
+        setpoint = PowerImpedanceACDC.SetPoint(
+                Pac = Pwf,
+                Qac = Qwf,
+                θac = 0.0,
+                Vac = Vm * sqrt(2),
+                Pdc = Pwf,
+                Vdc = 640,
+        ),
+        limits = PowerImpedanceACDC.Limits(
+                P_min = -1000.0,
+                P_max = 1000.0,
+                Q_min = -1000.0,
+                Q_max = 1000.0,
+        ),
+)
+
+WF3 = PowerImpedanceACDC.tlc(
+        elec = PowerImpedanceACDC.ElectricalTLC(
+                Lᵣ = 0.08 * (380^2 / 600) / (2 * pi * 50),
+                Rᵣ = 0.0008 * (380^2 / 600),
+                Sbase = 600,
+                vACbase_LL_RMS = 380,
+                vDCbase = 640,
+        ),
+        meas = PowerImpedanceACDC.Measurement(
+                v_ac = PowerImpedanceACDC.Butterworth(order = 1, ωc = 1e4),
+                i_ac = PowerImpedanceACDC.Butterworth(order = 1, ωc = 1e4),
+        ),
+        sync = PowerImpedanceACDC.PLLSynchronization(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.3978, Ki = 7.9577),
+                filter = PowerImpedanceACDC.Butterworth(order = 1, ωc = 2 * pi * 80),
+        ),
+        outerActive = PowerImpedanceACDC.OuterActivePowerControl(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
+                P_ac_ref = 0.0,
+                support = PowerImpedanceACDC.NoFrequencySupport(),
+        ),
+        outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
+                Q_ac_ref = 0.0,
+                support = PowerImpedanceACDC.NoVoltageSupport(),
+        ),
+        innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl(),
+        innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
+                pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.254647908947033, Ki = 0.8),
+        ),
+        mod = PowerImpedanceACDC.NoModulation(),
+        setpoint = PowerImpedanceACDC.SetPoint(
+                Pac = Pwf,
+                Qac = Qwf,
+                θac = 0.0,
+                Vac = Vm * sqrt(2),
+                Pdc = Pwf,
+                Vdc = 640,
+        ),
+        limits = PowerImpedanceACDC.Limits(
+                P_min = -1000.0,
+                P_max = 1000.0,
+                Q_min = -1000.0,
+                Q_max = 1000.0,
+        ),
+)
+
 
 IEEE14bus = @network begin
 
@@ -83,100 +518,13 @@ Zg1=impedance(z = (s::Complex)-> (0.2874  + s*0.0091)  , pins = 3, transformatio
 
 
 #Converters
-
-
- MMC1 = mmc(Vᵈᶜ = 640, vDCbase = 640, Sbase = 1000, vACbase_LL_RMS = 333, turnsRatio = 333/380, Vₘ = Vm, Lᵣ = 0.18 * (333^2/1000) /2/pi/50, Rᵣ = 0.001 *(333^2/1000),
-        P = P_MMC1, Q = Q_MMC1,
-        Rₐᵣₘ = 0.4,Lₐᵣₘ = 46.125e-3,Cₐᵣₘ = 11.3867e-3,N = 400,
-        occ = PI_control(Kₚ = 0.6532, Kᵢ = 281.1370,n_f= 2,ω_f=200*2*pi),
-        ccc = PI_control(Kₚ = 0.0936, Kᵢ = 40.5396),
-        zcc = PI_control(Kₚ = 0.0936, Kᵢ = 40.5396),
-        energy = PI_control(Kₚ = 1.469, Kᵢ = 31.4819),
-        pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664, n_f= 1,ω_f=75*2*pi),
-        q = PI_control(Kₚ = 0.0, Kᵢ = 3, n_f = 2,ω_f = 140*2*pi),
-        p = VSE(H = 5,K_d = 100,K_ω = 10,ref_ω = 1, n_f = 2,ω_f = 140*2*pi),
-        VI= CCQSEM(Rᵥ = 0.01,Lᵥ = 0.25,ref_vd = 1,ref_vq = 0,n_f = 2,ω_f =200 ), gfm= true, timeDelay=200e-6, padeOrderNum=5, padeOrderDen=5) 
-
-
-MMC2=mmc(Vᵈᶜ = 640, vDCbase = 640, Sbase = 1000, vACbase_LL_RMS = 333, turnsRatio = 333/380, Vₘ = Vm, Lᵣ = 0.18 * (333^2/1000) /2/pi/50, Rᵣ = 0.001 *(333^2/1000),
-        P = P_MMC2, Q = Q_MMC2,  
-        Rₐᵣₘ = 0.4,Lₐᵣₘ = 46.125e-3,Cₐᵣₘ = 11.3867e-3,N = 400,
-        occ = PI_control(Kₚ = 0.6532, Kᵢ = 281.1370,n_f= 2,ω_f=400*2*pi),
-        ccc = PI_control(Kₚ = 0.0936, Kᵢ = 40.5396),
-        zcc = PI_control(Kₚ = 0.0936, Kᵢ = 40.5396),
-        energy = PI_control(Kₚ = 1.469, Kᵢ = 31.4819),
-        pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664, n_f= 1,ω_f=75*2*pi),
-        q = PI_control(Kₚ = 0.0, Kᵢ = 3, n_f = 2,ω_f = 140*2*pi),
-        p = VSE(H = 5,K_d = 100,K_ω = 10,ref_ω = 1, n_f = 2,ω_f = 140*2*pi),
-        VI= CCQSEM(Rᵥ = 0.0,Lᵥ = 0.4,ref_vd = 1,ref_vq = 0,n_f = 2,ω_f =50), gfm= true, timeDelay=200e-6, padeOrderNum=5, padeOrderDen=5) 
-
-
-MMC3=mmc(Vᵈᶜ = 640 , vDCbase = 640, Sbase = 1000, vACbase_LL_RMS = 333, turnsRatio = 333/380, Vₘ = Vm, Lᵣ = 0.1305*(333^2/1000)/2/pi/50, Rᵣ = 0.0037*(333^2/1000),
-        Q = Q_MMC3,
-        occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654,n_f= 2,ω_f=600*2*pi),
-        # occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654,n_f= 2,ω_f=100*2*pi), # Retuning required for trip of T2_5
-        ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-        zcc = PI_control(Kₚ = 0.0992, Kᵢ = 42.9719),
-        energy = PI_control(Kₚ = 1.2894, Kᵢ = 27.63),
-        pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664,n_f= 1,ω_f=80*2*pi),
-        dc = PI_control(Kₚ = 5, Kᵢ = 15),
-        q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159,n_f= 1,ω_f=100*2*pi),timeDelay= 250e-6, padeOrderNum=5, padeOrderDen=5
-        #p= PI_control(Kₚ = 0.1, Kᵢ = 31.4159)
-        )   
-
-MMC4=mmc(Vᵈᶜ = 640 , vDCbase = 640, Sbase = 1000, vACbase_LL_RMS = 333, turnsRatio = 333/380, Vₘ = Vm, Lᵣ = 0.1305*(333^2/1000)/2/pi/50, Rᵣ = 0.0037*(333^2/1000),
-        Q = Q_MMC4,
-        occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654,n_f= 2,ω_f=100*2*pi),
-        ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-        zcc = PI_control(Kₚ = 0.0992, Kᵢ = 42.9719),
-        energy = PI_control(Kₚ = 1.2894, Kᵢ = 27.63),
-        pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664,n_f= 1,ω_f=80*2*pi),
-        #pll = PI_control(Kₚ = 1.5, Kᵢ = 314.15),
-        dc = PI_control(Kₚ = 5, Kᵢ = 15),
-        q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159,n_f= 1,ω_f=100*2*pi) ,timeDelay=200e-6, padeOrderNum=5, padeOrderDen=5
-        #p= PI_control(Kₚ = 0.1, Kᵢ = 31.4159)
-        )   
-
-# Delays deactivated for the wind farms!
-WF1= tlc(Vᵈᶜ = 640, Vₘ = Vm, Lᵣ =0.08*(380^2/600)/2/pi/50, Rᵣ = 0.0008*(380^2/600), 
-        Sbase = 600, vACbase_LL_RMS = 380, 
-        P = Pwf, Q = Qwf,
-        occ = PI_control(Kₚ = 0.254647908947033, Kᵢ = 0.8), 
-        pll = PI_control(Kₚ = 0.3978, Kᵢ = 7.9577, ω_f = 2*pi*50,n_f=1),
-        #pll = PI_control(Kₚ = 3, Kᵢ = 38.5155, ω_f = 2*pi*50,n_f=1), # Fast PLL tuning
-        v_meas_filt = PI_control(ω_f = 1e4,n_f=1), 
-        i_meas_filt = PI_control(ω_f = 1e4,n_f=1),
-        #vac_supp = PI_control(ω_f = 1/0.5, Kₚ =10),
-        #f_supp = PI_control(ω_f = 1/0.5, Kₚ =10),
-        p = PI_control(Kₚ = 0.01, Kᵢ = 10), 
-        q = PI_control(Kₚ = 0.01, Kᵢ = 10), #timeDelay=200e-6, padeOrderDen=5, padeOrderNum=5
-        )
-
-WF2= tlc(Vᵈᶜ = 640, Vₘ = Vm, Lᵣ =0.08*(380^2/600)/2/pi/50, Rᵣ = 0.0008*(380^2/600), 
-        Sbase = 600, vACbase_LL_RMS = 380, 
-        P = Pwf, Q = Qwf,
-        occ = PI_control(Kₚ = 0.254647908947033, Kᵢ = 0.8),
-        pll = PI_control(Kₚ = 0.3978, Kᵢ = 7.9577, ω_f = 2*pi*80,n_f=1),
-        v_meas_filt = PI_control(ω_f = 1e4,n_f=1),
-        i_meas_filt = PI_control(ω_f = 1e4,n_f=1), 
-        #vac_supp = PI_control(ω_f = 1/0.5, Kₚ =10),
-        #f_supp = PI_control(ω_f = 1/0.5, Kₚ =10),
-        p = PI_control(Kₚ = 0.01, Kᵢ = 10), 
-        q = PI_control(Kₚ = 0.01, Kᵢ = 10), #timeDelay=200e-6, padeOrderDen=5, padeOrderNum=5
-        )
-
-WF3= tlc(Vᵈᶜ = 640, Vₘ = Vm, Lᵣ =0.08*(380^2/600)/2/pi/50, Rᵣ = 0.0008*(380^2/600), 
-        Sbase = 600, vACbase_LL_RMS = 380, 
-        P = Pwf, Q = Qwf,
-        occ = PI_control(Kₚ = 0.254647908947033, Kᵢ = 0.8), 
-        pll = PI_control(Kₚ = 0.3978, Kᵢ = 7.9577, ω_f = 2*pi*80,n_f=1),
-        v_meas_filt = PI_control(ω_f = 1e4,n_f=1), 
-        i_meas_filt = PI_control(ω_f = 1e4,n_f=1),
-        #vac_supp = PI_control(ω_f = 1/0.5, Kₚ =10),
-        #f_supp = PI_control(ω_f = 1/0.5, Kₚ =10),
-        p = PI_control(Kₚ = 0.01, Kᵢ = 10), 
-        q = PI_control(Kₚ = 0.01, Kᵢ = 10), #timeDelay=200e-6, padeOrderDen=5, padeOrderNum=5
-        )
+MMC1 = MMC1
+MMC2 = MMC2
+MMC3 = MMC3
+MMC4 = MMC4
+WF1 = WF1
+WF2 = WF2
+WF3 = WF3
 
 
 
@@ -449,20 +797,20 @@ for i in eachindex(omegas)
     Ynode_manual_f=zeros(Complex{Float64},20,20)
 
     # MMCs
-    MMC1=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC1],omegas[i]*im)
-    MMC2=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC2],omegas[i]*im)
-    MMC3=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC3],omegas[i]*im)
-    MMC4=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC4],omegas[i]*im)
-    MMC1=vcat(MMC1[1:1,1:3],-MMC1[2:3,1:3])
-    MMC2=vcat(MMC2[1:1,1:3],-MMC2[2:3,1:3])
-    MMC3=vcat(MMC3[1:1,1:3],-MMC3[2:3,1:3])
-    MMC4=vcat(MMC4[1:1,1:3],-MMC4[2:3,1:3])
+    MMC1_adm=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC1],omegas[i]*im)
+    MMC2_adm=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC2],omegas[i]*im)
+    MMC3_adm=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC3],omegas[i]*im)
+    MMC4_adm=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC4],omegas[i]*im)
+    MMC1_adm=vcat(MMC1_adm[1:1,1:3],-MMC1_adm[2:3,1:3])
+    MMC2_adm=vcat(MMC2_adm[1:1,1:3],-MMC2_adm[2:3,1:3])
+    MMC3_adm=vcat(MMC3_adm[1:1,1:3],-MMC3_adm[2:3,1:3])
+    MMC4_adm=vcat(MMC4_adm[1:1,1:3],-MMC4_adm[2:3,1:3])
 
 
     # TLCs
-    TLC1=(-PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF1],omegas[i]*im))[2:3,2:3]
-    TLC2=(-PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF2],omegas[i]*im))[2:3,2:3]
-    TLC3=(-PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF3],omegas[i]*im))[2:3,2:3]
+    TLC1_adm=(-PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF1],omegas[i]*im))[2:3,2:3]
+    TLC2_adm=(-PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF2],omegas[i]*im))[2:3,2:3]
+    TLC3_adm=(-PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF3],omegas[i]*im))[2:3,2:3]
 
     # Sources
     SRC1=PowerImpedanceACDC.get_y(IEEE14bus.elements[:Zg1],omegas[i]*im)[1:2,1:2]
@@ -472,18 +820,18 @@ for i in eachindex(omegas)
     Ynode_manual_f[1:2,:1:2]=SRC1
 
     #MMC
-    Ynode_manual_f[3:5,:3]=MMC1[:,1]
-    Ynode_manual_f[3,3:5]=MMC1[1,:]
-    Ynode_manual_f[4:5,4:5]=MMC1[2:3,2:3]+SRC2
+    Ynode_manual_f[3:5,:3]=MMC1_adm[:,1]
+    Ynode_manual_f[3,3:5]=MMC1_adm[1,:]
+    Ynode_manual_f[4:5,4:5]=MMC1_adm[2:3,2:3]+SRC2
 
-    Ynode_manual_f[6:8,:6:8]=MMC2
-    Ynode_manual_f[9:11,:9:11]=MMC3
-    Ynode_manual_f[12:14,:12:14]=MMC4
+    Ynode_manual_f[6:8,:6:8]=MMC2_adm
+    Ynode_manual_f[9:11,:9:11]=MMC3_adm
+    Ynode_manual_f[12:14,:12:14]=MMC4_adm
 
     #TLCs
-    Ynode_manual_f[15:16,:15:16]=TLC1
-    Ynode_manual_f[17:18,:17:18]=TLC2
-    Ynode_manual_f[19:20,:19:20]=TLC3
+    Ynode_manual_f[15:16,:15:16]=TLC1_adm       
+    Ynode_manual_f[17:18,:17:18]=TLC2_adm
+    Ynode_manual_f[19:20,:19:20]=TLC3_adm       
 
     push!(Ynode_manual,Ynode_manual_f)
 
