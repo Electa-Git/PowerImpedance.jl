@@ -29,7 +29,7 @@ using PowerImpedanceACDC.NetworkBuilder: pin, ⟷
 	updated = NetworkBuilder.update!(builder; elements = updated_elements)
 
 	@test updated.powerflow === nothing
-	@test builder.network.elements[:z1].element_value.value == ComplexF64[3;;]
+	@test builder.network.elements[:z1].element_model.value == ComplexF64[3;;]
 	@test Set(builder.network.nets[:n1]) == Set(legacy.nets[:n1])
 end
 
@@ -192,6 +192,71 @@ const IEEE39_ELIM_ELEMENTS = [:STATCOM]
 const IEEE39_FREQ_RANGE = (1e0, 5e3, 10)
 
 function build_ieee39bus_with_macro()
+	elec = PowerImpedanceACDC.ElectricalTLC(
+		Lᵣ = Lf_ST,
+		Rᵣ = Rf_ST,
+		Sbase = S_ST,
+		vACbase_LL_RMS = 345,
+		vDCbase = Vdc_ST,
+	)
+
+	meas = PowerImpedanceACDC.Measurement(
+		v_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+		i_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+	)
+
+	sync = PowerImpedanceACDC.PLLSynchronization(
+		pi_ctrl = PowerImpedanceACDC.PIControl(
+			Kp = 0.397887357729738,
+			Ki = 7.957747154594767,
+		),
+		filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 2π * 80),
+	)
+
+	innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl()
+
+	innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
+		pi_ctrl = PowerImpedanceACDC.PIControl(
+			Kp = 0.254647908947033,
+			Ki = 0.8,
+		),
+	)
+
+	mod = PowerImpedanceACDC.PadeModulation(
+		timeDelay = 200e-6,
+		padeOrderNum = 3,
+		padeOrderDen = 3,
+	)
+
+	limits = PowerImpedanceACDC.Limits(
+		P_min = -1000.0,
+		P_max = 1000.0,
+		Q_min = -1000.0,
+		Q_max = 1000.0,
+	)
+
+	outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
+		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
+		v_dc_ref = 0.0,
+	)
+
+	outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
+		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
+		support = PowerImpedanceACDC.VoltageSupportLag(
+			K = 5.0,
+			ωc = 1 / 0.5,
+			v_ac_ref = Vm1*sqrt(2)*Vac_ref_ST / elec.vACbase,
+		),
+	)
+
+	setpoint = PowerImpedanceACDC.SetPoint(
+		Pac = 0.0,
+		Qac = Q_ST*S_ST,
+		θac = 0.0,
+		Vac = Vm1*sqrt(2)*Vac_ref_ST,
+		Pdc = 0.0,
+		Vdc = Vdc_ST,
+	)
 	return @network begin
 
 		voltageBase = Vm1
@@ -264,29 +329,19 @@ function build_ieee39bus_with_macro()
 
 		G_DC=dc_source(pins = 1, V = Vdc_ST/2) # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
-		STATCOM = tlc(Vᵈᶜ = Vdc_ST, Lᵣ = Lf_ST, Rᵣ = Rf_ST,
-			Sbase = S_ST, vDCbase = Vdc_ST, Vₘ = Vm1,
-			Q = Q_ST*S_ST, vACbase_LL_RMS = 345, Q_max = 1000, Q_min = -1000,
-			occ = PI_control(Kₚ = 0.254647908947033, Kᵢ = 0.8),
-			pll = PI_control(
-				Kₚ = 0.397887357729738,
-				Kᵢ = 7.957747154594767,
-				ω_f = (2*pi)*80,
-				n_f = 2,
-			), # These gains are fine.
-			v_meas_filt = PI_control(ω_f = 0.5e4, n_f = 2),
-			i_meas_filt = PI_control(ω_f = 0.5e4, n_f = 2),
-			f_supp = PI_control(ω_f = 1/0.5, Kₚ = 5), #
-			dc = PI_control(Kₚ = 5, Kᵢ = 5),
-			q = PI_control(Kₚ = 0.04, Kᵢ = 40),
-			vac_supp = PI_control(
-				Kₚ = 5*(S_ST/1000),
-				ω_f = 1/0.5,
-				ref = [Vm1*sqrt(2)*Vac_ref_ST],
-			),
-			timeDelay = 200e-6, #!!!!!
-			padeOrderNum = 3,
-			padeOrderDen = 3,
+
+
+		STATCOM = PowerImpedanceACDC.tlc(
+			elec = elec,
+			meas = meas,
+			sync = sync,
+			outerActive = outerActive,
+			outerReactive = outerReactive,
+			innerVoltage = innerVoltage,
+			innerCurrent = innerCurrent,
+			mod = mod,
+			setpoint = setpoint,
+			limits = limits,
 		)
 
 		dummy_impedance=impedance(z = 1e4, pins = 1) # Dummy impedance to arrange powerflow of DC-controlling STATCOM
@@ -1233,6 +1288,72 @@ function build_ieee39bus_with_macro()
 end
 
 function ieee39bus_elements()
+
+	elec = PowerImpedanceACDC.ElectricalTLC(
+		Lᵣ = Lf_ST,
+		Rᵣ = Rf_ST,
+		Sbase = S_ST,
+		vACbase_LL_RMS = 345,
+		vDCbase = Vdc_ST,
+	)
+
+	meas = PowerImpedanceACDC.Measurement(
+		v_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+		i_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+	)
+
+	sync = PowerImpedanceACDC.PLLSynchronization(
+		pi_ctrl = PowerImpedanceACDC.PIControl(
+			Kp = 0.397887357729738,
+			Ki = 7.957747154594767,
+		),
+		filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 2π * 80),
+	)
+
+	innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl()
+
+	innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
+		pi_ctrl = PowerImpedanceACDC.PIControl(
+			Kp = 0.254647908947033,
+			Ki = 0.8,
+		),
+	)
+
+	mod = PowerImpedanceACDC.PadeModulation(
+		timeDelay = 200e-6,
+		padeOrderNum = 3,
+		padeOrderDen = 3,
+	)
+
+	limits = PowerImpedanceACDC.Limits(
+		P_min = -1000.0,
+		P_max = 1000.0,
+		Q_min = -1000.0,
+		Q_max = 1000.0,
+	)
+
+	outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
+		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
+		v_dc_ref = 0.0,
+	)
+
+	outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
+		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
+		support = PowerImpedanceACDC.VoltageSupportLag(
+			K = 5.0,
+			ωc = 1 / 0.5,
+			v_ac_ref = Vm1*sqrt(2)*Vac_ref_ST / elec.vACbase,
+		),
+	)
+
+	setpoint = PowerImpedanceACDC.SetPoint(
+		Pac = 0.0,
+		Qac = Q_ST*S_ST,
+		θac = 0.0,
+		Vac = Vm1*sqrt(2)*Vac_ref_ST,
+		Pdc = 0.0,
+		Vdc = Vdc_ST,
+	)
 	return (;
 
 
@@ -1304,29 +1425,17 @@ function ieee39bus_elements()
 
 		G_DC = dc_source(pins = 1, V = Vdc_ST/2), # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
-		STATCOM = tlc(Vᵈᶜ = Vdc_ST, Lᵣ = Lf_ST, Rᵣ = Rf_ST,
-			Sbase = S_ST, vDCbase = Vdc_ST, Vₘ = Vm1,
-			Q = Q_ST*S_ST, vACbase_LL_RMS = 345, Q_max = 1000, Q_min = -1000,
-			occ = PI_control(Kₚ = 0.254647908947033, Kᵢ = 0.8),
-			pll = PI_control(
-				Kₚ = 0.397887357729738,
-				Kᵢ = 7.957747154594767,
-				ω_f = (2*pi)*80,
-				n_f = 2,
-			), # These gains are fine.
-			v_meas_filt = PI_control(ω_f = 0.5e4, n_f = 2),
-			i_meas_filt = PI_control(ω_f = 0.5e4, n_f = 2),
-			f_supp = PI_control(ω_f = 1/0.5, Kₚ = 5), #
-			dc = PI_control(Kₚ = 5, Kᵢ = 5),
-			q = PI_control(Kₚ = 0.04, Kᵢ = 40),
-			vac_supp = PI_control(
-				Kₚ = 5*(S_ST/1000),
-				ω_f = 1/0.5,
-				ref = [Vm1*sqrt(2)*Vac_ref_ST],
-			),
-			timeDelay = 200e-6, #!!!!!
-			padeOrderNum = 3,
-			padeOrderDen = 3,
+		STATCOM = PowerImpedanceACDC.tlc(
+			elec = elec,
+			meas = meas,
+			sync = sync,
+			outerActive = outerActive,
+			outerReactive = outerReactive,
+			innerVoltage = innerVoltage,
+			innerCurrent = innerCurrent,
+			mod = mod,
+			setpoint = setpoint,
+			limits = limits,
 		),
 
 		dummy_impedance = impedance(z = 1e4, pins = 1), # Dummy impedance to arrange powerflow of DC-controlling STATCOM

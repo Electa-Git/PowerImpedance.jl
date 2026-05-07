@@ -761,198 +761,6 @@ function make_node(elem::Element, side::Int)
 end
 
 
-function build_acdcpf(pm::_PM.AbstractPowerModel)
-	_PM.variable_bus_voltage(pm, bounded = false)
-	_PM.variable_gen_power(pm, bounded = false)
-	_PM.variable_branch_power(pm, bounded = false)
-	_PM.variable_storage_power(pm, bounded = false)
-
-	# dirty, should be improved in the future TODO
-	if typeof(pm) <: _PM.SOCBFPowerModel
-		_PM.variable_branch_current(pm, bounded = false)
-	end
-
-	_PMACDC.variable_active_dcbranch_flow(pm, bounded = false)
-	_PMACDC.variable_dcbranch_current(pm, bounded = false)
-	_PMACDC.variable_dc_converter(pm, bounded = false)
-	_PMACDC.variable_dcgrid_voltage_magnitude(pm, bounded = false)
-	_PMACDC.variable_dcgenerator_power(pm; bounded = false)
-	_PMACDC.variable_flexible_demand(pm, bounded = false)
-	_PMACDC.variable_pst(pm, bounded = false)
-	_PMACDC.variable_sssc(pm, bounded = false)
-
-	_PM.constraint_model_voltage(pm)
-	_PMACDC.constraint_voltage_dc(pm)
-
-
-	for (i, bus) in _PM.ref(pm, :ref_buses)
-		@assert bus["bus_type"] == 3
-		_PM.constraint_theta_ref(pm, i)
-		_PM.constraint_voltage_magnitude_setpoint(pm, i)
-	end
-
-	for (i, bus) in _PM.ref(pm, :bus)# _PM.ids(pm, :bus)
-		_PMACDC.constraint_power_balance_ac(pm, i)
-		# PV Bus Constraints
-		if length(_PM.ref(pm, :bus_gens, i)) > 0 && !(i in _PM.ids(pm, :ref_buses))
-			for j in _PM.ref(pm, :bus_gens, i)
-				_PM.constraint_gen_setpoint_active(pm, j)
-				if bus["bus_type"] == 2
-					_PM.constraint_voltage_magnitude_setpoint(pm, i)
-				elseif bus["bus_type"] == 1
-					_PM.constraint_gen_setpoint_active(pm, j)
-				end
-			end
-		end
-	end
-
-	for i in _PM.ids(pm, :branch)
-		# dirty, should be improved in the future TODO
-		if typeof(pm) <: _PM.SOCBFPowerModel
-			_PM.constraint_power_losses(pm, i)
-			_PM.constraint_voltage_magnitude_difference(pm, i)
-			_PM.constraint_branch_current(pm, i)
-		else
-			_PM.constraint_ohms_yt_from(pm, i)
-			_PM.constraint_ohms_yt_to(pm, i)
-		end
-	end
-	for i in _PM.ids(pm, :flex_load)
-		_PMACDC.constraint_total_flexible_demand(pm, i)
-	end
-
-	for i in _PM.ids(pm, :fixed_load)
-		_PMACDC.constraint_total_fixed_demand(pm, i)
-	end
-
-	for i in _PM.ids(pm, :busdc)
-		_PMACDC.constraint_power_balance_dc(pm, i)
-	end
-	for i in _PM.ids(pm, :branchdc)
-		_PMACDC.constraint_ohms_dc_branch(pm, i)
-	end
-
-	if !isempty(_PM.ids(pm, :gendc))
-		for i in _PM.ids(pm, :gendc)
-			_PMACDC.constraint_dcgenerator_voltage_and_power(pm, i)
-		end
-	end
-
-	for (c, conv) in _PM.ref(pm, :convdc)
-		_PMACDC.constraint_conv_transformer(pm, c)
-		_PMACDC.constraint_conv_reactor(pm, c)
-		_PMACDC.constraint_conv_filter(pm, c)
-		if conv["type_dc"] == 2
-			_PMACDC.constraint_dc_voltage_magnitude_setpoint(pm, c)
-		elseif conv["type_dc"] == 3 || conv["type_dc"] == 4
-			if typeof(pm) <: _PM.AbstractACPModel || typeof(pm) <: _PM.AbstractACRModel
-				_PMACDC.constraint_dc_droop_control(pm, c)
-			else
-				Memento.warn(
-					_PM._LOGGER,
-					join([
-						"Droop only defined for ACP and ACR formulations, converter ",
-						c,
-						" will be treated as type 2",
-					]),
-				)
-				_PMACDC.constraint_dc_voltage_magnitude_setpoint(pm, c)
-			end
-		else
-			_PMACDC.constraint_active_conv_setpoint(pm, c)
-		end
-		if conv["type_ac"] == 2
-			if haskey(conv, "acq_droop") && conv["acq_droop"] == 1 # AC voltage droop control
-				_PMACDC.constraint_ac_voltage_droop_control(pm, c)
-			else # Constant AC voltage control
-				_PM.constraint_voltage_magnitude_setpoint(pm, conv["busac_i"])
-			end
-		else
-			_PMACDC.constraint_reactive_conv_setpoint(pm, c)
-		end
-		_PMACDC.constraint_converter_losses(pm, c)
-		_PMACDC.constraint_converter_current(pm, c)
-	end
-end
-
-function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs...)
-	#PowerModels function that generates PowerModel
-	ref_ext = [
-		_PMACDC.add_ref_dcgrid!,
-		_PMACDC.ref_add_pst!,
-		_PMACDC.ref_add_sssc!,
-		_PMACDC.ref_add_flex_load!,
-		_PMACDC.ref_add_gendc!,
-	]
-	pm = _PM.instantiate_model(
-		data,
-		model_type,
-		build_acdcpf;
-		ref_extensions = ref_ext,
-		kwargs...,
-	)
-
-	#Set the Ipopt optimizer
-	JuMP.set_optimizer(pm.model, solver)
-	JuMP.optimize!(pm.model)
-	result = _IM.build_result(pm, JuMP.solve_time(pm.model))
-	println(result["termination_status"])
-	if result["termination_status"] == MOI.LOCALLY_SOLVED
-		println("Power flow converged succesfully.")
-	else
-		converged_feasible = false
-		has_violations = !isempty(primal_feasibility_report(pm.model; atol = 1e-4)) # Empty no violations for given tolerance
-		if has_violations
-			println(
-				"Violations reported. Entering power flow with increments of setpoints to find a solution.",
-			)
-			for r ∈ 1:5
-				update_actives_setpoints!(data, -0.0001) # relative change of 0.01%
-				pm=_PM.instantiate_model(
-					data,
-					model_type,
-					build_acdcpf;
-					ref_extensions = ref_ext,
-					kwargs...,
-				)
-				JuMP.set_optimizer(pm.model, solver)
-				JuMP.optimize!(pm.model)
-				result = _IM.build_result(pm, JuMP.solve_time(pm.model))
-				if result["termination_status"] == MOI.LOCALLY_SOLVED
-					println("Power flow converged succesfully after $r increment change.")
-					converged_feasible = true
-					break
-				elseif isempty(primal_feasibility_report(pm.model; atol = 1e-4))
-					println(
-						"Power flow converged succesfully after $r increment change. Point is feasible.",
-					)
-					converged_feasible = true
-					break
-				else
-					#nothing
-
-				end
-			end
-			if !converged_feasible
-				# Last resort relaxing constraints...experimental stage!
-				println(
-					"Last resort: Relaxing constraints to find a solution and see which constraints are violated.",
-				)
-				result=solve_acdcpf_relax(data, model_type, solver; kwargs...)
-			end
-		else # Constraints are satisfied
-			println("Power flow converged succesfully. Point is feasible")
-		end
-
-	end
-
-	return result
-
-end
-
-
-
-
 ### Relaxation function to see which constraints might be violated
 
 function build_acdcpf(pm::_PM.AbstractPowerModel)
@@ -1192,77 +1000,79 @@ function solve_mcdcpf(data::Dict{String,Any}, model_type::Type, solver; kwargs..
     return result
 end
 
-function solve_acdcpf(data::Dict{String,Any}, model_type::Type, solver; kwargs...)
+function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs...)
+    #PowerModels function that generates PowerModel
+    ref_ext = [
+        _PMACDC.add_ref_dcgrid!,
+        _PMACDC.ref_add_pst!,
+        _PMACDC.ref_add_sssc!,
+        _PMACDC.ref_add_flex_load!,
+        _PMACDC.ref_add_gendc!,
+    ]
     pm = _PM.instantiate_model(
         data,
         model_type,
         build_acdcpf;
-        ref_extensions = [
-            PowerModelsACDC.add_ref_dcgrid!,
-            PowerModelsACDC.ref_add_pst!,
-            PowerModelsACDC.ref_add_sssc!,
-            PowerModelsACDC.ref_add_flex_load!,
-            PowerModelsACDC.ref_add_gendc!,
-        ],
-        kwargs...
+        ref_extensions = ref_ext,
+        kwargs...,
     )
 
+    #Set the Ipopt optimizer
     JuMP.set_optimizer(pm.model, solver)
     JuMP.optimize!(pm.model)
     result = _IM.build_result(pm, JuMP.solve_time(pm.model))
-
     println(result["termination_status"])
-
     if result["termination_status"] == MOI.LOCALLY_SOLVED
         println("Power flow converged succesfully.")
     else
         converged_feasible = false
-        has_violations = !isempty(primal_feasibility_report(pm.model; atol = 1e-4))
-
+        has_violations = !isempty(primal_feasibility_report(pm.model; atol = 1e-4)) # Empty no violations for given tolerance
         if has_violations
-            println("Violations reported. Entering power flow with increments of setpoints to find a solution.")
-            for r = 1:5
-                update_actives_setpoints!(data, -0.0001)
-
-                pm = _PM.instantiate_model(
+            println(
+                "Violations reported. Entering power flow with increments of setpoints to find a solution.",
+            )
+            for r ∈ 1:5
+                update_actives_setpoints!(data, -0.0001) # relative change of 0.01%
+                pm=_PM.instantiate_model(
                     data,
                     model_type,
                     build_acdcpf;
-                    ref_extensions = [
-                        PowerModelsACDC.add_ref_dcgrid!,
-                        PowerModelsACDC.ref_add_pst!,
-                        PowerModelsACDC.ref_add_sssc!,
-                        PowerModelsACDC.ref_add_flex_load!,
-                        PowerModelsACDC.ref_add_gendc!,
-                    ],
-                    kwargs...
+                    ref_extensions = ref_ext,
+                    kwargs...,
                 )
-
                 JuMP.set_optimizer(pm.model, solver)
                 JuMP.optimize!(pm.model)
                 result = _IM.build_result(pm, JuMP.solve_time(pm.model))
-
                 if result["termination_status"] == MOI.LOCALLY_SOLVED
                     println("Power flow converged succesfully after $r increment change.")
                     converged_feasible = true
                     break
                 elseif isempty(primal_feasibility_report(pm.model; atol = 1e-4))
-                    println("Power flow converged succesfully after $r increment change. Point is feasible.")
+                    println(
+                        "Power flow converged succesfully after $r increment change. Point is feasible.",
+                    )
                     converged_feasible = true
                     break
+                else
+                    #nothing
+
                 end
             end
-
             if !converged_feasible
-                println("Last resort: Relaxing constraints to find a solution and see which constraints are violated.")
-                result = solve_acdcpf_relax(data, model_type, solver; kwargs...)
+                # Last resort relaxing constraints...experimental stage!
+                println(
+                    "Last resort: Relaxing constraints to find a solution and see which constraints are violated.",
+                )
+                result=solve_acdcpf_relax(data, model_type, solver; kwargs...)
             end
-        else
+        else # Constraints are satisfied
             println("Power flow converged succesfully. Point is feasible")
         end
+
     end
 
     return result
+
 end
 
 function solve_acdcpf_relax(data::Dict{String, Any}, model_type::Type, solver; kwargs...)

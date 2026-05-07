@@ -16,6 +16,8 @@ const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
         include("adm_TLC_test.jl")
         include("Impedance_test.jl")
         include("Source_test.jl")
+        include("NetworkBuilder_test.jl")
+        # include("make_y_node_test.jl")
         include("Transformer_test.jl")
         #include("power_flow_test.jl")
         

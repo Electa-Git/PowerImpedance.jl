@@ -98,7 +98,7 @@ function active_setpoint_values(network::P.Network)
 
 	for (name, element) in pairs(network.elements)
 		if P.is_converter(element) || P.is_generator(element)
-			values[name] = deepcopy(element.element_value)
+			values[name] = deepcopy(element.element_model)
 		end
 	end
 
@@ -138,15 +138,15 @@ function restore_active_setpoint_values!(network::P.Network, powerflow::NamedTup
 				ArgumentError("Cached power flow expected :$name to be an active element."),
 			)
 
-		typeof(element.element_value) === typeof(cached_value) ||
+		typeof(element.element_model) === typeof(cached_value) ||
 			throw(
 				ArgumentError(
 					"Cached active setpoint value for :$name has type $(typeof(cached_value)), " *
-					"but the rebuilt element has type $(typeof(element.element_value)).",
+					"but the rebuilt element has type $(typeof(element.element_model)).",
 				),
 			)
 
-		element.element_value = deepcopy(cached_value)
+		element.element_model = deepcopy(cached_value)
 	end
 
 	sync_parent_powerflow_globals!(powerflow)
@@ -667,7 +667,13 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 			Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
 			Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6
 
-			P.update!(element.element_value, Vm, θ, Pac, Qac, Vdc, Pdc)
+			setpoint = P.SetPoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
+
+			if element.element_model isa P.AbstractStateSpace
+				P.update!(element, element.element_model, setpoint)
+			else
+				P.update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
+			end
 		elseif P.is_generator(element)
 			ac_node = non_ground_node(element, nodes2bus)
 
@@ -687,7 +693,9 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 				sqrt(2)
 			θ = result["solution"]["bus"][string(ac_bus)]["va"]
 
-			P.update!(element.element_value, Pgen, Qgen, Vm, θ)
+			setpoint = P.SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+
+			P.update!(element, element.element_model, setpoint)
 		end
 	end
 
