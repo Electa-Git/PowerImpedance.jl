@@ -22,25 +22,101 @@ net = @network begin
 
 	# HVDC link 1
 	# MMC1 controls the DC voltage, and is situated at the remote end.
-	c1 = mmc(Vᵈᶜ = 800, vDCbase = 800, Vₘ = transmissionVoltage,
-		P_max = 1500, P_min = -1500, P = -pHVDC1, Q = qC1, Q_max = 500,
-		Q_min = -500,
-		occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-		ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-		pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-		q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-		dc = PI_control(Kₚ = 5, Kᵢ = 15),
+	c1 = PowerImpedanceACDC.mmc(
+		elec = PowerImpedanceACDC.ElectricalMMC(vDC_base = 800, 
+		),
+		sync = PowerImpedanceACDC.PLLSynchronization(
+			pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
+		),
+		delta_control = PowerImpedanceACDC.ΔdqControlGFL(
+			outer_active = PowerImpedanceACDC.OuterActiveVdcControl(
+				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5, Ki = 15),
+				v_dc_ref = 1.0,
+			),
+			outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
+				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
+				Q_ac_ref = qC1 / 1000.0,
+			),
+			occ = PowerImpedanceACDC.InnerCurrentPIControl(
+				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.7691, Ki = 522.7654),
+			),
+		),
+		sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
+			tec = PowerImpedanceACDC.TotalEnergyControl(
+				pi_control = PowerImpedanceACDC.PIControl(),
+			),
+			zscc = PowerImpedanceACDC.ZeroSequenceCurrentControl(
+				PowerImpedanceACDC.PIControl(),
+			),
+			ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
+				PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
+			),
+		),
+		setpoint = PowerImpedanceACDC.SetPoint(
+			Pac = -pHVDC1,
+			Qac = qC1,
+			θac = 0.0,
+			Vac = transmissionVoltage*sqrt(2), #Amplitude LN for Vac setpoint
+			Pdc = -pHVDC1,
+			Vdc = 800,
+		),
+		limits = PowerImpedanceACDC.Limits(
+			P_min = -1500,
+			P_max = 1500,
+			Q_min = -500,
+			Q_max = 500,
+		),
 	)
 	# MMC2 controls P&Q. It is connected to bus 7. Define the transformer impedance parameters at the converter side!
-	c2 = mmc(Vᵈᶜ = 800, vDCbase = 800, Vₘ = transmissionVoltage,
-		P_max = 1000, P_min = -1000, P = pHVDC1, Q = qC2, Q_max = 1000,
-		Q_min = -1000,
-		vACbase_LL_RMS = 333, turnsRatio = 333/380, Lᵣ = 0.0461, Rᵣ = 0.4103,
-		occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-		ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-		pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-		p = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-		q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
+	c2 = PowerImpedanceACDC.mmc(
+		elec = PowerImpedanceACDC.ElectricalMMC(
+			vDC_base = 800,
+			vACbase_LL_RMS = 333,
+			turnsRatio = 333 / 380,
+			Lᵣ = 0.0461,
+			Rᵣ = 0.4103,
+		),
+		sync = PowerImpedanceACDC.PLLSynchronization(
+			pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
+		),
+		delta_control = PowerImpedanceACDC.ΔdqControlGFL(
+			outer_active = PowerImpedanceACDC.OuterActivePowerControl(
+				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
+				P_ac_ref = pHVDC1 / 1000.0,
+			),
+			outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
+				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
+				Q_ac_ref = qC2 / 1000.0,
+			),
+			occ = PowerImpedanceACDC.InnerCurrentPIControl(
+				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.7691, Ki = 522.7654),
+			),
+		),
+		sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
+			tec = PowerImpedanceACDC.TotalEnergyControl(
+				pi_control = PowerImpedanceACDC.PIControl(),
+			),
+			zscc = PowerImpedanceACDC.ZeroSequenceCurrentControl(
+				PowerImpedanceACDC.PIControl(),
+			),
+			ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
+				PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
+			),
+		),
+		setpoint = PowerImpedanceACDC.SetPoint(
+			Pac = pHVDC1,
+			Qac = qC2,
+			θac = 0.0,
+			Vac = transmissionVoltage*sqrt(2), #Amplitude LN for Vac setpoint
+			Pdc = pHVDC1,
+			Vdc = 800,
+		),
+		limits = PowerImpedanceACDC.Limits(
+			P_min = -1000,
+			P_max = 1000,
+			Q_min = -1000,
+			Q_max = 1000,
+		),
 	)
 
 	dc_line = cable(length = 100e3, positions = [(-0.5, 1), (0.5, 1)],
