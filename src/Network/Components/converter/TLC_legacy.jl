@@ -1,48 +1,277 @@
-export tlc
+# export tlclegacy
+
+# TODO: Implement legacy functionality
+
+function tlclegacy(; kwargs...)
+    kwargs = NamedTuple(kwargs)
+    legacy_keys = (
+        :ω₀, :P, :Q, :P_dc, :P_min, :P_max, :Q_min, :Q_max,
+        :θ, :Vₘ, :Vᵈᶜ, :Lᵣ, :Rᵣ, :Lₐᵣₘ, :Rₐᵣₘ,
+        :pll, :v_meas_filt, :i_meas_filt, :p, :q, :dc, :occ, :vac, :vac_supp,
+        :controls, :equilibrium, :A, :B, :C, :D,
+        :timeDelay, :padeOrderNum, :padeOrderDen,
+        :vACbase_LL_RMS, :Sbase, :vDCbase, :iDCbase, :vACbase, :iACbase, :debug,
+    )
+
+    if any(key -> key in keys(kwargs), legacy_keys)
+        return _legacy_tlc_from_kwargs(kwargs)
+    end
+
+    return tlc_modular(; kwargs...)
+end
+
+
+_legacy_kwget(kwargs, key, default) = begin
+    nt = NamedTuple(kwargs)
+    key in keys(nt) ? getproperty(nt, key) : default
+end
+
+function _legacy_field(obj, key, default)
+    obj === nothing && return default
+    hasproperty(obj, key) ? getproperty(obj, key) : default
+end
+
+function _legacy_ref(obj, default)
+    ref = _legacy_field(obj, :ref, default)
+    ref isa AbstractArray && !isempty(ref) && return ref[1]
+    return ref
+end
+
+function _legacy_pi_control(obj)
+    return PIControl(
+        Kp = Float64(_legacy_field(obj, :Kₚ, _legacy_field(obj, :Kp, 0.0))),
+        Ki = Float64(_legacy_field(obj, :Kᵢ, _legacy_field(obj, :Ki, 0.0))),
+    )
+end
+
+function _legacy_filter(obj)
+    order = Int(_legacy_field(obj, :n_f, 0))
+    ωc = Float64(_legacy_field(obj, :ω_f, 0.0))
+    return order > 0 && ωc > 0 ? Butterworth(order = order, ωc = ωc) : NoFilter()
+end
+
+function _legacy_setpoint(kwargs)
+    return SetPoint(
+        Pac = Float64(_legacy_kwget(kwargs, :P, 0.0)),
+        Qac = Float64(_legacy_kwget(kwargs, :Q, 0.0)),
+        θac = Float64(_legacy_kwget(kwargs, :θ, 0.0)),
+        Vac = Float64(_legacy_kwget(kwargs, :Vₘ, 220 * sqrt(2 / 3))),
+        Pdc = Float64(_legacy_kwget(kwargs, :P_dc, 0.0)),
+        Vdc = Float64(_legacy_kwget(kwargs, :Vᵈᶜ, 0.0)),
+    )
+end
+
+function _legacy_limits(kwargs)
+    return Limits(
+        P_min = Float64(_legacy_kwget(kwargs, :P_min, 0.9)),
+        P_max = Float64(_legacy_kwget(kwargs, :P_max, 1.1)),
+        Q_min = Float64(_legacy_kwget(kwargs, :Q_min, -0.5)),
+        Q_max = Float64(_legacy_kwget(kwargs, :Q_max, 0.5)),
+    )
+end
+
+function _legacy_controls(kwargs)
+    kwargs = NamedTuple(kwargs)
+    controls = OrderedDict{Symbol, Any}()
+
+    if key in keys(kwargs) && false
+    end
+
+    if :controls in keys(kwargs) && kwargs.controls !== nothing
+        for (key, value) in kwargs.controls
+            controls[key] = value
+        end
+    end
+
+    for key in (:pll, :v_meas_filt, :i_meas_filt, :p, :q, :dc, :occ, :vac, :vac_supp)
+        if key in keys(kwargs)
+            controls[key] = getproperty(kwargs, key)
+        end
+    end
+
+    return controls
+end
+
+function _legacy_tlc_from_kwargs(kwargs)
+    kwargs = NamedTuple(kwargs)
+    controls = _legacy_controls(kwargs)
+    setpoint = :setpoint in keys(kwargs) ? kwargs.setpoint : _legacy_setpoint(kwargs)
+    limits = :limits in keys(kwargs) ? kwargs.limits : _legacy_limits(kwargs)
+
+    vac_filter = _legacy_filter(get(controls, :v_meas_filt, nothing))
+    iac_filter = _legacy_filter(get(controls, :i_meas_filt, nothing))
+    vdc_filter = _legacy_filter(get(controls, :dc, nothing))
+
+    meas = :meas in keys(kwargs) ? kwargs.meas : Measurement(
+        v_ac = vac_filter,
+        i_ac = iac_filter,
+        v_dc = vdc_filter,
+    )
+
+    pll_ctrl = _legacy_kwget(controls, :pll, nothing)
+    sync = :sync in keys(kwargs) ? kwargs.sync : (
+        pll_ctrl === nothing ? NoSynchronization() : PLLSynchronization(
+            pi_ctrl = _legacy_pi_control(pll_ctrl),
+            filter = _legacy_filter(pll_ctrl),
+        )
+    )
+
+    outerActive = :outerActive in keys(kwargs) ? kwargs.outerActive : begin
+        if haskey(controls, :dc)
+            ctrl = controls[:dc]
+            v_dc_ref = _legacy_field(ctrl, :ref, [setpoint.Vdc / max(_legacy_kwget(kwargs, :vDCbase, 640.0), eps())])
+            OuterActiveVdcControl(
+                pi_ctrl = _legacy_pi_control(ctrl),
+                v_dc_ref = Float64(v_dc_ref isa AbstractArray ? v_dc_ref[1] : v_dc_ref),
+            )
+        elseif haskey(controls, :p)
+            ctrl = controls[:p]
+            p_ref = _legacy_field(ctrl, :ref, [setpoint.Pac / max(_legacy_kwget(kwargs, :Sbase, 500.0), eps())])
+            OuterActivePowerControl(
+                pi_ctrl = _legacy_pi_control(ctrl),
+                P_ac_ref = Float64(p_ref isa AbstractArray ? p_ref[1] : p_ref),
+            )
+        else
+            NoOuterActiveControl()
+        end
+    end
+
+    outerReactive = :outerReactive in keys(kwargs) ? kwargs.outerReactive : begin
+        if haskey(controls, :vac_supp)
+            ctrl = controls[:vac_supp]
+            v_ac_ref = _legacy_field(ctrl, :ref, [setpoint.Vac / max(_legacy_tlc_elec_vacbase(kwargs), eps())])
+            q_ctrl = haskey(controls, :q) ? controls[:q] : nothing
+            OuterReactiveQControl(
+                pi_ctrl = _legacy_pi_control(q_ctrl === nothing ? ctrl : q_ctrl),
+                Q_ac_ref = q_ctrl === nothing ? 0.0 : Float64(_legacy_ref(q_ctrl, 0.0)),
+                support = VoltageSupportLag(
+                    K = Float64(_legacy_field(ctrl, :Kₚ, 0.0)),
+                    ωc = Float64(_legacy_field(ctrl, :ω_f, 0.0)),
+                    v_ac_ref = Float64(v_ac_ref isa AbstractArray ? v_ac_ref[1] : v_ac_ref),
+                ),
+            )
+        elseif haskey(controls, :vac)
+            ctrl = controls[:vac]
+            v_ac_ref = _legacy_field(ctrl, :ref, [setpoint.Vac / max(_legacy_tlc_elec_vacbase(kwargs), eps())])
+            OuterReactiveVacControl(
+                pi_ctrl = _legacy_pi_control(ctrl),
+                v_ac_ref = Float64(v_ac_ref isa AbstractArray ? v_ac_ref[1] : v_ac_ref),
+            )
+        elseif haskey(controls, :q)
+            ctrl = controls[:q]
+            OuterReactiveQControl(
+                pi_ctrl = _legacy_pi_control(ctrl),
+                Q_ac_ref = Float64(_legacy_ref(ctrl, setpoint.Qac / max(_legacy_kwget(kwargs, :Sbase, 500.0), eps()))),
+            )
+        else
+            NoOuterReactiveControl()
+        end
+    end
+
+    innerVoltage = :innerVoltage in keys(kwargs) ? kwargs.innerVoltage : NoInnerVoltageControl()
+
+    innerCurrent = :innerCurrent in keys(kwargs) ? kwargs.innerCurrent : begin
+        occ_ctrl = _legacy_kwget(controls, :occ, nothing)
+        occ_ctrl === nothing ? NoInnerCurrentControl() : InnerCurrentPIControl(
+            pi_ctrl = _legacy_pi_control(occ_ctrl),
+            filter = _legacy_filter(occ_ctrl),
+        )
+    end
+
+    mod = :mod in keys(kwargs) ? kwargs.mod : begin
+        timeDelay = Float64(_legacy_kwget(kwargs, :timeDelay, 0.0))
+        padeOrderNum = Int(_legacy_kwget(kwargs, :padeOrderNum, 0))
+        padeOrderDen = Int(_legacy_kwget(kwargs, :padeOrderDen, 0))
+        if !iszero(timeDelay) && (padeOrderNum > 0 || padeOrderDen > 0)
+            DelayModulation(timeDelay = timeDelay, padeOrderNum = padeOrderNum, padeOrderDen = padeOrderDen)
+        else
+            NoModulation()
+        end
+    end
+
+    elec = :elec in keys(kwargs) ? kwargs.elec : ElectricalTLC(
+        ωbase = Float64(_legacy_kwget(kwargs, :ω₀, 100 * π)),
+        Lᵣ = Float64(_legacy_kwget(kwargs, :Lᵣ, 60e-3)),
+        Rᵣ = Float64(_legacy_kwget(kwargs, :Rᵣ, 0.535)),
+        vACbase_LL_RMS = Float64(_legacy_kwget(kwargs, :vACbase_LL_RMS, 220.0)),
+        Sbase = Float64(_legacy_kwget(kwargs, :Sbase, 500.0)),
+        vDCbase = Float64(_legacy_kwget(kwargs, :vDCbase, 640.0)),
+    )
+
+    connection = _legacy_kwget(kwargs, :connection, true)
+
+    return tlc_modular(
+        elec = elec,
+        meas = meas,
+        sync = sync,
+        outerActive = outerActive,
+        outerReactive = outerReactive,
+        innerVoltage = innerVoltage,
+        innerCurrent = innerCurrent,
+        mod = mod,
+        setpoint = setpoint,
+        limits = limits,
+        connection = connection,
+    )
+end
+
+_legacy_tlc_elec_vacbase(kwargs) = begin
+    if haskey(kwargs, :elec)
+        return kwargs.elec.vACbase
+    end
+    vACbase_LL_RMS = Float64(_legacy_kwget(kwargs, :vACbase_LL_RMS, 220.0))
+    Sbase = Float64(_legacy_kwget(kwargs, :Sbase, 500.0))
+    vACbase_LL_RMS * sqrt(2 / 3)
+end
+
+
+
+
+
 
 # Test commit adding a comment
-@with_kw mutable struct TLC <: Converter
-    ω₀ :: Union{Int, Float64} = 100*π
+# @with_kw mutable struct TLC <: Converter
+#     ω₀ :: Union{Int, Float64} = 100*π
 
-    P :: Union{Int, Float64} = -10              # active power [MW]
-    Q :: Union{Int, Float64} = 3                # reactive power [MVA]
-    P_dc :: Union{Int, Float64} = 100           # DC power [MW]
-    P_min :: Union{Float64, Int} = -100         # min active power output [MW]
-    P_max :: Union{Float64, Int} = 100          # max active power output [MW]
-    Q_min :: Union{Float64, Int} = -50          # min reactive power output [MVA]
-    Q_max :: Union{Float64, Int} = 50           # max reactive power output [MVA]
+#     P :: Union{Int, Float64} = -10              # active power [MW]
+#     Q :: Union{Int, Float64} = 3                # reactive power [MVA]
+#     P_dc :: Union{Int, Float64} = 100           # DC power [MW]
+#     P_min :: Union{Float64, Int} = -100         # min active power output [MW]
+#     P_max :: Union{Float64, Int} = 100          # max active power output [MW]
+#     Q_min :: Union{Float64, Int} = -50          # min reactive power output [MVA]
+#     Q_max :: Union{Float64, Int} = 50           # max reactive power output [MVA]
 
-    θ :: Union{Int, Float64} = 0
-    Vₘ :: Union{Int, Float64} = 333             # AC voltage, amplitude [kV]
-    Vᵈᶜ :: Union{Int, Float64} = 640            # DC-bus voltage [kV]
+#     θ :: Union{Int, Float64} = 0
+#     Vₘ :: Union{Int, Float64} = 333             # AC voltage, amplitude [kV]
+#     Vᵈᶜ :: Union{Int, Float64} = 640            # DC-bus voltage [kV]
 
-    Lᵣ :: Union{Int, Float64}  = 60e-3         # inductance of the converter transformer at the converter side [H]
-    Rᵣ :: Union{Int, Float64}  = 0.535         # resistance of the converter transformer at the converter side [H]
+#     Lᵣ :: Union{Int, Float64}  = 60e-3         # inductance of the converter transformer at the converter side [H]
+#     Rᵣ :: Union{Int, Float64}  = 0.535         # resistance of the converter transformer at the converter side [H]
 
-    Lₐᵣₘ :: Union{Int, Float64}  = 0        # filter inductance [H] Needed for power flow calculation so default zero
-    Rₐᵣₘ :: Union{Int, Float64}  = 0        # equivalent filter resistance
+#     Lₐᵣₘ :: Union{Int, Float64}  = 0        # filter inductance [H] Needed for power flow calculation so default zero
+#     Rₐᵣₘ :: Union{Int, Float64}  = 0        # equivalent filter resistance
 
-    controls :: OrderedDict{Symbol, Controller} = OrderedDict{Symbol, Controller}()
-    equilibrium :: Array{Union{Int, Float64}} = [0]
-    A :: Array{Complex} = [0]
-    B :: Array{Complex} = [0]
-    C :: Array{Complex} = [0]
-    D :: Array{Complex} = [0]
+#     controls :: OrderedDict{Symbol, Controller} = OrderedDict{Symbol, Controller}()
+#     equilibrium :: Array{Union{Int, Float64}} = [0]
+#     A :: Array{Complex} = [0]
+#     B :: Array{Complex} = [0]
+#     C :: Array{Complex} = [0]
+#     D :: Array{Complex} = [0]
 
-    timeDelay :: Float64 = 0
-    padeOrderNum :: Int = 0
-    padeOrderDen :: Int = 0
+#     timeDelay :: Float64 = 0
+#     padeOrderNum :: Int = 0
+#     padeOrderDen :: Int = 0
 
-    vACbase_LL_RMS :: Union{Int, Float64} = 220 # Voltage base in kV
-    Sbase :: Union{Int, Float64} = 500 # Power base in MW
-    vDCbase :: Union{Int, Float64} = 640        # DC voltage base [kV]
-    iDCbase :: Union{Int, Float64} = 0
+#     vACbase_LL_RMS :: Union{Int, Float64} = 220 # Voltage base in kV
+#     Sbase :: Union{Int, Float64} = 500 # Power base in MW
+#     vDCbase :: Union{Int, Float64} = 640        # DC voltage base [kV]
+#     iDCbase :: Union{Int, Float64} = 0
 
-    vACbase :: Float64 = 0 # AC voltage base for impedance/admittance calculation
-    iACbase :: Float64 = 0 # AC current base for impedance/admittance calculation
+#     vACbase :: Float64 = 0 # AC voltage base for impedance/admittance calculation
+#     iACbase :: Float64 = 0 # AC current base for impedance/admittance calculation
 
-    debug = nothing
-end
+#     debug = nothing
+# end
 
 """
     function tlc(;args...)
