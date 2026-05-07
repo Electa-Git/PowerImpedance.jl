@@ -471,7 +471,7 @@ function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
 			if typeof(pm) <: P._PM.AbstractACPModel || typeof(pm) <: P._PM.AbstractACRModel
 				P._PMACDC.constraint_dc_droop_control(pm, c)
 			else
-				P._PM.Memento.warn(
+				P._PMACDC.Memento.warn(
 					P._PM._LOGGER,
 					join([
 						"Droop only defined for ACP and ACR formulations, converter ",

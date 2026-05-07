@@ -12,9 +12,9 @@ import PowerModelsACDC as _PMACDC
 ## Memento settings
 
 # Create our module level logger (this will get precompiled)
-const Memento = _PM.Memento
+const Memento = _PMACDC.Memento
 const _Memento = Memento
-const _LOGGER = _PM._LOGGER
+const _LOGGER = _PMACDC._LOGGER
 
 # Register the module level logger at runtime so that folks can access the logger via `getlogger(PowerModelsMCDC)`
 # NOTE: If this line is not included then the precompiled `PowerModelsMCDC._LOGGER` won't be registered at runtime.
