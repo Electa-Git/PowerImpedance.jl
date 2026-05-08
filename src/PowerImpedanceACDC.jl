@@ -15,6 +15,9 @@ using Parameters
 using DataStructures
 using DocStringExtensions
 
+## Overloading of Base functions (TODO: In future from PowerBlocks overloading)
+import Base: convert
+
 # Time delays
 using ControlSystemsBase, RobustAndOptimalControl
 
@@ -27,7 +30,7 @@ using LinearAlgebra
 using ForwardDiff, NonlinearSolve, SteadyStateDiffEq  # solve diffs and nonlinear equations
 
 #PowerBlocks
-import PowerBlocks as PB
+# import PowerBlocks as PB
 
 # Power flow
 import PowerModels, PowerModelsACDC

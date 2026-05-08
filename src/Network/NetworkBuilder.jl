@@ -4,9 +4,11 @@ export pin, ⟷, ↔
 
 const P = parentmodule(@__MODULE__)
 
+
 struct Pin
 	element::Symbol
-	name::Symbol
+	side::Int
+	terminal::Int
 end
 
 struct Connection
@@ -21,7 +23,61 @@ mutable struct BuilderState
 	powerflow::Any
 end
 
-pin(element::Symbol, name) = Pin(element, Symbol(name))
+pin(element::Symbol, side::Integer, terminal::Integer) =
+	Pin(element, Int(side), Int(terminal))
+
+pin(element::Symbol, name) = begin
+	side, terminal = parse_pin_name(name)
+	Pin(element, side, terminal)
+end
+
+"""
+Parse a pin name in the form "side.terminal", Symbol 1.1, or a tuple (side, terminal) into a (side, terminal) pair of integers.
+"""
+function parse_pin_name(name)
+	name isa Tuple{<:Integer, <:Integer} && return (Int(name[1]), Int(name[2]))
+
+	parts = split(string(name), ".")
+	length(parts) == 2 ||
+		throw(
+			ArgumentError(
+				"Pin name must contain side and terminal in the form side.terminal, got $(repr(name)).",
+			),
+		)
+
+	all(!isempty(part) for part in parts) ||
+		throw(ArgumentError("Pin name cannot contain empty side or terminal: $(repr(name))."))
+
+	try
+		side = parse(Int, parts[1])
+		terminal = parse(Int, parts[2])
+		side > 0 || throw(ArgumentError("Pin side must be >= 1, got $side."))
+		terminal > 0 || throw(ArgumentError("Pin terminal must be >= 1, got $terminal."))
+		return (side, terminal)
+	catch err
+		err isa ArgumentError && rethrow()
+		throw(
+			ArgumentError(
+				"Pin name must contain integer side and terminal in the form side.terminal, got $(repr(name)).",
+			),
+		)
+	end
+end
+"""
+Generate a unique pin name based on the element, side, and terminal. The name is in the form "side.terminal", e.g. "1.1" for side 1 terminal 1.
+This is the legacy naming convention for pins in PIACDC
+"""
+pin_name(pin::Pin) = Symbol("$(pin.side).$(pin.terminal)")
+
+function Base.getproperty(pin::Pin, field::Symbol)
+	field === :name && return pin_name(pin)
+	return getfield(pin, field)
+end
+
+function Base.propertynames(::Pin, private::Bool = false)
+	props = (:element, :side, :terminal, :name)
+	return private ? props : props
+end
 
 function connection_endpoints(connection::Connection)
 	return connection.endpoints
@@ -96,9 +152,10 @@ end
 function active_setpoint_values(network::P.Network)
 	values = Dict{Symbol, Any}()
 
+	# TODO: this should be changed to a linearized representation in next step
 	for (name, element) in pairs(network.elements)
 		if P.is_converter(element) || P.is_generator(element)
-			values[name] = deepcopy(element.element_model)
+			values[name] = deepcopy(element)
 		end
 	end
 
@@ -138,15 +195,15 @@ function restore_active_setpoint_values!(network::P.Network, powerflow::NamedTup
 				ArgumentError("Cached power flow expected :$name to be an active element."),
 			)
 
-		typeof(element.element_model) === typeof(cached_value) ||
+		typeof(element) === typeof(cached_value) ||
 			throw(
 				ArgumentError(
 					"Cached active setpoint value for :$name has type $(typeof(cached_value)), " *
-					"but the rebuilt element has type $(typeof(element.element_model)).",
+					"but the rebuilt element has type $(typeof(element)).",
 				),
 			)
 
-		element.element_model = deepcopy(cached_value)
+		element = deepcopy(cached_value)
 	end
 
 	sync_parent_powerflow_globals!(powerflow)
@@ -206,6 +263,8 @@ function network_endpoint(
 	elements::NamedTuple,
 	endpoint::Pin,
 )
+	endpoint_name = pin_name(endpoint)
+
 	hasproperty(elements, endpoint.element) ||
 		throw(ArgumentError("Unknown element :$(endpoint.element) in connection endpoint."))
 
@@ -221,22 +280,32 @@ function network_endpoint(
 		)
 	end
 
-	haskey(network.elements[endpoint.element].pins, endpoint.name) ||
+	haskey(network.elements[endpoint.element].pins, endpoint_name) ||
 		throw(
-			ArgumentError("Unknown pin $(endpoint.name) on element :$(endpoint.element)."),
+			ArgumentError("Unknown pin $(endpoint_name) on element :$(endpoint.element)."),
 		)
 
-	return (endpoint.element, endpoint.name)
+	return (endpoint.element, endpoint_name)
 end
 
+#TODO: What is this?
 function network_endpoint(::P.Network, ::NamedTuple, endpoint::Symbol)
 	return endpoint
 end
 
+"""
+Retrieve the value of a specific option, returning a default value if the option is not set.
+"""
 function option_value(options::NamedTuple, name::Symbol, default)
 	return hasproperty(options, name) ? getproperty(options, name) : default
 end
+"""
 
+Set a global variable in the parent module of NetworkBuilder. 
+This is used to make power flow results accessible for custom constraints and objective functions defined by the user.
+
+I do not understand this one as well
+"""
 function set_parent_global!(name::Symbol, value)
 	Core.eval(P, Expr(:(=), name, value))
 	return value
@@ -265,13 +334,14 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 	push!(bus2nodes, "gnd" => ground_nodes)
 
 	for element in values(network.elements)
-		P.make_powerflow!(
+		P.convert!(
 			data,
+			element,
+			P.PMACDC,
 			nodes2bus,
 			bus2nodes,
 			elem2comp,
 			comp2elem,
-			element,
 			global_dict,
 		)
 	end

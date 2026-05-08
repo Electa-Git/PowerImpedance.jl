@@ -6,7 +6,7 @@
     - Lets PowerModelsACDC solve the powerflow
     - Use the setpoints to convert to a linearized admittance representation
 """
-function convert(nw::Network, ::Type{LinearizedAdmittanceNetwork})
+function Base.convert(nw::Network, ::Type{LinearizedAdmittanceNetwork})
 
     if is_linear(nw)
         println("Network only consists of linear elements. Skipping power flow.")
@@ -90,7 +90,7 @@ function convert!(data, nets, ::Type{PMACDC}, nw)
     end
 end
 
-function convert(nw::Network, ::Type{PMACDC})
+function Base.convert(nw::Network, ::Type{PMACDC})
     global ang_min, ang_max, result, nodes2bus, elem2comp, data
     global_dict = PowerModelsACDC.get_pu_bases(1000, net.voltageBase[1]) # 3-PH MVA, LL-RMS, Original setting was 100,320
     global_dict["omega"] = 2π * 50

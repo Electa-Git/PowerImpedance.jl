@@ -182,7 +182,7 @@ function power_flow(net::Network)
     
     #### 1. Create PowerModels dictionary and make interface 
     for elem in values(net.elements)
-        make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+        convert!(data, elem, PMACDC, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     end
 
     if use_mcdc
@@ -233,30 +233,30 @@ function power_flow(net::Network)
         solve_mcdcpf(data, _PM.ACPPowerModel, ipopt; setting = s) :
         solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting = s)
     
-    # # Rerun power flow with relaxed constraints if no convergence
-    # if result["termination_status"] == MOI.LOCALLY_SOLVED
-    #     println("Power flow converged succesfully.")
-    # else
-    #     println("No convergence (try again with relaxation): ",result["termination_status"])
+    # Rerun power flow with relaxed constraints if no convergence
+    if result["termination_status"] == MOI.LOCALLY_SOLVED
+        println("Power flow converged succesfully.")
+    else
+        println("No convergence (try again with relaxation): ",result["termination_status"])
         
-    #     result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
-    #     if result["termination_status"] == MOI.LOCALLY_SOLVED
-    #         println("Power flow solution found with relaxation")
-    #     else
-    #         error("Second iteration not succesful. Check your formulation")
-    #     end
-    # end
+        result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
+        if result["termination_status"] == MOI.LOCALLY_SOLVED
+            println("Power flow solution found with relaxation")
+        else
+            error("Second iteration not succesful. Check your formulation")
+        end
+    end
 
 	#### 3. Update setpoints of active elements
 	for (key, element) in net.elements
 
-#         # Check if it is an active component
-#         if !(is_converter(element) || is_generator(element))
-#             continue ## Skip iteration if it is active
-#         end
-#         #Find the corresponding PowerModels component
-#         comp_type, key = elem2comp[element.symbol]
-#         elem_dict = result["solution"][comp_type][string(key)]
+        # Check if it is an active component
+        if !(is_converter(element) || is_generator(element))
+            continue ## Skip iteration if it is active
+        end
+        #Find the corresponding PowerModels component
+        comp_type, key = elem2comp[element.symbol]
+        elem_dict = result["solution"][comp_type][string(key)]
         
         if is_converter(element) # In converter bus1 is DC and bus2 is AC
             dc_node = make_node(element, 1) 
@@ -383,33 +383,33 @@ function power_flow(net::Network)
 			θ = result["solution"]["bus"][string(ac_bus)]["va"]
 			update_string = string(key)
 
-#             setpoint = SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+            setpoint = SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
 
-#             print(update_string * " Active Power [MW]: ")
-#             println(Pgen)
-#             print(update_string * " Reactive Power [MVar]: ")
-#             println(Qgen)
-#             print(update_string * " AC Voltage Magnitude [pu]: ")
-#             println(result["solution"]["bus"][string(ac_bus )]["vm"])
-#             print(update_string * " AC Voltage Angle [rad]: ")
-#             println(θ)
+            print(update_string * " Active Power [MW]: ")
+            println(Pgen)
+            print(update_string * " Reactive Power [MVar]: ")
+            println(Qgen)
+            print(update_string * " AC Voltage Magnitude [pu]: ")
+            println(result["solution"]["bus"][string(ac_bus )]["vm"])
+            print(update_string * " AC Voltage Angle [rad]: ")
+            println(θ)
 
-#             update!(element, element.element_model, setpoint)
-#             # Update fields element
-#             # element.setpoint = setpoint #Update operating point
-#             # element.A = A
-#             # element.B = B
-#             # element.C = C
-#             # element.D = D
+            update!(element, element.element_model, setpoint)
+            # Update fields element
+            # element.setpoint = setpoint #Update operating point
+            # element.A = A
+            # element.B = B
+            # element.C = C
+            # element.D = D
             
 
      
-#         end
-#     end
+        end
+    end
 
 	return result, data, nodes2bus, elem2comp
 
-# end
+end
 
 function is_linear(net::Network)
 	## Only if no converter or SM, return true
@@ -452,17 +452,17 @@ function set_bus_type_dc(bus_data, type)
 end
 
 ## THis function makes sure we dispatch on the right component
-make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict) =
-	make_power_flow!(
-		elem.element_model,
-		data,
-		nodes2bus,
-		bus2nodes,
-		elem2comp,
-		comp2elem,
-		elem,
-		global_dict,
-	)
+# make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict) =
+# 	make_power_flow!(
+# 		elem.element_model,
+# 		data,
+# 		nodes2bus,
+# 		bus2nodes,
+# 		elem2comp,
+# 		comp2elem,
+# 		elem,
+# 		global_dict,
+# 	)
 
 function injection_initialization!(data, elem2comp, comp2elem, ac_bus, elem, global_dict)
 	## A lot of initialization for source and machine are the same so combined in here

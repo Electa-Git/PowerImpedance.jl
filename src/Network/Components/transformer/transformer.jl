@@ -207,7 +207,7 @@ function eval_y(t::Transformer, s::ComplexF64)
 	return abcd_to_y(eval_abcd(t, s))
 end
 
-function convert!(data,elem::Element{Transformer},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+function convert!(data,elem::Element{<:Transformer},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
     t = elem.element_model
 	# Initialize an AC branch between both nodes

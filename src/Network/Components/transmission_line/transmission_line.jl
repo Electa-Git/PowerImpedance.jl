@@ -5,7 +5,7 @@ function eval_y(tl :: Transmission_line, s :: Complex)
 end
 
 
-function convert!(data,elem::Element{Transmission_line},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+function convert!(data,elem::Element{<:Transmission_line},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
     tl = elem.element_model
     if is_three_phase(elem)    

@@ -773,7 +773,7 @@ function eval_y(gen :: SynchronousMachine, s :: Complex)
 end
 
 
-function convert!(data,elem::Element{SynchronousMachine},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+function convert!(data,elem::Element{<:SynchronousMachine},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
     machine = elem.element_model
     # Check if AC or DC source (second one not implemented)

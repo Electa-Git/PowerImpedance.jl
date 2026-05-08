@@ -140,27 +140,27 @@ function eval_y(imp::Impedance, s::Complex)
 	return abcd_to_y(eval_abcd(imp, s))
 end
 
-### PowerBlocks
-function topowerblocks(elem::Element{Impedance})
+# ### PowerBlocks
+# function topowerblocks(elem::Element{Impedance})
 	
-	# Check if AC or DC source (second one not implemented)
-	pb = PB.ImpedanceData(;value=elem.element_model.value)
+# 	# Check if AC or DC source (second one not implemented)
+# 	# pb = PB.ImpedanceData(;value=elem.element_model.value)
 	
-	if is_load(elem) #Shunt
-		nbports = 1
-	else
-		nbports = 2
-	end
+# 	if is_load(elem) #Shunt
+# 		nbports = 1
+# 	else
+# 		nbports = 2
+# 	end
 
-	elecdomain = elecdomainpb(elem)
+# 	elecdomain = elecdomainpb(elem)
 	
-	return pb, nbports, elecdomain
-end
+# 	return pb, nbports, elecdomain
+# end
 
 
-function addecs!(ecsdata, elem::Element{Impedance}, blockid, pblut) #No ecsdata for impedance
-	return 
-end
+# function addecs!(ecsdata, elem::Element{Impedance}, blockid, pblut) #No ecsdata for impedance
+# 	return 
+# end
 		
 
 
@@ -169,7 +169,7 @@ end
 # POWER FLOW
 
 
-function convert!(data,elem::Element{Impedance},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+function convert!(data,elem::Element{<:Impedance},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
     imp = elem.element_model
 

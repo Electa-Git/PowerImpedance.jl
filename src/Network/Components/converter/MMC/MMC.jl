@@ -290,7 +290,7 @@ function pf_vtar_pu(conv::MMC, elem::Element, global_dict)
     return elem.setpoint.Vac / vbase_ln_rms
 end
 
-function convert!(data,elem::Element{MMC},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
     conv = elem.element_model
     dc_node = make_node(elem, 1)

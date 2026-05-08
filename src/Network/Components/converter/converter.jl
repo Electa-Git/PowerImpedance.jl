@@ -12,7 +12,7 @@ function eval_y(converter :: AbstractConverter, s :: Complex)
 end
 
 
-function convert!(data,elem::Element{AbstractConverter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+function convert!(data,elem::Element{<:AbstractConverter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
     converter = elem.element_model
     pins = elem.pins

@@ -47,7 +47,7 @@ $(SIGNATURES)
 The method creates the AC/DC buses, converter component entry, operating-point
 setpoints, limits, and reactor parameters expected by PowerModelsACDC.
 """
-function convert!(data,elem::Element{Converter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+function convert!(data,elem::Element{<:Converter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
     converter = elem.element_model
     

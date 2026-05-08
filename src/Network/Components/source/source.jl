@@ -88,9 +88,9 @@ function eval_y(source::Source, s::Complex)
 end
 
 
-function convert!(data,elem::Element{Source},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+function convert!(data,elem::Element{<:Source},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
-    # source = elem.element_model
+    source = elem.element_model
 
 	# Check if AC or DC source (second one not implemented)
 	is_three_phase(elem) ?
@@ -116,38 +116,38 @@ function convert!(data,elem::Element{Source},::Type{PMACDC}, nodes2bus, bus2node
 
 end
 
-function topowerblocks(elem::Element{Source})
+# function topowerblocks(elem::Element{Source})
 	
-	# Check if AC or DC source (second one not implemented)
-	nbports=1
-	elecdomain = elecdomainpb(elem)
-	if is_three_phase(elem)
-		pb = PB.ACSourceData()
+# 	# Check if AC or DC source (second one not implemented)
+# 	nbports=1
+# 	elecdomain = elecdomainpb(elem)
+# 	if is_three_phase(elem)
+# 		pb = PB.ACSourceData()
 
-	else
-		pb = PB.DCSourceData()
-	end
+# 	else
+# 		pb = PB.DCSourceData()
+# 	end
 
-	return pb, nbports, elecdomain
-end
+# 	return pb, nbports, elecdomain
+# end
 
 
-function addecs!(ecsdata, elem::Element{Source}, blockid, pblut)
+# function addecs!(ecsdata, elem::Element{Source}, blockid, pblut)
 	
-	nongroundnets = filtergrounds(values(elem.pins))
-	busid = pblut.bus[first(nongroundnets)] # All nets map to the same busid in the LUT
+# 	nongroundnets = filtergrounds(values(elem.pins))
+# 	busid = pblut.bus[first(nongroundnets)] # All nets map to the same busid in the LUT
 
-	value = elem.element_model.V 
+# 	value = elem.element_model.V 
 	
-	if is_three_phase(elem)
-		componenttype = PB.Vac
-		PB.add!(ecsdata, PB.θ, busid, 0)
-	else
-		componenttype =  PB.Vdc
-	end
+# 	if is_three_phase(elem)
+# 		componenttype = PB.Vac
+# 		PB.add!(ecsdata, PB.θ, busid, 0)
+# 	else
+# 		componenttype =  PB.Vdc
+# 	end
 
-	PB.add!(ecsdata, componenttype, busid, value)
-end
+# 	PB.add!(ecsdata, componenttype, busid, value)
+# end
 		
 
 

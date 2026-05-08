@@ -11,10 +11,10 @@ export SetPoint
 # PB.CompositeDataStyle(::Network) = PB.IsCompositeData()
 
 struct PIACDC end
-PB.ToolType(::PIACDC) = IsTool()
+# PB.ToolType(::PIACDC) = IsTool()
 
 struct PMACDC end
-PB.ToolType(::PMACDC) = IsTool()
+# PB.ToolType(::PMACDC) = IsTool()
 
 
 """
