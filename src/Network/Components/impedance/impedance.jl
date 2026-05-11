@@ -169,65 +169,66 @@ end
 # POWER FLOW
 
 
+pmtype(elem::Element{<:Impedance}) = is_three_phase(elem) ? (is_load(elem) ? "shunt" : "branch") : "branchdc"
+
 function convert!(data,elem::Element{<:Impedance},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-    
-    imp = elem.element_model
 
-	if is_three_phase(elem)
-		if is_load(elem) #This means it's a ground connected impedance --> shunt impedance
-			### MAKE BUSES OUT OF THE NODES
-			# Find the nodes not connected to the ground
-			ac_nodes = make_non_ground_node(elem, bus2nodes)
-
-			ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-			key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "shunt")
-
-			(data["shunt"])[string(key)] = Dict{String, Any}()
-			((data["shunt"])[string(key)])["source_id"] = Any["bus", ac_bus]
-			((data["shunt"])[string(key)])["index"] = key
-			((data["shunt"])[string(key)])["shunt_bus"] = ac_bus
-			data["shunt"][string(key)]["status"] = 1
-
-			abcd = eval_abcd(imp, global_dict["omega"] * 1im)
-			n = 3
-			Z = (abcd[1:n, (n+1):end])[1, 1] / global_dict["Z"]
-			data["shunt"][string(key)]["gs"] = real(1/Z)
-			data["shunt"][string(key)]["bs"] = imag(1/Z)
-		else
-			# Initialize an AC branch between both nodes
-			key = branch_ac!(
-				data,
-				nodes2bus,
-				bus2nodes,
-				elem2comp,
-				comp2elem,
-				elem,
-				global_dict,
-			)
-			((data["branch"])[string(key)])["transformer"] = false
-			((data["branch"])[string(key)])["tap"] = 1
-			((data["branch"])[string(key)])["shift"] = 0
-			((data["branch"])[string(key)])["c_rating_a"] = 1
-
-			abcd = eval_abcd(imp, global_dict["omega"] * 1im)
-			n = 3
-			Z = (abcd[1:n, (n+1):end])[1, 1] / global_dict["Z"] # Assuming impedance with equal values for all phases 
-			((data["branch"])[string(key)])["br_r"] = real(Z)
-			((data["branch"])[string(key)])["br_x"] = imag(Z)
-			((data["branch"])[string(key)])["g_fr"] = 0
-			((data["branch"])[string(key)])["b_fr"] = 0
-			((data["branch"])[string(key)])["g_to"] = 0
-			((data["branch"])[string(key)])["b_to"] = 0
-		end
-	else
-		## DC impedance
-		#TODO: Add two pin impedance case here as well --> Transformation from 2 --> 1 pin
-		key =
-			branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
-		abcd = eval_abcd(imp, 1e-6*1im)
-		Z = abcd[1, 2] * global_dict["S"] / global_dict["V"]^2 # To DC per unit system
-		((data["branchdc"])[string(key)])["r"] = real(Z)
+	if pmtype(elem) == "shunt"
+		ac_nodes = make_non_ground_node(elem, bus2nodes)
+		ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
+		key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "shunt")
+		return convert!(data, elem, PMACDC, key, (ac_bus,), global_dict)
+	elseif pmtype(elem) == "branch"
+		key, bus1,bus2 = branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+		return convert!(data, elem, PMACDC, key, (bus1, bus2), global_dict)
 	end
 
+	key,bus1,bus2 = branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+	return convert!(data, elem, PMACDC, key, (bus1, bus2), global_dict)
+end
+
+function convert!(data, elem::Element{<:Impedance}, ::Type{PMACDC}, key, buses, global_dict)
+    imp = elem.element_model
+
+	if pmtype(elem) == "shunt"
+		ac_bus = first(buses)
+		shunt = Dict{String, Any}()
+		shunt["source_id"] = Any["bus", ac_bus]
+		shunt["index"] = key
+		shunt["shunt_bus"] = ac_bus
+		shunt["status"] = 1
+
+		abcd = eval_abcd(imp, global_dict["omega"] * 1im)
+		n = 3
+		z = abcd[1:n, (n+1):end][1, 1] / global_dict["Z"]
+		shunt["gs"] = real(1 / z)
+		shunt["bs"] = imag(1 / z)
+		data["shunt"][string(key)] = shunt
+		return nothing
+	elseif pmtype(elem) == "branch"
+		branch_ac!(data, key, buses, global_dict)
+		branch = data["branch"][string(key)]
+		branch["transformer"] = false
+		branch["tap"] = 1
+		branch["shift"] = 0
+		branch["c_rating_a"] = 1
+
+		abcd = eval_abcd(imp, global_dict["omega"] * 1im)
+		n = 3
+		z = abcd[1:n, (n+1):end][1, 1] / global_dict["Z"]
+		branch["br_r"] = real(z)
+		branch["br_x"] = imag(z)
+		branch["g_fr"] = 0
+		branch["b_fr"] = 0
+		branch["g_to"] = 0
+		branch["b_to"] = 0
+		return nothing
+	end
+	branch_dc!(data, key, buses, global_dict)
+	branchdc = data["branchdc"][string(key)]
+	abcd = eval_abcd(imp, 1e-6 * 1im)
+	z = abcd[1, 2] * global_dict["S"] / global_dict["V"]^2
+	branchdc["r"] = real(z)
+	return nothing
 end
 

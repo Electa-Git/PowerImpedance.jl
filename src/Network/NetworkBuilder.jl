@@ -156,6 +156,34 @@ function internnet(registry::Table, element::Symbol, side::Int)
 	end
 end
 
+#### Helper functions to Connectionregistry
+
+function acconnections(registry::ConnectionsRegistry)
+	return filter(row -> row.elecdomain == 1, registry.registry)
+end
+
+function dccconnections(registry::ConnectionsRegistry)
+	return filter(row -> row.elecdomain == 2, registry.registry)
+end
+
+function sortedcomponentconnections(registry::ConnectionsRegistry, component::Symbol)
+	# Find connections of component
+	compconn = filter(row -> row.elem == component, registry.registry)
+	# First AC and then DC connections
+	acconn = filter(row -> row.elecdomain == 1, compconn)
+	sort!(accon, by = row -> (row.side, row.terminal))
+	dcconn = filter(row -> row.elecdomain == 2, compconn)
+	sort!(dccon, by = row -> (row.side, row.terminal))
+	elecdomainsorted = vcat(acconn, dcconn)
+
+
+	return elecdomainsorted
+
+end
+
+
+
+##### Builder state
 
 mutable struct BuilderState
 	elements::NamedTuple
@@ -505,7 +533,7 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 	global_dict = P.PowerModelsACDC.get_pu_bases(1000, network.voltageBase[1])
 	global_dict["omega"] = 2π * 50
 
-	data = P.data_init(Dict{String, Any}(), global_dict)
+	data = P.data_init!(Dict{String, Any}(), global_dict)
 	nodes2bus = Dict()
 	bus2nodes = Dict()
 	elem2comp = Dict()
@@ -965,5 +993,7 @@ function non_ground_node(element::P.Element, nodes2bus)
 
 	return Set(node for node in values(element.pins) if !(node in ground_nodes))
 end
+
+include("NB_power_flow.jl")
 
 end

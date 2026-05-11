@@ -47,12 +47,9 @@ $(SIGNATURES)
 The method creates the AC/DC buses, converter component entry, operating-point
 setpoints, limits, and reactor parameters expected by PowerModelsACDC.
 """
-function convert!(data,elem::Element{<:Converter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-    
-    converter = elem.element_model
-    
-    pins = elem.pins
+pmtype(::Element{<:Converter}) = "convdc"
 
+function convert!(data,elem::Element{<:Converter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     # Busses interface (dc_bus --> 1.1 & ac_bus --> 2.1 and 2.2)
     dc_node = make_node(elem, 1) 
     ac_nodes = make_node(elem,2) #Similar AC bus
@@ -60,7 +57,14 @@ function convert!(data,elem::Element{<:Converter},::Type{PMACDC}, nodes2bus, bus
     ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
     
     # Interface element
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "convdc")
+    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
+    return convert!(data, elem, PMACDC, key, (ac_bus, dc_bus), global_dict)
+end
+
+function convert!(data, elem::Element{<:Converter}, ::Type{PMACDC}, key, buses, global_dict)
+    converter = elem.element_model
+    ac_bus = buses[1]
+    dc_bus = buses[2]
 
     (data["convdc"])[string(key)] = Dict{String, Any}()
     ((data["convdc"])[string(key)])["busdc_i"] = dc_bus
@@ -179,4 +183,5 @@ function convert!(data,elem::Element{<:Converter},::Type{PMACDC}, nodes2bus, bus
     ((data["busdc"])[string(dc_bus)])["Vdcmax"] = 1.1 * ((data["busdc"])[string(dc_bus)])["Vdc"]
     ((data["busdc"])[string(dc_bus)])["Vdcmin"] = 0.9 * ((data["busdc"])[string(dc_bus)])["Vdc"]
     ((data["busdc"])[string(dc_bus)]) = set_bus_type_dc((data["busdc"])[string(dc_bus)], ((data["convdc"])[string(key)])["type_dc"])
+    return nothing
 end

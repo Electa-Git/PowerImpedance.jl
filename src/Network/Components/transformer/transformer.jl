@@ -207,18 +207,22 @@ function eval_y(t::Transformer, s::ComplexF64)
 	return abcd_to_y(eval_abcd(t, s))
 end
 
+pmtype(::Element{<:Transformer}) = "branch"
+
 function convert!(data,elem::Element{<:Transformer},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-    
+
+	key, bus1, bus2 = branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+		
+	return convert!(data, elem, PMACDC, key, (bus1, bus2), global_dict)
+end
+
+function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch, (bus1, bus2), global_dict)
     t = elem.element_model
-	# Initialize an AC branch between both nodes
-	key_branch =
-		branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
-
-	# Add transformer data)
-	((data["branch"])[string(key_branch)])["transformer"] = true
-
-	((data["branch"])[string(key_branch)])["shift"] = 0
-	((data["branch"])[string(key_branch)])["c_rating_a"] = 1
+	branch_ac!(data, key_branch, (bus1, bus2), global_dict)
+	branch = data["branch"][string(key_branch)]
+	branch["transformer"] = true
+	branch["shift"] = 0
+	branch["c_rating_a"] = 1
 
 	abcd = eval_abcd(t, global_dict["omega"] * 1im)
 	n = 3
@@ -228,18 +232,19 @@ function convert!(data,elem::Element{<:Transformer},::Type{PMACDC}, nodes2bus, b
 		abcd[(n+1):end, 1:n],
 		abcd[(n+1):end, (n+1):end],
 	)
-	Y = [d*inv(b) c-d*inv(b)*a; -inv(b) inv(b)*a] * global_dict["Z"]
+	y = [d * inv(b) c - d * inv(b) * a; -inv(b) inv(b) * a] * global_dict["Z"]
 
-	tap = sqrt(real(Y[n+1, n+1]/Y[1, 1]))
-	ys = -Y[1, n+1]*tap
-	yc = Y[n+1, n+1] - ys
+	tap = sqrt(real(y[n+1, n+1] / y[1, 1]))
+	ys = -y[1, n+1] * tap
+	yc = y[n+1, n+1] - ys
 
-	((data["branch"])[string(key_branch)])["tap"] = tap
-	((data["branch"])[string(key_branch)])["br_r"] = real(1/ys)
-	((data["branch"])[string(key_branch)])["br_x"] = imag(1/ys)
-	((data["branch"])[string(key_branch)])["g_fr"] = real(yc)/2
-	((data["branch"])[string(key_branch)])["b_fr"] = imag(yc)/2
-	((data["branch"])[string(key_branch)])["g_to"] = real(yc)/2
-	((data["branch"])[string(key_branch)])["b_to"] = imag(yc)/2
+	branch["tap"] = tap
+	branch["br_r"] = real(1 / ys)
+	branch["br_x"] = imag(1 / ys)
+	branch["g_fr"] = real(yc) / 2
+	branch["b_fr"] = imag(yc) / 2
+	branch["g_to"] = real(yc) / 2
+	branch["b_to"] = imag(yc) / 2
+	return nothing
 end
 

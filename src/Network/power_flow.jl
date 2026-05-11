@@ -166,7 +166,7 @@ function power_flow(net::Network)
 
     # PowerModels network dictionary
     data = Dict{String, Any}()
-    data = data_init(data, global_dict)
+    data = data_init!(data, global_dict)
     data["_mcdc"] = use_mcdc
    
     ### 2-way dicts so we can have O(1) time complexity (node, elem:PowerImpedance ↔ bus, component:PowerModelsACDC)
@@ -563,11 +563,10 @@ function injection_initialization_dc!(data, elem2comp, comp2elem, dc_bus, elem, 
 	return parse(Int, key)
 end
 
+
+
 function branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
-
-
-
-	# Handle any amount of input and output pins
+    # Handle any amount of input and output pins
 	node1 = make_node(elem, 1)
 	node2 = make_node(elem, 2)
 	bus1 = add_bus_ac!(data, nodes2bus, bus2nodes, node1, global_dict)
@@ -575,6 +574,11 @@ function branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, glob
 
 	# Interface element
 	key_branch = comp_elem_interface!(data, elem2comp, comp2elem, elem, "branch")
+    return key_branch, bus1, bus2
+end
+function branch_ac!(data, key_branch, (bus1,bus2), global_dict)
+
+	
 
 	(data["branch"])[string(key_branch)] = Dict{String, Any}()
 	((data["branch"])[string(key_branch)])["f_bus"] = bus1
@@ -590,10 +594,9 @@ function branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, glob
 	return key_branch
 end
 
-function branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
-	# Add busses for the branch
-	pins = elem.pins
 
+
+function branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
 	node1 = make_node(elem, 1)
 	node2 = make_node(elem, 2)
 	bus1 = add_bus_dc!(data, nodes2bus, bus2nodes, node1, global_dict)
@@ -601,6 +604,14 @@ function branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, glob
 
 	# Interface element
 	key_branch = comp_elem_interface!(data, elem2comp, comp2elem, elem, "branchdc")
+
+    return key_branch, bus1, bus2
+end
+
+function branch_dc!(data, key_branch, (bus1,bus2), global_dict)
+	# Add busses for the branch
+	# pins = elem.pins
+
 
 	(data["branchdc"])[string(key_branch)] = Dict{String, Any}()
 	((data["branchdc"])[string(key_branch)])["fbusdc"] = bus1
@@ -723,7 +734,7 @@ function add_interm_bus_ac!(data, global_dict)
 	return bus
 end
 
-function data_init(data, global_dict)
+function data_init!(data, global_dict)
 	data["source_type"] = "matpower"
 	data["name"] = "network"
 	data["source_version"] = "0.0.0"
