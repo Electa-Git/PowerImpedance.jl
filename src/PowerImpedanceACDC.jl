@@ -18,6 +18,10 @@ using DocStringExtensions
 ## Overloading of Base functions (TODO: In future from PowerBlocks overloading)
 import Base: convert
 
+# Utilities
+
+import TypedTables: Table
+
 # Time delays
 using ControlSystemsBase, RobustAndOptimalControl
 
@@ -57,6 +61,8 @@ include("Packages/PowerModelsMCDC.jl/src/PowerModelsMCDC.jl")
 import .PowerModelsMCDC
 const _PMMCDC = PowerModelsMCDC
 
+# COre
+include("core/util.jl")
 
 # Including all components    
 include("Network/Components/AbstractElement.jl")
