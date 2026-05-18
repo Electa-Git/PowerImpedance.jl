@@ -48,14 +48,16 @@ $(TYPEDFIELDS)
 struct InnerCurrentPIControl{F<:AbstractMeasurementFilter} <: AbstractInnerCurrentControl
     pi_ctrl::PIControl
     filter::F
+    activate_ω_c_multiplication::Bool
 end
 
 function InnerCurrentPIControl(;
     pi_ctrl::PIControl = PIControl(),
     filter::AbstractMeasurementFilter = NoFilter(),
+    activate_ω_c_multiplication::Bool = true
 )
     filter = measurement_filter_ss(filter)
-    return InnerCurrentPIControl{typeof(filter)}(pi_ctrl, filter)
+    return InnerCurrentPIControl{typeof(filter)}(pi_ctrl, filter, activate_ω_c_multiplication)
 end
 
 InnerCurrentPIControl(pi_ctrl::PIControl) = InnerCurrentPIControl(pi_ctrl = pi_ctrl)
@@ -116,8 +118,10 @@ function state_space!(F, x, inputs, block::InnerCurrentPIControl, conv::Abstract
     F[i] = block.pi_ctrl.Ki * e_d
     F[i + 1] = block.pi_ctrl.Ki * e_q
 
-    vMΔ_d_ref_c = x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * sync.ω_c * i_q + v_d
-    vMΔ_q_ref_c = x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * sync.ω_c * i_d + v_q
+    multiplication_factor = block.activate_ω_c_multiplication ? sync.ω_c : 1
+
+    vMΔ_d_ref_c = x.ξ_id + block.pi_ctrl.Kp * e_d + Lᵣ * multiplication_factor * i_q + v_d
+    vMΔ_q_ref_c = x.ξ_iq + block.pi_ctrl.Kp * e_q - Lᵣ * multiplication_factor * i_d + v_q
 
     return (; vMΔ_d_ref_c, vMΔ_q_ref_c)
 end

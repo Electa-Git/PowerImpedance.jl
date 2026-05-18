@@ -1,4 +1,17 @@
-export CirculatingCurrentSuppressionControl, ZeroSequenceCurrentControl, CirculatingCurrentControl
+export CirculatingCurrentSuppressionControl, ZeroSequenceCurrentControl, CirculatingCurrentControl, 
+    NoZeroSequenceCurrentControl, NoCirculatingCurrentSuppressionControl
+
+struct NoZeroSequenceCurrentControl <: AbstractInnerCurrentControl end
+statenames(::NoZeroSequenceCurrentControl) = ()
+function state_space!(F, x, inputs, b::NoZeroSequenceCurrentControl, conv::AbstractMMC)
+    return (vMΣ_z_ref = inputs.meas.v_dc_f/2,)
+end
+
+struct NoCirculatingCurrentSuppressionControl <: AbstractInnerCurrentControl end
+statenames(::NoCirculatingCurrentSuppressionControl) = ()
+function state_space!(F, x, inputs, b::NoCirculatingCurrentSuppressionControl, conv::AbstractMMC)
+    return (vMΣ_d_ref_c = 0, vMΣ_q_ref_c = 0, )
+end
 
 struct ZeroSequenceCurrentControl <: AbstractInnerCurrentControl
     pi_control::PIControl

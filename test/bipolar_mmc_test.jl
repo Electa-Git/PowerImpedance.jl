@@ -230,7 +230,7 @@ end
 
 function bipolar_admittance_si_scan_convention(elem, s::Complex)
     # Raw BipolarMMC ordering is [p, r, n, d, q] and values are per-unit.
-    Y = Matrix{ComplexF64}(eval_parameters(elem.element_model, s))
+    Y = Matrix{ComplexF64}(eval_parameters(elem.element_model, s, SI_units = false))
 
     ep = elem.element_model.pole_pos.element_model.elec
     i_dc_base = ep.Sbase / ep.vDC_base
@@ -305,7 +305,7 @@ end
     pole_neg.D = Yn
 
     bipolar = bipolar_mmc(pole_pos, pole_neg).element_model
-    Y = eval_parameters(bipolar, 2im * π * 50)
+    Y = eval_parameters(bipolar, 2im * π * 50, SI_units = false)
 
     expected = ComplexF64[
         1.0 -1.0 0.0 0.1 0.2;

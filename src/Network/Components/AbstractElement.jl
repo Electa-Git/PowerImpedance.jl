@@ -142,7 +142,7 @@ end
 end =#
 
 # PSCAD requires SI results
-function eval_y(elem::Element, s::Complex)
+function eval_y(elem::Element, s::Complex; SI_units::Bool=true)
     n = size(elem.A, 1)
     Iₙ = Matrix{ComplexF64}(I, n, n)
     Y = elem.C * ((s * Iₙ - elem.A) \ elem.B) + elem.D
@@ -152,7 +152,7 @@ function eval_y(elem::Element, s::Complex)
     if isa(model, TLC)
         elec = model.elec
 
-        vACbase = elec.vACbase * sqrt(2 / 3)
+        vACbase = elec.vACbase
         iACbase = 2 * elec.Sbase / (3 * vACbase)
         iDCbase = elec.Sbase / elec.vDCbase
 
@@ -165,6 +165,28 @@ function eval_y(elem::Element, s::Complex)
         # column scaling = input voltage bases
         Y[:, 1]   ./= elec.vDCbase
         Y[:, 2:3] ./= vACbase
+    end
+
+    if isa(model, MMC)
+        elec = model.elec
+
+        Y = Matrix{ComplexF64}(Y)
+        
+        if !SI_units
+            return Y
+        end
+
+        iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
+        iDCbase = elec.Sbase / elec.vDC_base
+
+        # row scaling = output current bases
+        Y[1, :]   .*= iDCbase
+        Y[2:3, :] .*= iACbase
+
+        # column scaling = input voltage bases
+        Y[:, 1]   ./= elec.vDC_base
+        Y[:, 2:3] ./= (elec.vAC_base / elec.turnsRatio)
+
     end
 
     return Y

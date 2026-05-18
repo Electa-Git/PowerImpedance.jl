@@ -56,9 +56,9 @@ initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c
                                                                 initialvalues(c.occ; inputs, conv)...) 
 
 @with_kw struct ΣdqzControlTEC{E<:AbstractEnergyControl, I1<:AbstractInnerCurrentControl, I2<:AbstractInnerCurrentControl} <: AbstractΣdqzControl
-    tec::E      # Total Energy Control
-    zscc::I1    # Zero-Sequence Current Control
-    ccsc::I2    # Circulating Current Suppression Control
+    tec::E = NoTotalEnergyControl()                     # Total Energy Control
+    zscc::I1 = NoZeroSequenceCurrentControl()           # Zero-Sequence Current Control
+    ccsc::I2 = NoCirculatingCurrentSuppressionControl() # Circulating Current Suppression Control
 end
 statenames(c::ΣdqzControlTEC) = (statenames(c.tec)..., statenames(c.zscc)..., statenames(c.ccsc)...)
 initialvalues(c::ΣdqzControlTEC) = (; initialvalues(c.tec)..., initialvalues(c.zscc)..., initialvalues(c.ccsc)...) 
@@ -213,6 +213,31 @@ function mmc(;
 end
 
 ############################  Power-flow integration MMC ############################
+
+
+
+equilibrium_state_space!(F, x, inputs, c::MMC, setpoint::SetPoint) =
+    equilibrium_state_space!(F, x, inputs, c, c.delta_control, setpoint)
+
+
+equilibrium_state_space!(F, x, inputs, c::MMC, ::AbstractΔdqControl, ::SetPoint) =
+    state_space!(F, x, inputs, c)
+
+equilibrium_state_space!(F, x, inputs, c::MMC, b::ΔdqControlGFL, setpoint::SetPoint) =
+    equilibrium_state_space!(F, x, inputs, c, b.outer_active, setpoint)
+
+equilibrium_state_space!(F, x, inputs, c::MMC, ::AbstractOuterActiveControl, ::SetPoint) =
+    state_space!(F, x, inputs, c)
+
+
+function equilibrium_state_space!(F, x, inputs, c::MMC, ::OuterActiveVdcControl, setpoint::SetPoint)
+    y = state_space!(F, x, inputs, c)
+    idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
+    @assert !isnothing(idx_ξvdc)
+    i_dc_ref = (setpoint.Pdc / c.elec.Sbase) / inputs.v_dc
+    F[idx_ξvdc] = i_dc_ref - 3*x.iΣ_z
+    return y
+end
 
 """
 Resolve zero-valued MMC control references from a power-flow setpoint.

@@ -39,15 +39,10 @@ net = @network begin
 			),
 			occ = PowerImpedanceACDC.InnerCurrentPIControl(
 				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.7691, Ki = 522.7654),
+				activate_ω_c_multiplication = false
 			),
 		),
 		sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
-			tec = PowerImpedanceACDC.TotalEnergyControl(
-				pi_control = PowerImpedanceACDC.PIControl(),
-			),
-			zscc = PowerImpedanceACDC.ZeroSequenceCurrentControl(
-				PowerImpedanceACDC.PIControl(),
-			),
 			ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
 				PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
 			),
@@ -56,7 +51,7 @@ net = @network begin
 			Pac = -pHVDC1,
 			Qac = qC1,
 			θac = 0.0,
-			Vac = transmissionVoltage*sqrt(2), #Amplitude LN for Vac setpoint
+			Vac = transmissionVoltage, #Amplitude LN for Vac setpoint
 			Pdc = -pHVDC1,
 			Vdc = 800,
 		),
@@ -90,15 +85,10 @@ net = @network begin
 			),
 			occ = PowerImpedanceACDC.InnerCurrentPIControl(
 				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.7691, Ki = 522.7654),
+				activate_ω_c_multiplication = false
 			),
 		),
 		sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
-			tec = PowerImpedanceACDC.TotalEnergyControl(
-				pi_control = PowerImpedanceACDC.PIControl(),
-			),
-			zscc = PowerImpedanceACDC.ZeroSequenceCurrentControl(
-				PowerImpedanceACDC.PIControl(),
-			),
 			ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
 				PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
 			),
@@ -107,7 +97,7 @@ net = @network begin
 			Pac = pHVDC1,
 			Qac = qC2,
 			θac = 0.0,
-			Vac = transmissionVoltage*sqrt(2), #Amplitude LN for Vac setpoint
+			Vac = transmissionVoltage, #Amplitude LN for Vac setpoint
 			Pdc = pHVDC1,
 			Vdc = 800,
 		),
@@ -242,7 +232,7 @@ end
 
 
 # Plotting for visual inspection
-
+# using Plots
 # plot(omegas./(2*pi), rad2deg.(angle.(getindex.(imp_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Angle [degree]",minorgrid=true, legend=:none, xaxis = :log10)
 # plot!(omegas./(2*pi), rad2deg.(angle.(getindex.(Z_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Angle [degree]",minorgrid=true, legend=:none, xaxis = :log10, line=:dash)
 # plot(omegas./(2*pi), 20*log10.(abs.(getindex.(imp_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Y_11 [dB]",minorgrid=true, legend=:none, xaxis = :log10)

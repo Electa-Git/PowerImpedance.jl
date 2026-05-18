@@ -150,9 +150,9 @@ The mapping is a superposition of two 3-port MMC admittances:
 - Positive pole: between `(p,r)` using `v_dc,p = v_p - v_r`
 - Negative pole: between `(r,n)` using `v_dc,n = v_r - v_n`
 """
-function eval_parameters(converter::BipolarMMC, s::Complex)
-    Yp = Matrix{ComplexF64}(eval_y(converter.pole_pos, s)) # [dc, d, q]
-    Yn = Matrix{ComplexF64}(eval_y(converter.pole_neg, s)) # [dc, d, q]
+function eval_parameters(converter::BipolarMMC, s::Complex; SI_units::Bool=true)
+    Yp = Matrix{ComplexF64}(eval_y(converter.pole_pos, s; SI_units)) # [dc, d, q]
+    Yn = Matrix{ComplexF64}(eval_y(converter.pole_neg, s; SI_units)) # [dc, d, q]
 
     size(Yp) == (3, 3) || throw(ArgumentError("Positive-pole MMC must provide a 3x3 admittance matrix."))
     size(Yn) == (3, 3) || throw(ArgumentError("Negative-pole MMC must provide a 3x3 admittance matrix."))

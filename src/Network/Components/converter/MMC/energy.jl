@@ -1,6 +1,12 @@
-export TotalEnergyControl, ΣEnergyControl, ΔEnergyControl
+export NoTotalEnergyControl, TotalEnergyControl, ΣEnergyControl, ΔEnergyControl
 
 abstract type AbstractEnergyControl             <: AbstractStateSpace end
+
+struct NoTotalEnergyControl <: AbstractEnergyControl end
+statenames(::NoTotalEnergyControl) = ()
+function state_space!(F, x, meas, b::NoTotalEnergyControl, conv::AbstractMMC)
+    return (iΣ_z_ref = 0,)
+end
 
 @with_kw struct TotalEnergyControl <: AbstractEnergyControl
     pi_control::PIControl
