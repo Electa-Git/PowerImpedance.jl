@@ -133,12 +133,12 @@ function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
     (; vMΔ_d_ref_c, vMΔ_q_ref_c) = out_delta
     (; vMΣ_d_ref_c, vMΣ_q_ref_c, vMΣ_z_ref) = out_sigma
     
-    vMΔ_d_ref_c *= conv.elec.baseConv1; vMΔ_q_ref_c *= conv.elec.baseConv1 # Δ variables multiplied by baseConv1 (DC -> AC base conversion)
-
+    # First, the references are converter to grid reference framoe
     Δθ_c = syncangle(conv.sync, x)
-    vCΔ_d, vCΔ_q = frame_transform(vCΔ_d, vCΔ_q, Δθ_c) #TODO change variables naming
-    vCΣ_d, vCΣ_q = frame_transform(vCΣ_d, vCΣ_q, -2*Δθ_c) # Zero sequence is reference frame independent, so not transformed
+    vMΔ_d_ref, vMΔ_q_ref = inverse_frame_transform(vMΔ_d_ref_c, vMΔ_q_ref_c, Δθ_c)
+    vMΣ_d_ref, vMΣ_q_ref = vMΣ_d_ref_c, vMΣ_q_ref_c
 
+    vMΔ_d_ref *= conv.elec.baseConv1; vMΔ_q_ref *= conv.elec.baseConv1 # Δ variables multiplied by baseConv1 (DC -> AC base conversion)
 
     VΣΔ_CmdqZ = 1/4 * [ 2 * vCΣ_z       0              2 * vCΣ_d               vCΔ_d + vCΔ_Zd       vCΔ_Zq - vCΔ_q       vCΔ_d       vCΔ_q
                         0              2 * vCΣ_z       2 * vCΣ_q               -vCΔ_q - vCΔ_Zq      vCΔ_Zd - vCΔ_d       vCΔ_q       -vCΔ_d
@@ -149,23 +149,19 @@ function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
                         -vCΔ_q          vCΔ_d           -2 * vCΔ_Zq             vCΣ_q               -vCΣ_d              0          -2 * vCΣ_z]
     
     # For optimization, the matrix VΣΔ_CmdqZ could be inversed or factorized (symbolically) beforehand. But is it needed/better?
-    (mΣd, mΣq, mΣz, mΔd, mΔq, mΔZd, mΔZq) = VΣΔ_CmdqZ \ [vMΣ_d_ref_c; vMΣ_q_ref_c; vMΣ_z_ref; vMΔ_d_ref_c; vMΔ_q_ref_c; 0; 0] # vΔZdq_c are set to zero by controller, but mΔZdq_c can be different from zero
-
-
-    mΔd, mΔq = inverse_frame_transform(mΔd, mΔq, Δθ_c) 
-    mΣd, mΣq = inverse_frame_transform(mΣd, mΣq, -2*Δθ_c) # Zero sequence is reference frame independent, so not transformed
+    (mΣd, mΣq, mΣz, mΔd, mΔq, mΔZd, mΔZq) = VΣΔ_CmdqZ \ [vMΣ_d_ref; vMΣ_q_ref; vMΣ_z_ref; vMΔ_d_ref; vMΔ_q_ref; 0; 0] # vΔZdq are set to zero by controller, but mΔZdq can be different from zero
 
     # Pade delays
     y, i = state_space_block!(F, x, (mΔd, mΔq), b.delay1, conv, 1)
     mΔd, mΔq = phase_compensated_dq(y, conv.elec.ωbase * b.delay1.timeDelay)
-
+    # TODO improve this part
     mΔZd_res, i = state_space_block!(F, x, (mΔZd, ), b.delay2a, conv, i)
     mΔZq_res, i = state_space_block!(F, x, (mΔZq, ), b.delay2b, conv, i)
 
     T = [cos(3 * conv.elec.ωbase * b.delay2a.timeDelay) sin(3 * conv.elec.ωbase * b.delay2a.timeDelay)
          -sin(3 * conv.elec.ωbase * b.delay2a.timeDelay) cos(3 * conv.elec.ωbase * b.delay2a.timeDelay)]
 
-    mΔZd, mΔZq = T * [mΔZd_res; mΔZq_res]
+    mΔZd, mΔZq = T * [mΔZd_res[1]; mΔZq_res[1]]
 
     y, i = state_space_block!(F, x, (mΣd, mΣq), b.delay3, conv, i)
     mΣd, mΣq = phase_compensated_dq(y, -2*conv.elec.ωbase * b.delay3.timeDelay)

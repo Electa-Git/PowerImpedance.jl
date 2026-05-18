@@ -9,6 +9,7 @@ const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
         
         include("imp_test.jl")
         include("adm_MMC_test.jl")
+        include("adm_MMC_compensated_test.jl")
         include("bipolar_mmc_test.jl")
         include("solvers_test.jl")
         include("adm_OHL_test.jl")

@@ -72,7 +72,7 @@ function state_space!(F, x, inputs, b::CirculatingCurrentControl, conv::Abstract
     J = [ 0 1 0
          -1 0 0
           0 0 0]
-    J_min2ω = -2 * sync.ω_c * J
+    J_min2ω = -2 * conv.elec.ωbase * J
 
     F[1:3] = Ki_iΣ * (iΣ_ref - iΣ) - J_min2ω * ξ_iΣ
 
