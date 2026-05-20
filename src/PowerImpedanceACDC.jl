@@ -15,6 +15,13 @@ using Parameters
 using DataStructures
 using DocStringExtensions
 
+## Overloading of Base functions (TODO: In future from PowerBlocks overloading)
+import Base: convert
+
+# Utilities
+
+import TypedTables: Table
+
 # Time delays
 using ControlSystemsBase, RobustAndOptimalControl
 
@@ -25,6 +32,9 @@ using LaTeXStrings
 # Symbolic and numerical calculations
 using LinearAlgebra
 using ForwardDiff, NonlinearSolve, SteadyStateDiffEq  # solve diffs and nonlinear equations
+
+#PowerBlocks
+# import PowerBlocks as PB
 
 # Power flow
 import PowerModels, PowerModelsACDC
@@ -51,6 +61,8 @@ include("Packages/PowerModelsMCDC.jl/src/PowerModelsMCDC.jl")
 import .PowerModelsMCDC
 const _PMMCDC = PowerModelsMCDC
 
+# COre
+include("core/util.jl")
 
 # Including all components    
 include("Network/Components/AbstractElement.jl")
@@ -102,6 +114,10 @@ include("Network/Components/machine/SynchronousMachine.jl")
 
 # Including network
 include("Network/Network.jl")
+
+# Refactoring attempt
+include("core/base.jl")
+include("core/convert.jl")
 
 # New power flow
 include("Network/power_flow.jl")

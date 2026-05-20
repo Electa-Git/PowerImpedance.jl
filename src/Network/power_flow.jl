@@ -182,7 +182,7 @@ function power_flow(net::Network)
     
     #### 1. Create PowerModels dictionary and make interface 
     for elem in values(net.elements)
-        make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+        convert!(data, elem, PMACDC, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     end
 
     if use_mcdc
@@ -233,19 +233,19 @@ function power_flow(net::Network)
         solve_mcdcpf(data, _PM.ACPPowerModel, ipopt; setting = s) :
         solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting = s)
     
-    # # Rerun power flow with relaxed constraints if no convergence
-    # if result["termination_status"] == MOI.LOCALLY_SOLVED
-    #     println("Power flow converged succesfully.")
-    # else
-    #     println("No convergence (try again with relaxation): ",result["termination_status"])
+    # Rerun power flow with relaxed constraints if no convergence
+    if result["termination_status"] == MOI.LOCALLY_SOLVED
+        println("Power flow converged succesfully.")
+    else
+        println("No convergence (try again with relaxation): ",result["termination_status"])
         
-    #     result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
-    #     if result["termination_status"] == MOI.LOCALLY_SOLVED
-    #         println("Power flow solution found with relaxation")
-    #     else
-    #         error("Second iteration not succesful. Check your formulation")
-    #     end
-    # end
+        result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
+        if result["termination_status"] == MOI.LOCALLY_SOLVED
+            println("Power flow solution found with relaxation")
+        else
+            error("Second iteration not succesful. Check your formulation")
+        end
+    end
 
 	#### 3. Update setpoints of active elements
 	for (key, element) in net.elements
@@ -452,17 +452,17 @@ function set_bus_type_dc(bus_data, type)
 end
 
 ## THis function makes sure we dispatch on the right component
-make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict) =
-	make_power_flow!(
-		elem.element_model,
-		data,
-		nodes2bus,
-		bus2nodes,
-		elem2comp,
-		comp2elem,
-		elem,
-		global_dict,
-	)
+# make_powerflow!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict) =
+# 	make_power_flow!(
+# 		elem.element_model,
+# 		data,
+# 		nodes2bus,
+# 		bus2nodes,
+# 		elem2comp,
+# 		comp2elem,
+# 		elem,
+# 		global_dict,
+# 	)
 
 function injection_initialization!(data, elem2comp, comp2elem, ac_bus, elem, global_dict)
 	## A lot of initialization for source and machine are the same so combined in here

@@ -5,8 +5,9 @@ function eval_y(tl :: Transmission_line, s :: Complex)
 end
 
 
-function make_power_flow!(tl :: Transmission_line, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
- 
+function convert!(data,elem::Element{<:Transmission_line},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+    
+    tl = elem.element_model
     if is_three_phase(elem)    
         key = branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
         ((data["branch"])[string(key)])["transformer"] = false

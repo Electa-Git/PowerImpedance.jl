@@ -1,5 +1,22 @@
 export SetPoint
 
+# PowerBlocks things, before finding proper place
+### PowerBlocks
+
+# elecdomainpb(elem::Element) = is_three_phase(elem) ? PB.AC : PB.DC
+
+# PB.DataInputStyle(::Network) = PB.IsDataInput()
+# PB.DataInputStyle(::Element) = PB.IsDataInput()
+# PB.DataInputStyle(::StateSpaceABCD) = PB.IsDataInput()
+# PB.CompositeDataStyle(::Network) = PB.IsCompositeData()
+
+struct PIACDC end
+# PB.ToolType(::PIACDC) = IsTool()
+
+struct PMACDC end
+# PB.ToolType(::PMACDC) = IsTool()
+
+
 """
 Struct guarantees representation of the component like a multiport
 network using ABCD parameters. It consists of:
@@ -37,6 +54,7 @@ struct SetpointPU # Per-unitized setpoint used internally
 end
 
 
+
 @with_kw struct Limits
     #Limits 
     P_min ::Float64 = 0.9         # min active power output [pu]
@@ -47,12 +65,12 @@ end
 
 
 
-mutable struct Element
+mutable struct Element{T<: Any} #TODO: consider making this an immutable struct, and use a constructor to handle the logic of setting the fields
     symbol::Symbol
     pins :: Dict{Symbol, Symbol}
     input_pins :: Int
     output_pins :: Int
-    element_model :: Any #AbstractElementModel  # component defined type
+    element_model :: T #AbstractElementModel  # component defined type
     A::Matrix{ComplexF64}  
     B::Matrix{ComplexF64} 
     C::Matrix{ComplexF64} 
@@ -63,7 +81,7 @@ mutable struct Element
     setpoint::SetPoint
     limits::Limits
     function Element(; element_model=nothing, element_value=nothing, args...)
-        elem = new()
+        
 
         model =
             element_model !== nothing ? element_model :
@@ -73,6 +91,8 @@ mutable struct Element
         if element_model !== nothing && element_value !== nothing && !(element_model === element_value)
             throw(ArgumentError("Both `element_model` and legacy `element_value` were provided with different values."))
         end
+
+        elem = new{typeof(model)}()
 
         elem.element_model = model
         elem.setpoint = SetPoint()

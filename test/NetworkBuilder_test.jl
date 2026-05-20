@@ -11,8 +11,8 @@ using PowerImpedanceACDC.NetworkBuilder: pin, ⟷
 
 	elements = (; z1 = impedance(z = 1, pins = 1), z2 = impedance(z = 2, pins = 1))
 	connections = (
-		pin(:z1, 1.1) ⟷ pin(:z2, 1.1) ⟷ :n1,
-		pin(:z1, 2.1) ⟷ pin(:z2, 2.1) ⟷ :gnd,
+		pin(:z1, 1,1) ⟷ pin(:z2, 1.1) ⟷ :n1,
+		pin(:z1, 2.1) ⟷ pin(:z2, 2,1) ⟷ :gnd,
 	)
 
 	builder = NetworkBuilder.define(elements, connections)
@@ -2185,7 +2185,7 @@ function ieee39bus_connections()
 		# Loads grounding
 
 		pin(:LoadB3, 2.1) ⟷ :gndD,
-		pin(:LoadB3, 2.2) ⟷ :gndQ,
+		pin(:LoadB3, 2,2) ⟷ :gndQ,
 		pin(:LoadB4a, 2.1) ⟷ :gndD,
 		pin(:LoadB4a, 2.2) ⟷ :gndQ,
 		pin(:LoadB4b, 2.1) ⟷ :gndD,
@@ -2213,7 +2213,7 @@ function ieee39bus_connections()
 		pin(:LoadB24, 2.1) ⟷ :gndD,
 		pin(:LoadB24, 2.2) ⟷ :gndQ,
 		pin(:LoadB25, 2.1) ⟷ :gndD,
-		pin(:LoadB25, 2.2) ⟷ :gndQ,
+		pin(:LoadB25, 2,2) ⟷ :gndQ,
 		pin(:LoadB26, 2.1) ⟷ :gndD,
 		pin(:LoadB26, 2.2) ⟷ :gndQ,
 		pin(:LoadB27, 2.1) ⟷ :gndD,
@@ -2234,9 +2234,9 @@ function ieee39bus_connections()
 		pin(:G31, 1.1) ⟷ pin(:Zg31, 1.1),
 		pin(:G31, 1.2) ⟷ pin(:Zg31, 1.2),
 		pin(:G32, 1.1) ⟷ pin(:Zg32, 1.1),
-		pin(:G32, 1.2) ⟷ pin(:Zg32, 1.2),
-		pin(:G33, 1.1) ⟷ pin(:Zg33, 1.1),
-		pin(:G33, 1.2) ⟷ pin(:Zg33, 1.2),
+		pin(:G32, 1,2) ⟷ pin(:Zg32, 1.2),
+		pin(:G33, 1.1) ⟷ pin(:Zg33, 1,1),
+		pin(:G33, 1,2) ⟷ pin(:Zg33, 1,2),
 		pin(:G34, 1.1) ⟷ pin(:Zg34, 1.1),
 		pin(:G34, 1.2) ⟷ pin(:Zg34, 1.2),
 		pin(:G35, 1.1) ⟷ pin(:Zg35, 1.1),

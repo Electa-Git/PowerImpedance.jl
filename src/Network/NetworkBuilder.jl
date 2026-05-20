@@ -1,49 +1,272 @@
 module NetworkBuilder
-
+import TypedTables: Table
 export pin, ⟷, ↔
 
 const P = parentmodule(@__MODULE__)
+using ..PowerImpedanceACDC: @Table
 
 struct Pin
-	element::Symbol
-	name::Symbol
+	elementid::Symbol
+	side::Int
+	terminal::Int
+
+	function Pin(elementid::Symbol, side::Int, terminal::Int)
+		side > 0 || throw(ArgumentError("Pin side must be >= 1, got $side."))
+		terminal > 0 ||
+			throw(ArgumentError("Pin terminal must be >= 1, got $terminal."))
+		return new(elementid, side, terminal)
+	end
 end
 
-struct Connection
-	endpoints::Vector{Any}
+struct ConnectionDef
+	name::Union{Symbol, Nothing}
+	endpoints::Vector{Pin}
 end
+
+ConnectionDef(endpoints::Vector{Pin};name=nothing) = ConnectionDef(name, endpoints)
+ConnectionDef(endpoint::Pin;name=nothing) = ConnectionDef([endpoint,]; name)
+ConnectionDef(name::Symbol) = ConnectionDef(name, Pin[])
+ConnectionDef(conn::ConnectionDef; name=conn.name) = ConnectionDef(name, conn.endpoints)
+
+"""
+
+Fields:
+- `nets`: NamedTuple with net names and a collection of connected element pins, e.g. `:net1 => (Pin(:element1, 1, 1), Pin(:element2, 2, 1))`
+- `busregistry`: Table collecting bus information bus, elem, side, and, electrical domain 
+"""
+struct ConnectionsRegistry
+    registry::@Table{net::Symbol,bus::Int, elem::Symbol, side::Int, terminal::Int, elecdomain::Int} 
+end
+
+"""
+	ConnectionsRegistry(elements, connections)
+
+Build a `ConnectionsRegistry` from `elements` and connection definitions.
+
+Each connection definition must provide a `name` and `endpoints`. Endpoints in
+the same connection are assigned the same bus, and the registry records the
+net name, bus number, element, side, terminal, and electrical domain.
+"""
+function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}})
+	
+	#1. Do checks of connections
+
+	# perform merges
+	connections_vec = mergebyname(connections) # Merge same netname connections 
+	connections_vec = mergebysharedpin(connections_vec) #Merge with shared pin
+	connections_vec = updateemptyname(connections_vec) # Update empty names to random unique symbol
+	# connections = Tuple(connections_vec)
+
+
+
+	#2. Populate registry
+	registry = Table(net=Symbol[], bus=Int[], elem=Symbol[], side=Int[], terminal=Int[], elecdomain=Int[])
+	for conndef in connections_vec
+		examplepin = first(conndef.endpoints) #All endpoints should be connected to same bus 
+		bus = internnet(registry, examplepin.elementid, examplepin.side) #Check if net already has a bus via element and side, otherwise assign next bus
+		
+		for pin in conndef.endpoints
+			@assert pin.elementid in keys(elements) "Element :$(pin.elementid) defined in connection but not found in elements."
+			elecdomain = P.elecdomain(elements[pin.elementid], pin.side)
+			push!(registry, (;net=conndef.name, bus, elem=pin.elementid, side=pin.side, terminal=pin.terminal, elecdomain))
+		end
+	end
+	return ConnectionsRegistry(registry)
+end
+
+function updateemptyname(conns::Vector{ConnectionDef})
+	for i in eachindex(conns)
+		if isnothing(conns[i].name)
+			conns[i] = ConnectionDef(conns[i].endpoints; name=gensym())
+		end
+	end
+	return conns
+end
+
+function mergebyname(conns::Tuple{Vararg{ConnectionDef}})
+	named = Dict{Symbol, Vector{Pin}}()
+	unnamed = ConnectionDef[]
+	for c in conns
+		if c.name === nothing
+			push!(unnamed, c)
+		else
+			push!(get!(named, c.name, Pin[]), c.endpoints...)
+		end
+	end
+	out = ConnectionDef[]
+	for (nm, pins) in named
+		push!(out, ConnectionDef(pins; name=nm))
+	end
+	append!(out, unnamed)
+	return out
+
+end
+
+function mergebysharedpin(conns::Vector{ConnectionDef})
+	# union-find via iterative merging
+	changed = true
+	conns = copy(conns)
+	pin_id(p::Pin) = (p.elementid, p.side, p.terminal)
+	while changed
+		changed = false
+		n = length(conns)
+		i = 1
+		while i <= n
+			j = i+1
+			while j <= n
+				seti = Set(pin_id.(conns[i].endpoints))
+				setj = Set(pin_id.(conns[j].endpoints))
+				if !isempty(intersect(seti, setj))
+					# merge j into i
+					allpins = vcat(conns[i].endpoints, conns[j].endpoints)
+					# remove duplicate pins
+					unique_pins = Dict{Tuple,Pin}()
+					for p in allpins
+						unique_pins[pin_id(p)] = p
+					end
+					mergedpins = collect(values(unique_pins))
+					# determine name (prefer existing name if any)
+					name = conns[i].name === nothing ? conns[j].name : conns[i].name
+					conns[i] = ConnectionDef(mergedpins; name=name)
+					splice!(conns, j)
+					n -= 1
+					changed = true
+					continue
+				end
+				j += 1
+			end
+			i += 1
+		end
+	end
+	return conns
+end
+
+function internnet(registry::Table, element::Symbol, side::Int)
+	# Find if bus already exists for element and side
+	busfilterfunc(row) = row.elem == element && row.side == side
+	busfilter = map(busfilterfunc, registry)
+
+	if any(busfilter)
+		bus_vec = registry.bus[busfilter]
+		@assert length(bus_vec) == 1 "Multiple buses found for element :$element side $side. This should not happen, check your connections!"
+		return bus_vec[1]
+	else
+		nextbus = maximum(registry.bus; init=0) + 1
+		return nextbus
+	end
+end
+
 
 mutable struct BuilderState
 	elements::NamedTuple
-	connections::Tuple
+	connections::ConnectionsRegistry
 	options::NamedTuple
 	network::P.Network
 	powerflow::Any
 end
 
-pin(element::Symbol, name) = Pin(element, Symbol(name))
+pin(element::Symbol, side::Integer, terminal::Integer) =
+	Pin(element, Int(side), Int(terminal))
 
-function connection_endpoints(connection::Connection)
-	return connection.endpoints
+pin(element::Symbol, name) = begin
+	side, terminal = parse_pin_name(name)
+	Pin(element, side, terminal)
 end
 
-function connection_endpoints(endpoint::Union{Pin, Symbol})
-	return Any[endpoint]
+"""
+Parse a pin name in the form "side.terminal", Symbol 1.1, or a tuple (side, terminal) into a (side, terminal) pair of integers.
+"""
+function parse_pin_name(name)
+	name isa Tuple{<:Integer, <:Integer} && return (Int(name[1]), Int(name[2]))
+
+	parts = split(string(name), ".")
+	length(parts) == 2 ||
+		throw(
+			ArgumentError(
+				"Pin name must contain side and terminal in the form side.terminal, got $(repr(name)).",
+			),
+		)
+
+	all(!isempty(part) for part in parts) ||
+		throw(ArgumentError("Pin name cannot contain empty side or terminal: $(repr(name))."))
+
+	try
+		side = parse(Int, parts[1])
+		terminal = parse(Int, parts[2])
+		side > 0 || throw(ArgumentError("Pin side must be >= 1, got $side."))
+		terminal > 0 || throw(ArgumentError("Pin terminal must be >= 1, got $terminal."))
+		return (side, terminal)
+	catch err
+		err isa ArgumentError && rethrow()
+		throw(
+			ArgumentError(
+				"Pin name must contain integer side and terminal in the form side.terminal, got $(repr(name)).",
+			),
+		)
+	end
+end
+"""
+Generate a unique pin name based on the element, side, and terminal. The name is in the form "side.terminal", e.g. "1.1" for side 1 terminal 1.
+This is the legacy naming convention for pins in PIACDC
+"""
+pin_name(pin::Pin) = Symbol("$(pin.side).$(pin.terminal)")
+pin_name(side::Int, terminal::Int) = Symbol("$(side).$(terminal)")
+
+function Base.getproperty(pin::Pin, field::Symbol)
+	field === :name && return pin_name(pin)
+	return getfield(pin, field)
 end
 
-function connection_endpoints(endpoint::AbstractString)
-	return Any[Symbol(endpoint)]
+function Base.propertynames(::Pin, private::Bool = false)
+	props = (:element, :side, :terminal, :name)
+	return private ? props : props
 end
 
-function ⟷(left, right)
-	return Connection(vcat(connection_endpoints(left), connection_endpoints(right)))
+# function connection_endpoints(connection::Connection)
+# 	return connection.endpoints
+# end
+
+# function connection_endpoints(endpoint::Pin)
+# 	return Pin[endpoint]
+# end
+
+# function connection_endpoints(endpoint::AbstractString)
+# 	return Any[Symbol(endpoint)]
+# end
+
+
+"""
+	⟷(left, right)
+Connects corresponding pins or gives names to the nets
+
+
+Returns intermediate ConnectionDef (parsed as NamedTuple afterwards).
+"""
+function ⟷(left,right) 
+	
+	left_conn = ConnectionDef(left)
+	right_conn = ConnectionDef(right)
+	
+	if !isnothing(left_conn.name) && !isnothing(right_conn.name) && left_conn.name != right_conn.name
+		throw(ArgumentError("Cannot connect two named nets with different names: :$(left_conn.name) and :$(right_conn.name)."))
+	else 
+		name = !isnothing(left_conn.name) ? left_conn.name : right_conn.name
+		endpoints = vcat(left_conn.endpoints, right_conn.endpoints)
+		return ConnectionDef(endpoints; name)
+	end
 end
+
 
 ↔(left, right) = left ⟷ right
 
-function define(elements::NamedTuple, connections::Tuple; options = (;))
-	network = build_network(elements, connections, options)
-	return BuilderState(elements, connections, options, network, nothing)
+function define(elements::NamedTuple, connections::Tuple{Vararg{ConnectionDef}}; options = (;))
+
+	connectionregistry = ConnectionsRegistry(elements, connections)
+
+	network = build_network(elements, connectionregistry, options)
+
+	
+	return BuilderState(elements, connectionregistry, options, network, nothing)
 end
 
 function update!(
@@ -96,9 +319,10 @@ end
 function active_setpoint_values(network::P.Network)
 	values = Dict{Symbol, Any}()
 
+	# TODO: this should be changed to a linearized representation in next step
 	for (name, element) in pairs(network.elements)
 		if P.is_converter(element) || P.is_generator(element)
-			values[name] = deepcopy(element.element_model)
+			values[name] = deepcopy(element)
 		end
 	end
 
@@ -138,15 +362,15 @@ function restore_active_setpoint_values!(network::P.Network, powerflow::NamedTup
 				ArgumentError("Cached power flow expected :$name to be an active element."),
 			)
 
-		typeof(element.element_model) === typeof(cached_value) ||
+		typeof(element) === typeof(cached_value) ||
 			throw(
 				ArgumentError(
 					"Cached active setpoint value for :$name has type $(typeof(cached_value)), " *
-					"but the rebuilt element has type $(typeof(element.element_model)).",
+					"but the rebuilt element has type $(typeof(element)).",
 				),
 			)
 
-		element.element_model = deepcopy(cached_value)
+		element = deepcopy(cached_value)
 	end
 
 	sync_parent_powerflow_globals!(powerflow)
@@ -161,7 +385,7 @@ function sync_parent_powerflow_globals!(powerflow::NamedTuple)
 	return powerflow
 end
 
-function build_network(elements::NamedTuple, connections::Tuple, options::NamedTuple)
+function build_network(elements::NamedTuple, connections::ConnectionsRegistry, options::NamedTuple)
 	network = P.Network()
 	network.voltageBase[1] = option_value(options, :voltageBase, network.voltageBase[1])
 
@@ -171,25 +395,38 @@ function build_network(elements::NamedTuple, connections::Tuple, options::NamedT
 		P.add!(network, name, element)
 	end
 
-	for connection in connections
-		connection isa Connection ||
-			throw(ArgumentError("NetworkBuilder connections must be created with ⟷ or ↔."))
-
-		endpoints = network_endpoints(network, elements, connection)
-		isempty(endpoints) && continue
-
-		P.connect!(network, endpoints...)
+	netnames = unique(connections.registry.net) # Collection of net names
+	
+	for net in netnames
+		net_entries = filter(r -> r.net == net, connections.registry)
+		networkpins = Any[map(connrowtonwpin, net_entries)...]
+		push!(networkpins, net) # Add net name as pin for backward compatibility with previous behavior
+		P.connect!(network, networkpins...)
+		
 	end
+
+	# for connection in connections
+	# 	connection isa ConnectionDef ||
+	# 		throw(ArgumentError("NetworkBuilder connections must be created with ⟷ or ↔."))
+
+	# 	endpoints = network_endpoints(network, elements, connection)
+	# 	isempty(endpoints) && continue
+
+	# 	P.connect!(network, endpoints...)
+	# end
 
 	P.check_lumped_elements(network)
 	P.connect!(network)
 	return network
 end
 
+connrowtonwpin(row) = (row.elem, pin_name(row.side, row.terminal))
+
+
 function network_endpoints(
 	network::P.Network,
 	elements::NamedTuple,
-	connection::Connection,
+	connection::ConnectionDef,
 )
 	endpoints = Any[]
 
@@ -197,6 +434,8 @@ function network_endpoints(
 		resolved = network_endpoint(network, elements, endpoint)
 		resolved === nothing || push!(endpoints, resolved)
 	end
+
+	push!(endpoints, connection.name) # Add net name as endpoint (corresponding to previous behavior)
 
 	return Tuple(endpoints)
 end
@@ -206,37 +445,49 @@ function network_endpoint(
 	elements::NamedTuple,
 	endpoint::Pin,
 )
-	hasproperty(elements, endpoint.element) ||
-		throw(ArgumentError("Unknown element :$(endpoint.element) in connection endpoint."))
+	endpoint_name = pin_name(endpoint)
 
-	if !haskey(network.elements, endpoint.element)
-		element = getproperty(elements, endpoint.element)
+	hasproperty(elements, endpoint.elementid) ||
+		throw(ArgumentError("Unknown element :$(endpoint.elementid) in connection endpoint."))
+
+	if !haskey(network.elements, endpoint.elementid)
+		element = getproperty(elements, endpoint.elementid)
 
 		element.connection == false && return nothing
 
 		throw(
 			ArgumentError(
-				"Element :$(endpoint.element) was declared but was not added to the network.",
+				"Element :$(endpoint.elementid) was declared but was not added to the network.",
 			),
 		)
 	end
 
-	haskey(network.elements[endpoint.element].pins, endpoint.name) ||
+	haskey(network.elements[endpoint.elementid].pins, endpoint_name) ||
 		throw(
-			ArgumentError("Unknown pin $(endpoint.name) on element :$(endpoint.element)."),
+			ArgumentError("Unknown pin $(endpoint_name) on element :$(endpoint.elementid)."),
 		)
 
-	return (endpoint.element, endpoint.name)
+	return (endpoint.elementid, endpoint_name)
 end
 
-function network_endpoint(::P.Network, ::NamedTuple, endpoint::Symbol)
-	return endpoint
-end
+#This is not necessary more as Netname symbols are kept as name of the ConnectionDef
+# function network_endpoint(::P.Network, ::NamedTuple, endpoint::Symbol)
+# 	return endpoint
+# end
 
+"""
+Retrieve the value of a specific option, returning a default value if the option is not set.
+"""
 function option_value(options::NamedTuple, name::Symbol, default)
 	return hasproperty(options, name) ? getproperty(options, name) : default
 end
+"""
 
+Set a global variable in the parent module of NetworkBuilder. 
+This is used to make power flow results accessible for custom constraints and objective functions defined by the user.
+
+I do not understand this one as well
+"""
 function set_parent_global!(name::Symbol, value)
 	Core.eval(P, Expr(:(=), name, value))
 	return value
@@ -265,13 +516,14 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 	push!(bus2nodes, "gnd" => ground_nodes)
 
 	for element in values(network.elements)
-		P.make_powerflow!(
+		P.convert!(
 			data,
+			element,
+			P.PMACDC,
 			nodes2bus,
 			bus2nodes,
 			elem2comp,
 			comp2elem,
-			element,
 			global_dict,
 		)
 	end
