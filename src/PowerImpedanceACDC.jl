@@ -118,7 +118,7 @@ include("Network/Network.jl")
 
 # Refactoring attempt
 include("core/base.jl")
-include("core/convert.jl")
+# include("core/convert.jl")
 
 # New power flow
 include("Network/power_flow.jl")

@@ -1,6 +1,8 @@
 abstract type AbstractConverter <: AbstractStateSpace end
 
 
+
+
 # Evaluating the admittance of the converter
 function eval_abcd(converter :: AbstractConverter, s :: Complex)
     return eval_y(converter, s)
@@ -149,6 +151,33 @@ function convert!(data, elem::Element{<:AbstractConverter}, ::Type{PMACDC}, key,
     ((data["busdc"])[string(dc_bus)])["Vdcmin"] = 0.9 * ((data["busdc"])[string(dc_bus)])["Vdc"]
     ((data["busdc"])[string(dc_bus)]) = set_bus_type_dc((data["busdc"])[string(dc_bus)], ((data["convdc"])[string(key)])["type_dc"])
     return nothing
+end
+
+
+function transform(result, elem::Element{<:AbstractConverter}, ::Type{PMACDC}, ::Type{PIACDC},)
+    
+    dccon = 
+    _, ac_bus = nodes2bus[ac_node]
+
+    Pdc = elem_dict["pdc"] * global_dict["S"] / 1e6
+    Vm =
+        (result["solution"]["bus"][string(ac_bus)]["vm"] * global_dict["V"] / 1e3) *
+        sqrt(2)
+    θ = result["solution"]["bus"][string(ac_bus)]["va"]
+    Vdc =
+        result["solution"]["busdc"][string(dc_bus)]["vm"] *
+        (data["dcpol"] * global_dict["V"] / 1e3)
+    Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
+    Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6
+
+    setpoint = P.SetPoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
+
+    if element.element_model isa P.AbstractStateSpace
+        update!(element, element.element_model, setpoint)
+    else
+        update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
+    end
+
 end
 
 function timeDelayPadeMatrices(padeOrderNum,padeOrderDen,t_delay,numberVars)

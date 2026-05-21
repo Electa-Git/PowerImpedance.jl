@@ -8,53 +8,56 @@
     - Lets PowerModelsACDC solve the powerflow
     - Use the setpoints to convert to a linearized admittance representation
 """
-# function Base.convert(bs::BuilderState, ::Type{LinearizedAdmittanceNetwork})
+function Base.convert(bs::BuilderState, ::Type{P.LinearizedAdmittanceNetwork})
 
-#     if !is_linear(bs.network)
-        
-#         #1. Convert PowerImpedanceACDC payload to PMACDC
-#         data = convert(bs, PMACDC)
+    if !is_linear(bs.network)
 
-#         # 2. Call the PowerModelsACDC solver
-#         ipopt = JuMP.optimizer_with_attributes(
-#             Ipopt.Optimizer,
-#             "tol" => 1e2,
-#             "dual_inf_tol" => 1e-1,
-#             "constr_viol_tol" => 1e-3,
-#             "compl_inf_tol" => 1e3,
-#             "print_level" => 0, # was set to 5 for more verbose output
-#             "max_iter" => 100,
-#             "grad_f_constant" => "yes",
-#             "recalc_y" => "yes",
-#             "bound_relax_factor" => 1e-8,
-#             "expect_infeasible_problem" => "yes",
-#         )
-#         s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false)
-#         result = solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting = s)
-#     else
-#         println("Network only consists of linear elements. Skipping power flow.")
-#         result = Dict("solution" => Dict())
-#     end
+        sp = nonlinearsetpoints(bs)
 
-#     # Transform results to setpoints that can be used by linearization step
-#     transform(result["solution"],nw, nodes2bus,elem2comp, PMACDC, PIACDC)
+    else
+        println("Network only consists of linear elements. Skipping power flow.")
+        sp = (;)
+    end
 
-# end
+    
+
+end
+
+
+function nonlinearsetpoints(bs::BuilderState, ::Type{P.LinearizedAdmittanceNetwork})
+    
+    #1. Convert PowerImpedanceACDC payload to PMACDC
+    data, elempitopm = convert(bs, PMACDC)
+
+    options = bs.options
+
+    result = solve_acdcpf(
+        data,
+        P._PM.ACPPowerModel,
+        powerflow_optimizer(options),
+        is_bounded_options(options);
+        setting = powerflow_setting(options),
+    )
+
+    # Transform results to setpoints that can be used by linearization step
+    transform(result["solution"],bs, P.PMACDC, P.PIACDC, elempitopm)
+     
+end
 
 # Transforms output(output payload) from PMACDC to PIACDC
-function transform(output, nw, nodes2bus, elem2comp, ::Type{PMACDC}, ::Type{PIACDC})
+function transform(output, bs::BuilderState, ::Type{P.PMACDC}, ::Type{P.PIACDC}, elempitopm)
 
-    for (key,elem) in nw.elements
+    for (key,elem) in bs.elements
         
         #1. Skip passive devices
         if passive(elem)
             continue # Skips iteration
         end
 
-        pmcomptype, key = elem2comp[elem.symbol]
-        elemresult = output[string(key)]
+        pmcomptype, key = elempitopm[elem.symbol]
+        elemresult = output[pmcomptype][string(key)]
 
-        sp = transform(output, element, nodes2bus)
+        sp = P.transform(output, element, P.PMACDC, P.PIACDC)
 
     end
 

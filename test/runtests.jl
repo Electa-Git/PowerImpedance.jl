@@ -3,7 +3,7 @@ using PowerImpedanceACDC
 using Test
 using LinearAlgebra
 
-const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
+# const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
 
 # Uncomment the following line to change logging level:
 # using Logging
@@ -27,6 +27,7 @@ const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
         include("Source_test.jl")
         include("NetworkBuilder_test.jl")
         include("ConnectionRegistry_test.jl")
+        include("convert_pmacdc_test.jl")
         include("make_y_node_test.jl")
         include("Transformer_test.jl")
         #include("power_flow_test.jl")

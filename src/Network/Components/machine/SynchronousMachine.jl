@@ -792,9 +792,9 @@ function convert!(data, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, key
     
     
 
-    _initialize_gen_entry!(data, key, interm_bus, elem, global_dict)
+    _initialize_gen_entry!(data, key_branch, interm_bus, elem, global_dict)
 
-    key_branch = length(data["branch"]) + 1
+    # key_branch = length(data["branch"]) + 1
     key_branch_str = string(key_branch)
 
     data["branch"][key_branch_str] = Dict{String, Any}()
@@ -827,7 +827,7 @@ function convert!(data, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, key
         data["bus"][string(interm_bus)] = set_bus_type(bus, 2)
     end
 
-    gen = data["gen"][string(key)]
+    gen = data["gen"][key_branch_str]
     data["bus"][string(interm_bus)]["vm"] = gen["vg"]
     data["bus"][string(interm_bus)]["vmin"] = 0.9 * gen["vg"]
     data["bus"][string(interm_bus)]["vmax"] = 1.1 * gen["vg"]

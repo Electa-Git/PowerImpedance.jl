@@ -152,15 +152,17 @@ function _initialize_gen_entry!(data, key, ac_bus, elem, global_dict)
 	gen["index"] = key
 
 	injecter = elem.element_model
+	sp = elem.setpoint
+	lm = elem.limits
 	s_base = global_dict["S"] / 1e6
 	v_base = global_dict["V"] / 1e3
-	gen["pg"] = injecter.P / s_base
-	gen["qg"] = injecter.Q / s_base
-	gen["pmin"] = injecter.P_min / s_base
-	gen["pmax"] = injecter.P_max / s_base
-	gen["qmin"] = injecter.Q_min / s_base
-	gen["qmax"] = injecter.Q_max / s_base
-	gen["vg"] = get_AC_voltage(injecter) / v_base
+	gen["pg"] = sp.Pac / s_base
+	gen["qg"] = sp.Qac / s_base
+	gen["pmin"] = lm.P_min / s_base
+	gen["pmax"] = lm.P_max / s_base
+	gen["qmin"] = lm.Q_min / s_base
+	gen["qmax"] = lm.Q_max / s_base
+	gen["vg"] = sp.Vac / v_base
 	gen["model"] = 1
 	gen["cost"] = 0
 	gen["ncost"] = 0
@@ -182,13 +184,14 @@ function _initialize_gendc_entry!(data, key, dc_bus, elem, global_dict)
 	gendc["source_id"] = Any["gen", key]
 	gendc["index"] = key
 
-	injecter = elem.element_model
+	sp = elem.setpoint
+	lm = elem.limits
 	s_base = global_dict["S"] / 1e6
 	v_base = global_dict["V"] / 1e3
-	gendc["pgdcset"] = injecter.P / s_base
-	gendc["pmin"] = injecter.P_min / s_base
-	gendc["pmax"] = injecter.P_max / s_base
-	gendc["vgdc"] = injecter.V / v_base
+	gendc["pgdcset"] = sp.Pdc / s_base
+	gendc["pmin"] = lm.P_min / s_base
+	gendc["pmax"] = lm.P_max / s_base
+	gendc["vgdc"] = sp.Vdc / v_base
 	gendc["model"] = 1
 	gendc["cost"] = 0
 	gendc["ncost"] = 0

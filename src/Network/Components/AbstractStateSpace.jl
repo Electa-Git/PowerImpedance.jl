@@ -81,11 +81,11 @@ end
 function update!(elem::Element, m::AbstractStateSpace, setpoint::Setpoint)
 
     # Power flow to inputs of state_space function
-    global inputs, setpoint_pu = pftoinputs(m, setpoint)
+    inputs, setpoint_pu = pftoinputs(m_eff, setpoint)
     inputs_vec = collect(values(inputs))
 
     # Initial values
-    global init = orderedinitialvalues(m; setpoint_pu, inputs)
+    init = orderedinitialvalues(m_eff; setpoint_pu, inputs)
 
     # Parameters for equilibirum with NonlinearSolve.jl
     p_equil = (; inputs = inputs_vec, m = m, setpoint_pu)
@@ -94,7 +94,7 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::Setpoint)
     f!(du, u, p) = _state_space!(du, u, p.inputs, p.setpoint_pu, p.m, Equil())
     @info "Starting to solve for steady-state solution"
     prob = NonlinearProblem(f!, collect(promote(values(init)...)), p_equil)
-    global sol = solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+    sol = solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
 
     name = isdefined(elem, :symbol) ? string(elem.symbol) : string(nameof(typeof(m)))
 
@@ -104,7 +104,7 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::Setpoint)
         error("$name steady-state solution not found!")
     end
 
-    global equilibrium = sol.u[1:n_states(m)] # discard dummy states if any
+    equilibrium = sol.u[1:n_states(m_eff)] # discard dummy states if any
 
     nb_states = n_states(m)
     nb_inputs = n_inputs(m)

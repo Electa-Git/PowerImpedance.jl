@@ -1,6 +1,9 @@
 export power_flow, result, data
 using Logging
 
+const ang_max = deg2rad(-360)
+const ang_min = deg2rad(360)
+
 has_bipolar_converter(net::Network) = any(elem -> elem.element_model isa BipolarMMC, values(net.elements))
 
 function _dict_get_anykey(dict_like, key::String, default)
@@ -149,13 +152,13 @@ function power_flow(net::Network)
 	global_dict = PowerModelsACDC.get_pu_bases(1000, net.voltageBase[1]) # 3-PH MVA, LL-RMS, Original setting was 100,320
 	global_dict["omega"] = 2π * 50
 
-	ang_min = deg2rad(360)
-	ang_max = deg2rad(-360)
+	# ang_min = deg2rad(360)
+	# ang_max = deg2rad(-360)
 
 	nodes_dict = net.nets
 	elem_dict = net.elements
-    ang_min = deg2rad(360)
-    ang_max = deg2rad(-360)
+    # ang_min = deg2rad(360)
+    # ang_max = deg2rad(-360)
 
 	# No power flow when linear (no setpoint updates) 
 	if is_linear(net)
@@ -409,12 +412,12 @@ function is_linear(net::Network)
 	return true
 end
 
-function get_AC_voltage(injecter::Union{SynchronousMachine, Source})
-	return injecter.V
-end
+# function get_AC_voltage(injecter::Union{SynchronousMachine, Source})
+# 	return injecter.V
+# end
 
-function get_AC_voltage(injecter::TLC)
-	return injecter.Vₘ
+function get_AC_voltage(elem::Element)
+	return elem.sp.Vac
 end
 
 function set_bus_type(bus_data, type)
@@ -484,16 +487,17 @@ function injection_initialization!(data, elem2comp, comp2elem, ac_bus, elem, glo
 	((data["gen"])[key])["source_id"] = Any["gen", parse(Int, key)]
 	((data["gen"])[key])["index"] = parse(Int, key)
 
-	injecter = elem.element_model
+	sp = elem.setpoint
+	lm = elem.limits
 	S_base = global_dict["S"] / 1e6
 	V_base = global_dict["V"] / 1e3
-	((data["gen"])[key])["pg"] = injecter.P / S_base
-	((data["gen"])[key])["qg"] = injecter.Q / S_base
-	((data["gen"])[key])["pmin"] = injecter.P_min / S_base
-	((data["gen"])[key])["pmax"] = injecter.P_max / S_base
-	((data["gen"])[key])["qmin"] = injecter.Q_min / S_base
-	((data["gen"])[key])["qmax"] = injecter.Q_max / S_base
-	((data["gen"])[key])["vg"] = get_AC_voltage(injecter) / V_base #Accesor function to treat multiple field names for AC Voltage
+	((data["gen"])[key])["pg"] = sp.Pac / S_base
+	((data["gen"])[key])["qg"] = sp.Qac / S_base
+	((data["gen"])[key])["pmin"] = lm.P_min / S_base
+	((data["gen"])[key])["pmax"] = lm.P_max / S_base
+	((data["gen"])[key])["qmin"] = lm.Q_min / S_base
+	((data["gen"])[key])["qmax"] = lm.Q_max / S_base
+	((data["gen"])[key])["vg"] = sp.Vac / V_base #Accesor function to treat multiple field names for AC Voltage
 
 	# not using
 	((data["gen"])[key])["model"] = 1
@@ -535,14 +539,15 @@ function injection_initialization_dc!(data, elem2comp, comp2elem, dc_bus, elem, 
 	((data["gendc"])[key])["source_id"] = Any["gen", parse(Int, key)]
 	((data["gendc"])[key])["index"] = parse(Int, key)
 
-	injecter = elem.element_model
+	sp = elem.setpoint
+	lm = elem.limits
 	S_base = global_dict["S"] / 1e6
 	V_base = global_dict["V"] / 1e3
-	((data["gendc"])[key])["pgdcset"] = injecter.P / S_base
-	((data["gendc"])[key])["pmin"] = injecter.P_min / S_base
-	((data["gendc"])[key])["pmax"] = injecter.P_max / S_base
+	((data["gendc"])[key])["pgdcset"] = sp.Pdc / S_base
+	((data["gendc"])[key])["pmin"] = lm.P_min / S_base
+	((data["gendc"])[key])["pmax"] = lm.P_max / S_base
 
-	((data["gendc"])[key])["vgdc"] = (injecter).V / V_base #Accesor function to treat multiple field names for AC Voltage
+	((data["gendc"])[key])["vgdc"] = sp.Vdc / V_base #Accesor function to treat multiple field names for DC Voltage
 
 	# not using
 	((data["gendc"])[key])["model"] = 1
@@ -1076,7 +1081,7 @@ function solve_acdcpf_relax(data::Dict{String, Any}, model_type::Type, solver; k
 		_PMACDC.ref_add_sssc!,
 		_PMACDC.ref_add_flex_load!,
 		_PMACDC.ref_add_gendc!,
-		_PMACDC.ref_add_im!,
+		# _PMACDC.ref_add_im!,
 	]
 	pm = _PM.instantiate_model(
 		data,
