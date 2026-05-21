@@ -1,5 +1,5 @@
 
-function convert(bs::BuilderState, ::Type{P.PMACDC})
+function Base.convert(bs::BuilderState, ::Type{P.PMACDC})
     
     #PMACDC data + interface
     data = Dict{String, Any}()
@@ -10,51 +10,45 @@ function convert(bs::BuilderState, ::Type{P.PMACDC})
     
     global_dict["omega"] = 2*π*50
 
+
     ## Adding buses 
 
-    buspm2pi = convert!(data, bs.connections, P.PMACDC, global_dict)
+    convert!(data, bs.connections, P.PMACDC, global_dict)
     
 
     # 2. Fill up the data dictionary with corresponding PM index and bus connections 
 
-    elempmtopi = Dict{Tuple{String, Int}, Symbol}() #Maps PM component to element symbol for later use in transformation of results
+    elempitopm = Dict{Symbol,@NamedTuple{pmtype::String, compkey::Int}}() #Maps PM component to element symbol for later use in transformation of results
 
-    for (elemid, element) in bs.elements #NamedTuple
+    for (elemid, element) in pairs(bs.elements) #NamedTuple
         # Get sorted connectoins (first AC, then DC)
         connections = sortedcomponentconnections(bs.connections, elemid)
         sortedbusses = unique(connections.bus)
+        
 
         # Get the PM component key and update LUT
-        pmtype = pmtype(element)
+        pmtype = P.pmtype(element)
         compkey = length(data[pmtype]) + 1
-        elempmtopi[(pmtype, compkey)] = elemid
+        elempitopm[elemid] = (;pmtype, compkey)
 
-        convert!(data, element, P.PMACDC, compkey, sortedbusses, global_dict)
+        P.convert!(data, element, P.PMACDC, compkey, sortedbusses, global_dict)
         
     end 
 
-
     ensure_slack_bus!(data)
 	P.PowerModelsACDC.process_additional_data!(data)
+   
 
-	result = solve_acdcpf(
-		data,
-		P._PM.ACPPowerModel,
-		powerflow_optimizer(options),
-		is_bounded_options(options);
-		setting = powerflow_setting(options),
-	)
-
-	powerflow = (result = result, data = data, nodes2bus = nodes2bus, elem2comp = elem2comp)
+	# powerflow = (result = result, data = data, nodes2bus = nodes2bus, elem2comp = elem2comp)
 
 
 
-    return data
+    return data, elempitopm
 
         
 end
 
-function convert!(data, element::P.Element{T}, elempmtopi, buspm2pi, ::Type{P.PMACDC}) where {T}
+function convert!(data, element::P.Element{T}, ::Type{P.PMACDC}, elempmtopi, buspm2pi ) where {T}
     
     
 
@@ -76,50 +70,51 @@ function convert!(data, element::P.Element{T}, elempmtopi, buspm2pi, ::Type{P.PM
     return compdict, pmcomptype
 end
 
-function updateacbus!(compdict::Dict, pmcomptype, pmbus_vec)
-    ACBusDict = Dict("gen"=>("gen_bus",), "shunt"=>("shunt_bus",), "branch" =>("f_bus", "t_bus"), "convdc"=>("busac_i",))
+# function updateacbus!(compdict::Dict, pmcomptype, pmbus_vec)
+#     ACBusDict = Dict("gen"=>("gen_bus",), "shunt"=>("shunt_bus",), "branch" =>("f_bus", "t_bus"), "convdc"=>("busac_i",))
 
-    names = ACBusDict[pmcomptype]
-    for (name, bus) in zip(names, pmbus_vec)
-        compdict[name] = bus
-    end
-end
+#     names = ACBusDict[pmcomptype]
+#     for (name, bus) in zip(names, pmbus_vec)
+#         compdict[name] = bus
+#     end
+# end
 
 
 
-function updateid!(compdict, index, pmcomptype)
-    compdict["source_id"] = Any[pmcomptype, index]
-    compdict["index"] = index
-end
+# function updateid!(compdict, index, pmcomptype)
+#     compdict["source_id"] = Any[pmcomptype, index]
+#     compdict["index"] = index
+# end
 
 
 findvalue(componentdata, id) = componentdata[id] 
 
 
 
-function convert!(data, connections::ConnectionsRegistry, global_dict)
+function convert!(data, connections::ConnectionsRegistry,  ::Type{P.PMACDC},global_dict)
     
-    pm2pi = Dict{Tuple{String, Int}, Int}() # Maps PM bus index to PI bus index for later use in transformation of results
-   
+    # pm2pi = Dict{Tuple{String, Int}, Int}() # Maps PM bus index to PI bus index for later use in transformation of results
+    # pi2pm = Dict{Int, Tuple{String, Int}}()
+
     # Split up for improved speed inside for loop (same function)
-    acconnections = P.acconnections(connections)
-    acbusses = unique(acconnections.bus) # Their index is busid
-    dcconnections = P.dcconnections(connections)
-    dcbusses = unique(dcconnections.bus)
+    acconn = acconnections(connections)
+    acbusses = unique(acconn.bus) # Their index is busid
+    dcconn = dcconnections(connections)
+    dcbusses = unique(dcconn.bus)
     
     # AC-bus generation
     for (i,bus) in enumerate(acbusses)
-        pm2pi[("bus", i)] = bus
+        # pm2pi[("bus", i)] = bus
         addbus!(data, bus, global_dict, Val(:AC))
     end
 
     # DC-bus generation
     for (i,bus) in enumerate(dcbusses)
-        pm2pi[("busdc", i)] = bus
+        # pm2pi[("busdc", i)] = bus
         addbus!(data, bus, global_dict, Val(:DC))
     end
 
-    return pm2pi
+    # return pm2pi
 end
 
 function addbus!(data, bus, global_dict, ::Val{:AC})

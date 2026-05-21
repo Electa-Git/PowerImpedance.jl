@@ -1,7 +1,7 @@
 
-# using PowerImpedanceACDC
-# using LinearAlgebra
-# using Test
+using PowerImpedanceACDC
+using LinearAlgebra
+using Test
 
 function read_validation_data(path::AbstractString)
     lines = readlines(path)
@@ -172,8 +172,8 @@ function build_mmc_grid()
     grid = @network begin
         voltageBase = Vm
 
-        G3 = ac_source(pins = 3, V = Vm, transformation = true)
-        G_DC = dc_source(pins = 1, V = Vdc / 2)
+        G3 = ac_source(pins = 3, setpoint = SetPoint(Vac = Vm), transformation = true)
+        G_DC = dc_source(pins = 1, setpoint = SetPoint(Vdc = Vdc / 2))
 
         DUT = dut
 

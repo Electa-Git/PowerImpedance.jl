@@ -1,5 +1,6 @@
 module NetworkBuilder
 import TypedTables: Table
+
 export pin, ⟷, ↔
 
 const P = parentmodule(@__MODULE__)
@@ -62,12 +63,15 @@ function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}}
 	#2. Populate registry
 	registry = Table(net=Symbol[], bus=Int[], elem=Symbol[], side=Int[], terminal=Int[], elecdomain=Int[])
 	for conndef in connections_vec
-		examplepin = first(conndef.endpoints) #All endpoints should be connected to same bus 
-		bus = internnet(registry, examplepin.elementid, examplepin.side) #Check if net already has a bus via element and side, otherwise assign next bus
+	
+		examplepin = first(conndef.endpoints) #All endpoints should be connected to same bus
+		elecdomain = P.elecdomain(elements[examplepin.elementid], examplepin.side)
+		bus = internbus(registry, conndef.name, examplepin.elementid, examplepin.side, elecdomain) #Check if net already has a bus via element and side, otherwise assign next bus
 		
+		# TODO: Check whether sides of all other elements are already connected to the same bus of the examplepin + all same elec domain
 		for pin in conndef.endpoints
 			@assert pin.elementid in keys(elements) "Element :$(pin.elementid) defined in connection but not found in elements."
-			elecdomain = P.elecdomain(elements[pin.elementid], pin.side)
+			
 			push!(registry, (;net=conndef.name, bus, elem=pin.elementid, side=pin.side, terminal=pin.terminal, elecdomain))
 		end
 	end
@@ -140,8 +144,11 @@ function mergebysharedpin(conns::Vector{ConnectionDef})
 	end
 	return conns
 end
+"""
 
-function internnet(registry::Table, element::Symbol, side::Int)
+We search if a given element and side already exist in the registry. IF yes, they should have the same bus. Busid consists of Int + elecdomain
+"""
+function internbus(registry::Table, net::Symbol, element::Symbol, side::Int, elecdomain::Int)
 	# Find if bus already exists for element and side
 	busfilterfunc(row) = row.elem == element && row.side == side
 	busfilter = map(busfilterfunc, registry)
@@ -151,19 +158,29 @@ function internnet(registry::Table, element::Symbol, side::Int)
 		@assert length(bus_vec) == 1 "Multiple buses found for element :$element side $side. This should not happen, check your connections!"
 		return bus_vec[1]
 	else
-		nextbus = maximum(registry.bus; init=0) + 1
+		if !P.isgroundnet(net)
+			
+			domainbus = (filter(row -> row.elecdomain == elecdomain, registry)).bus
+			nextbus = maximum(domainbus; init=0) + 1
+		else
+			nextbus = 0 # Ground bus is always bus 0
+		end
 		return nextbus
 	end
 end
 
 #### Helper functions to Connectionregistry
+# domainfilter(row,elecdomain) = 
+domainconnections(registry, ::Val{1}) = acconnections(registry)
+domainconnections(registry, ::Val{2}) = dcconnections(registry)
 
 function acconnections(registry::ConnectionsRegistry)
-	return filter(row -> row.elecdomain == 1, registry.registry)
+	#Filter out ground bus and DC bus
+	return filter(row -> (row.elecdomain == 1) && row.bus !=0, registry.registry)
 end
 
-function dccconnections(registry::ConnectionsRegistry)
-	return filter(row -> row.elecdomain == 2, registry.registry)
+function dcconnections(registry::ConnectionsRegistry)
+	return filter(row -> row.elecdomain == 2 && row.bus !=0, registry.registry)
 end
 
 function sortedcomponentconnections(registry::ConnectionsRegistry, component::Symbol)
@@ -171,9 +188,9 @@ function sortedcomponentconnections(registry::ConnectionsRegistry, component::Sy
 	compconn = filter(row -> row.elem == component, registry.registry)
 	# First AC and then DC connections
 	acconn = filter(row -> row.elecdomain == 1, compconn)
-	sort!(accon, by = row -> (row.side, row.terminal))
+	sort!(acconn, by = row -> (row.side, row.terminal))
 	dcconn = filter(row -> row.elecdomain == 2, compconn)
-	sort!(dccon, by = row -> (row.side, row.terminal))
+	sort!(dcconn, by = row -> (row.side, row.terminal))
 	elecdomainsorted = vcat(acconn, dcconn)
 
 
@@ -522,8 +539,8 @@ function set_parent_global!(name::Symbol, value)
 end
 
 function solve_powerflow(network::P.Network, options::NamedTuple)
-	set_parent_global!(:ang_min, deg2rad(360))
-	set_parent_global!(:ang_max, deg2rad(-360))
+	# set_parent_global!(:ang_min, deg2rad(360))
+	# set_parent_global!(:ang_max, deg2rad(-360))
 
 	if P.is_linear(network)
 		println("Network only consists of linear elements. Skipping power flow.")
@@ -995,5 +1012,6 @@ function non_ground_node(element::P.Element, nodes2bus)
 end
 
 include("NB_power_flow.jl")
+include("../core/convert.jl")
 
 end

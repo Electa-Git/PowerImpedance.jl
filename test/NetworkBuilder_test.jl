@@ -265,16 +265,16 @@ function build_ieee39bus_with_macro()
 
 
 		# Sources @ 345 kV
-		G30=ac_source(pins = 3, V = Vm1, transformation = true)
-		G31=ac_source(pins = 3, V = Vm1, transformation = true)
-		G32=ac_source(pins = 3, V = Vm1, transformation = true)
-		G33=ac_source(pins = 3, V = Vm1, transformation = true)
-		G34=ac_source(pins = 3, V = Vm1, transformation = true)
-		G35=ac_source(pins = 3, V = Vm1, transformation = true)
-		G36=ac_source(pins = 3, V = Vm1, transformation = true)
-		G37=ac_source(pins = 3, V = Vm1, transformation = true)
-		G38=ac_source(pins = 3, V = Vm1, transformation = true)
-		G39=ac_source(pins = 3, V = Vm1, transformation = true)
+		G30=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
+		G31=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
+		G32=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
+		G33=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
+		G34=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
+		G35=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
+		G36=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
+		G37=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
+		G38=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
+		G39=ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true)
 		# Source impedances @ 345 kV
 		Zg30=impedance(
 			z = (s::Complex) -> (0.191736 + s*0.0122063),
@@ -327,7 +327,7 @@ function build_ieee39bus_with_macro()
 			transformation = true,
 		)
 
-		G_DC=dc_source(pins = 1, V = Vdc_ST/2) # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
+		G_DC=dc_source(pins = 1, setpoint=SetPoint(Vdc = Vdc_ST/2)) # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
 
 
@@ -1361,16 +1361,16 @@ function ieee39bus_elements()
 
 
 		# Sources @ 345 kV
-		G30 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G31 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G32 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G33 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G34 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G35 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G36 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G37 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G38 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G39 = ac_source(pins = 3, V = Vm1, transformation = true),
+		G30 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
+		G31 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
+		G32 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
+		G33 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
+		G34 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
+		G35 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
+		G36 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
+		G37 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
+		G38 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
+		G39 = ac_source(pins = 3, setpoint=SetPoint(Vac = Vm1), transformation = true),
 		# Source impedances @ 345 kV
 		Zg30 = impedance(
 			z = (s::Complex) -> (0.191736 + s*0.0122063),
@@ -1423,7 +1423,7 @@ function ieee39bus_elements()
 			transformation = true,
 		),
 
-		G_DC = dc_source(pins = 1, V = Vdc_ST/2), # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
+		G_DC = dc_source(pins = 1, setpoint=SetPoint(Vdc = Vdc_ST/2)), # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
 		STATCOM = PowerImpedanceACDC.tlc(
 			elec = elec,

@@ -38,7 +38,7 @@ abstract type AbstractMultiport <: AbstractElementModel end
     Pac ::Float64 = 0              # active power [MW]
     Qac ::Float64 = 0                # reactive power [MVA]
     θac ::Float64 = 0
-    Vac ::Float64 = 220*sqrt(2/3)             # AC voltage, amplitude [kV]
+    Vac ::Float64 = 0#220*sqrt(2/3)             # AC voltage, amplitude [kV]
 
     # DC
     Pdc::Float64 = 0.0
