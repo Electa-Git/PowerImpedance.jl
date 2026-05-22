@@ -1,5 +1,5 @@
 function isgroundnet(net)
-    return !startswith(lowercasestring(net), "gnd")
+    return startswith(lowercase(string(net)), "gnd")
 end
 
 function elecdomain(elem, side)

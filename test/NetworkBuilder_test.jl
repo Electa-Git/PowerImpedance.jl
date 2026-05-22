@@ -2373,6 +2373,38 @@ function build_ieee39bus_with_networkbuilder()
 	return (; builder, solved, network = builder.network)
 end
 
+function ieee39bus_with_nwbuilder_powerflow()
+	builder_options = (;
+		voltageBase = Vm1,
+		power_flow = (;
+			is_bounded = (;
+				bus_voltage = true,
+			),
+		),
+	)
+
+	builder = NetworkBuilder.define(
+		ieee39bus_elements(),
+		ieee39bus_connections();
+		options = builder_options,
+	)
+
+	data,_ = convert(builder, PIACDC.PMACDC)
+
+    options = builder.options
+
+    solved = solve_acdcpf(
+        data,
+        PIACDC._PM.ACPPowerModel,
+        powerflow_optimizer(options),
+        is_bounded_options(options);
+        setting = powerflow_setting(options),
+    )
+
+
+	return (; builder, solved, network = builder.network)
+end
+
 function determine_ieee39bus_impedance(network; freq_range = IEEE39_FREQ_RANGE)
 	return determine_impedance(
 		network;
@@ -2397,8 +2429,26 @@ function test_ieee39bus_networkbuilder_parity(; freq_range = IEEE39_FREQ_RANGE)
 	return nothing
 end
 
+function test_nwbuilder_powerflow_parity(; freq_range = IEEE39_FREQ_RANGE)
+	legacy = build_ieee39bus_with_macro()
+	built = ieee39bus_with_nwbuilder_powerflow().network
+
+	z_legacy, omega_legacy = determine_ieee39bus_impedance(legacy; freq_range)
+	z_built, omega_built = determine_ieee39bus_impedance(built; freq_range)
+
+	@test isequal(omega_built, omega_legacy)
+	@test axes(z_built) == axes(z_legacy)
+	@test isequal(z_built, z_legacy)
+
+	return nothing
+end
+
 @testset "IEEE39bus NetworkBuilder parity" begin
 	test_ieee39bus_networkbuilder_parity()
+end
+
+@testset "IEEE39bus NetworkBuilder power flow parity" begin
+	test_nwbuilder_powerflow_parity()
 end
 
 @testset "NetworkBuilder drops endpoints of declared disconnected elements" begin
