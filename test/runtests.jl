@@ -3,7 +3,7 @@ using PowerImpedanceACDC
 using Test
 using LinearAlgebra
 
-# const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
+const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
 
 @testset "PowerImpedanceACDC" begin
         

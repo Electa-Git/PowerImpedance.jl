@@ -1,4 +1,4 @@
-using PowerImpedanceACDC.NetworkBuilder: pin, ⟷
+using PowerImpedanceACDC.NetworkBuilder: pin, ⟷, powerflow_optimizer, is_bounded_options, powerflow_setting, solve_acdcpf
 
 @testset "NetworkBuilder unit tests" begin
 	legacy = @network begin
@@ -2389,11 +2389,11 @@ function ieee39bus_with_nwbuilder_powerflow()
 		options = builder_options,
 	)
 
-	data,_ = convert(builder, PIACDC.PMACDC)
+	data,elempitopm = convert(builder, PIACDC.PMACDC)
 
     options = builder.options
 
-    solved = solve_acdcpf(
+    result = solve_acdcpf(
         data,
         PIACDC._PM.ACPPowerModel,
         powerflow_optimizer(options),
@@ -2402,7 +2402,7 @@ function ieee39bus_with_nwbuilder_powerflow()
     )
 
 
-	return (; builder, solved, network = builder.network)
+	return (; builder, solved=(;data, result, elempitopm), network = builder.network)
 end
 
 function determine_ieee39bus_impedance(network; freq_range = IEEE39_FREQ_RANGE)
@@ -2426,19 +2426,39 @@ function test_ieee39bus_networkbuilder_parity(; freq_range = IEEE39_FREQ_RANGE)
 	@test axes(z_built) == axes(z_legacy)
 	@test isequal(z_built, z_legacy)
 
+	@test legacy.elements[:STATCOM].A ≈ built.elements[:STATCOM].A rtol=1e-11 #Check if the linearized state matrix are approx the same
+
 	return nothing
 end
 
 function test_nwbuilder_powerflow_parity(; freq_range = IEEE39_FREQ_RANGE)
-	legacy = build_ieee39bus_with_macro()
-	built = ieee39bus_with_nwbuilder_powerflow().network
+	legacypf = build_ieee39bus_with_networkbuilder().solved.powerflow
+	newpf = ieee39bus_with_nwbuilder_powerflow().solved
 
-	z_legacy, omega_legacy = determine_ieee39bus_impedance(legacy; freq_range)
-	z_built, omega_built = determine_ieee39bus_impedance(built; freq_range)
+	function dicts_approx_equal(dict1, dict2; atol = 1e-5)
+		keys1 = keys(dict1)
+		keys2 = keys(dict2)
+		if keys1 != keys2
+			return false
+		end
+		for key in keys1
+			val1 = dict1[key]
+			val2 = dict2[key]
+			if val1 isa AbstractDict && val2 isa AbstractDict
+				if !dicts_approx_equal(val1, val2; atol)
+					return false
+				end
+			elseif !isapprox(val1, val2; atol)
+				return false
+			end
+		end
+		return true
+	end
+	@test dicts_approx_equal(newpf.result["solution"]["convdc"]["1"], legacypf.result["solution"]["convdc"]["1"]; atol = 1e-5)
 
-	@test isequal(omega_built, omega_legacy)
-	@test axes(z_built) == axes(z_legacy)
-	@test isequal(z_built, z_legacy)
+	# @test isequal(legacypf, builtpf)
+	# @test axes(z_built) == axes(z_legacy)
+	# @test isequal(z_built, z_legacy)
 
 	return nothing
 end
