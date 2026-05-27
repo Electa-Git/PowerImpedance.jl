@@ -49,7 +49,7 @@ Each connection definition must provide a `name` and `endpoints`. Endpoints in
 the same connection are assigned the same bus, and the registry records the
 net name, bus number, element, side, terminal, and electrical domain.
 """
-function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}})
+function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}}, nonconnected_elements = Set())
 	
 	#1. Do checks of connections
 
@@ -72,10 +72,17 @@ function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}}
 		# TODO: Check whether sides of all other elements are already connected to the same bus of the examplepin + all same elec domain
 		for pin in conndef.endpoints
 			@assert pin.elementid in keys(elements) "Element :$(pin.elementid) defined in connection but not found in elements."
-			
+				
 			push!(registry, (;net=conndef.name, bus, elem=pin.elementid, side=pin.side, terminal=pin.terminal, elecdomain))
+		
+			
 		end
 	end
+
+	#Take out connections for non-connected elements (if any)
+	connectfilterfunc(row) = row.elem ∉ nonconnected_elements
+
+	registry = filter(connectfilterfunc, registry)
 	return ConnectionsRegistry(registry)
 end
 
@@ -307,12 +314,17 @@ end
 
 function define(elements::NamedTuple, connections::Tuple{Vararg{ConnectionDef}}; options = (;))
 
-	connectionregistry = ConnectionsRegistry(elements, connections)
+	connected_elements = (; filter(p -> p.second.connection, pairs(elements))...) #Filter out non-connected elements
+	nonconnectedid = setdiff(keys(elements), keys(connected_elements))
+	if !isempty(nonconnectedid)
+		println("The following elements are not connected according to their definition and will be ignored: $(nonconnectedid). If you want to include them, set connection=true in their definition.")
+	end
+	connectionregistry = ConnectionsRegistry(elements, connections, nonconnectedid)
 
 	network = build_network(elements, connectionregistry, options)
 
 	
-	return BuilderState(elements, connectionregistry, options, network, nothing)
+	return BuilderState(connected_elements, connectionregistry, options, network, nothing)
 end
 
 function update!(
