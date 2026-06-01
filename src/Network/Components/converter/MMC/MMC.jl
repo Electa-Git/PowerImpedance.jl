@@ -75,22 +75,22 @@ initialvalues(c::ΣdqzControlLEC) = (; initialvalues(c.wsigma)..., initialvalues
 ################## State-space equations #####################
 
 ### MMC ###
-function state_space!(F, x, inputs, c::MMC)
+function state_space!(F, x, inputs, setpoint_pu::SetpointPU, c::MMC)
     # -- Signal Processing ------------------------------------------------------------------------    
     sig_in = input_signals(c, x, inputs)
 
-    meas, i = state_space_block!(F, x, sig_in, c.meas, c, 1)
-    sync_out, i = state_space_block!(F, x, meas, c.sync, c, i)
+    meas, i = state_space_block!(F, x, sig_in, setpoint_pu, c.meas, c, 1)
+    sync_out, i = state_space_block!(F, x, meas, setpoint_pu, c.sync, c, i)
 
     # -- Delta and Sigma control ------------------------------------------------------------------
-    out_delta, i = state_space_block!(F, x, (; meas, sync = sync_out), c.delta_control, c, i)
-    out_sigma, i = state_space_block!(F, x, (meas = meas, power = (P_ac_f = meas.P_ac_f,), sync = sync_out), c.sigma_control, c, i)
+    out_delta, i = state_space_block!(F, x, (; meas, sync = sync_out), setpoint_pu, c.delta_control, c, i)
+    out_sigma, i = state_space_block!(F, x, (meas = meas, power = (P_ac_f = meas.P_ac_f,), sync = sync_out), setpoint_pu, c.sigma_control, c, i)
 
     # -- Modulation -------------------------------------------------------------------------------
-    out_modulation, i = state_space_block!(F, x, (; meas, out_delta, out_sigma), c.modulation, c, i)
+    out_modulation, i = state_space_block!(F, x, (; meas, out_delta, out_sigma), setpoint_pu, c.modulation, c, i)
 
     # -- Electrical model -------------------------------------------------------------------------
-    state_space_block!(F, x, (; out_modulation, sig_in, inputs), c.elec, c, i)
+    state_space_block!(F, x, (; out_modulation, sig_in, inputs), setpoint_pu, c.elec, c, i)
 
     return nothing
 end
@@ -98,52 +98,52 @@ end
 
 ### Higher level structures ###
 
-function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΣdqzControlTEC, c::MMC) 
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, setpoint_pu::SetpointPU, b::ΣdqzControlTEC, c::MMC) 
     (; meas) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_Wtot, i = state_space_block!(F, x, meas, b.tec, c, 1)
+    out_Wtot, i = state_space_block!(F, x, meas, setpoint_pu, b.tec, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_zscc, i = state_space_block!(F, x, (; meas, out_Wtot), b.zscc, c, i)
-    out_ccsc, i = state_space_block!(F, x, meas, b.ccsc, c, i)
+    out_zscc, i = state_space_block!(F, x, (; meas, out_Wtot), setpoint_pu, b.zscc, c, i)
+    out_ccsc, i = state_space_block!(F, x, meas, setpoint_pu, b.ccsc, c, i)
 
     return merge(out_ccsc, out_zscc)
 end
 
-function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΣdqzControlLEC, c::MMC) 
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, setpoint_pu::SetpointPU, b::ΣdqzControlLEC, c::MMC) 
     (; meas, power, sync) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_wsigma, i = state_space_block!(F, x, (; meas, power, sync), b.wsigma, c, 1)
-    out_wdelta, i = state_space_block!(F, x, (; meas, power, sync), b.wdelta, c, i)
+    out_wsigma, i = state_space_block!(F, x, (; meas, power, sync), setpoint_pu, b.wsigma, c, 1)
+    out_wdelta, i = state_space_block!(F, x, (; meas, power, sync), setpoint_pu, b.wdelta, c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_ccc, _ = state_space_block!(F, x, (; meas, sync, out_wΣ = out_wsigma, out_wΔ = out_wdelta), b.ccc, c, i)
+    out_ccc, _ = state_space_block!(F, x, (; meas, sync, out_wΣ = out_wsigma, out_wΔ = out_wdelta), setpoint_pu, b.ccc, c, i)
 
     return out_ccc
 end
 
-function state_space!(F, x, inputs, b::ΔdqControlGFL, c::MMC)
+function state_space!(F, x, inputs, setpoint_pu::SetpointPU, b::ΔdqControlGFL, c::MMC)
     (; meas, sync) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_active, i = state_space_block!(F, x, (; meas, sync), b.outer_active, c, 1)
-    out_reactive, i = state_space_block!(F, x, (; meas, sync), b.outer_reactive, c, i)
+    out_active, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, b.outer_active, c, 1)
+    out_reactive, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, b.outer_reactive, c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
     
-    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = (; out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref)), b.occ, c, i)
+    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = (; out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref)), setpoint_pu, b.occ, c, i)
 
     return merge(out_active, out_occ)
 end
 
-function state_space!(F, x, inputs, b::ΔdqControlGFM, c::MMC)
+function state_space!(F, x, inputs, setpoint_pu::SetpointPU, b::ΔdqControlGFM, c::MMC)
     (; meas, sync) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_reactive, i = state_space_block!(F, x, (; meas, sync), b.outer_reactive, c, 1)
+    out_reactive, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, b.outer_reactive, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_vi, i = state_space_block!(F, x, (; meas, sync, out_reactive), b.vi, c, i)
+    out_vi, i = state_space_block!(F, x, (; meas, sync, out_reactive), setpoint_pu, b.vi, c, i)
 
-    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = out_vi), b.occ, c, i)
+    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = out_vi), setpoint_pu, b.occ, c, i)
 
     return out_occ
 end
@@ -151,18 +151,18 @@ end
 
 ################## Handling of inputs and outputs ############
 
-function pftoinputs(c::MMC, setpoint::SetPoint) 
-    Vm  = setpoint.Vac / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
+function pftoinputs(c::MMC, setpoint::Setpoint) 
+    v_ac  = setpoint.Vac / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
     v_dc = setpoint.Vdc / c.elec.vDC_base
     p_ac = setpoint.Pac / c.elec.Sbase
     q_ac = - setpoint.Qac / c.elec.Sbase   # TODO check if this minus sign is really needed/relevant
     p_dc = setpoint.Pdc / c.elec.Sbase
     
-    vG_d = Vm * cos(setpoint.θac)   # d component of the grid voltage in the grid frame  
-    vG_q = -Vm * sin(setpoint.θac)  # q component of the grid voltage in the grid frame
+    vG_d = v_ac * cos(setpoint.θac)   # d component of the grid voltage in the grid frame  
+    vG_q = -v_ac * sin(setpoint.θac)  # q component of the grid voltage in the grid frame
 
     return (v_dc = v_dc, vG_d = vG_d, vG_q = vG_q), 
-        SetpointPU(p_ac, q_ac, p_dc, setpoint.θac)
+        SetpointPU(p_ac, q_ac, setpoint.θac, v_ac, p_dc, v_dc)
 end
 
 function input_signals(c::MMC, x, inputs)
@@ -198,7 +198,7 @@ function mmc(;
     delta_control::AbstractΔdqControl,
     sigma_control::AbstractΣdqzControl,
     modulation::AbstractModulationMMC = UncompensatedModulation(),
-    setpoint::SetPoint=SetPoint(),
+    setpoint::Setpoint=Setpoint(),
     limits::Limits = Limits(),
     connection::Bool = true)
 
@@ -216,90 +216,19 @@ end
 
 
 
-equilibrium_state_space!(F, x, inputs, c::MMC, setpoint::SetPoint) =
-    equilibrium_state_space!(F, x, inputs, c, c.delta_control, setpoint)
+equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC) =
+    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.delta_control)
 
+equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFL) =
+    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_active)
 
-equilibrium_state_space!(F, x, inputs, c::MMC, ::AbstractΔdqControl, ::SetPoint) =
-    state_space!(F, x, inputs, c)
-
-equilibrium_state_space!(F, x, inputs, c::MMC, b::ΔdqControlGFL, setpoint::SetPoint) =
-    equilibrium_state_space!(F, x, inputs, c, b.outer_active, setpoint)
-
-equilibrium_state_space!(F, x, inputs, c::MMC, ::AbstractOuterActiveControl, ::SetPoint) =
-    state_space!(F, x, inputs, c)
-
-
-function equilibrium_state_space!(F, x, inputs, c::MMC, ::OuterActiveVdcControl, setpoint::SetPoint)
-    y = state_space!(F, x, inputs, c)
+function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, ::OuterActiveVdcControl)
     idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
     @assert !isnothing(idx_ξvdc)
-    i_dc_ref = (setpoint.Pdc / c.elec.Sbase) / inputs.v_dc
+    i_dc_ref = setpoint_pu.p_dc / inputs.v_dc
     F[idx_ξvdc] = i_dc_ref - 3*x.iΣ_z
     return y
 end
-
-"""
-Resolve zero-valued MMC control references from a power-flow setpoint.
-
-$(SIGNATURES)
-"""
-function resolved_refs(c::MMC, setpoint::SetPoint)
-    sync =
-        if c.sync isa VSEWithDamping
-            VSEWithDamping(
-                H = c.sync.H,
-                K_d = c.sync.K_d,
-                K_ω = c.sync.K_ω,
-                P_ac_ref = iszero(c.sync.P_ac_ref) ? setpoint.Pac / c.elec.Sbase : c.sync.P_ac_ref,
-                ω_ref = c.sync.ω_ref,
-                pll = c.sync.pll,
-            )
-        else
-            c.sync
-        end
-
-    delta_control =
-        if c.delta_control isa ΔdqControlGFL
-            outer_active =
-                if c.delta_control.outer_active isa OuterActivePowerControl
-                    OuterActivePowerControl(
-                        pi_ctrl = c.delta_control.outer_active.pi_ctrl,
-                        P_ac_ref = iszero(c.delta_control.outer_active.P_ac_ref) ?
-                                   setpoint.Pac / c.elec.Sbase :
-                                   c.delta_control.outer_active.P_ac_ref,
-                        support = c.delta_control.outer_active.support,
-                    )
-                elseif c.delta_control.outer_active isa OuterActiveVdcControl
-                    OuterActiveVdcControl(
-                        pi_ctrl = c.delta_control.outer_active.pi_ctrl,
-                        v_dc_ref = iszero(c.delta_control.outer_active.v_dc_ref) ?
-                                   setpoint.Vdc / c.elec.vDC_base :
-                                   c.delta_control.outer_active.v_dc_ref,
-                    )
-                else
-                    c.delta_control.outer_active
-                end
-            outer_reactive = resolved_outer_reactive(c.delta_control.outer_reactive, c, setpoint)
-            ΔdqControlGFL(outer_active, outer_reactive, c.delta_control.occ)
-        elseif c.delta_control isa ΔdqControlGFM
-            outer_reactive = resolved_outer_reactive(c.delta_control.outer_reactive, c, setpoint)
-            ΔdqControlGFM(outer_reactive, c.delta_control.vi, c.delta_control.occ)
-        else
-            c.delta_control
-        end
-
-    return MMC(c.meas, sync, delta_control, c.sigma_control, c.modulation, c.elec)
-end
-
-function resolved_outer_reactive(block::OuterReactiveQControl, c::MMC, setpoint::SetPoint)
-    return OuterReactiveQControl(
-        pi_ctrl = block.pi_ctrl,
-        Q_ac_ref = iszero(block.Q_ac_ref) ? -setpoint.Qac / c.elec.Sbase : block.Q_ac_ref,
-        support = block.support,
-    )
-end
-resolved_outer_reactive(block::AbstractOuterReactiveControl, c::MMC, setpoint::SetPoint) = block
 
 pf_type_ac(::ΔdqControlGFL) = 1
 pf_type_ac(block::ΔdqControlGFM) = pf_type_ac(block.outer_reactive)
@@ -309,11 +238,6 @@ pf_type_dc(::NoSynchronization) = 1
 pf_type_dc(::PLLSynchronization) = 1
 pf_type_dc(block::ΔdqControlGFL, sync::AbstractSynchronization) = pf_type_dc(block.outer_active)
 pf_type_dc(::ΔdqControlGFM, sync::AbstractSynchronization) = pf_type_dc(sync)
-
-function pf_vtar_pu(conv::MMC, elem::Element, global_dict)
-    vbase_ln_rms = global_dict["V"] / 1e3
-    return elem.setpoint.Vac / vbase_ln_rms
-end
 
 function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     
@@ -337,7 +261,7 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, nodes2bus, bus2nodes
     convdc["basekVac"] = global_dict["V"] / 1e3
 
     convdc["type_ac"] = pf_type_ac(conv.delta_control)
-    convdc["Vtar"] = pf_vtar_pu(conv, elem, global_dict)
+    convdc["Vtar"] = (elem.setpoint.Vac/sqrt(2)) / (global_dict["V"] / 1e3) # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages, PowerImpedanceACDC uses amplitude
     if convdc["type_ac"] == 2
         data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
@@ -360,13 +284,12 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, nodes2bus, bus2nodes
     convdc["bf"] = 0.0
     convdc["reactor"] = 1
 
-    z_ac_base = (3 / 2) * conv.elec.vAC_base^2 / conv.elec.Sbase
-    convdc["rc"] = conv.elec.turnsRatio^(-2) * conv.elec.Rₑ * z_ac_base / global_dict["Z"]
-    convdc["xc"] = conv.elec.turnsRatio^(-2) * conv.elec.Lₑ * z_ac_base * global_dict["omega"] / conv.elec.ωbase / global_dict["Z"]
+    convdc["rc"] = conv.elec.turnsRatio^(-2) * (conv.elec.Rₑ * conv.elec.zAC_base) / global_dict["Z"]
+    convdc["xc"] = conv.elec.turnsRatio^(-2) * (conv.elec.Lₑ * conv.elec.lAC_base) * global_dict["omega"] / global_dict["Z"]
 
-    convdc["Vmmax"] = 1.1 * elem.setpoint.Vac * 1e3 / global_dict["V"]
-    convdc["Vmmin"] = 0.9 * elem.setpoint.Vac * 1e3 / global_dict["V"]
-    convdc["Imax"] = 1.1 * max(abs(elem.limits.P_min), abs(elem.limits.P_max), abs(elem.setpoint.Pac)) / max(elem.setpoint.Vac, eps())
+    convdc["Vmmax"] = 1.1 * convdc["Vtar"]
+    convdc["Vmmin"] = 0.9 * convdc["Vtar"]
+    convdc["Imax"] = 1.1 * max(abs(elem.limits.P_min), abs(elem.limits.P_max), abs(elem.setpoint.Pac)) / max(elem.setpoint.Vac / sqrt(2), eps())
 
     convdc["P_g"] = elem.setpoint.Pac
     convdc["Q_g"] = elem.setpoint.Qac

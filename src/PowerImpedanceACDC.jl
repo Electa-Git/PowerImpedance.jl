@@ -55,6 +55,7 @@ using Markdown
 using Interpolations
 using DelimitedFiles
 import NaNMath # Deal with out of domain erros in Nonlinearsolve
+using Logging # For logging macros: @info, @warn, @error and @debug
 
 # Include PowerModelsMCDC as a local package, due to dependencies
 include("Packages/PowerModelsMCDC.jl/src/PowerModelsMCDC.jl")

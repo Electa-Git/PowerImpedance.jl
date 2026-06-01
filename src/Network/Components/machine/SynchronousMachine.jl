@@ -118,7 +118,7 @@ inputnames(m::SynchronousMachine) = (:vd, :vq, :Tm0)
 outputnames(m::SynchronousMachine) = (:id, :iq)
 elecinputnames(m::SynchronousMachine) = (:vd, :vq)
 
-function pftoinputs(m::SynchronousMachine, setpoint::SetPoint)
+function pftoinputs(m::SynchronousMachine, setpoint::Setpoint)
     
     v_bus_d = setpoint.Vac * cos(setpoint.θac) /  (m.elec.Vᵃᶜ_base * sqrt(2/3))
     v_bus_q = -setpoint.Vac * sin(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
@@ -304,7 +304,7 @@ end
 
 ###### HElper functions ########################
 
-function synchronousmachine(;elec=ElectricalSM(),mech=MechanicalSM(),avr=AVRSM(),gov=GovernorSM(), setpoint=SetPoint(), connection=true)
+function synchronousmachine(;elec=ElectricalSM(),mech=MechanicalSM(),avr=AVRSM(),gov=GovernorSM(), setpoint=Setpoint(), connection=true)
     
     gen = SynchronousMachine(elec, mech,avr, gov)
     # Transformation property set to false, as model is natively defined in dq-frame. TODO: Fix this
@@ -371,7 +371,7 @@ end
 #     C=jac[nb_states+1:end, 1:nb_states]
 #     D=jac[nb_states+1:end, nb_states+1:end-1]
 
-#     setpoint = SetPoint(;Vac,θac, Pac,Qac)
+#     setpoint = Setpoint(;Vac,θac, Pac,Qac)
 
 #     return setpoint, A,B,C,D # Return new element
 #     ### END

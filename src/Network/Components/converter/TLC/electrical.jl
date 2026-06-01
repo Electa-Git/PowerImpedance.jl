@@ -29,6 +29,7 @@ struct ElectricalTLC <: AbstractStateSpace
     Sbase::Float64
     vDCbase::Float64
     zACbase::Float64
+    lACbase::Float64
     iDCbase::Float64 
     vACbase::Float64 
     iACbase::Float64 
@@ -57,7 +58,7 @@ function ElectricalTLC(;
     Rᵣ = Rᵣ / zACbase
     Lᵣ = Lᵣ / lACbase
 
-    return ElectricalTLC(Lᵣ, Rᵣ, ωbase, Sbase, vDCbase, zACbase, iDCbase, vACbase, iACbase)
+    return ElectricalTLC(Lᵣ, Rᵣ, ωbase, Sbase, vDCbase, zACbase, lACbase, iDCbase, vACbase, iACbase)
 
 end
 
@@ -74,7 +75,7 @@ Compute initial current states from power-flow inputs and setpoints.
 
 $(SIGNATURES)
 """
-function initialvalues(block::ElectricalTLC; inputs, setpoint_pu=SetPoint())
+function initialvalues(block::ElectricalTLC; inputs, setpoint_pu=SetpointPU())
     v_d = inputs.vG_d
     v_q = inputs.vG_q
 

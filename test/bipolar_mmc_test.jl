@@ -15,7 +15,7 @@ using PowerImpedanceACDC:
     OuterReactiveQControl,
     PIControl,
     PLLSynchronization,
-    SetPoint,
+    Setpoint,
     TotalEnergyControl,
     UncompensatedModulation,
     VSEWithDamping,
@@ -95,7 +95,7 @@ function build_mapping_test_pole(; Vac = 220 * sqrt(2 / 3), Vdc = 320.0)
         sync = sync,
         delta_control = delta_control,
         sigma_control = sigma_control,
-        setpoint = SetPoint(Pac = 0.7, Qac = 0.0, θac = -1.5393799172821/2 /π *360, Vac = Vac, Vdc = Vdc, Pdc = -0.7),
+        setpoint = Setpoint(Pac = 0.7, Qac = 0.0, θac = -1.5393799172821/2 /π *360, Vac = Vac, Vdc = Vdc, Pdc = -0.7),
         limits = Limits(P_min = -1.0, P_max = 1.0, Q_min = -1.0, Q_max = 1.0),
     )
 end
@@ -128,14 +128,12 @@ function build_adm_style_gfm_pole(; Pac, Qac, Vac_setpoint, Vdc)
         H = 5.0,
         K_d = 100.0,
         K_ω = 10.0,
-        P_ac_ref = Pac / 1060.0,
         pll = pll,
     )
 
     delta_control = ΔdqControlGFM(
         outer_reactive = OuterReactiveQControl(
             pi_ctrl = PIControl(Kp = 0.0, Ki = 30.0),
-            Q_ac_ref = -Qac / 1060.0,
         ),
         vi = CCVI(
             R_v = 0.01,
@@ -165,7 +163,7 @@ function build_adm_style_gfm_pole(; Pac, Qac, Vac_setpoint, Vdc)
         delta_control = delta_control,
         sigma_control = sigma_control,
         modulation = UncompensatedModulation(timeDelay = 200e-6, padeOrderNum = 5, padeOrderDen = 5),
-        setpoint = SetPoint(Pac = Pac, Qac = Qac, θac = 0.0, Vac = Vac_setpoint, Vdc = Vdc, Pdc = Pac),
+        setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = 0.0, Vac = Vac_setpoint, Vdc = Vdc, Pdc = Pac),
         limits = Limits(P_min = -1500.0, P_max = 1500.0, Q_min = -1000.0, Q_max = 1000.0),
     )
 end

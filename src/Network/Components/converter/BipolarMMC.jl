@@ -8,7 +8,7 @@ mutable struct BipolarMMC{E<:Element} <: AbstractBipolarMMC
 end
 
 function station_setpoint(pos::Element, neg::Element)
-    return SetPoint(
+    return Setpoint(
         Pac = pos.setpoint.Pac + neg.setpoint.Pac,
         Qac = pos.setpoint.Qac + neg.setpoint.Qac,
         θac = pos.setpoint.θac,
@@ -52,8 +52,8 @@ end
 function bipolar_mmc(
     mmc_pos::MMC,
     mmc_neg::MMC;
-    setpoint_pos::SetPoint = SetPoint(),
-    setpoint_neg::SetPoint = setpoint_pos,
+    setpoint_pos::Setpoint = Setpoint(),
+    setpoint_neg::Setpoint = setpoint_pos,
     limits_pos::Limits = Limits(),
     limits_neg::Limits = limits_pos,
     connection::Bool = true,
@@ -107,7 +107,7 @@ function update!(converter::BipolarMMC, Vm, θ,
                  Pac_p, Qac_p, Vpr, Pdc_p,
                  Pac_n, Qac_n, Vrn, Pdc_n)
 
-    setpoint_pos = SetPoint(
+    setpoint_pos = Setpoint(
         Pac = Pac_p,
         Qac = Qac_p,
         θac = θ,
@@ -115,7 +115,7 @@ function update!(converter::BipolarMMC, Vm, θ,
         Pdc = Pdc_p,
         Vdc = Vpr,
     )
-    setpoint_neg = SetPoint(
+    setpoint_neg = Setpoint(
         Pac = Pac_n,
         Qac = Qac_n,
         θac = θ,

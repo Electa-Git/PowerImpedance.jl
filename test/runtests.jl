@@ -5,7 +5,15 @@ using LinearAlgebra
 
 const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
 
-@testset "PowerImpedanceACDC" begin
+# Uncomment the following line to change logging level:
+# using Logging
+# Logging.global_logger(ConsoleLogger(stderr, Logging.Warn)) # possible values: Logging.Debug, Logging.Info, Logging.Warn, Logging.Error
+
+# Alternatively, you can set the logging level to debug for the PIACDC package only (to avoid vscode debug logging) via an environment variable:
+# ENV["JULIA_DEBUG"]=PowerImpedanceACDC # Warning: this will unfortunanelty not enable the debug logging for the ipopt solver.
+
+
+@time @testset "PowerImpedanceACDC" begin
         
         include("imp_test.jl")
         include("adm_MMC_test.jl")
@@ -23,4 +31,4 @@ const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
         include("Transformer_test.jl")
         #include("power_flow_test.jl")
         
-end
+end;

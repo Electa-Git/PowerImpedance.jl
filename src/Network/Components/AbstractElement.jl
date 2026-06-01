@@ -1,4 +1,4 @@
-export SetPoint
+export Setpoint
 
 # PowerBlocks things, before finding proper place
 ### PowerBlocks
@@ -32,7 +32,7 @@ abstract type AbstractElementModel end
 
 abstract type AbstractMultiport <: AbstractElementModel end
 
-@with_kw struct SetPoint
+@with_kw struct Setpoint
     
     # Power flow results
     Pac ::Float64 = 0              # active power [MW]
@@ -46,11 +46,14 @@ abstract type AbstractMultiport <: AbstractElementModel end
    
 end
 
-struct SetpointPU # Per-unitized setpoint used internally
-    p_ac::Float64
-    q_ac::Float64
-    p_dc::Float64
-    θ_ac::Float64
+@with_kw struct SetpointPU # Per-unitized setpoint used internally
+    p_ac::Float64 = 0
+    q_ac::Float64 = 0
+    θ_ac::Float64 = 0
+    v_ac::Float64 = 1
+    
+    p_dc::Float64 = 0
+    v_dc::Float64 = 1
 end
 
 
@@ -78,7 +81,7 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
     #   basevalues::BaseVal
     transformation :: Bool
     connection :: Bool # True = Element is connected, False= Element is disconnected 
-    setpoint::SetPoint
+    setpoint::Setpoint
     limits::Limits
     function Element(; element_model=nothing, element_value=nothing, args...)
         
@@ -95,7 +98,7 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
         elem = new{typeof(model)}()
 
         elem.element_model = model
-        elem.setpoint = SetPoint()
+        elem.setpoint = Setpoint()
         elem.limits = Limits()
         elem.A, elem.B, elem.C, elem.D = fill(Array{ComplexF64}(undef, 0, 0), 4)
 

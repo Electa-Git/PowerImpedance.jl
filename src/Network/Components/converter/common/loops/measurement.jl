@@ -255,14 +255,14 @@ Evaluate all measurement filters and return their filtered outputs.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, inputs, m::Measurement, ::AbstractConverter)
-    vG_d, i = state_space_block!(F, x, inputs, m.vG_d, 1)
-    vG_q, i = state_space_block!(F, x, inputs, m.vG_q, i)
-    v_dc, i = state_space_block!(F, x, inputs, m.v_dc, i)
-    i_d, i = state_space_block!(F, x, inputs, m.i_d, i)
-    i_q, i = state_space_block!(F, x, inputs, m.i_q, i)
-    i_dc, i = state_space_block!(F, x, inputs, m.i_dc, i)
-    θ, i = state_space_block!(F, x, inputs, m.θ, i)
+function state_space!(F, x, inputs, m::Measurement, c::AbstractConverter)
+    vG_d, i = state_space_block!(F, x, inputs, m.vG_d, c, 1)
+    vG_q, i = state_space_block!(F, x, inputs, m.vG_q, c, i)
+    v_dc, i = state_space_block!(F, x, inputs, m.v_dc, c, i)
+    i_d, i = state_space_block!(F, x, inputs, m.i_d, c, i)
+    i_q, i = state_space_block!(F, x, inputs, m.i_q, c, i)
+    i_dc, i = state_space_block!(F, x, inputs, m.i_dc, c, i)
+    θ, i = state_space_block!(F, x, inputs, m.θ, c, i)
 
     # Computing the power from the measured signals
     measured = merge(vG_d, vG_q, v_dc, i_d, i_q, i_dc, θ)
@@ -272,9 +272,9 @@ function state_space!(F, x, inputs, m::Measurement, ::AbstractConverter)
         P_dc = measured.v_dc_f * measured.i_dc_f,
     ))
 
-    P_ac, i = state_space_block!(F, x, power_inputs, m.P_ac, i)
-    Q_ac, i = state_space_block!(F, x, power_inputs, m.Q_ac, i)
-    P_dc, _ = state_space_block!(F, x, power_inputs, m.P_dc, i)
+    P_ac, i = state_space_block!(F, x, power_inputs, m.P_ac, c, i)
+    Q_ac, i = state_space_block!(F, x, power_inputs, m.Q_ac, c, i)
+    P_dc, _ = state_space_block!(F, x, power_inputs, m.P_dc, c, i)
 
     return merge(measured, P_ac, Q_ac, P_dc)
 end

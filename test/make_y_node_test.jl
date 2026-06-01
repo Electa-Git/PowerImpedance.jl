@@ -89,7 +89,6 @@ MMC1 = PowerImpedanceACDC.mmc(
                 H = 5,
                 K_d = 100,
                 K_ω = 10,
-                P_ac_ref = P_MMC1 / 1000.0,
                 ω_ref = 1.0,
                 pll = PowerImpedanceACDC.PLLSynchronization(
                         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
@@ -99,7 +98,6 @@ MMC1 = PowerImpedanceACDC.mmc(
         delta_control = PowerImpedanceACDC.ΔdqControlGFM(
                 outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
                         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.0, Ki = 3),
-                        Q_ac_ref = 0.0,
                         support = PowerImpedanceACDC.NoVoltageSupport(),
                 ),
                 vi = PowerImpedanceACDC.CCVI(
@@ -130,11 +128,11 @@ MMC1 = PowerImpedanceACDC.mmc(
                 padeOrderNum = 5,
                 padeOrderDen = 5,
         ),
-        setpoint = PowerImpedanceACDC.SetPoint(
+        setpoint = PowerImpedanceACDC.Setpoint(
                 Pac = P_MMC1,
                 Qac = Q_MMC1,
                 θac = 0.0,
-                Vac = Vm,
+                Vac = Vm * sqrt(2),
                 Pdc = P_MMC1,
                 Vdc = 640,
         ),
@@ -167,7 +165,6 @@ MMC2 = PowerImpedanceACDC.mmc(
                 H = 5,
                 K_d = 100,
                 K_ω = 10,
-                P_ac_ref = P_MMC2 / 1000.0,
                 ω_ref = 1.0,
                 pll = PowerImpedanceACDC.PLLSynchronization(
                         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
@@ -177,7 +174,6 @@ MMC2 = PowerImpedanceACDC.mmc(
         delta_control = PowerImpedanceACDC.ΔdqControlGFM(
                 outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
                         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.0, Ki = 3),
-                        Q_ac_ref = Q_MMC2/1000.0,
                         support = PowerImpedanceACDC.NoVoltageSupport(),
                 ),
                 vi = PowerImpedanceACDC.CCVI(
@@ -208,11 +204,11 @@ MMC2 = PowerImpedanceACDC.mmc(
                 padeOrderNum = 5,
                 padeOrderDen = 5,
         ),
-        setpoint = PowerImpedanceACDC.SetPoint(
+        setpoint = PowerImpedanceACDC.Setpoint(
                 Pac = P_MMC2,
                 Qac = Q_MMC2,
                 θac = 0.0,
-                Vac = Vm,
+                Vac = Vm * sqrt(2),
                 Pdc = P_MMC2,
                 Vdc = 640,
         ),
@@ -248,11 +244,9 @@ MMC3 = PowerImpedanceACDC.mmc(
         delta_control = PowerImpedanceACDC.ΔdqControlGFL(
                 outer_active = PowerImpedanceACDC.OuterActiveVdcControl(
                         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5, Ki = 15),
-                        v_dc_ref = 1.0,
                 ),
                 outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
                         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
-                        Q_ac_ref = Q_MMC3/1000.0,
                         support = PowerImpedanceACDC.NoVoltageSupport(),
                 ),
                 occ = PowerImpedanceACDC.InnerCurrentPIControl(
@@ -276,11 +270,11 @@ MMC3 = PowerImpedanceACDC.mmc(
                 padeOrderNum = 5,
                 padeOrderDen = 5,
         ),
-        setpoint = PowerImpedanceACDC.SetPoint(
+        setpoint = PowerImpedanceACDC.Setpoint(
                 Pac = 0.0,
                 Qac = Q_MMC3,
                 θac = 0.0,
-                Vac = Vm,
+                Vac = Vm * sqrt(2),
                 Pdc = 0.0,
                 Vdc = 640,
         ),
@@ -316,11 +310,9 @@ MMC4 = PowerImpedanceACDC.mmc(
         delta_control = PowerImpedanceACDC.ΔdqControlGFL(
                 outer_active = PowerImpedanceACDC.OuterActiveVdcControl(
                         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5, Ki = 15),
-                        v_dc_ref = 1.0,
                 ),
                 outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
                         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
-                        Q_ac_ref = Q_MMC4/1000.0,
                         support = PowerImpedanceACDC.NoVoltageSupport(),
                 ),
                 occ = PowerImpedanceACDC.InnerCurrentPIControl(
@@ -344,11 +336,11 @@ MMC4 = PowerImpedanceACDC.mmc(
                 padeOrderNum = 5,
                 padeOrderDen = 5,
         ),
-        setpoint = PowerImpedanceACDC.SetPoint(
+        setpoint = PowerImpedanceACDC.Setpoint(
                 Pac = 0.0,
                 Qac = Q_MMC4,
                 θac = 0.0,
-                Vac = Vm,
+                Vac = Vm * sqrt(2),
                 Pdc = 0.0,
                 Vdc = 640,
         ),
@@ -379,12 +371,10 @@ WF1 = PowerImpedanceACDC.tlc(
         ),
         outerActive = PowerImpedanceACDC.OuterActivePowerControl(
                 pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
-                P_ac_ref = 0.0,
                 support = PowerImpedanceACDC.NoFrequencySupport(),
         ),
         outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
                 pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
-                Q_ac_ref = 0.0,
                 support = PowerImpedanceACDC.NoVoltageSupport(),
         ),
         innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl(),
@@ -392,7 +382,7 @@ WF1 = PowerImpedanceACDC.tlc(
                 pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.254647908947033, Ki = 0.8),
         ),
         mod = PowerImpedanceACDC.NoModulation(),
-        setpoint = PowerImpedanceACDC.SetPoint(
+        setpoint = PowerImpedanceACDC.Setpoint(
                 Pac = Pwf,
                 Qac = Qwf,
                 θac = 0.0,
@@ -426,12 +416,10 @@ WF2 = PowerImpedanceACDC.tlc(
         ),
         outerActive = PowerImpedanceACDC.OuterActivePowerControl(
                 pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
-                P_ac_ref = 0.0,
                 support = PowerImpedanceACDC.NoFrequencySupport(),
         ),
         outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
                 pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
-                Q_ac_ref = 0.0,
                 support = PowerImpedanceACDC.NoVoltageSupport(),
         ),
         innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl(),
@@ -439,7 +427,7 @@ WF2 = PowerImpedanceACDC.tlc(
                 pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.254647908947033, Ki = 0.8),
         ),
         mod = PowerImpedanceACDC.NoModulation(),
-        setpoint = PowerImpedanceACDC.SetPoint(
+        setpoint = PowerImpedanceACDC.Setpoint(
                 Pac = Pwf,
                 Qac = Qwf,
                 θac = 0.0,
@@ -473,12 +461,10 @@ WF3 = PowerImpedanceACDC.tlc(
         ),
         outerActive = PowerImpedanceACDC.OuterActivePowerControl(
                 pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
-                P_ac_ref = 0.0,
                 support = PowerImpedanceACDC.NoFrequencySupport(),
         ),
         outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
                 pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.01, Ki = 10),
-                Q_ac_ref = 0.0,
                 support = PowerImpedanceACDC.NoVoltageSupport(),
         ),
         innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl(),
@@ -486,7 +472,7 @@ WF3 = PowerImpedanceACDC.tlc(
                 pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.254647908947033, Ki = 0.8),
         ),
         mod = PowerImpedanceACDC.NoModulation(),
-        setpoint = PowerImpedanceACDC.SetPoint(
+        setpoint = PowerImpedanceACDC.Setpoint(
                 Pac = Pwf,
                 Qac = Qwf,
                 θac = 0.0,

@@ -237,7 +237,6 @@ function build_ieee39bus_with_macro()
 
 	outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
 		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
-		v_dc_ref = 0.0,
 	)
 
 	outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
@@ -245,11 +244,10 @@ function build_ieee39bus_with_macro()
 		support = PowerImpedanceACDC.VoltageSupportLag(
 			K = 5.0,
 			ωc = 1 / 0.5,
-			v_ac_ref = Vm1*sqrt(2)*Vac_ref_ST / elec.vACbase,
 		),
 	)
 
-	setpoint = PowerImpedanceACDC.SetPoint(
+	setpoint = PowerImpedanceACDC.Setpoint(
 		Pac = 0.0,
 		Qac = Q_ST*S_ST,
 		θac = 0.0,
@@ -1334,7 +1332,6 @@ function ieee39bus_elements()
 
 	outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
 		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
-		v_dc_ref = 0.0,
 	)
 
 	outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
@@ -1342,11 +1339,10 @@ function ieee39bus_elements()
 		support = PowerImpedanceACDC.VoltageSupportLag(
 			K = 5.0,
 			ωc = 1 / 0.5,
-			v_ac_ref = Vm1*sqrt(2)*Vac_ref_ST / elec.vACbase,
 		),
 	)
 
-	setpoint = PowerImpedanceACDC.SetPoint(
+	setpoint = PowerImpedanceACDC.Setpoint(
 		Pac = 0.0,
 		Qac = Q_ST*S_ST,
 		θac = 0.0,

@@ -24,13 +24,13 @@ if SM == "PM"
             PM = round(PM, digits = 2)
             f_gcf = round(omega[i]/(2*π), digits = 2)
         
-            println("\t Phase margin is ", PM, "° at gain crossover frequency ", f_gcf, " Hz")
+            @info "\t Phase margin is $PM ° at gain crossover frequency $f_gcf Hz"
             counter_PM = counter_PM + 1
         end
     end
 
     if counter_PM == 0
-        println("\t Infinite phase margin")
+        @info "\t Infinite phase margin"
     end
 
 ##### Gain margin
@@ -42,13 +42,13 @@ elseif SM == "GM"
             GM = round(GM, digits = 2)
             f_pcf = round(omega[i]/(2*π), digits = 2)
 
-            println("\t Gain margin is ", GM, " dB at phase crossover frequency ", f_pcf, " Hz")
+            @info "\t Gain margin is $GM dB at phase crossover frequency $f_pcf Hz"
             counter_GM = counter_GM + 1
         end
     end
 
     if counter_GM == 0
-        println("\t Infinite gain margin")
+        @info "\t Infinite gain margin"
     end
 
 ##### Vector margin
@@ -60,10 +60,10 @@ elseif SM == "VM"
     VM = round(VM, digits = 2)
     f_VM = round(omega[index_VM]/(2*π), digits = 2)
 
-    println("\t Vector margin is ", VM, " % at frequency ", f_VM, " Hz")
+    @info "\t Vector margin is $VM % at frequency $f_VM Hz"
 
 else
-    println("\t Indicate the type of stability margin: PM, GM, VM or no")
+    @info "\t Indicate the type of stability margin: PM, GM, VM or no"
 end
 
 end

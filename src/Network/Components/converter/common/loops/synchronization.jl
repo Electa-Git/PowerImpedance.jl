@@ -42,7 +42,7 @@ Return nominal synchronization outputs without state equations.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, block::NoSynchronization, conv::AbstractConverter) = (ω_c = 1.0,)
+state_space!(F, x, meas, setpoint_pu::SetpointPU, block::NoSynchronization, conv::AbstractConverter) = (ω_c = 1.0,)
 
 """
 Phase-locked-loop synchronization block.
@@ -102,7 +102,7 @@ Evaluate PLL filter, PI integrator, and angle state equations.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, meas, block::PLLSynchronization, conv::AbstractConverter)
+function state_space!(F, x, meas, ::SetpointPU, block::PLLSynchronization, conv::AbstractConverter)
     _, vG_q_pll_f = frame_transform(meas.vG_d_f, meas.vG_q_f, (x.Δθ_pll - syncangle(conv.sync, x))) # Ensuring that voltage is in PLL reference frame (it is not the converter reference frame in GFM)
     v_pll, i = filter_step!(F, 1, x, block.filter, filter_statenames(:v_q_pll_f, block.filter), vG_q_pll_f)
     Δω = -block.pi_ctrl.Kp * v_pll + x.ξ_pll
@@ -118,7 +118,6 @@ struct VSEWithDamping <: AbstractSynchronization   # VSE = Virtual Swing Equatio
     H::Float64          # Virtual Inertia [s]
     K_d::Float64        # Damping coefficient [-]
     K_ω::Float64        # Droop coefficient [-]
-    P_ac_ref::Float64   # Active power reference [pu]
     ω_ref::Float64      # Angular frequency reference [pu]
     pll::PLLSynchronization # PLL
 end
@@ -127,7 +126,6 @@ function VSEWithDamping(;
     H::Real = 5,
     K_d::Real = 100,
     K_ω::Real = 10,
-    P_ac_ref::Real = 0,
     ω_ref::Real = 1,
     pll::PLLSynchronization,
 )
@@ -135,7 +133,6 @@ function VSEWithDamping(;
         Float64(H),
         Float64(K_d),
         Float64(K_ω),
-        Float64(P_ac_ref),
         Float64(ω_ref),
         pll,
     )
@@ -149,8 +146,8 @@ function initialvalues(b::VSEWithDamping; setpoint_pu)
     return (; initialvalues(b.pll)..., ω_VSM=1, Δθ_VSM=setpoint_pu.θ_ac)
 end
 
-function state_space!(F, x, meas, b::VSEWithDamping, conv::AbstractConverter)
-    out_pll, i = state_space_block!(F, x, meas, b.pll, conv, 1)
+function state_space!(F, x, meas, setpoint_pu::SetpointPU, b::VSEWithDamping, conv::AbstractConverter)
+    out_pll, i = state_space_block!(F, x, meas, setpoint_pu, b.pll, conv, 1)
 
     ω_PLL = out_pll.ω_c
 
@@ -159,7 +156,7 @@ function state_space!(F, x, meas, b::VSEWithDamping, conv::AbstractConverter)
     ω_VSM = x.ω_VSM
     
     # dω_VSM / dt = ...
-    F[i] = (b.P_ac_ref - P_ac_f - b.K_d * (ω_VSM-ω_PLL) - b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H) 
+    F[i] = (setpoint_pu.p_ac - P_ac_f - b.K_d * (ω_VSM-ω_PLL) - b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H) 
 
     # dΔθ_VSM/dt
     F[i+1] = conv.elec.ωbase * (ω_VSM-1)

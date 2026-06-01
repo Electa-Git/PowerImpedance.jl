@@ -31,11 +31,9 @@ net = @network begin
 		delta_control = PowerImpedanceACDC.ΔdqControlGFL(
 			outer_active = PowerImpedanceACDC.OuterActiveVdcControl(
 				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5, Ki = 15),
-				v_dc_ref = 1.0,
 			),
 			outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
 				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
-				Q_ac_ref = qC1 / 1000.0,
 			),
 			occ = PowerImpedanceACDC.InnerCurrentPIControl(
 				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.7691, Ki = 522.7654),
@@ -47,11 +45,11 @@ net = @network begin
 				PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
 			),
 		),
-		setpoint = PowerImpedanceACDC.SetPoint(
+		setpoint = PowerImpedanceACDC.Setpoint(
 			Pac = -pHVDC1,
 			Qac = qC1,
 			θac = 0.0,
-			Vac = transmissionVoltage, #Amplitude LN for Vac setpoint
+			Vac = transmissionVoltage * sqrt(2), #Amplitude LN for Vac setpoint
 			Pdc = -pHVDC1,
 			Vdc = 800,
 		),
@@ -77,11 +75,9 @@ net = @network begin
 		delta_control = PowerImpedanceACDC.ΔdqControlGFL(
 			outer_active = PowerImpedanceACDC.OuterActivePowerControl(
 				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
-				P_ac_ref = pHVDC1 / 1000.0,
 			),
 			outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
 				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
-				Q_ac_ref = qC2 / 1000.0,
 			),
 			occ = PowerImpedanceACDC.InnerCurrentPIControl(
 				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.7691, Ki = 522.7654),
@@ -93,11 +89,11 @@ net = @network begin
 				PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
 			),
 		),
-		setpoint = PowerImpedanceACDC.SetPoint(
+		setpoint = PowerImpedanceACDC.Setpoint(
 			Pac = pHVDC1,
 			Qac = qC2,
 			θac = 0.0,
-			Vac = transmissionVoltage, #Amplitude LN for Vac setpoint
+			Vac = transmissionVoltage * sqrt(2), #Amplitude LN for Vac setpoint
 			Pdc = pHVDC1,
 			Vdc = 800,
 		),

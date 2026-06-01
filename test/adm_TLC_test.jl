@@ -124,7 +124,6 @@ function build_case1_grid()
 
     outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
-        v_dc_ref = 0.0,   # legacy behavior: resolve from PF operating point
     )
 
     outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
@@ -132,11 +131,10 @@ function build_case1_grid()
         support = PowerImpedanceACDC.VoltageSupportLag(
             K = 5.0,
             ωc = 1 / 0.5,
-            v_ac_ref = vac_ref_pu,
         ),
     )
 
-    setpoint = PowerImpedanceACDC.SetPoint(
+    setpoint = PowerImpedanceACDC.Setpoint(
         Pac = Powf,
         Qac = Qowf,
         θac = 0.0,
@@ -225,7 +223,7 @@ function build_case2_grid()
         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
     )
 
-    setpoint = PowerImpedanceACDC.SetPoint(
+    setpoint = PowerImpedanceACDC.Setpoint(
         Pac = Powf,
         Qac = Qowf,
         θac = 0.0,

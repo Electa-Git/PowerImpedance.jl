@@ -75,13 +75,11 @@ function common_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
         H = 5.0,
         K_d = 100.0,
         K_ω = 10.0,
-        P_ac_ref = Pmmc / 1060.0,
         pll = pll,
     )
 
     outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
         pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.0, Ki = 30.0),
-        Q_ac_ref = -Qmmc / 1060.0,
     )
 
     innerVoltage = PowerImpedanceACDC.CCVI(
@@ -130,11 +128,11 @@ function common_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
         padeOrderDen = 5,
     )
 
-    setpoint = PowerImpedanceACDC.SetPoint(
+    setpoint = PowerImpedanceACDC.Setpoint(
         Pac = Pmmc,
         Qac = Qmmc,
         θac = 0.0,
-        Vac = Vm,
+        Vac = Vm * sqrt(2),
         Pdc = Pmmc,
         Vdc = Vdc,
     )

@@ -157,8 +157,8 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
     mode = findmin(abs.(max_lambda .- max_mode))[2][1]
     index_mode = findmin(abs.(abs_lambda[:, mode] .- max_mode))[2]
     # Dominant oscillation mode is determined based on the frequency at which eigenvalue reaches highest magnitude 
-    println("The oscillation frequency is ", round(f[index_mode]; digits = 1), " Hz")
-    println("The critical eigenvalue is ", mode)
+    @info "The oscillation frequency is $(round(f[index_mode]; digits = 1)) Hz"
+    @info "The critical eigenvalue is $mode"
 
     #plotly() # To activate interactive plot
     # Plotting of magnitude eigenvalues 
@@ -210,7 +210,7 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
                 O[k, i] = O[k, i]/Tot;   
             end  
         end
-        println("The mode from lambda ",idx," at ",round.(f[index_mode_lambda],digits=1)," Hz has observability ", round.(O[:,idx]; digits = 2)) 
+        @info "The mode from lambda $idx at $(round(f[index_mode_lambda]; digits=1)) Hz has observability $(round.(O[:,idx]; digits = 2))" 
     end
     
     # Observability eigenvalue decomposition
@@ -227,7 +227,7 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
             O[k, i] = O[k, i]/Tot;   
         end  
     end
-    println("The observability of the critical eigenvalue at the buses is ", round.(O[:,mode]; digits = 2)) 
+   @info "The observability of the critical eigenvalue at the buses is $(round.(O[:,mode]; digits = 2))"
 
     # Controllability eigenvalue decomposition
     C = zeros(λₙ, λₙ);
@@ -241,7 +241,7 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
             C[k, i] = C[k, i]/Tot;   
         end  
     end
-    println("The controllability of the critical eigenvalue at the buses is ", round.(C[:,mode]; digits = 2))
+    @info "The controllability of the critical eigenvalue at the buses is $(round.(C[:,mode]; digits = 2))"
 
     # Participation factors eigenvalue decomposition
     P = zeros(λₙ, λₙ);
@@ -255,7 +255,7 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
             P[k, i] = P[k, i]/Tot;   
         end  
     end
-    println("The participation factors of the buses in the critical eigenvalue are ", round.(P[:,mode]; digits = 2))
+    @info "The participation factors of the buses in the critical eigenvalue are $(round.(P[:,mode]; digits = 2))"
 
     # Two ways of finding and assessing the oscillatory modes: (1) PMD and (2) PND
     # Positive mode damping (PMD) criterion 
@@ -306,16 +306,16 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
     end
 
     if PMD_unstable
-        println("Unstable according to the PMD criterion:")
+        @info "Unstable according to the PMD criterion:"
         for i in 1:λₙ
             if length(PMD_modes[i])>0
                 for mode in PMD_modes[i]
-                    println(" Eigenvalue ",i," is unstable at ",round(mode; digits = 2)," Hz")
+                    @info " Eigenvalue $i is unstable at $(round(mode; digits = 2)) Hz"
                 end
             end
         end
     else
-        println("Stable according to the PMD criterion")
+        @info "Stable according to the PMD criterion"
     end
 
 
@@ -364,22 +364,22 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
     end
 
     if PND_unstable
-        println("Unstable according to the PND criterion:")
+        @info "Unstable according to the PND criterion:"
         for i in 1:λₙ
             if length(PND_modes[i])>0
                 for mode in PND_modes[i]
-                    println(" Eigenvalue ",i," is unstable at ",round(mode; digits = 2)," Hz")
+                    @info " Eigenvalue $i is unstable at $(round(mode; digits = 2)) Hz"
                 end
             end
         end
     else
-        println("Stable according to the PND criterion")
+        @info "Stable according to the PND criterion"
     end
 
     min_mode_PND = findmin(min_real_lambda[:,1])[2]
     index_mode_PND =  Int.(min_real_lambda[min_mode_PND,2])
     # Dominant oscillation mode is determined based on the minimum real part
-    println("The critical frequency based on PND is ", round(f[index_mode_PND]; digits = 1), " Hz at eigenvalue ", min_mode_PND)
+    @info "The critical frequency based on PND is $(round(f[index_mode_PND]; digits = 1)) Hz at eigenvalue $min_mode_PND"
 
     # Participation factors eigenvalue decomposition
     P = zeros(λₙ, λₙ);
@@ -393,7 +393,7 @@ function EVD(Zcl_bus, omega, fmin, fmax,determinant=false)
             P[k, i] = P[k, i]/Tot;   
         end  
     end
-    println("The participation factors of the buses in the critical eigenvalue based on PND are ", round.(P[:,min_mode_PND]; digits = 2))
+    @info "The participation factors of the buses in the critical eigenvalue based on PND are $(round.(P[:,min_mode_PND]; digits = 2))"
 
     if determinant
         d = abs.(inv.(det.(Zcl_bus)))

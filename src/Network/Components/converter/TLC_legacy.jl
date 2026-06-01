@@ -51,7 +51,7 @@ function _legacy_filter(obj)
 end
 
 function _legacy_setpoint(kwargs)
-    return SetPoint(
+    return Setpoint(
         Pac = Float64(_legacy_kwget(kwargs, :P, 0.0)),
         Qac = Float64(_legacy_kwget(kwargs, :Q, 0.0)),
         θac = Float64(_legacy_kwget(kwargs, :θ, 0.0)),

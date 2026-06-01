@@ -107,7 +107,6 @@ $(TYPEDFIELDS)
 """
 struct OuterActivePowerControl{S<:AbstractFrequencySupport} <: AbstractOuterActiveControl
     pi_ctrl::PIControl
-    P_ac_ref::Float64
     support::S
 end
 
@@ -118,10 +117,9 @@ $(SIGNATURES)
 """
 function OuterActivePowerControl(;
     pi_ctrl::PIControl = PIControl(),
-    P_ac_ref::Real = 0.0,
     support::AbstractFrequencySupport = NoFrequencySupport(),
 )
-    return OuterActivePowerControl{typeof(support)}(pi_ctrl, Float64(P_ac_ref), support)
+    return OuterActivePowerControl{typeof(support)}(pi_ctrl, support)
 end
 
 """
@@ -143,13 +141,13 @@ Evaluate active-power control and its support dynamics.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, inputs, block::OuterActivePowerControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActivePowerControl, conv::AbstractConverter)
     (; meas, sync) = inputs
     ns = n_states(block.support)
     support = state_space!(@view(F[1:ns]), x, sync, block.support)
     P_ac_f = meas.P_ac_f
 
-    Peff_ref = block.P_ac_ref + support.P_ac_support
+    Peff_ref = setpoint_pu.p_ac + support.P_ac_support
 
     F[ns + 1] = block.pi_ctrl.Ki * (Peff_ref - P_ac_f)
 
@@ -167,7 +165,6 @@ $(TYPEDFIELDS)
 """
 @with_kw struct OuterActiveVdcControl <: AbstractOuterActiveControl
     pi_ctrl::PIControl = PIControl()
-    v_dc_ref::Float64 = 1.0
 end
 
 """
@@ -182,9 +179,9 @@ Evaluate DC-voltage PI control.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, inputs, block::OuterActiveVdcControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActiveVdcControl, conv::AbstractConverter)
     (; meas) = inputs
-    F[1] = block.pi_ctrl.Ki * (block.v_dc_ref - meas.v_dc_f)
+    F[1] = block.pi_ctrl.Ki * (setpoint_pu.v_dc - meas.v_dc_f)
 
-    return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (block.v_dc_ref - meas.v_dc_f) + x.ξ_v_dc), )
+    return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (setpoint_pu.v_dc - meas.v_dc_f) + x.ξ_v_dc), )
 end

@@ -13,6 +13,8 @@ struct ElectricalMMC <: AbstractStateSpace
     vAC_base :: Float64     # TODO complete this
     vDC_base :: Float64
     Sbase :: Float64
+    zAC_base :: Float64
+    lAC_base :: Float64
 
     # Base conversions
     baseConv1 :: Float64
@@ -62,7 +64,7 @@ function ElectricalMMC(;
     baseConv2 = vDC_base/vAC_base;# DC to AC voltage
     baseConv3 = iAC_base/iDC_base;# AC to DC current
 
-    return ElectricalMMC(Lₐᵣₘ, Rₐᵣₘ, Cₐᵣₘ, N, turnsRatio, ωbase, vAC_base, vDC_base, Sbase, baseConv1, baseConv2, baseConv3, Lₑ, Rₑ)
+    return ElectricalMMC(Lₐᵣₘ, Rₐᵣₘ, Cₐᵣₘ, N, turnsRatio, ωbase, vAC_base, vDC_base, Sbase, zAC_base, lAC_base, baseConv1, baseConv2, baseConv3, Lₑ, Rₑ)
 end
 
 statenames(::ElectricalMMC) = (:iΔ_d, :iΔ_q, :iΣ_d, :iΣ_q, :iΣ_z, 

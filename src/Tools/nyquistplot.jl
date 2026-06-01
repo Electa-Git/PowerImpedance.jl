@@ -211,14 +211,13 @@ function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :
 
     N = sum(cw) - sum(ccw) 
 
-    println("")
     if N > 0
-        println("Result stability assessment: Unstable system \n")
-        println("Unstable frequencies around ",round.(unstable_modes; digits=2), " Hz")
+        @info "Result stability assessment: Unstable system"
+        @info "Unstable frequencies around $(round.(unstable_modes; digits=2)) Hz"
     elseif N < 0
-        println("Result stability assessment: Unstable subsystem \n")
+        @info "Result stability assessment: Unstable subsystem"
     else
-        println("Result stability assessment: Stable system if subsystems are stable \n")
+        @info "Result stability assessment: Stable system if subsystems are stable"
     end
 
     ##### ----- STABILITY MARGINS ----- #####
@@ -227,7 +226,7 @@ function nyquistplot(L, omega; zoom :: String = "", SM :: String = "no", title :
     # Possibilities for SM are "PM", "GM" and "VM"
     if SM != "no"
         for i in 1:λₙ
-            println("Stability margins for λ", i, ":")
+            @info "Stability margins for λ$i:"
             stabilitymargin(Λ[:,i], omega, SM = SM)
         end
     end

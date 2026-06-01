@@ -75,7 +75,7 @@ function add!(n::Network, designator::Symbol, elem::Element)
     # Do not add the element to the network if connection is false
     elseif elem.connection == false
         
-        println("Element $(designator) not added to the network as connection=false.") 
+        @info "Element $(designator) not added to the network as connection=false."
     end
 
 end

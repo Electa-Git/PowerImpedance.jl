@@ -1,4 +1,5 @@
 export power_flow, result, data
+using Logging
 
 has_bipolar_converter(net::Network) = any(elem -> elem.element_model isa BipolarMMC, values(net.elements))
 
@@ -158,7 +159,7 @@ function power_flow(net::Network)
 
 	# No power flow when linear (no setpoint updates) 
 	if is_linear(net)
-		println("Network only consists of linear elements. Skipping power flow.")
+		@info "Network only consists of linear elements. Skipping power flow."
 		return
 	end
 
@@ -191,9 +192,8 @@ function power_flow(net::Network)
 
 	#### 1b. Check for slack busses (add one if none present) (3 is slack bus)
 	if !(3 in [data["bus"][index]["bus_type"] for index in keys(data["bus"])])
-		println(
-			"WARNING: No slack bus present. The first PV bus with generator will be set as reference",
-		)
+		@warn "WARNING: No slack bus present. The first PV bus with generator will be set as reference",
+		
 		for gen_index in keys(data["gen"])
 			bus_gen = data["gen"][gen_index]["gen_bus"]
 			if data["bus"][string(bus_gen)]["bus_type"] == 2 # PV-bus
@@ -220,7 +220,7 @@ function power_flow(net::Network)
         "dual_inf_tol" => 1e-1,
         "constr_viol_tol" => 1e-3,
         "compl_inf_tol" => 1e3,
-        "print_level" => 0, # was set to 5 for more verbose output
+        "print_level" => Logging.min_enabled_level(current_logger()) <= Logging.Debug ? 5 : 0,
         "max_iter" => 100,
         "grad_f_constant" => "yes",
         "recalc_y" => "yes",
@@ -235,13 +235,13 @@ function power_flow(net::Network)
     
     # Rerun power flow with relaxed constraints if no convergence
     if result["termination_status"] == MOI.LOCALLY_SOLVED
-        println("Power flow converged succesfully.")
+        @info "Power flow converged succesfully."
     else
-        println("No convergence (try again with relaxation): ",result["termination_status"])
-        
+        @warn "No convergence (try again with relaxation): $(result["termination_status"])"
+
         result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
         if result["termination_status"] == MOI.LOCALLY_SOLVED
-            println("Power flow solution found with relaxation")
+            @info "Power flow solution found with relaxation"
         else
             error("Second iteration not succesful. Check your formulation")
         end
@@ -290,7 +290,7 @@ function power_flow(net::Network)
                         Pac_n, Qac_n, Vrn, Pdc_n,
                     )
 
-                    setpoint = SetPoint(
+                    setpoint = Setpoint(
                         Pac = Pac_p + Pac_n,
                         Qac = Qac_p + Qac_n,
                         θac = θ,
@@ -300,19 +300,15 @@ function power_flow(net::Network)
                     )
                     element.setpoint = setpoint
 
+                    @info begin 
                     update_string = string(key)
-                    print(update_string * " Active Power [MW]: ")
-                    println(setpoint.Pac)
-                    print(update_string * " Reactive Power [MVar]: ")
-                    println(setpoint.Qac)
-                    print(update_string * " AC Voltage Magnitude [pu]: ")
-                    println(result["solution"]["bus"][string(ac_bus)]["vm"])
-                    print(update_string * " AC Voltage Angle [rad]: ")
-                    println(θ)
-                    print(update_string * " Vpr [kV]: ")
-                    println(Vpr)
-                    print(update_string * " Vrn [kV]: ")
-                    println(Vrn)
+                    """$update_string Active Power [MW]: $setpoint.Pac
+                    $update_string Reactive Power [MVar]: $setpoint.Qac
+                    $update_string AC Voltage Magnitude [pu]: $(result["solution"]["bus"][string(ac_bus)]["vm"])
+                    $update_string AC Voltage Angle [rad]: $θ
+                    $update_string Vpr [kV]:: $Vpr
+                    $update_string Vrn [kV]:: $Vrn"""
+                    end
                 else
                     pole = _first_pole(elem_dict["pgrid"])
                     Pac = -_pole_value(elem_dict["pgrid"], pole) * base_power
@@ -320,7 +316,7 @@ function power_flow(net::Network)
                     Pdc = _pole_value(elem_dict["pdc"], pole) * base_power
                     Vdc = _pole_voltage_kv(vm_dc, pole, base_vdc)
 
-                    setpoint = SetPoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
+                    setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
                     if element.element_model isa AbstractStateSpace
                         update!(element, element.element_model, setpoint)
@@ -328,19 +324,15 @@ function power_flow(net::Network)
                         update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
                     end
 
-                    update_string = string(key)
-                    print(update_string * " Active Power [MW]: ")
-                    println(Pac)
-                    print(update_string * " Reactive Power [MVar]: ")
-                    println(Qac)
-                    print(update_string * " AC Voltage Magnitude [pu]: ")
-                    println(result["solution"]["bus"][string(ac_bus)]["vm"])
-                    print(update_string * " AC Voltage Angle [rad]: ")
-                    println(θ)
-                    print(update_string * " DC Voltage [kV]: ")
-                    println(Vdc)
-                    print(update_string * " DC Power [MW]: ")
-                    println(Pdc)
+                    @info begin 
+                        update_string = string(key)
+                        """$update_string Active Power [MW]: $Pac
+                        $update_string Reactive Power [MVar]: $Qac
+                        $update_string AC Voltage Magnitude [pu]: $(result["solution"]["bus"][string(ac_bus)]["vm"])
+                        $update_string AC Voltage Angle [rad]: $θ
+                        $update_string DC Voltage [kV]: $Vdc
+                        $update_string DC Power [MW]: $Pdc"""
+                    end
                 end
             else
                 Pdc = elem_dict["pdc"] * global_dict["S"] / 1e6
@@ -348,26 +340,23 @@ function power_flow(net::Network)
                 Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
                 Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6 # Think about this!
 
-                setpoint = SetPoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
+                setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
                 if element.element_model isa AbstractStateSpace
                     update!(element, element.element_model, setpoint)
                 else
                     update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
                 end
-                update_string = string(key)
-                print(update_string * " Active Power [MW]: ")
-                println(Pac)
-                print(update_string * " Reactive Power [MVar]: ")
-                println(Qac)
-                print(update_string * " AC Voltage Magnitude [pu]: ")
-                println(result["solution"]["bus"][string(ac_bus)]["vm"])
-                print(update_string * " AC Voltage Angle [rad]: ")
-                println(θ)
-                print(update_string * " DC Voltage [kV]: ")
-                println(Vdc)
-                print(update_string * " DC Power [MW]: ")
-                println(Pdc)
+                
+                @info begin 
+                    update_string = string(key)
+                    """$update_string Active Power [MW]: $Pac
+                    $update_string Reactive Power [MVar]: $Qac
+                    $update_string AC Voltage Magnitude [pu]: $(result["solution"]["bus"][string(ac_bus)]["vm"])
+                    $update_string AC Voltage Angle [rad]: $θ
+                    $update_string DC Voltage [kV]: $Vdc
+                    $update_string DC Power [MW]: $Pdc"""
+                end
             end
 
 		elseif is_generator(element) #ac bus is the one with no ground in it's name
@@ -383,16 +372,15 @@ function power_flow(net::Network)
 			θ = result["solution"]["bus"][string(ac_bus)]["va"]
 			update_string = string(key)
 
-            setpoint = SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+            setpoint = Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
 
-            print(update_string * " Active Power [MW]: ")
-            println(Pgen)
-            print(update_string * " Reactive Power [MVar]: ")
-            println(Qgen)
-            print(update_string * " AC Voltage Magnitude [pu]: ")
-            println(result["solution"]["bus"][string(ac_bus )]["vm"])
-            print(update_string * " AC Voltage Angle [rad]: ")
-            println(θ)
+            @info begin 
+                update_string = string(key)
+                """$update_string Active Power [MW]: $Pgen
+                $update_string Reactive Power [MVar]: $Qgen
+                $update_string AC Voltage Magnitude [pu]: $(result["solution"]["bus"][string(ac_bus)]["vm"])
+                $update_string AC Voltage Angle [rad]: $θ"""
+            end
 
             update!(element, element.element_model, setpoint)
             # Update fields element
@@ -990,11 +978,11 @@ function solve_mcdcpf(data::Dict{String,Any}, model_type::Type, solver; kwargs..
     JuMP.optimize!(pm.model)
     result = _IM.build_result(pm, JuMP.solve_time(pm.model))
 
-    println(result["termination_status"])
+    @info result["termination_status"]
     if result["termination_status"] == MOI.LOCALLY_SOLVED
-        println("Power flow converged succesfully.")
+        @info "Power flow converged succesfully."
     else
-        println("Power flow did not converge to `LOCALLY_SOLVED` with MCDC backend.")
+        @warn "Power flow did not converge to `LOCALLY_SOLVED` with MCDC backend."
     end
 
     return result
@@ -1021,16 +1009,14 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
     JuMP.set_optimizer(pm.model, solver)
     JuMP.optimize!(pm.model)
     result = _IM.build_result(pm, JuMP.solve_time(pm.model))
-    println(result["termination_status"])
+    @info result["termination_status"]
     if result["termination_status"] == MOI.LOCALLY_SOLVED
-        println("Power flow converged succesfully.")
+        @info "Power flow converged succesfully."
     else
         converged_feasible = false
         has_violations = !isempty(primal_feasibility_report(pm.model; atol = 1e-4)) # Empty no violations for given tolerance
         if has_violations
-            println(
-                "Violations reported. Entering power flow with increments of setpoints to find a solution.",
-            )
+            @warn "Violations reported. Entering power flow with increments of setpoints to find a solution."
             for r ∈ 1:5
                 update_actives_setpoints!(data, -0.0001) # relative change of 0.01%
                 pm=_PM.instantiate_model(
@@ -1044,13 +1030,11 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
                 JuMP.optimize!(pm.model)
                 result = _IM.build_result(pm, JuMP.solve_time(pm.model))
                 if result["termination_status"] == MOI.LOCALLY_SOLVED
-                    println("Power flow converged succesfully after $r increment change.")
+                    @info "Power flow converged succesfully after $r increment change."
                     converged_feasible = true
                     break
                 elseif isempty(primal_feasibility_report(pm.model; atol = 1e-4))
-                    println(
-                        "Power flow converged succesfully after $r increment change. Point is feasible.",
-                    )
+                    @info "Power flow converged succesfully after $r increment change. Point is feasible."
                     converged_feasible = true
                     break
                 else
@@ -1060,13 +1044,11 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
             end
             if !converged_feasible
                 # Last resort relaxing constraints...experimental stage!
-                println(
-                    "Last resort: Relaxing constraints to find a solution and see which constraints are violated.",
-                )
+                @warn "Last resort: Relaxing constraints to find a solution and see which constraints are violated."
                 result=solve_acdcpf_relax(data, model_type, solver; kwargs...)
             end
         else # Constraints are satisfied
-            println("Power flow converged succesfully. Point is feasible")
+            @info "Power flow converged succesfully. Point is feasible"
         end
 
     end
@@ -1105,7 +1087,7 @@ function solve_acdcpf_relax(data::Dict{String, Any}, model_type::Type, solver; k
 	for (con, penalty) in map
 		violation = JuMP.value(penalty)
 		if abs(violation) > 1e-6
-			println("ATTENTION! Constraint `$(JuMP.name(con))` is violated by $violation")
+			@warn "ATTENTION! Constraint `$(JuMP.name(con))` is violated by $violation"
 			error("Power flow constraints are violated.")
 		end
 	end

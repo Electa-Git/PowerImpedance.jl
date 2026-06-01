@@ -1,4 +1,5 @@
 module NetworkBuilder
+using Logging
 import TypedTables: Table
 export pin, ⟷, ↔
 
@@ -498,7 +499,7 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 	set_parent_global!(:ang_max, deg2rad(-360))
 
 	if P.is_linear(network)
-		println("Network only consists of linear elements. Skipping power flow.")
+		@info "Network only consists of linear elements. Skipping power flow."
 		return nothing
 	end
 
@@ -552,9 +553,7 @@ function ensure_slack_bus!(data)
 		return data
 	end
 
-	println(
-		"WARNING: No slack bus present. The first PV bus with generator will be set as reference",
-	)
+	@warn "WARNING: No slack bus present. The first PV bus with generator will be set as reference"
 	for gen_index in keys(data["gen"])
 		bus_gen = data["gen"][gen_index]["gen_bus"]
 		if data["bus"][string(bus_gen)]["bus_type"] == 2
@@ -585,7 +584,7 @@ function powerflow_optimizer(options::NamedTuple)
 		"dual_inf_tol" => 1e-1,
 		"constr_viol_tol" => 1e-3,
 		"compl_inf_tol" => 1e3,
-		"print_level" => 5,
+		"print_level" => Logging.min_enabled_level(current_logger()) <= Logging.Debug ? 5 : 0,
 		"max_iter" => 100,
 		"grad_f_constant" => "yes",
 		"recalc_y" => "yes",
@@ -776,16 +775,14 @@ function solve_acdcpf(
 	P.JuMP.set_optimizer(pm.model, optimizer)
 	P.JuMP.optimize!(pm.model)
 	result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
-	println(result["termination_status"])
+	@info result["termination_status"]
 	if result["termination_status"] == P.JuMP.MOI.LOCALLY_SOLVED
-		println("Power flow converged succesfully.")
+		@info "Power flow converged succesfully."
 	else
 		converged_feasible = false
 		has_violations = !isempty(P.JuMP.primal_feasibility_report(pm.model; atol = 1e-4))
 		if has_violations
-			println(
-				"Violations reported. Entering power flow with increments of setpoints to find a solution.",
-			)
+			@warn "Violations reported. Entering power flow with increments of setpoints to find a solution."
 			for r ∈ 1:5
 				P.update_actives_setpoints!(data, -0.0001)
 				pm = P._PM.instantiate_model(
@@ -799,26 +796,22 @@ function solve_acdcpf(
 				P.JuMP.optimize!(pm.model)
 				result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
 				if result["termination_status"] == P.JuMP.MOI.LOCALLY_SOLVED
-					println("Power flow converged succesfully after $r increment change.")
+					@info "Power flow converged succesfully after $r increment change."
 					converged_feasible = true
 					break
 				elseif isempty(P.JuMP.primal_feasibility_report(pm.model; atol = 1e-4))
-					println(
-						"Power flow converged succesfully after $r increment change. Point is feasible.",
-					)
+					@info "Power flow converged succesfully after $r increment change. Point is feasible."
 					converged_feasible = true
 					break
 				end
 			end
 			if !converged_feasible
-				println(
-					"Last resort: Relaxing constraints to find a solution and see which constraints are violated.",
-				)
+				@warn "Last resort: Relaxing constraints to find a solution and see which constraints are violated."
 				result =
 					solve_acdcpf_relax(data, model_type, optimizer, variables; kwargs...)
 			end
 		else
-			println("Power flow converged succesfully. Point is feasible")
+			@info "Power flow converged succesfully. Point is feasible"
 		end
 	end
 
@@ -857,7 +850,7 @@ function solve_acdcpf_relax(
 	for (con, penalty) in map
 		violation = P.JuMP.value(penalty)
 		if abs(violation) > 1e-6
-			println("ATTENTION! Constraint `$(P.JuMP.name(con))` is violated by $violation")
+			@warn "ATTENTION! Constraint `$(P.JuMP.name(con))` is violated by $violation"
 			error("Power flow constraints are violated.")
 		end
 	end
@@ -919,7 +912,7 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 			Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
 			Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6
 
-			setpoint = P.SetPoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
+			setpoint = P.Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
 			if element.element_model isa P.AbstractStateSpace
 				P.update!(element, element.element_model, setpoint)
@@ -945,7 +938,7 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 				sqrt(2)
 			θ = result["solution"]["bus"][string(ac_bus)]["va"]
 
-			setpoint = P.SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+			setpoint = P.Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
 
 			P.update!(element, element.element_model, setpoint)
 		end

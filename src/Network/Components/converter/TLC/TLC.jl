@@ -79,7 +79,7 @@ $(SIGNATURES)
 Electrical currents are initialized first because measurement and controller
 initial conditions depend on the operating-point currents.
 """
-function initialvalues(c::TLC; inputs, setpoint_pu=SetPoint())
+function initialvalues(c::TLC; inputs, setpoint_pu=SetpointPU())
     elec_init = initialvalues(c.elec; inputs, setpoint_pu)
 
     meas_inputs = (
@@ -129,10 +129,11 @@ Convert a power-flow setpoint into normalized TLC inputs.
 
 $(SIGNATURES)
 """
-function pftoinputs(c::TLC, setpoint::SetPoint)
+function pftoinputs(c::TLC, setpoint::Setpoint)
     vACbase = c.elec.vACbase
-    v_bus_d = setpoint.Vac * cos(setpoint.θac) / vACbase
-    v_bus_q = -setpoint.Vac * sin(setpoint.θac) / vACbase
+    v_ac = setpoint.Vac / vACbase
+    v_bus_d = v_ac * cos(setpoint.θac)
+    v_bus_q = -v_ac * sin(setpoint.θac)
     v_dc = setpoint.Vdc / c.elec.vDCbase
 
     p_ac = setpoint.Pac / c.elec.Sbase
@@ -140,7 +141,7 @@ function pftoinputs(c::TLC, setpoint::SetPoint)
     p_dc = setpoint.Pdc / c.elec.Sbase
     
     return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),
-        SetpointPU(p_ac, q_ac, p_dc, setpoint.θac)
+        SetpointPU(p_ac, q_ac, setpoint.θac, v_ac, p_dc, v_dc)
 end
 
 """
@@ -187,16 +188,8 @@ Evaluate TLC equilibrium equations.
 
 $(SIGNATURES)
 """
-equilibrium_state_space!(F, x, inputs, c::TLC, setpoint::SetPoint) =
-    equilibrium_state_space!(F, x, inputs, c, c.outerActive, setpoint)
-
-"""
-Default TLC equilibrium equations for active-loop modes without DC-current balancing.
-
-$(SIGNATURES)
-"""
-equilibrium_state_space!(F, x, inputs, c::TLC, ::AbstractOuterActiveControl, ::SetPoint) =
-    state_space!(F, x, inputs, c)
+equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC) =
+    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerActive)
 
 """
 Evaluate TLC equilibrium equations for DC-voltage control.
@@ -208,10 +201,10 @@ $(SIGNATURES)
 The DC-voltage PI state equation is replaced with the DC-current balance used to
 solve the operating point.
 """
-function equilibrium_state_space!(F, x, inputs, c::TLC, block::OuterActiveVdcControl, setpoint::SetPoint)
-    y = state_space!(F, x, inputs, c)
+function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC, block::OuterActiveVdcControl)
     idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
-    i_dc_ref = (setpoint.Pdc / c.elec.Sbase) / inputs.v_dc
+    @assert !isnothing(idx_ξvdc)
+    i_dc_ref = setpoint_pu.p_dc / inputs.v_dc
     F[idx_ξvdc] = i_dc_ref - y.elec.i_dc
     return y
 end
@@ -226,23 +219,23 @@ $(SIGNATURES)
 Subblocks are evaluated explicitly in dependency order. Electrical dynamics are
 written into the first state slice after modulation commands are available.
 """
-function state_space!(F, x, inputs, c::TLC)
+function state_space!(F, x, inputs, setpoint_pu::SetpointPU, c::TLC)
     sig_in = input_signals(c, x, inputs)
 
-    meas, i = state_space_block!(F, x, sig_in, c.meas, c, 1)
-    sync, i = state_space_block!(F, x, meas, c.sync, c, i)
-    pact, i = state_space_block!(F, x, (; meas, sync), c.outerActive, c, i)
-    qact, i = state_space_block!(F, x, (; meas, sync), c.outerReactive, c, i)
-    vloop, i = state_space_block!(F, x, (; meas, sync, pact, qact), c.innerVoltage, c, i)
-    iloop, i = state_space_block!(F, x, (; meas, sync, vloop), c.innerCurrent, c, i)
-    mod, i = state_space_block!(F, x, (; meas, iloop), c.mod, c, i)
+    meas, i = state_space_block!(F, x, sig_in, setpoint_pu, c.meas, c, 1)
+    sync, i = state_space_block!(F, x, meas, setpoint_pu, c.sync, c, i)
+    pact, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, c.outerActive, c, i)
+    qact, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, c.outerReactive, c, i)
+    vloop, i = state_space_block!(F, x, (; meas, sync, pact, qact), setpoint_pu, c.innerVoltage, c, i)
+    iloop, i = state_space_block!(F, x, (; meas, sync, vloop), setpoint_pu, c.innerCurrent, c, i)
+    mod, i = state_space_block!(F, x, (; meas, iloop), setpoint_pu, c.mod, c, i)
 
     elec_in = (
         v_dc = sig_in.v_dc,
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
     )
-    elec, _ = state_space_block!(F, x, (inputs = elec_in, mod = mod), c.elec, c, i)
+    elec, _ = state_space_block!(F, x, (inputs = elec_in, mod = mod), setpoint_pu, c.elec, c, i)
 
     return (;
         sig_in,
@@ -271,7 +264,7 @@ function tlc(;
     innerVoltage::AbstractInnerVoltage = NoInnerVoltageControl(),
     innerCurrent::AbstractInnerCurrentControl = NoInnerCurrentControl(),
     mod::AbstractModulationTLC = NoModulation(),
-    setpoint::SetPoint = SetPoint(),
+    setpoint::Setpoint = Setpoint(),
     limits::Limits = Limits(),
     connection::Bool = true
 )
@@ -291,74 +284,6 @@ end
 
 ############################  Power-flow integration TLC ############################
 
-
-"""
-Resolve zero-valued control references from a power-flow setpoint.
-
-$(SIGNATURES)
-"""
-function resolved_refs(c::TLC, setpoint::SetPoint)
-    v_ac_ref = setpoint.Vac / c.elec.vACbase
-    v_dc_ref = setpoint.Vdc / c.elec.vDCbase
-
-    outerActive =
-        if c.outerActive isa OuterActivePowerControl
-            OuterActivePowerControl(
-                pi_ctrl = c.outerActive.pi_ctrl,
-                P_ac_ref = iszero(c.outerActive.P_ac_ref) ? setpoint.Pac / c.elec.Sbase : c.outerActive.P_ac_ref,
-                support = c.outerActive.support,
-            )
-        elseif c.outerActive isa OuterActiveVdcControl
-            OuterActiveVdcControl(
-                pi_ctrl = c.outerActive.pi_ctrl,
-                v_dc_ref = iszero(c.outerActive.v_dc_ref) ? v_dc_ref : c.outerActive.v_dc_ref,
-            )
-        else
-            c.outerActive
-        end
-
-    outerReactive =
-        if c.outerReactive isa OuterReactiveQControl
-            supp =
-                if c.outerReactive.support isa VoltageSupportLag
-                    VoltageSupportLag(
-                        K = c.outerReactive.support.K,
-                        ωc = c.outerReactive.support.ωc,
-                        v_ac_ref = iszero(c.outerReactive.support.v_ac_ref) ?
-                                  v_ac_ref :
-                                  c.outerReactive.support.v_ac_ref,
-                    )
-                else
-                    c.outerReactive.support
-                end
-
-            OuterReactiveQControl(
-                pi_ctrl = c.outerReactive.pi_ctrl,
-                Q_ac_ref = iszero(c.outerReactive.Q_ac_ref) ? (-setpoint.Qac / c.elec.Sbase) : c.outerReactive.Q_ac_ref,
-                support = supp,
-            )
-        elseif c.outerReactive isa OuterReactiveVacControl
-            OuterReactiveVacControl(
-                pi_ctrl = c.outerReactive.pi_ctrl,
-                v_ac_ref = iszero(c.outerReactive.v_ac_ref) ?
-                          v_ac_ref :
-                          c.outerReactive.v_ac_ref,
-            )
-        else
-            c.outerReactive
-        end
-
-    return TLC(
-        c.elec,
-        c.meas,
-        c.sync,
-        outerActive,
-        outerReactive,
-        c.innerVoltage,
-        c.innerCurrent,
-        c.mod,
-    )
-end
 
 """
 Return PowerModelsACDC AC converter type for a reactive outer loop.
@@ -390,34 +315,6 @@ pf_acq_droop(block::OuterReactiveQControl) =
         enabled = 1,
         kq = block.support.K,
     ) : (enabled = 0, kq = 0.0)
-
-"""
-Return AC voltage target in the PowerModelsACDC per-unit base.
-
-$(SIGNATURES)
-"""
-function pf_vtar_pu(conv::TLC, elem::Element, global_dict)
-    vbase_ln_rms = global_dict["V"] / 1e3
-
-    if conv.outerReactive isa OuterReactiveVacControl
-        Vac_peak = iszero(conv.outerReactive.v_ac_ref) ?
-                   elem.setpoint.Vac :
-                   conv.outerReactive.v_ac_ref * conv.elec.vACbase
-        return (Vac_peak / sqrt(2)) / vbase_ln_rms
-
-    elseif conv.outerReactive isa OuterReactiveQControl &&
-           conv.outerReactive.support isa VoltageSupportLag
-        supp = conv.outerReactive.support
-        Vac_peak = iszero(supp.v_ac_ref) ?
-                   elem.setpoint.Vac :
-                   supp.v_ac_ref * conv.elec.vACbase
-        return (Vac_peak / sqrt(2)) / vbase_ln_rms
-
-    else
-        # legacy PQ-bus initialization used converter.Vₘ directly (amplitude over phase-RMS base)
-        return elem.setpoint.Vac / vbase_ln_rms
-    end
-end
 
 """
 Return DC voltage setpoint in the PowerModelsACDC per-unit base.
@@ -473,7 +370,7 @@ function convert!(data,elem::Element{<:TLC},::Type{PMACDC}, nodes2bus, bus2nodes
     convdc["basekVac"] = global_dict["V"] / 1e3
 
     convdc["type_ac"] = pf_type_ac(conv.outerReactive)
-    convdc["Vtar"] = pf_vtar_pu(conv, elem, global_dict)
+    convdc["Vtar"] = (elem.setpoint.Vac/sqrt(2)) / ( global_dict["V"] / 1e3) # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages, PowerImpedanceACDC uses amplitude  
     if convdc["type_ac"] == 2
         data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
@@ -502,12 +399,11 @@ function convert!(data,elem::Element{<:TLC},::Type{PMACDC}, nodes2bus, bus2nodes
 
     zbase = global_dict["Z"]
     convdc["rc"] = (conv.elec.Rᵣ*conv.elec.zACbase) / zbase
-    convdc["xc"] = (conv.elec.Lᵣ*conv.elec.zACbase) * global_dict["omega"] / zbase
+    convdc["xc"] = (conv.elec.Lᵣ*conv.elec.lACbase) * global_dict["omega"] / zbase
 
-    vm_rms_kV = elem.setpoint.Vac / sqrt(2)
-    convdc["Vmmax"] = 1.1 * vm_rms_kV * 1e3 / global_dict["V"]
-    convdc["Vmmin"] = 0.9 * vm_rms_kV * 1e3 / global_dict["V"]
-    convdc["Imax"] = 1.1 * max(abs(elem.limits.P_min), abs(elem.limits.P_max), abs(elem.setpoint.Pac)) / max(vm_rms_kV, eps())
+    convdc["Vmmax"] = 1.1 * convdc["Vtar"]
+    convdc["Vmmin"] = 0.9 * convdc["Vtar"]
+    convdc["Imax"] = 1.1 * max(abs(elem.limits.P_min), abs(elem.limits.P_max), abs(elem.setpoint.Pac)) / max(elem.setpoint.Vac / sqrt(2), eps())
 
     convdc["P_g"] = elem.setpoint.Pac
     convdc["Q_g"] = elem.setpoint.Qac
