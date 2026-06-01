@@ -35,16 +35,21 @@ abstract type AbstractMultiport <: AbstractElementModel end
 @with_kw struct SetPoint
     
     # Power flow results
-    Pac ::Float64 = 0              # active power [MW]
-    Qac ::Float64 = 0                # reactive power [MVA]
-    θac ::Float64 = 0
-    Vac ::Float64 = 0#220*sqrt(2/3)             # AC voltage, amplitude [kV]
+    Pac ::Union{Float64, Missing} = missing              # active power [MW]
+    Qac ::Union{Float64, Missing} = missing                # reactive power [MVA]
+    θac ::Union{Float64, Missing} = missing
+    Vac ::Union{Float64, Missing} = missing#220*sqrt(2/3)             # AC voltage, amplitude [kV]
 
     # DC
-    Pdc::Float64 = 0.0
-    Vdc::Float64 = 0.0
+    Pdc::Union{Float64, Missing} = missing
+    Vdc::Union{Float64, Missing} = missing
    
 end
+
+# Base.getproperty(sp::SetPoint, key::Symbol) = getfield(sp, key) === nothing ? 0.0 : getfield(sp, key) #Return 0 when not specified
+
+# getstrict(sp::Setpoint, key::Symbol) = getfield(sp, key) === nothing ? throw(ArgumentError("The setpoint value for $(key) is not defined.")) : getfield(sp, key)
+# get(sp::Setpoint, key::Symbol) = getfield(sp, key) === nothing ? missing : getfield(sp, key)
 
 struct SetpointPU # Per-unitized setpoint used internally
     p_ac::Float64
@@ -75,7 +80,6 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
     B::Matrix{ComplexF64} 
     C::Matrix{ComplexF64} 
     D::Matrix{ComplexF64} 
-    #   basevalues::BaseVal
     transformation :: Bool
     connection :: Bool # True = Element is connected, False= Element is disconnected 
     setpoint::SetPoint
@@ -169,23 +173,23 @@ function eval_y(elem::Element, s::Complex)
 
     model = elem.element_model
 
-    if isa(model, TLC)
-        elec = model.elec
+    # if isa(model, TLC)
+    #     elec = model.elec
 
-        vACbase = elec.vACbase * sqrt(2 / 3)
-        iACbase = 2 * elec.Sbase / (3 * vACbase)
-        iDCbase = elec.Sbase / elec.vDCbase
+    #     vACbase = elec.vACbase * sqrt(2 / 3)
+    #     iACbase = 2 * elec.Sbase / (3 * vACbase)
+    #     iDCbase = elec.Sbase / elec.vDCbase
 
-        Y = Matrix{ComplexF64}(Y)
+    #     Y = Matrix{ComplexF64}(Y)
 
-        # row scaling = output current bases
-        Y[1, :]   .*= iDCbase
-        Y[2:3, :] .*= iACbase
+    #     # row scaling = output current bases
+    #     Y[1, :]   .*= iDCbase
+    #     Y[2:3, :] .*= iACbase
 
-        # column scaling = input voltage bases
-        Y[:, 1]   ./= elec.vDCbase
-        Y[:, 2:3] ./= vACbase
-    end
+    #     # column scaling = input voltage bases
+    #     Y[:, 1]   ./= elec.vDCbase
+    #     Y[:, 2:3] ./= vACbase
+    # end
 
     return Y
 end
@@ -275,6 +279,10 @@ end
 
 function is_impedance(element :: Element)
     isa(element.element_model, Impedance) && !any(occursin("gnd", string(x)) for x in element.pins)
+end
+
+function issingleport(element :: Element)
+    isa(element.element_model, SynchronousMachine) || isa(element.element_model, Source)
 end
 
 function is_load(element :: Element)

@@ -88,7 +88,7 @@ function ac_source(; setpoint = SetPoint(;Vac=220/sqrt(3)), pins=1, transformati
 
     return Element(;
         input_pins = pins,
-        output_pins = pins,
+        output_pins = pins, # AC sources one-port, kept for legacy
         element_model = source,
         A = A,
         B = B,

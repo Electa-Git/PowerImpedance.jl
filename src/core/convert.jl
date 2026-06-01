@@ -8,9 +8,9 @@
     - Lets PowerModelsACDC solve the powerflow
     - Use the setpoints to convert to a linearized admittance representation
 """
-function Base.convert(bs::BuilderState, ::Type{P.LinearizedAdmittanceNetwork})
+function Base.convert(bs::BuilderState, ::Type{LinearizedAdmittanceNetwork})
 
-    if !is_linear(bs.network)
+    if !P.is_linear(bs.network)
 
         sp = nonlinearsetpoints(bs)
 
@@ -19,15 +19,15 @@ function Base.convert(bs::BuilderState, ::Type{P.LinearizedAdmittanceNetwork})
         sp = (;)
     end
 
-    
+    return LinearizedAdmittanceNetwork(bs, sp)
 
 end
 
 
-function nonlinearsetpoints(bs::BuilderState, ::Type{P.LinearizedAdmittanceNetwork})
+function nonlinearsetpoints(bs::BuilderState)
     
     #1. Convert PowerImpedanceACDC payload to PMACDC
-    data, elempitopm = convert(bs, PMACDC)
+    data, global_dict, elempitopm = convert(bs, P.PMACDC)
 
     options = bs.options
 
@@ -40,27 +40,43 @@ function nonlinearsetpoints(bs::BuilderState, ::Type{P.LinearizedAdmittanceNetwo
     )
 
     # Transform results to setpoints that can be used by linearization step
-    transform(result["solution"],bs, P.PMACDC, P.PIACDC, elempitopm)
-     
+    sp = transform(result["solution"], global_dict, bs, P.PMACDC, P.PIACDC, elempitopm)
+    return sp
 end
 
 # Transforms output(output payload) from PMACDC to PIACDC
-function transform(output, bs::BuilderState, ::Type{P.PMACDC}, ::Type{P.PIACDC}, elempitopm)
+function transform(output, global_dict, bs::BuilderState, ::Type{P.PMACDC}, ::Type{P.PIACDC}, elempitopm)
 
-    for (key,elem) in bs.elements
+    sp = (;)
+    for (key,elem) in pairs(bs.elements)
         
         #1. Skip passive devices
-        if passive(elem)
+        if P.is_passive(elem) || P.is_source(elem)
             continue # Skips iteration
         end
 
-        pmcomptype, key = elempitopm[elem.symbol]
-        elemresult = output[pmcomptype][string(key)]
+        pmcomptype, pmkey = elempitopm[key]
+        elemresult = output[pmcomptype][string(pmkey)]
+        busresult = transform(output, bs.connections, P.PMACDC, P.PIACDC, key) #Sorted from AC to DC (easier extension for nonshunt active elements)
+        
 
-        sp = P.transform(output, element, P.PMACDC, P.PIACDC)
+        sp = merge(sp, (; key => P.transform(elemresult, busresult, global_dict, elem, P.PMACDC, P.PIACDC),))
 
     end
 
+
+    return sp
+end
+
+function transform(output, connections, ::Type{P.PMACDC}, ::Type{P.PIACDC}, key)
+   
+    elemconnections = sortedcomponentconnections(connections, key) #Sorted from AC to DC and with terminal
+    busids = unique(Table(bus = elemconnections.bus, elecdomain=elemconnections.elecdomain))
+    # busids_symbol = Symbol.(unique(string.(elemconnections.elecdomain, "_", elemconnections.bus)))
+    busresults = [output[string(busid.elecdomain == 1 ? "bus" : "busdc")][string(busid.bus)] for busid in busids]
+    # busresults_nt = NamedTuple{busids_symbol}(busresults)
+    
+    return busresults
 end
 
 

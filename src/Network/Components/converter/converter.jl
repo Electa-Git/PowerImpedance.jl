@@ -154,30 +154,31 @@ function convert!(data, elem::Element{<:AbstractConverter}, ::Type{PMACDC}, key,
 end
 
 
-function transform(result, elem::Element{<:AbstractConverter}, ::Type{PMACDC}, ::Type{PIACDC},)
+function transform(elemresult, busresult, global_dict, element::Element{<:AbstractConverter}, ::Type{PMACDC}, ::Type{PIACDC})
     
-    dccon = 
-    _, ac_bus = nodes2bus[ac_node]
+    acbusresult = busresult[1] # AC bus
+    dcbusresult = busresult[2] # DC bus
 
-    Pdc = elem_dict["pdc"] * global_dict["S"] / 1e6
+    Pdc = elemresult["pdc"] * global_dict["S"] / 1e6
     Vm =
-        (result["solution"]["bus"][string(ac_bus)]["vm"] * global_dict["V"] / 1e3) *
+        (acbusresult["vm"] * global_dict["V"] / 1e3) *
         sqrt(2)
-    θ = result["solution"]["bus"][string(ac_bus)]["va"]
+    θ = acbusresult["va"]
     Vdc =
-        result["solution"]["busdc"][string(dc_bus)]["vm"] *
-        (data["dcpol"] * global_dict["V"] / 1e3)
-    Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
-    Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6
+        dcbusresult["vm"] *
+        (dcpol * global_dict["V"] / 1e3) # data["dcpol"] should be here. const dcpol in powerflow.jl
+    Pac = -elemresult["pgrid"] * global_dict["S"] / 1e6
+    Qac = elemresult["qgrid"] * global_dict["S"] / 1e6
 
-    setpoint = P.SetPoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
+    setpoint = SetPoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
-    if element.element_model isa P.AbstractStateSpace
+    if element.element_model isa AbstractStateSpace
         update!(element, element.element_model, setpoint)
     else
         update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
     end
 
+    return setpoint
 end
 
 function timeDelayPadeMatrices(padeOrderNum,padeOrderDen,t_delay,numberVars)

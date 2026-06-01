@@ -43,32 +43,11 @@ function Base.convert(bs::BuilderState, ::Type{P.PMACDC})
 
 
 
-    return data, elempitopm
+    return data, global_dict, elempitopm
 
         
 end
 
-function convert!(data, element::P.Element{T}, ::Type{P.PMACDC}, elempmtopi, buspm2pi ) where {T}
-    
-    
-
-
-    #1. Convert component
-    pmcomp, pmcomptype = convert(element, global_dict)    
-    compindex = length(data[pmcomptype]) + 1
-
-    
-    ## Update the LUT
-    elempmtopi[(pmcomptype, compindex)] = elemid
-
-    
-   
-
-
-    ## Add the copy to the right index of data dict
-    data[pmcomptype][string(compindex)] = compdict
-    return compdict, pmcomptype
-end
 
 # function updateacbus!(compdict::Dict, pmcomptype, pmbus_vec)
 #     ACBusDict = Dict("gen"=>("gen_bus",), "shunt"=>("shunt_bus",), "branch" =>("f_bus", "t_bus"), "convdc"=>("busac_i",))
