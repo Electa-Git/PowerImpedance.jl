@@ -4,6 +4,9 @@ using Logging
 const ang_max = deg2rad(-360)
 const ang_min = deg2rad(360)
 
+const ang_max = deg2rad(-360)
+const ang_min = deg2rad(360)
+
 has_bipolar_converter(net::Network) = any(elem -> elem.element_model isa BipolarMMC, values(net.elements))
 
 function _dict_get_anykey(dict_like, key::String, default)
