@@ -199,10 +199,8 @@ function convert!(data, elem::Element{<:Impedance}, ::Type{PMACDC}, key, buses, 
 		shunt["status"] = 1
 
 		abcd = eval_abcd(imp, global_dict["omega"] * 1im)
-		println(abcd)
 		n = 3
 		z = abcd[1:n, (n+1):end][1, 1] / global_dict["Z"]
-		println(z)
 		shunt["gs"] = real(1 / z)
 		shunt["bs"] = imag(1 / z)
 		data["shunt"][string(key)] = shunt

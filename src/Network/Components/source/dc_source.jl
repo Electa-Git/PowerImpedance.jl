@@ -49,7 +49,7 @@ Parameters:
 		transformation = transformation, connection = connection)
 end =#
 
-function dc_source(; pins=1, setpoint=SetPoint(Vdc=240),transformation=false, connection=true, args...)
+function dc_source(; pins=1, setpoint=Setpoint(Vdc=240),transformation=false, connection=true, args...)
     source = Source()
 
     for (key, val) in pairs(args)

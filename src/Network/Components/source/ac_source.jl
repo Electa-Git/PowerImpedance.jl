@@ -69,7 +69,7 @@ three_phase_source = ac_source(V = 1.0, P = 50, Q = 20, Z = 0.1, pins = 3)
 end
  =#
 
-function ac_source(; setpoint = SetPoint(;Vac=220/sqrt(3)), pins=1, transformation=false, connection=true, args...)
+function ac_source(; setpoint = Setpoint(;Vac=220/sqrt(3)), pins=1, transformation=false, connection=true, args...)
     source = Source()
 
     for (key, val) in pairs(args)

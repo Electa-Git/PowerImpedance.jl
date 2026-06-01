@@ -844,6 +844,6 @@ function transform(elemresult, busresult, global_dict, elem::Element{<:Synchrono
             global_dict["V"] / 1e3) * sqrt(2) # Convert the LN-RMS voltage coming from the PF to LN-PK
     θ = acbusresult["va"]
 
-    setpoint = SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+    setpoint = Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
     return setpoint
 end

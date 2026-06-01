@@ -170,7 +170,7 @@ function transform(elemresult, busresult, global_dict, element::Element{<:Abstra
     Pac = -elemresult["pgrid"] * global_dict["S"] / 1e6
     Qac = elemresult["qgrid"] * global_dict["S"] / 1e6
 
-    setpoint = SetPoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
+    setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
     if element.element_model isa AbstractStateSpace
         update!(element, element.element_model, setpoint)

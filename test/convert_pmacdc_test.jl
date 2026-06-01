@@ -6,7 +6,7 @@ using PowerImpedanceACDC.NetworkBuilder: solve_acdcpf, define, pin, ⟷, powerfl
 Vac = 220 #LL-RMS
 Z = 1
  elements = (; 
-        sm1 = synchronousmachine(;elec=ElectricalSM(rt=1e-10,lt=1e-10), setpoint=SetPoint(;Pac = 50, Qac = 10, Vac = 1.0 * Vac / sqrt(3))),
+        sm1 = synchronousmachine(;elec=ElectricalSM(rt=1e-10,lt=1e-10), setpoint=Setpoint(;Pac = 50, Qac = 10, Vac = 1.0 * Vac / sqrt(3))),
         z1 = impedance(z = Z, pins = 3, transformation = true),
     )
     connections = (
