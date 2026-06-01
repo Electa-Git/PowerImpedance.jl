@@ -68,7 +68,7 @@ function dc_source(; pins=1, setpoint=SetPoint(Vdc=240),transformation=false, co
 
     return Element(;
         input_pins = pins,
-        output_pins = pins,
+        output_pins = pins, # DC sources are one-port, kept for legacy
         element_model = source,
         A = A,
         B = B,

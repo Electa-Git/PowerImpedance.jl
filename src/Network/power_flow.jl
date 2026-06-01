@@ -148,7 +148,7 @@ Forms the dictionary needed for solving the power flow problem using
 package PowerModelsACDC. After successful power flow solving, it updates
 the operating point of the active devices """
 function power_flow(net::Network)
-	global ang_min, ang_max, result, nodes2bus, elem2comp, data
+	# global ang_min, ang_max, result, nodes2bus, elem2comp, data
 	global_dict = PowerModelsACDC.get_pu_bases(1000, net.voltageBase[1]) # 3-PH MVA, LL-RMS, Original setting was 100,320
 	global_dict["omega"] = 2π * 50
 
@@ -726,13 +726,13 @@ function add_interm_bus_ac!(data, global_dict)
 	bus = parse(Int, bus)
 	return bus
 end
-
+const dcpol = 2 # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
 function data_init!(data, global_dict)
 	data["source_type"] = "matpower"
 	data["name"] = "network"
 	data["source_version"] = "0.0.0"
 	data["per_unit"] = true
-	data["dcpol"] = 2 # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
+	data["dcpol"] = dcpol # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
 	data["baseMVA"] = global_dict["S"] / 1e6
 	data["bus"] = Dict{String, Any}()
 	data["im"] = Dict{String, Any}()

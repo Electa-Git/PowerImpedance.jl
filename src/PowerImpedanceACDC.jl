@@ -20,7 +20,8 @@ import Base: convert
 
 # Utilities
 
-import TypedTables: Table
+using TypedTables: Table
+using StaticArrays: SMatrix
 
 # Time delays
 using ControlSystemsBase, RobustAndOptimalControl
@@ -117,7 +118,7 @@ include("Network/Components/machine/SynchronousMachine.jl")
 include("Network/Network.jl")
 
 # Refactoring attempt
-include("core/base.jl")
+# include("core/base.jl")
 # include("core/convert.jl")
 
 # New power flow

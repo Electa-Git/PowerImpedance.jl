@@ -307,7 +307,7 @@ end
 function synchronousmachine(;elec=ElectricalSM(),mech=MechanicalSM(),avr=AVRSM(),gov=GovernorSM(), setpoint=Setpoint(), connection=true)
     
     gen = SynchronousMachine(elec, mech,avr, gov)
-    # Transformation property set to false, as model is natively defined in dq-frame. TODO: Fix this
+    # Transformation property set to false, as model is natively defined in dq-frame. TODO: Fix this; outpins 0 bcs oneport, kept for legacy
     elem = Element(input_pins = 2, output_pins = 2, element_model = gen, transformation = false; connection, setpoint)
     return elem
 end
@@ -832,4 +832,18 @@ function convert!(data, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, key
     data["bus"][string(interm_bus)]["vmin"] = 0.9 * gen["vg"]
     data["bus"][string(interm_bus)]["vmax"] = 1.1 * gen["vg"]
     return nothing
+end
+
+function transform(elemresult, busresult, global_dict, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, ::Type{PIACDC})
+			
+    acbusresult = busresult[1]
+    Pgen = elemresult["pg"] * global_dict["S"] / 1e6 #MW
+    Qgen = elemresult["qg"] * global_dict["S"] / 1e6 #MVAr
+    Vm =
+        (acbusresult["vm"] *
+            global_dict["V"] / 1e3) * sqrt(2) # Convert the LN-RMS voltage coming from the PF to LN-PK
+    θ = acbusresult["va"]
+
+    setpoint = SetPoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+    return setpoint
 end

@@ -1,4 +1,5 @@
-using PowerImpedanceACDC.NetworkBuilder: pin, ⟷, powerflow_optimizer, is_bounded_options, powerflow_setting, solve_acdcpf
+using PowerImpedanceACDC.NetworkBuilder: pin, ⟷, powerflow_optimizer, is_bounded_options, 
+powerflow_setting, solve_acdcpf, get_y, LinearizedAdmittanceNetwork
 
 @testset "NetworkBuilder unit tests" begin
 	legacy = @network begin
@@ -2459,12 +2460,49 @@ function test_nwbuilder_powerflow_parity(; freq_range = IEEE39_FREQ_RANGE)
 	return nothing
 end
 
+function test_linearizedadmittance_parity(; freq_range = IEEE39_FREQ_RANGE)
+	legacy = build_ieee39bus_with_macro()
+	built = build_ieee39bus_with_networkbuilder().builder
+	newadmnw = convert(built, LinearizedAdmittanceNetwork)
+
+	freqs = range(freq_range[1], freq_range[2], step=freq_range[3])
+	s = 1im .* 2π .* freqs
+	elemkeys = [:STATCOM, :T1_39, :T9_39, :LoadB39]
+	for key in elemkeys
+		@test haskey(legacy.elements, key) #"Legacy network is missing element $key"
+		@test haskey(newadmnw.interface.elem, key) #"New network is missing element $key"
+		
+		ylegacy = PIACDC.get_y.((legacy.elements[key],), s) #Should be pu (disabled scaling)
+		ynew = get_y.((newadmnw,), (key,), s) 
+
+		@test isapprox(ylegacy, ynew; atol = 1e-5) #"Admittance mismatch for element $key"
+	end
+	
+	
+
+
+
+
+	# @test isequal(omega_built, omega_legacy)
+	# @test axes(z_built) == axes(z_legacy)
+
+
+	# @test legacy.elements[:STATCOM].A ≈ built.elements[:STATCOM].A rtol=1e-11 #Check if the linearized state matrix are approx the same
+
+
+	return nothing
+end
+
 @testset "IEEE39bus NetworkBuilder parity" begin
 	test_ieee39bus_networkbuilder_parity()
 end
 
 @testset "IEEE39bus NetworkBuilder power flow parity" begin
 	test_nwbuilder_powerflow_parity()
+end
+
+@testset "IEEE39bus NetworkBuilder linearized admittance parity" begin
+	test_linearizedadmittance_parity()
 end
 
 @testset "NetworkBuilder drops endpoints of declared disconnected elements" begin

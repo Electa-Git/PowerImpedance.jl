@@ -1,9 +1,12 @@
-abstract type Transmission_line end
+abstract type Transmission_line <: AbstractMultiport end
 
 function eval_y(tl :: Transmission_line, s :: Complex)
     return abcd_to_y(eval_abcd(tl, s))
 end
 
+function eval_y(el::Element{<:Transmission_line}, s :: Complex)
+    return eval_y(el.element_model, s)
+end
 
 pmtype(elem::Element{<:Transmission_line}) = is_three_phase(elem) ? "branch" : "branchdc"
 

@@ -83,6 +83,7 @@ function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}}
 	connectfilterfunc(row) = row.elem ∉ nonconnected_elements
 
 	registry = filter(connectfilterfunc, registry)
+
 	return ConnectionsRegistry(registry)
 end
 
@@ -191,13 +192,16 @@ function dcconnections(registry::ConnectionsRegistry)
 	return filter(row -> row.elecdomain == 2 && row.bus !=0, registry.registry)
 end
 
-function sortedcomponentconnections(registry::ConnectionsRegistry, component::Symbol)
+sortedcomponentconnections(registry::ConnectionsRegistry, component::Symbol) = sortedcomponentconnections(registry.registry, component)
+
+function sortedcomponentconnections(registry::Table, component::Symbol;withground=false)
 	# Find connections of component
-	compconn = filter(row -> row.elem == component, registry.registry)
+	compconn = filter(row -> row.elem == component, registry)
 	# First AC and then DC connections
-	acconn = filter(row -> row.elecdomain == 1, compconn)
+	groundfilt(row) = withground ? (true) : (row.bus != 0)  # Filter ground connections if withground=false 
+	acconn = filter(row -> (row.elecdomain == 1) && groundfilt(row), compconn)
 	sort!(acconn, by = row -> (row.side, row.terminal))
-	dcconn = filter(row -> row.elecdomain == 2, compconn)
+	dcconn = filter(row -> row.elecdomain == 2 && groundfilt(row), compconn)
 	sort!(dcconn, by = row -> (row.side, row.terminal))
 	elecdomainsorted = vcat(acconn, dcconn)
 
@@ -321,8 +325,20 @@ function define(elements::NamedTuple, connections::Tuple{Vararg{ConnectionDef}};
 	end
 	connectionregistry = ConnectionsRegistry(elements, connections, nonconnectedid)
 
-	network = build_network(elements, connectionregistry, options)
+	network = build_network(deepcopy(elements), connectionregistry, options) # Avoid rewriting of elements in new version
 
+
+	### New changes wrt legacy version:1) add pins to elements again (necesarry for legacy) 2) filter out ground for singleport in connections
+	updateelempins!(elements, connectionregistry)
+
+	# Check that single port devices(synchronous machine, ideal voltage sources) are not connected to ground (after legacy network definition)
+	groundedsingleports = filter(row -> P.isgroundnet(row.net) && P.issingleport(elements[row.elem]), connectionregistry.registry)
+	
+	if !isempty(groundedsingleports) 
+		@warn "The following single-port elements are connected to ground, for legacy reasons allowed: $(groundedsingleports.elem). These ground connections will be removed from the connection list"
+		registry = filter(row -> row ∉ groundedsingleports, connectionregistry.registry)
+		connectionregistry = ConnectionsRegistry(registry)
+	end
 	
 	return BuilderState(connected_elements, connectionregistry, options, network, nothing)
 end
@@ -346,6 +362,20 @@ function update!(
 
 	return (network = builder.network, powerflow = builder.powerflow)
 end
+
+function updateelempins!(elements, connectionsregistry)
+	for (name, element) in pairs(elements)
+		pins = filter(row -> row.elem == name, connectionsregistry.registry)
+		for pin in pins
+			legacypinname = pin_name(pin.side, pin.terminal)
+			net = pin.net
+			element.pins[legacypinname] = net
+		end
+
+
+	end
+end
+
 
 function solve(builder::BuilderState)
 	powerflow = solve_powerflow(builder.network, builder.options)
@@ -431,7 +461,7 @@ function restore_active_setpoint_values!(network::P.Network, powerflow::NamedTup
 		element = deepcopy(cached_value)
 	end
 
-	sync_parent_powerflow_globals!(powerflow)
+	# sync_parent_powerflow_globals!(powerflow)
 	return network
 end
 
@@ -598,10 +628,10 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 	)
 
 	powerflow = (result = result, data = data, nodes2bus = nodes2bus, elem2comp = elem2comp)
-	set_parent_global!(:result, result)
-	set_parent_global!(:data, data)
-	set_parent_global!(:nodes2bus, nodes2bus)
-	set_parent_global!(:elem2comp, elem2comp)
+	# set_parent_global!(:result, result)
+	# set_parent_global!(:data, data)
+	# set_parent_global!(:nodes2bus, nodes2bus)
+	# set_parent_global!(:elem2comp, elem2comp)
 	return powerflow
 end
 
@@ -888,7 +918,7 @@ function solve_acdcpf_relax(
 		P._PMACDC.ref_add_sssc!,
 		P._PMACDC.ref_add_flex_load!,
 		P._PMACDC.ref_add_gendc!,
-		P._PMACDC.ref_add_im!,
+		# P._PMACDC.ref_add_im!,
 	]
 	build_method = pm -> build_acdcpf(pm, variables)
 	pm = P._PM.instantiate_model(
@@ -1001,7 +1031,7 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 		end
 	end
 
-	sync_parent_powerflow_globals!(powerflow)
+	# sync_parent_powerflow_globals!(powerflow)
 	return network
 end
 
@@ -1015,7 +1045,7 @@ function non_ground_node(element::P.Element, nodes2bus)
 
 	return Set(node for node in values(element.pins) if !(node in ground_nodes))
 end
-
+include("../core/base.jl")
 include("NB_power_flow.jl")
 include("../core/convert.jl")
 
