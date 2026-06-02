@@ -166,8 +166,8 @@ function build_mmc_grid()
     grid = @network begin
         voltageBase = Vm
 
-        G3 = ac_source(pins = 3, V = Vm, transformation = true)
-        G_DC = dc_source(pins = 1, V = Vdc / 2)
+        G3 = ac_source(pins = 3, setpoint = Setpoint(Vac = Vm), transformation = true)
+        G_DC = dc_source(pins = 1, setpoint = Setpoint(Vdc = Vdc / 2))
 
         DUT = dut
 

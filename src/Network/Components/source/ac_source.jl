@@ -69,7 +69,7 @@ three_phase_source = ac_source(V = 1.0, P = 50, Q = 20, Z = 0.1, pins = 3)
 end
  =#
 
-function ac_source(; pins=1, transformation=false, connection=true, args...)
+function ac_source(; setpoint = Setpoint(;Vac=220/sqrt(3)), pins=1, limits=Limits(), transformation=false, connection=true, args...)
     source = Source()
 
     for (key, val) in pairs(args)
@@ -86,15 +86,16 @@ function ac_source(; pins=1, transformation=false, connection=true, args...)
 
     A, B, C, D = make_abcd(source, pins)
 
-    return Element(
+    return Element(;
         input_pins = pins,
-        output_pins = pins,
+        output_pins = pins, # AC sources one-port, kept for legacy
         element_model = source,
         A = A,
         B = B,
         C = C,
         D = D,
         transformation = transformation,
+        setpoint,
         connection = connection,
     )
 end

@@ -239,16 +239,29 @@ pf_type_dc(::PLLSynchronization) = 1
 pf_type_dc(block::ΔdqControlGFL, sync::AbstractSynchronization) = pf_type_dc(block.outer_active)
 pf_type_dc(::ΔdqControlGFM, sync::AbstractSynchronization) = pf_type_dc(sync)
 
+
+"""
+Wrapper method for legacy power flow construction from Network type
+"""
 function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-    
-    conv = elem.element_model
     dc_node = make_node(elem, 1)
     ac_nodes = make_node(elem, 2)
     dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_node, global_dict)
     ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-
     key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "convdc")
+    return convert!(data,elem,PMACDC, key, (ac_bus, dc_bus),  global_dict)
+end
+
+pmtype(::Element{<:MMC}) = "convdc"
+
+function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_dict)
+    
+    conv = elem.element_model
+    ac_bus = buses[1]
+    dc_bus = buses[2]
+    
     key_str = string(key)
+    
 
     data["convdc"][key_str] = Dict{String, Any}()
     convdc = data["convdc"][key_str]

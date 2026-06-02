@@ -32,17 +32,21 @@ abstract type AbstractElementModel end
 
 abstract type AbstractMultiport <: AbstractElementModel end
 
+abstract type AbstractStateSpace <: AbstractElementModel end
+
+
+
 @with_kw struct Setpoint
     
     # Power flow results
-    Pac ::Float64 = 0              # active power [MW]
-    Qac ::Float64 = 0                # reactive power [MVA]
-    θac ::Float64 = 0
-    Vac ::Float64 = 220*sqrt(2/3)             # AC voltage, amplitude [kV]
+    Pac ::Union{Float64, Missing} = missing              # active power [MW]
+    Qac ::Union{Float64, Missing} = missing                # reactive power [MVA]
+    θac ::Union{Float64, Missing} = missing
+    Vac ::Union{Float64, Missing} = missing#220*sqrt(2/3)             # AC voltage, amplitude [kV]
 
     # DC
-    Pdc::Float64 = 0.0
-    Vdc::Float64 = 0.0
+    Pdc::Union{Float64, Missing} = missing
+    Vdc::Union{Float64, Missing} = missing
    
 end
 
@@ -78,7 +82,6 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
     B::Matrix{ComplexF64} 
     C::Matrix{ComplexF64} 
     D::Matrix{ComplexF64} 
-    #   basevalues::BaseVal
     transformation :: Bool
     connection :: Bool # True = Element is connected, False= Element is disconnected 
     setpoint::Setpoint
@@ -165,10 +168,15 @@ end
 end =#
 
 # PSCAD requires SI results
-function eval_y(elem::Element, s::Complex; SI_units::Bool=true)
+function eval_y(elem::Element{<:AbstractStateSpace}, s::Complex; SI_units::Bool=true)
     n = size(elem.A, 1)
     Iₙ = Matrix{ComplexF64}(I, n, n)
     Y = elem.C * ((s * Iₙ - elem.A) \ elem.B) + elem.D
+    Y = Matrix{ComplexF64}(Y)
+    
+    if !SI_units
+        return Y
+    end
 
     model = elem.element_model
 
@@ -179,7 +187,6 @@ function eval_y(elem::Element, s::Complex; SI_units::Bool=true)
         iACbase = 2 * elec.Sbase / (3 * vACbase)
         iDCbase = elec.Sbase / elec.vDCbase
 
-        Y = Matrix{ComplexF64}(Y)
 
         # row scaling = output current bases
         Y[1, :]   .*= iDCbase
@@ -193,11 +200,8 @@ function eval_y(elem::Element, s::Complex; SI_units::Bool=true)
     if isa(model, MMC)
         elec = model.elec
 
-        Y = Matrix{ComplexF64}(Y)
         
-        if !SI_units
-            return Y
-        end
+        
 
         iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
         iDCbase = elec.Sbase / elec.vDC_base
@@ -215,6 +219,10 @@ function eval_y(elem::Element, s::Complex; SI_units::Bool=true)
     return Y
 end
 
+function eval_y(elem::Element{<:AbstractMultiport}, s::Complex; SI_units::Bool=true)
+    Y = get_y(elem, s)
+    return Y
+end
 
 ################### ABCD functions ################################
 function get_abcd(element::Element, s::Complex)
@@ -300,6 +308,10 @@ end
 
 function is_impedance(element :: Element)
     isa(element.element_model, Impedance) && !any(occursin("gnd", string(x)) for x in element.pins)
+end
+
+function issingleport(element :: Element)
+    isa(element.element_model, SynchronousMachine) || isa(element.element_model, Source)
 end
 
 function is_load(element :: Element)

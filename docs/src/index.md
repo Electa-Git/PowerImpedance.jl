@@ -10,5 +10,5 @@ Documentation for [PowerImpedanceACDC](https://gitlab.kuleuven.be/electa/control
 ```
 
 ```@autodocs
-Modules = [PowerImpedanceACDC]
+Modules = [PowerImpedanceACDC, PowerImpedanceACDC.NetworkBuilder, PowerImpedanceACDC.PowerModelsMCDC]
 ```

@@ -1,6 +1,7 @@
 module NetworkBuilder
 using Logging
 import TypedTables: Table
+
 export pin, ⟷, ↔
 
 const P = parentmodule(@__MODULE__)
@@ -48,7 +49,7 @@ Each connection definition must provide a `name` and `endpoints`. Endpoints in
 the same connection are assigned the same bus, and the registry records the
 net name, bus number, element, side, terminal, and electrical domain.
 """
-function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}})
+function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}}, nonconnected_elements = Set())
 	
 	#1. Do checks of connections
 
@@ -63,15 +64,26 @@ function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}}
 	#2. Populate registry
 	registry = Table(net=Symbol[], bus=Int[], elem=Symbol[], side=Int[], terminal=Int[], elecdomain=Int[])
 	for conndef in connections_vec
-		examplepin = first(conndef.endpoints) #All endpoints should be connected to same bus 
-		bus = internnet(registry, examplepin.elementid, examplepin.side) #Check if net already has a bus via element and side, otherwise assign next bus
+	
+		examplepin = first(conndef.endpoints) #All endpoints should be connected to same bus
+		elecdomain = P.elecdomain(elements[examplepin.elementid], examplepin.side)
+		bus = internbus(registry, conndef.name, examplepin.elementid, examplepin.side, elecdomain) #Check if net already has a bus via element and side, otherwise assign next bus
 		
+		# TODO: Check whether sides of all other elements are already connected to the same bus of the examplepin + all same elec domain
 		for pin in conndef.endpoints
 			@assert pin.elementid in keys(elements) "Element :$(pin.elementid) defined in connection but not found in elements."
-			elecdomain = P.elecdomain(elements[pin.elementid], pin.side)
+				
 			push!(registry, (;net=conndef.name, bus, elem=pin.elementid, side=pin.side, terminal=pin.terminal, elecdomain))
+		
+			
 		end
 	end
+
+	#Take out connections for non-connected elements (if any)
+	connectfilterfunc(row) = row.elem ∉ nonconnected_elements
+
+	registry = filter(connectfilterfunc, registry)
+
 	return ConnectionsRegistry(registry)
 end
 
@@ -141,8 +153,11 @@ function mergebysharedpin(conns::Vector{ConnectionDef})
 	end
 	return conns
 end
+"""
 
-function internnet(registry::Table, element::Symbol, side::Int)
+We search if a given element and side already exist in the registry. IF yes, they should have the same bus. Busid consists of Int + elecdomain
+"""
+function internbus(registry::Table, net::Symbol, element::Symbol, side::Int, elecdomain::Int)
 	# Find if bus already exists for element and side
 	busfilterfunc(row) = row.elem == element && row.side == side
 	busfilter = map(busfilterfunc, registry)
@@ -152,11 +167,52 @@ function internnet(registry::Table, element::Symbol, side::Int)
 		@assert length(bus_vec) == 1 "Multiple buses found for element :$element side $side. This should not happen, check your connections!"
 		return bus_vec[1]
 	else
-		nextbus = maximum(registry.bus; init=0) + 1
+		if !P.isgroundnet(net)
+			
+			domainbus = (filter(row -> row.elecdomain == elecdomain, registry)).bus
+			nextbus = maximum(domainbus; init=0) + 1
+		else
+			nextbus = 0 # Ground bus is always bus 0
+		end
 		return nextbus
 	end
 end
 
+#### Helper functions to Connectionregistry
+# domainfilter(row,elecdomain) = 
+domainconnections(registry, ::Val{1}) = acconnections(registry)
+domainconnections(registry, ::Val{2}) = dcconnections(registry)
+
+function acconnections(registry::ConnectionsRegistry)
+	#Filter out ground bus and DC bus
+	return filter(row -> (row.elecdomain == 1) && row.bus !=0, registry.registry)
+end
+
+function dcconnections(registry::ConnectionsRegistry)
+	return filter(row -> row.elecdomain == 2 && row.bus !=0, registry.registry)
+end
+
+sortedcomponentconnections(registry::ConnectionsRegistry, component::Symbol) = sortedcomponentconnections(registry.registry, component)
+
+function sortedcomponentconnections(registry::Table, component::Symbol;withground=false)
+	# Find connections of component
+	compconn = filter(row -> row.elem == component, registry)
+	# First AC and then DC connections
+	groundfilt(row) = withground ? (true) : (row.bus != 0)  # Filter ground connections if withground=false 
+	acconn = filter(row -> (row.elecdomain == 1) && groundfilt(row), compconn)
+	sort!(acconn, by = row -> (row.side, row.terminal))
+	dcconn = filter(row -> row.elecdomain == 2 && groundfilt(row), compconn)
+	sort!(dcconn, by = row -> (row.side, row.terminal))
+	elecdomainsorted = vcat(acconn, dcconn)
+
+
+	return elecdomainsorted
+
+end
+
+
+
+##### Builder state
 
 mutable struct BuilderState
 	elements::NamedTuple
@@ -262,12 +318,29 @@ end
 
 function define(elements::NamedTuple, connections::Tuple{Vararg{ConnectionDef}}; options = (;))
 
-	connectionregistry = ConnectionsRegistry(elements, connections)
+	connected_elements = (; filter(p -> p.second.connection, pairs(elements))...) #Filter out non-connected elements
+	nonconnectedid = setdiff(keys(elements), keys(connected_elements))
+	if !isempty(nonconnectedid)
+		println("The following elements are not connected according to their definition and will be ignored: $(nonconnectedid). If you want to include them, set connection=true in their definition.")
+	end
+	connectionregistry = ConnectionsRegistry(elements, connections, nonconnectedid)
 
-	network = build_network(elements, connectionregistry, options)
+	network = build_network(deepcopy(elements), connectionregistry, options) # Avoid rewriting of elements in new version
 
+
+	### New changes wrt legacy version:1) add pins to elements again (necesarry for legacy) 2) filter out ground for singleport in connections
+	updateelempins!(elements, connectionregistry)
+
+	# Check that single port devices(synchronous machine, ideal voltage sources) are not connected to ground (after legacy network definition)
+	groundedsingleports = filter(row -> P.isgroundnet(row.net) && P.issingleport(elements[row.elem]), connectionregistry.registry)
 	
-	return BuilderState(elements, connectionregistry, options, network, nothing)
+	if !isempty(groundedsingleports) 
+		@warn "The following single-port elements are connected to ground, for legacy reasons allowed: $(groundedsingleports.elem). These ground connections will be removed from the connection list"
+		registry = filter(row -> row ∉ groundedsingleports, connectionregistry.registry)
+		connectionregistry = ConnectionsRegistry(registry)
+	end
+	
+	return BuilderState(connected_elements, connectionregistry, options, network, nothing)
 end
 
 function update!(
@@ -289,6 +362,20 @@ function update!(
 
 	return (network = builder.network, powerflow = builder.powerflow)
 end
+
+function updateelempins!(elements, connectionsregistry)
+	for (name, element) in pairs(elements)
+		pins = filter(row -> row.elem == name, connectionsregistry.registry)
+		for pin in pins
+			legacypinname = pin_name(pin.side, pin.terminal)
+			net = pin.net
+			element.pins[legacypinname] = net
+		end
+
+
+	end
+end
+
 
 function solve(builder::BuilderState)
 	powerflow = solve_powerflow(builder.network, builder.options)
@@ -374,7 +461,7 @@ function restore_active_setpoint_values!(network::P.Network, powerflow::NamedTup
 		element = deepcopy(cached_value)
 	end
 
-	sync_parent_powerflow_globals!(powerflow)
+	# sync_parent_powerflow_globals!(powerflow)
 	return network
 end
 
@@ -495,8 +582,8 @@ function set_parent_global!(name::Symbol, value)
 end
 
 function solve_powerflow(network::P.Network, options::NamedTuple)
-	set_parent_global!(:ang_min, deg2rad(360))
-	set_parent_global!(:ang_max, deg2rad(-360))
+	# set_parent_global!(:ang_min, deg2rad(360))
+	# set_parent_global!(:ang_max, deg2rad(-360))
 
 	if P.is_linear(network)
 		@info "Network only consists of linear elements. Skipping power flow."
@@ -506,7 +593,7 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 	global_dict = P.PowerModelsACDC.get_pu_bases(1000, network.voltageBase[1])
 	global_dict["omega"] = 2π * 50
 
-	data = P.data_init(Dict{String, Any}(), global_dict)
+	data = P.data_init!(Dict{String, Any}(), global_dict)
 	nodes2bus = Dict()
 	bus2nodes = Dict()
 	elem2comp = Dict()
@@ -541,10 +628,10 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 	)
 
 	powerflow = (result = result, data = data, nodes2bus = nodes2bus, elem2comp = elem2comp)
-	set_parent_global!(:result, result)
-	set_parent_global!(:data, data)
-	set_parent_global!(:nodes2bus, nodes2bus)
-	set_parent_global!(:elem2comp, elem2comp)
+	# set_parent_global!(:result, result)
+	# set_parent_global!(:data, data)
+	# set_parent_global!(:nodes2bus, nodes2bus)
+	# set_parent_global!(:elem2comp, elem2comp)
 	return powerflow
 end
 
@@ -831,7 +918,7 @@ function solve_acdcpf_relax(
 		P._PMACDC.ref_add_sssc!,
 		P._PMACDC.ref_add_flex_load!,
 		P._PMACDC.ref_add_gendc!,
-		P._PMACDC.ref_add_im!,
+		# P._PMACDC.ref_add_im!,
 	]
 	build_method = pm -> build_acdcpf(pm, variables)
 	pm = P._PM.instantiate_model(
@@ -944,7 +1031,7 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 		end
 	end
 
-	sync_parent_powerflow_globals!(powerflow)
+	# sync_parent_powerflow_globals!(powerflow)
 	return network
 end
 
@@ -958,5 +1045,8 @@ function non_ground_node(element::P.Element, nodes2bus)
 
 	return Set(node for node in values(element.pins) if !(node in ground_nodes))
 end
+include("../core/base.jl")
+include("NB_power_flow.jl")
+include("../core/convert.jl")
 
 end

@@ -1,6 +1,8 @@
 abstract type AbstractConverter <: AbstractStateSpace end
 
 
+
+
 # Evaluating the admittance of the converter
 function eval_abcd(converter :: AbstractConverter, s :: Complex)
     return eval_y(converter, s)
@@ -11,12 +13,10 @@ function eval_y(converter :: AbstractConverter, s :: Complex)
     return Y
 end
 
+pmtype(::Element{<:AbstractConverter}) = "convdc"
 
 function convert!(data,elem::Element{<:AbstractConverter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-    
-    converter = elem.element_model
-    pins = elem.pins
-    
+
     # Busses interface (dc_bus --> 1.1 & ac_bus --> 2.1 and 2.2)
     dc_node = make_node(elem, 1) 
     ac_nodes = make_node(elem,2) #Similar AC bus
@@ -24,7 +24,14 @@ function convert!(data,elem::Element{<:AbstractConverter},::Type{PMACDC}, nodes2
     ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
     
     # Interface element
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "convdc")
+    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
+    return convert!(data, elem, PMACDC, key, (ac_bus, dc_bus), global_dict)
+end
+
+function convert!(data, elem::Element{<:AbstractConverter}, ::Type{PMACDC}, key, buses, global_dict)
+    converter = elem.element_model
+    ac_bus = buses[1]
+    dc_bus = buses[2]
 
     (data["convdc"])[string(key)] = Dict{String, Any}()
     ((data["convdc"])[string(key)])["busdc_i"] = dc_bus
@@ -143,6 +150,35 @@ function convert!(data,elem::Element{<:AbstractConverter},::Type{PMACDC}, nodes2
     ((data["busdc"])[string(dc_bus)])["Vdcmax"] = 1.1 * ((data["busdc"])[string(dc_bus)])["Vdc"]
     ((data["busdc"])[string(dc_bus)])["Vdcmin"] = 0.9 * ((data["busdc"])[string(dc_bus)])["Vdc"]
     ((data["busdc"])[string(dc_bus)]) = set_bus_type_dc((data["busdc"])[string(dc_bus)], ((data["convdc"])[string(key)])["type_dc"])
+    return nothing
+end
+
+
+function transform(elemresult, busresult, global_dict, element::Element{<:AbstractConverter}, ::Type{PMACDC}, ::Type{PIACDC})
+    
+    acbusresult = busresult[1] # AC bus
+    dcbusresult = busresult[2] # DC bus
+
+    Pdc = elemresult["pdc"] * global_dict["S"] / 1e6
+    Vm =
+        (acbusresult["vm"] * global_dict["V"] / 1e3) *
+        sqrt(2)
+    θ = acbusresult["va"]
+    Vdc =
+        dcbusresult["vm"] *
+        (dcpol * global_dict["V"] / 1e3) # data["dcpol"] should be here. const dcpol in powerflow.jl
+    Pac = -elemresult["pgrid"] * global_dict["S"] / 1e6
+    Qac = elemresult["qgrid"] * global_dict["S"] / 1e6
+
+    setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
+
+    if element.element_model isa AbstractStateSpace
+        update!(element, element.element_model, setpoint)
+    else
+        update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
+    end
+
+    return setpoint
 end
 
 function timeDelayPadeMatrices(padeOrderNum,padeOrderDen,t_delay,numberVars)

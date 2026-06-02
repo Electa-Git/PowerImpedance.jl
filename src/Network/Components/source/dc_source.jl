@@ -49,7 +49,7 @@ Parameters:
 		transformation = transformation, connection = connection)
 end =#
 
-function dc_source(; pins=1, transformation=false, connection=true, args...)
+function dc_source(; pins=1, setpoint=Setpoint(Vdc=240),transformation=false, connection=true, args...)
     source = Source()
 
     for (key, val) in pairs(args)
@@ -66,15 +66,16 @@ function dc_source(; pins=1, transformation=false, connection=true, args...)
 
     A, B, C, D = make_abcd(source, pins)
 
-    return Element(
+    return Element(;
         input_pins = pins,
-        output_pins = pins,
+        output_pins = pins, # DC sources are one-port, kept for legacy
         element_model = source,
         A = A,
         B = B,
         C = C,
         D = D,
-        transformation = transformation,
-        connection = connection,
+		setpoint,
+        transformation,
+        connection,
     )
 end

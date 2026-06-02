@@ -1,6 +1,5 @@
 
 
-abstract type AbstractStateSpace <: AbstractElementModel end
 
 # Function for ordering states & initialvalues. Puts all that are not defined to zero & discards initial values that do not appear in statenames 
 # Default: no explicit nonzero initial values; Fallback function, so that it is not necessary in all the modular parts to initialize.
@@ -77,15 +76,15 @@ function _state_space!(F, x, inputs, setpoint_pu::SetpointPU, m::AbstractStateSp
     return
 
 end
-
+#TODO: Merge this function
 function update!(elem::Element, m::AbstractStateSpace, setpoint::Setpoint)
 
     # Power flow to inputs of state_space function
-    global inputs, setpoint_pu = pftoinputs(m, setpoint)
+    inputs, setpoint_pu = pftoinputs(m, setpoint)
     inputs_vec = collect(values(inputs))
 
     # Initial values
-    global init = orderedinitialvalues(m; setpoint_pu, inputs)
+    init = orderedinitialvalues(m; setpoint_pu, inputs)
 
     # Parameters for equilibirum with NonlinearSolve.jl
     p_equil = (; inputs = inputs_vec, m = m, setpoint_pu)
@@ -94,7 +93,7 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::Setpoint)
     f!(du, u, p) = _state_space!(du, u, p.inputs, p.setpoint_pu, p.m, Equil())
     @info "Starting to solve for steady-state solution"
     prob = NonlinearProblem(f!, collect(promote(values(init)...)), p_equil)
-    global sol = solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+    sol = solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
 
     name = isdefined(elem, :symbol) ? string(elem.symbol) : string(nameof(typeof(m)))
 
@@ -104,7 +103,7 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::Setpoint)
         error("$name steady-state solution not found!")
     end
 
-    global equilibrium = sol.u[1:n_states(m)] # discard dummy states if any
+    equilibrium = sol.u[1:n_states(m)] # discard dummy states if any
 
     nb_states = n_states(m)
     nb_inputs = n_inputs(m)
@@ -128,52 +127,52 @@ function update!(elem::Element, m::AbstractStateSpace, setpoint::Setpoint)
     return elem
 end
 
-
-#= function update!(elem::Element, m::AbstractStateSpace, setpoint::Setpoint)
+function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpace}
+    
+    m = elem.element_model
 
     # Power flow to inputs of state_space function
-    global inputs = pftoinputs(m, setpoint)
+    inputs, setpoint_pu = pftoinputs(m, setpoint)
     inputs_vec = collect(values(inputs))
+
     # Initial values
-    global init = orderedinitialvalues(m;setpoint, inputs)
+    init = orderedinitialvalues(m; setpoint_pu, inputs)
 
     # Parameters for equilibirum with NonlinearSolve.jl
-    p_equil=(;inputs=inputs_vec, m, solvekind=Equil())
+    p_equil = (; inputs = inputs_vec, m = m, setpoint_pu)
 
     # Initialize problem
-    f!(du,u,p) = _state_space!(du, u, p.inputs, p.m, p.solvekind)
-    # println("Starting to solve for steady-state solution")
+    f!(du, u, p) = _state_space!(du, u, p.inputs, p.setpoint_pu, p.m, Equil())
+    @info "Starting to solve for steady-state solution"
     prob = NonlinearProblem(f!, collect(promote(values(init)...)), p_equil)
-    global sol=solve(prob;maxiters=20,abstol = 1e-6,reltol = 1e-6)
-    
-    # Solve nonlinear problem
-    if SciMLBase.successful_retcode(sol)
-        # println("$(elem.symbol) steady-state solution found!")
-    else
-        error("$(elem.symbol) steady-state solution not found!")
-    end 
-    global equilibrium = sol.u[1:n_states(m)] #Discarding the equilibrium value for dummy states
-    
-    # Calculate Jacobian
-    nb_states = n_states(m)
-    nb_inputs = n_inputs(m) # vd, vq, Tm
-    nb_elec_inputs = n_elec_inputs(m)
-    nb_addit_inputs = nb_inputs-nb_elec_inputs
-    nb_outputs = n_outputs(m) #id, iq
+    sol = solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
 
-    h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end], m, Jac())
+    name = isdefined(elem, :symbol) ? string(elem.symbol) : string(nameof(typeof(m)))
+
+    if SciMLBase.successful_retcode(sol)
+        @info "$name steady-state solution found!"
+    else
+        error("$name steady-state solution not found!")
+    end
+
+    equilibrium = sol.u[1:n_states(m)] # discard dummy states if any
+
+    nb_states = n_states(m)
+    nb_inputs = n_inputs(m)
+    nb_elec_inputs = n_elec_inputs(m)
+    nb_addit_inputs = nb_inputs - nb_elec_inputs
+    nb_outputs = n_outputs(m)
+
+    h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end], setpoint_pu, m, Jac())
     jac = zeros(nb_states+nb_outputs, nb_states+nb_inputs)
     x = [equilibrium; inputs_vec]; F = fill(zero(eltype(x)), nb_states+nb_outputs)
     ForwardDiff.jacobian!(jac, h!, F, x)
+     
+    A = jac[1:nb_states, 1:nb_states]
+    B = jac[1:nb_states, nb_states+1:end-nb_addit_inputs]
+    C = jac[nb_states+1:end, 1:nb_states]
+    D = jac[nb_states+1:end, nb_states+1:end-nb_addit_inputs]
 
-    ### 5. New operating point
-    elem.A=jac[1:nb_states, 1:nb_states]
-    elem.B=jac[1:nb_states, nb_states+1:end-nb_addit_inputs] # We discard additional inputs for our state-space matrices.
-    elem.C=jac[nb_states+1:end, 1:nb_states]
-    elem.D=jac[nb_states+1:end, nb_states+1:end-nb_addit_inputs]
-
-    return elem
-
+    return A,B,C,D 
 end
 
- =#

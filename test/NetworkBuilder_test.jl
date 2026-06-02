@@ -1,4 +1,5 @@
-using PowerImpedanceACDC.NetworkBuilder: pin, ⟷
+using PowerImpedanceACDC.NetworkBuilder: pin, ⟷, powerflow_optimizer, is_bounded_options, 
+powerflow_setting, solve_acdcpf, get_y, LinearizedAdmittanceNetwork
 
 @testset "NetworkBuilder unit tests" begin
 	legacy = @network begin
@@ -263,16 +264,16 @@ function build_ieee39bus_with_macro()
 
 
 		# Sources @ 345 kV
-		G30=ac_source(pins = 3, V = Vm1, transformation = true)
-		G31=ac_source(pins = 3, V = Vm1, transformation = true)
-		G32=ac_source(pins = 3, V = Vm1, transformation = true)
-		G33=ac_source(pins = 3, V = Vm1, transformation = true)
-		G34=ac_source(pins = 3, V = Vm1, transformation = true)
-		G35=ac_source(pins = 3, V = Vm1, transformation = true)
-		G36=ac_source(pins = 3, V = Vm1, transformation = true)
-		G37=ac_source(pins = 3, V = Vm1, transformation = true)
-		G38=ac_source(pins = 3, V = Vm1, transformation = true)
-		G39=ac_source(pins = 3, V = Vm1, transformation = true)
+		G30=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G31=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G32=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G33=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G34=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G35=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G36=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G37=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G38=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G39=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
 		# Source impedances @ 345 kV
 		Zg30=impedance(
 			z = (s::Complex) -> (0.191736 + s*0.0122063),
@@ -325,7 +326,7 @@ function build_ieee39bus_with_macro()
 			transformation = true,
 		)
 
-		G_DC=dc_source(pins = 1, V = Vdc_ST/2) # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
+		G_DC=dc_source(pins = 1, setpoint=Setpoint(Vdc = Vdc_ST/2)) # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
 
 
@@ -1357,16 +1358,16 @@ function ieee39bus_elements()
 
 
 		# Sources @ 345 kV
-		G30 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G31 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G32 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G33 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G34 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G35 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G36 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G37 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G38 = ac_source(pins = 3, V = Vm1, transformation = true),
-		G39 = ac_source(pins = 3, V = Vm1, transformation = true),
+		G30 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G31 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G32 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G33 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G34 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G35 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G36 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G37 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G38 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G39 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
 		# Source impedances @ 345 kV
 		Zg30 = impedance(
 			z = (s::Complex) -> (0.191736 + s*0.0122063),
@@ -1419,7 +1420,7 @@ function ieee39bus_elements()
 			transformation = true,
 		),
 
-		G_DC = dc_source(pins = 1, V = Vdc_ST/2), # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
+		G_DC = dc_source(pins = 1, setpoint=Setpoint(Vdc = Vdc_ST/2)), # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
 		STATCOM = PowerImpedanceACDC.tlc(
 			elec = elec,
@@ -2369,6 +2370,38 @@ function build_ieee39bus_with_networkbuilder()
 	return (; builder, solved, network = builder.network)
 end
 
+function ieee39bus_with_nwbuilder_powerflow()
+	builder_options = (;
+		voltageBase = Vm1,
+		power_flow = (;
+			is_bounded = (;
+				bus_voltage = true,
+			),
+		),
+	)
+
+	builder = NetworkBuilder.define(
+		ieee39bus_elements(),
+		ieee39bus_connections();
+		options = builder_options,
+	)
+
+	data,elempitopm = convert(builder, PIACDC.PMACDC)
+
+    options = builder.options
+
+    result = solve_acdcpf(
+        data,
+        PIACDC._PM.ACPPowerModel,
+        powerflow_optimizer(options),
+        is_bounded_options(options);
+        setting = powerflow_setting(options),
+    )
+
+
+	return (; builder, solved=(;data, result, elempitopm), network = builder.network)
+end
+
 function determine_ieee39bus_impedance(network; freq_range = IEEE39_FREQ_RANGE)
 	return determine_impedance(
 		network;
@@ -2390,11 +2423,92 @@ function test_ieee39bus_networkbuilder_parity(; freq_range = IEEE39_FREQ_RANGE)
 	@test axes(z_built) == axes(z_legacy)
 	@test isequal(z_built, z_legacy)
 
+	eignew = eigvals(built.elements[:STATCOM].A)
+	eiglegacy = eigvals(legacy.elements[:STATCOM].A)
+
+	@test sort(real(eignew)) ≈ sort(real(eiglegacy)) rtol=1e-8
+	@test sort(imag(eignew)) ≈ sort(imag(eiglegacy)) rtol=1e-8
+
+	# @test legacy.elements[:STATCOM].A ≈ built.elements[:STATCOM].A rtol=1e-8 #Check if the linearized state matrix are approx the same
+
+	return nothing
+end
+
+function test_nwbuilder_powerflow_parity(; freq_range = IEEE39_FREQ_RANGE)
+	legacypf = build_ieee39bus_with_networkbuilder().solved.powerflow
+	newpf = ieee39bus_with_nwbuilder_powerflow().solved
+
+	function dicts_approx_equal(dict1, dict2; atol = 1e-5)
+		keys1 = keys(dict1)
+		keys2 = keys(dict2)
+		if keys1 != keys2
+			return false
+		end
+		for key in keys1
+			val1 = dict1[key]
+			val2 = dict2[key]
+			if val1 isa AbstractDict && val2 isa AbstractDict
+				if !dicts_approx_equal(val1, val2; atol)
+					return false
+				end
+			elseif !isapprox(val1, val2; atol)
+				return false
+			end
+		end
+		return true
+	end
+	@test dicts_approx_equal(newpf.result["solution"]["convdc"]["1"], legacypf.result["solution"]["convdc"]["1"]; atol = 1e-5)
+
+	# @test isequal(legacypf, builtpf)
+	# @test axes(z_built) == axes(z_legacy)
+	# @test isequal(z_built, z_legacy)
+
+	return nothing
+end
+
+function test_linearizedadmittance_parity(; freq_range = IEEE39_FREQ_RANGE)
+	legacy = build_ieee39bus_with_macro()
+	built = build_ieee39bus_with_networkbuilder().builder
+	newadmnw = convert(built, LinearizedAdmittanceNetwork)
+
+	freqs = range(freq_range[1], freq_range[2], step=freq_range[3])
+	s = 1im .* 2π .* freqs
+	elemkeys = [:STATCOM, :T1_39, :T9_39, :LoadB39]
+	for key in elemkeys
+		@test haskey(legacy.elements, key) #"Legacy network is missing element $key"
+		@test haskey(newadmnw.interface.elem, key) #"New network is missing element $key"
+		
+		ylegacy = PIACDC.eval_y.((legacy.elements[key],), s;SI_units = false) #Should be pu (disabled scaling)
+		ynew = get_y.((newadmnw,), (key,), s) 
+
+		@test isapprox(ylegacy, ynew; atol = 1e-4, rtol=1e-4) #"Admittance mismatch for element $key"
+	end
+	
+	
+
+
+
+
+	# @test isequal(omega_built, omega_legacy)
+	# @test axes(z_built) == axes(z_legacy)
+
+
+	# @test legacy.elements[:STATCOM].A ≈ built.elements[:STATCOM].A rtol=1e-11 #Check if the linearized state matrix are approx the same
+
+
 	return nothing
 end
 
 @testset "IEEE39bus NetworkBuilder parity" begin
 	test_ieee39bus_networkbuilder_parity()
+end
+
+@testset "IEEE39bus NetworkBuilder power flow parity" begin
+	test_nwbuilder_powerflow_parity()
+end
+
+@testset "IEEE39bus NetworkBuilder linearized admittance parity" begin
+	test_linearizedadmittance_parity()
 end
 
 @testset "NetworkBuilder drops endpoints of declared disconnected elements" begin

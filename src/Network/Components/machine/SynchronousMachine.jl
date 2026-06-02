@@ -307,7 +307,7 @@ end
 function synchronousmachine(;elec=ElectricalSM(),mech=MechanicalSM(),avr=AVRSM(),gov=GovernorSM(), setpoint=Setpoint(), connection=true)
     
     gen = SynchronousMachine(elec, mech,avr, gov)
-    # Transformation property set to false, as model is natively defined in dq-frame. TODO: Fix this
+    # Transformation property set to false, as model is natively defined in dq-frame. TODO: Fix this; outpins 0 bcs oneport, kept for legacy
     elem = Element(input_pins = 2, output_pins = 2, element_model = gen, transformation = false; connection, setpoint)
     return elem
 end
@@ -773,60 +773,77 @@ function eval_y(gen :: SynchronousMachine, s :: Complex)
 end
 
 
+pmtype(::Element{<:SynchronousMachine}) = "gen"
+
 function convert!(data,elem::Element{<:SynchronousMachine},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-    
-    machine = elem.element_model
-    # Check if AC or DC source (second one not implemented)
-    # is_three_phase(elem) ? nothing : error("DC sources are currently not implemented")
 
-    ### MAKE BUSES OUT OF THE NODES
     # Find the nodes not connected to the ground
-    ac_nodes = make_non_ground_node(elem, bus2nodes) 
+    ac_nodes = make_non_ground_node(elem, bus2nodes)
     ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-    # Make busses for the non-ground nodes 
-    interm_bus = add_interm_bus_ac!(data, global_dict) # No mapping to node, bcs no corresponding node in PowerImpedance
-
-    # Make the generator component for injection
-    key = injection_initialization!(data, elem2comp, comp2elem, interm_bus, elem, global_dict)
-    key = string(key)
-
-    # Add additional branch & bus for SM transformer (RL-branch)
     
-    key_branch = length(data["branch"]) + 1
+
+    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
+    return convert!(data, elem, PMACDC, key, (ac_bus,), global_dict)
+end
+
+function convert!(data, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, key_branch, (ac_bus,), global_dict)
+    machine = elem.element_model
+    interm_bus = add_interm_bus_ac!(data, global_dict)
+    
+    
+
+    _initialize_gen_entry!(data, key_branch, interm_bus, elem, global_dict)
+
+    # key_branch = length(data["branch"]) + 1
     key_branch_str = string(key_branch)
 
-    (data["branch"])[key_branch_str] = Dict{String, Any}()
-    ((data["branch"])[key_branch_str])["f_bus"] = interm_bus
-    ((data["branch"])[key_branch_str])["t_bus"] = ac_bus
-    ((data["branch"])[key_branch_str])["source_id"] = Any["branch", key_branch]
-    ((data["branch"])[key_branch_str])["index"] = key_branch
-    ((data["branch"])[key_branch_str])["rate_a"] = 1
-    ((data["branch"])[key_branch_str])["rate_b"] = 1
-    ((data["branch"])[key_branch_str])["rate_c"] = 1
-    ((data["branch"])[key_branch_str])["br_status"] = 1
-    ((data["branch"])[key_branch_str])["angmin"] = ang_min
-    ((data["branch"])[key_branch_str])["angmax"] = ang_max
-    ((data["branch"])[key_branch_str])["transformer"] = false
-    ((data["branch"])[key_branch_str])["tap"] = 1
-    ((data["branch"])[key_branch_str])["shift"] = 0
-    ((data["branch"])[key_branch_str])["c_rating_a"] = 1
+    data["branch"][key_branch_str] = Dict{String, Any}()
+    branch = data["branch"][key_branch_str]
+    branch["f_bus"] = interm_bus
+    branch["t_bus"] = ac_bus
+    branch["source_id"] = Any["branch", key_branch]
+    branch["index"] = key_branch
+    branch["rate_a"] = 1
+    branch["rate_b"] = 1
+    branch["rate_c"] = 1
+    branch["br_status"] = 1
+    branch["angmin"] = ang_min
+    branch["angmax"] = ang_max
+    branch["transformer"] = false
+    branch["tap"] = 1
+    branch["shift"] = 0
+    branch["c_rating_a"] = 1
+    branch["br_r"] = machine.elec.rt * (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
+    branch["br_x"] = machine.elec.lt * (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
+    branch["g_fr"] = 0
+    branch["b_fr"] = 0
+    branch["g_to"] = 0
+    branch["b_to"] = 0
 
-    
-    ((data["branch"])[key_branch_str])["br_r"] = machine.elec.rt * (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
-    ((data["branch"])[key_branch_str])["br_x"] = machine.elec.lt * (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
-    ((data["branch"])[key_branch_str])["g_fr"] = 0
-    ((data["branch"])[key_branch_str])["b_fr"] = 0
-    ((data["branch"])[key_branch_str])["g_to"] = 0
-    ((data["branch"])[key_branch_str])["b_to"] = 0
-
-    # Change type of final bus, intermediate bus is PQ-bus
+    bus = data["bus"][string(interm_bus)]
     if isapprox(elem.limits.P_max, elem.setpoint.Pac)
-        ((data["bus"])[string(interm_bus)]) = set_bus_type((data["bus"])[string(interm_bus)], 1)
+        data["bus"][string(interm_bus)] = set_bus_type(bus, 1)
     else
-        ((data["bus"])[string(interm_bus)]) = set_bus_type((data["bus"])[string(interm_bus)], 2)
+        data["bus"][string(interm_bus)] = set_bus_type(bus, 2)
     end
 
-    ((data["bus"])[string(interm_bus)])["vm"] = ((data["gen"])[key])["vg"]
-    ((data["bus"])[string(interm_bus)])["vmin"] =  0.9*((data["gen"])[key])["vg"]
-    ((data["bus"])[string(interm_bus)])["vmax"] =  1.1*((data["gen"])[key])["vg"]
+    gen = data["gen"][key_branch_str]
+    data["bus"][string(interm_bus)]["vm"] = gen["vg"]
+    data["bus"][string(interm_bus)]["vmin"] = 0.9 * gen["vg"]
+    data["bus"][string(interm_bus)]["vmax"] = 1.1 * gen["vg"]
+    return nothing
+end
+
+function transform(elemresult, busresult, global_dict, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, ::Type{PIACDC})
+			
+    acbusresult = busresult[1]
+    Pgen = elemresult["pg"] * global_dict["S"] / 1e6 #MW
+    Qgen = elemresult["qg"] * global_dict["S"] / 1e6 #MVAr
+    Vm =
+        (acbusresult["vm"] *
+            global_dict["V"] / 1e3) * sqrt(2) # Convert the LN-RMS voltage coming from the PF to LN-PK
+    θ = acbusresult["va"]
+
+    setpoint = Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+    return setpoint
 end

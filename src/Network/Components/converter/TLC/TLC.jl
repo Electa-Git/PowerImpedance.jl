@@ -349,14 +349,20 @@ Write the TLC converter entry into a PowerModelsACDC power-flow data dictionary.
 $(SIGNATURES)
 """
 function convert!(data,elem::Element{<:TLC},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-    
-    conv = elem.element_model
+
     dc_node = make_node(elem, 1)
     ac_nodes = make_node(elem, 2)
     dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_node, global_dict)
     ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
 
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "convdc")
+    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
+    return convert!(data, elem, PMACDC, key, (ac_bus, dc_bus), global_dict)
+end
+
+function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global_dict)
+    conv = elem.element_model
+    ac_bus = buses[1]
+    dc_bus = buses[2]
     key_str = string(key)
 
     data["convdc"][key_str] = Dict{String, Any}()

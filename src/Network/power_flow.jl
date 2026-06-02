@@ -1,6 +1,12 @@
 export power_flow, result, data
 using Logging
 
+const ang_max = deg2rad(-360)
+const ang_min = deg2rad(360)
+
+const ang_max = deg2rad(-360)
+const ang_min = deg2rad(360)
+
 has_bipolar_converter(net::Network) = any(elem -> elem.element_model isa BipolarMMC, values(net.elements))
 
 function _dict_get_anykey(dict_like, key::String, default)
@@ -145,17 +151,17 @@ Forms the dictionary needed for solving the power flow problem using
 package PowerModelsACDC. After successful power flow solving, it updates
 the operating point of the active devices """
 function power_flow(net::Network)
-	global ang_min, ang_max, result, nodes2bus, elem2comp, data
+	# global ang_min, ang_max, result, nodes2bus, elem2comp, data
 	global_dict = PowerModelsACDC.get_pu_bases(1000, net.voltageBase[1]) # 3-PH MVA, LL-RMS, Original setting was 100,320
 	global_dict["omega"] = 2π * 50
 
-	ang_min = deg2rad(360)
-	ang_max = deg2rad(-360)
+	# ang_min = deg2rad(360)
+	# ang_max = deg2rad(-360)
 
 	nodes_dict = net.nets
 	elem_dict = net.elements
-    ang_min = deg2rad(360)
-    ang_max = deg2rad(-360)
+    # ang_min = deg2rad(360)
+    # ang_max = deg2rad(-360)
 
 	# No power flow when linear (no setpoint updates) 
 	if is_linear(net)
@@ -167,7 +173,7 @@ function power_flow(net::Network)
 
     # PowerModels network dictionary
     data = Dict{String, Any}()
-    data = data_init(data, global_dict)
+    data = data_init!(data, global_dict)
     data["_mcdc"] = use_mcdc
    
     ### 2-way dicts so we can have O(1) time complexity (node, elem:PowerImpedance ↔ bus, component:PowerModelsACDC)
@@ -409,12 +415,12 @@ function is_linear(net::Network)
 	return true
 end
 
-function get_AC_voltage(injecter::Union{SynchronousMachine, Source})
-	return injecter.V
-end
+# function get_AC_voltage(injecter::Union{SynchronousMachine, Source})
+# 	return injecter.V
+# end
 
-function get_AC_voltage(injecter::TLC)
-	return injecter.Vₘ
+function get_AC_voltage(elem::Element)
+	return elem.sp.Vac
 end
 
 function set_bus_type(bus_data, type)
@@ -484,16 +490,17 @@ function injection_initialization!(data, elem2comp, comp2elem, ac_bus, elem, glo
 	((data["gen"])[key])["source_id"] = Any["gen", parse(Int, key)]
 	((data["gen"])[key])["index"] = parse(Int, key)
 
-	injecter = elem.element_model
+	sp = elem.setpoint
+	lm = elem.limits
 	S_base = global_dict["S"] / 1e6
 	V_base = global_dict["V"] / 1e3
-	((data["gen"])[key])["pg"] = injecter.P / S_base
-	((data["gen"])[key])["qg"] = injecter.Q / S_base
-	((data["gen"])[key])["pmin"] = injecter.P_min / S_base
-	((data["gen"])[key])["pmax"] = injecter.P_max / S_base
-	((data["gen"])[key])["qmin"] = injecter.Q_min / S_base
-	((data["gen"])[key])["qmax"] = injecter.Q_max / S_base
-	((data["gen"])[key])["vg"] = get_AC_voltage(injecter) / V_base #Accesor function to treat multiple field names for AC Voltage
+	((data["gen"])[key])["pg"] = sp.Pac / S_base
+	((data["gen"])[key])["qg"] = sp.Qac / S_base
+	((data["gen"])[key])["pmin"] = lm.P_min / S_base
+	((data["gen"])[key])["pmax"] = lm.P_max / S_base
+	((data["gen"])[key])["qmin"] = lm.Q_min / S_base
+	((data["gen"])[key])["qmax"] = lm.Q_max / S_base
+	((data["gen"])[key])["vg"] = sp.Vac / V_base #Accesor function to treat multiple field names for AC Voltage
 
 	# not using
 	((data["gen"])[key])["model"] = 1
@@ -535,14 +542,15 @@ function injection_initialization_dc!(data, elem2comp, comp2elem, dc_bus, elem, 
 	((data["gendc"])[key])["source_id"] = Any["gen", parse(Int, key)]
 	((data["gendc"])[key])["index"] = parse(Int, key)
 
-	injecter = elem.element_model
+	sp = elem.setpoint
+	lm = elem.limits
 	S_base = global_dict["S"] / 1e6
 	V_base = global_dict["V"] / 1e3
-	((data["gendc"])[key])["pgdcset"] = injecter.P / S_base
-	((data["gendc"])[key])["pmin"] = injecter.P_min / S_base
-	((data["gendc"])[key])["pmax"] = injecter.P_max / S_base
+	((data["gendc"])[key])["pgdcset"] = sp.Pdc / S_base
+	((data["gendc"])[key])["pmin"] = lm.P_min / S_base
+	((data["gendc"])[key])["pmax"] = lm.P_max / S_base
 
-	((data["gendc"])[key])["vgdc"] = (injecter).V / V_base #Accesor function to treat multiple field names for AC Voltage
+	((data["gendc"])[key])["vgdc"] = sp.Vdc / V_base #Accesor function to treat multiple field names for DC Voltage
 
 	# not using
 	((data["gendc"])[key])["model"] = 1
@@ -551,11 +559,10 @@ function injection_initialization_dc!(data, elem2comp, comp2elem, dc_bus, elem, 
 	return parse(Int, key)
 end
 
+
+
 function branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
-
-
-
-	# Handle any amount of input and output pins
+    # Handle any amount of input and output pins
 	node1 = make_node(elem, 1)
 	node2 = make_node(elem, 2)
 	bus1 = add_bus_ac!(data, nodes2bus, bus2nodes, node1, global_dict)
@@ -563,6 +570,11 @@ function branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, glob
 
 	# Interface element
 	key_branch = comp_elem_interface!(data, elem2comp, comp2elem, elem, "branch")
+    return key_branch, bus1, bus2
+end
+function branch_ac!(data, key_branch, (bus1,bus2), global_dict)
+
+	
 
 	(data["branch"])[string(key_branch)] = Dict{String, Any}()
 	((data["branch"])[string(key_branch)])["f_bus"] = bus1
@@ -578,10 +590,9 @@ function branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, glob
 	return key_branch
 end
 
-function branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
-	# Add busses for the branch
-	pins = elem.pins
 
+
+function branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
 	node1 = make_node(elem, 1)
 	node2 = make_node(elem, 2)
 	bus1 = add_bus_dc!(data, nodes2bus, bus2nodes, node1, global_dict)
@@ -589,6 +600,14 @@ function branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, glob
 
 	# Interface element
 	key_branch = comp_elem_interface!(data, elem2comp, comp2elem, elem, "branchdc")
+
+    return key_branch, bus1, bus2
+end
+
+function branch_dc!(data, key_branch, (bus1,bus2), global_dict)
+	# Add busses for the branch
+	# pins = elem.pins
+
 
 	(data["branchdc"])[string(key_branch)] = Dict{String, Any}()
 	((data["branchdc"])[string(key_branch)])["fbusdc"] = bus1
@@ -710,13 +729,13 @@ function add_interm_bus_ac!(data, global_dict)
 	bus = parse(Int, bus)
 	return bus
 end
-
-function data_init(data, global_dict)
+const dcpol = 2 # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
+function data_init!(data, global_dict)
 	data["source_type"] = "matpower"
 	data["name"] = "network"
 	data["source_version"] = "0.0.0"
 	data["per_unit"] = true
-	data["dcpol"] = 2 # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
+	data["dcpol"] = dcpol # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
 	data["baseMVA"] = global_dict["S"] / 1e6
 	data["bus"] = Dict{String, Any}()
 	data["im"] = Dict{String, Any}()
@@ -1065,7 +1084,7 @@ function solve_acdcpf_relax(data::Dict{String, Any}, model_type::Type, solver; k
 		_PMACDC.ref_add_sssc!,
 		_PMACDC.ref_add_flex_load!,
 		_PMACDC.ref_add_gendc!,
-		_PMACDC.ref_add_im!,
+		# _PMACDC.ref_add_im!,
 	]
 	pm = _PM.instantiate_model(
 		data,
