@@ -77,7 +77,7 @@ function _state_space!(F, x, inputs, setpoint_pu::SetpointPU, m::AbstractStateSp
     return
 
 end
-
+#TODO: Merge this function
 function update!(elem::Element, m::AbstractStateSpace, setpoint::Setpoint)
 
     # Power flow to inputs of state_space function

@@ -239,12 +239,6 @@ pf_type_dc(::PLLSynchronization) = 1
 pf_type_dc(block::ΔdqControlGFL, sync::AbstractSynchronization) = pf_type_dc(block.outer_active)
 pf_type_dc(::ΔdqControlGFM, sync::AbstractSynchronization) = pf_type_dc(sync)
 
-function pf_vtar_pu(conv::MMC, elem::Element, global_dict)
-    vbase_ln_rms = global_dict["V"] / 1e3
-    return elem.setpoint.Vac / vbase_ln_rms
-end
-
-
 
 """
 Wrapper method for legacy power flow construction from Network type

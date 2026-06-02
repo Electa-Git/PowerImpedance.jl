@@ -164,7 +164,7 @@ end
 end =#
 
 # PSCAD requires SI results
-function eval_y(elem::Element, s::Complex; SI_units::Bool=true)
+function eval_y(elem::Element{<:AbstractStateSpace}, s::Complex; SI_units::Bool=true)
     n = size(elem.A, 1)
     Iₙ = Matrix{ComplexF64}(I, n, n)
     Y = elem.C * ((s * Iₙ - elem.A) \ elem.B) + elem.D
@@ -215,6 +215,10 @@ function eval_y(elem::Element, s::Complex; SI_units::Bool=true)
     return Y
 end
 
+function eval_y(elem::Element{<:AbstractMultiport}, s::Complex; SI_units::Bool=true)
+    Y = get_y(elem, s)
+    return Y
+end
 
 ################### ABCD functions ################################
 function get_abcd(element::Element, s::Complex)

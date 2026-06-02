@@ -72,6 +72,7 @@ julia = "1.10"
 [extras]
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 
 [targets]
 test = ["Test", "JLD2", "JuMP"]

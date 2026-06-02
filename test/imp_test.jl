@@ -116,13 +116,14 @@ net = @network begin
 		I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3),
 		transformation = true)
 
-	g4 = ac_source(
-		V = transmissionVoltage,
-		P = pHVDC1,
+	g4 = ac_source(setpoint = Setpoint(
+		Vac = transmissionVoltage,
+		Pac = pHVDC1),
+		limits = PowerImpedanceACDC.Limits(
 		P_min = -2000,
 		P_max = 2000,
 		Q_max = 1000,
-		Q_min = -1000,
+		Q_min = -1000),
 		pins = 3,
 		transformation = true,
 	)
