@@ -46,7 +46,7 @@ If you find PowerImpedanceACDC useful in your work, we kindly request that you c
 - Jan Kircheis: MMC, Component validation, Multinodal stability analysis, Line interface, Transformer 
 - Robbe Vander Eeckt: Component validation, Two-level converter, Power flow
 - Amr Saad: Component validation
-
+- Amauri Martins: Passive components, NetworkBuilder, tests, CI
 
 ## License
 This is a free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. PowerImpedanceACDC is distributed in the hope that it will be useful, but without any warranty; without even the implied warranty of merchantability or fitness for a particular purpose. See the GNU General Public License for more details.
