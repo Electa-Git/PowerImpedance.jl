@@ -24,7 +24,8 @@ using TypedTables: Table
 using StaticArrays: SMatrix
 
 # Time delays
-using ControlSystemsBase, RobustAndOptimalControl
+using ControlSystemsBase: ss, tf
+using RobustAndOptimalControl: modal_form
 
 # Plotting
 using Plots
