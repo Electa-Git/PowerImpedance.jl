@@ -9,12 +9,14 @@ net = @network begin
 	voltageBase = transmissionVoltage
 
 	g1 = ac_source(
-		V = transmissionVoltage,
-		P = pHVDC1,
+		setpoint = Setpoint(
+		Vac = transmissionVoltage,
+		Pac = pHVDC1),
+		limits = PowerImpedanceACDC.Limits(
 		P_min = -2000,
 		P_max = 2000,
 		Q_max = 1000,
-		Q_min = -1000,
+		Q_min = -1000),
 		pins = 3,
 		transformation = true,
 	)
