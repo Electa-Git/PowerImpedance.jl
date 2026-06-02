@@ -1,6 +1,5 @@
 
 
-abstract type AbstractStateSpace <: AbstractElementModel end
 
 # Function for ordering states & initialvalues. Puts all that are not defined to zero & discards initial values that do not appear in statenames 
 # Default: no explicit nonzero initial values; Fallback function, so that it is not necessary in all the modular parts to initialize.

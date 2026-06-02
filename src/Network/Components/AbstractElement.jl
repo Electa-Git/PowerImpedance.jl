@@ -32,6 +32,10 @@ abstract type AbstractElementModel end
 
 abstract type AbstractMultiport <: AbstractElementModel end
 
+abstract type AbstractStateSpace <: AbstractElementModel end
+
+
+
 @with_kw struct Setpoint
     
     # Power flow results
