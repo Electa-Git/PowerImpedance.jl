@@ -805,7 +805,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
     g!(du,u,p) = state_space!(p[1], du, u, p[2];solve=p[3]) # g is the state-space formulation used to obtain the steady-state operation point, copy from f, see some lines above
     # g!(du,u,p) = f!(exp, du,u, vector_inputs)
 
-    println("Starting to solve for Steady-State Solution!")
+    @info "Starting to solve for Steady-State Solution!"
     prob = NonlinearProblem(g!, init_x, (converter, vector_inputs, :equilibrium))
     sol=solve(prob,SSRootfind(TrustRegion()),maxiters=100,abstol = 1e-1,reltol = 1e-1)
 
@@ -816,7 +816,7 @@ function update!(converter :: TLC, Vm, θ,Pac, Qac, Vdc, Pdc)
     # println(sol.trace)
     converter.debug = sol
     if SciMLBase.successful_retcode(sol)
-        println("TLC steady-state solution found!")
+        @info "TLC steady-state solution found!"
     else
        error("TLC steady-state solution not found!")
     end

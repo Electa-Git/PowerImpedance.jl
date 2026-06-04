@@ -81,12 +81,12 @@ function blackbox_MMC(;args...)
     data = readdlm(converter.path_f , '\t', Float64)
     freq = data[:, 2]                                 
     Nf = length(freq)
-    println("MMC:Loaded $Nf frequency points")
+    @info "MMC:Loaded $Nf frequency points"
 
     # Second: MMC data - Each row: Vdc_pu Vac_p Pref Qref Pdc Iac  then  Nf * 9 complex entries (flattened 3x3 per frequency, C-order)
     raw, header = readdlm(converter.path_MMC, Any; header=true)    # whitespace-delimited; header returned separately
     nrows, ncols = size(raw)
-    println("MMC: $nrows operating points loaded from MMC data file")
+    @info "MMC: $nrows operating points loaded from MMC data file"
     
     #TODO: Can be further generalized based on the controller dict, and then infer column count and matrix dimensions
 
@@ -193,10 +193,10 @@ function blackbox_MMC(;args...)
         end
     end
 
-    println("Vdc values: $Vdc_vals")
-    println("Vac values: $Vac_vals")
-    println("Pac values: $Pac_vals")
-    println("Qac values: $Qac_vals")
+    @info "Vdc values: $Vdc_vals"
+    @info "Vac values: $Vac_vals"
+    @info "Pac values: $Pac_vals"
+    @info "Qac values: $Qac_vals"
 
     converter.itp = linear_interpolation((Vac_vals, Pac_vals, Qac_vals, freq), Ymmc_4d, extrapolation_bc=Line())
 

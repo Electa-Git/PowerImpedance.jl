@@ -15,7 +15,7 @@ function Base.convert(bs::BuilderState, ::Type{LinearizedAdmittanceNetwork})
         sp = nonlinearsetpoints(bs)
 
     else
-        println("Network only consists of linear elements. Skipping power flow.")
+        @info "Network only consists of linear elements. Skipping power flow."
         sp = (;)
     end
 

@@ -321,7 +321,7 @@ function define(elements::NamedTuple, connections::Tuple{Vararg{ConnectionDef}};
 	connected_elements = (; filter(p -> p.second.connection, pairs(elements))...) #Filter out non-connected elements
 	nonconnectedid = setdiff(keys(elements), keys(connected_elements))
 	if !isempty(nonconnectedid)
-		println("The following elements are not connected according to their definition and will be ignored: $(nonconnectedid). If you want to include them, set connection=true in their definition.")
+		@info "The following elements are not connected according to their definition and will be ignored: $(nonconnectedid). If you want to include them, set connection=true in their definition."
 	end
 	connectionregistry = ConnectionsRegistry(elements, connections, nonconnectedid)
 

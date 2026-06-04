@@ -1776,14 +1776,14 @@ end
     # TODO: Define termination conditions
     # g!(du,u,p,t) = f!(exp_steadyState, du, u, vector_inputs) # g is the state-space formulation used to obtain the steady-state operation point, copy from f, see some lines above
     g!(du,u,p) = state_space!(du,u, p[1];converter=p[2], solver=p[3])
-    println("Starting to solve for Steady-State Solution!")
+    @info "Starting to solve for Steady-State Solution!"
     prob = NonlinearProblem(g!, init_x, (vector_inputs, converter, :equilibrium))
     sol=solve(prob,TrustRegion(),maxiters=20,abstol = 1e-8,reltol = 1e-8)
     
     # Command to show solver results
     # sol.trace
     if SciMLBase.successful_retcode(sol)
-        println("MMC steady-state solution found!")
+        @info "MMC steady-state solution found!"
     else
         error("MMC steady-state solution not found!")
     end

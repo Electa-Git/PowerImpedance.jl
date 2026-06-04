@@ -20,7 +20,7 @@ function check_stability(net :: Network, mmc :: Element; direction :: Symbol = :
         for i in 2:length(tf)
             if (20*log10(abs(tf[i-1][3])) > 0) && (20*log10(abs(tf[i][3])) < 0)
                 wrappedAngle = angle(tf[i][3]) + 2*pi*floor(angle(tf[i][3])/(-2*pi))
-                println("Phase Margin = ", round(rad2deg(wrappedAngle) + 180, digits = 3), "° at ", round(omega[i]/2/pi, digits = 3), " Hz.")
+                @info "Phase Margin = $(round(rad2deg(wrappedAngle) + 180, digits = 3))° at $(round(omega[i]/2/pi, digits = 3)) Hz."
                 # println("Phase Margin = ", round(rad2deg(angle(tf[i][3])) + 180, digits = 3), "° at ", round(omega[i]/2/pi, digits = 3), " Hz.") # Original
             end
         end
