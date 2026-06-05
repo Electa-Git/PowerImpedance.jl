@@ -104,11 +104,6 @@ end
 
 # State-space interface names
 """
-Prefix state names to keep positive-pole and negative-pole states distinct.
-"""
-prefixednames(prefix::Symbol, names) = map(name -> Symbol(prefix, name), names)
-
-"""
 Return the positive-pole state names in the bipolar model namespace.
 """
 positivepolestatenames(converter::BipolarMMC) = prefixednames(:pos_, statenames(converter.pole_pos.element_model))
@@ -148,27 +143,11 @@ dummynames(::BipolarMMC) = ()
 
 # Pole adapters
 """
-Prefix a pole initial-value NamedTuple so it can be merged into the bipolar state vector.
-"""
-function prefixedinitialvalues(prefix::Symbol, values)
-    names = propertynames(values)
-    prefixed = prefixednames(prefix, names)
-    return NamedTuple{prefixed}(Tuple(values))
-end
-
-"""
-Extract one pole's state NamedTuple from the flat bipolar state NamedTuple.
-"""
-function polestates(x, original_names, prefixed_names)
-    return NamedTuple{original_names}(ntuple(i -> getfield(x, prefixed_names[i]), length(original_names)))
-end
-
-"""
 Extract positive-pole states from the bipolar state vector.
 """
 function positivepolestates(converter::BipolarMMC, x)
     names = statenames(converter.pole_pos.element_model)
-    return polestates(x, names, positivepolestatenames(converter))
+    return subblockstates(x, names, positivepolestatenames(converter))
 end
 
 """
@@ -176,7 +155,7 @@ Extract negative-pole states from the bipolar state vector.
 """
 function negativepolestates(converter::BipolarMMC, x)
     names = statenames(converter.pole_neg.element_model)
-    return polestates(x, names, negativepolestatenames(converter))
+    return subblockstates(x, names, negativepolestatenames(converter))
 end
 
 """
