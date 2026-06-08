@@ -290,12 +290,6 @@ function power_flow(net::Network)
                     Vpr = (_terminal_voltage(vm_dc, "p") - _terminal_voltage(vm_dc, "r")) * base_vdc
                     Vrn = (_terminal_voltage(vm_dc, "r") - _terminal_voltage(vm_dc, "n")) * base_vdc
 
-                    update!(
-                        element.element_model, Vm, θ,
-                        Pac_p, Qac_p, Vpr, Pdc_p,
-                        Pac_n, Qac_n, Vrn, Pdc_n,
-                    )
-
                     setpoint = Setpoint(
                         Pac = Pac_p + Pac_n,
                         Qac = Qac_p + Qac_n,
@@ -304,7 +298,7 @@ function power_flow(net::Network)
                         Pdc = Pdc_p + Pdc_n,
                         Vdc = Vpr + Vrn,
                     )
-                    element.setpoint = setpoint
+                    update!(element, element.element_model, setpoint)
 
                     @info begin 
                     update_string = string(key)
@@ -1137,6 +1131,5 @@ function update_actives_setpoints!(data, delta)
 
 
 end
-
 
 

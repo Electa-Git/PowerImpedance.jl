@@ -20,8 +20,7 @@ function _ac_row_start_for_sign_flip(element::Element)
     model = element.element_model
 
     if model isa BipolarMMC
-        # Bipolar ordering: [p, r, n, d, q]
-        return 4
+        return typemax(Int)
     end
 
     if model isa MMC || model isa TLC

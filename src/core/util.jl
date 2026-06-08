@@ -2,6 +2,27 @@ function isgroundnet(net)
     return startswith(lowercase(string(net)), "gnd")
 end
 
+"""
+Prefix names with an element identifier so repeated subblocks keep distinct names.
+"""
+prefixednames(element_name::Symbol, names) = map(name -> Symbol(element_name, name), names)
+
+"""
+Prefix an initial-value NamedTuple so it can be merged into a composite state vector.
+"""
+function prefixedinitialvalues(element_name::Symbol, values)
+    names = propertynames(values)
+    prefixed = prefixednames(element_name, names)
+    return NamedTuple{prefixed}(Tuple(values))
+end
+
+"""
+Extract a subblock state NamedTuple from a composite state NamedTuple.
+"""
+function subblockstates(x, original_names, prefixed_names)
+    return NamedTuple{original_names}(ntuple(i -> getfield(x, prefixed_names[i]), length(original_names)))
+end
+
 function elecdomain(elem, side)
     
     if is_converter(elem)
@@ -160,4 +181,3 @@ macro Table(ex)
     return :(Table{$nt_elements,1, $nt_vectors})
 end
 export @Table
-

@@ -1,12 +1,21 @@
 export AbstractBipolarMMC, BipolarMMC, bipolar_mmc
 
+"""
+Common abstract type for bipolar MMC converter models.
+"""
 abstract type AbstractBipolarMMC <: AbstractConverter end
 
+"""
+Container for a bipolar MMC assembled from a positive-pole and negative-pole MMC element.
+"""
 mutable struct BipolarMMC{E<:Element} <: AbstractBipolarMMC
     pole_pos::E
     pole_neg::E
 end
 
+"""
+Build the station-level setpoint by summing both pole setpoints.
+"""
 function station_setpoint(pos::Element, neg::Element)
     return Setpoint(
         Pac = pos.setpoint.Pac + neg.setpoint.Pac,
@@ -18,6 +27,9 @@ function station_setpoint(pos::Element, neg::Element)
     )
 end
 
+"""
+Build station-level active and reactive power limits from both pole limits.
+"""
 function station_limits(pos::Element, neg::Element)
     return Limits(
         P_min = pos.limits.P_min + neg.limits.P_min,
@@ -27,11 +39,17 @@ function station_limits(pos::Element, neg::Element)
     )
 end
 
+"""
+Validate that a pole argument is an MMC element.
+"""
 function check_pole_element(elem::Element, name::String)
     elem.element_model isa MMC || throw(ArgumentError("`$name` must be an MMC element (`mmc(...)`)."))
     return nothing
 end
 
+"""
+Construct a bipolar MMC element from two existing MMC elements.
+"""
 function bipolar_mmc(mmc_pos::Element, mmc_neg::Element; connection::Bool = true)
     check_pole_element(mmc_pos, "mmc_pos")
     check_pole_element(mmc_neg, "mmc_neg")
@@ -49,6 +67,9 @@ function bipolar_mmc(mmc_pos::Element, mmc_neg::Element; connection::Bool = true
     )
 end
 
+"""
+Construct a bipolar MMC element from two MMC models and optional pole setpoints/limits.
+"""
 function bipolar_mmc(
     mmc_pos::MMC,
     mmc_neg::MMC;
@@ -81,124 +102,218 @@ function bipolar_mmc(
     return bipolar_mmc(pos, neg; connection = connection)
 end
 
+# State-space interface names
 """
-    update!(converter::BipolarMMC, Vm, θ, Pac, Qac, Vdc, Pdc)
+Return the positive-pole state names in the bipolar model namespace.
+"""
+positivepolestatenames(converter::BipolarMMC) = prefixednames(:pos_, statenames(converter.pole_pos.element_model))
 
-Update using station totals. Active/reactive power and DC quantities are split
-equally over both poles.
 """
-function update!(converter::BipolarMMC, Vm, θ, Pac, Qac, Vdc, Pdc)
-    return update!(
-        converter, Vm, θ,
-        Pac / 2, Qac / 2, Vdc / 2, Pdc / 2,
-        Pac / 2, Qac / 2, Vdc / 2, Pdc / 2,
+Return the negative-pole state names in the bipolar model namespace.
+"""
+negativepolestatenames(converter::BipolarMMC) = prefixednames(:neg_, statenames(converter.pole_neg.element_model))
+
+"""
+Return all bipolar MMC state names as one flat state vector.
+"""
+statenames(converter::BipolarMMC) = (
+    positivepolestatenames(converter)...,
+    negativepolestatenames(converter)...,
+)
+
+"""
+Return the bipolar electrical input order: DC terminal voltages and shared AC dq voltages.
+"""
+inputnames(::BipolarMMC) = (:v_p, :v_r, :v_n, :vG_d, :vG_q)
+
+"""
+Return the electrical input subset used when forming the admittance transfer function.
+"""
+elecinputnames(::BipolarMMC) = (:v_p, :v_r, :v_n, :vG_d, :vG_q)
+
+"""
+Return the bipolar output current order in load convention.
+"""
+outputnames(::BipolarMMC) = (:i_p, :i_r, :i_n, :i_d, :i_q)
+
+"""
+Return dummy equilibrium equation names; the bipolar wrapper adds none.
+"""
+dummynames(::BipolarMMC) = ()
+
+# Pole adapters
+"""
+Extract positive-pole states from the bipolar state vector.
+"""
+function positivepolestates(converter::BipolarMMC, x)
+    names = statenames(converter.pole_pos.element_model)
+    return subblockstates(x, names, positivepolestatenames(converter))
+end
+
+"""
+Extract negative-pole states from the bipolar state vector.
+"""
+function negativepolestates(converter::BipolarMMC, x)
+    names = statenames(converter.pole_neg.element_model)
+    return subblockstates(x, names, negativepolestatenames(converter))
+end
+
+"""
+Build one MMC pole input NamedTuple from its DC voltage and shared AC dq voltages.
+"""
+function poleinputs(m::MMC, v_dc, inputs)
+    return NamedTuple{inputnames(m)}((v_dc, inputs.vG_d, inputs.vG_q))
+end
+
+"""
+Return positive-pole MMC inputs using v_p - v_r as the pole DC voltage.
+"""
+positivepoleinputs(converter::BipolarMMC, inputs) =
+    poleinputs(converter.pole_pos.element_model, inputs.v_p - inputs.v_r, inputs)
+
+"""
+Return negative-pole MMC inputs using v_r - v_n as the pole DC voltage.
+"""
+negativepoleinputs(converter::BipolarMMC, inputs) =
+    poleinputs(converter.pole_neg.element_model, inputs.v_r - inputs.v_n, inputs)
+
+# Power-flow adapter
+"""
+Convert a station-level power-flow setpoint into bipolar state-space inputs.
+"""
+function pftoinputs(converter::BipolarMMC, setpoint::Setpoint)
+    pole_setpoint = Setpoint(
+        Pac = setpoint.Pac / 2,
+        Qac = setpoint.Qac / 2,
+        θac = setpoint.θac,
+        Vac = setpoint.Vac,
+        Pdc = setpoint.Pdc / 2,
+        Vdc = setpoint.Vdc / 2,
+    )
+    pole_inputs, pole_setpoint_pu = pftoinputs(converter.pole_pos.element_model, pole_setpoint)
+
+    return (
+        v_p = pole_inputs.v_dc,
+        v_r = 0.0,
+        v_n = -pole_inputs.v_dc,
+        vG_d = pole_inputs.vG_d,
+        vG_q = pole_inputs.vG_q,
+    ), pole_setpoint_pu
+end
+
+# State-space assembly
+"""
+Return bipolar initial values by concatenating the two pole initial-value sets.
+"""
+function initialvalues(converter::BipolarMMC; inputs, setpoint_pu = SetpointPU())
+    inputs_pos = positivepoleinputs(converter, inputs)
+    inputs_neg = negativepoleinputs(converter, inputs)
+    init_pos = initialvalues(converter.pole_pos.element_model; inputs = inputs_pos, setpoint_pu)
+    init_neg = initialvalues(converter.pole_neg.element_model; inputs = inputs_neg, setpoint_pu)
+
+    return (;
+        prefixedinitialvalues(:pos_, init_pos)...,
+        prefixedinitialvalues(:neg_, init_neg)...,
     )
 end
 
-
 """
-    update!(converter::BipolarMMC, Vm, θ,
-            Pac_p, Qac_p, Vpr, Pdc_p,
-            Pac_n, Qac_n, Vrn, Pdc_n)
-
-True bipolar operating-point update. Updates both poles.
+Evaluate both pole state-space equations inside the flat bipolar state vector.
 """
-function update!(converter::BipolarMMC, Vm, θ,
-                 Pac_p, Qac_p, Vpr, Pdc_p,
-                 Pac_n, Qac_n, Vrn, Pdc_n)
-
-    setpoint_pos = Setpoint(
-        Pac = Pac_p,
-        Qac = Qac_p,
-        θac = θ,
-        Vac = Vm,
-        Pdc = Pdc_p,
-        Vdc = Vpr,
+function state_space!(F, x, inputs, setpoint_pu::SetpointPU, converter::BipolarMMC)
+    n_pos = n_states(converter.pole_pos.element_model)
+    state_space!(
+        @view(F[1:n_pos]),
+        positivepolestates(converter, x),
+        positivepoleinputs(converter, inputs),
+        setpoint_pu,
+        converter.pole_pos.element_model,
     )
-    setpoint_neg = Setpoint(
-        Pac = Pac_n,
-        Qac = Qac_n,
-        θac = θ,
-        Vac = Vm,
-        Pdc = Pdc_n,
-        Vdc = Vrn,
+    state_space!(
+        @view(F[n_pos + 1:end]),
+        negativepolestates(converter, x),
+        negativepoleinputs(converter, inputs),
+        setpoint_pu,
+        converter.pole_neg.element_model,
     )
-
-    update!(converter.pole_pos, converter.pole_pos.element_model, setpoint_pos)
-    update!(converter.pole_neg, converter.pole_neg.element_model, setpoint_neg)
-
     return nothing
 end
 
-#= function _pole_y(elem::Element, s::Complex)
-    if !isempty(elem.A)
-        return eval_y(elem, s)
-    end
-
-    hasmethod(eval_parameters, Tuple{typeof(elem.element_model), Complex}) ||
-        throw(ArgumentError("BipolarMMC poles are not initialized. Run `power_flow(...)` first."))
-
-    return eval_parameters(elem.element_model, s)
-end =#
+"""
+Apply both pole equilibrium equations during the generic state-space update.
+"""
+function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, converter::BipolarMMC)
+    n_pos = n_states(converter.pole_pos.element_model)
+    equilibriumequations!(
+        @view(F[1:n_pos]),
+        positivepolestates(converter, x),
+        positivepoleinputs(converter, inputs),
+        setpoint_pu,
+        nothing,
+        converter.pole_pos.element_model,
+    )
+    equilibriumequations!(
+        @view(F[n_pos + 1:end]),
+        negativepolestates(converter, x),
+        negativepoleinputs(converter, inputs),
+        setpoint_pu,
+        nothing,
+        converter.pole_neg.element_model,
+    )
+    return nothing
+end
 
 """
-    eval_parameters(converter::BipolarMMC, s::Complex)
-
-Return the 5×5 small-signal admittance matrix ordered as `[p, r, n, d, q]`.
-
-The mapping is a superposition of two 3-port MMC admittances:
-- Positive pole: between `(p,r)` using `v_dc,p = v_p - v_r`
-- Negative pole: between `(r,n)` using `v_dc,n = v_r - v_n`
+Write bipolar pin-current outputs from both pole current outputs in load convention.
 """
-function eval_parameters(converter::BipolarMMC, s::Complex; SI_units::Bool=true)
-    Yp = Matrix{ComplexF64}(eval_y(converter.pole_pos, s; SI_units)) # [dc, d, q]
-    Yn = Matrix{ComplexF64}(eval_y(converter.pole_neg, s; SI_units)) # [dc, d, q]
+function outputequations!(F, x, inputs, y, converter::BipolarMMC)
+    out_pos = fill(zero(eltype(F)), n_outputs(converter.pole_pos.element_model))
+    out_neg = fill(zero(eltype(F)), n_outputs(converter.pole_neg.element_model))
 
-    size(Yp) == (3, 3) || throw(ArgumentError("Positive-pole MMC must provide a 3x3 admittance matrix."))
-    size(Yn) == (3, 3) || throw(ArgumentError("Negative-pole MMC must provide a 3x3 admittance matrix."))
+    outputequations!(
+        out_pos,
+        positivepolestates(converter, x),
+        positivepoleinputs(converter, inputs),
+        nothing,
+        converter.pole_pos.element_model,
+    )
+    outputequations!(
+        out_neg,
+        negativepolestates(converter, x),
+        negativepoleinputs(converter, inputs),
+        nothing,
+        converter.pole_neg.element_model,
+    )
 
-    Y5 = zeros(ComplexF64, 5, 5)             # [p, r, n, d, q]
+    F[1] = out_pos[1]
+    F[2] = -out_pos[1] + out_neg[1]
+    F[3] = -out_neg[1]
+    F[4] = -(out_pos[2] + out_neg[2])
+    F[5] = -(out_pos[3] + out_neg[3])
+    return nothing
+end
 
-    # -----------------------
-    # DC terminal current rows
-    # -----------------------
-    # i_p = i_dc,p
-    Y5[1, 1] =  Yp[1, 1]
-    Y5[1, 2] = -Yp[1, 1]
-    Y5[1, 4] =  Yp[1, 2]
-    Y5[1, 5] =  Yp[1, 3]
+"""
+Evaluate the 5x5 bipolar admittance from the generic state-space ABCD matrices.
+"""
+function eval_y(elem::Element{<:BipolarMMC}, s::Complex; SI_units::Bool=true)
+    n = size(elem.A, 1)
+    Iₙ = Matrix{ComplexF64}(I, n, n)
+    Y = Matrix{ComplexF64}(elem.C * ((s * Iₙ - elem.A) \ elem.B) + elem.D)
 
-    # i_r = -i_dc,p + i_dc,n
-    Y5[2, 1] = -Yp[1, 1]
-    Y5[2, 2] =  Yp[1, 1] + Yn[1, 1]
-    Y5[2, 3] = -Yn[1, 1]
-    Y5[2, 4] = -Yp[1, 2] + Yn[1, 2]
-    Y5[2, 5] = -Yp[1, 3] + Yn[1, 3]
+    SI_units || return Y
 
-    # i_n = -i_dc,n
-    Y5[3, 2] = -Yn[1, 1]
-    Y5[3, 3] =  Yn[1, 1]
-    Y5[3, 4] = -Yn[1, 2]
-    Y5[3, 5] = -Yn[1, 3]
+    elec = elem.element_model.pole_pos.element_model.elec
+    iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
+    iDCbase = elec.Sbase / elec.vDC_base
 
-    # -----------------------
-    # AC current rows (dq), shared AC port
-    # -----------------------
-    # i_d = i_d,p + i_d,n
-    Y5[4, 1] =  Yp[2, 1]
-    Y5[4, 2] = -Yp[2, 1] + Yn[2, 1]
-    Y5[4, 3] = -Yn[2, 1]
-    Y5[4, 4] =  Yp[2, 2] + Yn[2, 2]
-    Y5[4, 5] =  Yp[2, 3] + Yn[2, 3]
+    Y[1:3, :] .*= iDCbase
+    Y[4:5, :] .*= iACbase
 
-    # i_q = i_q,p + i_q,n
-    Y5[5, 1] =  Yp[3, 1]
-    Y5[5, 2] = -Yp[3, 1] + Yn[3, 1]
-    Y5[5, 3] = -Yn[3, 1]
-    Y5[5, 4] =  Yp[3, 2] + Yn[3, 2]
-    Y5[5, 5] =  Yp[3, 3] + Yn[3, 3]
+    Y[:, 1:3] ./= elec.vDC_base
+    Y[:, 4:5] ./= (elec.vAC_base / elec.turnsRatio)
 
-    return Y5
+    return Y
 end
 
 

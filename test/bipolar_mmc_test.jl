@@ -27,7 +27,6 @@ using PowerImpedanceACDC:
     ac_source,
     bipolar_mmc,
     dc_source,
-    eval_parameters,
     mmc,
     update!
 using Test
@@ -188,13 +187,16 @@ function build_bipolar_gfm_from_adm_mmc_test()
     )
 
     update!(
+        elem,
         elem.element_model,
-        Vm * sqrt(2),
-        0.0,
-        2 * Pmmc,
-        2 * Qmmc,
-        BIPOLAR_VDC_TOTAL_KV,
-        2 * Pmmc,
+        Setpoint(
+            Pac = 2 * Pmmc,
+            Qac = 2 * Qmmc,
+            θac = 0.0,
+            Vac = Vm * sqrt(2),
+            Vdc = BIPOLAR_VDC_TOTAL_KV,
+            Pdc = 2 * Pmmc,
+        ),
     )
 
     return elem
@@ -214,35 +216,25 @@ function build_bipolar_gfm_from_pscad_power_flow(pscad_pf)
     )
 
     update!(
+        elem,
         elem.element_model,
-        Vac_ln_peak,
-        pscad_pf.θac,
-        2 * Pac_pole,
-        2 * Qac_pole,
-        BIPOLAR_VDC_TOTAL_KV,
-        2 * Pac_pole,
+        Setpoint(
+            Pac = 2 * Pac_pole,
+            Qac = 2 * Qac_pole,
+            θac = pscad_pf.θac,
+            Vac = Vac_ln_peak,
+            Vdc = BIPOLAR_VDC_TOTAL_KV,
+            Pdc = 2 * Pac_pole,
+        ),
     )
 
     return elem
 end
 
 function bipolar_admittance_si_scan_convention(elem, s::Complex)
-    # Raw BipolarMMC ordering is [p, r, n, d, q] and values are per-unit.
-    Y = Matrix{ComplexF64}(eval_parameters(elem.element_model, s, SI_units = false))
-
-    ep = elem.element_model.pole_pos.element_model.elec
-    i_dc_base = ep.Sbase / ep.vDC_base
-    i_ac_base = (2 * ep.Sbase / (3 * ep.vAC_base)) * ep.turnsRatio
-
-    Y[1:3, :] .*= i_dc_base
-    Y[4:5, :] .*= i_ac_base
-    Y[:, 1:3] ./= ep.vDC_base
-    Y[:, 4:5] ./= ep.vAC_base
-
-    # PSCAD scan ordering is [d, q, p, n] and uses the opposite AC-current sign.
-    Y_scan = Y[[4, 5, 1, 3], [4, 5, 1, 3]]
-    Y_scan[1:2, :] .*= -1
-    return Y_scan
+    # BipolarMMC ordering is [p, r, n, d, q]; PSCAD scan ordering is [d, q, p, n].
+    Y = Matrix{ComplexF64}(PowerImpedanceACDC.eval_y(elem, s, SI_units = true))
+    return Y[[4, 5, 1, 3], [4, 5, 1, 3]]
 end
 
 phase_delta(a, b) = abs(angle(exp(1im * (angle(a) - angle(b)))))
@@ -285,33 +277,25 @@ function report_bipolar_test_failures(omegas, validation_y, model_y; mag_atol = 
 end
 
 
-@testset "Bipolar MMC Admittance Mapping" begin
+@testset "Bipolar MMC Generic Admittance Evaluation" begin
     pole_pos = build_mapping_test_pole()
     pole_neg = build_mapping_test_pole()
-
-    Yp = ComplexF64[1.0 0.1 0.2; 0.3 2.0 0.4; 0.5 0.6 3.0]
-    Yn = ComplexF64[1.5 0.2 0.1; 0.4 1.8 0.3; 0.7 0.5 2.5]
-
-    pole_pos.A = zeros(ComplexF64, 1, 1)
-    pole_pos.B = zeros(ComplexF64, 1, 3)
-    pole_pos.C = zeros(ComplexF64, 3, 1)
-    pole_pos.D = Yp
-
-    pole_neg.A = zeros(ComplexF64, 1, 1)
-    pole_neg.B = zeros(ComplexF64, 1, 3)
-    pole_neg.C = zeros(ComplexF64, 3, 1)
-    pole_neg.D = Yn
-
-    bipolar = bipolar_mmc(pole_pos, pole_neg).element_model
-    Y = eval_parameters(bipolar, 2im * π * 50, SI_units = false)
 
     expected = ComplexF64[
         1.0 -1.0 0.0 0.1 0.2;
        -1.0 2.5 -1.5 0.1 -0.1;
         0.0 -1.5 1.5 -0.2 -0.1;
-        0.3 0.1 -0.4 3.8 0.7;
-        0.5 0.2 -0.7 1.1 5.5;
+       -0.3 -0.1 0.4 -3.8 -0.7;
+       -0.5 -0.2 0.7 -1.1 -5.5;
     ]
+
+    elem = bipolar_mmc(pole_pos, pole_neg)
+    elem.A = zeros(ComplexF64, 1, 1)
+    elem.B = zeros(ComplexF64, 1, 5)
+    elem.C = zeros(ComplexF64, 5, 1)
+    elem.D = expected
+
+    Y = PowerImpedanceACDC.eval_y(elem, 2im * π * 50, SI_units = false)
 
     @test size(Y) == (5, 5)
     @test Y ≈ expected atol = 1e-12
