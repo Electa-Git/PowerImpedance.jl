@@ -288,8 +288,8 @@ function outputequations!(F, x, inputs, y, converter::BipolarMMC)
     F[1] = out_pos[1]
     F[2] = -out_pos[1] + out_neg[1]
     F[3] = -out_neg[1]
-    F[4] = -(out_pos[2] + out_neg[2])
-    F[5] = -(out_pos[3] + out_neg[3])
+    F[4] = (out_pos[2] + out_neg[2])
+    F[5] = (out_pos[3] + out_neg[3])
     return nothing
 end
 

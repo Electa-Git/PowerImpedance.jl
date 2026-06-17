@@ -36,11 +36,17 @@ function elecdomain(elem, side)
 
 end
 
+abstract type AbstractFreqResp end
+
+# Some general methods
+Base.size(fr::AbstractFreqResp) = size(fr.D)
+
+(fr::AbstractFreqResp)(Yout::AbstractMatrix, s::ComplexF64) =dropdims((fr)(reshape(Yout, (size(Yout)...,1)), [s,]), dims=3) # Reshape and then flatten again    
 
 ### Frequency response of state-space models for linearized admittance calculation. Implementation of ControlSystemsBase.jl 
 ### but with caching of the Hessenberg decomposition to speed up repeated evaluations at different frequencies. Also, custom back-substitution to reuse temporary vectors and avoid allocations.
 
-struct HessenbergFreqResp{TH, TC, TB, TD, TW, TCS}
+struct HessenbergFreqResp{TH, TC, TB, TD, TW, TCS, TS} <: AbstractFreqResp
     H::TH
     C::TC
     B::TB
@@ -48,9 +54,12 @@ struct HessenbergFreqResp{TH, TC, TB, TD, TW, TCS}
     workB::TW
     u::Vector{ComplexF64}
     cs::TCS
+    scale::TS #Scaling matrix has same dimensions as D
 end
 
-function HessenbergFreqResp(A::AbstractMatrix, B::AbstractMatrix, C::AbstractMatrix, D::AbstractMatrix)
+function HessenbergFreqResp(A::AbstractMatrix, B::AbstractMatrix, C::AbstractMatrix, D::AbstractMatrix, scale::AbstractMatrix)
+    
+    size(D) == size(scale) || throw(DimensionMismatch("wrong size of scaling matrix"))
     F = hessenberg(A)
     Q = Matrix(F.Q)
     H = F.H
@@ -67,18 +76,29 @@ function HessenbergFreqResp(A::AbstractMatrix, B::AbstractMatrix, C::AbstractMat
         workB,
         u,
         cs,
+        scale
     )
 end
 
-Base.size(fr::HessenbergFreqResp) = size(fr.D)
 
-function (fr::HessenbergFreqResp)(Yout::AbstractMatrix, s::ComplexF64)
-    size(Yout) == size(fr) || throw(DimensionMismatch("wrong output size"))
-    copyto!(fr.workB, fr.B)
-    ldiv2!(fr.u, fr.cs, fr.H, fr.workB, shift = -s) #Shift is A+μI so need to negate s
-    copyto!(Yout, fr.D)
-    mul!(Yout, fr.C, fr.workB, -1, 1)
-    return Yout
+
+
+
+function (fr::HessenbergFreqResp)(Yout::AbstractArray{T, 3}, s_vec::AbstractVector{<:Complex}) where {T}
+    size(Yout[:,:,1]) == size(fr) || throw(DimensionMismatch("wrong output size"))
+    size(Yout,3) == size(s_vec,1) || throw(DimensionMismatch("wrong output size"))
+   
+    @simd for i in eachindex(s_vec)
+        Youti = @view Yout[:,:,i]
+        s = s_vec[i]
+        copyto!(fr.workB, fr.B)
+        ldiv2!(fr.u, fr.cs, fr.H, fr.workB, shift = -s) #Shift is A+μI so need to negate s
+        copyto!(Youti, fr.D)
+        mul!(Youti, fr.C, fr.workB, -1, 1)
+        Youti .*= fr.scale # Scale output if necessary
+    end
+
+    # return Yout
 end
 
 function (fr::HessenbergFreqResp)(s::ComplexF64)
@@ -87,23 +107,30 @@ function (fr::HessenbergFreqResp)(s::ComplexF64)
     return Yout
 end
 
-struct FallbackFreqResp{TA, TB, TC, TD}
+struct FallbackFreqResp{TA, TB, TC, TD, TS} <: AbstractFreqResp
     A::TA
     B::TB
     C::TC
     D::TD
+    scale::TS
 end
 
 function FallbackFreqResp(A::AbstractMatrix, B::AbstractMatrix, C::AbstractMatrix, D::AbstractMatrix)
+    size(D) == size(scale) || throw(DimensionMismatch("wrong size of scaling matrix"))
     return FallbackFreqResp{typeof(A), typeof(B), typeof(C), typeof(D)}(A, B, C, D)
 end
 
-Base.size(fr::FallbackFreqResp) = size(fr.D)
 
-function (fr::FallbackFreqResp)(Yout::AbstractMatrix, s::ComplexF64)
-    size(Yout) == size(fr) || throw(DimensionMismatch("wrong output size"))
-    Yout .= fr.C * ((s * I - fr.A) \ fr.B)
-    Yout .+= fr.D
+function (fr::FallbackFreqResp)(Yout::AbstractArray{T, 3}, s_vec::AbstractVector{<:Complex}) where {T}
+    size(Yout[:,:,1]) == size(fr) || throw(DimensionMismatch("wrong output size"))
+    size(Yout,3) == size(s_vec,1) || throw(DimensionMismatch("wrong output size"))
+    @simd for i in eachindex(s_vec)
+        s = s_vec[i]
+        Youti = @view Yout[:,:,i]
+        Youti .= fr.C * ((s * I - fr.A) \ fr.B)
+        Youti .+= fr.D
+        Youti .*= fr.scale
+    end
     return Yout
 end
 
@@ -113,11 +140,11 @@ function (fr::FallbackFreqResp)(s::ComplexF64)
     return Yout
 end
 
-function freqresp_cache(A::AbstractMatrix, B::AbstractMatrix, C::AbstractMatrix, D::AbstractMatrix)
+function freqresp_cache(A::AbstractMatrix, B::AbstractMatrix, C::AbstractMatrix, D::AbstractMatrix; scale::AbstractMatrix=ones(size(D)...))
     try
-        return HessenbergFreqResp(A, B, C, D)
+        return HessenbergFreqResp(A, B, C, D, scale)
     catch
-        return FallbackFreqResp(A, B, C, D)
+        return FallbackFreqResp(A, B, C, D, scale)
     end
 end
 
@@ -162,6 +189,8 @@ function ldiv2!(u, cs, F::UpperHessenberg, B::AbstractVecOrMat; shift::Number = 
     end
     return X
 end
+
+
 
 #convenience macro to create typedtable types
 macro Table(ex)

@@ -76,12 +76,12 @@ function make_z(net::Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}},
                 if (n === nothing)
                     n = findfirst(p -> p == node_name, dict[:output_list])
                     (n === nothing) && continue
-                    sysmatrix[nᵥ+n,  nₑₛ+yi] = -(-1)^i                  # Current direction (1.1, 2.1, 2.2)
-                    sysmatrix[nᵥ+n, nᵥ+n] = (-1)^i
+                    sysmatrix[nᵥ+n,  nₑₛ+yi] = -(-1)                  # Current direction (1.1, 2.1, 2.2), renoved i, all currents in load convention now
+                    sysmatrix[nᵥ+n, nᵥ+n] = (-1)
                     # inmatrix[nₑₚ+1:nₑₚ+pₚ, 2(n-1)+1] += -Y[1:end, yi] # All outputs are assumed to be grounded. This can be implemented in a future work.               # -Y[:, yi]
                 else
                     # Original
-                    sysmatrix[n, nₑₛ+yi] = -(-1)^i                          # The other part of the KCL
+                    sysmatrix[n, nₑₛ+yi] = -(-1)                          # The other part of the KCL
                     sysmatrix[nₑₚ+1:nₑₚ+pₚ, n] += Y[1:end, yi]               # +Y[:, yi] 
                 end
             end

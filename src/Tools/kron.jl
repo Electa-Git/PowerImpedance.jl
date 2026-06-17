@@ -22,7 +22,13 @@ function kron(matrix, no_eliminate)
 	Y21 = matrix[eliminate, no_eliminate]
 	Y22 = matrix[eliminate, eliminate]
 
-	return Y11 - (Y12*inv(Y22))*Y21
+	if norm(abs.(Y12), Inf) < 1e-12 #Y12 = 0 -> no influence of second subsystem on system of interest
+		Ykron = Y11
+	else
+		Ykron = Y11 - (Y12*inv(Y22))*Y21
+	end
+
+	return Ykron
 
 
 end

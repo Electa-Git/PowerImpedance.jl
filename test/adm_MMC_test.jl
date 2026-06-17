@@ -41,7 +41,7 @@ function element_y(elem, s::Complex)
 end
 
 function mmc_plot_convention(Y::AbstractMatrix)
-    return [transpose(Y[1, :]); transpose(-Y[2, :]); transpose(-Y[3, :])]
+    return [transpose(Y[1, :]); transpose(Y[2, :]); transpose(Y[3, :])]
 end
 
 function common_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)

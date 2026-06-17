@@ -1,5 +1,10 @@
 using PowerImpedanceACDC.NetworkBuilder: pin, ⟷, powerflow_optimizer, is_bounded_options, 
 powerflow_setting, solve_acdcpf, get_y, LinearizedAdmittanceNetwork
+using LinearAlgebra
+using PowerImpedanceACDC
+using Test
+const NB = PowerImpedanceACDC.NetworkBuilder
+# PIACDC =PowerImpedanceACDC
 
 @testset "NetworkBuilder unit tests" begin
 	legacy = @network begin
@@ -2414,16 +2419,18 @@ end
 
 function test_ieee39bus_networkbuilder_parity(; freq_range = IEEE39_FREQ_RANGE)
 	legacy = build_ieee39bus_with_macro()
-	built = build_ieee39bus_with_networkbuilder().network
+	built = build_ieee39bus_with_networkbuilder()
+
+	builtnetw = built.network
 
 	z_legacy, omega_legacy = determine_ieee39bus_impedance(legacy; freq_range)
-	z_built, omega_built = determine_ieee39bus_impedance(built; freq_range)
+	z_built, omega_built = determine_ieee39bus_impedance(builtnetw; freq_range)
 
 	@test isequal(omega_built, omega_legacy)
 	@test axes(z_built) == axes(z_legacy)
 	@test isequal(z_built, z_legacy)
 
-	eignew = eigvals(built.elements[:STATCOM].A)
+	eignew = eigvals(builtnetw.elements[:STATCOM].A)
 	eiglegacy = eigvals(legacy.elements[:STATCOM].A)
 
 	@test sort(real(eignew)) ≈ sort(real(eiglegacy)) rtol=1e-8
@@ -2478,8 +2485,9 @@ function test_linearizedadmittance_parity(; freq_range = IEEE39_FREQ_RANGE)
 		@test haskey(legacy.elements, key) #"Legacy network is missing element $key"
 		@test haskey(newadmnw.interface.elem, key) #"New network is missing element $key"
 		
-		ylegacy = PIACDC.eval_y.((legacy.elements[key],), s;SI_units = false) #Should be pu (disabled scaling)
-		ynew = get_y.((newadmnw,), (key,), s) 
+		ylegacy = PIACDC.eval_y.((legacy.elements[key],), s;SI_units = true) #Should be pu (disabled scaling)
+		ynew = get_y(newadmnw,key, s)
+		ynew = [ynew[:,:,i] for i in axes(ynew, 3)]
 
 		@test isapprox(ylegacy, ynew; atol = 1e-4, rtol=1e-4) #"Admittance mismatch for element $key"
 	end
@@ -2499,6 +2507,30 @@ function test_linearizedadmittance_parity(; freq_range = IEEE39_FREQ_RANGE)
 	return nothing
 end
 
+
+function test_ynode_and_edge_parity(; freq_range = IEEE39_FREQ_RANGE)
+	legacy = build_ieee39bus_with_macro()
+	built = build_ieee39bus_with_networkbuilder().builder
+	newadmnw = convert(built, LinearizedAdmittanceNetwork)
+	Z, omega = determine_impedance(legacy; input_pins=[:Bus9d, :Bus9q], output_pins=[:gndD, :gndQ], elim_elements=[:STATCOM], freq_range)
+	s = omega .*im
+	yedge = NB.make_y_edge(newadmnw, s)
+	Znew = [inv(yedge[1:2,1:2,i]) for i in axes(yedge,3)]
+
+	@test isapprox(Z,Znew)
+	Ynodeleg, _, omega = make_y_node(legacy;freq_range)
+	#Restructure to have AC-first. TODO: Update so you look at net ids for better robustness
+	Ynodeleg_sc = [[A[end-1, end-1] A[end-1, end] A[end-1, end-2]; A[end, end-1] A[end, end] A[end, end-2]; A[end-2,end-1] A[end-2,end] A[end-2,end-2]] for A in Ynodeleg] # Only take Ysc
+	
+	Ynodenew = NB.make_y_node(newadmnw, im.*omega)
+	DC_dummy_adm = zeros(3,3)
+	DC_dummy_adm[3,3] = 1e-4 #Dummy impedance added at DC side
+	Ynodenew = [Ynodenew[:,:,i] .+ DC_dummy_adm for i in axes(Ynodenew,3)]
+
+	@test isapprox(Ynodeleg_sc, Ynodenew;rtol=1e-7, atol=1e-7)
+end
+
+
 @testset "IEEE39bus NetworkBuilder parity" begin
 	test_ieee39bus_networkbuilder_parity()
 end
@@ -2509,6 +2541,10 @@ end
 
 @testset "IEEE39bus NetworkBuilder linearized admittance parity" begin
 	test_linearizedadmittance_parity()
+end
+
+@testset "IEEE39bus NetworkBuilder linearized admittance Ynode and Yedge parity" begin
+	test_ynode_and_edge_parity()
 end
 
 @testset "NetworkBuilder drops endpoints of declared disconnected elements" begin

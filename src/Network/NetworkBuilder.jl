@@ -192,21 +192,22 @@ function dcconnections(registry::ConnectionsRegistry)
 	return filter(row -> row.elecdomain == 2 && row.bus !=0, registry.registry)
 end
 
-sortedcomponentconnections(registry::ConnectionsRegistry, component::Symbol) = sortedcomponentconnections(registry.registry, component)
+sortedcomponentconnections(registry::ConnectionsRegistry, component::Symbol; kwargs...) = sortedcomponentconnections(registry.registry, component; kwargs...)
 
-function sortedcomponentconnections(registry::Table, component::Symbol;withground=false)
+function sortedcomponentconnections(registry::Table, component::Symbol;withground=false, acfirst=true)
 	# Find connections of component
 	compconn = filter(row -> row.elem == component, registry)
-	# First AC and then DC connections
-	groundfilt(row) = withground ? (true) : (row.bus != 0)  # Filter ground connections if withground=false 
-	acconn = filter(row -> (row.elecdomain == 1) && groundfilt(row), compconn)
-	sort!(acconn, by = row -> (row.side, row.terminal))
-	dcconn = filter(row -> row.elecdomain == 2 && groundfilt(row), compconn)
-	sort!(dcconn, by = row -> (row.side, row.terminal))
-	elecdomainsorted = vcat(acconn, dcconn)
+	# Filter out the ground connections if necessary ()
+	groundfilt(row) = row.bus != 0
+	if !withground
+		filter!(groundfilt, compconn)
+	end
+	#Sorting depends if we want ac first (elecdomain=1 so first)
+	sortfunc(row) = acfirst ? (row.elecdomain, row.side, row.terminal) : (row.side, row.terminal)
 
-
-	return elecdomainsorted
+	sort!(compconn, by = sortfunc)
+	
+	return compconn
 
 end
 
@@ -221,6 +222,12 @@ mutable struct BuilderState
 	network::P.Network
 	powerflow::Any
 end
+
+Base.show(io::IO, bs::BuilderState) = println(io, 	"\n Network implemented via BuilderState \n",
+													"----------------------------------- \n",
+													" Nb. of elements: $(length(bs.elements)) \n",
+													" Nb. of connections: $(length(bs.connections.registry)) \n",
+													" With following options: $(bs.options)" )
 
 pin(element::Symbol, side::Integer, terminal::Integer) =
 	Pin(element, Int(side), Int(terminal))
@@ -574,7 +581,6 @@ end
 Set a global variable in the parent module of NetworkBuilder. 
 This is used to make power flow results accessible for custom constraints and objective functions defined by the user.
 
-I do not understand this one as well
 """
 function set_parent_global!(name::Symbol, value)
 	Core.eval(P, Expr(:(=), name, value))
@@ -1048,5 +1054,6 @@ end
 include("../core/base.jl")
 include("NB_power_flow.jl")
 include("../core/convert.jl")
+include("Solvers/make_adm_NB.jl")
 
 end

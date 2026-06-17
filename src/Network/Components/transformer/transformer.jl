@@ -1,6 +1,6 @@
 export transformer
 
-@with_kw mutable struct Transformer
+@with_kw mutable struct Transformer <: AbstractMultiport
 	pins::Int = 1                     # marks single or three phase
 	organization::Symbol = :YY        # three phase organization (:YY or :ΔY)
 
