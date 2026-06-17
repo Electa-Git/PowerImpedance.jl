@@ -45,7 +45,7 @@ function element_y(elem, s::Complex)
 end
 
 function tlc_plot_convention(Y::AbstractMatrix)
-    return [transpose(Y[1, :]); transpose(-Y[2, :]); transpose(-Y[3, :])]
+    return [transpose(Y[1, :]); transpose(Y[2, :]); transpose(Y[3, :])]
 end
 
 function common_tlc_blocks(; Vm, Vdc, Lf, Rf)

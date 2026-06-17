@@ -25,7 +25,7 @@ function _ac_row_start_for_sign_flip(element::Element)
 
     if model isa MMC || model isa TLC
         # Monopolar ordering: [dc, d, q]
-        return 2
+        return typemax(Int) #Changed all currents in state space to load sign convention=> Not needed to flip sign
     end
 
     return typemax(Int)

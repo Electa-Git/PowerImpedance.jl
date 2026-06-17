@@ -787,16 +787,16 @@ for i in eachindex(omegas)
     MMC2_adm=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC2],omegas[i]*im)
     MMC3_adm=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC3],omegas[i]*im)
     MMC4_adm=PowerImpedanceACDC.get_y(IEEE14bus.elements[:MMC4],omegas[i]*im)
-    MMC1_adm=vcat(MMC1_adm[1:1,1:3],-MMC1_adm[2:3,1:3])
-    MMC2_adm=vcat(MMC2_adm[1:1,1:3],-MMC2_adm[2:3,1:3])
-    MMC3_adm=vcat(MMC3_adm[1:1,1:3],-MMC3_adm[2:3,1:3])
-    MMC4_adm=vcat(MMC4_adm[1:1,1:3],-MMC4_adm[2:3,1:3])
+    MMC1_adm=vcat(MMC1_adm[1:1,1:3],MMC1_adm[2:3,1:3])
+    MMC2_adm=vcat(MMC2_adm[1:1,1:3],MMC2_adm[2:3,1:3])
+    MMC3_adm=vcat(MMC3_adm[1:1,1:3],MMC3_adm[2:3,1:3])
+    MMC4_adm=vcat(MMC4_adm[1:1,1:3],MMC4_adm[2:3,1:3])
 
 
     # TLCs
-    TLC1_adm=(-PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF1],omegas[i]*im))[2:3,2:3]
-    TLC2_adm=(-PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF2],omegas[i]*im))[2:3,2:3]
-    TLC3_adm=(-PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF3],omegas[i]*im))[2:3,2:3]
+    TLC1_adm=(PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF1],omegas[i]*im))[2:3,2:3]
+    TLC2_adm=(PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF2],omegas[i]*im))[2:3,2:3]
+    TLC3_adm=(PowerImpedanceACDC.get_y(IEEE14bus.elements[:WF3],omegas[i]*im))[2:3,2:3]
 
     # Sources
     SRC1=PowerImpedanceACDC.get_y(IEEE14bus.elements[:Zg1],omegas[i]*im)[1:2,1:2]

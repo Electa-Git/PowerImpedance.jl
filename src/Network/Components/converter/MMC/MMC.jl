@@ -183,9 +183,11 @@ function input_signals(c::MMC, x, inputs)
     )
 end
 
+
+## Conventions: should all be ingoing as to have proper admittance formulation wrt to nodal voltages
 function outputequations!(F, x, y, inputs, c::MMC)
     # NB: All electrical state variables are in grid dq frame (and not converter frame)
-    F[1:3] = [3*x.iΣ_z, x.iΔ_d, x.iΔ_q]
+    F[1:3] = [3*x.iΣ_z, -x.iΔ_d, -x.iΔ_q]
 end
 
 
@@ -211,6 +213,29 @@ function mmc(;
         setpoint,
         limits)
 end
+
+##################### SI Scaling ######################################
+function SI_scale(elem::Element{<:MMC})
+    elec = elem.element_model.elec
+
+    
+
+    scale = ones(3,3)
+
+    iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
+    iDCbase = elec.Sbase / elec.vDC_base
+
+    # row scaling = output current bases
+    Y[1, :]   .*= iDCbase
+    Y[2:3, :] .*= iACbase
+
+    # column scaling = input voltage bases
+    Y[:, 1]   ./= elec.vDC_base
+    Y[:, 2:3] ./= (elec.vAC_base / elec.turnsRatio)
+
+    return scale
+end
+
 
 ############################  Power-flow integration MMC ############################
 

@@ -23,7 +23,8 @@ function Base.convert(bs::BuilderState, ::Type{P.PMACDC})
     for (elemid, element) in pairs(bs.elements) #NamedTuple
         # Get sorted connectoins (first AC, then DC)
         connections = sortedcomponentconnections(bs.connections, elemid)
-        sortedbusses = unique(connections.bus)
+        busidtable = Table(elecdomain = connections.elecdomain, bus=connections.bus) #Bus id consists of both bus and elecdomain bcs duplicates busses in other elec domain
+        sortedbusses = Table(unique(busidtable)).bus #unique(connections.bus) #Take unique busidss (elecdomain+bus integer) and then only provide it with bus information
         
 
         # Get the PM component key and update LUT

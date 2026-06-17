@@ -173,13 +173,14 @@ end
 
 """
 Write TLC output equations.
+All currents carry load sign convention for compatibility with admittance formulation.
 
 $(SIGNATURES)
 """
 function outputequations!(F, x, inputs, y, ::TLC)
     F[1] = y.elec.i_dc
-    F[2] = y.elec.i_d
-    F[3] = y.elec.i_q
+    F[2] = -y.elec.i_d
+    F[3] = -y.elec.i_q
     return nothing
 end
 
@@ -281,7 +282,26 @@ function tlc(;
     )
 end
 
+##################### SI Scaling ######################################
+function SI_scale(elem::Element{<:TLC})
+    elec = elem.element_model.elec
 
+    vACbase = elec.vACbase
+    iACbase = 2 * elec.Sbase / (3 * vACbase)
+    iDCbase = elec.Sbase / elec.vDCbase
+
+    scale = ones(3,3)
+
+    # row scaling = output current bases
+    scale[1, :]   .*= iDCbase
+    scale[2:3, :] .*= iACbase
+
+    # column scaling = input voltage bases
+    scale[:, 1]   ./= elec.vDCbase
+    scale[:, 2:3] ./= vACbase
+
+    return scale
+end
 ############################  Power-flow integration TLC ############################
 
 

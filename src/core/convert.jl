@@ -41,6 +41,8 @@ function nonlinearsetpoints(bs::BuilderState)
 
     # Transform results to setpoints that can be used by linearization step
     sp = transform(result["solution"], global_dict, bs, P.PMACDC, P.PIACDC, elempitopm)
+
+    @info "Setpoints of nonlinear devices: $(sp)"
     return sp
 end
 

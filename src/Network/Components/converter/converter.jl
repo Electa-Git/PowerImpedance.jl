@@ -172,11 +172,11 @@ function transform(elemresult, busresult, global_dict, element::Element{<:Abstra
 
     setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
-    if element.element_model isa AbstractStateSpace
-        update!(element, element.element_model, setpoint)
-    else
-        update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
-    end
+    # if element.element_model isa AbstractStateSpace
+    #     update!(element, element.element_model, setpoint)
+    # else
+    #     update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
+    # end
 
     return setpoint
 end
