@@ -1008,7 +1008,7 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 			setpoint = P.Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
 			if element.element_model isa P.AbstractStateSpace
-				P.update!(element, element.element_model, setpoint)
+				P.update!(element, setpoint)
 			else
 				P.update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
 			end
@@ -1033,7 +1033,7 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 
 			setpoint = P.Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
 
-			P.update!(element, element.element_model, setpoint)
+			P.update!(element, setpoint)
 		end
 	end
 

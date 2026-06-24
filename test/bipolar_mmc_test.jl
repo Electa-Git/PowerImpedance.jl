@@ -188,7 +188,6 @@ function build_bipolar_gfm_from_adm_mmc_test()
 
     update!(
         elem,
-        elem.element_model,
         Setpoint(
             Pac = 2 * Pmmc,
             Qac = 2 * Qmmc,
@@ -217,7 +216,6 @@ function build_bipolar_gfm_from_pscad_power_flow(pscad_pf)
 
     update!(
         elem,
-        elem.element_model,
         Setpoint(
             Pac = 2 * Pac_pole,
             Qac = 2 * Qac_pole,

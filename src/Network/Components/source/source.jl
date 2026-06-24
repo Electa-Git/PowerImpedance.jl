@@ -1,6 +1,5 @@
 #= 
 @with_kw mutable struct Source <: AbstractMultiport
-	Z::Union{Float64, Int} = 0 # source series impedance [Ω]
 	V::Union{Float64, Int} = 0        # DC voltage or voltage magnitude [kV]
 
 	P::Union{Float64, Int}     = 0      # active power output [MW]
@@ -17,7 +16,7 @@ end
 function make_abcd(source::Source, p)
 	# p = np(elem)
 	A = Matrix{ComplexF64}(I, p, p)
-	B = Diagonal(fill(ComplexF64(source.Z), p)) |> Matrix
+	B = Diagonal(fill(0.0, p)) |> Matrix
 	C = zeros(ComplexF64, p, p)
 	D = Matrix{ComplexF64}(I, p, p)
 
@@ -34,17 +33,14 @@ function eval_y(source::Source, s::Complex)
 	abcd = source.ABCD
 	p = source.pins
 
-	if source.Z == 0
-		abcd = copy(abcd)
-		abcd[1:p, (p+1):end] .= 1e-6 .* Matrix{ComplexF64}(I, p, p)
-	end
+	abcd = copy(abcd)
+	abcd[1:p, (p+1):end] .= 1e-6 .* Matrix{ComplexF64}(I, p, p)
 
 	return abcd_to_y(abcd)
 end =#
 
 
 @with_kw mutable struct Source <: AbstractMultiport
-    Z::Union{Float64, Int} = 0
     V::Union{Float64, Int} = 0
 
     P::Union{Float64, Int}     = 0
@@ -62,7 +58,7 @@ function make_abcd(source::Source, p)
     source.pins = p
 
     A = Matrix{ComplexF64}(I, p, p)
-    B = Diagonal(fill(ComplexF64(source.Z), p)) |> Matrix
+    B = zeros(ComplexF64, p, p)
     C = zeros(ComplexF64, p, p)
     D = Matrix{ComplexF64}(I, p, p)
 
@@ -79,10 +75,8 @@ function eval_y(source::Source, s::Complex)
     abcd = eval_abcd(source, s)
     p = source.pins
 
-    if source.Z == 0
-        abcd = copy(abcd)
-        abcd[1:p, (p+1):end] .= 1e-6 .* Matrix{ComplexF64}(I, p, p)
-    end
+	abcd = copy(abcd)
+	abcd[1:p, (p+1):end] .= 1e-6 .* Matrix{ComplexF64}(I, p, p)
 
     return abcd_to_y(abcd)
 end
