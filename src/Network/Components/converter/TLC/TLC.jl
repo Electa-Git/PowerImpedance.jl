@@ -122,7 +122,7 @@ Return additional equilibrium dummy names.
 
 $(SIGNATURES)
 """
-dummynames(::TLC) = ()
+equilibriumnames(::TLC) = ()
 
 """
 Convert a power-flow setpoint into normalized TLC inputs.

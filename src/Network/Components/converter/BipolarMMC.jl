@@ -139,7 +139,7 @@ outputnames(::BipolarMMC) = (:i_p, :i_r, :i_n, :i_d, :i_q)
 """
 Return dummy equilibrium equation names; the bipolar wrapper adds none.
 """
-dummynames(::BipolarMMC) = ()
+equilibriumnames(::BipolarMMC) = ()
 
 # Pole adapters
 """

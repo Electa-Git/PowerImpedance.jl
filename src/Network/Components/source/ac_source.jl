@@ -12,14 +12,12 @@ The AC source model provides:
 - Phase shift `θ` (in radians).
 - Active and reactive power reference values (`P`, `Q` in MW/MVAr).
 - Limits on generated power (`P_min`, `P_max`, `Q_min`, `Q_max`).
-- Series impedance `Z` (in Ω).
 - Connection pins (`1.x` and `2.x` for x ∈ {1, ..., `pins`}).
 
 To ground the source, connect a pin to the ground when constructing the network.
 
 ## Parameters
 ```julia
-Z     :: Union{Float64, Int} = 0  # Source series impedance [Ω]
 V     :: Union{Float64, Int} = 0        # Voltage magnitude (or DC voltage) [kV]
 P     :: Union{Float64, Int} = 0        # Reference active power output [MW]
 Q     :: Union{Float64, Int} = 0        # Reference reactive power output [MVAr]
@@ -40,7 +38,7 @@ ABCD :: Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
 source = ac_source(V = 1.0, P = 50, Q = 20, P_min = 10, P_max = 100, Q_min = 5, Q_max = 50)
 
 # Define a three-phase AC source with impedance
-three_phase_source = ac_source(V = 1.0, P = 50, Q = 20, Z = 0.1, pins = 3)
+three_phase_source = ac_source(V = 1.0, P = 50, Q = 20, pins = 3)
 ```
 
 ## Notes

@@ -1,11 +1,8 @@
 export power_flow, result, data
 using Logging
 
-const ang_max = deg2rad(-360)
-const ang_min = deg2rad(360)
-
-const ang_max = deg2rad(-360)
-const ang_min = deg2rad(360)
+const ang_max = deg2rad(360)
+const ang_min = deg2rad(-360)
 
 has_bipolar_converter(net::Network) = any(elem -> elem.element_model isa BipolarMMC, values(net.elements))
 
@@ -298,7 +295,7 @@ function power_flow(net::Network)
                         Pdc = Pdc_p + Pdc_n,
                         Vdc = Vpr + Vrn,
                     )
-                    update!(element, element.element_model, setpoint)
+                    update!(element, setpoint)
 
                     @info begin 
                     update_string = string(key)
@@ -319,7 +316,7 @@ function power_flow(net::Network)
                     setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
                     if element.element_model isa AbstractStateSpace
-                        update!(element, element.element_model, setpoint)
+                        update!(element, setpoint)
                     else
                         update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
                     end
@@ -343,7 +340,7 @@ function power_flow(net::Network)
                 setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
                 if element.element_model isa AbstractStateSpace
-                    update!(element, element.element_model, setpoint)
+                    update!(element, setpoint)
                 else
                     update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
                 end
@@ -382,7 +379,7 @@ function power_flow(net::Network)
                 $update_string AC Voltage Angle [rad]: $θ"""
             end
 
-            update!(element, element.element_model, setpoint)
+            update!(element, setpoint)
             # Update fields element
             # element.setpoint = setpoint #Update operating point
             # element.A = A

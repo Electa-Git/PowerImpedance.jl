@@ -14,7 +14,6 @@ connect the pin to the ground while constructing the network.
 
 Parameters:
 ```julia
-	Z :: Union{Float64, Int} = 0 # source series impedance [Ω]
 	V :: Union{Float64, Int} = 0        # DC voltage or voltage magnitude [kV]
 
 	P   :: Union{Float64, Int} = 0      # active power output [MW]
