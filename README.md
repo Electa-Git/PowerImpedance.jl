@@ -1,61 +1,55 @@
 # PowerImpedanceACDC
-PowerImpedanceACDC is a Julia-based implementation for the frequency-domain analysis of modern power systems.
-Its core functionalities include impedance/admittance characterization and small-signal stability assessment.
-The analysis relies on analytical models validated against the Electromagnetic Transient (EMT) simulation software PSCAD.
-The implemented components are:
-- Modular Multilevel Converter (MMC) with various controls (Grid-Following and Grid-Forming)
-- Two-level converter with various controls
+
+PowerImpedanceACDC is a Julia package for frequency-domain analysis of modern power systems. It provides tools for impedance/admittance characterization and fast small-signal stability assessment based on analytical models validated against PSCAD EMT simulations using the Z-tool [citations]. All implemented models have been validated in the frequency range from 0.1 Hz to 5 kHz.
+
+## Supported Components
+
+### Analytical Models
+- Modular Multilevel Converters (MMCs)
+  - Grid-Following (GFL) control
+  - Grid-Forming (GFM) control
+  - Various modulation schemes
+- Two-level converters with multiple control strategies
 - Overhead lines and underground cables
-- Synchronous generator
+- Synchronous generators
+- Induction machines
 - Transformers
-- Impedances
+- Lumped impedances
 - Ideal voltage sources
 
-Following features are currently implemented:
-- Impedance/admittance identification
-- Stability assessment via the Generalized Nyquist Criterion (GNC), applicable to standalone-stable Multiple-Input Multiple-Output (MIMO) systems
-- Oscillation mode identification via Eigenvalue Decomposition (EVD) and bus participation factors
-- Passivity assessment and Singular Value Decomposition (SVD) functions 
+### Black-Box Models
+Frequency-response data can be imported for:
+- Passive components
+- VSC-based AC/DC converters
 
-The following figure shows the admittances of an High Voltage Direct Current (HVDC) link with two MMCs, validated against PSCAD. You can find this example, along with explanations, in the `example` folder.
+## Features
 
-![Validation against PSCAD](docs/src/pictures/P2P_validation.png)
+### Impedance Identification
+- Impedance and admittance characterization
+
+### Loop-Gain-Based Stability Assessment
+- Generalized Nyquist Criterion (GNC) for standalone-stable MIMO systems
+- Oscillation mode identification using the Phase-Shift Criterion (PSC)
+
+### Nodal-Impedance-Based Stability Assessment
+- Eigenvalue decomposition of nodal impedance matrices
+- Positive Mode Damping (PMD)-based stability assessment and mode identification
+- Phase-Shift Criterion (PSC)-based stability assessment and mode identification
+- Bus participation factor analysis
+
+### Additional Analysis Tools
+- Passivity assessment
+- Small-gain analysis
+
+## Example
+
+The figure below shows the admittance characteristics of a point-to-point HVDC link composed of two MMCs. The analytical results are validated against PSCAD simulations. This example, together with a detailed explanation, is available in the `examples` folder.
+
+docs/src/pictures/P2P_validation.png
 
 ## Installation
-The latest stable release of PowerImpedanceACDC can be installed using the Julia package manager with
+
+Install the latest release using the Julia package manager:
+
 ```julia
 ] add PowerImpedanceACDC
-```
-
-## Citation
-If you find PowerImpedanceACDC useful in your work, we kindly request that you cite the following:
-```
-@misc{PowerImpedanceACDC2025,
-  author       = "Electa",
-  title        = "PowerImpedanceACDC. Impedance-based stability analyses.",
-  month        = "March",
-  year         = "2025",
-}
-```
-
-## Contributors
-- Aleksandra Leki: First implementation, OHL, Cables, Transformer, MMC
-- Özgür Can Sakinci: MMC, Two-level converter, Synchronous generator, Time delays
-- Thomas Roose: Generalized Nyquist, Eigenvalue decomposition, Bus participation factors 
-- Francisco Garcia: Passivity analysis, Small gain, Oscillation mode identification, MMC
-- Jan Kircheis: MMC, Component validation, Multinodal stability analysis, Line interface, Transformer 
-- Robbe Vander Eeckt: Component validation, Two-level converter, Power flow
-- Amr Saad: Component validation
-- Amauri Martins: Passive components, NetworkBuilder, tests, CI
-
-## License
-This is a free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. PowerImpedanceACDC is distributed in the hope that it will be useful, but without any warranty; without even the implied warranty of merchantability or fitness for a particular purpose. See the GNU General Public License for more details.
-
-## Future work
-- Integration of blackbox EMT converter models
-- Bipolar DC 
-- $V_{ac}$-droop for two-level converter
-- $V_{ac}$-control for both converters
-- Compensated MMC modulation
-- Speed improvements
-  
