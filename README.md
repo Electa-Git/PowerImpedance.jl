@@ -65,7 +65,7 @@ A step-by-step implementation of this example is available in the `examples` fol
 Install the latest release using the Julia package manager:
 
 ```julia
-] add PowerImpedance
+] add PowerImpedanceACDC
 ```
 
 ## Citation
