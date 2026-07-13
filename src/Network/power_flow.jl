@@ -1,10 +1,8 @@
-export power_flow, result, data
-using Logging
+export power_flow
 
 const ang_max = deg2rad(360)
 const ang_min = deg2rad(-360)
 
-has_bipolar_converter(net::Network) = any(elem -> elem.element_model isa BipolarMMC, values(net.elements))
 
 function _dict_get_anykey(dict_like, key::String, default)
     if !(dict_like isa Dict)
@@ -52,104 +50,14 @@ function _terminal_voltage(vm, terminal::String)
     return 0.0
 end
 
-function _pole_voltage_kv(vm, pole::String, base_kv::Float64)
-    vp = _terminal_voltage(vm, "p")
-    vr = _terminal_voltage(vm, "r")
-    vn = _terminal_voltage(vm, "n")
-
-    if pole == "n"
-        return (vr - vn) * base_kv
-    elseif pole == "r"
-        return (vp - vn) * base_kv
-    end
-
-    return (vp - vr) * base_kv
-end
-
-function _set_branch_terminal_defaults!(branch::Dict{String, Any}, terminal::String)
-    if terminal == "p"
-        branch["conductors"] = 2
-        branch["connect_at"] = 1
-        branch["status_p"] = 1
-        branch["status_r"] = 0
-        branch["status_n"] = 0
-    elseif terminal == "r"
-        branch["conductors"] = 2
-        branch["connect_at"] = 0
-        branch["status_p"] = 0
-        branch["status_r"] = 1
-        branch["status_n"] = 0
-    elseif terminal == "n"
-        branch["conductors"] = 2
-        branch["connect_at"] = 2
-        branch["status_p"] = 0
-        branch["status_r"] = 0
-        branch["status_n"] = 1
-    else
-        branch["conductors"] = 3
-        branch["connect_at"] = 0
-        branch["status_p"] = 1
-        branch["status_r"] = 1
-        branch["status_n"] = 1
-    end
-    branch["return_z"] = get(branch, "return_z", get(branch, "r", 0.0))
-end
-
-function _prepare_mcdc_data!(data, net::Network, elem2comp)
-    # Ensure all converters have multi-conductor metadata.
-    for conv in values(data["convdc"])
-        conv["poles"] = get(conv, "poles", 1)
-        conv["connect_at"] = get(conv, "connect_at", 1)
-        conv["status_p"] = get(conv, "status_p", 1)
-        conv["status_r"] = get(conv, "status_r", 1)
-        conv["status_n"] = get(conv, "status_n", 1)
-        conv["ground_type"] = get(conv, "ground_type", 0)
-        conv["ground_z"] = get(conv, "ground_z", 0.0)
-    end
-
-    # Map network nodes to bipolar terminals, so 1-conductor DC elements can be
-    # translated into the MCDC branch metadata.
-    node2terminal = Dict{Symbol, String}()
-    for element in values(net.elements)
-        element.element_model isa BipolarMMC || continue
-        for idx in 1:3
-            pin = Symbol("1.$idx")
-            if haskey(element.pins, pin)
-                node = element.pins[pin]
-                node2terminal[node] = idx == 1 ? "p" : idx == 2 ? "r" : "n"
-            end
-        end
-    end
-
-    for (symbol, (component, key)) in elem2comp
-        component == "branchdc" || continue
-        branch = data["branchdc"][string(key)]
-        haskey(branch, "conductors") && continue
-
-        element = net.elements[symbol]
-        nodes_from = collect(make_node(element, 1))
-        nodes_to = collect(make_node(element, 2))
-
-        if length(nodes_from) == 1 && length(nodes_to) == 1
-            term_from = get(node2terminal, nodes_from[1], "")
-            term_to = get(node2terminal, nodes_to[1], "")
-            if term_from != "" && term_from == term_to
-                _set_branch_terminal_defaults!(branch, term_from)
-                continue
-            end
-        end
-
-        _set_branch_terminal_defaults!(branch, "")
-    end
-end
 """
 	function power_flow(net :: Network)
 Forms the dictionary needed for solving the power flow problem using
 package PowerModelsACDC. After successful power flow solving, it updates
 the operating point of the active devices """
 function power_flow(net::Network)
-	# global ang_min, ang_max, result, nodes2bus, elem2comp, data
-	global_dict = PowerModelsACDC.get_pu_bases(1000, net.voltageBase[1]) # 3-PH MVA, LL-RMS, Original setting was 100,320
+	global result, nodes2bus, elem2comp, data, global_dict
+	global_dict = PowerModelsACDC._get_pu_bases(1000, net.voltageBase[1]) # 3-PH MVA, LL-RMS, Original setting was 100,320
 	global_dict["omega"] = 2π * 50
 
 	# ang_min = deg2rad(360)
@@ -161,17 +69,17 @@ function power_flow(net::Network)
     # ang_max = deg2rad(-360)
 
 	# No power flow when linear (no setpoint updates) 
-	if is_linear(net)
-		@info "Network only consists of linear elements. Skipping power flow."
-		return
-	end
+	# if is_linear(net)
+	# 	@info "Network only consists of linear elements. Skipping power flow."
+	# 	return
+	# end
 
-    use_mcdc = has_bipolar_converter(net)
+    
 
     # PowerModels network dictionary
     data = Dict{String, Any}()
     data = data_init!(data, global_dict)
-    data["_mcdc"] = use_mcdc
+
    
     ### 2-way dicts so we can have O(1) time complexity (node, elem:PowerImpedance ↔ bus, component:PowerModelsACDC)
     nodes2bus = Dict()
@@ -189,9 +97,7 @@ function power_flow(net::Network)
         convert!(data, elem, PMACDC, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
     end
 
-    if use_mcdc
-        _prepare_mcdc_data!(data, net, elem2comp)
-    end
+    
 
 	#### 1b. Check for slack busses (add one if none present) (3 is slack bus)
 	if !(3 in [data["bus"][index]["bus_type"] for index in keys(data["bus"])])
@@ -210,12 +116,9 @@ function power_flow(net::Network)
 
     #### 2. Run power flow
     
-    if use_mcdc
-        _PMMCDC.process_additional_data!(data)
-        _PMMCDC.make_multiconductor!(data)
-    else
-        PowerModelsACDC.process_additional_data!(data)
-    end
+    
+    PowerModelsACDC.process_additional_data!(data)
+    
 
     ipopt = JuMP.optimizer_with_attributes(
         Ipopt.Optimizer,
@@ -231,10 +134,7 @@ function power_flow(net::Network)
         "expect_infeasible_problem" => "yes",
     )
     s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false)
-    result =
-        use_mcdc ?
-        solve_mcdcpf(data, _PM.ACPPowerModel, ipopt; setting = s) :
-        solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting = s)
+    result = solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting = s)
     
     # Rerun power flow with relaxed constraints if no convergence
     if result["termination_status"] == MOI.LOCALLY_SOLVED
@@ -270,91 +170,30 @@ function power_flow(net::Network)
             Vm = (result["solution"]["bus"][string(ac_bus)]["vm"] * global_dict["V"] / 1e3) * sqrt(2) # Convert the LN-RMS voltage coming from the PF to LN-PK
             θ = result["solution"]["bus"][string(ac_bus)]["va"]
 
-            if use_mcdc
-                vm_dc = result["solution"]["busdc"][string(dc_bus)]["vm"]
-                base_power = global_dict["S"] / 1e6
-                base_vdc = global_dict["V"] / 1e3
+            
+            Pdc = elem_dict["pdc"] * global_dict["S"] / 1e6
+            Vdc = result["solution"]["busdc"][string(dc_bus)]["vm"] * (data["dcpol"] * global_dict["V"] / 1e3) # Convert the pole-ground voltage coming from PF to pole-pole voltage
+            Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
+            Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6 # Think about this!
 
-                if element.element_model isa BipolarMMC
-                    Pac_p = -_pole_value(elem_dict["pgrid"], "p") * base_power
-                    Qac_p = _pole_value(elem_dict["qgrid"], "p") * base_power
-                    Pdc_p = _pole_value(elem_dict["pdc"], "p") * base_power
+            setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
-                    Pac_n = -_pole_value(elem_dict["pgrid"], "n") * base_power
-                    Qac_n = _pole_value(elem_dict["qgrid"], "n") * base_power
-                    Pdc_n = _pole_value(elem_dict["pdc"], "n") * base_power
-
-                    Vpr = (_terminal_voltage(vm_dc, "p") - _terminal_voltage(vm_dc, "r")) * base_vdc
-                    Vrn = (_terminal_voltage(vm_dc, "r") - _terminal_voltage(vm_dc, "n")) * base_vdc
-
-                    setpoint = Setpoint(
-                        Pac = Pac_p + Pac_n,
-                        Qac = Qac_p + Qac_n,
-                        θac = θ,
-                        Vac = Vm,
-                        Pdc = Pdc_p + Pdc_n,
-                        Vdc = Vpr + Vrn,
-                    )
-                    update!(element, setpoint)
-
-                    @info begin 
-                    update_string = string(key)
-                    """$update_string Active Power [MW]: $setpoint.Pac
-                    $update_string Reactive Power [MVar]: $setpoint.Qac
-                    $update_string AC Voltage Magnitude [pu]: $(result["solution"]["bus"][string(ac_bus)]["vm"])
-                    $update_string AC Voltage Angle [rad]: $θ
-                    $update_string Vpr [kV]:: $Vpr
-                    $update_string Vrn [kV]:: $Vrn"""
-                    end
-                else
-                    pole = _first_pole(elem_dict["pgrid"])
-                    Pac = -_pole_value(elem_dict["pgrid"], pole) * base_power
-                    Qac = _pole_value(elem_dict["qgrid"], pole) * base_power
-                    Pdc = _pole_value(elem_dict["pdc"], pole) * base_power
-                    Vdc = _pole_voltage_kv(vm_dc, pole, base_vdc)
-
-                    setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
-
-                    if element.element_model isa AbstractStateSpace
-                        update!(element, setpoint)
-                    else
-                        update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
-                    end
-
-                    @info begin 
-                        update_string = string(key)
-                        """$update_string Active Power [MW]: $Pac
-                        $update_string Reactive Power [MVar]: $Qac
-                        $update_string AC Voltage Magnitude [pu]: $(result["solution"]["bus"][string(ac_bus)]["vm"])
-                        $update_string AC Voltage Angle [rad]: $θ
-                        $update_string DC Voltage [kV]: $Vdc
-                        $update_string DC Power [MW]: $Pdc"""
-                    end
-                end
+            if element.element_model isa AbstractStateSpace
+                update!(element, setpoint)
             else
-                Pdc = elem_dict["pdc"] * global_dict["S"] / 1e6
-                Vdc = result["solution"]["busdc"][string(dc_bus)]["vm"] * (data["dcpol"] * global_dict["V"] / 1e3) # Convert the pole-ground voltage coming from PF to pole-pole voltage
-                Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
-                Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6 # Think about this!
-
-                setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
-
-                if element.element_model isa AbstractStateSpace
-                    update!(element, setpoint)
-                else
-                    update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
-                end
-                
-                @info begin 
-                    update_string = string(key)
-                    """$update_string Active Power [MW]: $Pac
-                    $update_string Reactive Power [MVar]: $Qac
-                    $update_string AC Voltage Magnitude [pu]: $(result["solution"]["bus"][string(ac_bus)]["vm"])
-                    $update_string AC Voltage Angle [rad]: $θ
-                    $update_string DC Voltage [kV]: $Vdc
-                    $update_string DC Power [MW]: $Pdc"""
-                end
+                update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
             end
+            
+            @info begin 
+                update_string = string(key)
+                """$update_string Active Power [MW]: $Pac
+                $update_string Reactive Power [MVar]: $Qac
+                $update_string AC Voltage Magnitude [pu]: $(result["solution"]["bus"][string(ac_bus)]["vm"])
+                $update_string AC Voltage Angle [rad]: $θ
+                $update_string DC Voltage [kV]: $Vdc
+                $update_string DC Power [MW]: $Pdc"""
+            end
+        
 
 		elseif is_generator(element) #ac bus is the one with no ground in it's name
 
@@ -870,133 +709,6 @@ function build_acdcpf(pm::_PM.AbstractPowerModel)
     end
 end
 
-function build_mcdcpf(pm::_PM.AbstractPowerModel)
-    _PM.variable_bus_voltage(pm, bounded = false)
-    _PM.variable_gen_power(pm, bounded = false)
-    _PM.variable_branch_power(pm, bounded = false)
-    _PM.variable_storage_power(pm, bounded = false)
-
-    if typeof(pm) <: _PM.SOCBFPowerModel
-        _PM.variable_branch_current(pm, bounded = false)
-    end
-
-    _PMMCDC.variable_mc_active_dcbranch_flow(pm, bounded = false)
-    _PMMCDC.variable_mc_dcbranch_current(pm, bounded = false)
-    _PMMCDC.variable_mcdcgrid_voltage_magnitude(pm, bounded = false)
-    _PMMCDC.variable_mcdc_converter(pm, bounded = false)
-
-    _PM.constraint_model_voltage(pm)
-
-    for (i, bus) in _PM.ref(pm, :ref_buses)
-        @assert bus["bus_type"] == 3
-        _PM.constraint_theta_ref(pm, i)
-        _PM.constraint_voltage_magnitude_setpoint(pm, i)
-    end
-
-    for (i, bus) in _PM.ref(pm, :bus)
-        _PMMCDC.constraint_kcl_shunt(pm, i)
-
-        if length(_PM.ref(pm, :bus_gens, i)) > 0 && !(i in _PM.ids(pm, :ref_buses))
-            for j in _PM.ref(pm, :bus_gens, i)
-                _PM.constraint_gen_setpoint_active(pm, j)
-                if bus["bus_type"] == 2
-                    _PM.constraint_voltage_magnitude_setpoint(pm, i)
-                elseif bus["bus_type"] == 1
-                    _PM.constraint_gen_setpoint_active(pm, j)
-                end
-            end
-        end
-    end
-
-    for i in _PM.ids(pm, :branch)
-        if typeof(pm) <: _PM.SOCBFPowerModel
-            _PM.constraint_power_losses(pm, i)
-            _PM.constraint_voltage_magnitude_difference(pm, i)
-            _PM.constraint_branch_current(pm, i)
-        else
-            _PM.constraint_ohms_yt_from(pm, i)
-            _PM.constraint_ohms_yt_to(pm, i)
-        end
-    end
-
-    for i in _PM.ids(pm, :busdc)
-        _PMMCDC.constraint_kcl_shunt_dcgrid(pm, i)
-    end
-
-    for i in _PM.ids(pm, :branchdc)
-        _PMMCDC.constraint_ohms_dc_branch(pm, i)
-    end
-
-    for (c, conv) in _PM.ref(pm, :convdc)
-        _PMMCDC.constraint_conv_transformer(pm, c)
-        _PMMCDC.constraint_conv_reactor(pm, c)
-        _PMMCDC.constraint_conv_filter(pm, c)
-
-        poles = keys(conv["status"])
-
-        if conv["type_dc"] == 2
-            vdcm = _PM.var(pm, _PM.nw_id_default, :vdcm, conv["busdc_i"])
-            for pole in poles
-                vdcset = conv["Vdcset"][pole]
-                if pole == "p"
-                    JuMP.@constraint(pm.model, vdcm["p"] - vdcm["r"] == vdcset)
-                elseif pole == "n"
-                    JuMP.@constraint(pm.model, vdcm["r"] - vdcm["n"] == vdcset)
-                elseif pole == "r"
-                    JuMP.@constraint(pm.model, vdcm["p"] - vdcm["n"] == vdcset)
-                end
-            end
-        else
-            if conv["type_dc"] == 3 || conv["type_dc"] == 4
-                @warn "MCDC droop constraints are not implemented in this package path yet. Falling back to active power setpoints for converter $c."
-            end
-            for pole in poles
-                pset = conv["P_g"][pole]
-                _PMMCDC.constraint_active_conv_setpoint(pm, _PM.nw_id_default, c, pset, pole)
-            end
-        end
-
-        if conv["type_ac"] == 2
-            _PM.constraint_voltage_magnitude_setpoint(pm, conv["busac_i"])
-        else
-            for pole in poles
-                qset = conv["Q_g"][pole]
-                _PMMCDC.constraint_reactive_conv_setpoint(pm, _PM.nw_id_default, c, qset, pole)
-            end
-        end
-
-        _PMMCDC.constraint_converter_losses(pm, c)
-        _PMMCDC.constraint_converter_current(pm, c)
-        _PMMCDC.constraint_converter_dc_current(pm, c)
-    end
-
-    _PMMCDC.constraint_converter_dc_ground_shunt_ohm(pm)
-end
-
-function solve_mcdcpf(data::Dict{String,Any}, model_type::Type, solver; kwargs...)
-    pm = _PM.instantiate_model(
-        data,
-        model_type,
-        build_mcdcpf;
-        ref_extensions = [
-            _PMMCDC.add_ref_dcgrid!,
-        ],
-        kwargs...
-    )
-
-    JuMP.set_optimizer(pm.model, solver)
-    JuMP.optimize!(pm.model)
-    result = _IM.build_result(pm, JuMP.solve_time(pm.model))
-
-    @info result["termination_status"]
-    if result["termination_status"] == MOI.LOCALLY_SOLVED
-        @info "Power flow converged succesfully."
-    else
-        @warn "Power flow did not converge to `LOCALLY_SOLVED` with MCDC backend."
-    end
-
-    return result
-end
 
 function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs...)
     #PowerModels function that generates PowerModel

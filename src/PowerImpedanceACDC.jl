@@ -18,25 +18,31 @@ using DocStringExtensions
 ## Overloading of Base functions (TODO: In future from PowerBlocks overloading)
 import Base: convert
 
-# Utilities
+using ControlSystemsBase: ControlSystemsBase, tf, ss
+using DataStructures: DataStructures, OrderedDict
+using DelimitedFiles: DelimitedFiles, readdlm
+using DocStringExtensions: DocStringExtensions, SIGNATURES, TYPEDEF,
+                            TYPEDFIELDS
+using ForwardDiff: ForwardDiff
+using Interpolations: Interpolations, Line, linear_interpolation, scale
+using Ipopt: Ipopt
+using JuMP: JuMP, MOI, index, name, primal_feasibility_report
+using LaTeXStrings: LaTeXStrings
+using LinearAlgebra: LinearAlgebra, Diagonal, I, UpperHessenberg, det, eigvals,
+                    eigvecs, hessenberg, mul!, norm, pinv, rank, svdvals
+using Logging: Logging, current_logger
+using LsqFit: LsqFit, curve_fit
+using Markdown: Markdown, @doc_str
+using Munkres: Munkres, munkres
+using NonlinearSolve: NonlinearSolve
+using Parameters: Parameters, @with_kw
+using Peaks: Peaks, argmaxima
+using Plots: Plots, hline!, palette, plot, plot!, scatter!, vline!
+using RobustAndOptimalControl: RobustAndOptimalControl, modal_form
+using SteadyStateDiffEq: SteadyStateDiffEq, NonlinearProblem, SciMLBase, solve
 
-using TypedTables: Table
-using StaticArrays: SMatrix
 
-# Time delays
-using ControlSystemsBase: ss, tf
-using RobustAndOptimalControl: modal_form
 
-# Plotting
-using Plots
-using LaTeXStrings
-
-# Symbolic and numerical calculations
-using LinearAlgebra
-using ForwardDiff, NonlinearSolve, SteadyStateDiffEq  # solve diffs and nonlinear equations
-
-#PowerBlocks
-# import PowerBlocks as PB
 
 # Power flow
 import PowerModels, PowerModelsACDC
@@ -47,22 +53,9 @@ const _PMACDC = PowerModelsACDC
 using Ipopt
 using JuMP
 
-# For tools
-using Peaks
-using LsqFit
 
-# Miscellaneous
-using Munkres
-using Markdown
-using Interpolations
-using DelimitedFiles
-import NaNMath # Deal with out of domain erros in Nonlinearsolve
-using Logging # For logging macros: @info, @warn, @error and @debug
 
-# Include PowerModelsMCDC as a local package, due to dependencies
-include("Packages/PowerModelsMCDC.jl/src/PowerModelsMCDC.jl")
-import .PowerModelsMCDC
-const _PMMCDC = PowerModelsMCDC
+
 
 # COre
 include("core/util.jl")
@@ -108,7 +101,6 @@ include("Network/Components/converter/common/loops/inner_current.jl")
 include("Network/Components/converter/MMC/MMC.jl")
 include("Network/Components/converter/TLC/TLC.jl")
 include("Network/Components/converter/blackbox_MMC.jl")
-include("Network/Components/converter/BipolarMMC.jl")
 
 # Machines
 include("Network/Components/machine/machine.jl")

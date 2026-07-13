@@ -281,7 +281,6 @@ end
 ######################### Element type #############################
 function is_passive(element :: Element)
     (isa(element.element_model, MMC) ||
-     isa(element.element_model, BipolarMMC) ||
      isa(element.element_model, Blackbox_MMC) ||
      isa(element.element_model, TLC) ||
      isa(element.element_model, Source) ||
@@ -295,7 +294,6 @@ end
 
 function is_converter(element :: Element)
     (isa(element.element_model, MMC) ||
-     isa(element.element_model, BipolarMMC) ||
      isa(element.element_model, TLC) ||
      isa(element.element_model, Blackbox_MMC))
 end

@@ -27,7 +27,11 @@ end
 
 # Default functions for state_space! that do not use the setpoint_pu or the full model
 state_space!(F, x, inputs, setpoint_pu, block::AbstractStateSpace, m::AbstractStateSpace) = state_space!(F, x, inputs, block, m)
+state_space!(F, x, inputs, ::Nothing, block::AbstractStateSpace, m::AbstractStateSpace) = state_space!(F, x, inputs, block, m)
 state_space!(F, x, inputs, block::AbstractStateSpace, m::AbstractStateSpace) = state_space!(F, x, inputs, block)
+state_space!(F, x, inputs,::Nothing,  block::AbstractStateSpace) = state_space!(F, x, inputs, block)
+
+
 
 state_space_block!(F, x, inputs, block, m::AbstractStateSpace, idx::Integer) = state_space_block!(F, x, inputs, nothing, block, m::AbstractStateSpace, idx::Integer)
 
@@ -56,7 +60,7 @@ equilibriumequations!(F, x, inputs, setpoint_pu, y, m::AbstractStateSpace, block
 
 outputequations!(F, x, inputs, y, m::AbstractStateSpace) = nothing
 
-function _state_space!(F, x, inputs, setpoint_pu::SetpointPU, m::AbstractStateSpace, solvekind::AbstractSolveKind)
+function _state_space!(F, x, inputs, setpoint_pu::Union{SetpointPU, Nothing}, m::AbstractStateSpace, solvekind::AbstractSolveKind)
     
     # Convert vector states to NamedTuple with keys the statenames (we enforce the same order)
     x_names = statenames(m)
@@ -105,7 +109,7 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
         error("$name steady-state solution not found!")
     end
 
-    equilibrium = sol.u[1:n_states(m)] # discard equilibrium states if any
+    global equilibrium = sol.u[1:n_states(m)] # discard equilibrium states if any
 
     nb_states = n_states(m)
     nb_inputs = n_inputs(m)

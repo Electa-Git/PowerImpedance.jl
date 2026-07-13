@@ -1,11 +1,29 @@
 module NetworkBuilder
-using Logging
+
 import TypedTables: Table
 
 export pin, ⟷, ↔
 
 const P = parentmodule(@__MODULE__)
-using ..PowerImpedanceACDC: @Table
+
+#convenience macro to create typedtable types
+macro Table(ex)
+    Meta.isexpr(ex, :braces) || throw(ArgumentError("@Table expects {...}"))
+    nt_elements = :(@NamedTuple{})
+    nt_vectors = :(@NamedTuple{})
+ 
+    for a in ex.args
+        if !(a isa LineNumberNode)
+            Meta.isexpr(a, :(::)) ||throw(ArgumentError("@Table specification must contain name::type expressions"))
+            var = (a.args[1])
+            el = esc(a.args[2])
+            push!(nt_elements.args[3].args,:($var::$el))
+            push!(nt_vectors.args[3].args,:($var::Vector{$el}))
+        end
+    end
+    return :(Table{$nt_elements,1, $nt_vectors})
+end
+
 
 struct Pin
 	elementid::Symbol
@@ -596,7 +614,7 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
 		return nothing
 	end
 
-	global_dict = P.PowerModelsACDC.get_pu_bases(1000, network.voltageBase[1])
+	global_dict = P.PowerModelsACDC._get_pu_bases(1000, network.voltageBase[1])
 	global_dict["omega"] = 2π * 50
 
 	data = P.data_init!(Dict{String, Any}(), global_dict)
@@ -677,7 +695,7 @@ function powerflow_optimizer(options::NamedTuple)
 		"dual_inf_tol" => 1e-1,
 		"constr_viol_tol" => 1e-3,
 		"compl_inf_tol" => 1e3,
-		"print_level" => Logging.min_enabled_level(current_logger()) <= Logging.Debug ? 5 : 0,
+		"print_level" => P.Logging.min_enabled_level(P.current_logger()) <= P.Logging.Debug ? 5 : 0,
 		"max_iter" => 100,
 		"grad_f_constant" => "yes",
 		"recalc_y" => "yes",
@@ -956,7 +974,7 @@ function apply_powerflow_setpoints!(network::P.Network, powerflow::NamedTuple)
 	data = powerflow.data
 	nodes2bus = powerflow.nodes2bus
 	elem2comp = powerflow.elem2comp
-	global_dict = P.PowerModelsACDC.get_pu_bases(1000, network.voltageBase[1])
+	global_dict = P.PowerModelsACDC._get_pu_bases(1000, network.voltageBase[1])
 	global_dict["omega"] = 2π * 50
 
 	for element in values(network.elements)

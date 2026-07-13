@@ -5,16 +5,6 @@ function _node_from_pin(network::Network, designator::Symbol, pin::Symbol)
 end
 
 function _converter_nodes_in_order(network::Network, designator::Symbol, element::Element)
-    if element.element_model isa BipolarMMC
-        # Bipolar converter ordering: [p, r, n, d, q]
-        return Symbol[
-            _node_from_pin(network, designator, Symbol("1.1")),
-            _node_from_pin(network, designator, Symbol("1.2")),
-            _node_from_pin(network, designator, Symbol("1.3")),
-            _node_from_pin(network, designator, Symbol("2.1")),
-            _node_from_pin(network, designator, Symbol("2.2")),
-        ]
-    end
 
     # Monopolar converter ordering: [dc, d, q]
     return Symbol[
@@ -173,13 +163,8 @@ if nodelist == []
                 end
                 if is_converter(element)
                     ordered_nodes = _converter_nodes_in_order(network, designator, element)
-                    if element.element_model isa BipolarMMC
-                        dc_nodes = collect(ordered_nodes[1:3]) # [p, r, n]
-                        ac_nodes = collect(ordered_nodes[4:5]) # [d, q]
-                    else
-                        dc_nodes = collect(ordered_nodes[1:1]) # [dc]
-                        ac_nodes = collect(ordered_nodes[2:3]) # [d, q]
-                    end
+                    dc_nodes = collect(ordered_nodes[1:1]) # [dc]
+                    ac_nodes = collect(ordered_nodes[2:3]) # [d, q]
 
                     dc_nodes = [
                         node for node in dc_nodes
