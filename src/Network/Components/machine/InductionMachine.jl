@@ -280,6 +280,9 @@ function make_power_flow!(machine:: InductionMachine, data, nodes2bus, bus2nodes
     data["im"][key_str] = Dict{String, Any}()
 
     torque = machine.torque
+    Sbase = global_dict["S"]
+    Vbase = global_dict["V"]
+    impscale = ((machine.Vᵃᶜ_base)^2/machine.S_base)/global_dict["Z"]
     # Power flow initial values
     data["im"][key_str]["P_ag"] = machine.T_0
     data["im"][key_str]["Q_ag"] = 0.0
@@ -287,18 +290,18 @@ function make_power_flow!(machine:: InductionMachine, data, nodes2bus, bus2nodes
     data["im"][key_str]["im_bus"] = ac_bus
 
     # Power flow limits (not used in power flow)
-    data["im"][key_str]["Pacmin"] = 0.9 * machine.T_0
+    data["im"][key_str]["Pacmin"] = 0.9 * machine.T_0 #/ Sbase
     data["im"][key_str]["Vmmin"] = 0.9 # Should be extended with local_base/global_base but we do not care (not used in PF)
     data["im"][key_str]["Vmmax"] = 1.1
-    data["im"][key_str]["Pacmax"] = 1.1 * machine.T_0
-    data["im"][key_str]["Pacrated"] = machine.T_0
+    data["im"][key_str]["Pacmax"] = 1.1 * machine.T_0 #/ Sbase
+    data["im"][key_str]["Pacrated"] = machine.T_0 #/ Sbase
 
     # Power flow elements
-    data["im"][key_str]["x_m"] = machine.l_m # In per unit equal
-    data["im"][key_str]["x_rl"] = machine.l_rl
-    data["im"][key_str]["x_sl"] = machine.l_sl
-    data["im"][key_str]["r_r"] = machine.r_r
-    data["im"][key_str]["r_s"] = machine.r_s
+    data["im"][key_str]["x_m"] = machine.l_m * impscale # In per unit equal
+    data["im"][key_str]["x_rl"] = machine.l_rl * impscale
+    data["im"][key_str]["x_sl"] = machine.l_sl * impscale
+    data["im"][key_str]["r_r"] = machine.r_r * impscale
+    data["im"][key_str]["r_s"] = machine.r_s * impscale
 
     # Torque parameters
     data["im"][key_str]["torque"] =  Dict{String, Any}()
