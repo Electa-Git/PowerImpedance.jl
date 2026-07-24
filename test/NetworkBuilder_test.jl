@@ -3,7 +3,7 @@ powerflow_setting, solve_acdcpf, get_y, LinearizedAdmittanceNetwork
 using LinearAlgebra
 using PowerImpedanceACDC
 using Test
-const NB = PowerImpedanceACDC.NetworkBuilder
+
 # PIACDC =PowerImpedanceACDC
 
 @testset "NetworkBuilder unit tests" begin

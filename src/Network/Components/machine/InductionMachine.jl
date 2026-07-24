@@ -1,274 +1,315 @@
-export inductionmachine, TorqueModel, InductionMachine
+export inductionmachine, InductionMachine, ElectricalIM, MechanicalIM
 
 
-# include("controller.jl") # Removed this for now, will need to think in the future how to implement controllers for SGs.
-# TODO: Right now, second pins of the SG should be connected to the ground.
-@with_kw mutable struct InductionMachine <: Machine
-    
-    
-    ω_n :: Union{Int, Float64} = 2*50*π
-    p_f:: Union{Int, Float64} = 2 # Nb. of poles (2 per 3phase winding set)
+##### Electrical model ###############333
+
+@doc raw"""
+   
+    $(TYPEDSIGNATURES)
+
+Electrical subsystem of an induction machine.
+
+The model is formulated in the synchronous dq reference frame using an
+inverse-Γ representation. It describes the dynamics of stator currents
+and rotor flux linkages and computes the electromagnetic torque supplied
+to the mechanical subsystem.
+
+# Parameters
+
+## Base quantities
+
+- `ωn` : electrical base angular frequency (rad/s)
+- `p_f` : number of poles
+- `Vac_base` : line-to-line RMS voltage base
+- `S_base` : power base
+
+## Transformer impedance
+
+- `lt` : transformer inductance
+- `rt` : transformer resistance
+
+## Machine parameters
+
+- `l_m` : magnetizing inductance
+- `l_sl` : stator leakage inductance
+- `r_s` : stator resistance
+- `l_rl` : rotor leakage inductance
+- `r_r` : rotor resistance
+
+# States
+
+- `i_d` : d-axis stator current
+- `i_q` : q-axis stator current
+- `Ψ_df` : d-axis rotor flux linkage
+- `Ψ_qf` : q-axis rotor flux linkage
+
+# Initial Conditions
+
+The electrical states are initialized from the active and reactive
+power setpoint:
+
+```julia
+i_d  = 2/3 * p_ac
+i_q  = -2/3 * q_ac
+Ψ_df = 1.0
+Ψ_qf = 0.0
+"""
+@with_kw struct ElectricalIM <: AbstractStateSpace
+
+    ωn :: Float64 = 100π
+    p_f :: Float64 = 2
 
     # Base values
-    Vᵃᶜ_base :: Union{Int, Float64} = 220 # Converter AC voltage base, LL, RMS [kV]
-    S_base :: Union{Int, Float64} = 1000 # Converter AC voltage base, LL, RMS [kV]
+    Vac_base :: Float64 = 220
+    S_base :: Float64 = 1000
 
-    # Transformer (RL-branch model), default no transformer
-    lt :: Union{Int, Float64} = 0 #0.065 # [pu]
-    rt :: Union{Int, Float64} = 0# 0.0026 # [pu]
+    # Transformer
+    lt :: Float64 = 0.0
+    rt :: Float64 = 0.0
 
-    # Values from Harnefors (in same format as SM)
-    l_m :: Union{Int, Float64} = 1.66 # magnetizing inductance [pu] (same for d,q)
-    l_sl :: Union{Int, Float64} = 0.15  # Stator leakage inductance [pu]
-    r_s :: Union{Int, Float64} = 0.0015  # Stator/Armature resistance [pu]
+    # Machine
+    l_m :: Float64 = 1.66
+    l_sl :: Float64 = 0.15
+    r_s :: Float64 = 0.0015
 
-    l_rl :: Union{Int, Float64} = 0.165  # Rotor/Field leakage inductance [pu]
-    r_r :: Union{Int, Float64} = 0.01 # Rotor/field circuit resistance [pu]
+    l_rl :: Float64 = 0.165
+    r_r :: Float64 = 0.01
+end
+
+statenames(::ElectricalIM) = (:i_d,:i_q,:Ψ_df,:Ψ_qf)
+initialvalues(::ElectricalIM;setpoint_pu::SetpointPU) = (;i_d=2/3*setpoint_pu.p_ac, i_q=-2/3*setpoint_pu.q_ac, Ψ_df=1.0)
 
 
-    H :: Union{Int, Float64} = 4 # Inertia constant [s]
 
-    # Load model (T0(Aω^(m)+Bω+C)) for parabolic m=2, B=C=0
-    torque = TorqueModel() # Container for load coefficients
-    T_0 :: Union{Int, Float64} =0.9 # Synchronous torque [pu]
-   
-    P :: Union{Int, Float64} = 0              # active power [MW]
-    Q :: Union{Int, Float64} = 0                # reactive power [MVA]
-    P_min :: Union{Float64, Int} = -100         # min active power output [MW]
-    P_max :: Union{Float64, Int} = 100          # max active power output [MW]
-    Q_min :: Union{Float64, Int} = -50          # min reactive power output [MVA]
-    Q_max :: Union{Float64, Int} = 50           # max reactive power output [MVA]
+######## Mechanical model #######################3
+@doc raw""" 
 
-    θ :: Union{Int, Float64} = 0
-    V :: Union{Int, Float64} = 220*sqrt(2/3)             # AC voltage, amplitude [kV]
+    $(TYPEDSIGNATURES)
+Mechanical subsystem of an induction machine. 
 
-    # controls :: OrderedDict{Symbol, Controller} = OrderedDict{Symbol, Controller}() # Disabled for now
-    equilibrium :: Array{Union{Int, Float64}} = [0]
-    A :: Array{Complex} = [0]
-    B :: Array{Complex} = [0]
-    C :: Array{Complex} = [0]
-    D :: Array{Complex} = [0]
+The model describes rotor-speed dynamics driven by the difference between electromagnetic torque and a speed-dependent load torque. 
+
+# Parameters 
+- `H` : inertia constant 
+- T_0 : Nominal load torque [pu]
+- A : nonlinear coefficient
+- B: linear coefficient
+- C: constant coefficient
+
+```math
+\tau_m = T_0 (A \omega_r^m + B \omega_r + C)
+```
+
+# Initial conditions
+- ω_r = 1.0
+
+"""
+@with_kw struct MechanicalIM <: AbstractStateSpace
+
+    H :: Float64 = 4.0 # Inertia of motor
+
+
+    # Mechanical torque model of form T(ω) = T₀*(A*ωᵐ+B*ω+C)
+    T_0 :: Float64 = 0.9
+
+    A :: Float64 = 0.0
+    B :: Float64 = 0.0
+    C::Float64 = 1.0
+    m :: Int = 1
 
 end
 
-struct TorqueModel
-    A :: Union{Int, Float64} # Parabolic constant [pu]
-    B :: Union{Int, Float64} # Linear constant [pu]
-    C :: Union{Int, Float64} # Constant [pu]
-    m :: Int # Load model exponent
+statenames(::MechanicalIM) = (:ω_r,)
+initialvalues(::MechanicalIM) = (ω_r = 1.0,)
+
+########## Induction Machine #############33
+@doc raw"""
+    $(TYPEDSIGNATURES)
+
+Dynamic induction machine model composed of an electrical subsystem (`ElectricalIM`) and a mechanical subsystem (`MechanicalIM`). 
+
+The electrical subsystem computes stator-current and rotor-flux dynamics as well as the electromagnetic torque. 
+The mechanical subsystem uses this torque to determine rotor-speed dynamics. 
+
+# Components
+- `elec::ElectricalIM` : electrical model
+- `mech::MechanicalIM` : mechanical model
+
+# States 
+The complete state vector consists of 
+- `i_d` 
+- `i_q` 
+- `Ψ_df` 
+- `Ψ_qf` 
+- `ω_r` 
+
+# Inputs 
+- `vd` : d-axis terminal voltage 
+- `vq` : q-axis terminal voltage 
+
+# Outputs 
+- `id` : d-axis stator current 
+- `iq` : q-axis stator current 
+
+# Notes
+
+The external interface uses a dq-lagging convention for voltages and currents, while the internal state-space equations are evaluated using a dq-leading convention. The required sign conversions are handled automatically.
+
+"""
+
+
+struct InductionMachine <: AbstractStateSpace
+    elec::ElectricalIM
+    mech::MechanicalIM
 end
-function TorqueModel(;model_type="constant", A=0,B=0, C=1, m=1)
+@doc raw"""
+    inductionmachine(; elec=ElectricalIM(),
+                        mech=MechanicalIM(),
+                        setpoint=Setpoint(),
+                        connection=true)
 
-    if model_type == "quadratic" # Parabolic load model
-        # Warn about possible modeling mistake
-        if A == 0 && B == 0
-            println("Parabolic load model specified with no parabolic (A) or linear (B) coefficient")
-            A = 1
-            C=0
-        end
-        m = 2 
-    elseif model_type == "power" # 
-        if m == 0
-            println("No exponent (m) defined")
-            m=2
-        end
-        B = 0
-        C= 0
-    elseif model_type=="constant"
-        A = 0
-        B = 0
-        C=1
-        m=1
-    end
-    return TorqueModel(A,B,C,m)
-end
+Create an induction machine element.
 
-function inductionmachine(;args...)
-    gen = InductionMachine()
-    connection = true
-    for (key, val) in pairs(args)
-        if in(key, propertynames(gen))
-            setfield!(gen, key, val)    
-        elseif (key == :connection)
-            connection = val                                                    
-        else
-            throw(ArgumentError("Machine does not have a property $(key)."))
-        end
-    end
+# Arguments
 
-    elem = Element(input_pins = 2, output_pins = 2, element_value = gen, connection=connection)
-end
+- `elec` : electrical machine model.
+- `mech` : mechanical machine model.
+- `setpoint` : operating-point specification used for initialization.
+- `connection` : whether the element is connected to the network.
 
+# Returns
 
-function state_space(x;gen::InductionMachine, V)    
-          
-         # Parameter calculations
+An `Element` containing an `InductionMachine` model.
 
-            ## Inverse Γ-model (book Harnefors)
-            l_s = gen.l_m + gen.l_sl + gen.lt # + transformer impedance
-            l_r = gen.l_m + gen.l_rl
+# Example
 
-            # Refer rotor leakage to stator
-            l_M = gen.l_m^2/l_r;
-            l_σ = l_s-l_M
+```julia
+im = inductionmachine(
+    elec = ElectricalIM(),
+    mech = MechanicalIM(T_0 = 0.9))
+```   
 
-            # Equivalent resistance
-            r_eq = gen.r_s+ gen.rt
-            r_R = (gen.l_m/l_r)^2*gen.r_r
+"""
+function inductionmachine(; elec = ElectricalIM(), mech = MechanicalIM(), setpoint = Setpoint(), connection = true)
 
-            # Steady-state torque
-            T0 = gen.T_0
+    indm = InductionMachine(elec,mech)
 
-            # Base values
-            Z_base = gen.Vᵃᶜ_base^2 / gen.S_base
-            I_base = sqrt(2/3)*gen.S_base / gen.Vᵃᶜ_base
-            Ψ_base = gen.Vᵃᶜ_base/ gen.ω_n
-            τ_base = 3/2*(gen.p_f/2)*Ψ_base*I_base
-            ### States
-            i_d     = x[1]  # d-axis stator current
-            i_q     = x[2]  # q-axis stator current
-            Ψ_df    = x[3]  # Rotor field d-axis
-            Ψ_qf    = x[4]  # Rotor field q-axis
-
-            ω_r     = x[5]  # Per unit rotor angular speed omega/omega_n
-
-            ### Inputs
-            v_d = V[1]#inputs[1] # d-axis grid voltage [pu]
-            v_q = V[2]#inputs[2] # q-axis grid voltage [pu]
-
-        
-
-            # Individual equations for performance (NLSolve for small problems)
-
-            # Current state equations
-            F1 = gen.ω_n / l_σ *(v_d-(r_eq+r_R)*i_d + l_σ*i_q + ω_r*Ψ_qf + r_R/l_M*Ψ_df)
-            F2 = gen.ω_n / l_σ *(v_q-(r_eq+r_R)*i_q - l_σ*i_d - ω_r*Ψ_df + r_R/l_M*Ψ_qf)
-
-            # Rotor flux state equations
-            F3 = gen.ω_n*(r_R*i_d - (r_R/l_M)*Ψ_df + (1.0 - ω_r) * Ψ_qf)
-            F4 = gen.ω_n*(r_R*i_q - (r_R/l_M)*Ψ_qf - (1.0 - ω_r) * Ψ_df)
-
-            # Mechanical equations
-
-            τ_e = (Ψ_df*i_q - Ψ_qf*i_d); # Opposite of SM (generating torque (motor) <> using torque (SM)). TODO: Uniformize this
-            τ_m = T0 *(gen.torque.A*ω_r^(gen.torque.m) + gen.torque.B * ω_r + gen.torque.C)
-            F5 = (1/(2*gen.H) * (τ_e-τ_m))
-        
-            
-
-            return [F1,F2,F3,F4,F5]
+    return Element(
+        input_pins = 3,
+        output_pins = 3,
+        element_model = indm,
+        transformation = true;
+        connection,
+        setpoint
+    )
 end
 
-function update!(gen :: InductionMachine, Pac, Qac, Vm, θ)
-    
-    # Parameter calculations
+statenames(m::InductionMachine) =
+(
+    statenames(m.elec)...,
+    statenames(m.mech)...
+)
 
-     ## Inverse Γ-model (book Harnefors)
-    l_s = gen.l_m + gen.l_sl + gen.lt # + transformer impedance
-    l_r = gen.l_m + gen.l_rl
+initialvalues(m::InductionMachine;setpoint_pu, kwargs...) = merge(initialvalues(m.elec;setpoint_pu), initialvalues(m.mech))
 
-    # Refer rotor leakage to stator
-    l_M = gen.l_m^2/l_r;
-    l_σ = l_s-l_M
+inputnames(::InductionMachine) = (:vd,:vq)
+outputnames(::InductionMachine) = (:id,:iq)
+function pftoinputs(m::InductionMachine, setpoint::Setpoint)
 
-    # Equivalent resistance
-    r_eq = gen.r_s+ gen.rt
-    r_R = (gen.l_m/l_r)^2*gen.r_r
+    Sbase = m.elec.S_base
+    Vacbase_LL = m.elec.Vac_base
+    Vac_base_phpk = sqrt(2/3)* Vacbase_LL
+    v_bus_d = setpoint.Vac*cos(setpoint.θac) / Vac_base_phpk
 
-    # Steady-state torque
-    T_0 = gen.T_0
+    v_bus_q = -setpoint.Vac*sin(setpoint.θac) / (Vac_base_phpk) # Inputs are in dq-lagging
 
-    # Base values
-    Z_base = gen.Vᵃᶜ_base^2 / gen.S_base
-    I_base = sqrt(2/3)*gen.S_base / gen.Vᵃᶜ_base
-    Ψ_base = gen.Vᵃᶜ_base/ gen.ω_n
-    τ_base = 3/2*(gen.p_f/2)*Ψ_base*I_base
+    sp = setpoint
+    sp_pu = SetpointPU(p_ac = sp.Pac/Sbase, q_ac = sp.Qac/Sbase, θ_ac= sp.θac, v_ac = sp.Vac/Vac_base_phpk)
+    return NamedTuple{inputnames(m)}((v_bus_d,v_bus_q)), sp_pu
+end
 
+function outputequations!(F,x,inputs,y,m::InductionMachine)
 
-    gen.V = Vm
-    gen.θ = θ
-    gen.P = Pac
-    gen.Q = Qac
+    F[1] = x.i_d #Load convention (implemented like this)
+    F[2] = -x.i_q #Load convention, but state-space model with dq-leading, so reverse sign
 
-    # Initialization values (Put here in dq-leading, convert later back to lagging)
-
-    v_bus_d0 = gen.V * cos(θ) /  (gen.Vᵃᶜ_base * sqrt(2/3))
-    v_bus_q0 = gen.V * sin(θ) / (gen.Vᵃᶜ_base * sqrt(2/3))
-    
-    inputs_vector = [v_bus_d0;v_bus_q0] # voltages are in pu here!
-   
-    x0_ss = [T_0,T_0,1.0,0.0,1.0]
-    f(u,p) = state_space(u;gen=p[1], V=p[2])
-    prob = NonlinearProblem(f, x0_ss, (gen, (v_bus_d0,v_bus_q0)))
-    nb_states = 5
-    nb_outputs=2
-    nb_inputs=2
-    println("Starting to solve for Steady-State Solution!")
-    sol_ss = solve(prob, SimpleNewtonRaphson(), maxiters=20,abstol = 1e-6,reltol = 1e-6)
-    if SciMLBase.successful_retcode(sol_ss)
-        println("IM steady-state solution found!")
-    else
-        println("IM steady-state solution not found!")
-    end
-    h(u) = state_space(u[1:end-nb_inputs];gen, V = u[end-nb_inputs+1:end])
-    jac=zeros(nb_states,nb_states+nb_inputs)
-    ForwardDiff.jacobian!(jac,h,[sol_ss;1.0;0])
-    gen.A = jac[1:nb_states, 1:nb_states]
-    gen.B = jac[1:nb_states, nb_states+1:end]
-    gen.B[:,2] = -gen.B[:,2]
-    gen.C = [1 0 0 0 0;0 -1 0 0 0] #Convert from dq-leading to dq-lagging
-    gen.D = [0.0 0.0 ;0.0 0.0]
-   
-
-    
-
-    
-    
-
-    # Setting up the equilibrium point based on the initial solution
-    gen.equilibrium = sol_ss
-    # println("Overall steady-state solution")
-    # println(gen.equilibrium)
-
-    gen.C /= Z_base 
-    gen.D /= Z_base 
-
-    # writedlm( "A.csv",  gen.A, ',')
-    # writedlm( "B.csv",  gen.B, ',')
-    # writedlm( "C.csv",  gen.C, ',')
-    # writedlm( "D.csv",  gen.D, ',')
 end
 
 
-function eval_parameters(gen :: InductionMachine, s :: Complex)
-    # numerical
-    I = Matrix{Complex}(Diagonal([1 for dummy in 1:size(gen.A,1)]))
-    Y = (gen.C*inv(s*I-gen.A))*gen.B + gen.D
+############ State space equations ###########
 
-    return Y
+
+function state_space!(F, x, v_dq, block::ElectricalIM; indm::InductionMachine)
+
+    # Parameters
+    l_s = block.l_m + block.l_sl + block.lt
+    l_r = block.l_m + block.l_rl
+
+    l_M = block.l_m^2 / l_r
+    l_σ = l_s - l_M
+
+    r_eq = block.r_s + block.rt
+    r_R = (block.l_m/l_r)^2 * block.r_r
+
+    # States
+    i_d  = x.i_d
+    i_q  = x.i_q
+    Ψ_df = x.Ψ_df
+    Ψ_qf = x.Ψ_qf
+    ω_r = x.ω_r
+
+    # Inputs
+    v_d, v_q = v_dq
+
+    #Equations
+    F[1] = block.ωn/l_σ*(v_d-(r_eq+r_R)*i_d+l_σ*i_q+ω_r*Ψ_qf+r_R/l_M*Ψ_df)
+    F[2] = block.ωn/l_σ*(v_q-(r_eq+r_R)*i_q-l_σ*i_d-ω_r*Ψ_df+r_R/l_M*Ψ_qf)
+    F[3] = block.ωn*(r_R*i_d-(r_R/l_M)*Ψ_df+(1-ω_r)*Ψ_qf)
+    F[4] = block.ωn*(r_R*i_q-(r_R/l_M)*Ψ_qf-(1-ω_r)*Ψ_df)
+
+    # Algebraic variables
+    τ_e = Ψ_df*i_q - Ψ_qf*i_d
+
+    return τ_e
 end
 
-# This did not work!
-# function eval_abcd(gen :: SynchronousMachine, s :: Complex)
-#     Y = eval_parameters(gen,s)
-#     abcd = y_to_abcd(Y)
-# end
 
-# Repeating what is done for the MMC
 
-function eval_abcd(gen :: InductionMachine, s :: Complex)
-    return eval_y(gen, s)
+function state_space!( F, x, τ_e, block::MechanicalIM; indm::InductionMachine)
+
+    # States
+    ω_r = x.ω_r
+
+    # Torque equation
+    τ_m = block.T_0*(block.A*ω_r^(block.m) + block.B*ω_r + block.C)
+
+    F[1] =  (τ_e - τ_m)/(2*block.H)
 end
 
-function eval_y(gen :: InductionMachine, s :: Complex)
-    Y = eval_parameters(gen, s)
-    return Y
+
+
+
+function state_space!(F, x, inputs,indm::InductionMachine)
+
+    v_dq = (inputs.vd, -inputs.vq) # Transform from dq-lagging to dq-leading
+    index = 1
+
+    index_end = index + n_states(indm.elec) - 1
+
+    τ_e = state_space!(@view(F[index:index_end]), x, v_dq, indm.elec; indm)
+
+
+    index = index_end+1
+    index_end = index + n_states(indm.mech) - 1
+
+    state_space!(@view(F[index:index_end]), x, τ_e, indm.mech; indm)
+    index = index_end + 1
+
 end
 
-function make_power_flow!(machine:: InductionMachine, data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
+pmtype(elem::Element{<:InductionMachine}) = "im"
 
-    # Check if AC or DC source (second one not implemented)
-    # is_three_phase(elem) ? nothing : error("DC sources are currently not implemented")
+function  convert!(data, elem::Element{<:InductionMachine}, ::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
 
     ### MAKE BUSES OUT OF THE NODES
     # Find the nodes not connected to the ground
@@ -276,40 +317,77 @@ function make_power_flow!(machine:: InductionMachine, data, nodes2bus, bus2nodes
     ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
 
     key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "im")
+
+    return convert!(data, elem, PMACDC, key, (ac_bus,), global_dict)
+end
+
+
+function convert!(data, elem::Element{<:InductionMachine}, ::Type{PMACDC}, key, (ac_bus,), global_dict)
+
+    # Check if AC or DC source (second one not implemented)
+    # is_three_phase(elem) ? nothing : error("DC sources are currently not implemented")
+
+    
     key_str = string(key)
     data["im"][key_str] = Dict{String, Any}()
 
-    torque = machine.torque
+    indm = elem.element_model
+    elec = indm.elec
+    mech = indm.mech
     Sbase = global_dict["S"]
     Vbase = global_dict["V"]
-    impscale = ((machine.Vᵃᶜ_base)^2/machine.S_base)/global_dict["Z"]
+    impscale = ((elec.Vac_base)^2/elec.S_base)/global_dict["Z"]
     # Power flow initial values
-    data["im"][key_str]["P_ag"] = machine.T_0
+    data["im"][key_str]["P_ag"] = mech.T_0
     data["im"][key_str]["Q_ag"] = 0.0
     data["im"][key_str]["status"] = 1
     data["im"][key_str]["im_bus"] = ac_bus
 
     # Power flow limits (not used in power flow)
-    data["im"][key_str]["Pacmin"] = 0.9 * machine.T_0 #/ Sbase
+    data["im"][key_str]["Pacmin"] = 0.9 * mech.T_0 #/ Sbase
     data["im"][key_str]["Vmmin"] = 0.9 # Should be extended with local_base/global_base but we do not care (not used in PF)
     data["im"][key_str]["Vmmax"] = 1.1
-    data["im"][key_str]["Pacmax"] = 1.1 * machine.T_0 #/ Sbase
-    data["im"][key_str]["Pacrated"] = machine.T_0 #/ Sbase
+    data["im"][key_str]["Pacmax"] = 1.1 * mech.T_0 #/ Sbase
+    data["im"][key_str]["Pacrated"] = mech.T_0 #/ Sbase
 
     # Power flow elements
-    data["im"][key_str]["x_m"] = machine.l_m * impscale # In per unit equal
-    data["im"][key_str]["x_rl"] = machine.l_rl * impscale
-    data["im"][key_str]["x_sl"] = machine.l_sl * impscale
-    data["im"][key_str]["r_r"] = machine.r_r * impscale
-    data["im"][key_str]["r_s"] = machine.r_s * impscale
+    data["im"][key_str]["x_m"] = elec.l_m * impscale # In per unit equal
+    data["im"][key_str]["x_rl"] = elec.l_rl * impscale
+    data["im"][key_str]["x_sl"] = elec.l_sl * impscale
+    data["im"][key_str]["r_r"] = elec.r_r * impscale
+    data["im"][key_str]["r_s"] = elec.r_s * impscale
 
     # Torque parameters
     data["im"][key_str]["torque"] =  Dict{String, Any}()
-    data["im"][key_str]["torque"]["T_0"] = machine.T_0 
-    data["im"][key_str]["torque"]["A"] = torque.A
-    data["im"][key_str]["torque"]["B"] = torque.B
-    data["im"][key_str]["torque"]["C"] = torque.C
-    data["im"][key_str]["torque"]["m"] = torque.m
+    data["im"][key_str]["torque"]["T_0"] = mech.T_0 
+    data["im"][key_str]["torque"]["A"] = mech.A
+    data["im"][key_str]["torque"]["B"] = mech.B
+    data["im"][key_str]["torque"]["C"] = mech.C
+    data["im"][key_str]["torque"]["m"] = mech.m
    
+    return nothing
     
+end
+
+function transform(elemresult, busresult, global_dict, elem::Element{<:InductionMachine}, ::Type{PMACDC}, ::Type{PIACDC})
+			
+    acbusresult = busresult[1]
+    Pgen = elemresult["pg"] * global_dict["S"] / 1e6 #MW
+    Qgen = elemresult["qg"] * global_dict["S"] / 1e6 #MVAr
+    Vm =
+        (acbusresult["vm"] *
+            global_dict["V"] / 1e3) * sqrt(2) # Convert the LN-RMS voltage coming from the PF to LN-PK
+    θ = acbusresult["va"]
+
+    setpoint = Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
+    return setpoint
+end
+
+##################### SI Scaling ######################################
+function SI_scale(elem::Element{<:InductionMachine})
+    elec = elem.element_model.elec
+    Ybase = elec.S_base / elec.Vac_base^2 
+    scale = fill(Ybase,2,2)
+    
+    return scale
 end

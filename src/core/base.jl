@@ -163,17 +163,17 @@ function LinearizedAdmittanceNetwork(bs::BuilderState, sp)
     for (i,(key,elem)) in enumerate(pairs(passives))
         passives_adm[i], passives_ind[i] = LinearizedAdmittance(elem,key, conn, netids)
     end
-    actives = LinearizedAdmittanceCollection(actives_adm, actives_ind)
+    activescoll = LinearizedAdmittanceCollection(actives_adm, actives_ind)
 
     groundednets = [id for (net,id) in pairs(netids) if occursin("gnd", lowercase(string(net)))]
     for (key, elem) in pairs(sources)
        nets = filter(row -> row.elem == key, conn).net
        push!(groundednets, [netids[net] for net in nets]...)
     end
-    passives = LinearizedAdmittanceCollection(passives_adm, passives_ind)
+    passivescoll = LinearizedAdmittanceCollection(passives_adm, passives_ind)
 
 
-    return LinearizedAdmittanceNetwork(passives, actives, LinearizedInterface(lut, netids, groundednets, activenetids))
+    return LinearizedAdmittanceNetwork(passivescoll, activescoll, LinearizedInterface(lut, netids, groundednets, activenetids))
 
 end
 

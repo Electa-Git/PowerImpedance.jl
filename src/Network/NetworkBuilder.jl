@@ -766,6 +766,7 @@ function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
 	)
 	P._PMACDC.variable_pst(pm, bounded = variable_bounded(variables, :pst, false))
 	P._PMACDC.variable_sssc(pm, bounded = variable_bounded(variables, :sssc, false))
+	P._PMACDC.variable_im(pm, bounded = variable_bounded(variables, :im, false))
 
 	P._PM.constraint_model_voltage(pm)
 	P._PMACDC.constraint_voltage_dc(pm)
@@ -816,6 +817,13 @@ function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
 	for i in P._PM.ids(pm, :branchdc)
 		P._PMACDC.constraint_ohms_dc_branch(pm, i)
 	end
+
+	for i in P._PM.ids(pm, :im)
+        P._PMACDC.constraint_im_stator(pm, i)
+        P._PMACDC.constraint_im_rotor_inductance(pm, i)
+        P._PMACDC.constraint_im_magnetisation(pm, i)
+        P._PMACDC.constraint_im_slip(pm, i)
+    end
 
 	if !isempty(P._PM.ids(pm, :gendc))
 		for i in P._PM.ids(pm, :gendc)
@@ -873,6 +881,7 @@ function solve_acdcpf(
 		P._PMACDC.ref_add_sssc!,
 		P._PMACDC.ref_add_flex_load!,
 		P._PMACDC.ref_add_gendc!,
+		P._PMACDC.ref_add_im!
 	]
 	build_method = pm -> build_acdcpf(pm, variables)
 	pm = P._PM.instantiate_model(
@@ -942,7 +951,7 @@ function solve_acdcpf_relax(
 		P._PMACDC.ref_add_sssc!,
 		P._PMACDC.ref_add_flex_load!,
 		P._PMACDC.ref_add_gendc!,
-		# P._PMACDC.ref_add_im!,
+		P._PMACDC.ref_add_im!,
 	]
 	build_method = pm -> build_acdcpf(pm, variables)
 	pm = P._PM.instantiate_model(

@@ -4,7 +4,7 @@
 # Function for ordering states & initialvalues. Puts all that are not defined to zero & discards initial values that do not appear in statenames 
 # Default: no explicit nonzero initial values; Fallback function, so that it is not necessary in all the modular parts to initialize.
 initialvalues(::AbstractStateSpace; kwargs...) = (;)
-equilibriuminitialvalues(::AbstractStateSpace; kwargs...) = (;)
+# equilibriuminitialvalues(::AbstractStateSpace; kwargs...) = (;)
 # TODO: Find proper name, add check for discrepancy statenames and initialvalues
 orderedinitialvalues(x;kwargs...) = NamedTuple{statenames(x)}((;NamedTuple{statenames(x)}(ntuple(i->0.0,length(statenames(x))))..., initialvalues(x;kwargs...)...))
 # statenamesmodular(m::AbstractStateSpace) = merge([statenames(getfield(m,n)) for n in fieldnames(typeof(m))]...)
@@ -27,6 +27,8 @@ end
 
 # Default functions for state_space! that do not use the setpoint_pu or the full model
 state_space!(F, x, inputs, setpoint_pu, block::AbstractStateSpace, m::AbstractStateSpace) = state_space!(F, x, inputs, block, m)
+state_space!(F, x, inputs, setpoint_pu,  m::AbstractStateSpace) = state_space!(F, x, inputs, m)
+
 state_space!(F, x, inputs, ::Nothing, block::AbstractStateSpace, m::AbstractStateSpace) = state_space!(F, x, inputs, block, m)
 state_space!(F, x, inputs, block::AbstractStateSpace, m::AbstractStateSpace) = state_space!(F, x, inputs, block)
 state_space!(F, x, inputs,::Nothing,  block::AbstractStateSpace) = state_space!(F, x, inputs, block)
@@ -83,6 +85,7 @@ end
 
 function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpace}
     
+    
     m = elem.element_model
 
     # Power flow to inputs of state_space function
@@ -110,6 +113,10 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     end
 
     global equilibrium = sol.u[1:n_states(m)] # discard equilibrium states if any
+
+    ϵ = 1e-15
+    equilibrium[abs.(equilibrium) .< ϵ] .= 0
+
 
     nb_states = n_states(m)
     nb_inputs = n_inputs(m)

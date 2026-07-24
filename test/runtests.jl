@@ -2,6 +2,8 @@
 using PowerImpedanceACDC
 using Test
 using LinearAlgebra
+import PowerImpedanceACDC.NetworkBuilder
+const NB = PowerImpedanceACDC.NetworkBuilder
 
 const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
 
@@ -22,6 +24,8 @@ Logging.global_logger(ConsoleLogger(stderr, Logging.Warn)) # possible values: Lo
         include("adm_OHL_test.jl")
         include("adm_DC_cable_test.jl")
         include("adm_TLC_test.jl")
+        include("adm_SM_test.jl")
+        include("adm_IM_test.jl")
         include("Impedance_test.jl")
         include("Source_test.jl")
         include("NetworkBuilder_test.jl")

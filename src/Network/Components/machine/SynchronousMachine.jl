@@ -104,7 +104,13 @@ initialvalues(::AVRSM) =  (;)
 
 
 ################### SYNCHRONOUS MACHINE ######################
-
+"""
+    A synchronous machine model. Validated against PSCAD. The model is based on the modified Kundur's example, with a steam turbine and governor. The model is implemented in the dq reference frame, and the electrical equations are based on the Park's transformation. The mechanical equations are based on the swing equation, and the governor is based on a simple first-order model. The AVR is based on a simple first-order model with a lead-lag compensator.
+    **Disclaimer**: Validation is slightly below 1% error, mostly at lowest frequencies. 
+    Possible reasons:
+    - Highly sensitive to operation point. Terminal voltage for power flow should be calculated based on AVR & exciter if no integral control
+    - Smaller timestep PSCAD (current validation with 1us)
+"""
 struct SynchronousMachine <: AbstractStateSpace
     elec::ElectricalSM
     mech::MechanicalSM
@@ -112,8 +118,8 @@ struct SynchronousMachine <: AbstractStateSpace
     gov::GovernorSM
 end
 
-statenames(m::SynchronousMachine) = (statenames(m.elec)..., statenames(m.mech)...,statenames(m.avr)..., statenames(m.gov)...)
-initialvalues(m::SynchronousMachine;inputs, kwargs...) =  merge(initialvalues(m.elec), initialvalues(m.mech),initialvalues(m.avr),initialvalues(m.gov;inputs))
+statenames(m::SynchronousMachine) = (statenames(m.elec)..., statenames(m.mech)...,statenames(m.gov)...,statenames(m.avr)...)
+initialvalues(m::SynchronousMachine;inputs, kwargs...) =  merge(initialvalues(m.elec), initialvalues(m.mech),initialvalues(m.gov;inputs),initialvalues(m.avr))
 inputnames(m::SynchronousMachine) = (:vd, :vq, :Tm0)
 outputnames(m::SynchronousMachine) = (:id, :iq)
 elecinputnames(m::SynchronousMachine) = (:vd, :vq)
@@ -133,8 +139,8 @@ function outputequations!(F, x, inputs, y, gen::SynchronousMachine)
     theta_grid = 0; # The angle of the global dq reference frame TODO: Check if this is correct
     d = get_state(:θ_sg, x) - theta_grid; # New reference frame angle - old RF angle
     T_inv = [cos(d) sin(d);
-        -sin(d)  cos(d)]; # Rotation to rotor's RF
-    F[1:2] = -T_inv*[x.i_d;x.i_q] #Grid ref frame currentst
+        -sin(d)  cos(d)]; # Rotation to stator's RF
+    F[1:2] = -T_inv* [x.i_d;x.i_q] #Grid ref frame currentst
 end
 
 

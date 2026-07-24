@@ -284,6 +284,7 @@ function is_passive(element :: Element)
      isa(element.element_model, Blackbox_MMC) ||
      isa(element.element_model, TLC) ||
      isa(element.element_model, Source) ||
+     isa(element.element_model, InductionMachine) ||
      isa(element.element_model, SynchronousMachine)) && return false
     true
 end
@@ -303,13 +304,16 @@ function is_generator(element :: Element)
     isa(element.element_model, SynchronousMachine)
 end
  
+function is_inductionmachine(element :: Element)
+    return isa(element.element_model, InductionMachine)
+end
 
 function is_impedance(element :: Element)
     isa(element.element_model, Impedance) && !any(occursin("gnd", string(x)) for x in element.pins)
 end
 
 function issingleport(element :: Element)
-    isa(element.element_model, SynchronousMachine) || isa(element.element_model, Source)
+    isa(element.element_model, SynchronousMachine) || isa(element.element_model, Source) || isa(element.element_model, InductionMachine)
 end
 
 function is_load(element :: Element)

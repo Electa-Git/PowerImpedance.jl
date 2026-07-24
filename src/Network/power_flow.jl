@@ -154,7 +154,7 @@ function power_flow(net::Network)
 	for (key, element) in net.elements
 
         # Check if it is an active component
-        if !(is_converter(element) || is_generator(element))
+        if !(is_converter(element) || is_generator(element) || is_inductionmachine(element))
             continue ## Skip iteration if it is active
         end
         #Find the corresponding PowerModels component
@@ -195,7 +195,7 @@ function power_flow(net::Network)
             end
         
 
-		elseif is_generator(element) #ac bus is the one with no ground in it's name
+		elseif (is_generator(element) || is_inductionmachine(element)) #ac bus is the one with no ground in it's name
 
 			ac_node = make_non_ground_node(element, bus2nodes)
 			bus_type, ac_bus = nodes2bus[ac_node]
@@ -238,7 +238,7 @@ end
 function is_linear(net::Network)
 	## Only if no converter or SM, return true
 	for elem in values(net.elements)
-		if (is_converter(elem) || is_generator(elem))
+		if (is_converter(elem) || is_generator(elem) || is_inductionmachine(elem))
 			return false
 		end
 	end
@@ -560,7 +560,7 @@ function add_interm_bus_ac!(data, global_dict)
 	return bus
 end
 const dcpol = 2
-function data_init(data, global_dict)
+function data_init!(data, global_dict)
     data["source_type"] = "matpower"
     data["name"] = "network"
     data["source_version"] = "0.0.0"
@@ -620,6 +620,7 @@ function build_acdcpf(pm::_PM.AbstractPowerModel)
     PowerModelsACDC.variable_flexible_demand(pm, bounded = false)
     PowerModelsACDC.variable_pst(pm, bounded = false)
     PowerModelsACDC.variable_sssc(pm, bounded = false)
+	PowerModelsACDC.variable_im(pm, bounded=false)
 
     _PM.constraint_model_voltage(pm)
     PowerModelsACDC.constraint_voltage_dc(pm)
@@ -662,6 +663,13 @@ function build_acdcpf(pm::_PM.AbstractPowerModel)
 
     for i in _PM.ids(pm, :fixed_load)
         PowerModelsACDC.constraint_total_fixed_demand(pm, i)
+    end
+
+	for i in _PM.ids(pm, :im)
+        PowerModelsACDC.constraint_im_stator(pm, i)
+        PowerModelsACDC.constraint_im_rotor_inductance(pm, i)
+        PowerModelsACDC.constraint_im_magnetisation(pm, i)
+        PowerModelsACDC.constraint_im_slip(pm, i)
     end
 
     for i in _PM.ids(pm, :busdc)
@@ -720,6 +728,7 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
         _PMACDC.ref_add_sssc!,
         _PMACDC.ref_add_flex_load!,
         _PMACDC.ref_add_gendc!,
+		_PMACDC.ref_add_im!
     ]
     pm = _PM.instantiate_model(
         data,

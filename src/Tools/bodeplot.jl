@@ -65,7 +65,7 @@ function bodeplot(L, omegas; legend = [""], plots = nothing)
 		end
 	end
 
-	if isa(L[1], Array) #Vector of matrices MIMO
+	if isa(L[1], AbstractArray) #Vector of matrices MIMO
 
 		dim=size(L[1])
 		dim[1]*dim[2]
