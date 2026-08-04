@@ -5,7 +5,7 @@ stages:
 
 variables:
   JULIA_DEPOT_PATH: "$CI_PROJECT_DIR/.julia"
-  JULIA_PKG_PRECOMPILE_AUTO: "0"
+  JULIA_PKG_PRECOMPILE_AUTO: "1"
 
 test:
   image: julia:1.11.2-bookworm
@@ -18,11 +18,12 @@ test:
     - julia --version
     - git --version
     - |
-      julia --project=. --compiled-modules=existing -e '
+      julia --project=. -e ' #--compiled-modules=existing
         using Pkg
         Pkg.Registry.add("General")
         Pkg.Registry.update()
         Pkg.instantiate()
+        Pkg.precompile()
         Pkg.test()
       '
   rules:
@@ -40,7 +41,7 @@ docs_check:
     - julia --version
     - git --version
     - |
-      julia --project=docs --compiled-modules=existing -e '
+      julia --project=docs -e ' #--compiled-modules=existing 
         using Pkg
         Pkg.Registry.add("General")
         Pkg.Registry.update()
