@@ -112,7 +112,7 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
         error("$name steady-state solution not found!")
     end
 
-    global equilibrium = sol.u[1:n_states(m)] # discard equilibrium states if any
+    equilibrium = sol.u[1:n_states(m)] # discard equilibrium states if any
 
     ϵ = 1e-15
     equilibrium[abs.(equilibrium) .< ϵ] .= 0

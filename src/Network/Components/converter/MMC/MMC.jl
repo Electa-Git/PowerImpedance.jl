@@ -310,7 +310,7 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
     convdc["droop"] = 0.0
     convdc["Vdcset"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
     convdc["Pacset"] = -elem.setpoint.Pac
-    convdc["Pdcset"] = !iszero(elem.setpoint.Pdc) ? elem.setpoint.Pdc : elem.setpoint.Pac
+    convdc["Pdcset"] = (!ismissing(elem.setpoint.Pdc) && !iszero(elem.setpoint.Pdc)) ? elem.setpoint.Pdc : elem.setpoint.Pac
     convdc["dVdcSet"] = 0.0
 
     convdc["islcc"] = 0
@@ -335,10 +335,10 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
     convdc["LossB"] = 0.0
     convdc["LossCrec"] = 0.0
     convdc["LossCinv"] = 0.0
-    convdc["Qacmax"] = elem.limits.Q_max
-    convdc["Qacmin"] = elem.limits.Q_min
-    convdc["Pacmax"] = elem.limits.P_max
-    convdc["Pacmin"] = elem.limits.P_min
+    convdc["Qacmax"] = elem.limits.Q_max*elem.element_model.elec.Sbase
+    convdc["Qacmin"] = elem.limits.Q_min*elem.element_model.elec.Sbase
+    convdc["Pacmax"] = elem.limits.P_max*elem.element_model.elec.Sbase
+    convdc["Pacmin"] = elem.limits.P_min*elem.element_model.elec.Sbase
 
     if data["bus"][string(ac_bus)]["bus_type"] == 1
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]

@@ -1,4 +1,4 @@
-abstract type Transmission_line <: AbstractMultiport end
+abstract type Transmission_line <: AbstractLinFreqDomain end
 
 function eval_y(tl :: Transmission_line, s :: Complex)
     return abcd_to_y(eval_abcd(tl, s))

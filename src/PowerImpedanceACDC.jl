@@ -118,7 +118,7 @@ include("Network/Network.jl")
 include("Network/power_flow.jl")
 
 # Alternative explicit network construction API
-include("Network/NetworkBuilder.jl")
+include("Network/NetworkBuilder/NetworkBuilder.jl")
 
 # Including network solvers
 include("Network/Solvers/make_abcd.jl")

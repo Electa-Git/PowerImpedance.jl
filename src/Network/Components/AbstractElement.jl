@@ -30,9 +30,10 @@ network using ABCD parameters. It consists of:
 """
 abstract type AbstractElementModel end
 
-abstract type AbstractMultiport <: AbstractElementModel end
+abstract type AbstractLinFreqDomain <: AbstractElementModel end
 
 abstract type AbstractStateSpace <: AbstractElementModel end
+
 
 
 
@@ -131,7 +132,8 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
     end
 end
 
-
+is_statespace(elem::Element) = elem.element_model isa AbstractStateSpace
+is_linfreqdomain(elem::Element) = elem.element_model isa AbstractLinFreqDomain
 
 for (n,m) in Dict(:nip => :input_pins, :nop => :output_pins)
   @eval ($n)(e::Element) = e.$m # creation of functions nip() and nop(), fetching the input_pins and output_pins parameters within the element structure
@@ -219,7 +221,7 @@ function eval_y(elem::Element{<:AbstractStateSpace}, s::Complex; SI_units::Bool=
     return Y
 end
 
-function eval_y(elem::Element{<:AbstractMultiport}, s::Complex; SI_units::Bool=true)
+function eval_y(elem::Element{<:AbstractLinFreqDomain}, s::Complex; SI_units::Bool=true)
     Y = get_y(elem, s)
     return Y
 end
@@ -279,6 +281,12 @@ function get_y(element :: Element, s :: Complex)
 end
 
 ######################### Element type #############################
+
+## New islinear functions for element
+# Default can be overridden for specific element types
+islinear(elem::Element{<:AbstractStateSpace}) = false
+islinear(elem::Element{<:AbstractLinFreqDomain}) = true
+
 function is_passive(element :: Element)
     (isa(element.element_model, MMC) ||
      isa(element.element_model, Blackbox_MMC) ||
@@ -286,7 +294,19 @@ function is_passive(element :: Element)
      isa(element.element_model, Source) ||
      isa(element.element_model, InductionMachine) ||
      isa(element.element_model, SynchronousMachine)) && return false
-    true
+    
+    return  true
+end
+
+function is_active(element :: Element)
+    (isa(element.element_model, MMC) ||
+     isa(element.element_model, Blackbox_MMC) ||
+     isa(element.element_model, TLC) ||
+     isa(element.element_model, Source) ||
+     isa(element.element_model, InductionMachine) ||
+     isa(element.element_model, SynchronousMachine)) && return true
+    
+    return false
 end
 
 function is_source(element :: Element)

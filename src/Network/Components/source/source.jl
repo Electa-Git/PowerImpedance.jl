@@ -1,5 +1,5 @@
 #= 
-@with_kw mutable struct Source <: AbstractMultiport
+@with_kw mutable struct Source <: AbstractLinFreqDomain
 	V::Union{Float64, Int} = 0        # DC voltage or voltage magnitude [kV]
 
 	P::Union{Float64, Int}     = 0      # active power output [MW]
@@ -40,7 +40,7 @@ function eval_y(source::Source, s::Complex)
 end =#
 
 
-@with_kw mutable struct Source <: AbstractMultiport
+@with_kw mutable struct Source <: AbstractLinFreqDomain
     V::Union{Float64, Int} = 0
 
     P::Union{Float64, Int}     = 0

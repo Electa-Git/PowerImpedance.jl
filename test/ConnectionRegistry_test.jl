@@ -449,9 +449,9 @@ end
         )
         
         builder = NetworkBuilder.define(elements, connections)
-        
-        @test :n1 in keys(builder.network.nets)
-        @test :gnd in keys(builder.network.nets)
+        network = NetworkBuilder.build_network(builder.elements, builder.connections, builder.options)
+        @test :n1 in keys(network.nets)
+        @test :gnd in keys(network.nets)
     end
 
     @testset "Multi-node network" begin
@@ -470,9 +470,10 @@ end
         )
         
         builder = NetworkBuilder.define(elements, connections)
+        network = NB.build_network(builder.elements, builder.connections, builder.options)
         
-        @test :n1 in keys(builder.network.nets)
-        @test :n2 in keys(builder.network.nets)
-        @test :gnd in keys(builder.network.nets)
+        @test :n1 in keys(network.nets)
+        @test :n2 in keys(network.nets)
+        @test :gnd in keys(network.nets)
     end
 end

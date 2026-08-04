@@ -1,6 +1,6 @@
 export impedance
 
-@with_kw mutable struct Impedance <: AbstractMultiport
+@with_kw mutable struct Impedance <: AbstractLinFreqDomain
 	value::Any = nothing      # either Matrix{ComplexF64} or a function s::Complex -> Matrix{ComplexF64}
 	ABCD::Any  = nothing      # cached Matrix{ComplexF64} for constant impedances, otherwise nothing
 end
@@ -139,30 +139,6 @@ end
 function eval_y(imp::Impedance, s::Complex)
 	return abcd_to_y(eval_abcd(imp, s))
 end
-
-# ### PowerBlocks
-# function topowerblocks(elem::Element{Impedance})
-	
-# 	# Check if AC or DC source (second one not implemented)
-# 	# pb = PB.ImpedanceData(;value=elem.element_model.value)
-	
-# 	if is_load(elem) #Shunt
-# 		nbports = 1
-# 	else
-# 		nbports = 2
-# 	end
-
-# 	elecdomain = elecdomainpb(elem)
-	
-# 	return pb, nbports, elecdomain
-# end
-
-
-# function addecs!(ecsdata, elem::Element{Impedance}, blockid, pblut) #No ecsdata for impedance
-# 	return 
-# end
-		
-
 
 
 

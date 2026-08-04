@@ -1,6 +1,6 @@
 export transformer
 
-@with_kw mutable struct Transformer <: AbstractMultiport
+@with_kw mutable struct Transformer <: AbstractLinFreqDomain
 	pins::Int = 1                     # marks single or three phase
 	organization::Symbol = :YY        # three phase organization (:YY or :ΔY)
 
@@ -64,7 +64,7 @@ Pins: `1.1`, `2.1` for single phase transformer and `1.1`, `1.2`, `1.3`, `2.1`,
 `2.2`, `2.3` for a three-phase transformer.
 """
 
-function transformer(; args...)
+function transformer(def=:explicit; args...)
 	t = Transformer()
 	transformation = false
 	connection = true
@@ -79,7 +79,7 @@ function transformer(; args...)
 	end
 
 	# compute equivalent circuit parameters from OC/SC tests
-	if (t.V₁ᵒ != 0)
+	if def == :tests
 		t.n = t.V₁ᵒ / t.V₂ᵒ
 
 		R = t.P₁ˢ / (t.I₁ˢ)^2
@@ -223,6 +223,24 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
 	branch["transformer"] = true
 	branch["shift"] = 0
 	branch["c_rating_a"] = 1
+
+	## Update voltage limits to match the transformer voltage ratings
+	if t.V₁ᵒ == t.V₂ᵒ == 0 
+		@warn ("Transformer has no open-circuit voltage ratings, voltage limits will be updated with 1pu assumed at primary.")
+		Vprim = global_dict["V"] / 1e3
+		Vsec = Vprim / t.n
+	else	
+		Vprim = t.V₁ᵒ
+		Vsec = t.V₂ᵒ
+		((Vprim != global_dict["V"]/1e3) && (Vsec != global_dict["V"]/1e3)) && @warn ("Transformer voltage ratings do not match system base voltage.")
+	end
+
+	Vbase_global = global_dict["V"] / 1e3
+	data["bus"][string(bus1)]["vmax"] = (Vprim/Vbase_global)*1.1
+	data["bus"][string(bus2)]["vmax"] = (Vsec/Vbase_global)*1.1
+	data["bus"][string(bus1)]["vmin"] = (Vprim/Vbase_global)*0.9
+	data["bus"][string(bus2)]["vmin"] = (Vsec/Vbase_global)*0.9
+	
 
 	abcd = eval_abcd(t, global_dict["omega"] * 1im)
 	n = 3

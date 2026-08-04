@@ -56,7 +56,7 @@ Forms the dictionary needed for solving the power flow problem using
 package PowerModelsACDC. After successful power flow solving, it updates
 the operating point of the active devices """
 function power_flow(net::Network)
-	global result, nodes2bus, elem2comp, data, global_dict
+	# global result, nodes2bus, elem2comp, data, global_dict
 	global_dict = PowerModelsACDC._get_pu_bases(1000, net.voltageBase[1]) # 3-PH MVA, LL-RMS, Original setting was 100,320
 	global_dict["omega"] = 2π * 50
 
@@ -603,7 +603,7 @@ end
 ### Relaxation function to see which constraints might be violated
 
 function build_acdcpf(pm::_PM.AbstractPowerModel)
-    _PM.variable_bus_voltage(pm, bounded = false)
+    _PM.variable_bus_voltage(pm, bounded = true)
     _PM.variable_gen_power(pm, bounded = false)
     _PM.variable_branch_power(pm, bounded = false)
     _PM.variable_storage_power(pm, bounded = false)
@@ -730,7 +730,7 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
         _PMACDC.ref_add_gendc!,
 		_PMACDC.ref_add_im!
     ]
-    pm = _PM.instantiate_model(
+    global pm = _PM.instantiate_model(
         data,
         model_type,
         build_acdcpf;

@@ -3,24 +3,27 @@
 make_y_node(lanw::LinearizedAdmittanceNetwork, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.actives, s)
 make_y_edge(lanw::LinearizedAdmittanceNetwork, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.passives, s)
 
-function make_y(lanw::LinearizedAdmittanceNetwork, admcoll::LinearizedAdmittanceCollection{T}, s::AbstractVector{<:Complex}) where {T}
+
+### Input nodes and output nodes as input arguments. Then can be used for determine impedance
+function make_y(lanw::LinearizedAdmittanceNetwork, elemidvec::Vector{Int}, s::AbstractVector{<:Complex}, netidvec::AbstractVector{Int}=lanw.activenets) 
 
     Y = initY(lanw,s) #Zeroes of size nets
-    activenets = lanw.interface.activenets
+    
 
+    consideredadm = getindex(lanw.admittances, elemidvec)
     # Add active device admittances
-    fill!(Y, admcoll, s)
+    fill!(Y, consideredadm, s)
 
     # Eliminate grounded nodes & update indices of active nets (will be shifted due to elimination)
-    Yred, newactivenets = eliminategrounds(Y, lanw,activenets)
+    Yred, newnetidvec = eliminategrounds(Y, lanw,netidvec)
 
     # Kron reduction
     
-    N = length(activenets)
+    N = length(newnetidvec)
     Yfinal = Array{ComplexF64,3}(undef, N,N,length(s))
 
     for i in eachindex(s)
-        Yfinal[:,:,i] = P.kron(@view(Yred[:,:,i]), newactivenets)
+        Yfinal[:,:,i] = P.kron(@view(Yred[:,:,i]), newnetidvec)
     end
 
     return Yfinal
@@ -61,14 +64,14 @@ function initY(lanw::LinearizedAdmittanceNetwork, s::AbstractVector)
     return Array{ComplexF64, 3}(zeros(N,N, length(s)))
 end
 
-function eliminategrounds(Y::Array{ComplexF64,3}, lanw::LinearizedAdmittanceNetwork, activenets::Vector{Int})
-    groundnets = lanw.interface.groundednets
+function eliminategrounds(Y::Array{ComplexF64,3}, lanw::LinearizedAdmittanceNetwork, netidvec::Vector{Int})
+    groundnets = lanw.groundednets
     keep = setdiff(axes(Y,1), groundnets)
 
-    newactivenets = setdiff(activenets, groundnets)
-    newactivenets == activenets || @info("Some active nets are grounded.")
-    newactivenets = [findfirst(isequal(net), keep) for net in newactivenets]
+    newnetidvec = setdiff(netidvec, groundnets)
+    newnetidvec == netidvec || @info("Some input nets are grounded.")
+    newnetidvec = [findfirst(isequal(net), keep) for net in newnetidvec] # Find the index of each net in the new keep -> new index in matrix
 
-    return Y[keep, keep, :], newactivenets #Only non-grounded nodes are kept
+    return Y[keep, keep, :], newnetidvec #Only non-grounded nodes are kept
 end
 

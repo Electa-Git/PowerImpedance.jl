@@ -365,8 +365,8 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 	# ---------- Kron elimination ----------
 	if (tl.groundwires.nᵍ + tl.conductors.nˢᵇ > 1)
 		cond_noElim = [(i-1)*tl.conductors.nˢᵇ + 1 for i in 1:tl.conductors.nᵇ]
-		Z = kron(Z, cond_noElim)
-		P = kron(P, cond_noElim)
+		Z = PowerImpedanceACDC.kron(Z, cond_noElim)
+		P = PowerImpedanceACDC.kron(P, cond_noElim)
 	end
 
 	# ---------- invert P to get Y ----------

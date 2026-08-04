@@ -33,6 +33,9 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 SteadyStateDiffEq = "9672c7b4-1e72-59bd-8a11-6ac3964bc41f"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
+[sources]
+PowerModelsACDC = {rev = "master", url = "https://github.com/Electa-Git/PowerModelsACDC.jl.git"}
+
 [compat]
 ControlSystemsBase = "1"
 DataStructures = "0.19"
@@ -46,7 +49,7 @@ Ipopt = "1"
 JLD2 = "0.6"
 JuMP = "1"
 LaTeXStrings = "1"
-LinearAlgebra="1.12"
+LinearAlgebra = "1.12"
 Logging = "1.11"
 LsqFit = "0.15"
 Markdown = "1.11"
