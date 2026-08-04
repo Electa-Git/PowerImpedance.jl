@@ -101,7 +101,7 @@ function power_flow(net::Network)
 
 	#### 1b. Check for slack busses (add one if none present) (3 is slack bus)
 	if !(3 in [data["bus"][index]["bus_type"] for index in keys(data["bus"])])
-		@warn "WARNING: No slack bus present. The first PV bus with generator will be set as reference",
+		@warn "WARNING: No slack bus present. The first PV bus with generator will be set as reference"
 		
 		for gen_index in keys(data["gen"])
 			bus_gen = data["gen"][gen_index]["gen_bus"]
