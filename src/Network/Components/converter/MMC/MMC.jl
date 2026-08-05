@@ -226,12 +226,12 @@ function SI_scale(elem::Element{<:MMC})
     iDCbase = elec.Sbase / elec.vDC_base
 
     # row scaling = output current bases
-    Y[1, :]   .*= iDCbase
-    Y[2:3, :] .*= iACbase
+    scale[1, :]   .*= iDCbase
+    scale[2:3, :] .*= iACbase
 
     # column scaling = input voltage bases
-    Y[:, 1]   ./= elec.vDC_base
-    Y[:, 2:3] ./= (elec.vAC_base / elec.turnsRatio)
+    scale[:, 1]   ./= elec.vDC_base
+    scale[:, 2:3] ./= (elec.vAC_base / elec.turnsRatio)
 
     return scale
 end
