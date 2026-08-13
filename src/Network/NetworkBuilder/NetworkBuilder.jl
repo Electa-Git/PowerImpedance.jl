@@ -4,8 +4,15 @@ module NetworkBuilder
 import TypedTables: Table
 
 export pin, ⟷, ↔
+export AbsoluteError, AbsoluteGrid, DeterministicGrid, Grid, Gridspace, RelativeGrid
+export @gridspace, @relax
+export ImpedanceCase, ParametricImpedance, SolveCase, ParametricSolve
 
 const P = parentmodule(@__MODULE__)
+
+include("gridspace/grid.jl")
+include("gridspace/gridspace.jl")
+include("gridspace/macros.jl")
 
 #convenience macro to create typedtable types
 macro Table(ex)
@@ -128,5 +135,7 @@ include("../../core/convert.jl")
 include("cachesetpoints.jl")
 include("../Solvers/make_adm_NB.jl")
 include("../Solvers/determine_impedance_NB.jl")
+include("uquant.jl")
+include("parametric.jl")
 
 end

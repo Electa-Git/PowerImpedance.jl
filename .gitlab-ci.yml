@@ -1,11 +1,28 @@
 stages:
   - test
   - docs
+  - release_check
   - deploy
 
 variables:
   JULIA_DEPOT_PATH: "$CI_PROJECT_DIR/.julia"
   JULIA_PKG_PRECOMPILE_AUTO: "1"
+
+  # Keep this NO permanently after the first GitHub migration.
+  #
+  # For the ONE-TIME history reconciliation only, override this with
+  # a protected project CI/CD variable:
+  #
+  #   GITHUB_RECONCILE_ONCE = YES
+  #
+  GITHUB_RECONCILE_ONCE: "NO"
+
+  GITHUB_REMOTE_URL: "git@github.com:Electa-Git/PowerImpedance.jl.git"
+
+  # Keeps the current manually-maintained GitHub history reachable after
+  # the one-time transition to GitLab-authoritative history.
+  GITHUB_LEGACY_TAG: "legacy-github-main-pre-gitlab-authority"
+
 
 test:
   image: julia:1.11.2-bookworm
@@ -26,9 +43,50 @@ test:
         Pkg.precompile()
         Pkg.test()
       '
+    - |
+      julia -e '
+        using Pkg
+        Pkg.activate(; temp=true)
+        Pkg.develop(PackageSpec(path=pwd()))
+        Pkg.add("Measurements")
+        include("test/run_extension_tests.jl")
+      '
+    - |
+      julia -e '
+        using Pkg
+        Pkg.activate(; temp=true)
+        Pkg.develop(PackageSpec(path=pwd()))
+        Pkg.add(["TestItems", "TestItemRunner"])
+        include("test/run_testitems.jl")
+      '
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+    # A release tag MUST run the real test suite.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+
+
+advisory_quality:
+  image: julia:1.11.2-bookworm
+  stage: test
+  allow_failure: true
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - |
+      julia -e '
+        using Pkg
+        Pkg.activate(; temp=true)
+        Pkg.add(["Aqua", "JuliaFormatter"])
+        Pkg.develop(PackageSpec(path=pwd()))
+        include("test/advisory_quality.jl")
+      '
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
 
 docs_check:
   image: julia:1.11.2-bookworm
@@ -41,7 +99,7 @@ docs_check:
     - julia --version
     - git --version
     - |
-      julia --project=docs -e ' #--compiled-modules=existing 
+      julia --project=docs -e ' #--compiled-modules=existing
         using Pkg
         Pkg.Registry.add("General")
         Pkg.Registry.update()
@@ -54,6 +112,444 @@ docs_check:
       '
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+    # Release tags must also prove that documentation still builds.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+
+
+# ---------------------------------------------------------------------------
+# GitHub publication infrastructure
+# ---------------------------------------------------------------------------
+
+.github_release_base:
+  image: alpine:3.22
+
+  variables:
+    # Release jobs need enough history to perform ancestry checks.
+    GIT_DEPTH: "0"
+    GIT_TERMINAL_PROMPT: "0"
+
+  before_script:
+    - apk add --no-cache git openssh-client
+
+    - mkdir -p "$HOME/.ssh"
+    - chmod 700 "$HOME/.ssh"
+
+    # Both variables must be GitLab CI/CD variables of Type = File.
+    - cp "$GITHUB_DEPLOY_KEY" "$HOME/.ssh/id_ed25519"
+    - cp "$GITHUB_KNOWN_HOSTS" "$HOME/.ssh/known_hosts"
+
+    - chmod 600 "$HOME/.ssh/id_ed25519"
+    - chmod 644 "$HOME/.ssh/known_hosts"
+
+    - |
+      cat > "$HOME/.ssh/config" <<'EOF'
+      Host github.com
+        IdentityFile ~/.ssh/id_ed25519
+        IdentitiesOnly yes
+      EOF
+
+    - chmod 600 "$HOME/.ssh/config"
+
+    - git remote remove github 2>/dev/null || true
+    - git remote add github "$GITHUB_REMOTE_URL"
+
+
+# ---------------------------------------------------------------------------
+# READ-ONLY PREFLIGHT
+#
+# On main:
+#   manual diagnostic only; never blocks Pages.
+#
+# On a release tag:
+#   automatic gate after tests/docs.
+#
+# This performs only fetch/read operations. It cannot modify GitHub.
+# ---------------------------------------------------------------------------
+
+github_release_preflight:
+  extends: .github_release_base
+  stage: release_check
+
+  script:
+    - |
+      set -eu
+
+      # Proves SSH authentication and repository access.
+      git ls-remote github HEAD >/dev/null
+
+      # Get authoritative GitLab main.
+      git fetch --no-tags origin \
+        "+refs/heads/${CI_DEFAULT_BRANCH}:refs/remotes/origin/${CI_DEFAULT_BRANCH}"
+
+      # Get currently published GitHub main.
+      git fetch --no-tags github \
+        "+refs/heads/main:refs/remotes/github/main"
+
+      VERSION="$(
+        sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Project.toml |
+        head -n 1
+      )"
+
+      test -n "$VERSION" || {
+        echo "FAIL: could not read version from Project.toml"
+        exit 1
+      }
+
+      EXPECTED_TAG="v${VERSION}"
+      GITHUB_MAIN_SHA="$(git rev-parse refs/remotes/github/main)"
+
+      echo
+      echo "GitLab candidate : $CI_COMMIT_SHA"
+      echo "GitHub main      : $GITHUB_MAIN_SHA"
+      echo "Project version  : $VERSION"
+      echo "Expected tag     : $EXPECTED_TAG"
+      echo
+
+      echo "Left/right commit counts (GitHub/GitLab):"
+      git rev-list \
+        --left-right \
+        --count \
+        refs/remotes/github/main..."$CI_COMMIT_SHA" || true
+
+      echo
+
+      STATUS="DIVERGED"
+
+      if git merge-base --is-ancestor \
+        refs/remotes/github/main \
+        "$CI_COMMIT_SHA"
+      then
+        STATUS="FAST_FORWARD"
+
+      elif git merge-base --is-ancestor \
+        "$CI_COMMIT_SHA" \
+        refs/remotes/github/main
+      then
+        STATUS="GITHUB_AHEAD"
+      fi
+
+      echo "Publication topology: $STATUS"
+      echo
+
+      # Manual main-branch preflight is informational only.
+      if [ -z "${CI_COMMIT_TAG:-}" ]; then
+        echo "READ-ONLY PREFLIGHT COMPLETE."
+        echo "GitHub was not modified."
+        exit 0
+      fi
+
+      # From here down we are validating an actual release-tag pipeline.
+
+      test "$CI_COMMIT_TAG" = "$EXPECTED_TAG" || {
+        echo "FAIL:"
+        echo "tag '$CI_COMMIT_TAG' != expected '$EXPECTED_TAG'"
+        exit 1
+      }
+
+      git merge-base --is-ancestor \
+        "$CI_COMMIT_SHA" \
+        "refs/remotes/origin/${CI_DEFAULT_BRANCH}" || {
+          echo "FAIL:"
+          echo "tagged commit is not on ${CI_DEFAULT_BRANCH}"
+          exit 1
+        }
+
+      if [ "$STATUS" = "FAST_FORWARD" ]; then
+        echo "PASS:"
+        echo "normal GitHub publication is possible."
+        exit 0
+      fi
+
+      if [ "${GITHUB_RECONCILE_ONCE:-NO}" = "YES" ]; then
+        echo "PASS WITH MIGRATION ARMED:"
+        echo "GitHub history is not fast-forwardable."
+        echo "The one-time reconciliation job is explicitly enabled."
+        exit 0
+      fi
+
+      echo "FAIL:"
+      echo "GitHub requires the one-time history reconciliation."
+      echo "No write operation was attempted."
+      exit 1
+
+  rules:
+    # Release tags run this automatically and failures block deployment.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+      when: on_success
+      allow_failure: false
+
+    # On normal main pipelines this is merely an optional diagnostic.
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+      allow_failure: true
+
+
+# ---------------------------------------------------------------------------
+# ONE-TIME MIGRATION
+#
+# This job DOES NOT normally exist.
+#
+# It appears only when:
+#
+#   1. this is a valid version tag pipeline; and
+#   2. protected variable GITHUB_RECONCILE_ONCE == YES
+#
+# It:
+#
+# Its dry-run models an atomic operation that would:
+#
+#   - preserve the current GitHub main under a legacy tag;
+#   - replace GitHub main with the tagged GitLab history;
+#   - publish the release tag;
+#   - uses --force-with-lease, never naked --force;
+#
+# The live push remains commented out pending clearance.
+#
+# After the first migration, GITHUB_RECONCILE_ONCE must return to NO.
+# ---------------------------------------------------------------------------
+
+github_release_reconcile_once:
+  extends: .github_release_base
+  stage: deploy
+
+  # Prevent two GitHub publication jobs from operating concurrently.
+  resource_group: github-release
+
+  script:
+    - |
+      set -eu
+
+      VERSION="$(
+        sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Project.toml |
+        head -n 1
+      )"
+
+      test -n "${CI_COMMIT_TAG:-}" || {
+        echo "REFUSED: not a tag pipeline"
+        exit 1
+      }
+
+      test "$CI_COMMIT_TAG" = "v${VERSION}" || {
+        echo "REFUSED:"
+        echo "tag '$CI_COMMIT_TAG' != Project.toml version 'v${VERSION}'"
+        exit 1
+      }
+
+      git fetch --no-tags origin \
+        "+refs/heads/${CI_DEFAULT_BRANCH}:refs/remotes/origin/${CI_DEFAULT_BRANCH}"
+
+      git fetch origin \
+        "+refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+
+      git fetch --no-tags github \
+        "+refs/heads/main:refs/remotes/github/main"
+
+      git merge-base --is-ancestor \
+        "$CI_COMMIT_SHA" \
+        "refs/remotes/origin/${CI_DEFAULT_BRANCH}" || {
+          echo "REFUSED:"
+          echo "tagged commit is not on ${CI_DEFAULT_BRANCH}"
+          exit 1
+        }
+
+      GITHUB_MAIN_SHA="$(git rev-parse refs/remotes/github/main)"
+
+      # If this is already fast-forwardable, there is no justification
+      # whatsoever for invoking the migration mechanism.
+      if git merge-base --is-ancestor \
+        refs/remotes/github/main \
+        "$CI_COMMIT_SHA"
+      then
+        echo "REFUSED:"
+        echo "reconciliation is unnecessary."
+        echo "GitHub can already be updated by normal publication."
+        exit 1
+      fi
+
+      # Never overwrite an existing release tag.
+      if git ls-remote \
+        --exit-code \
+        --tags \
+        github \
+        "refs/tags/${CI_COMMIT_TAG}" >/dev/null 2>&1
+      then
+        echo "REFUSED:"
+        echo "GitHub tag ${CI_COMMIT_TAG} already exists."
+        exit 1
+      fi
+
+      # The preservation tag must also be new.
+      if git ls-remote \
+        --exit-code \
+        --tags \
+        github \
+        "refs/tags/${GITHUB_LEGACY_TAG}" >/dev/null 2>&1
+      then
+        echo "REFUSED:"
+        echo "GitHub legacy-preservation tag already exists."
+        exit 1
+      fi
+
+      echo
+      echo "ONE-TIME MIGRATION PLAN"
+      echo
+      echo "old GitHub main:"
+      echo "  ${GITHUB_MAIN_SHA}"
+      echo
+      echo "will be preserved as:"
+      echo "  ${GITHUB_LEGACY_TAG}"
+      echo
+      echo "new GitHub main:"
+      echo "  ${CI_COMMIT_SHA}"
+      echo
+      echo "release tag:"
+      echo "  ${CI_COMMIT_TAG}"
+      echo
+
+      echo "Running real Git push dry-run..."
+      echo
+
+      git push \
+        --dry-run \
+        --atomic \
+        --force-with-lease="refs/heads/main:${GITHUB_MAIN_SHA}" \
+        github \
+        "${GITHUB_MAIN_SHA}:refs/tags/${GITHUB_LEGACY_TAG}" \
+        "${CI_COMMIT_SHA}:refs/heads/main" \
+        "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+
+      echo
+      echo "Dry-run passed."
+      echo "DRY-RUN ONLY: atomic migration was not performed."
+
+      # LIVE PUSH DISABLED PENDING CLEARANCE:
+      # git push \
+      #   --atomic \
+      #   --force-with-lease="refs/heads/main:${GITHUB_MAIN_SHA}" \
+      #   github \
+      #   "${GITHUB_MAIN_SHA}:refs/tags/${GITHUB_LEGACY_TAG}" \
+      #   "${CI_COMMIT_SHA}:refs/heads/main" \
+      #   "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/ && $GITHUB_RECONCILE_ONCE == "YES"'
+      when: manual
+      allow_failure: false
+
+
+# ---------------------------------------------------------------------------
+# PERMANENT RELEASE PUBLICATION
+#
+# After the one-time reconciliation this is the only normal release path.
+#
+# ABSOLUTELY NO FORCE PUSH.
+#
+# GitHub main must already be an ancestor of the tagged GitLab commit.
+# The live push remains commented out pending clearance.
+# ---------------------------------------------------------------------------
+
+github_release_publish:
+  extends: .github_release_base
+  stage: deploy
+
+  resource_group: github-release
+
+  script:
+    - |
+      set -eu
+
+      VERSION="$(
+        sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Project.toml |
+        head -n 1
+      )"
+
+      test -n "${CI_COMMIT_TAG:-}" || {
+        echo "REFUSED: not a tag pipeline"
+        exit 1
+      }
+
+      test "$CI_COMMIT_TAG" = "v${VERSION}" || {
+        echo "REFUSED:"
+        echo "tag '$CI_COMMIT_TAG' != Project.toml version 'v${VERSION}'"
+        exit 1
+      }
+
+      git fetch --no-tags origin \
+        "+refs/heads/${CI_DEFAULT_BRANCH}:refs/remotes/origin/${CI_DEFAULT_BRANCH}"
+
+      git fetch origin \
+        "+refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+
+      git fetch --no-tags github \
+        "+refs/heads/main:refs/remotes/github/main"
+
+      # Release commit must be part of authoritative GitLab main.
+      git merge-base --is-ancestor \
+        "$CI_COMMIT_SHA" \
+        "refs/remotes/origin/${CI_DEFAULT_BRANCH}" || {
+          echo "REFUSED:"
+          echo "tagged commit is not on ${CI_DEFAULT_BRANCH}"
+          exit 1
+        }
+
+      # This is the permanent anti-bullshit guard.
+      #
+      # If somebody starts independently committing to GitHub again,
+      # publication stops instead of silently rewriting anything.
+      git merge-base --is-ancestor \
+        refs/remotes/github/main \
+        "$CI_COMMIT_SHA" || {
+          echo "REFUSED:"
+          echo "GitHub main is not an ancestor of this release."
+          echo "GitHub has diverged from authoritative GitLab history."
+          echo "Force-push is intentionally absent."
+          exit 1
+        }
+
+      # Existing release tags are immutable.
+      if git ls-remote \
+        --exit-code \
+        --tags \
+        github \
+        "refs/tags/${CI_COMMIT_TAG}" >/dev/null 2>&1
+      then
+        echo "REFUSED:"
+        echo "GitHub tag ${CI_COMMIT_TAG} already exists."
+        exit 1
+      fi
+
+      echo
+      echo "Running real Git push dry-run..."
+      echo
+
+      git push \
+        --dry-run \
+        --atomic \
+        github \
+        "${CI_COMMIT_SHA}:refs/heads/main" \
+        "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+
+      echo
+      echo "Dry-run passed."
+      echo "DRY-RUN ONLY: release was not published."
+
+      # LIVE PUSH DISABLED PENDING CLEARANCE:
+      # git push \
+      #   --atomic \
+      #   github \
+      #   "${CI_COMMIT_SHA}:refs/heads/main" \
+      #   "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/ && $GITHUB_RECONCILE_ONCE != "YES"'
+      when: manual
+      allow_failure: false
+
+
+# ---------------------------------------------------------------------------
+# Existing GitLab Pages deployment
+# ---------------------------------------------------------------------------
 
 pages:
   image: julia:1.11.2-bookworm

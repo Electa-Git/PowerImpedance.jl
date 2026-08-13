@@ -41,6 +41,12 @@ Frequency-response data can be imported for:
 - Passivity assessment
 - Small-gain analysis
 
+### Parametric and uncertainty studies
+
+Qualified `NetworkBuilder` shadow constructors support deterministic Cartesian
+sweeps and Measurements.jl-based Monte Carlo studies while preserving the
+ordinary scalar API. See the [Gridspace guide](docs/src/gridspace.md).
+
 ## Example
 
 The figure below shows the admittance characteristics of a point-to-point HVDC link composed of two MMCs. The analytical results are validated against PSCAD simulations. This example, together with a detailed explanation, is available in the `examples` folder.
@@ -53,3 +59,7 @@ Install the latest release using the Julia package manager:
 
 ```julia
 ] add PowerImpedanceACDC
+```
+
+For local Conventional Commit warnings, enable the tracked advisory hook with
+`git config core.hooksPath .githooks`. The hook never blocks a commit.

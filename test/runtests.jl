@@ -33,5 +33,6 @@ Logging.global_logger(ConsoleLogger(stderr, Logging.Warn)) # possible values: Lo
         include("convert_pmacdc_test.jl")
         include("make_y_node_test.jl")
         include("Transformer_test.jl")
+        include("Gridspace_test.jl")
         
 end;

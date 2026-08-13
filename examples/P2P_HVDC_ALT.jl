@@ -19,14 +19,14 @@ L = 100e3
 
 # Connections between elements follow the same pattern as the `@network` semantics, but we need a `pin(...)`` wrapper to avoid the macro overkill:
 connections = (
-	pin(:c1, 2.1) ⟷ pin(:tl1, 2.1) ⟷ :B3d,
-	pin(:c1, 2.2) ⟷ pin(:tl1, 2.2) ⟷ :B3q, pin(:g4, 1.1) ⟷ pin(:tl1, 1.1) ⟷ :B2d,
+	pin(:tl1, 2.1) ⟷ pin(:c1, 2.1) ⟷ :B3d,
+	pin(:tl1, 2.2) ⟷ pin(:c1, 2.2) ⟷ :B3q, pin(:g4, 1.1) ⟷ pin(:tl1, 1.1) ⟷ :B2d,
 	pin(:g4, 1.2) ⟷ pin(:tl1, 1.2) ⟷ :B2q, pin(:g4, 2.1) ⟷ :gndd,
 	pin(:g4, 2.2) ⟷ :gndq,
-	pin(:c1, 1.1) ⟷ pin(:ugc, 1.1) ⟷ :B4,
+	pin(:ugc, 1.1) ⟷ pin(:c1, 1.1) ⟷ :B4,
 	pin(:ugc, 2.1) ⟷ pin(:ohl, 1.1) ⟷ :BX,
-	pin(:c2, 1.1) ⟷ pin(:ohl, 2.1) ⟷ :B5, pin(:c2, 2.1) ⟷ pin(:tl78, 1.1) ⟷ :B6d,
-	pin(:c2, 2.2) ⟷ pin(:tl78, 1.2) ⟷ :B6q,
+	pin(:ohl, 2.1) ⟷ pin(:c2, 1.1) ⟷ :B5, pin(:tl78, 1.1) ⟷ pin(:c2, 2.1) ⟷ :B6d,
+	pin(:tl78, 1.2) ⟷ pin(:c2, 2.2) ⟷ :B6q,
 	pin(:g1, 1.1) ⟷ pin(:tl78, 2.1) ⟷ :B7d,
 	pin(:g1, 1.2) ⟷ pin(:tl78, 2.2) ⟷ :B7q, pin(:g1, 2.1) ⟷ :gndd,
 	pin(:g1, 2.2) ⟷ :gndq,
@@ -88,7 +88,7 @@ function ohl_to_ugc(x)
 			transformation = true,
 		),
 
-		c1 = mmc(Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
+		c1 = only(NetworkBuilder.mmc(Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
 			P_max = 1500, P_min = -1500, P = -pHVDC1, Q = qC1, Q_max = 500,
 			Q_min = -500,
 			occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
@@ -97,9 +97,9 @@ function ohl_to_ugc(x)
 			q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
 			dc = PI_control(Kₚ = 6, Kᵢ = 15), timeDelay = 200e-6, padeOrderNum = 5,
 			padeOrderDen = 5,
-		),
+		)),
 
-		c2 = mmc(Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
+		c2 = only(NetworkBuilder.mmc(Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
 			P_max = 1000, P_min = -1000, P = pHVDC1, Q = qC2, Q_max = 1000,
 			Q_min = -1000,
 			vACbase_LL_RMS = 333, turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
@@ -110,7 +110,7 @@ function ohl_to_ugc(x)
 			p = PI_control(Kₚ = 1 * 0.1, Kᵢ = 31.4159),
 			q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159), timeDelay = 200e-6,
 			padeOrderNum = 5, padeOrderDen = 5,
-		),
+		)),
 
 		ugc = ugc_model,
 		ohl = ohl_model,

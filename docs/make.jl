@@ -1,3 +1,5 @@
+ENV["GKSwstype"] = "100"
+
 using Documenter
 using Documenter: Remotes
 using PowerImpedanceACDC
@@ -42,6 +44,9 @@ const HAS_BIBLIOGRAPHY = isfile(BIBLIOGRAPHY_FILE)
 
 const LITERATE_EXAMPLE_FILES = (
 	"P2P_HVDC_ALT.jl",
+	"P2P_HVDC_Gridspace.jl",
+	"IEEE39bus_Gridspace.jl",
+	"Gridspace_uncertainty.jl",
 )
 
 const LITERATE_EXAMPLE_PATHS = [
@@ -215,6 +220,10 @@ end
 function build_pages()
 	pages = Any["Home"=>"index.md"]
 
+	if isfile(joinpath(DOCS_SRC_DIR, "gridspace.md"))
+		push!(pages, "Parametric studies" => "gridspace.md")
+	end
+
 	tutorials_page = build_example_pages()
 	isnothing(tutorials_page) || push!(pages, tutorials_page)
 
@@ -222,7 +231,10 @@ function build_pages()
 		push!(pages, "API Reference" => "reference.md")
 	end
 
-	development_pages = Any[]
+	development_pages = Any[
+		"Docstrings" => "developers/docstrings.md",
+		"Conventions" => "developers/conventions.md",
+	]
 
 	todo_page = copy_todo!()
 	isnothing(todo_page) || push!(development_pages, todo_page)
@@ -230,7 +242,7 @@ function build_pages()
 	changelog_page = generate_changelog!()
 	isnothing(changelog_page) || push!(development_pages, changelog_page)
 
-	isempty(development_pages) || push!(pages, "Development" => development_pages)
+	push!(pages, "Developers" => development_pages)
 
 	if HAS_BIBLIOGRAPHY && isfile(joinpath(DOCS_SRC_DIR, "bibliography.md"))
 		push!(pages, "Bibliography" => "bibliography.md")
