@@ -47,6 +47,20 @@ Qualified `NetworkBuilder` shadow constructors support deterministic Cartesian
 sweeps and Measurements.jl-based Monte Carlo studies while preserving the
 ordinary scalar API. See the [Gridspace guide](docs/src/gridspace.md).
 
+The same study contract covers nodal admittance, loop-gain, and small-signal
+stability analysis. Staged `make_y_node`/`make_y_edge` composition and fused
+`make_loopgain`/`nyquistplot` entry points preserve exact numeric trials,
+converter-safe power-flow repetition, passive-only linearization reuse, and
+truthful uncertainty provenance. Parametric overloads are available for
+Nyquist, Bode, small-gain, passivity, EVD, stability-margin, and unstable-mode
+analysis.
+
+Optional package extensions provide covariance-aware Measurements sampling and
+direct phase-domain `LineCableModels.LineParameters` line construction. Exact
+external Monte Carlo response tensors can be passed through
+`NetworkBuilder.sampled_frequency_response` without breaking cross-entry or
+cross-frequency trial dependence. See [Package extensions](docs/src/package_extensions.md).
+
 ## Example
 
 The figure below shows the admittance characteristics of a point-to-point HVDC link composed of two MMCs. The analytical results are validated against PSCAD simulations. This example, together with a detailed explanation, is available in the `examples` folder.

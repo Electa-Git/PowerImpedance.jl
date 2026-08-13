@@ -375,6 +375,41 @@ end
           (:elements, :line, :line_parameters)
     @test only(case.coordinates).second.kind == :line_parameters
 
+    nyquist = PowerImpedanceACDC.nyquistplot(
+        result;
+        display_plot = false,
+        return_samples = true
+    )
+    bode = PowerImpedanceACDC.bodeplot(
+        result;
+        display_plot = false,
+        return_samples = true
+    )
+    passive = PowerImpedanceACDC.passivity(
+        result;
+        display_plot = false,
+        return_samples = true
+    )
+    modes = PowerImpedanceACDC.EVD(
+        result,
+        nothing,
+        10.0,
+        100.0;
+        display_plot = false,
+        return_samples = true
+    )
+    gain = PowerImpedanceACDC.small_gain(
+        result,
+        result;
+        display_plot = false,
+        return_samples = true
+    )
+    @test only(nyquist).uncertainty_source == :monte_carlo
+    @test only(bode).trials == 16
+    @test only(passive).trials == 16
+    @test only(modes).trials == 16
+    @test only(gain).trials == 16
+
     zero_parameters = measured_line_parameters(
         deterministic;
         relative_z = 0.0,

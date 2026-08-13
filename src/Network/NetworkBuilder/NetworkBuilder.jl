@@ -7,6 +7,8 @@ export pin, ⟷, ↔
 export AbsoluteError, AbsoluteGrid, DeterministicGrid, Grid, Gridspace, RelativeGrid
 export @gridspace, @relax
 export ImpedanceCase, ParametricImpedance, SolveCase, ParametricSolve
+export FrequencyResponseCase, ParametricFrequencyResponse, ParametricNodeSchema
+export StabilityCase, ParametricStability, make_loopgain, sampled_frequency_response
 
 const P = parentmodule(@__MODULE__)
 
@@ -137,5 +139,6 @@ include("../Solvers/make_adm_NB.jl")
 include("../Solvers/determine_impedance_NB.jl")
 include("uquant.jl")
 include("parametric.jl")
+include("small_signal.jl")
 
 end

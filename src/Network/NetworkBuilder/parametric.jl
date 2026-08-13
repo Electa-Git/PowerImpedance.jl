@@ -89,7 +89,7 @@ function _same_study_value(left, right)
     left === right && return true
     left isa Number && return isequal(left, right)
     left isa
-    Union{AbstractString, Symbol, Char, Nothing, Missing, Type, Module, Function} &&
+    Union{AbstractString, Symbol, Char, Nothing, Missing, Type, Module} &&
         return isequal(left, right)
     if left isa NamedTuple
         keys(left) == keys(right) || return false
@@ -182,7 +182,8 @@ function _stack_impedance_samples(samples::AbstractVector)
         "impedance samples must be arrays; received $(typeof(reference))",
     ))
     sample_dimensions = size(reference)
-    all(sample isa AbstractArray && size(sample) == sample_dimensions for sample in samples) ||
+    all(sample isa AbstractArray && size(sample) == sample_dimensions
+    for sample in samples) ||
         throw(DimensionMismatch("impedance sample types or dimensions differ"))
     stacked = similar(reference, (sample_dimensions..., length(samples)))
     trial_dimension = ndims(stacked)
@@ -208,7 +209,7 @@ function solve(
         return_samples::Bool = false
 )
     _validate_study_keywords(trials, distribution, confidence, tolerance)
-    plans = _gridspace_plans(gridspace)
+    plans = _gridspace_plans(deepcopy(gridspace))
     any(plan -> plan.uncertain, plans) && !_measurement_extension_loaded() &&
         throw(ArgumentError("uncertain studies require Measurements.jl; load it with `using Measurements`"))
     master_seed = _master_seed(seed)
@@ -274,13 +275,15 @@ function determine_impedance(
         kwargs...
 )
     _validate_study_keywords(trials, distribution, confidence, tolerance)
-    plans = _gridspace_plans(gridspace)
+    plans = _gridspace_plans(deepcopy(gridspace))
     any(plan -> plan.uncertain, plans) && !_measurement_extension_loaded() &&
         throw(ArgumentError("uncertain studies require Measurements.jl; load it with `using Measurements`"))
     master_seed = _master_seed(seed)
     cases = ImpedanceCase[]
 
-    run = _ParametricImpedanceRunner(nothing, (; kwargs...))
+    impedance_keywords = (; kwargs...)
+    run = _ParametricImpedanceRunner(nothing, impedance_keywords)
+    study_id = master_seed ⊻ 0xe7037ed1a0b428db
     for (case_index, plan) in enumerate(plans)
         case_seed = _case_seed(master_seed, case_index)
         rng = Random.Xoshiro(case_seed)
@@ -290,7 +293,11 @@ function determine_impedance(
             push!(cases,
                 ImpedanceCase(
                     plan.coordinates, 1, case_seed, distribution, output, impedance,
-                    frequencies, nothing, nothing
+                    frequencies, nothing, nothing,
+                    _ImpedanceReplay(
+                        plan, impedance_keywords, case_seed, distribution, 1, true,
+                        study_id
+                    )
                 ))
             continue
         end
@@ -330,7 +337,16 @@ function determine_impedance(
         push!(cases,
             ImpedanceCase(
                 plan.coordinates, requested_trials, case_seed, distribution, output,
-                averaged, frequencies, statistics, retained
+                averaged, frequencies, statistics, retained,
+                _ImpedanceReplay(
+                    plan,
+                    impedance_keywords,
+                    case_seed,
+                    distribution,
+                    requested_trials,
+                    plan.zero_uncertainty,
+                    study_id
+                )
             ))
     end
     return ParametricImpedance(cases)

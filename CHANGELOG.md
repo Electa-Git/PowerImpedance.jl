@@ -8,3 +8,10 @@
 - Add optional LineCableModels.jl `LineParameters` line constructors with
   covariance-aware Gridspace sampling.
 - Add ordered parametric result collections, statistics, optional samples, and seeded studies.
+- Extend Gridspace through nodal-admittance construction, exact per-trial
+  loop-gain composition, and fused small-signal stability analysis.
+- Add uncertainty-aware Nyquist, Bode, small-gain, passivity, EVD, stability
+  margin, unstable-frequency, and active-device partition analyses.
+- Add exact external whole-trial response adapters, frozen replay provenance,
+  explicit aligned/independent pairing, and covariance-aware standalone
+  Measurements response surrogates.

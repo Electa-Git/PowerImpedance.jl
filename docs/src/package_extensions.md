@@ -9,7 +9,7 @@ Two extensions are currently provided:
 
 | Extension | Activated by | Purpose |
 |:--|:--|:--|
-| `PowerImpedanceMeasurementsExt` | `Measurements` | Measurements-valued axes, Monte Carlo power flows, and Monte Carlo impedance studies |
+| `PowerImpedanceMeasurementsExt` | `Measurements` | Measurements-valued axes, converter-safe Monte Carlo studies, covariance-aware response surrogates, and small-signal analysis |
 | `PowerImpedanceLineCableModelsExt` | `LineCableModels` and `Measurements` | Native and `NetworkBuilder` lines constructed directly from phase-domain `LineParameters` |
 
 The extensions are load-order independent. A typical session starts with:
@@ -35,7 +35,7 @@ The clean workflow depends on what information must be retained:
 | Uncertain converter, source, or passive parameters | Use `Measurement` values or uncertain `NB.Grid` axes and let one Gridspace Monte Carlo run sample the complete builder |
 | Deterministic line model calculated by LCM | Pass the resulting `LineParameters` directly to `overhead_line` or `cable` |
 | LCM line uncertainty represented by joint first-order moments | Pass a covariance-preserving `LineParameters` to the qualified `NB.overhead_line` or `NB.cable` overload |
-| Exact empirical LCM joint distribution | Retain complete LCM trial tensors and evaluate complete trials together; direct `LineParametersMC` dispatch is not provided yet |
+| Exact empirical LCM joint distribution | Retain complete LCM trial tensors, evaluate each complete physical trial through PowerImpedanceACDC, and wrap the resulting response tensor with `NB.sampled_frequency_response` |
 
 See [Parametric and uncertainty studies](gridspace.md) for the basic Gridspace
 construction rules.
@@ -234,6 +234,53 @@ place of the impedance-specific fields; `output` bundles `powerflow` and
 trees. For an uncertain solve, `network` is `nothing` because there is no single
 physical network representing every trial; deterministic cases retain their
 network.
+
+### Standalone uncertain frequency responses
+
+Loading Measurements also adds direct uncertainty-aware stability entry points
+for three-dimensional matrix responses whose entries contain `Measurement`
+values:
+
+```julia
+result = nyquistplot(
+    uncertain_loopgain,
+    omega;
+    trials = 1000,
+    distribution = :normal,
+    seed = 2026,
+)
+```
+
+Shared Measurements primitive tags are collected across the complete response.
+Each primitive is drawn once per trial, and signed derivatives reconstruct all
+real and imaginary entries at all frequencies from the same draw. The same
+joint reconstruction is used across both operands of a standalone uncertain
+`small_gain` call. Normal sampling uses standard-normal primitive draws;
+uniform sampling uses variance-equivalent draws on `[-√3, √3]`.
+
+These overloads are explicitly labeled `:measurements_surrogate`. They preserve
+the encoded first-order means, variances, and signed covariance, but they do
+not recover a nonlinear empirical distribution whose complete trials were
+discarded during earlier aggregation. The call emits a warning for that
+reason. Prefer complete Gridspace results or exact empirical response slices
+when they are available.
+
+Exact external response data uses a different entry point:
+
+```julia
+response = NB.sampled_frequency_response(
+    samples,
+    omega;
+    nodes = [:bus_d, :bus_q],
+    trial_ids = 1:size(samples, 4),
+)
+```
+
+`samples` must have dimensions `(nodes, nodes, frequencies, trials)`. One trial
+slice is one indivisible realization. The resulting uncertainty source is
+`:empirical_samples`, and every stability tool consumes those exact slices.
+A callback overload accepts `(rng, trial_index)` and returns one ordinary
+numeric response, which is useful when trial responses are generated lazily.
 
 ## LineCableModels `LineParameters`
 
@@ -439,11 +486,23 @@ C_t = lcm_mc.samples.C[:, :, :, trial]
 
 Those four arrays jointly define one numeric `LineParameters`. A separate
 trial index for each entry, or independent sampling from the marginal PDFs,
-does not. Direct `LineParametersMC` dispatch and a trial-preserving empirical
-adapter are intentionally not part of the current extension. Until such an
-adapter exists, exact empirical end-to-end studies must be orchestrated at the
-case-study level, while the direct `.measurements` path is the supported clean
-interface for joint first-order propagation.
+does not. Direct `LineParametersMC` dispatch is intentionally not part of the
+current extension. The clean exact path is:
+
+1. select one common LCM trial index across `R`, `L`, `C`, `G`, and frequency;
+2. construct the numeric phase-domain, per-metre `LineParameters` for that
+   trial;
+3. build and evaluate the complete PowerImpedanceACDC system for that trial;
+4. store the resulting numeric impedance, admittance, or loop-gain response as
+   one fourth-dimension response slice; and
+5. call `NB.sampled_frequency_response(samples, omega; nodes, trial_ids)`.
+
+This separates responsibilities cleanly: LCM samples physical line designs,
+PowerImpedanceACDC evaluates complete systems, and the response adapter carries
+the exact joint trials into Nyquist, Bode, passivity, small-gain, margin, and EVD
+analysis. Use `.measurements` instead when a covariance-preserving first-order
+surrogate is sufficient and a second Monte Carlo stage inside
+PowerImpedanceACDC is desired.
 
 ### Supported line representations
 

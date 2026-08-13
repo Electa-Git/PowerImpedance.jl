@@ -2,15 +2,41 @@ import Statistics
 
 """One deterministic or uncertainty-aware impedance-study result."""
 struct ImpedanceCase
-    coordinates::Vector{Pair{Tuple,Any}}
+    coordinates::Vector{Pair{Tuple, Any}}
     trials::Int
-    seed::Union{Nothing,UInt64}
+    seed::Union{Nothing, UInt64}
     distribution::Symbol
     output::Any
     impedance::Any
     frequencies::Any
     statistics::Any
     samples::Any
+    _provenance::Any
+end
+
+function ImpedanceCase(
+        coordinates,
+        trials,
+        seed,
+        distribution,
+        output,
+        impedance,
+        frequencies,
+        statistics,
+        samples
+)
+    ImpedanceCase(
+        coordinates,
+        trials,
+        seed,
+        distribution,
+        output,
+        impedance,
+        frequencies,
+        statistics,
+        samples,
+        nothing
+    )
 end
 
 """Ordered collection of [`ImpedanceCase`](@ref) values."""
@@ -20,9 +46,9 @@ end
 
 """One deterministic or uncertainty-aware power-flow result."""
 struct SolveCase
-    coordinates::Vector{Pair{Tuple,Any}}
+    coordinates::Vector{Pair{Tuple, Any}}
     trials::Int
-    seed::Union{Nothing,UInt64}
+    seed::Union{Nothing, UInt64}
     distribution::Symbol
     output::Any
     powerflow::Any
@@ -31,13 +57,131 @@ struct SolveCase
     samples::Any
 end
 
-
 """Ordered collection of [`SolveCase`](@ref) values."""
 struct ParametricSolve
     cases::Vector{SolveCase}
 end
 
-for Collection in (:ParametricImpedance, :ParametricSolve)
+"""
+    FrequencyResponseCase
+
+Represent one deterministic or uncertainty-aware matrix frequency response.
+
+The canonical response layout is `n × n × nf`. Retained Monte Carlo samples use
+`n × n × nf × ntrials`. Frequencies are angular frequencies \\[rad/s\\].
+"""
+struct FrequencyResponseCase
+    "Gridspace coordinates that identify the deterministic case."
+    coordinates::Vector{Pair{Tuple, Any}}
+    "Number of Monte Carlo trials represented by the case."
+    trials::Int
+    "Derived local random seed, or `nothing` for externally supplied samples."
+    seed::Union{Nothing, UInt64}
+    "Sampling distribution identifier."
+    distribution::Symbol
+    "Response kind, such as `:node_admittance`, `:edge_admittance`, or `:loopgain`."
+    kind::Symbol
+    "Named result payload containing the response, frequencies, and node order."
+    output::Any
+    "Deterministic response or entrywise mean-and-standard-deviation response."
+    response::Any
+    "Strictly increasing angular-frequency vector \\[rad/s\\]."
+    frequencies::Vector{Float64}
+    "Ordered node names corresponding to the matrix rows and columns."
+    nodes::Vector{Symbol}
+    "Entrywise trial statistics, or `nothing` for a deterministic case."
+    statistics::Any
+    "Optional numeric sample tensor with layout `n × n × nf × ntrials`."
+    samples::Any
+    "Origin of uncertainty, such as `:monte_carlo` or `:empirical_samples`."
+    uncertainty_source::Symbol
+    "Private frozen information used to replay exact trials."
+    _provenance::Any
+end
+
+"""
+    ParametricFrequencyResponse
+
+Store ordered matrix-valued frequency-response cases from one study.
+
+The collection supports `length`, iteration, integer indexing, and `only`.
+"""
+struct ParametricFrequencyResponse
+    "Common response kind."
+    kind::Symbol
+    "Ordered deterministic cases."
+    cases::Vector{FrequencyResponseCase}
+    "Private identity used to prove shared trial provenance."
+    _study_id::UInt64
+end
+
+"""
+    ParametricNodeSchema
+
+Store one ordered node list per deterministic Gridspace case.
+
+Passing this object as `nodelist` to `make_y_edge` preserves case order and the
+sampling identity established by `make_y_node`.
+"""
+struct ParametricNodeSchema
+    "Ordered node names for every deterministic case."
+    nodes::Vector{Vector{Symbol}}
+    "Gridspace coordinates associated with each node list."
+    coordinates::Vector{Vector{Pair{Tuple, Any}}}
+    "Private shared-study identity."
+    _study_id::UInt64
+    "Private frozen study specification used for paired evaluation."
+    _study::Any
+end
+
+"""
+    StabilityCase
+
+Represent one deterministic or uncertainty-aware small-signal analysis.
+"""
+struct StabilityCase
+    "Gridspace coordinates that identify the deterministic case."
+    coordinates::Vector{Pair{Tuple, Any}}
+    "Number of numeric trials analyzed."
+    trials::Int
+    "Derived local random seed, when applicable."
+    seed::Union{Nothing, UInt64}
+    "Sampling distribution identifier."
+    distribution::Symbol
+    "Analysis identifier, such as `:nyquist`, `:bode`, or `:evd`."
+    analysis::Symbol
+    "Tool-specific aggregated result."
+    output::Any
+    "Tool-specific trial statistics."
+    statistics::Any
+    "Optional exact trial-level analysis records."
+    samples::Any
+    "Constructed plot object or plot collection."
+    plots::Any
+    "Origin of the analyzed uncertainty."
+    uncertainty_source::Symbol
+end
+
+"""
+    ParametricStability
+
+Store ordered results from one parametric small-signal analysis.
+
+The collection supports `length`, iteration, integer indexing, and `only`.
+"""
+struct ParametricStability
+    "Common analysis identifier."
+    analysis::Symbol
+    "Ordered deterministic cases."
+    cases::Vector{StabilityCase}
+end
+
+for Collection in (
+    :ParametricImpedance,
+    :ParametricSolve,
+    :ParametricFrequencyResponse,
+    :ParametricStability
+)
     @eval begin
         Base.length(result::$Collection) = length(result.cases)
         Base.size(result::$Collection) = (length(result),)
@@ -47,28 +191,40 @@ for Collection in (:ParametricImpedance, :ParametricSolve)
     end
 end
 
+Base.length(schema::ParametricNodeSchema) = length(schema.nodes)
+Base.size(schema::ParametricNodeSchema) = (length(schema),)
+Base.getindex(schema::ParametricNodeSchema, index::Integer) = schema.nodes[index]
+Base.iterate(schema::ParametricNodeSchema, state...) = iterate(schema.nodes, state...)
+Base.IteratorSize(::Type{<:ParametricNodeSchema}) = Base.HasShape{1}()
+
 struct _ValuePlan{F}
     sample::F
-    coordinates::Vector{Pair{Tuple,Any}}
+    coordinates::Vector{Pair{Tuple, Any}}
     uncertain::Bool
     zero_uncertainty::Bool
 end
 
-_measurement_extension_loaded() =
+function _measurement_extension_loaded()
     Base.get_extension(P, :PowerImpedanceMeasurementsExt) !== nothing
+end
 _is_measurement(::Any) = false
 _measurement_nominal(value) = value
 _measurement_error(::Any) = 0.0
-_make_measurement(args...) = throw(ArgumentError(
-    "uncertainty aggregation requires Measurements.jl; load it with `using Measurements`",
-))
-_sample_measurement(rng, value, distribution) = throw(ArgumentError(
-    "sampling Measurements values requires Measurements.jl; load it with `using Measurements`",
-))
+function _make_measurement(args...)
+    throw(ArgumentError(
+        "uncertainty aggregation requires Measurements.jl; load it with `using Measurements`",
+    ))
+end
+function _sample_measurement(rng, value, distribution)
+    throw(ArgumentError(
+        "sampling Measurements values requires Measurements.jl; load it with `using Measurements`",
+    ))
+end
 
 function _has_measurement(value)
     _is_measurement(value) && return true
-    value isa Complex && return _has_measurement(real(value)) || _has_measurement(imag(value))
+    value isa Complex &&
+        return _has_measurement(real(value)) || _has_measurement(imag(value))
     value isa NamedTuple && return any(_has_measurement, values(value))
     value isa Tuple && return any(_has_measurement, value)
     value isa AbstractArray && return any(_has_measurement, value)
@@ -77,7 +233,8 @@ end
 
 function _zero_measurement(value)
     _is_measurement(value) && return iszero(_measurement_error(value))
-    value isa Complex && return _zero_measurement(real(value)) && _zero_measurement(imag(value))
+    value isa Complex &&
+        return _zero_measurement(real(value)) && _zero_measurement(imag(value))
     value isa NamedTuple && return all(_zero_measurement, values(value))
     value isa Tuple && return all(_zero_measurement, value)
     value isa AbstractArray && return all(_zero_measurement, value)
@@ -88,11 +245,13 @@ function _sample_value(rng, value, distribution)
     _is_measurement(value) && return _sample_measurement(rng, value, distribution)
     value isa Complex && return complex(
         _sample_value(rng, real(value), distribution),
-        _sample_value(rng, imag(value), distribution),
+        _sample_value(rng, imag(value), distribution)
     )
-    value isa NamedTuple && return map(item -> _sample_value(rng, item, distribution), value)
+    value isa NamedTuple &&
+        return map(item -> _sample_value(rng, item, distribution), value)
     value isa Tuple && return map(item -> _sample_value(rng, item, distribution), value)
-    value isa AbstractArray && return map(item -> _sample_value(rng, item, distribution), value)
+    value isa AbstractArray &&
+        return map(item -> _sample_value(rng, item, distribution), value)
     return value
 end
 
@@ -101,19 +260,19 @@ function _measurement_description(value)
         return (
             kind = :measurement,
             nominal = _measurement_nominal(value),
-            error = _measurement_error(value),
+            error = _measurement_error(value)
         )
     end
     if value isa Complex
         return (
             kind = :complex_measurement,
             nominal = complex(
-                _measurement_nominal(real(value)), _measurement_nominal(imag(value)),
+                _measurement_nominal(real(value)), _measurement_nominal(imag(value))
             ),
             error = (
                 real = _measurement_error(real(value)),
-                imag = _measurement_error(imag(value)),
-            ),
+                imag = _measurement_error(imag(value))
+            )
         )
     end
     return (kind = :measurement_container, nominal = value, error = nothing)
@@ -123,9 +282,10 @@ function _axis_plans(axis::DeterministicGrid, path::Tuple)
     varied = length(axis) > 1
     return map(enumerate(axis.vals)) do (_, value)
         uncertain = _has_measurement(value)
-        coordinates = Pair{Tuple,Any}[]
+        coordinates = Pair{Tuple, Any}[]
         if varied || uncertain
-            metadata = uncertain ? _measurement_description(value) : (kind = :deterministic, value = value)
+            metadata = uncertain ? _measurement_description(value) :
+                       (kind = :deterministic, value = value)
             push!(coordinates, path => metadata)
         end
         sample = (rng, distribution) -> _sample_value(rng, value, distribution)
@@ -134,33 +294,30 @@ function _axis_plans(axis::DeterministicGrid, path::Tuple)
 end
 
 function _axis_plans(axis::RelativeGrid, path::Tuple)
-    return [
-        _ValuePlan(
-            (rng, distribution) -> begin
-                sigma = abs(nominal) * error / 100
-                iszero(sigma) ? float(nominal) : rand(rng, _distribution(distribution, nominal, sigma))
-            end,
-            Pair{Tuple,Any}[
-                path => (kind = :relative, nominal = nominal, error = error),
-            ],
-            true,
-            iszero(error),
-        ) for (nominal, error) in Iterators.product(axis.vals, axis.rel_err)
-    ]
+    return [_ValuePlan(
+                (rng, distribution) -> begin
+                    sigma = abs(nominal) * error / 100
+                    iszero(sigma) ? float(nominal) :
+                    rand(rng, _distribution(distribution, nominal, sigma))
+                end,
+                Pair{Tuple, Any}[
+                    path => (kind = :relative, nominal = nominal, error = error),
+                ],
+                true,
+                iszero(error)
+            ) for (nominal, error) in Iterators.product(axis.vals, axis.rel_err)]
 end
 
 function _axis_plans(axis::AbsoluteGrid, path::Tuple)
-    return [
-        _ValuePlan(
-            (rng, distribution) -> iszero(error) ? float(nominal) :
-                rand(rng, _distribution(distribution, nominal, error)),
-            Pair{Tuple,Any}[
-                path => (kind = :absolute, nominal = nominal, error = error),
-            ],
-            true,
-            iszero(error),
-        ) for (nominal, error) in Iterators.product(axis.vals, axis.abs_err)
-    ]
+    return [_ValuePlan(
+                (rng, distribution) -> iszero(error) ? float(nominal) :
+                                       rand(rng, _distribution(distribution, nominal, error)),
+                Pair{Tuple, Any}[
+                    path => (kind = :absolute, nominal = nominal, error = error),
+                ],
+                true,
+                iszero(error)
+            ) for (nominal, error) in Iterators.product(axis.vals, axis.abs_err)]
 end
 
 function _axis_path(g::Gridspace, path::Tuple, index::Int)
@@ -169,16 +326,19 @@ function _axis_path(g::Gridspace, path::Tuple, index::Int)
 end
 
 function _gridspace_plans(g::Gridspace, path::Tuple = ())
-    axis_plans = ntuple(index -> begin
-        axis = g.grids[index]
-        axis_path = _axis_path(g, path, index)
-        axis isa Gridspace ? _gridspace_plans(axis, axis_path) : _axis_plans(axis, axis_path)
-    end, length(g.grids))
+    axis_plans = ntuple(
+        index -> begin
+            axis = g.grids[index]
+            axis_path = _axis_path(g, path, index)
+            axis isa Gridspace ? _gridspace_plans(axis, axis_path) :
+            _axis_plans(axis, axis_path)
+        end,
+        length(g.grids))
 
     combinations = Iterators.product(axis_plans...)
     plans = _ValuePlan[]
     for combination in combinations
-        coordinates = Pair{Tuple,Any}[]
+        coordinates = Pair{Tuple, Any}[]
         foreach(plan -> append!(coordinates, plan.coordinates), combination)
         uncertain = any(plan -> plan.uncertain, combination)
         zero_uncertainty = all(plan -> plan.zero_uncertainty, combination)
@@ -210,8 +370,9 @@ end
 
 _master_seed(seed::Nothing) = rand(Random.RandomDevice(), UInt64)
 _master_seed(seed::Integer) = UInt64(seed)
-_case_seed(master::UInt64, case_index::Integer) =
+function _case_seed(master::UInt64, case_index::Integer)
     master ⊻ (UInt64(case_index) * 0x9e3779b97f4a7c15)
+end
 
 function _trial_error(error, plan::_ValuePlan, case_index, trial_index, seed)
     paths = isempty(plan.coordinates) ? "<none>" : join(first.(plan.coordinates), ", ")
@@ -244,7 +405,7 @@ function _scalar_statistics(values::AbstractVector{<:Real})
         median = Statistics.median(sorted),
         q95 = Statistics.quantile(sorted, 0.95),
         max = last(sorted),
-        n = length(values),
+        n = length(values)
     )
 end
 
@@ -256,7 +417,8 @@ end
 function _aggregate_numbers(values::AbstractVector{<:Complex})
     real_result, real_statistics = _aggregate_numbers(real.(values))
     imag_result, imag_statistics = _aggregate_numbers(imag.(values))
-    return complex(real_result, imag_result), (real = real_statistics, imag = imag_statistics)
+    return complex(real_result, imag_result),
+    (real = real_statistics, imag = imag_statistics)
 end
 
 function _aggregate_numbers(values::AbstractVector)
@@ -270,17 +432,19 @@ function _aggregate_tree(values::AbstractVector)
     if first_value isa Number && all(value -> value isa Number, values)
         return _aggregate_numbers(values)
     elseif first_value isa NamedTuple
-        keys(first_value) == keys(last(values)) || throw(ArgumentError("power-flow schemas differ across trials"))
-        pairs = map(keys(first_value)) do key
+        keys(first_value) == keys(last(values)) ||
+            throw(ArgumentError("power-flow schemas differ across trials"))
+        names = keys(first_value)
+        pairs = map(names) do key
             _aggregate_tree([getproperty(value, key) for value in values])
         end
-        return map(first, pairs), map(last, pairs)
+        return NamedTuple{names}(map(first, pairs)), NamedTuple{names}(map(last, pairs))
     elseif first_value isa AbstractDict
         expected = Set(keys(first_value))
         all(value -> Set(keys(value)) == expected, values) ||
             throw(ArgumentError("power-flow schemas differ across trials"))
-        output = Dict{keytype(first_value),Any}()
-        statistics = Dict{keytype(first_value),Any}()
+        output = Dict{keytype(first_value), Any}()
+        statistics = Dict{keytype(first_value), Any}()
         for key in keys(first_value)
             output[key], statistics[key] = _aggregate_tree([value[key] for value in values])
         end
@@ -291,7 +455,8 @@ function _aggregate_tree(values::AbstractVector)
         output = similar(first_value, Any)
         statistics = similar(first_value, Any)
         for index in eachindex(first_value)
-            output[index], statistics[index] = _aggregate_tree([value[index] for value in values])
+            output[index], statistics[index] = _aggregate_tree([value[index]
+                                                                for value in values])
         end
         return output, statistics
     elseif first_value isa Tuple
@@ -300,7 +465,8 @@ function _aggregate_tree(values::AbstractVector)
         pairs = ntuple(index -> _aggregate_tree([value[index] for value in values]), length(first_value))
         return map(first, pairs), map(last, pairs)
     end
-    all(==(first_value), values) || throw(ArgumentError("nonnumeric outputs differ across trials"))
+    all(==(first_value), values) ||
+        throw(ArgumentError("nonnumeric outputs differ across trials"))
     return first_value, nothing
 end
 

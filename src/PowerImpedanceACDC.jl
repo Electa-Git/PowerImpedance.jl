@@ -143,5 +143,6 @@ include("Tools/passivity.jl")
 include("Tools/unstable_frequency.jl")
 
 
+include("Tools/parametric_stability.jl")
 
 end

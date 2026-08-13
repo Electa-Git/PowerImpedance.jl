@@ -103,3 +103,166 @@ that object with separate Gridspace axes.
 trial count, derived seed, distribution, output, statistics, and optional
 samples. An uncertain solve aggregates numeric leaves under the power-flow
 solution and sets `network` to `nothing`.
+
+## Small-signal frequency responses
+
+The same Gridspace contract extends through nodal admittance construction and
+stability analysis. Frequency ranges are specified in hertz; returned `omega`
+vectors are angular frequencies in radians per second. The canonical response
+layout is `(rows, columns, frequencies)`, and retained numeric samples add a
+fourth trial dimension.
+
+The explicit staged API makes the physical partition visible:
+
+```julia
+Ynode, node_schema, omega = NB.make_y_node(
+    builder_space;
+    freq_range = (1.0, 1e3, 400),
+    trials = 1000,
+    seed = 2026,
+)
+
+Yedge, _, _ = NB.make_y_edge(
+    builder_space;
+    nodelist = node_schema,
+    freq_range = (1.0, 1e3, 400),
+)
+
+loopgain = inv.(Yedge) .* Ynode
+result = nyquistplot(loopgain, omega; zoom = "yes", SM = "GM")
+```
+
+`node_schema` stores one ordered node list per deterministic case. Passing it
+to `make_y_edge` also inherits the case order, trial count, seed, distribution,
+and study identity. The specialized broadcast expression performs one matrix
+inverse and matrix product at each frequency and numeric trial. It never
+inverts an aggregated mean±standard-deviation matrix.
+
+The fused path performs the node and edge calculations from the same sampled
+`BuilderState` and one active-device linearization per trial:
+
+```julia
+loopgain, node_schema, omega = NB.make_loopgain(
+    builder_space;
+    freq_range = (1.0, 1e3, 400),
+    trials = 1000,
+    seed = 2026,
+)
+
+result = nyquistplot(
+    builder_space;
+    freq_range = (1.0, 1e3, 400),
+    trials = 1000,
+    seed = 2026,
+    zoom = "yes",
+    SM = "GM",
+)
+```
+
+`make_y_node`, `make_y_edge`, and `make_loopgain` return a
+`ParametricFrequencyResponse`, a `ParametricNodeSchema`, and the common angular
+frequency vector. A response contains ordered `FrequencyResponseCase` values.
+Every case records:
+
+- deterministic coordinates, trials, seed, and distribution;
+- response kind, ordered nodes, and angular frequencies;
+- the deterministic response or aggregated mean±standard deviation;
+- standard real/imaginary statistics;
+- optional `(n, n, nf, ntrials)` samples;
+- a truthful `uncertainty_source`; and
+- private frozen provenance for exact replay when samples were not retained.
+
+The possible uncertainty sources are `:deterministic`, `:monte_carlo`,
+`:empirical_samples`, and `:measurements_surrogate`. Extracting only an
+aggregated `case.response` discards empirical trial dependence. Pass the
+complete result collection to later tools so retained samples or frozen replay
+provenance remain available.
+
+## Response composition and pairing
+
+Explicit response composition accepts deterministic inputs or uncertain
+collections:
+
+```julia
+loopgain = NB.make_loopgain(Yedge, Ynode; pairing = :auto)
+```
+
+`pairing=:auto` aligns trials only when shared provenance proves that trial
+indices describe the same physical samples. Otherwise select a policy:
+
+- `pairing=:aligned` declares that equal trial indices are jointly sampled;
+- `pairing=:independent` draws independent left and right trial indices using
+  the supplied `seed` and optional `trials` count.
+
+Unrelated deterministic case collections form a Cartesian product. Shared
+studies align by deterministic coordinates. Ambiguous uncertain composition is
+an error rather than silently imposing a dependence model.
+
+## Exact external Monte Carlo responses
+
+Use `sampled_frequency_response` when another solver or case-study runner has
+already produced complete numeric response trials:
+
+```julia
+external = NB.sampled_frequency_response(
+    samples,
+    omega;
+    nodes = [:bus_d, :bus_q],
+    trial_ids = 1:size(samples, 4),
+)
+```
+
+Here `samples` has dimensions `(n, n, nf, ntrials)`. One fourth-dimension slice
+must contain the whole response from one physical trial—every matrix entry and
+every frequency uses the same trial index. A callback form is also available:
+
+```julia
+external = NB.sampled_frequency_response(
+    (rng, trial_index) -> calculate_one_numeric_response(rng, trial_index),
+    omega;
+    trials = 1000,
+    seed = 2026,
+    nodes = [:bus_d, :bus_q],
+)
+```
+
+Both forms preserve cross-entry and cross-frequency empirical dependence. They
+are the clean terminal boundary for exact Monte Carlo data produced outside
+PowerImpedanceACDC.
+
+## Stability result collections
+
+Parametric overloads are available for `nyquistplot`, `bodeplot`, `small_gain`,
+`passivity`, `EVD`, `stabilitymargin`, and `unstable_frequency`. Each returns a
+`ParametricStability` containing ordered `StabilityCase` values. A case exposes
+`analysis`, tool-specific `output`, `statistics`, optional trial `samples`, and
+constructed `plots`. Plots are constructed and displayed by default;
+`display_plot=false` suppresses display without discarding plot objects.
+
+For example:
+
+```julia
+nyquist = nyquistplot(loopgain; return_samples = true)
+case = only(nyquist)
+
+case.output.assessment_probabilities
+case.output.encirclements
+case.output.margins
+case.output.unstable_frequencies
+case.statistics.eigenloci
+case.samples.metrics
+case.plots.nyquist
+```
+
+Nyquist and EVD match eigenvalue trajectories within every trial and then
+match complete trial loci to a nominal trajectory. Bode phase is unwrapped
+within each trial before branch alignment and aggregation. Small-gain binary
+inputs obey the explicit pairing policy above. Passivity, margins, and unstable
+frequencies are evaluated on numeric trials, never on aggregated matrices.
+
+`check_stability(builder_space, :converter; direction=:ac)` resolves the
+selected converter terminals through the connection registry, partitions the
+device from the remaining network, constructs `Zrest * inv(Zdevice)` per
+trial, and runs the common Nyquist analysis. Missing, passive, source,
+disconnected, singular, or dimensionally inconsistent selections are rejected
+with case and trial diagnostics.

@@ -34,5 +34,6 @@ Logging.global_logger(ConsoleLogger(stderr, Logging.Warn)) # possible values: Lo
         include("make_y_node_test.jl")
         include("Transformer_test.jl")
         include("Gridspace_test.jl")
+        include("small_signal_gridspace_test.jl")
         
 end;
