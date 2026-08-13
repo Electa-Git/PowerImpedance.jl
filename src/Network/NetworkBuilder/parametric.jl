@@ -36,6 +36,30 @@ function (target::_BuilderMaterializer)(elements, options)
     return define(elements, target.connections; options)
 end
 
+"""
+    define(elements, connections; options=(;))
+
+Compose element Gridspaces into a declarative system Gridspace.
+
+# Arguments
+
+- `elements`: Named tuple whose values are qualified NetworkBuilder shadow
+  constructor results.
+- `connections`: Fixed tuple of [`ConnectionDef`](@ref) values.
+- `options`: Ordinary or explicitly gridded builder options.
+
+# Returns
+
+- A `Gridspace{BuilderState}` whose deterministic cases follow Cartesian-product
+  order.
+
+# Notes
+
+Raw arrays and other containers remain atomic constructor arguments. Only an
+explicit [`Grid`](@ref), uncertainty grid, or nested Gridspace introduces an
+axis. Connections are fixed by this overload; stochastic topology changes are
+rejected by downstream response studies.
+"""
 function define(
         elements::NamedTuple{Names, Types},
         connections::Tuple{Vararg{ConnectionDef}};
@@ -199,6 +223,43 @@ function (runner::_ParametricImpedanceRunner)(builder::BuilderState)
     return determine_impedance(network; runner.keywords...)
 end
 
+"""
+    solve(gridspace::Gridspace{BuilderState}; trials=nothing,
+          distribution=:normal, seed=nothing, confidence=0.95,
+          tolerance=0.02, return_samples=false)
+
+Solve every deterministic case and numeric uncertainty trial in a builder
+Gridspace.
+
+# Arguments
+
+- `gridspace`: Declarative systems to materialize and solve.
+- `trials`: Positive Monte Carlo count, or `nothing` for DKW sizing.
+- `distribution`: Primitive sampling law, `:normal` or `:uniform`.
+- `seed`: Local master seed, or `nothing` to generate one without changing the
+  global random-number generator.
+- `confidence`: DKW simultaneous confidence when `trials=nothing`.
+- `tolerance`: DKW empirical-CDF tolerance when `trials=nothing`.
+- `return_samples`: Retain each numeric power-flow result when `true`.
+
+# Returns
+
+- A [`ParametricSolve`](@ref) containing one [`SolveCase`](@ref) per
+  deterministic Gridspace case.
+
+# Notes
+
+`:normal` samples `Normal(nominal, standard_deviation)`. `:uniform` samples
+`nominal ± √3 standard_deviation`, which has the same variance. Every sampled
+builder contains ordinary numeric values before reaching the scalar solver.
+Separate Gridspace axes remain independent. Zero-uncertainty cases execute one
+physical solve while retaining the requested logical trial count.
+
+# Errors
+
+Throws an error for invalid Monte Carlo controls or a failed case/trial. Trial
+errors report coordinates, case index, trial index, and seed.
+"""
 function solve(
         gridspace::Gridspace{BuilderState};
         trials::Union{Nothing, Int} = nothing,
@@ -264,6 +325,52 @@ function solve(
     return ParametricSolve(cases)
 end
 
+"""
+    determine_impedance(gridspace::Gridspace{BuilderState}; trials=nothing,
+                        distribution=:normal, seed=nothing, confidence=0.95,
+                        tolerance=0.02, return_samples=false, kwargs...)
+
+Evaluate impedance for every deterministic case and numeric uncertainty trial
+in a builder Gridspace.
+
+# Arguments
+
+- `gridspace`: Declarative systems to materialize and evaluate.
+- `trials`: Positive Monte Carlo count, or `nothing` for DKW sizing.
+- `distribution`: Primitive sampling law, `:normal` or `:uniform`.
+- `seed`: Local master seed, or `nothing` to generate one without changing the
+  global random-number generator.
+- `confidence`: DKW simultaneous confidence when `trials=nothing`.
+- `tolerance`: DKW empirical-CDF tolerance when `trials=nothing`.
+- `return_samples`: Retain the numeric tensor with layout
+  `rows × columns × frequencies × trials` when `true`.
+- `kwargs`: Scalar impedance arguments, including `nets`, `elim_elements`, and
+  `freq_range`, whose frequencies are specified in hertz.
+
+# Returns
+
+- A [`ParametricImpedance`](@ref) containing one [`ImpedanceCase`](@ref) per
+  deterministic Gridspace case. Complex response statistics are stored
+  separately under `case.statistics.real` and `case.statistics.imag`.
+
+# Notes
+
+`:normal` samples `Normal(nominal, standard_deviation)`. `:uniform` samples
+`nominal ± √3 standard_deviation`, which has the same variance. Passive-only
+changes rebuild passive admittances while reusing the active operating point.
+Changes to active elements, sources, connections, or builder options repeat
+power flow, nonlinear equilibrium, and linearization.
+
+When samples are omitted, private frozen provenance records the builder plan,
+distribution, and seed so downstream stability tools can replay the same
+numeric trials. The uncertainty source of such cases is `:monte_carlo`.
+
+# Errors
+
+Throws an error for invalid Monte Carlo controls, inconsistent trial response
+dimensions or frequencies, or a failed case/trial. Trial errors report
+coordinates, case index, trial index, and seed.
+"""
 function determine_impedance(
         gridspace::Gridspace{BuilderState};
         trials::Union{Nothing, Int} = nothing,

@@ -6,6 +6,41 @@ struct GridspacePokemon
     name::Symbol
 end
 
+module ErgonomicBuilderAPI
+using PowerImpedanceACDC
+using PowerImpedanceACDC.NetworkBuilder: Grid, define, pin, ⟷
+
+function impedance_study()
+    elements = (branch = impedance(Grid; z = Grid([1.0, 2.0]), pins = 1),)
+    connections = (
+        pin(:branch, 1, 1) ⟷ :bus,
+        pin(:branch, 2, 1) ⟷ :gnd
+    )
+    builders = define(elements, connections)
+    return determine_impedance(
+        builders;
+        nets = [:bus],
+        freq_range = (1.0, 10.0, 2)
+    )
+end
+end
+
+module WildcardBuilderAPI
+using PowerImpedanceACDC
+using PowerImpedanceACDC.NetworkBuilder
+
+const shared_impedance_generic = determine_impedance === NetworkBuilder.determine_impedance
+const shared_loopgain_generic = make_loopgain === NetworkBuilder.make_loopgain
+end
+
+module ReverseWildcardBuilderAPI
+using PowerImpedanceACDC.NetworkBuilder
+using PowerImpedanceACDC
+
+const shared_impedance_generic = determine_impedance === NetworkBuilder.determine_impedance
+const shared_loopgain_generic = make_loopgain === NetworkBuilder.make_loopgain
+end
+
 @gridspace struct GridspaceMacroExample{T <: Real}
     x::T
     y::T = 2
@@ -51,6 +86,51 @@ end
     @test_throws ArgumentError collect(relative)
 end
 
+@testset "NetworkBuilder public import boundary" begin
+    safe_exports = (
+        :BuilderState,
+        :Pin,
+        :ConnectionDef,
+        :define,
+        :update!,
+        :solve,
+        :pin,
+        Symbol("⟷"),
+        Symbol("↔"),
+        :Grid,
+        :Gridspace,
+        :DeterministicGrid,
+        :RelativeGrid,
+        :AbsoluteGrid,
+        :AbsoluteError,
+        Symbol("@gridspace"),
+        Symbol("@relax"),
+        :ImpedanceCase,
+        :ParametricImpedance,
+        :SolveCase,
+        :ParametricSolve,
+        :FrequencyResponseCase,
+        :ParametricFrequencyResponse,
+        :ParametricNodeSchema,
+        :StabilityCase,
+        :ParametricStability,
+        :determine_impedance,
+        :make_loopgain,
+        :sampled_frequency_response
+    )
+    @test all(name -> name in names(NB), safe_exports)
+    @test all(name -> name ∉ names(NB), (:impedance, :cable, :overhead_line, :mmc, :tlc))
+    @test WildcardBuilderAPI.shared_impedance_generic
+    @test WildcardBuilderAPI.shared_loopgain_generic
+    @test ReverseWildcardBuilderAPI.shared_impedance_generic
+    @test ReverseWildcardBuilderAPI.shared_loopgain_generic
+
+    result = ErgonomicBuilderAPI.impedance_study()
+    @test result isa NB.ParametricImpedance
+    @test length(result) == 2
+    @test all(case -> size(case.impedance) == (1, 1, 2), result)
+end
+
 @testset "large impedance sample stacking" begin
     samples = Any[fill(complex(Float64(index)), 1, 1, 2) for index in 1:15_000]
     stacked = NB._stack_impedance_samples(samples)
@@ -62,13 +142,17 @@ end
 @testset "Qualified component shadows" begin
     parent = PowerImpedanceACDC.impedance(z = 3.0, pins = 1)
     shadow = only(NB.impedance(z = 3.0, pins = 1))
+    dispatched = only(PowerImpedanceACDC.impedance(NB.Grid; z = 3.0, pins = 1))
     @test shadow.element_model.value == parent.element_model.value
     @test shadow.input_pins == parent.input_pins
     @test shadow.output_pins == parent.output_pins
     @test shadow.transformation == parent.transformation
     @test shadow.connection == parent.connection
+    @test dispatched.element_model.value == parent.element_model.value
 
     @test only(NB.PIControl(Kp = 2.0, Ki = 3.0)) ==
+          PowerImpedanceACDC.PIControl(Kp = 2.0, Ki = 3.0)
+    @test only(PowerImpedanceACDC.PIControl(NB.Grid; Kp = 2.0, Ki = 3.0)) ==
           PowerImpedanceACDC.PIControl(Kp = 2.0, Ki = 3.0)
     @test only(NB.ElectricalTLC(Lᵣ = 0.1, Rᵣ = 0.2)) ==
           PowerImpedanceACDC.ElectricalTLC(Lᵣ = 0.1, Rᵣ = 0.2)
@@ -77,6 +161,13 @@ end
           length(NB.SHADOW_CONSTRUCTOR_MANIFEST)
     @test all(entry -> isdefined(NB, first(entry)), NB.SHADOW_CONSTRUCTOR_MANIFEST)
     @test all(entry -> isdefined(PowerImpedanceACDC, first(entry)), NB.SHADOW_CONSTRUCTOR_MANIFEST)
+    @test all(
+        entry -> hasmethod(
+            getfield(PowerImpedanceACDC, first(entry)),
+            Tuple{typeof(NB.Grid)}
+        ),
+        NB.SHADOW_CONSTRUCTOR_MANIFEST
+    )
 
     old_pi = PowerImpedanceACDC.PI_control(Kₚ = 1.0, Kᵢ = 2.0)
     @test only(NB.tlc(P = 1.0, pll = old_pi)) isa PowerImpedanceACDC.Element
@@ -99,7 +190,7 @@ end
     @test length(builders) == 2
     @test [case.elements.z1.element_model.value[1] for case in builders] == [1, 2]
 
-    result = NB.determine_impedance(
+    result = PowerImpedanceACDC.determine_impedance(
         builders; nets = [:n1], freq_range = (1.0, 10.0, 3), seed = 11
     )
     @test result isa NB.ParametricImpedance

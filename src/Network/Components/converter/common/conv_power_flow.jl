@@ -20,7 +20,7 @@ $(SIGNATURES)
 
 # Details
 
-The legacy converter interface delegates ABCD evaluation to [`eval_y`](@ref).
+The legacy converter interface delegates ABCD evaluation to `eval_y`.
 """
 function eval_abcd(converter :: Converter, s :: Complex)
     return eval_y(converter, s)

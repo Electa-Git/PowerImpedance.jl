@@ -404,6 +404,59 @@ function NB._replay_response(replay::_MeasurementResponseReplay)
             for _ in 1:replay.trials]
 end
 
+"""
+    NetworkBuilder.sampled_frequency_response(
+        response::AbstractArray{<:Number, 3}, frequencies;
+        trials=nothing, distribution=:normal, seed=nothing,
+        confidence=0.95, tolerance=0.02, return_samples=false,
+        nodes=Symbol[], coordinates=[], kind=:external,
+    )
+
+Construct replayable numeric response trials from the first-order moment and
+covariance model encoded by a Measurements-valued frequency response.
+
+# Arguments
+
+- `response`: Square matrix response with layout
+  `nodes × nodes × frequencies`; real and imaginary entries may contain
+  Measurements values.
+- `frequencies`: Finite, positive, strictly increasing angular frequencies
+  \\[rad/s\\].
+- `trials`: Positive synthetic-trial count, or `nothing` for DKW sizing.
+- `distribution`: Latent primitive law, `:normal` or `:uniform`.
+- `seed`: Local master seed used for exact replay.
+- `confidence`: DKW simultaneous confidence when `trials=nothing`.
+- `tolerance`: DKW empirical-CDF tolerance when `trials=nothing`.
+- `return_samples`: Retain the numeric
+  `nodes × nodes × frequencies × trials` tensor when `true`.
+- `nodes`: Ordered response-node names.
+- `coordinates`: Optional deterministic-case coordinates.
+- `kind`: Response classification used by downstream composition.
+
+# Returns
+
+- A singleton `NetworkBuilder.ParametricFrequencyResponse` whose case has
+  `uncertainty_source == :measurements_surrogate`.
+
+# Notes
+
+Every shared Measurements primitive is drawn once per trial. Signed derivatives
+then reconstruct all matrix entries, real and imaginary components, and
+frequencies jointly. `:normal` uses standard-normal latent draws;
+`:uniform` uses `Uniform(-√3, √3)`, preserving the encoded covariance in
+expectation.
+
+This is a moment-and-covariance surrogate. It cannot recover skewness, tails,
+higher-order dependence, or complete empirical trials discarded before this
+call. When physical trial slices remain available, use the four-dimensional
+`sampled_frequency_response(samples, frequencies; ...)` overload, which labels
+the result `:empirical_samples`.
+
+# Errors
+
+Throws an error for a deterministic numeric response, invalid Monte Carlo
+controls, invalid frequencies, or incompatible matrix dimensions.
+"""
 function NB.sampled_frequency_response(
         response::AbstractArray{<:Number, 3},
         frequencies;

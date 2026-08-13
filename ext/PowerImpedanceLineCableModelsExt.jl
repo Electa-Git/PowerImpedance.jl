@@ -164,6 +164,17 @@ function _line_element(
     )
 end
 
+"""
+    overhead_line(parameters::LineParameters; length,
+                  transformation=false, connection=true,
+                  extrapolation=:error)
+
+Construct a native overhead-line `Element` from deterministic, phase-domain
+line parameters. `Z` [Ω/m] and `Y` [S/m] are scaled by the positive `length`
+[m] and interpolated entrywise over the tabulated frequencies [Hz]. Use
+`overhead_line(Grid, parameters; ...)` when the parameters or constructor
+arguments are uncertain or parametric.
+"""
 function P.overhead_line(
         parameters::LCM.LineParameters;
         length,
@@ -182,6 +193,17 @@ function P.overhead_line(
     )
 end
 
+"""
+    cable(parameters::LineParameters; length,
+          transformation=false, connection=true,
+          extrapolation=:error)
+
+Construct a native cable `Element` from deterministic, phase-domain line
+parameters. `Z` [Ω/m] and `Y` [S/m] are scaled by the positive `length` [m]
+and interpolated entrywise over the tabulated frequencies [Hz]. Use
+`cable(Grid, parameters; ...)` when the parameters or constructor arguments
+are uncertain or parametric.
+"""
 function P.cable(
         parameters::LCM.LineParameters;
         length,
@@ -254,6 +276,85 @@ function NB.cable(
 )
     return _line_parameters_gridspace(
         P.cable,
+        parameters;
+        length,
+        transformation,
+        connection,
+        extrapolation
+    )
+end
+
+"""
+    overhead_line(Grid, parameters::LineParameters; length,
+                  transformation=false, connection=true,
+                  extrapolation=:error)
+
+Construct a lazy overhead-line `Gridspace` from phase-domain, per-metre line
+parameters through the same positional marker used by every NetworkBuilder
+component shadow.
+
+# Arguments
+
+- `Grid`: The `PowerImpedanceACDC.NetworkBuilder.Grid` constructor, used here
+  as a positional dispatch marker.
+- `parameters`: Phase-domain `LineParameters` with `Z` in [Ω/m], `Y` in [S/m],
+  and deterministic frequencies in [Hz].
+- `length`: Positive line length [m], or an explicit Gridspace axis.
+- `transformation`: `false` for one conductor, `true` for two conductors, and
+  either value for three conductors.
+- `connection`: Whether the resulting element participates in the network.
+- `extrapolation`: `:error` or `:linear` outside the tabulated frequencies.
+
+# Returns
+
+- A lazy `Gridspace` that samples uncertain line parameters and constructor
+  fields into ordinary numeric values before line evaluation.
+
+# Notes
+
+`NetworkBuilder.overhead_line(parameters; ...)` remains a supported
+compatibility form.
+"""
+function P.overhead_line(
+        ::typeof(NB.Grid),
+        parameters::LCM.LineParameters;
+        length,
+        transformation = false,
+        connection = true,
+        extrapolation = :error
+)
+    return NB.overhead_line(
+        parameters;
+        length,
+        transformation,
+        connection,
+        extrapolation
+    )
+end
+
+"""
+    cable(Grid, parameters::LineParameters; length,
+          transformation=false, connection=true,
+          extrapolation=:error)
+
+Construct a lazy cable `Gridspace` from phase-domain line parameters. `Z` and
+`Y` are interpreted as per-metre matrices in [Ω/m] and [S/m], `length` is in
+[m], and frequencies are in [Hz]. The positional `Grid` marker selects the
+lazy constructor; [`cable(parameters; ...)`](@ref) remains the deterministic
+native overload.
+
+Uncertainty is sampled jointly within `parameters` before line evaluation.
+`extrapolation` accepts `:error` or `:linear`.
+"""
+function P.cable(
+        ::typeof(NB.Grid),
+        parameters::LCM.LineParameters;
+        length,
+        transformation = false,
+        connection = true,
+        extrapolation = :error
+)
+    return NB.cable(
         parameters;
         length,
         transformation,
@@ -412,9 +513,9 @@ end
 
 function _complex_coefficient(value, key)
     real_coefficient = NB._is_measurement(real(value)) ?
-        key[2] * Measurements.derivative(real(value), key) : 0.0
+                       key[2] * Measurements.derivative(real(value), key) : 0.0
     imag_coefficient = NB._is_measurement(imag(value)) ?
-        key[2] * Measurements.derivative(imag(value), key) : 0.0
+                       key[2] * Measurements.derivative(imag(value), key) : 0.0
     return complex(Float64(real_coefficient), Float64(imag_coefficient))
 end
 
@@ -422,6 +523,7 @@ function _coefficient_matrix(values, primitive_keys)
     coefficients = Matrix{ComplexF64}(
         undef, length(values), length(primitive_keys))
     for (column, key) in enumerate(primitive_keys), index in eachindex(values)
+
         coefficients[index, column] = _complex_coefficient(values[index], key)
     end
     return coefficients
@@ -452,7 +554,7 @@ function _sampling_plan(parameters::LCM.LineParameters)
     return lock(_LINE_PARAMETERS_SAMPLING_PLAN_LOCK) do
         cached = get(_LINE_PARAMETERS_SAMPLING_PLANS, Z_storage, nothing)
         if cached !== nothing && cached.Y_storage === Y_storage &&
-                cached.frequency_storage === frequency_storage
+           cached.frequency_storage === frequency_storage
             return cached
         end
         plan = _build_sampling_plan(parameters)
@@ -464,7 +566,7 @@ end
 function _sample_plan(rng, plan::_LineParametersSamplingPlan, distribution)
     standardized = NB._distribution(distribution, 0.0, 1.0)
     draws = Float64[Random.rand(rng, standardized)
-        for _ in plan.primitive_keys]
+                    for _ in plan.primitive_keys]
     Z_values = plan.Z_nominal + plan.Z_coefficients * draws
     Y_values = plan.Y_nominal + plan.Y_coefficients * draws
     Z = copy(reshape(Z_values, plan.dimensions))

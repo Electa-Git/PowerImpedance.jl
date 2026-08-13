@@ -1,4 +1,12 @@
-"""A lazily materialized Cartesian product of parameter axes."""
+"""
+    Gridspace{T}
+
+Represent a lazily materialized Cartesian product whose members have result
+type `T`.
+
+Deterministic iteration follows `Iterators.product`. Monte Carlo entry points
+sample uncertain axes into ordinary numeric values before invoking `target`.
+"""
 struct Gridspace{T,Args<:Tuple,F,Names<:Tuple}
     target::F
     grids::Args

@@ -1,32 +1,5 @@
 export dc_source
 
-"""
-	dc_source(;args...)
-Creates dc voltage in Volts.
-
-Internal impedance can be added with a command impedance after
-the equality sign.
-
-Pins: `1.x` and `2.x` for x ∈ {1, ..., pins}
-
-Plus pin is connected to `1.x` and minus to `2.x`. To ground the source,
-connect the pin to the ground while constructing the network.
-
-Parameters:
-```julia
-	V :: Union{Float64, Int} = 0        # DC voltage or voltage magnitude [kV]
-
-	P   :: Union{Float64, Int} = 0      # active power output [MW]
-	Q   :: Union{Float64, Int} = 0      # reactive power output [MVAr]
-	P_min :: Union{Float64, Int} = 0    # min active power output [MW]
-	P_max :: Union{Float64, Int} = 0    # max active power output [MW]
-	Q_min :: Union{Float64, Int} = 0    # min reactive power output [MVA]
-	Q_max :: Union{Float64, Int} = 0    # max reactive power output [MVA]
-
-	# pins :: Int = 1
-	ABCD :: Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
-```
-"""
 #= function dc_source(; args...)
 	source = Source()
 	transformation = false
@@ -47,7 +20,34 @@ Parameters:
 		element_value = source,
 		transformation = transformation, connection = connection)
 end =#
+"""
+    dc_source(; pins=1, setpoint=Setpoint(Vdc=240),
+              transformation=false, connection=true, source_kwargs...)
 
+Construct an ideal DC voltage-source element and its power-flow data.
+
+# Arguments
+
+- `pins`: Number of DC conductors represented on each legacy element side.
+- `setpoint`: DC voltage and power operating point. See [`Setpoint`](@ref).
+- `transformation`: Whether to expose a supported transformed representation.
+- `connection`: Whether NetworkBuilder includes the element in the system.
+- `source_kwargs`: Legacy fields of the internal `Source` model.
+
+# Returns
+
+- An `Element` whose model is a DC `Source`.
+
+# Errors
+
+- Throws `ArgumentError` when `source_kwargs` contains an unknown field.
+
+# Examples
+
+```julia
+source = dc_source(setpoint = Setpoint(Vdc = 320.0, Pdc = 100.0))
+```
+"""
 function dc_source(; pins=1, setpoint=Setpoint(Vdc=240),transformation=false, connection=true, args...)
     source = Source()
 

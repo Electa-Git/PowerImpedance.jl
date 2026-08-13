@@ -14,10 +14,9 @@
 using Measurements
 using Plots
 using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: @gridspace, pin, ⟷
+using PowerImpedanceACDC.NetworkBuilder: @gridspace, BuilderState, Grid,
+                                         Gridspace, define, pin, ⟷
 using Statistics
-
-const NB = PowerImpedanceACDC.NetworkBuilder;
 
 # ## Fixed network data
 
@@ -52,10 +51,10 @@ const builder_options = (;
 );
 
 # These elements do not change in the length or cable-geometry studies. The
-# qualified constructors still return singleton Gridspaces; `only` makes the
+# lazy constructors still return singleton Gridspaces; `only` makes the
 # fixed scalar elements explicit.
 const fixed_element_specs = (;
-    g1 = NB.ac_source(
+    g1 = ac_source(Grid;
         V = transmission_voltage,
         P = p_hvdc,
         P_min = -2000,
@@ -65,7 +64,7 @@ const fixed_element_specs = (;
         pins = 3,
         transformation = true
     ),
-    c1 = NB.mmc(
+    c1 = mmc(Grid;
         Vᵈᶜ = 640,
         vDCbase = 640,
         Vₘ = transmission_voltage,
@@ -84,7 +83,7 @@ const fixed_element_specs = (;
         padeOrderNum = 5,
         padeOrderDen = 5
     ),
-    c2 = NB.mmc(
+    c2 = mmc(Grid;
         Vᵈᶜ = 640,
         vDCbase = 640,
         Vₘ = transmission_voltage,
@@ -108,7 +107,7 @@ const fixed_element_specs = (;
         padeOrderNum = 5,
         padeOrderDen = 5
     ),
-    g4 = NB.ac_source(
+    g4 = ac_source(Grid;
         V = transmission_voltage,
         P = p_hvdc,
         P_min = -2000,
@@ -118,9 +117,9 @@ const fixed_element_specs = (;
         pins = 3,
         transformation = true
     ),
-    tl1 = NB.overhead_line(
+    tl1 = overhead_line(Grid;
         length = 25e3,
-        conductors = NB.Conductors(
+        conductors = Conductors(Grid;
             organization = :flat,
             nᵇ = 3,
             nˢᵇ = 1,
@@ -133,7 +132,7 @@ const fixed_element_specs = (;
             dˢᵇ = 0.0,
             dˢᵃᵍ = 10.0
         ),
-        groundwires = NB.Groundwires(
+        groundwires = Groundwires(Grid;
             nᵍ = 2,
             Rᵍᵈᶜ = 0.92,
             rᵍ = 0.0062,
@@ -144,9 +143,9 @@ const fixed_element_specs = (;
         earth_parameters = (1, 1, soil_resistivity),
         transformation = true
     ),
-    tl78 = NB.overhead_line(
+    tl78 = overhead_line(Grid;
         length = 90e3,
-        conductors = NB.Conductors(
+        conductors = Conductors(Grid;
             organization = :flat,
             nᵇ = 3,
             nˢᵇ = 1,
@@ -159,7 +158,7 @@ const fixed_element_specs = (;
             dˢᵇ = 0.0,
             dˢᵃᵍ = 10.0
         ),
-        groundwires = NB.Groundwires(
+        groundwires = Groundwires(Grid;
             nᵍ = 2,
             Rᵍᵈᶜ = 0.92,
             rᵍ = 0.0062,
@@ -174,7 +173,7 @@ const fixed_element_specs = (;
 
 const fixed_elements = map(only, fixed_element_specs);
 
-const corridor_conductors = only(NB.Conductors(
+const corridor_conductors = only(Conductors(Grid;
     organization = :flat,
     nᵇ = 2,
     nˢᵇ = 1,
@@ -188,7 +187,7 @@ const corridor_conductors = only(NB.Conductors(
     dˢᵃᵍ = 6.0
 ));
 
-const corridor_groundwires = only(NB.Groundwires(
+const corridor_groundwires = only(Groundwires(Grid;
     nᵍ = 2,
     Rᵍᵈᶜ = 0.92,
     rᵍ = 0.0062,
@@ -228,9 +227,9 @@ const nominal_geometry = only(P2PCableGeometry(
 # A 100 m endpoint regularization avoids the singular zero-length line model;
 # the labels retain the requested 0% and 100% values.
 
-const characteristic_shares = (0.0, 0.1, 0.5, 0.9, 1.0)
+const characteristic_shares = (0.0, 0.05, 0.1, 0.5, 0.9, 1.0)
 const endpoint_fraction = 1e-3
-const corridor_lengths = NB.Grid(map(characteristic_shares) do share
+const corridor_lengths = Grid(map(characteristic_shares) do share
     effective_share = clamp(share, endpoint_fraction, 1 - endpoint_fraction)
     (;
         share,
@@ -239,7 +238,7 @@ const corridor_lengths = NB.Grid(map(characteristic_shares) do share
     )
 end);
 
-transition_builders = NB.Gridspace{NB.BuilderState}(
+transition_builders = Gridspace{BuilderState}(
     lengths -> begin
         r1 = nominal_geometry.core_radius
         r2 = r1 + nominal_geometry.insulation_1
@@ -249,14 +248,14 @@ transition_builders = NB.Gridspace{NB.BuilderState}(
         r6 = r5 + nominal_geometry.insulation_3
 
         affected_elements = (;
-            ohl = only(NB.overhead_line(
+            ohl = only(overhead_line(Grid;
                 length = lengths.ohl,
                 conductors = corridor_conductors,
                 groundwires = corridor_groundwires,
                 earth_parameters = (1, 1, soil_resistivity),
                 transformation = true
             )),
-            ugc = only(NB.cable(
+            ugc = only(cable(Grid;
                 length = lengths.ugc,
                 positions = [
                     (-nominal_geometry.spacing / 2, nominal_geometry.burial_depth),
@@ -272,14 +271,14 @@ transition_builders = NB.Gridspace{NB.BuilderState}(
                 transformation = true
             ))
         )
-        NB.define(merge(deepcopy(fixed_elements), affected_elements), connections;
+        define(merge(deepcopy(fixed_elements), affected_elements), connections;
             options = builder_options)
     end,
     (corridor_lengths,),
     (:corridor_lengths,)
 );
 
-transition = NB.determine_impedance(
+transition = determine_impedance(
     transition_builders;
     nets = [:B5],
     elim_elements = [:c2],
@@ -311,17 +310,17 @@ transition_plot
 # thicknesses.
 
 cable_geometry = P2PCableGeometry(
-    spacing = NB.Grid(1.0, 10 / sqrt(3)),
-    burial_depth = NB.Grid(1.0, 10 / sqrt(3)),
-    core_radius = NB.Grid(0.02622, 10 / sqrt(3)),
-    insulation_1 = NB.Grid(0.06006 - 0.02622, 10 / sqrt(3)),
-    sheath = NB.Grid(0.06336 - 0.06006, 10 / sqrt(3)),
-    insulation_2 = NB.Grid(0.06636 - 0.06336, 10 / sqrt(3)),
-    screen = NB.Grid(0.06651 - 0.06636, 10 / sqrt(3)),
-    insulation_3 = NB.Grid(0.07256 - 0.06651, 10 / sqrt(3))
+    spacing = Grid(1.0, 10 / sqrt(3)),
+    burial_depth = Grid(1.0, 10 / sqrt(3)),
+    core_radius = Grid(0.02622, 10 / sqrt(3)),
+    insulation_1 = Grid(0.06006 - 0.02622, 10 / sqrt(3)),
+    sheath = Grid(0.06336 - 0.06006, 10 / sqrt(3)),
+    insulation_2 = Grid(0.06636 - 0.06336, 10 / sqrt(3)),
+    screen = Grid(0.06651 - 0.06636, 10 / sqrt(3)),
+    insulation_3 = Grid(0.07256 - 0.06651, 10 / sqrt(3))
 );
 
-cable_uq_builders = NB.Gridspace{NB.BuilderState}(
+cable_uq_builders = Gridspace{BuilderState}(
     (lengths, geometry) -> begin
         r1 = geometry.core_radius
         r2 = r1 + geometry.insulation_1
@@ -331,14 +330,14 @@ cable_uq_builders = NB.Gridspace{NB.BuilderState}(
         r6 = r5 + geometry.insulation_3
 
         affected_elements = (;
-            ohl = only(NB.overhead_line(
+            ohl = only(overhead_line(Grid;
                 length = lengths.ohl,
                 conductors = corridor_conductors,
                 groundwires = corridor_groundwires,
                 earth_parameters = (1, 1, soil_resistivity),
                 transformation = true
             )),
-            ugc = only(NB.cable(
+            ugc = only(cable(Grid;
                 length = lengths.ugc,
                 positions = [
                     (-geometry.spacing / 2, geometry.burial_depth),
@@ -354,7 +353,7 @@ cable_uq_builders = NB.Gridspace{NB.BuilderState}(
                 transformation = true
             ))
         )
-        NB.define(merge(deepcopy(fixed_elements), affected_elements), connections;
+        define(merge(deepcopy(fixed_elements), affected_elements), connections;
             options = builder_options)
     end,
     (corridor_lengths, cable_geometry),
@@ -363,7 +362,7 @@ cable_uq_builders = NB.Gridspace{NB.BuilderState}(
 
 cable_trials = 200 #src
 #md cable_trials = 30
-cable_uq = NB.determine_impedance(
+cable_uq = determine_impedance(
     cable_uq_builders;
     nets = [:B5],
     elim_elements = [:c2],
@@ -412,7 +411,7 @@ plot(cable_panels...;
 # The solver therefore repeats the power flow, converter equilibrium, and
 # linearization inside the same Monte Carlo loop.
 
-const half_corridor = corridor_lengths[3];
+const half_corridor = corridor_lengths[4];
 
 converter_uq_elements = merge(
     (;
@@ -422,7 +421,7 @@ converter_uq_elements = merge(
         tl78 = fixed_element_specs.tl78
     ),
     (;
-        c1 = NB.mmc(
+        c1 = mmc(Grid;
             Vᵈᶜ = 640,
             vDCbase = 640,
             Vₘ = transmission_voltage,
@@ -432,9 +431,9 @@ converter_uq_elements = merge(
             P_max = 1500,
             Q_min = -500,
             Q_max = 500,
-            Lₐᵣₘ = NB.Grid(50e-3, 5 / sqrt(3)),
-            Rₐᵣₘ = NB.Grid(1.07, 10 / sqrt(3)),
-            Cₐᵣₘ = NB.Grid(10e-3, 5 / sqrt(3)),
+            Lₐᵣₘ = Grid(50e-3, 5 / sqrt(3)),
+            Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
+            Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3)),
             occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
             ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
             pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
@@ -444,7 +443,7 @@ converter_uq_elements = merge(
             padeOrderNum = 5,
             padeOrderDen = 5
         ),
-        c2 = NB.mmc(
+        c2 = mmc(Grid;
             Vᵈᶜ = 640,
             vDCbase = 640,
             Vₘ = transmission_voltage,
@@ -458,9 +457,9 @@ converter_uq_elements = merge(
             turnsRatio = 333 / 380,
             Lᵣ = 0.0461,
             Rᵣ = 0.4103,
-            Lₐᵣₘ = NB.Grid(30e-3, 5 / sqrt(3)),
-            Rₐᵣₘ = NB.Grid(1.07, 10 / sqrt(3)),
-            Cₐᵣₘ = NB.Grid(10e-3, 5 / sqrt(3)),
+            Lₐᵣₘ = Grid(30e-3, 5 / sqrt(3)),
+            Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
+            Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3)),
             occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
             ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
             pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
@@ -470,14 +469,14 @@ converter_uq_elements = merge(
             padeOrderNum = 5,
             padeOrderDen = 5
         ),
-        ohl = NB.overhead_line(
+        ohl = overhead_line(Grid;
             length = half_corridor.ohl,
             conductors = corridor_conductors,
             groundwires = corridor_groundwires,
             earth_parameters = (1, 1, soil_resistivity),
             transformation = true
         ),
-        ugc = NB.cable(
+        ugc = cable(Grid;
             length = half_corridor.ugc,
             positions = [(-0.5, 1.0), (0.5, 1.0)],
             C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
@@ -492,12 +491,12 @@ converter_uq_elements = merge(
     )
 );
 
-converter_uq_builders = NB.define(converter_uq_elements, connections;
+converter_uq_builders = define(converter_uq_elements, connections;
     options = builder_options);
 
 converter_trials = 100 #src
 #md converter_trials = 5
-converter_uq = NB.determine_impedance(
+converter_uq = determine_impedance(
     converter_uq_builders;
     nets = [:B3d, :B5, :B6d],
     freq_range = (100.0, 5e3, 400),

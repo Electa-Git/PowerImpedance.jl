@@ -1,4 +1,4 @@
-struct _KeywordMaterializer{F,N}
+struct _KeywordMaterializer{F, N}
     constructor::F
 end
 
@@ -19,13 +19,14 @@ function _construct_keywords(constructor, names::Tuple, values::Tuple)
     end
 end
 
-(target::_KeywordMaterializer{F,N})(values...) where {F,N} =
+function (target::_KeywordMaterializer{F, N})(values...) where {F, N}
     _construct_keywords(target.constructor, N, values)
+end
 
 function _keyword_gridspace(::Type{T}, constructor; kwargs...) where {T}
     names = keys(kwargs)
     axes = map(_axis, Tuple(values(kwargs)))
-    target = _KeywordMaterializer{typeof(constructor),names}(constructor)
+    target = _KeywordMaterializer{typeof(constructor), names}(constructor)
     return Gridspace{T}(target, axes, names)
 end
 
@@ -33,7 +34,7 @@ function _keyword_gridspace(constructor; kwargs...)
     return _keyword_gridspace(Any, constructor; kwargs...)
 end
 
-const SHADOW_CONSTRUCTOR_MANIFEST = Pair{Symbol,Symbol}[]
+const SHADOW_CONSTRUCTOR_MANIFEST = Pair{Symbol, Symbol}[]
 const SHADOW_CONSTRUCTOR_EXCLUSIONS = (
     AbstractElementModel = :abstract_type,
     AbstractLinFreqDomain = :abstract_type,
@@ -44,7 +45,7 @@ const SHADOW_CONSTRUCTOR_EXCLUSIONS = (
     Network = :legacy_network_container,
     determine_impedance = :computational_function,
     power_flow = :computational_function,
-    eval_abcd = :computational_function,
+    eval_abcd = :computational_function
 )
 
 function _register_shadow!(name::Symbol, category::Symbol)
@@ -56,10 +57,21 @@ end
 macro shadow(category, name, target = name)
     category_value = category isa QuoteNode ? category : QuoteNode(category)
     name_value = name isa QuoteNode ? name : QuoteNode(name)
+    grid_doc = """
+        $(name)(Grid; kwargs...)
+
+    Construct a lazy `Gridspace` through positional dispatch while preserving
+    `$(name)(; kwargs...)` as the ordinary scalar constructor. Only explicit
+    `Grid` values or nested Gridspaces introduce parameter axes; other keyword
+    values remain atomic.
+    """
     return esc(quote
         _register_shadow!($name_value, $category_value)
-        function $(name)(; kwargs...)
+		@doc $grid_doc function $(name)(; kwargs...)
             return _keyword_gridspace($(target); kwargs...)
+        end
+        function $(target)(::typeof(Grid); kwargs...)
+            return $(name)(; kwargs...)
         end
     end)
 end

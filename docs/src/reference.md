@@ -1,48 +1,35 @@
+```@meta
+CurrentModule = PowerImpedanceACDC
+```
+
 # API reference
 
-## Gridspace
+The public interface is grouped by its defining module. Ordinary component
+constructors and downstream solvers belong to `PowerImpedanceACDC`.
+Gridspace construction, orchestration, and result containers belong to
+`PowerImpedanceACDC.NetworkBuilder`.
 
-```@docs; canonical=false
-PowerImpedanceACDC.NetworkBuilder.Grid
-PowerImpedanceACDC.NetworkBuilder.DeterministicGrid
-PowerImpedanceACDC.NetworkBuilder.RelativeGrid
-PowerImpedanceACDC.NetworkBuilder.AbsoluteGrid
-PowerImpedanceACDC.NetworkBuilder.AbsoluteError
-PowerImpedanceACDC.NetworkBuilder.Gridspace
-PowerImpedanceACDC.NetworkBuilder.@gridspace
-PowerImpedanceACDC.NetworkBuilder.@relax
+## `PowerImpedanceACDC`
+
+```@autodocs
+Modules = [PowerImpedanceACDC]
+Public = true
+Private = false
 ```
 
-## Parametric results
+## `PowerImpedanceACDC.NetworkBuilder`
 
-```@docs; canonical=false
-PowerImpedanceACDC.NetworkBuilder.ImpedanceCase
-PowerImpedanceACDC.NetworkBuilder.ParametricImpedance
-PowerImpedanceACDC.NetworkBuilder.SolveCase
-PowerImpedanceACDC.NetworkBuilder.ParametricSolve
-PowerImpedanceACDC.NetworkBuilder.FrequencyResponseCase
-PowerImpedanceACDC.NetworkBuilder.ParametricFrequencyResponse
-PowerImpedanceACDC.NetworkBuilder.ParametricNodeSchema
-PowerImpedanceACDC.NetworkBuilder.StabilityCase
-PowerImpedanceACDC.NetworkBuilder.ParametricStability
+```@autodocs
+Modules = [PowerImpedanceACDC.NetworkBuilder]
+Public = true
+Private = false
 ```
 
-## Parametric small-signal analysis
+Every component and configuration shadow is available through positional
+dispatch as `constructor(Grid; kwargs...)`; `constructor(; kwargs...)` remains
+the scalar API. Equivalent qualified `NetworkBuilder.constructor(; kwargs...)`
+forms remain available for compatibility but are intentionally not exported.
 
-```@docs; canonical=false
-PowerImpedanceACDC.NetworkBuilder.make_y_node
-PowerImpedanceACDC.NetworkBuilder.make_y_edge
-PowerImpedanceACDC.NetworkBuilder.make_loopgain
-PowerImpedanceACDC.NetworkBuilder.sampled_frequency_response
-PowerImpedanceACDC.nyquistplot
-PowerImpedanceACDC.bodeplot
-PowerImpedanceACDC.small_gain
-PowerImpedanceACDC.passivity
-PowerImpedanceACDC.EVD
-PowerImpedanceACDC.stabilitymargin
-PowerImpedanceACDC.unstable_frequency
-PowerImpedanceACDC.check_stability
-```
-
-Component shadow constructors deliberately remain qualified under
-`PowerImpedanceACDC.NetworkBuilder` and are not exported.
+Optional-package methods are documented on [Package extensions](package_extensions.md)
+because their extension modules are loaded only when the corresponding weak
+dependencies are present.

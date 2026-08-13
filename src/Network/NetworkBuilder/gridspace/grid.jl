@@ -5,37 +5,96 @@ import Distributions
 abstract type AbstractGrid end
 abstract type AbstractUncertainGrid <: AbstractGrid end
 
-"""A finite, explicitly enumerated parameter axis."""
+"""
+    DeterministicGrid
+
+Represent a finite, explicitly enumerated parameter axis.
+
+Use [`Grid`](@ref) to construct this type from one value or a collection of
+alternatives.
+"""
 struct DeterministicGrid{V<:Tuple} <: AbstractGrid
     vals::V
 end
 
-"""A Cartesian axis of nominal values and relative standard deviations (percent)."""
+"""
+    RelativeGrid
+
+Represent the Cartesian product of nominal values and relative standard
+deviations expressed in percent.
+
+Monte Carlo entry points sample each case with `distribution=:normal` or with
+the variance-equivalent `distribution=:uniform` law.
+"""
 struct RelativeGrid{V<:Tuple,P<:Tuple} <: AbstractUncertainGrid
     vals::V
     rel_err::P
 
+    @doc """
+        RelativeGrid(vals::V, rel_err::P) where {V<:Tuple,P<:Tuple}
+
+    Construct a relative-uncertainty axis from tuple-valued nominal values and
+    percentage standard deviations.
+
+    # Errors
+
+    - Throws `ArgumentError` for non-real or non-finite nominal values, or for
+      non-real, non-finite, or negative uncertainty values.
+    """
     function RelativeGrid(vals::V, rel_err::P) where {V<:Tuple,P<:Tuple}
         _validate_uncertainty(vals, rel_err, "relative")
         return new{V,P}(vals, rel_err)
     end
 end
 
-"""A Cartesian axis of nominal values and absolute standard deviations."""
+"""
+    AbsoluteGrid
+
+Represent the Cartesian product of nominal values and absolute standard
+deviations in the same physical unit as the nominal value.
+
+Monte Carlo entry points sample each case with `distribution=:normal` or with
+the variance-equivalent `distribution=:uniform` law.
+"""
 struct AbsoluteGrid{V<:Tuple,P<:Tuple} <: AbstractUncertainGrid
     vals::V
     abs_err::P
 
+    @doc """
+        AbsoluteGrid(vals::V, abs_err::P) where {V<:Tuple,P<:Tuple}
+
+    Construct an absolute-uncertainty axis from tuple-valued nominal values and
+    standard deviations expressed in the same physical units.
+
+    # Errors
+
+    - Throws `ArgumentError` for non-real or non-finite nominal values, or for
+      non-real, non-finite, or negative uncertainty values.
+    """
     function AbsoluteGrid(vals::V, abs_err::P) where {V<:Tuple,P<:Tuple}
         _validate_uncertainty(vals, abs_err, "absolute")
         return new{V,P}(vals, abs_err)
     end
 end
 
-"""Mark an uncertainty argument as an absolute standard deviation."""
+"""
+    AbsoluteError(errors)
+
+Mark nonnegative `errors` as absolute standard deviations in the same physical
+unit as the corresponding nominal values.
+"""
 struct AbsoluteError{T<:Tuple}
     vals::T
 
+    @doc """
+        AbsoluteError(vals::T) where {T<:Tuple}
+
+    Construct an absolute-error marker from tuple-valued standard deviations.
+
+    # Errors
+
+    - Throws `ArgumentError` for non-real, non-finite, or negative values.
+    """
     function AbsoluteError(vals::T) where {T<:Tuple}
         _validate_errors(vals, "absolute")
         return new{T}(vals)
@@ -70,10 +129,38 @@ AbsoluteError(x) = AbsoluteError(_grid_values(x))
     Grid(values)
     Grid(values, relative_errors)
     Grid(values, AbsoluteError(errors))
+    component(Grid; kwargs...)
 
 Create an explicit deterministic or uncertain parameter axis. Collections passed
 directly to `Grid` are expanded; component shadow constructors deliberately wrap
 ordinary collections as one atomic value.
+
+# Arguments
+
+- `values`: One nominal value or a collection of explicitly enumerated values.
+- `relative_errors`: Relative standard deviations in percent.
+- `errors`: An [`AbsoluteError`](@ref) containing standard deviations in the
+  physical unit of `values`.
+
+# Returns
+
+- A [`DeterministicGrid`](@ref), [`RelativeGrid`](@ref), or
+  [`AbsoluteGrid`](@ref).
+
+Passing the `Grid` function itself as the first positional argument to any
+component or configuration constructor selects its lazy NetworkBuilder method.
+For example, `impedance(Grid; z=Grid([1.0, 2.0]), pins=1)` returns a Gridspace,
+whereas `impedance(; z=1.0, pins=1)` remains the scalar constructor. Julia does
+not dispatch on keyword argument types, so this marker makes the selection
+explicit and uniform.
+
+# Notes
+
+The sampling law is selected by the Monte Carlo entry point. `:normal` uses
+`Normal(nominal, standard_deviation)`. `:uniform` uses the interval
+`nominal ± √3 standard_deviation`, which has the same variance. Separate
+Gridspace axes are sampled independently unless a purpose-built object provides
+specialized joint-sampling dispatch.
 """
 Grid(g::AbstractGrid) = g
 Grid(v) = DeterministicGrid(_grid_values(v))

@@ -1,38 +1,86 @@
 export overhead_line
 export Overhead_line, Conductors, Groundwires
 
+"""
+$(TYPEDEF)
+
+Describe overhead-line phase-conductor bundle geometry and material data.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Conductors
+	"Number of conductor bundles or phases."
 	nᵇ::Int = 1                       # number of bundles (phases)
+	"Number of subconductors in each bundle."
 	nˢᵇ::Int = 1                      # number of subconductors per bundle
+	"Height of the lowest bundle above ground `\\[m\\]`."
 	yᵇᶜ::Union{Int, Float64} = 0     # height above the ground of the lowest bundle  [m]
+	"Vertical offset between bundles `\\[m\\]`."
 	Δyᵇᶜ::Union{Int, Float64} = 0     # vertical offset between the bundles   [m]
+	"Horizontal bundle offset `\\[m\\]`."
 	Δxᵇᶜ::Union{Int, Float64} = 0     # horizontal offset between the lowest bundles  [m]
+	"Secondary horizontal offset used by offset/concentric layouts `\\[m\\]`."
 	Δ̃xᵇᶜ::Union{Int, Float64} = 0     # horizontal offset in group of bundles    [m]
+	"Maximum conductor sag `\\[m\\]`."
 	dˢᵃᵍ::Union{Int, Float64} = 0     # sag offset    [m]
+	"Nearest-neighbor subconductor spacing `\\[m\\]`."
 	dˢᵇ::Union{Int, Float64} = 0      # subconductor spacing (symmetric)  [m]
+	"Conductor radius `\\[m\\]`."
 	rᶜ::Union{Int, Float64} = 0       # conductor radius  [m]
+	"DC resistance of one complete conductor `\\[Ω/km\\]`."
 	Rᵈᶜ::Union{Int, Float64} = 0      # DC resistance for the entire conductor [Ω/m]
+	"Per-unit-length shunt conductance `\\[S/m\\]`."
 	gᶜ::Union{Int, Float64} = 1e-11   # shunt conductance
+	"Relative conductor permeability `\\[dimensionless\\]`."
 	μᵣᶜ::Union{Int, Float64} = 1      # relative conductor permeability
+	"Explicit horizontal and vertical conductor coordinates `\\[m\\]`."
 	positions::Tuple{Vector{Union{Int, Float64}}, Vector{Union{Int, Float64}}} = ([], [])   # add absolute positions manually
+	"Geometric layout identifier."
 	organization::Symbol = Symbol()
 end
 
+"""
+$(TYPEDEF)
+
+Describe overhead-line ground-wire geometry and material data.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Groundwires
+	"Number of ground wires."
 	nᵍ::Int = 0                        # number of groundwires (typically 0 or 2)
+	"Horizontal offset between ground wires `\\[m\\]`."
 	Δxᵍ::Union{Int, Float64} = 0       # horizontal offset between groundwires [m]
+	"Vertical offset above the lowest phase conductor `\\[m\\]`."
 	Δyᵍ::Union{Int, Float64} = 0       # vertical offset between the lowest conductor and groundwires  [m]
+	"Ground-wire radius `\\[m\\]`."
 	rᵍ::Union{Int, Float64} = 0        # ground wire radius  [m]
+	"Maximum ground-wire sag `\\[m\\]`."
 	dᵍˢᵃᵍ::Union{Int, Float64} = 0    # sag offset [m]
+	"DC resistance of one ground wire `\\[Ω/km\\]`."
 	Rᵍᵈᶜ::Union{Int, Float64} = 0      # groundwire DC resistance [Ω/m]
+	"Relative ground-wire permeability `\\[dimensionless\\]`."
 	μᵣᵍ::Union{Int, Float64} = 1       # relative groundwire permeability
+	"Explicit horizontal and vertical ground-wire coordinates `\\[m\\]`."
 	positions::Tuple{Vector{Union{Int, Float64}}, Vector{Union{Int, Float64}}} = ([], [])    # add absolute positions manually
 end
 
+"""
+$(TYPEDEF)
+
+Store the native overhead-line length, conductor data, ground-wire data, and
+earth-return properties used by frequency-domain evaluation.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Overhead_line <: Transmission_line
+	"Physical line length `\\[m\\]`."
 	length::Union{Int, Float64} = 0       # line length [m]
+	"Phase-conductor geometry and materials."
 	conductors::Conductors = Conductors()
+	"Ground-wire geometry and materials."
 	groundwires::Groundwires = Groundwires()
+	"Earth relative permeability, relative permittivity, and resistivity `\\[Ω·m\\]`."
 	earth_parameters::NTuple{N, Union{Int, Float64}} where N = (1, 1, 1) # (μᵣ_earth, ϵᵣ_earth, ρ_earth) in units ([], [], [Ωm])
 
 
@@ -41,56 +89,57 @@ end
 end
 
 """
-	overhead_line(;args...)
-Generates the element `elem` with the  `element_value` of the type `Transmission_line`. Arguments should be given in the
-form of struct `Transmission_line` fields:
-...
-- length - line length [m]
-- conductors - defined in the
-```julia
-struct Conductors
-	nᵇ :: Int = 1                       # number of bundles (phases)
-	nˢᵇ :: Int = 1                      # number of subconductors per bundle
-	yᵇᶜ :: Union{Int, Float64}  = 0     # height above the ground of the lowest bundle  [m]
-	Δyᵇᶜ :: Union{Int, Float64} = 0     # vertical offset between the bundles   [m]
-	Δxᵇᶜ :: Union{Int, Float64} = 0     # horizontal offset between the lowest bundles  [m]
-	Δ̃xᵇᶜ :: Union{Int, Float64} = 0     # horizontal offset in group of bundles    [m]
-	dˢᵃᵍ :: Union{Int, Float64} = 0     # sag offset    [m]
-	dˢᵇ :: Union{Int, Float64} = 0      # subconductor spacing (symmetric)  [m]
-	rᶜ :: Union{Int, Float64} = 0       # conductor radius  [m]
-	Rᵈᶜ :: Union{Int, Float64} = 0      # DC resistance for the entire conductor [Ω/m]
-	gᶜ :: Union{Int, Float64} = 1e-11   # shunt conductance
-	μᵣᶜ :: Union{Int, Float64} = 1      # relative conductor permeability
-	positions :: Tuple{Vector{Union{Int, Float64}}, Vector{Union{Int, Float64}}} = ([],[])   # add absolute positions manually
-	organization :: Symbol = Symbol()
-end
-```
-- groundwires - defined in the
-```julia
-struct Groundwires
-	nᵍ :: Int = 0                        # number of groundwires (typically 0 or 2)
-	Δxᵍ :: Union{Int, Float64} = 0       # horizontal ofsset between groundwires [m]
-	Δyᵍ :: Union{Int, Float64} = 0       # vertical offset between the lowest conductor and groundwires  [m]
-	rᵍ :: Union{Int, Float64} = 0        # ground wire radius  [m]
-	dᵍˢᵃᵍ ::  Union{Int, Float64} = 0    # sag offset [m]
-	Rᵍᵈᶜ :: Union{Int, Float64} = 0      # groundwire DC resistance [Ω/m]
-	μᵣᵍ :: Union{Int, Float64} = 1       # relative groundwire permeability
-	positions :: Tuple{Vector{Union{Int, Float64}}, Vector{Union{Int, Float64}}} = ([],[])    # add absolute positions manually
+    overhead_line(; length=0, conductors=Conductors(),
+                  groundwires=Groundwires(), earth_parameters=(1, 1, 1),
+                  transformation=false, connection=true)
 
-end
-```
-- earth\\_parameters - with default value `(1,1,1)` and meaning (μᵣ\\_earth, ϵᵣ\\_earth, ρ\\_earth) in units ([], [], [Ωm])
+Construct a frequency-dependent overhead transmission-line element.
 
-Example:
-```
-transmission_line(length = 227e3, conductors = Conductors(nᵇ = 2, nˢᵇ = 2, organization = :flat,
-Rᵈᶜ = 0.06266, rᶜ = 0.01436, yᵇᶜ = 27.5, Δxᵇᶜ = 11.8, dˢᵇ = 0.4572, dˢᵃᵍ = 10),
-earth_parameters = (1,1,100),
-groundwires = Groundwires(nᵍ = 2, Δxᵍ = 6.5, Δyᵍ = 7.5, Rᵍᵈᶜ = 0.9196, rᵍ = 0.0062, dᵍˢᵃᵍ = 10))
+# Arguments
+
+- `length`: Physical line length `\\[m\\]`.
+- `conductors`: Phase-conductor bundle and tower geometry.
+- `groundwires`: Optional ground-wire geometry and material data.
+- `earth_parameters`: Earth relative permeability `\\[dimensionless\\]`,
+  relative permittivity `\\[dimensionless\\]`, and resistivity `\\[Ω·m\\]`.
+- `transformation`: Whether to expose a supported transformed representation.
+- `connection`: Whether NetworkBuilder includes the element in the system.
+
+# Returns
+
+- An `Element` with one input and output terminal per conductor bundle.
+
+# Notes
+
+`Conductors` supports explicit positions or the implemented `:flat`,
+`:vertical`, `:delta`, `:offset`, and `:concentric` organizations. Frequency
+evaluation retains the complete self and mutual series-impedance and shunt-
+admittance matrices.
+
+# Errors
+
+- Throws `ArgumentError` for an unknown keyword or an unsupported conductor
+  organization/order during parameter evaluation.
+
+# Examples
+
+```julia
+line = overhead_line(
+    length = 90e3,
+    conductors = Conductors(
+        organization = :flat,
+        nᵇ = 3,
+        nˢᵇ = 1,
+        Rᵈᶜ = 0.063,
+        rᶜ = 0.015,
+        yᵇᶜ = 30.0,
+        Δxᵇᶜ = 10.0,
+        dˢᵃᵍ = 10.0,
+    ),
+    earth_parameters = (1.0, 1.0, 100.0),
+)
 ```
 """
-
-
 function overhead_line(; args...)
 	tl = Overhead_line()
 	transformation = false

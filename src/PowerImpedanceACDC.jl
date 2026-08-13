@@ -59,6 +59,7 @@ using JuMP
 
 # COre
 include("core/util.jl")
+include("core/logging.jl")
 
 # Including all components    
 include("Network/Components/AbstractElement.jl")
@@ -119,6 +120,7 @@ include("Network/power_flow.jl")
 
 # Alternative explicit network construction API
 include("Network/NetworkBuilder/NetworkBuilder.jl")
+import .NetworkBuilder: determine_impedance, make_loopgain
 
 # Including network solvers
 include("Network/Solvers/make_abcd.jl")

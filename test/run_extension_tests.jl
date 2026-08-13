@@ -35,6 +35,18 @@ end
     @test only(NB.Grid(10.0, 5.0)) == measurement(10.0, 0.5)
     @test only(NB.Grid(10.0, NB.AbsoluteError(0.5))) == measurement(10.0, 0.5)
 
+    # Monte Carlo runners use an abstractly typed accumulator because sampled
+    # solver outputs are constructed dynamically. Stacking must validate the
+    # members, not reject the container's `Vector{Any}` element type.
+    abstract_samples = Any[
+        fill(1.0 + 2.0im, 1, 1, 2),
+        fill(3.0 + 4.0im, 1, 1, 2)
+    ]
+    stacked_samples = NB._stack_impedance_samples(abstract_samples)
+    @test size(stacked_samples) == (1, 1, 2, 2)
+    @test stacked_samples[:, :, :, 1] == abstract_samples[1]
+    @test stacked_samples[:, :, :, 2] == abstract_samples[2]
+
     normal = impedance_study(10.0 ± 1.0; trials = 1000, seed = 123, return_samples = true)
     case = only(normal)
     @test case.trials == 1000

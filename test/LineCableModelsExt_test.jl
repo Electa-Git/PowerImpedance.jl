@@ -105,12 +105,22 @@ end
     @test overhead_abcd ≈ cable_abcd
 
     shadow = only(NB.overhead_line(parameters; length = 25e3))
+    dispatched = only(PowerImpedanceACDC.overhead_line(
+        NB.Grid,
+        parameters;
+        length = 25e3
+    ))
     @test PowerImpedanceACDC.eval_abcd(
         shadow.element_model,
         2pi * frequency * im
     ) ≈ overhead_abcd
+    @test PowerImpedanceACDC.eval_abcd(
+        dispatched.element_model,
+        2pi * frequency * im
+    ) ≈ overhead_abcd
 
-    length_grid = NB.cable(
+    length_grid = PowerImpedanceACDC.cable(
+        NB.Grid,
         parameters;
         length = NB.Grid([10e3, 20e3])
     )

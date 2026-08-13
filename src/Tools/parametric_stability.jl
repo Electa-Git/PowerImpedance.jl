@@ -10,24 +10,6 @@ make_y_edge(builder::_NB.BuilderState; kwargs...) = _NB.make_y_edge(builder; kwa
 function make_y_edge(gridspace::_NB.Gridspace{_NB.BuilderState}; kwargs...)
     _NB.make_y_edge(gridspace; kwargs...)
 end
-make_loopgain(builder::_NB.BuilderState; kwargs...) = _NB.make_loopgain(builder; kwargs...)
-function make_loopgain(gridspace::_NB.Gridspace{_NB.BuilderState}; kwargs...)
-    _NB.make_loopgain(gridspace; kwargs...)
-end
-function make_loopgain(
-        edge::_NB.ParametricFrequencyResponse,
-        node::_NB.ParametricFrequencyResponse;
-        kwargs...
-)
-    _NB.make_loopgain(edge, node; kwargs...)
-end
-function make_loopgain(
-        edge::AbstractArray{<:Number, 3},
-        node::AbstractArray{<:Number, 3};
-        kwargs...
-)
-    _NB.make_loopgain(edge, node; kwargs...)
-end
 
 function make_loopgain(
         edge::AbstractVector,
@@ -490,6 +472,10 @@ Analyze and plot matched trial eigenloci for every deterministic case.
 - `gridspace`: Constructed deterministic or uncertain power systems.
 - `omega`: Optional angular-frequency vector \\[rad/s\\] that must equal the stored vector.
 - `freq_range`: Minimum frequency \\[Hz\\], maximum frequency \\[Hz\\], and point count.
+- `trials`: Positive Monte Carlo count, or `nothing` for DKW sizing.
+- `distribution`: Primitive sampling law, `:normal` or variance-equivalent
+  `:uniform`.
+- `seed`: Local master seed used for reproducible sampling and replay.
 - `return_samples`: Retain response, eigenlocus, crossing, and encirclement records.
 - `display_plot`: Display constructed plots when `true`.
 
@@ -503,6 +489,10 @@ Analyze and plot matched trial eigenloci for every deterministic case.
 
 A zero net encirclement is reported as `:stable_if_subsystems_stable`; it is not
 an unconditional stability claim without open-loop right-half-plane pole data.
+Complete parametric results consume retained or replayed numeric trials. A
+standalone Measurements-valued tensor instead creates a covariance-preserving
+moment surrogate, emits a warning, and labels the case
+`:measurements_surrogate`; it cannot recreate discarded empirical trials.
 """
 function nyquistplot(
         source::Union{_NB.ParametricFrequencyResponse, _NB.ParametricImpedance},
@@ -757,6 +747,9 @@ Aggregate and plot trial-wise Bode magnitude and phase for every matrix channel.
 
 Phase is unwrapped within each trial and aligned to the nominal response before
 statistics are calculated.
+A standalone Measurements-valued tensor is sampled through the Measurements
+extension and labeled `:measurements_surrogate`. Pass a complete parametric
+result or external whole-trial tensor to preserve empirical trial dependence.
 """
 function bodeplot(
         source::Union{_NB.ParametricFrequencyResponse, _NB.ParametricImpedance},
@@ -895,6 +888,11 @@ For each trial and frequency, the evaluated product condition is:
 ```math
 \\sigma_{max}(G_1(j\\omega)G_2(j\\omega)) < 1.
 ```
+
+For standalone Measurements tensors, shared primitive tags are drawn jointly
+across both operands. The resulting covariance-preserving moment model is
+labeled `:measurements_surrogate`; it is not a reconstruction of discarded
+empirical trials.
 
 # Errors
 
@@ -1048,6 +1046,10 @@ The scalar implementation is preserved and applied per trial:
 ```math
 \\nu(j\\omega) = \\min \\operatorname{Re} \\lambda\\left(G(j\\omega) + G(j\\omega)^H\\right).
 ```
+
+A standalone Measurements-valued tensor is sampled through the Measurements
+extension and labeled `:measurements_surrogate`. Complete response collections
+retain or replay their original numeric trials.
 """
 function passivity(
         source::Union{_NB.ParametricFrequencyResponse, _NB.ParametricImpedance},
@@ -1329,6 +1331,9 @@ Perform trial-wise eigenvalue decomposition and modal assessment.
 Eigenvalue trajectories are matched to a nominal trajectory. Eigenvectors are
 reordered consistently, but arbitrary complex eigenvector phase is never
 aggregated.
+A standalone Measurements-valued tensor is sampled through the Measurements
+extension and labeled `:measurements_surrogate`; use whole empirical trial
+slices when higher-order distribution shape must be retained.
 """
 function EVD(
         source::Union{_NB.ParametricFrequencyResponse, _NB.ParametricImpedance},
@@ -1489,6 +1494,12 @@ Summarize phase, gain, or vector margins across all numeric trials.
 
 - A `NetworkBuilder.ParametricStability` containing critical margins, crossing
   frequencies, detection probabilities, and no-crossing probabilities.
+
+# Notes
+
+Margins are detected on retained or replayed numeric trials. Direct
+Measurements tensors use a covariance-preserving moment surrogate labeled
+`:measurements_surrogate`, not reconstructed empirical trials.
 """
 function stabilitymargin(
         source::Union{_NB.ParametricFrequencyResponse, _NB.ParametricImpedance},
@@ -1538,6 +1549,12 @@ Summarize unstable-frequency detections across all numeric trials.
 
 - A `NetworkBuilder.ParametricStability` containing detection and count
   probabilities plus pooled frequency statistics \\[Hz\\].
+
+# Notes
+
+Detection is performed on retained or replayed numeric trials. Direct
+Measurements tensors use a covariance-preserving moment surrogate labeled
+`:measurements_surrogate`, not reconstructed empirical trials.
 """
 function unstable_frequency(
         source::Union{_NB.ParametricFrequencyResponse, _NB.ParametricImpedance},

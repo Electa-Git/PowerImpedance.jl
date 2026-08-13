@@ -14,6 +14,27 @@ mutable struct OP
     Iac::Float64        # AC current [kA]
     Ymmc::Vector{Matrix{ComplexF64}}
     
+    @doc """
+        OP(Vdc, Vac, Pac, Qac, Pdc, Iac, n, Nf)
+
+    Construct one black-box converter operating point and allocate its sampled
+    admittance matrices.
+
+    # Arguments
+
+    - `Vdc`: DC voltage `\\[pu\\]`.
+    - `Vac`: AC voltage `\\[pu\\]`.
+    - `Pac`: AC active power `\\[MW\\]`.
+    - `Qac`: AC reactive power `\\[MVAr\\]`.
+    - `Pdc`: DC active power `\\[MW\\]`.
+    - `Iac`: AC current `\\[kA\\]`.
+    - `n`: Admittance-matrix order.
+    - `Nf`: Number of frequency samples.
+
+    # Returns
+
+    - An `OP` with `Nf` zero-valued `n × n` complex admittance matrices.
+    """
     function OP(Vdc, Vac, Pac, Qac, Pdc, Iac, n, Nf)
         new(Vdc, Vac, Pac, Qac, Pdc, Iac, [zeros(ComplexF64, n, n) for _ in 1:Nf])
     end
@@ -247,8 +268,6 @@ function eval_parameters(converter :: Blackbox_MMC, s :: Complex)
 
 
 end
-
-
 
 
 

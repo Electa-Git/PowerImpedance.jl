@@ -293,5 +293,24 @@ function tlc(; kwargs...)
     )
 end
 
+"""
+    mmc(Grid; kwargs...)
+
+Construct a lazy MMC `Gridspace` through positional dispatch. The keyword set
+may use either the modular API or the supported legacy API, but the two forms
+cannot be mixed. Ordinary keyword-only calls remain scalar constructors.
+"""
+P.mmc(::typeof(Grid); kwargs...) = mmc(; kwargs...)
+
+"""
+    tlc(Grid; kwargs...)
+
+Construct a lazy two-level-converter `Gridspace` through positional dispatch.
+The keyword set may use either the modular API or the supported legacy API, but
+the two forms cannot be mixed. Ordinary keyword-only calls remain scalar
+constructors.
+"""
+P.tlc(::typeof(Grid); kwargs...) = tlc(; kwargs...)
+
 _register_shadow!(:mmc, :element)
 _register_shadow!(:tlc, :element)

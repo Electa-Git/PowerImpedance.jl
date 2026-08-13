@@ -7,8 +7,7 @@
 
 using Plots
 using PowerImpedanceACDC
-
-const NB_SMALL_SIGNAL = PowerImpedanceACDC.NetworkBuilder;
+using PowerImpedanceACDC.NetworkBuilder: sampled_frequency_response
 
 # ## Construct the parametric systems
 #
@@ -36,7 +35,7 @@ frequency_range = (10.0, 1e3, 80);
 # `make_y_node` returns one active-element admittance response per deterministic
 # case, an ordered node schema, and the common angular-frequency vector.
 
-Ynode, node_schema, omega = NB_SMALL_SIGNAL.make_y_node(
+Ynode, node_schema, omega = make_y_node(
     builder_space;
     freq_range = frequency_range,
     seed = 2026
@@ -46,7 +45,7 @@ Ynode, node_schema, omega = NB_SMALL_SIGNAL.make_y_node(
 # inherit case order and study identity. For an uncertain builder space it also
 # inherits trial count, seeds, and distribution.
 
-Yedge, _, _ = NB_SMALL_SIGNAL.make_y_edge(
+Yedge, _, _ = make_y_edge(
     builder_space;
     nodelist = node_schema,
     freq_range = frequency_range
@@ -79,7 +78,7 @@ staged_plot
 # `make_loopgain` evaluates active and passive admittances from the same sampled
 # builder and one active-device linearization per trial.
 
-loopgain_fused, fused_schema, fused_omega = NB_SMALL_SIGNAL.make_loopgain(
+loopgain_fused, fused_schema, fused_omega = make_loopgain(
     builder_space;
     freq_range = frequency_range,
     seed = 2026
@@ -149,4 +148,4 @@ first_case = first(fused_nyquist);
 #
 # For exact results produced by an external Monte Carlo solver, wrap a numeric
 # `(nodes, nodes, frequencies, trials)` tensor with
-# `NB_SMALL_SIGNAL.sampled_frequency_response` before calling the same tools.
+# `sampled_frequency_response` before calling the same tools.

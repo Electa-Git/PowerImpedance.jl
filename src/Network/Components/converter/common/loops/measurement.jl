@@ -36,7 +36,7 @@ $(SIGNATURES)
 # Details
 
 The filter specification is converted to state-space matrices with
-[`measurement_filter_ss`](@ref) before being stored.
+`measurement_filter_ss` before being stored.
 """
 function MeasurementSignal(signal::Symbol, filter::F) where {F<:AbstractMeasurementFilter}
     filter = measurement_filter_ss(filter)

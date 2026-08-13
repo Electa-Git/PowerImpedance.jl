@@ -7,8 +7,7 @@
 
 using Plots
 using PowerImpedanceACDC
-
-const IEEE39_NB = PowerImpedanceACDC.NetworkBuilder;
+using PowerImpedanceACDC.NetworkBuilder: BuilderState, Grid, Gridspace, define, solve
 
 # The parity fixture is the authoritative NetworkBuilder version of this
 # system. Skip its top-level testsets while retaining its model functions and
@@ -107,7 +106,7 @@ function ieee39_soil_builder_space(
 )
     connections = ieee39bus_connections()
     function materialize(soil_resistivity)
-        builder = IEEE39_NB.define(
+        builder = define(
             ieee39_elements_at_soil_resistivity(base_elements, soil_resistivity),
             connections;
             options = IEEE39_BUILDER_OPTIONS
@@ -116,20 +115,20 @@ function ieee39_soil_builder_space(
         return builder
     end
 
-    return IEEE39_NB.Gridspace{IEEE39_NB.BuilderState}(
+    return Gridspace{BuilderState}(
         materialize,
-        (IEEE39_NB.Grid(soil_resistivities),),
+        (Grid(soil_resistivities),),
         (:soil_resistivity,)
     )
 end;
 
 function ieee39_reference_powerflow(base_elements = ieee39bus_elements())
-    builder = IEEE39_NB.define(
+    builder = define(
         deepcopy(base_elements),
         ieee39bus_connections();
         options = IEEE39_BUILDER_OPTIONS
     )
-    return IEEE39_NB.solve(builder).powerflow
+    return solve(builder).powerflow
 end;
 
 # Soil resistivity changes only passive frequency-domain models. The topology,
@@ -147,7 +146,7 @@ function run_ieee39_soil_study(;
 )
     base_elements = ieee39bus_elements()
     cached_powerflow = ieee39_reference_powerflow(base_elements)
-    result = IEEE39_NB.determine_impedance(
+    result = determine_impedance(
         ieee39_soil_builder_space(
             soil_resistivities;
             base_elements,
@@ -188,7 +187,8 @@ function plot_ieee39_soil_study(study)
             ylabel = "|Zdd| [dBΩ]",
             title = "Bus $(study.buses[bus_index])",
             framestyle = :box,
-            minorgrid = true
+            minorgrid = true,
+            legend = :outerright
         )
 
         for (case, soil_resistivity) in zip(study.result, study.soil_resistivities)
@@ -203,7 +203,11 @@ function plot_ieee39_soil_study(study)
         end
 
         spread = maximum_spread_db(study, bus_index)
-        annotate!(panel, 2.0, maximum(ylims(panel)),
+        x_min, x_max = xlims(panel)
+        y_min, y_max = ylims(panel)
+        annotation_x = 10^(log10(x_min) + 0.03 * log10(x_max / x_min))
+        annotation_y = y_max - 0.06 * (y_max - y_min)
+        annotate!(panel, annotation_x, annotation_y,
             text("max spread = $(round(spread; digits = 2)) dB", 8, :left))
         return panel
     end
@@ -211,7 +215,7 @@ function plot_ieee39_soil_study(study)
     return plot(
         panels...;
         layout = (length(panels), 1),
-        size = (950, 1050),
+        size = (1150, 1050),
         plot_title = "IEEE39 harmonic impedance versus common soil resistivity"
     )
 end;

@@ -69,6 +69,15 @@ Represent one deterministic or uncertainty-aware matrix frequency response.
 
 The canonical response layout is `n × n × nf`. Retained Monte Carlo samples use
 `n × n × nf × ntrials`. Frequencies are angular frequencies \\[rad/s\\].
+
+`uncertainty_source` is `:deterministic` for an ordinary response,
+`:monte_carlo` for a physically evaluated Gridspace study,
+`:empirical_samples` for supplied whole-trial data, or
+`:measurements_surrogate` for synthetic trials reconstructed from the
+first-order moment and covariance model encoded by Measurements values.
+
+Keep the complete case when passing a response downstream. Extracting only
+`response` discards retained samples and private replay provenance.
 """
 struct FrequencyResponseCase
     "Gridspace coordinates that identify the deterministic case."
@@ -93,7 +102,7 @@ struct FrequencyResponseCase
     statistics::Any
     "Optional numeric sample tensor with layout `n × n × nf × ntrials`."
     samples::Any
-    "Origin of uncertainty, such as `:monte_carlo` or `:empirical_samples`."
+    "Uncertainty origin: `:deterministic`, `:monte_carlo`, `:empirical_samples`, or `:measurements_surrogate`."
     uncertainty_source::Symbol
     "Private frozen information used to replay exact trials."
     _provenance::Any
@@ -138,6 +147,13 @@ end
     StabilityCase
 
 Represent one deterministic or uncertainty-aware small-signal analysis.
+
+The `uncertainty_source` field retains the source classification of the input
+response: `:deterministic`, `:monte_carlo`, `:empirical_samples`, or
+`:measurements_surrogate`. Tool-specific continuous outputs use the standard
+statistics `mean`, `std`, `min`, `q05`, `median`, `q95`, `max`, and `n`;
+categorical and variable-length outcomes use probabilities and pooled event
+summaries instead.
 """
 struct StabilityCase
     "Gridspace coordinates that identify the deterministic case."
@@ -158,7 +174,7 @@ struct StabilityCase
     samples::Any
     "Constructed plot object or plot collection."
     plots::Any
-    "Origin of the analyzed uncertainty."
+    "Uncertainty origin: `:deterministic`, `:monte_carlo`, `:empirical_samples`, or `:measurements_surrogate`."
     uncertainty_source::Symbol
 end
 

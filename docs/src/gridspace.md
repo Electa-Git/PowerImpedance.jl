@@ -2,33 +2,42 @@
 
 `PowerImpedanceACDC.NetworkBuilder` provides an additive parameter layer. The
 ordinary package constructors and scalar solver return values are unchanged.
-Qualified shadow constructors, such as `NetworkBuilder.impedance`, return a
-lazy `Gridspace`; use `only` to materialize a singleton specification.
+Pass the selectively imported `Grid` function as the first positional argument
+to select a lazy constructor, such as `impedance(Grid; ...)`; use `only` to
+materialize a singleton specification. Ordinary `impedance(; ...)` remains
+scalar. Qualified `NetworkBuilder.impedance(; ...)` shadows remain available
+for compatibility, but tutorials do not need a module alias. Grid axes,
+connections, builder orchestration, result types, and the external-response
+adapter are safe selective imports; downstream solvers remain ordinary
+top-level PowerImpedanceACDC functions.
 
 ```julia
 using PowerImpedanceACDC
-const NB = PowerImpedanceACDC.NetworkBuilder
+using PowerImpedanceACDC.NetworkBuilder: AbsoluteError, Grid, define, pin,
+    sampled_frequency_response, ⟷
 
-spec = NB.impedance(z = 5.0, pins = 1)
+spec = impedance(Grid; z = 5.0, pins = 1)
 element = only(spec)
 ```
 
 ## Deterministic Cartesian axes
 
 Only an explicit `Grid` introduces alternatives. Raw vectors, matrices,
-ranges, paths, and arbitrary objects passed to a shadow constructor remain one
-atomic value.
+ranges, paths, and arbitrary objects passed to a lazy constructor remain one
+atomic value. Julia does not dispatch on keyword argument types, so the first
+positional `Grid` is the explicit, uniform selector for every component and
+configuration constructor.
 
 ```julia
-sweep = NB.impedance(z = NB.Grid([1.0, 2.0, 5.0]), pins = 1)
+sweep = impedance(Grid; z = Grid([1.0, 2.0, 5.0]), pins = 1)
 length(sweep) # 3
 
-matrix_spec = NB.impedance(z = [1.0 0.0; 0.0 2.0], pins = 2)
+matrix_spec = impedance(Grid; z = [1.0 0.0; 0.0 2.0], pins = 2)
 length(matrix_spec) # 1
 ```
 
 Nested Gridspaces compose recursively. Cartesian order follows Julia's
-`Iterators.product`: the first axis changes fastest. `NetworkBuilder.define`
+`Iterators.product`: the first axis changes fastest. `define`
 lifts a named tuple of component Gridspaces into a `Gridspace{BuilderState}`.
 Connections remain fixed; component parameters and explicitly gridded options
 may vary.
@@ -42,9 +51,9 @@ same physical unit as the nominal value.
 ```julia
 using Measurements
 
-relative = NB.Grid(10.0, 5.0)                  # 5 percent standard deviation
-absolute = NB.Grid(10.0, NB.AbsoluteError(0.5))
-measured = NB.impedance(z = 10.0 ± 0.5, pins = 1)
+relative = Grid(10.0, 5.0)                  # 5 percent standard deviation
+absolute = Grid(10.0, AbsoluteError(0.5))
+measured = impedance(Grid; z = 10.0 ± 0.5, pins = 1)
 ```
 
 Uncertain `solve` and `determine_impedance` studies enumerate deterministic
@@ -64,7 +73,7 @@ repeats power flow, nonlinear equilibrium, and linearization. This is one Monte
 Carlo pass; converter uncertainty does not require a nested sampling loop.
 
 ```julia
-result = NB.determine_impedance(
+result = determine_impedance(
     builder_grid;
     nets = [:bus],
     freq_range = (1.0, 1e3, 100),
@@ -115,14 +124,14 @@ fourth trial dimension.
 The explicit staged API makes the physical partition visible:
 
 ```julia
-Ynode, node_schema, omega = NB.make_y_node(
+Ynode, node_schema, omega = make_y_node(
     builder_space;
     freq_range = (1.0, 1e3, 400),
     trials = 1000,
     seed = 2026,
 )
 
-Yedge, _, _ = NB.make_y_edge(
+Yedge, _, _ = make_y_edge(
     builder_space;
     nodelist = node_schema,
     freq_range = (1.0, 1e3, 400),
@@ -142,7 +151,7 @@ The fused path performs the node and edge calculations from the same sampled
 `BuilderState` and one active-device linearization per trial:
 
 ```julia
-loopgain, node_schema, omega = NB.make_loopgain(
+loopgain, node_schema, omega = make_loopgain(
     builder_space;
     freq_range = (1.0, 1e3, 400),
     trials = 1000,
@@ -184,7 +193,7 @@ Explicit response composition accepts deterministic inputs or uncertain
 collections:
 
 ```julia
-loopgain = NB.make_loopgain(Yedge, Ynode; pairing = :auto)
+loopgain = make_loopgain(Yedge, Ynode; pairing = :auto)
 ```
 
 `pairing=:auto` aligns trials only when shared provenance proves that trial
@@ -204,7 +213,7 @@ Use `sampled_frequency_response` when another solver or case-study runner has
 already produced complete numeric response trials:
 
 ```julia
-external = NB.sampled_frequency_response(
+external = sampled_frequency_response(
     samples,
     omega;
     nodes = [:bus_d, :bus_q],
@@ -217,7 +226,7 @@ must contain the whole response from one physical trial—every matrix entry and
 every frequency uses the same trial index. A callback form is also available:
 
 ```julia
-external = NB.sampled_frequency_response(
+external = sampled_frequency_response(
     (rng, trial_index) -> calculate_one_numeric_response(rng, trial_index),
     omega;
     trials = 1000,

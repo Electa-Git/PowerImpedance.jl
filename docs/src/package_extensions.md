@@ -18,8 +18,8 @@ The extensions are load-order independent. A typical session starts with:
 using PowerImpedanceACDC
 using Measurements
 using LineCableModels
-
-const NB = PowerImpedanceACDC.NetworkBuilder
+using PowerImpedanceACDC.NetworkBuilder: AbsoluteError, Grid, define, pin,
+    sampled_frequency_response, solve, ⟷
 ```
 
 `Measurements` and `LineCableModels` must be installed in the active Julia
@@ -31,11 +31,11 @@ The clean workflow depends on what information must be retained:
 
 | Study | Recommended path |
 |:--|:--|
-| Deterministic component sensitivity | Put explicit alternatives in `NB.Grid`, build once with `NB.define`, and call `NB.solve` or `NB.determine_impedance` |
-| Uncertain converter, source, or passive parameters | Use `Measurement` values or uncertain `NB.Grid` axes and let one Gridspace Monte Carlo run sample the complete builder |
+| Deterministic component sensitivity | Put explicit alternatives in `Grid`, build once with `define`, and call `solve` or `determine_impedance` |
+| Uncertain converter, source, or passive parameters | Use `Measurement` values or uncertain `Grid` axes and let one Gridspace Monte Carlo run sample the complete builder |
 | Deterministic line model calculated by LCM | Pass the resulting `LineParameters` directly to `overhead_line` or `cable` |
-| LCM line uncertainty represented by joint first-order moments | Pass a covariance-preserving `LineParameters` to the qualified `NB.overhead_line` or `NB.cable` overload |
-| Exact empirical LCM joint distribution | Retain complete LCM trial tensors, evaluate each complete physical trial through PowerImpedanceACDC, and wrap the resulting response tensor with `NB.sampled_frequency_response` |
+| LCM line uncertainty represented by joint first-order moments | Pass a covariance-preserving `LineParameters` to `overhead_line(Grid, lp; ...)` or `cable(Grid, lp; ...)` |
+| Exact empirical LCM joint distribution | Retain complete LCM trial tensors, evaluate each complete physical trial through PowerImpedanceACDC, and wrap the resulting response tensor with `sampled_frequency_response` |
 
 See [Parametric and uncertainty studies](gridspace.md) for the basic Gridspace
 construction rules.
@@ -50,17 +50,17 @@ Loading Measurements activates uncertain-grid iteration, sampling of
 ```julia
 using PowerImpedanceACDC
 using Measurements
-
-const NB = PowerImpedanceACDC.NetworkBuilder
+using PowerImpedanceACDC.NetworkBuilder: AbsoluteError, Grid, define, pin,
+    sampled_frequency_response, solve, ⟷
 ```
 
-The unqualified component constructors remain scalar constructors. Qualified
-constructors under `NetworkBuilder` are additive shadow constructors which
-return a lazy `Gridspace`:
+Keyword-only component calls remain scalar constructors. Passing `Grid` as the
+first positional argument selects the additive lazy constructor through Julia
+dispatch:
 
 ```julia
 scalar_element = impedance(z = 10.0, pins = 1)
-element_space = NB.impedance(z = 10.0, pins = 1)
+element_space = impedance(Grid; z = 10.0, pins = 1)
 
 materialized_element = only(element_space)
 ```
@@ -72,13 +72,13 @@ matrix, range, or configuration object remains one atomic constructor argument.
 
 ```julia
 # Three deterministic alternatives.
-length_axis = NB.Grid([50e3, 75e3, 100e3])
+length_axis = Grid([50e3, 75e3, 100e3])
 
 # A 5 percent relative standard deviation around one nominal value.
-relative_axis = NB.Grid(100.0, 5.0)
+relative_axis = Grid(100.0, 5.0)
 
 # An absolute standard deviation of 0.5 in the parameter's physical unit.
-absolute_axis = NB.Grid(10.0, NB.AbsoluteError(0.5))
+absolute_axis = Grid(10.0, AbsoluteError(0.5))
 
 # Measurements.jl values can also be placed directly in component fields.
 measured_value = 10.0 ± 0.5
@@ -86,19 +86,20 @@ measured_value = 10.0 ± 0.5
 
 The complete public construction path is:
 
-1. `NB.Grid(values)` introduces deterministic alternatives.
-2. `NB.Grid(nominals, relative_errors)` introduces relative standard
+1. `Grid(values)` introduces deterministic alternatives.
+2. `Grid(nominals, relative_errors)` introduces relative standard
    deviations in percent.
-3. `NB.Grid(nominals, NB.AbsoluteError(errors))` introduces absolute standard
+3. `Grid(nominals, AbsoluteError(errors))` introduces absolute standard
    deviations.
-4. Qualified component constructors create `Gridspace{Element}` objects.
-5. `NB.define(elements, connections; options)` composes them into a
+4. `component(Grid; kwargs...)` creates `Gridspace` objects; the qualified
+   `NetworkBuilder.component(; kwargs...)` spelling remains compatible.
+5. `define(elements, connections; options)` composes them into a
    `Gridspace{BuilderState}`.
-6. `NB.solve` and `NB.determine_impedance` execute the deterministic cases and
+6. `solve` and `determine_impedance` execute the deterministic cases and
    any trials belonging to each case.
 
 Multiple grid axes form a Cartesian product. For example,
-`NB.Grid([10.0, 20.0], [5.0, 10.0])` describes four uncertain cases: every
+`Grid([10.0, 20.0], [5.0, 10.0])` describes four uncertain cases: every
 nominal value paired with every relative standard deviation. Use separate
 studies when the values are intended to be paired rather than crossed.
 
@@ -108,24 +109,22 @@ The network is declared once. The affected constructor fields show explicitly
 which quantities vary:
 
 ```julia
-using PowerImpedanceACDC.NetworkBuilder: ⟷
-
 elements = (
-    branch = NB.impedance(
-        z = NB.Grid([8.0, 10.0, 12.0]),
+    branch = impedance(Grid;
+        z = Grid([8.0, 10.0, 12.0]),
         pins = 1,
     ),
-    shunt = NB.impedance(z = 20.0, pins = 1),
+    shunt = impedance(Grid; z = 20.0, pins = 1),
 )
 
 connections = (
-    NB.pin(:branch, 1, 1) ⟷ NB.pin(:shunt, 1, 1) ⟷ :bus,
-    NB.pin(:branch, 2, 1) ⟷ NB.pin(:shunt, 2, 1) ⟷ :gnd,
+    pin(:branch, 1, 1) ⟷ pin(:shunt, 1, 1) ⟷ :bus,
+    pin(:branch, 2, 1) ⟷ pin(:shunt, 2, 1) ⟷ :gnd,
 )
 
-builders = NB.define(elements, connections)
+builders = define(elements, connections)
 
-sensitivity = NB.determine_impedance(
+sensitivity = determine_impedance(
     builders;
     nets = [:bus],
     freq_range = (1.0, 1e3, 100),
@@ -143,12 +142,12 @@ elements are materialized:
 ```julia
 uncertain_elements = merge(
     elements,
-    (branch = NB.impedance(z = 10.0 ± 0.5, pins = 1),),
+    (branch = impedance(Grid; z = 10.0 ± 0.5, pins = 1),),
 )
 
-uncertain_builders = NB.define(uncertain_elements, connections)
+uncertain_builders = define(uncertain_elements, connections)
 
-uq = NB.determine_impedance(
+uq = determine_impedance(
     uncertain_builders;
     nets = [:bus],
     freq_range = (1.0, 1e3, 100),
@@ -179,12 +178,12 @@ sampling dispatch, as the LineParameters extension does.
 
 ### Power flow and nonlinear components
 
-`NB.solve(builder_space; ...)` runs the unchanged scalar solve pipeline for
+`solve(builder_space; ...)` runs the unchanged scalar solve pipeline for
 every physical sample. Each sampled converter or other nonlinear component
 therefore reaches the power-flow and nonlinear-equilibrium solvers as an
 ordinary numeric object.
 
-`NB.determine_impedance(builder_space; ...)` performs the same safe sampling in
+`determine_impedance(builder_space; ...)` performs the same safe sampling in
 one Monte Carlo loop. It caches an active-device linearization only while the
 operating-point context is unchanged:
 
@@ -202,8 +201,8 @@ changed.
 
 ### Results and retained samples
 
-`NB.determine_impedance` returns a `ParametricImpedance`, an ordered collection
-of `ImpedanceCase` values. `NB.solve` similarly returns a `ParametricSolve` of
+`determine_impedance` returns a `ParametricImpedance`, an ordered collection
+of `ImpedanceCase` values. `solve` similarly returns a `ParametricSolve` of
 `SolveCase` values. Both collections support iteration, integer indexing,
 `length`, and `only`.
 
@@ -268,7 +267,7 @@ when they are available.
 Exact external response data uses a different entry point:
 
 ```julia
-response = NB.sampled_frequency_response(
+response = sampled_frequency_response(
     samples,
     omega;
     nodes = [:bus_d, :bus_q],
@@ -293,8 +292,8 @@ Measurements have all been loaded, in any order:
 using PowerImpedanceACDC
 using LineCableModels
 using Measurements
-
-const NB = PowerImpedanceACDC.NetworkBuilder
+using PowerImpedanceACDC.NetworkBuilder: Grid, define,
+    sampled_frequency_response
 ```
 
 The integration boundary is deliberately narrow. LineCableModels constructs
@@ -302,7 +301,7 @@ and solves `CableDesign`, `LineCableSystem`, and `EarthModel` problems;
 PowerImpedanceACDC consumes the resulting `LineParameters`. LCM solvers are not
 executed inside Gridspace.
 
-### Native and NetworkBuilder entry points
+### Native and lazy entry points
 
 The extension adds these positional overloads:
 
@@ -321,17 +320,27 @@ cable(lp::LineParameters;
     extrapolation = :error,
 )
 
-NB.overhead_line(lp::LineParameters; length, transformation = false,
-    connection = true, extrapolation = :error)
+overhead_line(Grid, lp::LineParameters;
+    length,
+    transformation = false,
+    connection = true,
+    extrapolation = :error,
+)
 
-NB.cable(lp::LineParameters; length, transformation = false,
-    connection = true, extrapolation = :error)
+cable(Grid, lp::LineParameters;
+    length,
+    transformation = false,
+    connection = true,
+    extrapolation = :error,
+)
 ```
 
 The native overloads return an ordinary `Element` and accept deterministic
-`LineParameters`. The qualified overloads return `Gridspace{Element}` and must
-be used when `lp.Z`, `lp.Y`, or `length` is uncertain, or when another line
-argument is an explicit Gridspace axis.
+`LineParameters`. The positional-`Grid` overloads return `Gridspace{Element}`
+and must be used when `lp.Z`, `lp.Y`, or `length` is uncertain, or when another
+line argument is an explicit Gridspace axis. The older qualified
+`NetworkBuilder.overhead_line(lp; ...)` and `NetworkBuilder.cable(lp; ...)`
+spellings remain supported.
 
 `length` is required and is measured in metres. LCM `Z` and `Y` are interpreted
 as per-metre matrices in Ω/m and S/m. A `LineParameters` object does not carry
@@ -353,13 +362,13 @@ line = cable(
 )
 ```
 
-Use the qualified constructor to compose that result declaratively with a
+Use positional `Grid` dispatch to compose that result declaratively with a
 length sensitivity axis:
 
 ```julia
-line_space = NB.cable(
+line_space = cable(Grid,
     lp;
-    length = NB.Grid([50e3, 75e3, 100e3]),
+    length = Grid([50e3, 75e3, 100e3]),
     transformation = true,
 )
 ```
@@ -425,10 +434,10 @@ not be sampled independently to manufacture a coupled `Z(f),Y(f)` realization.
 ### Coupling LCM uncertainty into PowerImpedanceACDC
 
 The clean moment-and-covariance path is to pass the Measurements-valued summary
-directly to the qualified constructor:
+directly to the lazy constructor:
 
 ```julia
-uncertain_line = NB.cable(
+uncertain_line = cable(Grid,
     lcm_mc.measurements;
     length = 100e3,
     transformation = true,
@@ -439,9 +448,9 @@ elements = (
     # converters, sources, and other elements are declared here as Gridspaces
 )
 
-builders = NB.define(elements, connections; options = builder_options)
+builders = define(elements, connections; options = builder_options)
 
-result = NB.determine_impedance(
+result = determine_impedance(
     builders;
     nets = [:observed_bus],
     elim_elements = [:converter],
@@ -495,7 +504,7 @@ current extension. The clean exact path is:
 3. build and evaluate the complete PowerImpedanceACDC system for that trial;
 4. store the resulting numeric impedance, admittance, or loop-gain response as
    one fourth-dimension response slice; and
-5. call `NB.sampled_frequency_response(samples, omega; nodes, trial_ids)`.
+5. call `sampled_frequency_response(samples, omega; nodes, trial_ids)`.
 
 This separates responsibilities cleanly: LCM samples physical line designs,
 PowerImpedanceACDC evaluates complete systems, and the response adapter carries

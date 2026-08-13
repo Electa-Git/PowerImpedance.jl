@@ -4,6 +4,7 @@ module NetworkBuilder
 import TypedTables: Table
 
 export pin, ⟷, ↔
+export BuilderState, Pin, ConnectionDef, define, update!, solve
 export AbsoluteError, AbsoluteGrid, DeterministicGrid, Grid, Gridspace, RelativeGrid
 export @gridspace, @relax
 export ImpedanceCase, ParametricImpedance, SolveCase, ParametricSolve
@@ -46,6 +47,14 @@ include("legacy.jl")
 
 ##### Builder state
 
+"""
+    BuilderState
+
+Store one materialized NetworkBuilder system: ordinary numeric elements, its
+connection registry, builder options, and an optional cached power-flow result.
+
+Construct systems with [`define`](@ref) rather than calling this type directly.
+"""
 mutable struct BuilderState
 	elements::NamedTuple
 	connections::ConnectionsRegistry
@@ -61,6 +70,23 @@ Base.show(io::IO, bs::BuilderState) = println(io, 	"\n Network implemented via B
 
 
 
+"""
+    define(elements, connections; options=(;))
+
+Construct a scalar [`BuilderState`](@ref) from ordinary elements and fixed
+connections.
+
+# Arguments
+
+- `elements`: Named tuple of scalar PowerImpedanceACDC elements.
+- `connections`: Tuple of [`ConnectionDef`](@ref) values.
+- `options`: Builder and power-flow options.
+
+# Returns
+
+- A `BuilderState`. If the element values are Gridspaces, more-specific
+  dispatch returns a `Gridspace{BuilderState}`.
+"""
 function define(elements::NamedTuple, connections::Tuple{Vararg{ConnectionDef}}; options = (;))
 
 	connected_elements = (; filter(p -> p.second.connection, pairs(elements))...) #Filter out non-connected elements
@@ -88,6 +114,30 @@ end
 
 
 
+"""
+    update!(builder; elements=builder.elements,
+            connections=builder.connections, options=builder.options,
+            powerflow=nothing)
+
+Replace fields of an existing [`BuilderState`](@ref).
+
+# Arguments
+
+- `builder`: Mutable system definition to update.
+- `elements`: Replacement named tuple of scalar elements.
+- `connections`: Replacement connection registry.
+- `options`: Replacement builder options.
+- `powerflow`: Optional compatible cached power-flow result.
+
+# Returns
+
+- A named tuple containing the resulting `powerflow` cache.
+
+# Notes
+
+Changing the builder clears its previous power-flow cache. Supplying
+`powerflow` applies and caches the provided active-element setpoints.
+"""
 function update!(
 	builder::BuilderState;
 	elements = builder.elements,
@@ -110,6 +160,24 @@ end
 
 
 
+"""
+    solve(builder::BuilderState)
+
+Build and solve one ordinary numeric NetworkBuilder system.
+
+# Arguments
+
+- `builder`: Materialized system definition.
+
+# Returns
+
+- A named tuple containing `powerflow` and the constructed scalar `network`.
+
+# Notes
+
+The `Gridspace{BuilderState}` overload applies this scalar pipeline to every
+deterministic case and numeric Monte Carlo trial.
+"""
 function solve(builder::BuilderState)
 	buildernetwork = build_network(builder.elements, builder.connections, builder.options)
 	powerflow = solve_powerflow(buildernetwork, builder.options)

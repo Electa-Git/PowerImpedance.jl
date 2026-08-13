@@ -842,6 +842,10 @@ Evaluate the active-element nodal admittance on a logarithmic frequency grid.
 
 Converter, source, topology, option, or other active changes repeat the operating
 point and linearization. Passive-only changes may reuse the active linearization.
+`:normal` samples the declared nominal values and standard deviations;
+`:uniform` uses variance-equivalent intervals `nominal ± √3 standard_deviation`.
+When `return_samples=false`, exact trial statistics are calculated through
+temporary memory-mapped storage and frozen provenance permits later replay.
 
 # Errors
 
@@ -885,6 +889,8 @@ Evaluate the passive-network nodal admittance on a logarithmic frequency grid.
 
 Passing the `ParametricNodeSchema` from `make_y_node` replays the same sampled
 builder states and proves aligned trial provenance for loop-gain composition.
+It also inherits the originating trial count, distribution, seed, confidence,
+and tolerance. Supplying a conflicting value is an error.
 
 # Errors
 
@@ -937,6 +943,10 @@ L(j\\omega) = Y_{edge}(j\\omega)^{-1}Y_{node}(j\\omega).
 
 The fused Gridspace overload constructs `Yedge` and `Ynode` from one sampled
 `BuilderState` and one active-device linearization per trial.
+`:normal` samples the declared nominal values and standard deviations;
+`:uniform` uses variance-equivalent intervals `nominal ± √3 standard_deviation`.
+Derived operations always consume retained or replayed numeric trials, never
+the aggregated mean-and-standard-deviation matrices.
 
 # Errors
 
@@ -1245,6 +1255,12 @@ Wrap exact whole-trial matrix frequency responses for parametric analysis.
 
 One trial index selects the complete matrix at every frequency. This preserves
 cross-entry and cross-frequency empirical dependence.
+
+The supplied slices already define their empirical distribution, so this
+entry point has no `distribution` keyword. The callback overload uses isolated,
+derived RNG seeds to generate the requested slices without changing Julia's
+global random-number generator. Both overloads retain replayable whole-trial
+data; they do not fit a normal or uniform surrogate.
 
 # Errors
 

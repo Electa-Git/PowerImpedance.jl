@@ -1,13 +1,39 @@
 #### Intermediate data structures for defining connections ##########
 """
- Pin(elementid::Symbol, side::Int, terminal::Int)
- Represents a pin of an element, identified by the element's ID, the side of the element, and the terminal number on that side.
+    Pin(elementid, side, terminal)
+
+Identify one terminal of a named NetworkBuilder element.
+
+# Arguments
+
+- `elementid`: Element name used in the builder's element named tuple.
+- `side`: Positive element-side index.
+- `terminal`: Positive terminal index on `side`.
 """
 struct Pin
 	elementid::Symbol
 	side::Int
 	terminal::Int
 
+	@doc """
+		Pin(elementid::Symbol, side::Int, terminal::Int)
+
+	Construct a validated terminal identifier for a named element.
+
+	# Arguments
+
+	- `elementid`: Element name in the builder's element named tuple.
+	- `side`: Positive element-side index.
+	- `terminal`: Positive terminal index on `side`.
+
+	# Returns
+
+	- A `Pin` suitable for connection composition.
+
+	# Errors
+
+	- Throws `ArgumentError` when `side` or `terminal` is not positive.
+	"""
 	function Pin(elementid::Symbol, side::Int, terminal::Int)
 		side > 0 || throw(ArgumentError("Pin side must be >= 1, got $side."))
 		terminal > 0 ||
@@ -17,7 +43,12 @@ struct Pin
 end
 
 """
-    Collection of pins of elements and the name of the connection
+    ConnectionDef
+
+Represent an optional net name and the element pins connected to that net.
+
+Construct connection definitions with [`pin`](@ref) and [`⟷`](@ref), or call
+`ConnectionDef` directly for programmatically assembled endpoint vectors.
 """
 struct ConnectionDef
 	name::Union{Symbol, Nothing}
@@ -267,6 +298,23 @@ function mergebysharedpin(conns::Vector{ConnectionDef})
 	return conns
 end
 
+"""
+    pin(element, side, terminal)
+    pin(element, name)
+
+Construct a [`Pin`](@ref) for a named element.
+
+# Arguments
+
+- `element`: Element name used in the builder's element named tuple.
+- `side`: Positive element-side index.
+- `terminal`: Positive terminal index on `side`.
+- `name`: Pin designator such as `Symbol("2.1")` or `(2, 1)`.
+
+# Returns
+
+- A `Pin` suitable for composition with [`⟷`](@ref).
+"""
 pin(element::Symbol, side::Integer, terminal::Integer) =
 	Pin(element, Int(side), Int(terminal))
 

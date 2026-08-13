@@ -43,9 +43,14 @@ Frequency-response data can be imported for:
 
 ### Parametric and uncertainty studies
 
-Qualified `NetworkBuilder` shadow constructors support deterministic Cartesian
-sweeps and Measurements.jl-based Monte Carlo studies while preserving the
-ordinary scalar API. See the [Gridspace guide](docs/src/gridspace.md).
+Passing the selectively imported `Grid` constructor as the first positional
+argument to any ordinary component constructor selects its lazy NetworkBuilder
+form, for example `impedance(Grid; z=Grid([1.0, 2.0]), pins=1)`. The scalar
+keyword-only API remains unchanged. Qualified `NetworkBuilder` shadows remain
+available for compatibility. See the [Gridspace guide](docs/src/gridspace.md).
+Builder orchestration and result types can also be selectively imported, while
+`determine_impedance`, `make_loopgain`, and stability tools retain their
+ordinary top-level names.
 
 The same study contract covers nodal admittance, loop-gain, and small-signal
 stability analysis. Staged `make_y_node`/`make_y_edge` composition and fused
@@ -65,7 +70,7 @@ cross-frequency trial dependence. See [Package extensions](docs/src/package_exte
 
 The figure below shows the admittance characteristics of a point-to-point HVDC link composed of two MMCs. The analytical results are validated against PSCAD simulations. This example, together with a detailed explanation, is available in the `examples` folder.
 
-docs/src/pictures/P2P_validation.png
+![P2P HVDC admittance validation](docs/src/pictures/P2P_validation.png)
 
 ## Installation
 

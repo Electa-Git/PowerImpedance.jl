@@ -1,22 +1,47 @@
 export cable #function row 81 -> possible up to 4 conducting and insultating layers. Cable group of n cables possible.
 export Insulator, Conductor #mutable structures row 4, 13 and 23
 # first letter of the variable: Capital -> Mutable Structure (e.g. Cable, Insulator, Conductor), lowercase -> function (e.g. cable)
+"""
+$(TYPEDEF)
+
+Describe one conducting layer of a coaxial cable.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Conductor #conducting layer //macro @with_kw which decorates a type definition and allow default values and a keyword construct
+	"Inner radius `\\[m\\]`."
 	rᵢ::Union{Int, Float64} = 0              # inner radius
+	"Outer radius `\\[m\\]`."
 	rₒ::Union{Int, Float64} = 0              # outer radius
+	"Electrical resistivity `\\[Ω·m\\]`."
 	ρ::Union{Int, Float64} = 0              # conductor resistivity [Ωm]
+	"Relative permeability `\\[dimensionless\\]`."
 	μᵣ::Union{Int, Float64} = 1             # relative permeability
 
+	"Optional nominal conducting area `\\[m²\\]`."
 	A::Union{Int, Float64} = 0               # nominal area
 end
 
+"""
+$(TYPEDEF)
+
+Describe one insulating layer and its optional semiconducting screens.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Insulator #insulating layer
+	"Inner radius `\\[m\\]`."
 	rᵢ::Union{Int, Float64}  = 0               # inner radius
+	"Outer radius `\\[m\\]`."
 	rₒ::Union{Int, Float64}  = 0               # outer radius #Insulator defined between rᵢ < r < rₒ
+	"Relative permittivity `\\[dimensionless\\]`."
 	ϵᵣ::Union{Int, Float64} = 1               # relative permittivity
+	"Relative permeability `\\[dimensionless\\]`."
 	μᵣ::Union{Int, Float64} = 1               # relative permeability
 	# If a semiconductor is present, in an insulator, we have: rᵢ < semiconductor < a + a < insulator < b + b < semiconductor < rₒ
+	"Inner semiconducting-screen thickness `\\[m\\]`."
 	a::Union{Int, Float64} = 0                # inner semiconductor thickness
+	"Outer semiconducting-screen thickness `\\[m\\]`."
 	b::Union{Int, Float64} = 0                # outer semiconductor thickness
 	# From PSCAD manual:
 	# A = outer radius of inner conductor + thickness of inner semiconducting screen
@@ -25,65 +50,87 @@ end
 	# rᵢ = outer radius of inner conductor
 end
 
+"""
+$(TYPEDEF)
+
+Store the native cable-group geometry, layers, earth properties, and reduction
+options used by frequency-domain evaluation.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Cable <: Transmission_line #indicates that the mutable struct Cable is a subtype (<:) of abstract type Transmission_line
+	"Physical cable length `\\[m\\]`."
 	length::Union{Int, Float64} = 0                    # line length [m]. Union -> it could be both Int or Float64
+	"Ordered conducting layers."
 	conductors::OrderedDict{Symbol, Conductor} = OrderedDict{Symbol, Conductor}() #OrderedDict -> dictionary with a particular order. Key: Symbol-> C1, C2, C3 and C4. Value: Conductor-> Mutable Struct Conductor, defined above
+	"Ordered insulating layers."
 	insulators::OrderedDict{Symbol, Insulator} = OrderedDict{Symbol, Insulator}() #OrderedDict -> dictionary with a particular order. Key: Symbol-> I1, I2, I3 and I4. Value: Insulator-> Mutable Struct Insulator, defined above
+	"Cable-center coordinates `\\[m\\]`."
 	positions::Vector{Tuple{Real, Real}} = [] #Real -> indicates all variables are real number, vector composed by tuple of real numbers. e.g. positions=[(0,0),(1,1)]. Cables positions 1st:x=0, y=0. 2nd: x=1, y=1.
+	"Earth relative permeability, relative permittivity, and resistivity `\\[Ω·m\\]`."
 	earth_parameters::NTuple{N, Union{Int, Float64}} where N = (1, 1, 1) # (μᵣ, ϵᵣ, ρ) in units ([], [], [Ωm]) compact way of representing the type for a tuple of length N where all elements are of type Int or Float64.
+	"Cable geometry identifier."
 	configuration::Symbol = :coaxial #Configuration is a datatype symbol with value coaxial Symbol -> Type of data. Symbols can be entered using the quote operator ":"
+	"Installation identifier, such as `:underground` or `:aerial`."
 	type::Symbol = :underground   # or aerial. for the description, see above.
 
 
 
+	"Whether grounded internal conducting layers are Kron-reduced."
 	eliminate::Bool = true #eliminate-> variable with Bool datatype and value TRUE (Bool variable can be true or false)-> predifined with true value. If not specified elsewhere in the code, eliminate=true
 end
 
 """
-	cable(;args...)
-Generates the element `elem` with the  `element_value` of the type `Cable`. Arguments should be given in the
-form of struct `Cable` fields:
-- length - length of the cable in [m]
-- earth\\_parameters - (μᵣᵍ, ϵᵣᵍ, ρᵍ) in units ([], [], [Ωm])
-meaning ground (earth) relative premeability, relative permittivity and
-ground resistivity
-- conductors - dictionary with the key symbol being: C1, C2, C3 or C4, and the value
-given with the struct `Conductor`. If the sheath consists of metalic screen and sheath,
-then add screen with a key symbol SC and sheath with C2.
+    cable(; length=0, positions=[], earth_parameters=(1, 1, 1),
+          configuration=:coaxial, type=:underground, eliminate=true,
+          transformation=false, connection=true, layers...)
+
+Construct a frequency-dependent group of coaxial power cables.
+
+# Arguments
+
+- `length`: Physical cable length `\\[m\\]`.
+- `positions`: Cable-center coordinates `(x, y)` `\\[m\\]`; one pair per cable.
+- `earth_parameters`: Earth relative permeability `\\[dimensionless\\]`,
+  relative permittivity `\\[dimensionless\\]`, and resistivity `\\[Ω·m\\]`.
+- `configuration`: Cable geometry identifier. Default: `:coaxial`.
+- `type`: Installation identifier. Default: `:underground`.
+- `eliminate`: Whether grounded internal conducting layers are Kron-reduced.
+- `transformation`: Whether to expose a supported transformed representation.
+- `connection`: Whether NetworkBuilder includes the element in the system.
+- `layers`: Named `Conductor` values (`C1`, `C2`, ...) and `Insulator`
+  values (`I1`, `I2`, ...). A metallic screen may be supplied as `SC` together
+  with sheath `C2`.
+
+# Returns
+
+- An `Element` with one input and output terminal per cable position.
+
+# Notes
+
+`Conductor` radii and insulator radii are in metres. Conductor resistivity is
+in `\\[Ω·m\\]`; relative permeability and permittivity are dimensionless.
+The complete phase-domain self and mutual parameter matrices are evaluated at
+the requested frequency before optional internal-layer elimination.
+
+# Errors
+
+- Throws `ArgumentError` for an unknown property or layer, or when a metallic
+  screen is supplied without sheath `C2`.
+
+# Examples
+
 ```julia
-struct Conductor
-	rᵢ :: Union{Int, Float64} = 0              # inner radius
-	rₒ :: Union{Int, Float64} = 0              # outer radius
-	ρ  :: Union{Int, Float64} = 0              # conductor resistivity [Ωm]
-	μᵣ  :: Union{Int, Float64} = 1             # relative premeability
-
-	A :: Union{Int, Float64} = 0               # nominal area
-
-	screen_r :: Union{Int, Float64} = 0        # metalic screen outer radius
-	screen_ρ :: Union{Int, Float64} = 0        # metalic screen resistivity [Ωm]
-end
+cable_element = cable(
+    length = 100e3,
+    positions = [(-0.5, 1.0), (0.5, 1.0)],
+    C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
+    I1 = Insulator(rᵢ = 0.02622, rₒ = 0.06006, ϵᵣ = 2.67),
+    C2 = Conductor(rᵢ = 0.06006, rₒ = 0.06336, ρ = 2.14e-7),
+    earth_parameters = (1.0, 1.0, 100.0),
+)
 ```
-- insulators - dictionary with the key being symbol: I1, I2, I3 and I4, and the value #FP Keys: I1, I2, I3, I4
-given with the struct `Insulator`. For the insulator 2 the semiconducting layers #FP: Capital letters -> Struct
-can be added by specifying outer radius of the inner semiconducting layer and
-inner radius of the outer semiconducting layer.
-```julia
-struct Insulator
-	rᵢ :: Union{Int, Float64} = 0               # inner radius
-	rₒ :: Union{Int, Float64} = 0               # outer radius
-	ϵᵣ :: Union{Int, Float64} = 1               # relative permittivity
-	μᵣ :: Union{Int, Float64} = 1               # relative permeability
-
-	a :: Union{Int, Float64} = 0                # inner semiconductor thickness
-	b :: Union{Int, Float64} = 0                # outer semiconductor thickness
-end
-```
-- positions - given as an array in (x,y) format
-- configuration - symbol with two possible values: coaxial (default) and pipe-type
-- type - symbol representing underground or aerial cable
 """
-
-
 function cable(; args...)
 	c = Cable()
 	transformation = false

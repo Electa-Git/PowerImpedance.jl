@@ -19,13 +19,28 @@ include("modulation.jl")
 ################## Structs #####################
 
 ### MMC ###
+"""
+$(TYPEDEF)
+
+Combine the measurement, synchronization, differential-current control,
+internal-current control, modulation, and electrical submodels of a modular
+multilevel converter.
+
+$(TYPEDFIELDS)
+"""
 @with_kw struct MMC{S<:AbstractSynchronization, Δ<:AbstractΔdqControl, Σ<:AbstractΣdqzControl, Mod<:AbstractModulationMMC} <: AbstractMMC
     #### Blocks composing the MMC model:
+	"Measurement and signal-filtering block."
     meas::Measurement
+	"Synchronization block."
     sync::S
+	"Differential-current AC-side control structure."
     delta_control::Δ
+	"Sum/circulating-current internal control structure."
     sigma_control::Σ
+	"Modulation and delay block."
     modulation::Mod                      
+	"MMC electrical plant and physical bases."
     elec::ElectricalMMC
 end
 
@@ -193,6 +208,53 @@ end
 
 ################## Contructor ################################
 
+"""
+    mmc(; elec=ElectricalMMC(), meas=Measurement(), sync,
+        delta_control, sigma_control,
+        modulation=UncompensatedModulation(), setpoint=Setpoint(),
+        limits=Limits(), connection=true)
+
+Construct a modular multilevel converter from composable electrical, signal,
+control, and modulation blocks.
+
+# Arguments
+
+- `elec`: MMC electrical plant and physical base quantities.
+- `meas`: Converter measurement and filtering block.
+- `sync`: Synchronization model, such as `PLLSynchronization` or
+  `NoSynchronization`.
+- `delta_control`: AC-side differential-current control structure.
+- `sigma_control`: Internal sum/circulating-current control structure.
+- `modulation`: MMC modulation and delay model.
+- `setpoint`: AC/DC steady-state operating point.
+- `limits`: Active- and reactive-power limits in the converter base.
+- `connection`: Whether NetworkBuilder includes the converter in the system.
+
+# Returns
+
+- An `Element` with one DC terminal group and one transformed AC terminal group.
+
+# Notes
+
+The selected synchronization and outer-control blocks determine the AC and DC
+power-flow control modes. Frequency-domain evaluation solves the converter's
+nonlinear equilibrium at the resulting operating point before linearization.
+
+# Examples
+
+```julia
+converter = mmc(
+    sync = PLLSynchronization(),
+    delta_control = ΔdqControlGFL(
+        outer_active = OuterActivePowerControl(),
+        outer_reactive = OuterReactiveQControl(),
+        occ = InnerCurrentPIControl(),
+    ),
+    sigma_control = ΣdqzControlTEC(),
+    setpoint = Setpoint(Pac = 100.0, Qac = 0.0, Vac = 220.0, Vdc = 640.0),
+)
+```
+"""
 function mmc(;
     elec::ElectricalMMC = ElectricalMMC(),
     meas::Measurement = Measurement(),
