@@ -52,7 +52,7 @@ end
 end
 
 @testset "large impedance sample stacking" begin
-    samples = [fill(complex(Float64(index)), 1, 1, 2) for index in 1:15_000]
+    samples = Any[fill(complex(Float64(index)), 1, 1, 2) for index in 1:15_000]
     stacked = NB._stack_impedance_samples(samples)
     @test size(stacked) == (1, 1, 2, 15_000)
     @test stacked[:, :, :, 1] == first(samples)

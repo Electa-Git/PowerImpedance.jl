@@ -175,12 +175,15 @@ mutable struct _ParametricImpedanceRunner{K}
     keywords::K
 end
 
-function _stack_impedance_samples(samples::AbstractVector{<:AbstractArray})
+function _stack_impedance_samples(samples::AbstractVector)
     isempty(samples) && throw(ArgumentError("at least one impedance sample is required"))
     reference = first(samples)
+    reference isa AbstractArray || throw(ArgumentError(
+        "impedance samples must be arrays; received $(typeof(reference))",
+    ))
     sample_dimensions = size(reference)
-    all(size(sample) == sample_dimensions for sample in samples) ||
-        throw(DimensionMismatch("impedance sample dimensions differ"))
+    all(sample isa AbstractArray && size(sample) == sample_dimensions for sample in samples) ||
+        throw(DimensionMismatch("impedance sample types or dimensions differ"))
     stacked = similar(reference, (sample_dimensions..., length(samples)))
     trial_dimension = ndims(stacked)
     for (trial_index, sample) in enumerate(samples)

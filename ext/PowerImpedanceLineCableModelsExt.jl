@@ -387,6 +387,91 @@ function _sample_parameter_array(values, draws)
     return sampled
 end
 
+struct _LineParametersSamplingPlan
+    domain::DataType
+    dimensions::Tuple{Vararg{Int}}
+    frequencies::Vector{Float64}
+    primitive_keys::Vector{Any}
+    Z_nominal::Vector{ComplexF64}
+    Y_nominal::Vector{ComplexF64}
+    Z_coefficients::Matrix{ComplexF64}
+    Y_coefficients::Matrix{ComplexF64}
+    Y_storage::Any
+    frequency_storage::Any
+end
+
+const _LINE_PARAMETERS_SAMPLING_PLANS = IdDict{Any, _LineParametersSamplingPlan}()
+const _LINE_PARAMETERS_SAMPLING_PLAN_LOCK = ReentrantLock()
+
+function _complex_nominal(value)
+    return complex(
+        Float64(NB._measurement_nominal(real(value))),
+        Float64(NB._measurement_nominal(imag(value)))
+    )
+end
+
+function _complex_coefficient(value, key)
+    real_coefficient = NB._is_measurement(real(value)) ?
+        key[2] * Measurements.derivative(real(value), key) : 0.0
+    imag_coefficient = NB._is_measurement(imag(value)) ?
+        key[2] * Measurements.derivative(imag(value), key) : 0.0
+    return complex(Float64(real_coefficient), Float64(imag_coefficient))
+end
+
+function _coefficient_matrix(values, primitive_keys)
+    coefficients = Matrix{ComplexF64}(
+        undef, length(values), length(primitive_keys))
+    for (column, key) in enumerate(primitive_keys), index in eachindex(values)
+        coefficients[index, column] = _complex_coefficient(values[index], key)
+    end
+    return coefficients
+end
+
+function _build_sampling_plan(parameters::LCM.LineParameters)
+    primitive_keys = Any[_primitive_keys(parameters)...]
+    Z_values = parameters.Z.values
+    Y_values = parameters.Y.values
+    return _LineParametersSamplingPlan(
+        LCM.domain(parameters),
+        size(Z_values),
+        Float64.(parameters.f),
+        primitive_keys,
+        _complex_nominal.(vec(Z_values)),
+        _complex_nominal.(vec(Y_values)),
+        _coefficient_matrix(Z_values, primitive_keys),
+        _coefficient_matrix(Y_values, primitive_keys),
+        Y_values,
+        parameters.f
+    )
+end
+
+function _sampling_plan(parameters::LCM.LineParameters)
+    Z_storage = parameters.Z.values
+    Y_storage = parameters.Y.values
+    frequency_storage = parameters.f
+    return lock(_LINE_PARAMETERS_SAMPLING_PLAN_LOCK) do
+        cached = get(_LINE_PARAMETERS_SAMPLING_PLANS, Z_storage, nothing)
+        if cached !== nothing && cached.Y_storage === Y_storage &&
+                cached.frequency_storage === frequency_storage
+            return cached
+        end
+        plan = _build_sampling_plan(parameters)
+        _LINE_PARAMETERS_SAMPLING_PLANS[Z_storage] = plan
+        return plan
+    end
+end
+
+function _sample_plan(rng, plan::_LineParametersSamplingPlan, distribution)
+    standardized = NB._distribution(distribution, 0.0, 1.0)
+    draws = Float64[Random.rand(rng, standardized)
+        for _ in plan.primitive_keys]
+    Z_values = plan.Z_nominal + plan.Z_coefficients * draws
+    Y_values = plan.Y_nominal + plan.Y_coefficients * draws
+    Z = copy(reshape(Z_values, plan.dimensions))
+    Y = copy(reshape(Y_values, plan.dimensions))
+    return LCM.LineParameters(plan.domain, Z, Y, plan.frequencies)
+end
+
 function NB._sample_value(
         rng,
         parameters::LCM.LineParameters,
@@ -395,15 +480,7 @@ function NB._sample_value(
     any(NB._has_measurement, parameters.f) && throw(ArgumentError(
         "uncertain LineParameters frequencies are unsupported; use a deterministic, ordered frequency grid",
     ))
-    primitive_keys = _primitive_keys(parameters)
-    standardized = NB._distribution(distribution, 0.0, 1.0)
-    draws = Dict{Any, Float64}(
-        key => Random.rand(rng, standardized) for key in primitive_keys
-    )
-    Z = _sample_parameter_array(parameters.Z, draws)
-    Y = _sample_parameter_array(parameters.Y, draws)
-    frequencies = Float64.(parameters.f)
-    return LCM.LineParameters(LCM.domain(parameters), Z, Y, frequencies)
+    return _sample_plan(rng, _sampling_plan(parameters), distribution)
 end
 
 function NB._measurement_description(parameters::LCM.LineParameters)

@@ -302,6 +302,22 @@ end
     @test NB._has_measurement(parameters)
     @test !NB._zero_measurement(parameters)
 
+    empty!(LCM_EXT._LINE_PARAMETERS_SAMPLING_PLANS)
+    reference_rng = Xoshiro(1234)
+    primitive_keys = LCM_EXT._primitive_keys(parameters)
+    standardized = NB._distribution(:normal, 0.0, 1.0)
+    draws = Dict{Any, Float64}(
+        key => rand(reference_rng, standardized) for key in primitive_keys)
+    expected_Z = LCM_EXT._sample_parameter_array(parameters.Z, draws)
+    expected_Y = LCM_EXT._sample_parameter_array(parameters.Y, draws)
+    sampled = NB._sample_value(Xoshiro(1234), parameters, :normal)
+    @test Array(sampled.Z) == expected_Z
+    @test Array(sampled.Y) == expected_Y
+    @test length(LCM_EXT._LINE_PARAMETERS_SAMPLING_PLANS) == 1
+    first_plan = only(values(LCM_EXT._LINE_PARAMETERS_SAMPLING_PLANS))
+    NB._sample_value(Xoshiro(1235), parameters, :normal)
+    @test only(values(LCM_EXT._LINE_PARAMETERS_SAMPLING_PLANS)) === first_plan
+
     for (distribution, seed) in ((:normal, 2026), (:uniform, 2027))
         rng = Xoshiro(seed)
         samples = [NB._sample_value(rng, parameters, distribution) for _ in 1:5000]
