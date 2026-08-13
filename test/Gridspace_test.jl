@@ -51,6 +51,14 @@ end
     @test_throws ArgumentError collect(relative)
 end
 
+@testset "large impedance sample stacking" begin
+    samples = [fill(complex(Float64(index)), 1, 1, 2) for index in 1:15_000]
+    stacked = NB._stack_impedance_samples(samples)
+    @test size(stacked) == (1, 1, 2, 15_000)
+    @test stacked[:, :, :, 1] == first(samples)
+    @test stacked[:, :, :, end] == last(samples)
+end
+
 @testset "Qualified component shadows" begin
     parent = PowerImpedanceACDC.impedance(z = 3.0, pins = 1)
     shadow = only(NB.impedance(z = 3.0, pins = 1))

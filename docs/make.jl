@@ -224,6 +224,10 @@ function build_pages()
 		push!(pages, "Parametric studies" => "gridspace.md")
 	end
 
+	if isfile(joinpath(DOCS_SRC_DIR, "package_extensions.md"))
+		push!(pages, "Package extensions" => "package_extensions.md")
+	end
+
 	tutorials_page = build_example_pages()
 	isnothing(tutorials_page) || push!(pages, tutorials_page)
 

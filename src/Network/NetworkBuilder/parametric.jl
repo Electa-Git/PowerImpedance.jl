@@ -175,6 +175,20 @@ mutable struct _ParametricImpedanceRunner{K}
     keywords::K
 end
 
+function _stack_impedance_samples(samples::AbstractVector{<:AbstractArray})
+    isempty(samples) && throw(ArgumentError("at least one impedance sample is required"))
+    reference = first(samples)
+    sample_dimensions = size(reference)
+    all(size(sample) == sample_dimensions for sample in samples) ||
+        throw(DimensionMismatch("impedance sample dimensions differ"))
+    stacked = similar(reference, (sample_dimensions..., length(samples)))
+    trial_dimension = ndims(stacked)
+    for (trial_index, sample) in enumerate(samples)
+        selectdim(stacked, trial_dimension, trial_index) .= sample
+    end
+    return stacked
+end
+
 function (runner::_ParametricImpedanceRunner)(builder::BuilderState)
     decision = _linearization_decision(builder, runner.cache)
     network, runner.cache = _linearize(builder, decision)
@@ -309,7 +323,7 @@ function determine_impedance(
         end
         averaged, statistics = _aggregate_impedance(impedance_samples)
         output = (impedance = averaged, frequencies = frequencies)
-        retained = return_samples ? cat(impedance_samples...; dims = 4) : nothing
+        retained = return_samples ? _stack_impedance_samples(impedance_samples) : nothing
         push!(cases,
             ImpedanceCase(
                 plan.coordinates, requested_trials, case_seed, distribution, output,

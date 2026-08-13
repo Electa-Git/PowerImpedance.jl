@@ -25,7 +25,7 @@ variables:
 
 
 test:
-  image: julia:1.11.2-bookworm
+  image: julia:1.12.6-bookworm
   stage: test
   before_script:
     - apt-get update
@@ -48,8 +48,26 @@ test:
         using Pkg
         Pkg.activate(; temp=true)
         Pkg.develop(PackageSpec(path=pwd()))
-        Pkg.add("Measurements")
+        Pkg.add(["Measurements", "Plots"])
         include("test/run_extension_tests.jl")
+      '
+    - |
+      julia -e '
+        using Pkg
+        Pkg.activate(; temp=true)
+        Pkg.develop(PackageSpec(path=pwd()))
+        Pkg.add(PackageSpec(
+          name="GetDP",
+          url="https://github.com/Electa-Git/GetDP.jl.git",
+          rev="b1d91b0d8974ea642b772462edcf6e26299fdf0a",
+        ))
+        Pkg.add(PackageSpec(
+          name="LineCableModels",
+          url="https://github.com/Electa-Git/LineCableModels.jl.git",
+          rev="88f5de54202f5a97c7556b4ceac662b997f13de2",
+        ))
+        Pkg.add("Measurements")
+        include("test/run_linecablemodels_extension_tests.jl")
       '
     - |
       julia -e '
@@ -68,7 +86,7 @@ test:
 
 
 advisory_quality:
-  image: julia:1.11.2-bookworm
+  image: julia:1.12.6-bookworm
   stage: test
   allow_failure: true
   before_script:
@@ -89,7 +107,7 @@ advisory_quality:
 
 
 docs_check:
-  image: julia:1.11.2-bookworm
+  image: julia:1.12.6-bookworm
   stage: docs
   before_script:
     - apt-get update
@@ -552,7 +570,7 @@ github_release_publish:
 # ---------------------------------------------------------------------------
 
 pages:
-  image: julia:1.11.2-bookworm
+  image: julia:1.12.6-bookworm
   stage: deploy
   before_script:
     - apt-get update

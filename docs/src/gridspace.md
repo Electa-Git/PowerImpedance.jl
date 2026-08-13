@@ -88,9 +88,12 @@ median, 95th percentile, maximum, and sample count. Complex impedance stores
 real and imaginary statistics separately. With `return_samples=true`,
 impedance samples have dimensions `(rows, columns, frequencies, trials)`.
 
-Uncertain axes are independent. Correlated Measurements and covariance-aware
-sampling are not supported. Represent complex uncertainty by independently
-uncertain real and imaginary parts; no radial complex-error convention is used.
+Ordinary Gridspace axes are independent. Represent complex uncertainty on
+ordinary component fields through uncertain real and imaginary parts; no radial
+complex-error convention is used. The LineCableModels interoperability described
+on the [Package extensions](package_extensions.md) page additionally preserves
+covariance encoded inside one `LineParameters` object. It does not correlate
+that object with separate Gridspace axes.
 
 ## Result collections
 

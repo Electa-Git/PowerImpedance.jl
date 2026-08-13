@@ -56,6 +56,7 @@ DelimitedFiles = "1"
 Distributions = "0.25"
 JuliaFormatter = "2"
 LinearAlgebra = "1"
+LineCableModels = "0.1"
 Logging = "1"
 LsqFit = "0.15"
 Munkres = "0.2"
@@ -82,9 +83,11 @@ TypedTables = "1"
 julia = "1.10"
 
 [weakdeps]
+LineCableModels = "dffb7669-8cd4-4628-99dd-7694e356ba37"
 Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
 
 [extensions]
+PowerImpedanceLineCableModelsExt = ["LineCableModels", "Measurements"]
 PowerImpedanceMeasurementsExt = "Measurements"
 
 [extras]
