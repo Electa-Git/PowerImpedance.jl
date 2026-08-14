@@ -6,8 +6,8 @@
 # overlaid for direct comparison.
 
 using Plots
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: BuilderState, Grid, Gridspace, define, solve
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: BuilderState, Grid, Gridspace, define, solve
 
 # The parity fixture is the authoritative NetworkBuilder version of this
 # system. Skip its top-level testsets while retaining its model functions and
@@ -25,7 +25,7 @@ function include_ieee39_networkbuilder_fixture()
             expression
         end
 
-    path = joinpath(pkgdir(PowerImpedanceACDC), "test", "NetworkBuilder_test.jl")
+    path = joinpath(pkgdir(PowerImpedance), "test", "NetworkBuilder_test.jl")
     Base.include(skip_testsets, @__MODULE__, path)
     return nothing
 end;
@@ -48,7 +48,7 @@ const IEEE39_BUILDER_OPTIONS = (;
 function element_at_soil_resistivity(element, soil_resistivity)
     model = element.element_model
 
-    if model isa PowerImpedanceACDC.Overhead_line
+    if model isa PowerImpedance.Overhead_line
         return overhead_line(
             length = model.length,
             conductors = deepcopy(model.conductors),
@@ -61,7 +61,7 @@ function element_at_soil_resistivity(element, soil_resistivity)
             transformation = element.transformation,
             connection = element.connection
         )
-    elseif model isa PowerImpedanceACDC.Cable
+    elseif model isa PowerImpedance.Cable
         conductors = NamedTuple{Tuple(keys(model.conductors))}(
             Tuple(deepcopy(value) for value in values(model.conductors)),
         )

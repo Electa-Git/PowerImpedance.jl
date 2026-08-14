@@ -13,7 +13,7 @@ for node in keys(network.nets)
         end
         # All nodes need to be included in passive Y matrix, except when it is an internal source node
 
-        nets=PowerImpedanceACDC.netfor!(network, node) # Get nets (designator, pin) connected to the node
+        nets=PowerImpedance.netfor!(network, node) # Get nets (designator, pin) connected to the node
 
 
         # Check whether the node is connected to a source
@@ -23,7 +23,7 @@ for node in keys(network.nets)
 
             element=network.elements[net[1]] # Get the element, via the designator net[1]
             
-            if PowerImpedanceACDC.is_source(element) 
+            if PowerImpedance.is_source(element)
                 
                 isSourceNode = true # Skip the node if it is connected to a source
                 break
@@ -49,7 +49,7 @@ end
 # Elements weed out all active elements, i.e. MMC, sources, SG, TLC
 for (designator, element) in network.elements
     isSourceNode=false
-    if PowerImpedanceACDC.is_passive(element) # Check whether the element is passive
+    if PowerImpedance.is_passive(element) # Check whether the element is passive
         
         # Check whether the element is connected to a source and hence not part Y matrix
        
@@ -60,9 +60,9 @@ for (designator, element) in network.elements
                 continue
             end
 
-            for net in PowerImpedanceACDC.netfor!(network,element_node)
+            for net in PowerImpedance.netfor!(network,element_node)
 
-                if PowerImpedanceACDC.is_source(network.elements[net[1]])# Get the element, via the designator net[1]
+                if PowerImpedance.is_source(network.elements[net[1]])# Get the element, via the designator net[1]
                     
                     isSourceNode=true
                     break # Break the loop if a source is found
@@ -106,7 +106,7 @@ Ymatrix=[] # Preallocate the admittance matrix for each frequency
 for omega in omegas
 
     # Get the admittance matrix of the passives for the current frequency
-    Y = PowerImpedanceACDC.make_y(network, dict, omega*1im)
+    Y = PowerImpedance.make_y(network, dict, omega*1im)
     push!(Ymatrix,Y)
 
 end
@@ -156,7 +156,7 @@ Yedge=[]
 no_elim = [i for i in 1:length(nodelist)]
 for i in eachindex(Ymatrix)
 
-    push!(Yedge,PowerImpedanceACDC.kron(Ymatrix[i],no_elim))
+    push!(Yedge,PowerImpedance.kron(Ymatrix[i],no_elim))
 
 end
 

@@ -6,8 +6,8 @@
 # only the loop gain or final stability result is needed.
 
 using Plots
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: sampled_frequency_response
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: sampled_frequency_response
 
 # ## Construct the parametric systems
 #
@@ -17,7 +17,7 @@ using PowerImpedanceACDC.NetworkBuilder: sampled_frequency_response
 # calculated yet.
 
 include(joinpath(
-    pkgdir(PowerImpedanceACDC),
+    pkgdir(PowerImpedance),
     "examples",
     "IEEE39bus_Gridspace.jl"
 ));

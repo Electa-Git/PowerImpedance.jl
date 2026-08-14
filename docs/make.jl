@@ -3,10 +3,10 @@ ENV["GKSwstype"] = "100"
 using Documenter
 using Documenter: Remotes
 using Logging
-using PowerImpedanceACDC
+using PowerImpedance
 using TOML
 
-global_logger(PowerImpedanceACDC._relative_path_logger(current_logger()))
+global_logger(PowerImpedance._relative_path_logger(current_logger()))
 
 const ROOT_DIR = normpath(joinpath(@__DIR__, ".."))
 const DOCS_SRC_DIR = joinpath(@__DIR__, "src")
@@ -75,10 +75,10 @@ function load_project_metadata()
     project_toml = TOML.parsefile(joinpath(ROOT_DIR, "Project.toml"))
     authors = get(project_toml, "authors", String[])
     return (
-        name = get(project_toml, "name", "PowerImpedanceACDC"),
+        name = get(project_toml, "name", "PowerImpedance"),
         version = get(project_toml, "version", "dev"),
         authors = isempty(authors) ?
-                  "PowerImpedanceACDC contributors" :
+                  "PowerImpedance contributors" :
                   join(authors, ", ")
     )
 end
@@ -246,7 +246,8 @@ function build_pages()
         "Power-flow initialization" => "initialization.md",
         "Impedance and stability analysis" => "results.md",
         "Parametric and uncertainty studies" => "gridspace.md",
-        "Package extensions" => "package_extensions.md"
+        "Package extensions" => "package_extensions.md",
+        "Fundamental concepts" => "manual/fundamental_concepts.md"
     ]
 
     tutorials_page = build_example_pages()
@@ -269,7 +270,7 @@ function build_pages()
         push!(pages, "API Reference" => "reference.md")
     end
 
-    push!(pages, "Legacy scalar interface" => "legacy.md")
+    push!(pages, "Classic scalar interface" => "legacy.md")
 
     development_pages = Any[
         "Docstrings" => "developers/docstrings.md",
@@ -314,14 +315,14 @@ end
 metadata = load_project_metadata()
 
 DocMeta.setdocmeta!(
-    PowerImpedanceACDC,
+    PowerImpedance,
     :DocTestSetup,
-    :(using PowerImpedanceACDC);
+    :(using PowerImpedance);
     recursive = true
 )
 
 makedocs(;
-    modules = [PowerImpedanceACDC],
+    modules = [PowerImpedance],
     authors = metadata.authors,
     sitename = "$(metadata.name).jl",
     repo = GITLAB_REMOTE,

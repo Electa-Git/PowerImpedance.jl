@@ -2,12 +2,18 @@ module PowerImpedanceLineCableModelsExt
 
 using LineCableModels
 using Measurements
-using PowerImpedanceACDC
 import Random
 
 const LCM = LineCableModels
-const P = PowerImpedanceACDC
-const NB = PowerImpedanceACDC.NetworkBuilder
+if !isnothing(Base.identify_package(@__MODULE__, "PowerImpedance"))
+    @eval using PowerImpedance
+    const P = PowerImpedance
+else
+    @eval using PowerImpedanceACDC
+    const P = PowerImpedanceACDC
+end
+
+const NB = P.NetworkBuilder
 
 abstract type _LineParametersTransmissionLine <: P.Transmission_line end
 
@@ -64,7 +70,7 @@ end
 
 function _validate_line_parameters(parameters::LCM.LineParameters)
     LCM.domain(parameters) === LCM.PhaseDomain || throw(ArgumentError(
-        "PowerImpedanceACDC requires phase-domain LineParameters; " *
+        "PowerImpedance requires phase-domain LineParameters; " *
         "inverse-transform modal parameters before constructing the line",
     ))
 
@@ -79,7 +85,7 @@ function _validate_line_parameters(parameters::LCM.LineParameters)
         "LineParameters Z and Y matrices must be square",
     ))
     order in 1:3 || throw(ArgumentError(
-        "unsupported LineParameters order $order; PowerImpedanceACDC supports one, two, or three phase conductors",
+        "unsupported LineParameters order $order; PowerImpedance supports one, two, or three phase conductors",
     ))
     size(parameters.Z, 3) == length(parameters.f) || throw(DimensionMismatch(
         "the LineParameters frequency count must match the third Z/Y dimension",
@@ -135,7 +141,7 @@ function _uncertain_native_error(kind::Symbol)
     constructor = kind === :overhead_line ? "overhead_line" : "cable"
     return ArgumentError(
         "uncertain LineParameters and line lengths must be sampled before line evaluation; " *
-        "use `PowerImpedanceACDC.NetworkBuilder.$constructor(parameters; ...)`",
+        "use `PowerImpedance.NetworkBuilder.$constructor(parameters; ...)`",
     )
 end
 
@@ -295,7 +301,7 @@ component shadow.
 
 # Arguments
 
-- `Grid`: The `PowerImpedanceACDC.NetworkBuilder.Grid` constructor, used here
+- `Grid`: The `PowerImpedance.NetworkBuilder.Grid` constructor, used here
   as a positional dispatch marker.
 - `parameters`: Phase-domain `LineParameters` with `Z` in [Ω/m], `Y` in [S/m],
   and deterministic frequencies in [Hz].

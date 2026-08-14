@@ -1,6 +1,6 @@
 # Package extensions
 
-PowerImpedanceACDC keeps optional uncertainty packages outside its base
+PowerImpedance keeps optional uncertainty packages outside its base
 dependency set. Loading an optional package activates the corresponding Julia
 package extension without replacing the ordinary component constructors or
 scalar solvers.
@@ -15,17 +15,17 @@ Two extensions are currently provided:
 The extensions are load-order independent. A typical session starts with:
 
 ```julia
-using PowerImpedanceACDC
+using PowerImpedance
 using Measurements
 using LineCableModels
-using PowerImpedanceACDC.NetworkBuilder: AbsoluteError, Grid, define, pin,
+using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define, pin,
     sampled_frequency_response, solve, ⟷
 ```
 
 `Measurements` and `LineCableModels` must be installed in the active Julia
 environment. LineCableModels currently requires Julia 1.12. Loading
 LineCableModels is unnecessary for studies that only use ordinary
-PowerImpedanceACDC component parameters.
+PowerImpedance component parameters.
 
 The clean workflow depends on what information must be retained:
 
@@ -35,7 +35,7 @@ The clean workflow depends on what information must be retained:
 | Uncertain converter, source, or passive parameters | Use `Measurement` values or uncertain `Grid` axes and let one Gridspace Monte Carlo run sample the complete builder |
 | Deterministic line model calculated by LCM | Pass the resulting `LineParameters` directly to `overhead_line` or `cable` |
 | LCM line uncertainty represented by joint first-order moments | Pass a covariance-preserving `LineParameters` to `overhead_line(Grid, lp; ...)` or `cable(Grid, lp; ...)` |
-| Exact empirical LCM joint distribution | Retain complete LCM trial tensors, evaluate each complete physical trial through PowerImpedanceACDC, and wrap the resulting response tensor with `sampled_frequency_response` |
+| Exact empirical LCM joint distribution | Retain complete LCM trial tensors, evaluate each complete physical trial through PowerImpedance, and wrap the resulting response tensor with `sampled_frequency_response` |
 
 See [Parametric and uncertainty studies](gridspace.md) for the basic Gridspace
 construction rules.
@@ -48,9 +48,9 @@ Loading Measurements activates uncertain-grid iteration, sampling of
 `Measurement` values, and aggregation of numeric solver outputs:
 
 ```julia
-using PowerImpedanceACDC
+using PowerImpedance
 using Measurements
-using PowerImpedanceACDC.NetworkBuilder: AbsoluteError, Grid, define, pin,
+using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define, pin,
     sampled_frequency_response, solve, ⟷
 ```
 
@@ -285,20 +285,20 @@ numeric response, which is useful when trial responses are generated lazily.
 
 ### Enabling the extension
 
-The line extension activates after PowerImpedanceACDC, LineCableModels, and
+The line extension activates after PowerImpedance, LineCableModels, and
 Measurements have all been loaded, in any order:
 
 ```julia
-using PowerImpedanceACDC
+using PowerImpedance
 using LineCableModels
 using Measurements
-using PowerImpedanceACDC.NetworkBuilder: Grid, define,
+using PowerImpedance.NetworkBuilder: Grid, define,
     sampled_frequency_response
 ```
 
 The integration boundary is deliberately narrow. LineCableModels constructs
 and solves `CableDesign`, `LineCableSystem`, and `EarthModel` problems;
-PowerImpedanceACDC consumes the resulting `LineParameters`. LCM solvers are not
+PowerImpedance consumes the resulting `LineParameters`. LCM solvers are not
 executed inside Gridspace.
 
 ### Native and lazy entry points
@@ -409,7 +409,7 @@ The important inputs are:
 | `trial_sampler` | Optional callback for shared or otherwise correlated primitive draws within one trial |
 | `return_samples` | Retain complete empirical R/L/C/G trial tensors |
 | `return_pdf` | Retain entrywise histogram PDFs |
-| `per_length` | Must be `true` for subsequent PowerImpedanceACDC use |
+| `per_length` | Must be `true` for subsequent PowerImpedance use |
 
 Use `trial_sampler` when several LCM inputs depend on the same uncertain
 physical quantity. Draw that primitive once for a trial and rebuild every
@@ -431,7 +431,7 @@ The optional PDFs are marginal distributions. They describe each scalar entry
 but do not record which values occurred together in a physical trial. They must
 not be sampled independently to manufacture a coupled `Z(f),Y(f)` realization.
 
-### Coupling LCM uncertainty into PowerImpedanceACDC
+### Coupling LCM uncertainty into PowerImpedance
 
 The clean moment-and-covariance path is to pass the Measurements-valued summary
 directly to the lazy constructor:
@@ -463,7 +463,7 @@ result = determine_impedance(
 ```
 
 Before line evaluation, the extension samples the shared primitive tags in the
-complete `LineParameters` once per PowerImpedanceACDC trial and reconstructs
+complete `LineParameters` once per PowerImpedance trial and reconstructs
 ordinary dense numeric `Z` and `Y` arrays. The same primitive draw is therefore
 used across matrix entries, real and imaginary components, `Z` and `Y`, and all
 frequencies.
@@ -473,7 +473,7 @@ covariance. An LCM aggregator which creates a fresh independent
 `measurement(mean, std)` for every scalar retains only marginal standard
 deviations. A covariance-preserving aggregator must construct all scalar
 Measurements from shared latent primitives derived from the complete trial
-tensors. The PowerImpedanceACDC extension preserves covariance that is present;
+tensors. The PowerImpedance extension preserves covariance that is present;
 it cannot recover covariance that LCM has already discarded.
 
 With shared tags present, `distribution=:normal` uses standard-normal latent
@@ -501,17 +501,17 @@ current extension. The clean exact path is:
 1. select one common LCM trial index across `R`, `L`, `C`, `G`, and frequency;
 2. construct the numeric phase-domain, per-metre `LineParameters` for that
    trial;
-3. build and evaluate the complete PowerImpedanceACDC system for that trial;
+3. build and evaluate the complete PowerImpedance system for that trial;
 4. store the resulting numeric impedance, admittance, or loop-gain response as
    one fourth-dimension response slice; and
 5. call `sampled_frequency_response(samples, omega; nodes, trial_ids)`.
 
 This separates responsibilities cleanly: LCM samples physical line designs,
-PowerImpedanceACDC evaluates complete systems, and the response adapter carries
+PowerImpedance evaluates complete systems, and the response adapter carries
 the exact joint trials into Nyquist, Bode, passivity, small-gain, margin, and EVD
 analysis. Use `.measurements` instead when a covariance-preserving first-order
 surrogate is sufficient and a second Monte Carlo stage inside
-PowerImpedanceACDC is desired.
+PowerImpedance is desired.
 
 ### Supported line representations
 
@@ -538,4 +538,4 @@ by the downstream calculation, including:
 - frequencies near zero when a DC conversion requires them.
 
 Extrapolation is an explicit modelling decision, not a replacement for a
-frequency table designed for the intended PowerImpedanceACDC study.
+frequency table designed for the intended PowerImpedance study.

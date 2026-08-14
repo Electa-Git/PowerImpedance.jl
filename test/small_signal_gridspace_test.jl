@@ -221,11 +221,11 @@ end
         trial_ids = [1]
     )
 
-    stable_metrics = PowerImpedanceACDC._nyquist_trial(
+    stable_metrics = PowerImpedance._nyquist_trial(
         reshape(ComplexF64.(stable_locus), :, 1),
         frequencies
     )
-    unstable_metrics = PowerImpedanceACDC._nyquist_trial(
+    unstable_metrics = PowerImpedance._nyquist_trial(
         reshape(ComplexF64.(unstable_locus), :, 1),
         frequencies
     )

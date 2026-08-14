@@ -1,5 +1,5 @@
 using Logging
-using PowerImpedanceACDC
+using PowerImpedance
 using Aqua
 
 function advisory(check, name)
@@ -12,13 +12,13 @@ function advisory(check, name)
 end
 
 advisory("Aqua") do
-    Aqua.test_all(PowerImpedanceACDC; unbound_args = false, undefined_exports = false)
+    Aqua.test_all(PowerImpedance; unbound_args = false, undefined_exports = false)
 end
 
 advisory("Aqua undefined exports") do
-    Aqua.test_undefined_exports(PowerImpedanceACDC)
+    Aqua.test_undefined_exports(PowerImpedance)
 end
 
 advisory("Aqua unbound arguments") do
-    Aqua.test_unbound_args(PowerImpedanceACDC)
+    Aqua.test_unbound_args(PowerImpedance)
 end

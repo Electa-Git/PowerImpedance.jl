@@ -1,8 +1,8 @@
 # # Deterministic and uncertain impedance studies
 
-using PowerImpedanceACDC
+using PowerImpedance
 using Measurements
-using PowerImpedanceACDC.NetworkBuilder: Grid, define, pin, ⟷
+using PowerImpedance.NetworkBuilder: Grid, define, pin, ⟷
 
 # The positional `Grid` selects the lazy constructor. Each ordinary keyword
 # value remains an atomic singleton axis.

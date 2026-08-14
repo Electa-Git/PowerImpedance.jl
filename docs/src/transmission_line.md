@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = PowerImpedanceACDC
+CurrentModule = PowerImpedance
 ```
 
 # Transmission lines and cables
 
-PowerImpedanceACDC evaluates overhead-line and cable series impedance
+PowerImpedance evaluates overhead-line and cable series impedance
 ``\mathbf{Z}(f)`` and shunt admittance ``\mathbf{Y}(f)`` in phase coordinates,
 then forms the distributed-parameter transmission-line ABCD model
 [CastellanosMarti1997, MorchedGustavsenTartibi1999](@cite):
@@ -61,7 +61,7 @@ per-metre `LineParameters` object can be passed directly as the first argument
 to `overhead_line` or `cable`. Deterministic native construction and
 Gridspace-aware uncertain construction preserve the dense ``\mathbf{Z}`` and
 ``\mathbf{Y}`` matrices. See [Package extensions](package_extensions.md) for
-frequency coverage, interpolation, covariance, and sampling contracts.
+frequency coverage, interpolation, covariance, and sampling methods.
 
 See [`overhead_line`](@ref), [`cable`](@ref), [`Conductors`](@ref),
 [`Groundwires`](@ref), [`Conductor`](@ref), and [`Insulator`](@ref) for the

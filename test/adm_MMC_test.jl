@@ -1,5 +1,5 @@
 
-using PowerImpedanceACDC
+using PowerImpedance
 using LinearAlgebra
 using Test
 
@@ -45,7 +45,7 @@ function mmc_plot_convention(Y::AbstractMatrix)
 end
 
 function common_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
-    elec = PowerImpedanceACDC.ElectricalMMC(
+    elec = PowerImpedance.ElectricalMMC(
         vDC_base = 640.0,
         Sbase = 1060.0,
         vACbase_LL_RMS = 320.0,
@@ -58,77 +58,77 @@ function common_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
         N = 400,
     )
 
-    meas = PowerImpedanceACDC.Measurement(
-        P_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
-        Q_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 140 * 2π),
+    meas = PowerImpedance.Measurement(
+        P_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π),
+        Q_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π),
     )
 
-    pll = PowerImpedanceACDC.PLLSynchronization(
-        pi_ctrl = PowerImpedanceACDC.PIControl(
+    pll = PowerImpedance.PLLSynchronization(
+        pi_ctrl = PowerImpedance.PIControl(
             Kp = 0.28,
             Ki = 12.5664,
         ),
-        filter = PowerImpedanceACDC.Butterworth(order = 1, ωc = 75 * 2π),
+        filter = PowerImpedance.Butterworth(order = 1, ωc = 75 * 2π),
     )
 
-    synch = PowerImpedanceACDC.VSEWithDamping(
+    synch = PowerImpedance.VSEWithDamping(
         H = 5.0,
         K_d = 100.0,
         K_ω = 10.0,
         pll = pll,
     )
 
-    outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
-        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.0, Ki = 30.0),
+    outerReactive = PowerImpedance.OuterReactiveQControl(
+        pi_ctrl = PowerImpedance.PIControl(Kp = 0.0, Ki = 30.0),
     )
 
-    innerVoltage = PowerImpedanceACDC.CCVI(
+    innerVoltage = PowerImpedance.CCVI(
         R_v = 0.01,
         L_v = 0.25,
         V_d_ref = 1.0,
         V_q_ref = 0.0,
-        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 200.0),
+        filter = PowerImpedance.Butterworth(order = 2, ωc = 200.0),
     )
 
-    innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
-        pi_ctrl = PowerImpedanceACDC.PIControl(
+    innerCurrent = PowerImpedance.InnerCurrentPIControl(
+        pi_ctrl = PowerImpedance.PIControl(
             Kp = 0.6787,
             Ki = 292.2087,
         ),
-        filter = PowerImpedanceACDC.Butterworth(order = 1, ωc = 0.0001 * 2π),
+        filter = PowerImpedance.Butterworth(order = 1, ωc = 0.0001 * 2π),
     )
 
-    delta_control = PowerImpedanceACDC.ΔdqControlGFM(
+    delta_control = PowerImpedance.ΔdqControlGFM(
         outer_reactive = outerReactive,
         vi = innerVoltage,
         occ = innerCurrent,
     )
 
-    energy = PowerImpedanceACDC.TotalEnergyControl(
-        pi_control = PowerImpedanceACDC.PIControl(Kp = 1.386, Ki = 29.70),
+    energy = PowerImpedance.TotalEnergyControl(
+        pi_control = PowerImpedance.PIControl(Kp = 1.386, Ki = 29.70),
     )
 
-    zeroCurrent = PowerImpedanceACDC.ZeroSequenceCurrentControl(
-        PowerImpedanceACDC.PIControl(Kp = 0.0992, Ki = 42.9719),
+    zeroCurrent = PowerImpedance.ZeroSequenceCurrentControl(
+        PowerImpedance.PIControl(Kp = 0.0992, Ki = 42.9719),
     )
 
-    circulatingCurrent = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
-        PowerImpedanceACDC.PIControl(Kp = 0.0992, Ki = 42.9719),
+    circulatingCurrent = PowerImpedance.CirculatingCurrentSuppressionControl(
+        PowerImpedance.PIControl(Kp = 0.0992, Ki = 42.9719),
     )
 
-    sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
+    sigma_control = PowerImpedance.ΣdqzControlTEC(
         tec = energy,
         zscc = zeroCurrent,
         ccsc = circulatingCurrent,
     )
 
-    mod = PowerImpedanceACDC.UncompensatedModulation(
+    mod = PowerImpedance.UncompensatedModulation(
         timeDelay = 200e-6,
         padeOrderNum = 5,
         padeOrderDen = 5,
     )
 
-    setpoint = PowerImpedanceACDC.Setpoint(
+    setpoint = PowerImpedance.Setpoint(
         Pac = Pmmc,
         Qac = Qmmc,
         θac = 0.0,
@@ -137,7 +137,7 @@ function common_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
         Vdc = Vdc,
     )
 
-    limits = PowerImpedanceACDC.Limits(
+    limits = PowerImpedance.Limits(
         P_min = -1500.0,
         P_max = 1500.0,
         Q_min = -1000.0,
@@ -156,7 +156,7 @@ function build_mmc_grid()
     elec, meas, synch, delta_control, sigma_control, mod, setpoint, limits =
         common_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
 
-    dut = PowerImpedanceACDC.mmc(
+    dut = PowerImpedance.mmc(
         elec = elec,
         meas = meas,
         sync = synch,

@@ -1,4 +1,4 @@
-# This is an PowerImpedanceACDC element in order to model a transmission line based on 
+# This is an PowerImpedance element in order to model a transmission line based on
 # line parameters (Z and Y) or ABCD matrix.
 # It is a blackbox model, meaning that the internal structure of the line is not modeled.
 # The line is represented by its imported frequency-dependent parameters, e.g. line costants (Z,Y)

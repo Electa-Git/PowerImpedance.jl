@@ -1,6 +1,6 @@
 using Test
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: solve_acdcpf, define, pin, ⟷, powerflow_optimizer, is_bounded_options, powerflow_setting
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: solve_acdcpf, define, pin, ⟷, powerflow_optimizer, is_bounded_options, powerflow_setting
 
 
 Vac = 220 #LL-RMS
@@ -20,13 +20,13 @@ Z = 1
 
     builder = define(elements, connections)
 
-    data,elempitopm = convert(builder, PowerImpedanceACDC.PMACDC)
+    data,elempitopm = convert(builder, PowerImpedance.PMACDC)
 
     options = builder.options
 
     result = solve_acdcpf(
         data,
-        PowerImpedanceACDC._PM.ACPPowerModel,
+        PowerImpedance._PM.ACPPowerModel,
         powerflow_optimizer(options),
         is_bounded_options(options);
         setting = powerflow_setting(options),

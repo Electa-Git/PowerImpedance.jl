@@ -234,7 +234,7 @@ Begin with the module name indented by four spaces. Describe the module's purpos
 """
     ModuleName
 
-Describe the module's purpose within PowerImpedanceACDC.
+Describe the module's purpose within PowerImpedance.
 
 # Overview
 

@@ -20,5 +20,5 @@ Y_validation=[-28.128*im  11.463*im   16.667*im    0;
 	 16.667*im   0   -25.0*im   8.333*im;
 	0   16.667*im    8.333*im  -25*im]
 
-@test PowerImpedanceACDC.kron(Y, [2, 5, 6, 7]) ≈ Y_validation atol=1e-1
+@test PowerImpedance.kron(Y, [2, 5, 6, 7]) ≈ Y_validation atol=1e-1
 

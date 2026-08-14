@@ -1,6 +1,6 @@
 # Parametric and uncertainty studies
 
-`PowerImpedanceACDC.NetworkBuilder` provides an additive parameter layer. The
+`PowerImpedance.NetworkBuilder` provides an additive parameter layer. The
 ordinary package constructors and scalar solver return values are unchanged.
 Pass the selectively imported `Grid` function as the first positional argument
 to select a lazy constructor, such as `impedance(Grid; ...)`; use `only` to
@@ -9,11 +9,11 @@ scalar. Qualified `NetworkBuilder.impedance(; ...)` shadows remain available
 for compatibility, but tutorials do not need a module alias. Grid axes,
 connections, builder orchestration, result types, and the external-response
 adapter are safe selective imports; downstream solvers remain ordinary
-top-level PowerImpedanceACDC functions.
+top-level PowerImpedance functions.
 
 ```julia
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: AbsoluteError, Grid, define, pin,
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define, pin,
     sampled_frequency_response, ⟷
 
 spec = impedance(Grid; z = 5.0, pins = 1)
@@ -115,7 +115,7 @@ solution and sets `network` to `nothing`.
 
 ## Small-signal frequency responses
 
-The same Gridspace contract extends through nodal admittance construction and
+The same Gridspace logic extends through nodal admittance construction and
 stability analysis. Frequency ranges are specified in hertz; returned `omega`
 vectors are angular frequencies in radians per second. The canonical response
 layout is `(rows, columns, frequencies)`, and retained numeric samples add a
@@ -237,7 +237,7 @@ external = sampled_frequency_response(
 
 Both forms preserve cross-entry and cross-frequency empirical dependence. They
 are the clean terminal boundary for exact Monte Carlo data produced outside
-PowerImpedanceACDC.
+PowerImpedance.
 
 ## Stability result collections
 

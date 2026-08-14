@@ -1,14 +1,14 @@
 using Random
 using Distributions
-using PowerImpedanceACDC.NetworkBuilder: @gridspace, @relax, ⟷
+using PowerImpedance.NetworkBuilder: @gridspace, @relax, ⟷
 
 struct GridspacePokemon
     name::Symbol
 end
 
 module ErgonomicBuilderAPI
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: Grid, define, pin, ⟷
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: Grid, define, pin, ⟷
 
 function impedance_study()
     elements = (branch = impedance(Grid; z = Grid([1.0, 2.0]), pins = 1),)
@@ -26,16 +26,16 @@ end
 end
 
 module WildcardBuilderAPI
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder
+using PowerImpedance
+using PowerImpedance.NetworkBuilder
 
 const shared_impedance_generic = determine_impedance === NetworkBuilder.determine_impedance
 const shared_loopgain_generic = make_loopgain === NetworkBuilder.make_loopgain
 end
 
 module ReverseWildcardBuilderAPI
-using PowerImpedanceACDC.NetworkBuilder
-using PowerImpedanceACDC
+using PowerImpedance.NetworkBuilder
+using PowerImpedance
 
 const shared_impedance_generic = determine_impedance === NetworkBuilder.determine_impedance
 const shared_loopgain_generic = make_loopgain === NetworkBuilder.make_loopgain
@@ -68,7 +68,7 @@ end
     nested = NB.tlc(elec = NB.ElectricalTLC(Lᵣ = NB.Grid([0.1, 0.2])))
     @test length(nested) == 2
     @test [case.element_model.elec.Lᵣ for case in nested] ==
-          [PowerImpedanceACDC.ElectricalTLC(Lᵣ = value).Lᵣ for value in (0.1, 0.2)]
+          [PowerImpedance.ElectricalTLC(Lᵣ = value).Lᵣ for value in (0.1, 0.2)]
 
     macro_grid = GridspaceMacroExample(x = NB.Grid([1, 2]))
     @test [(case.x, case.y) for case in macro_grid] == [(1, 2), (2, 2)]
@@ -140,9 +140,9 @@ end
 end
 
 @testset "Qualified component shadows" begin
-    parent = PowerImpedanceACDC.impedance(z = 3.0, pins = 1)
+    parent = PowerImpedance.impedance(z = 3.0, pins = 1)
     shadow = only(NB.impedance(z = 3.0, pins = 1))
-    dispatched = only(PowerImpedanceACDC.impedance(NB.Grid; z = 3.0, pins = 1))
+    dispatched = only(PowerImpedance.impedance(NB.Grid; z = 3.0, pins = 1))
     @test shadow.element_model.value == parent.element_model.value
     @test shadow.input_pins == parent.input_pins
     @test shadow.output_pins == parent.output_pins
@@ -151,27 +151,27 @@ end
     @test dispatched.element_model.value == parent.element_model.value
 
     @test only(NB.PIControl(Kp = 2.0, Ki = 3.0)) ==
-          PowerImpedanceACDC.PIControl(Kp = 2.0, Ki = 3.0)
-    @test only(PowerImpedanceACDC.PIControl(NB.Grid; Kp = 2.0, Ki = 3.0)) ==
-          PowerImpedanceACDC.PIControl(Kp = 2.0, Ki = 3.0)
+          PowerImpedance.PIControl(Kp = 2.0, Ki = 3.0)
+    @test only(PowerImpedance.PIControl(NB.Grid; Kp = 2.0, Ki = 3.0)) ==
+          PowerImpedance.PIControl(Kp = 2.0, Ki = 3.0)
     @test only(NB.ElectricalTLC(Lᵣ = 0.1, Rᵣ = 0.2)) ==
-          PowerImpedanceACDC.ElectricalTLC(Lᵣ = 0.1, Rᵣ = 0.2)
+          PowerImpedance.ElectricalTLC(Lᵣ = 0.1, Rᵣ = 0.2)
     @test length(NB.SHADOW_CONSTRUCTOR_MANIFEST) >= 70
     @test length(unique(first, NB.SHADOW_CONSTRUCTOR_MANIFEST)) ==
           length(NB.SHADOW_CONSTRUCTOR_MANIFEST)
     @test all(entry -> isdefined(NB, first(entry)), NB.SHADOW_CONSTRUCTOR_MANIFEST)
-    @test all(entry -> isdefined(PowerImpedanceACDC, first(entry)), NB.SHADOW_CONSTRUCTOR_MANIFEST)
+    @test all(entry -> isdefined(PowerImpedance, first(entry)), NB.SHADOW_CONSTRUCTOR_MANIFEST)
     @test all(
         entry -> hasmethod(
-            getfield(PowerImpedanceACDC, first(entry)),
+            getfield(PowerImpedance, first(entry)),
             Tuple{typeof(NB.Grid)}
         ),
         NB.SHADOW_CONSTRUCTOR_MANIFEST
     )
 
-    old_pi = PowerImpedanceACDC.PI_control(Kₚ = 1.0, Kᵢ = 2.0)
-    @test only(NB.tlc(P = 1.0, pll = old_pi)) isa PowerImpedanceACDC.Element
-    @test only(NB.mmc(P = 1.0, pll = old_pi)) isa PowerImpedanceACDC.Element
+    old_pi = PowerImpedance.PI_control(Kₚ = 1.0, Kᵢ = 2.0)
+    @test only(NB.tlc(P = 1.0, pll = old_pi)) isa PowerImpedance.Element
+    @test only(NB.mmc(P = 1.0, pll = old_pi)) isa PowerImpedance.Element
     @test_throws ArgumentError NB.tlc(P = 1.0, outerActive = NB.NoOuterActiveControl())
     @test_throws ArgumentError NB.mmc(P = 1.0, delta_control = NB.ΔdqControlGFL())
 end
@@ -190,7 +190,7 @@ end
     @test length(builders) == 2
     @test [case.elements.z1.element_model.value[1] for case in builders] == [1, 2]
 
-    result = PowerImpedanceACDC.determine_impedance(
+    result = PowerImpedance.determine_impedance(
         builders; nets = [:n1], freq_range = (1.0, 10.0, 3), seed = 11
     )
     @test result isa NB.ParametricImpedance

@@ -4,12 +4,12 @@ using Random
 using Statistics
 using LineCableModels
 using Measurements
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: ⟷
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: ⟷
 
-const NB = PowerImpedanceACDC.NetworkBuilder
+const NB = PowerImpedance.NetworkBuilder
 const LCM_EXT = Base.get_extension(
-    PowerImpedanceACDC,
+    PowerImpedance,
     :PowerImpedanceLineCableModelsExt
 )
 
@@ -76,28 +76,28 @@ end
 @testset "LineCableModels extension activation" begin
     @test LCM_EXT !== nothing
     @test Base.get_extension(
-        PowerImpedanceACDC,
+        PowerImpedance,
         :PowerImpedanceMeasurementsExt
     ) !== nothing
 end
 
 @testset "Native LineParameters line constructors" begin
     parameters = deterministic_line_parameters(3)
-    overhead = PowerImpedanceACDC.overhead_line(parameters; length = 25e3)
-    cable = PowerImpedanceACDC.cable(parameters; length = 25e3)
+    overhead = PowerImpedance.overhead_line(parameters; length = 25e3)
+    cable = PowerImpedance.cable(parameters; length = 25e3)
 
-    @test overhead isa PowerImpedanceACDC.Element
-    @test cable isa PowerImpedanceACDC.Element
+    @test overhead isa PowerImpedance.Element
+    @test cable isa PowerImpedance.Element
     @test overhead.input_pins == overhead.output_pins == 3
     @test cable.input_pins == cable.output_pins == 3
     @test typeof(overhead.element_model) != typeof(cable.element_model)
 
     frequency = 100.0
-    overhead_abcd = PowerImpedanceACDC.eval_abcd(
+    overhead_abcd = PowerImpedance.eval_abcd(
         overhead.element_model,
         2pi * frequency * im
     )
-    cable_abcd = PowerImpedanceACDC.eval_abcd(
+    cable_abcd = PowerImpedance.eval_abcd(
         cable.element_model,
         2pi * frequency * im
     )
@@ -105,21 +105,21 @@ end
     @test overhead_abcd ≈ cable_abcd
 
     shadow = only(NB.overhead_line(parameters; length = 25e3))
-    dispatched = only(PowerImpedanceACDC.overhead_line(
+    dispatched = only(PowerImpedance.overhead_line(
         NB.Grid,
         parameters;
         length = 25e3
     ))
-    @test PowerImpedanceACDC.eval_abcd(
+    @test PowerImpedance.eval_abcd(
         shadow.element_model,
         2pi * frequency * im
     ) ≈ overhead_abcd
-    @test PowerImpedanceACDC.eval_abcd(
+    @test PowerImpedance.eval_abcd(
         dispatched.element_model,
         2pi * frequency * im
     ) ≈ overhead_abcd
 
-    length_grid = PowerImpedanceACDC.cable(
+    length_grid = PowerImpedance.cable(
         NB.Grid,
         parameters;
         length = NB.Grid([10e3, 20e3])
@@ -138,12 +138,12 @@ end
         diagonal_Y,
         parameters.f
     )
-    diagonal_line = PowerImpedanceACDC.overhead_line(
+    diagonal_line = PowerImpedance.overhead_line(
         diagonal_parameters;
         length = 25e3
     )
     @test !isapprox(
-        PowerImpedanceACDC.eval_abcd(
+        PowerImpedance.eval_abcd(
             diagonal_line.element_model,
             2pi * frequency * im
         ),
@@ -153,7 +153,7 @@ end
 
 @testset "LineParameters frequency interpolation" begin
     parameters = deterministic_line_parameters(2; frequencies = [10.0, 100.0])
-    line = PowerImpedanceACDC.cable(
+    line = PowerImpedance.cable(
         parameters;
         length = 1e3,
         transformation = true
@@ -183,7 +183,7 @@ end
     @test occursin("[10.0, 100.0] Hz", sprint(showerror, error))
     @test occursin("|f ± 50 Hz|", sprint(showerror, error))
 
-    extrapolated = PowerImpedanceACDC.cable(
+    extrapolated = PowerImpedance.cable(
         parameters;
         length = 1e3,
         transformation = true,
@@ -204,32 +204,32 @@ end
     two_phase = deterministic_line_parameters(2)
     three_phase = deterministic_line_parameters(3)
 
-    @test PowerImpedanceACDC.cable(one_phase; length = 1e3).input_pins == 1
-    @test PowerImpedanceACDC.cable(
+    @test PowerImpedance.cable(one_phase; length = 1e3).input_pins == 1
+    @test PowerImpedance.cable(
         two_phase;
         length = 1e3,
         transformation = true
     ).input_pins == 1
-    @test PowerImpedanceACDC.overhead_line(
+    @test PowerImpedance.overhead_line(
         three_phase;
         length = 1e3,
         transformation = true
     ).input_pins == 2
 
-    @test_throws ArgumentError PowerImpedanceACDC.cable(
+    @test_throws ArgumentError PowerImpedance.cable(
         one_phase;
         length = 1e3,
         transformation = true
     )
-    @test_throws ArgumentError PowerImpedanceACDC.cable(
+    @test_throws ArgumentError PowerImpedance.cable(
         two_phase;
         length = 1e3
     )
-    @test_throws ArgumentError PowerImpedanceACDC.cable(
+    @test_throws ArgumentError PowerImpedance.cable(
         deterministic_line_parameters(4);
         length = 1e3
     )
-    @test_throws ArgumentError PowerImpedanceACDC.cable(
+    @test_throws ArgumentError PowerImpedance.cable(
         deterministic_line_parameters(2; domain = ModalDomain);
         length = 1e3,
         transformation = true
@@ -240,21 +240,21 @@ end
         zeros(ComplexF64, 3, 3, 2),
         [10.0, 100.0]
     )
-    @test_throws DimensionMismatch PowerImpedanceACDC.cable(
+    @test_throws DimensionMismatch PowerImpedance.cable(
         mismatched;
         length = 1e3,
         transformation = true
     )
 
-    @test_throws ArgumentError PowerImpedanceACDC.cable(
+    @test_throws ArgumentError PowerImpedance.cable(
         deterministic_line_parameters(1; frequencies = [10.0]);
         length = 1e3
     )
-    @test_throws ArgumentError PowerImpedanceACDC.cable(
+    @test_throws ArgumentError PowerImpedance.cable(
         deterministic_line_parameters(1; frequencies = [10.0, 10.0]);
         length = 1e3
     )
-    @test_throws ArgumentError PowerImpedanceACDC.cable(
+    @test_throws ArgumentError PowerImpedance.cable(
         deterministic_line_parameters(1; frequencies = [0.0, 10.0]);
         length = 1e3
     )
@@ -268,12 +268,12 @@ end
 
     nonfinite_Z = Array(one_phase.Z)
     nonfinite_Z[1] = Inf + im
-    @test_throws ArgumentError PowerImpedanceACDC.cable(
+    @test_throws ArgumentError PowerImpedance.cable(
         LineParameters(nonfinite_Z, Array(one_phase.Y), one_phase.f);
         length = 1e3
     )
-    @test_throws ArgumentError PowerImpedanceACDC.cable(one_phase; length = 0.0)
-    @test_throws ArgumentError PowerImpedanceACDC.cable(
+    @test_throws ArgumentError PowerImpedance.cable(one_phase; length = 0.0)
+    @test_throws ArgumentError PowerImpedance.cable(
         one_phase;
         length = 1e3,
         extrapolation = :flat
@@ -281,7 +281,7 @@ end
 
     uncertain = measured_line_parameters(one_phase)
     native_error = try
-        PowerImpedanceACDC.cable(uncertain; length = 1e3)
+        PowerImpedance.cable(uncertain; length = 1e3)
         nothing
     catch caught
         caught
@@ -385,22 +385,22 @@ end
           (:elements, :line, :line_parameters)
     @test only(case.coordinates).second.kind == :line_parameters
 
-    nyquist = PowerImpedanceACDC.nyquistplot(
+    nyquist = PowerImpedance.nyquistplot(
         result;
         display_plot = false,
         return_samples = true
     )
-    bode = PowerImpedanceACDC.bodeplot(
+    bode = PowerImpedance.bodeplot(
         result;
         display_plot = false,
         return_samples = true
     )
-    passive = PowerImpedanceACDC.passivity(
+    passive = PowerImpedance.passivity(
         result;
         display_plot = false,
         return_samples = true
     )
-    modes = PowerImpedanceACDC.EVD(
+    modes = PowerImpedance.EVD(
         result,
         nothing,
         10.0,
@@ -408,7 +408,7 @@ end
         display_plot = false,
         return_samples = true
     )
-    gain = PowerImpedanceACDC.small_gain(
+    gain = PowerImpedance.small_gain(
         result,
         result;
         display_plot = false,
@@ -468,17 +468,17 @@ end
 
 @testset "LineCableModels extension load order" begin
     project = dirname(Base.active_project())
-    extension_check = "@assert Base.get_extension(PowerImpedanceACDC, " *
+    extension_check = "@assert Base.get_extension(PowerImpedance, " *
                       ":PowerImpedanceLineCableModelsExt) !== nothing"
 
-    powerimpedance_first = "using PowerImpedanceACDC; " *
-                           "@assert Base.get_extension(PowerImpedanceACDC, " *
+    powerimpedance_first = "using PowerImpedance; " *
+                           "@assert Base.get_extension(PowerImpedance, " *
                            ":PowerImpedanceLineCableModelsExt) === nothing; " *
                            "using LineCableModels; " * extension_check
     command = `$(Base.julia_cmd()) --project=$project --startup-file=no -e $powerimpedance_first`
     @test success(pipeline(command; stdout = devnull, stderr = devnull))
 
-    linecablemodels_first = "using LineCableModels; using PowerImpedanceACDC; " *
+    linecablemodels_first = "using LineCableModels; using PowerImpedance; " *
                             extension_check
     command = `$(Base.julia_cmd()) --project=$project --startup-file=no -e $linecablemodels_first`
     @test success(pipeline(command; stdout = devnull, stderr = devnull))

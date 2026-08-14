@@ -78,7 +78,7 @@ connections.
 
 # Arguments
 
-- `elements`: Named tuple of scalar PowerImpedanceACDC elements.
+- `elements`: Named tuple of scalar PowerImpedance elements.
 - `connections`: Tuple of [`ConnectionDef`](@ref) values.
 - `options`: Builder and power-flow options.
 

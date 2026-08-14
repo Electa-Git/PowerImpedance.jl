@@ -1,4 +1,4 @@
-using PowerImpedanceACDC.NetworkBuilder: pin, ⟷, Pin, ConnectionDef, ConnectionsRegistry, ↔
+using PowerImpedance.NetworkBuilder: pin, ⟷, Pin, ConnectionDef, ConnectionsRegistry, ↔
 
 
 @testset "Pin Creation and Parsing" begin

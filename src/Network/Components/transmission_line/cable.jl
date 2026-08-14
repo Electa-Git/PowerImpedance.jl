@@ -357,8 +357,8 @@ function eval_parameters(c::Cable, s::Complex)
 	# Kron elimination (unchanged intent, same call)
 	if c.eliminate
 		cond_noElim = [(i-1)*nₗ + 1 for i in 1:n]
-		Z = PowerImpedanceACDC.kron(Z, cond_noElim)
-		P = PowerImpedanceACDC.kron(P, cond_noElim)
+		Z = PowerImpedance.kron(Z, cond_noElim)
+		P = PowerImpedance.kron(P, cond_noElim)
 	end
 
 	Y = s * inv(P)

@@ -1,4 +1,4 @@
-# using PowerImpedanceACDC.NetworkBuilder: BuilderState
+# using PowerImpedance.NetworkBuilder: BuilderState
 
 """
     This function converts the nonlinear network (represented with BuilderState) to a linearized admittance representation
@@ -35,7 +35,7 @@ end
 
 function nonlinearsetpoints(bs::BuilderState)
     
-    #1. Convert PowerImpedanceACDC payload to PMACDC
+    #1. Convert PowerImpedance payload to PMACDC
     data, global_dict, elempitopm = convert(bs, P.PMACDC)
 
     options = bs.options

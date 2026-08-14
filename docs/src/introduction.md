@@ -7,7 +7,7 @@ small-signal models make those interactions visible without requiring a full
 electromagnetic-transient simulation for every operating condition
 [WangBlaabjerg2019, BayoSalas2018](@cite).
 
-PowerImpedanceACDC builds linearized multiport models around an AC/DC
+PowerImpedance builds linearized multiport models around an AC/DC
 power-flow operating point. Detailed passive models retain their
 frequency-dependent behavior, while active components include the relevant
 electrical dynamics and controls. The assembled response can then be used for

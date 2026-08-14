@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = PowerImpedanceACDC
+CurrentModule = PowerImpedance
 ```
 
 # Network construction
 
-A PowerImpedanceACDC system is a collection of component `Element` objects and
+A PowerImpedance system is a collection of component `Element` objects and
 their electrical connections. Each connection joins named component pins to a
 network node. Ground nodes are represented explicitly.
 
@@ -14,8 +14,8 @@ network node. Ground nodes are represented explicitly.
 only the small set of composition symbols required by the model:
 
 ```julia
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: Grid, define, pin, solve, ⟷
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: Grid, define, pin, solve, ⟷
 ```
 
 Scalar elements use the ordinary keyword constructors. Passing `Grid` as the
@@ -52,7 +52,7 @@ variants are separate deterministic cases.
 See [Parametric and uncertainty studies](gridspace.md) for grid construction,
 sampling, power-flow invalidation, and result aggregation.
 
-## Legacy network DSL
+## Classic network DSL
 
 The `@network` macro remains supported for existing models. It constructs a
 `Network` by naming elements and chaining their pins through nodes:

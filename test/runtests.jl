@@ -1,25 +1,34 @@
 # using JLD2
-using PowerImpedanceACDC
+using PowerImpedance
 using Test
 using LinearAlgebra
-import PowerImpedanceACDC.NetworkBuilder
-const NB = PowerImpedanceACDC.NetworkBuilder
+import PowerImpedance.NetworkBuilder
+const NB = PowerImpedance.NetworkBuilder
 
-const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
+const PI = PowerImpedance # Alias for easier access in tests
 
-# CI can set PIACDC_TEST_LOG_LEVEL=error; local runs retain warning output.
+# CI can set POWERIMPEDANCE_TEST_LOG_LEVEL=error; the former variable remains supported.
 using Logging
 const TEST_LOG_LEVEL =
-    lowercase(get(ENV, "PIACDC_TEST_LOG_LEVEL", "warn")) == "error" ?
+    lowercase(get(
+        ENV,
+        "POWERIMPEDANCE_TEST_LOG_LEVEL",
+        get(ENV, "PIACDC_TEST_LOG_LEVEL", "warn"),
+    )) == "error" ?
     Logging.Error : Logging.Warn
 Logging.global_logger(ConsoleLogger(stderr, TEST_LOG_LEVEL))
-TEST_LOG_LEVEL == Logging.Error && PowerImpedanceACDC._PMACDC.silence()
+TEST_LOG_LEVEL == Logging.Error && PowerImpedance._PMACDC.silence()
 
-# Alternatively, you can set the logging level to debug for the PIACDC package only (to avoid vscode debug logging) via an environment variable:
-# ENV["JULIA_DEBUG"]=PowerImpedanceACDC # Warning: this will unfortunanelty not enable the debug logging for the ipopt solver.
+# Alternatively, set the package-only logging level to debug through an environment variable to avoid VS Code debug logging:
+# ENV["JULIA_DEBUG"]=PowerImpedance # Warning: this will unfortunanelty not enable the debug logging for the ipopt solver.
 
+@testset "Package name compatibility" begin
+    @test nameof(PowerImpedance) === :PowerImpedance
+    @test PowerImpedanceACDC === PowerImpedance
+    @test PowerImpedance.PowerImpedanceACDC === PowerImpedance
+end
 
-@time @testset "PowerImpedanceACDC" begin
+@time @testset "PowerImpedance" begin
         
         include("imp_test.jl")
         include("adm_MMC_test.jl")

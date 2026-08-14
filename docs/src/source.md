@@ -1,12 +1,12 @@
 ```@meta
-CurrentModule = PowerImpedanceACDC
+CurrentModule = PowerImpedance
 ```
 
 # Voltage sources
 
 `ac_source` and `dc_source` define ideal voltage-source equivalents and their
 power-flow setpoints. They are single electrical ports internally, while the
-legacy element representation retains input and output pin groups for network
+classic element representation retains input and output pin groups for network
 compatibility.
 
 An AC source can represent a one-phase or three-phase grid equivalent. Its

@@ -1,11 +1,11 @@
 ```@meta
-CurrentModule = PowerImpedanceACDC
+CurrentModule = PowerImpedance
 ```
 
 # Power-flow initialization
 
 Frequency-domain converter and machine models are linearized around a
-steady-state operating point. PowerImpedanceACDC obtains that operating point
+steady-state operating point. PowerImpedance obtains that operating point
 from the combined AC/DC power-flow model and then applies the solved setpoints
 to the detailed active-device models.
 

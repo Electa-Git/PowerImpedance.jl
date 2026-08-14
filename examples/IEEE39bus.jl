@@ -1,11 +1,11 @@
-# This is a PowerImpedanceACDC implementation of the IEEE 39 bus system test system
+# This is a PowerImpedance implementation of the IEEE 39 bus system test system
 # Author: Jan Kircheis 
 # Date: Jan 2026
-# Related PSCAD model to be found under Etch: Control-->PowerImpedanceACDC-->IEEE 39-bus system
+# Related PSCAD model to be found under Etch: Control-->PowerImpedance-->IEEE 39-bus system
 # 345 kV implementation ---> Everything referred to 345 kV
 
 # Arrange environment
-using PowerImpedanceACDC
+using PowerImpedance
 using Plots #;plotlyjs() #Plotlyjs() for dynamic plotting if desired :)
 using DelimitedFiles
 

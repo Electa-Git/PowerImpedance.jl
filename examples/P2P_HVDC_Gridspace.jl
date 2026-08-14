@@ -13,8 +13,8 @@
 
 using Measurements
 using Plots
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: @gridspace, BuilderState, Grid,
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: @gridspace, BuilderState, Grid,
                                          Gridspace, define, pin, ⟷
 using Statistics
 

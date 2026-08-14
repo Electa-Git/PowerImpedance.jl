@@ -1,4 +1,4 @@
-import PowerImpedanceACDC.NetworkBuilder: ⟷, pin
+import PowerImpedance.NetworkBuilder: ⟷, pin
 function inductionmachinecircuit()
     transmissionVoltage = 220 / sqrt(3)
     g1 = ac_source(setpoint=Setpoint(Vac = transmissionVoltage, Pac = -500), pins = 3, transformation = true)

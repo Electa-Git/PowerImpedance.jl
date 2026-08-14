@@ -1,4 +1,4 @@
-# This is a PowerImpedanceACDC element in order to model a MMC converter soley based on frequency scans, e.g.
+# This is a PowerImpedance element in order to model a MMC converter soley based on frequency scans, e.g.
 # imported Two-port admittance matrix. It is a blackbox model, meaning that the internal structure of the converter is not modeled.
 # The converter is represented by its imported Y-parameters.
 
@@ -222,7 +222,7 @@ function blackbox_MMC(;args...)
     converter.itp = linear_interpolation((Vac_vals, Pac_vals, Qac_vals, freq), Ymmc_4d, extrapolation_bc=Line())
 
 
-    # Return complete PowerImpedanceACDC element
+    # Return complete PowerImpedance element
     elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false, connection = connection)
 
 end

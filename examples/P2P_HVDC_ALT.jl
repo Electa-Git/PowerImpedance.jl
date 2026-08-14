@@ -4,8 +4,8 @@
 # power-flow solution while sweeping the relative share of overhead line and
 # underground cable in a point-to-point HVDC system.
 
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: pin, ⟷
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: pin, ⟷
 using Plots
 
 # The P and Q defined here are what is injected into the network.

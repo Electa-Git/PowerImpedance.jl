@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = PowerImpedanceACDC
+CurrentModule = PowerImpedance
 ```
 
 # Two-level converter

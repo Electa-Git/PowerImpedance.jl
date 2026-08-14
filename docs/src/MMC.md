@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = PowerImpedanceACDC
+CurrentModule = PowerImpedance
 ```
 
 # Modular multilevel converter
@@ -15,7 +15,7 @@ linearized for frequency-domain evaluation. Electrical and controller
 uncertainty is therefore sampled before these steps; a sampled converter causes
 power flow, equilibrium, and linearization to be repeated.
 
-The high-level [`mmc`](@ref) constructor remains available for legacy models.
+The high-level [`mmc`](@ref) constructor remains available for existing models.
 The composable [`MMC`](@ref), controller, synchronization, modulation, and
 measurement types are listed in the [API reference](reference.md). The
 [P2P HVDC Gridspace tutorial](examples/P2P_HVDC_Gridspace.md) shows passive and

@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = PowerImpedanceACDC
+CurrentModule = PowerImpedance
 ```
 
-# PowerImpedanceACDC.jl
+# PowerImpedance.jl
 
-PowerImpedanceACDC is a frequency-domain modelling and small-signal analysis
+PowerImpedance is a frequency-domain modelling and small-signal analysis
 package for AC, DC, and hybrid power systems. It combines detailed passive and
 active component models with multiport network assembly, AC/DC power-flow
 initialization, impedance extraction, and stability-analysis tools.
@@ -36,18 +36,35 @@ changes.
 Install the package from the Julia package manager:
 
 ```julia
-pkg> add PowerImpedanceACDC
+pkg> add PowerImpedance
 ```
 
 Then load it with:
 
 ```julia
-using PowerImpedanceACDC
+using PowerImpedance
 ```
+
+### Former package name
+
+The package and module were formerly named `PowerImpedanceACDC`. The UUID is
+unchanged. After importing the renamed package, the former module name remains
+an exported alias, so existing qualified calls need no immediate rewrite:
+
+```julia
+using PowerImpedance
+
+PowerImpedanceACDC.make_y_node === PowerImpedance.make_y_node
+```
+
+The source tree also retains a compatibility entry point for existing
+manifests that already resolve `PowerImpedanceACDC` to this UUID. New
+environments must add and import `PowerImpedance`, because Julia project
+metadata cannot expose the same UUID under two package names.
 
 Optional interoperability is activated by loading `Measurements` or
 `LineCableModels` in the same environment. See [Package extensions](package_extensions.md)
-for the supported combinations and data contracts.
+for the supported combinations and data structures.
 
 ## Where to start
 

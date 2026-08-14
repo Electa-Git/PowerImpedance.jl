@@ -1,6 +1,6 @@
-# PowerImpedanceACDC
+# PowerImpedance.jl
 
-PowerImpedanceACDC is a Julia package for frequency-domain analysis of modern
+PowerImpedance is a Julia package for frequency-domain analysis of modern
 AC, DC, and hybrid power systems. It provides impedance and admittance
 characterization, AC/DC power-flow initialization, and fast small-signal
 stability assessment using analytical models validated against PSCAD EMT
@@ -64,7 +64,7 @@ Frequency-response data can be imported for:
 
 Gridspace extends the ordinary component constructors to deterministic
 parameter sweeps and uncertainty quantification while preserving the scalar
-API. Importing `Grid` from `PowerImpedanceACDC.NetworkBuilder` and passing it as
+API. Importing `Grid` from `PowerImpedance.NetworkBuilder` and passing it as
 the first positional argument selects the lazy NetworkBuilder form. Selected
 component parameters can then receive `Grid(...)` values without qualifying
 every constructor through the `NetworkBuilder` namespace.
@@ -100,14 +100,32 @@ PSCAD EMT simulations. A step-by-step implementation is available in the
 Install the latest release using the Julia package manager:
 
 ```julia
-pkg> add PowerImpedanceACDC
+pkg> add PowerImpedance
 ```
 
 Then load the package:
 
 ```julia
-using PowerImpedanceACDC
+using PowerImpedance
 ```
+
+### Compatibility with the former name
+
+The package and its primary module were formerly named `PowerImpedanceACDC`.
+The package UUID is unchanged, and `PowerImpedance` exports the former module
+name as an alias, so qualified references remain valid after changing the
+import:
+
+```julia
+using PowerImpedance
+
+PowerImpedanceACDC.determine_impedance === PowerImpedance.determine_impedance
+```
+
+An existing manifest that already resolves `PowerImpedanceACDC` to this UUID
+can also use the retained compatibility entry point. Fresh environments should
+install and import `PowerImpedance`; Julia package metadata cannot assign two
+package names to one UUID.
 
 The Measurements extension activates when `Measurements` is loaded. Direct
 `LineParameters` interoperability activates when both
@@ -116,7 +134,7 @@ The Measurements extension activates when `Measurements` is loaded. Direct
 
 ## Citation
 
-If you use PowerImpedanceACDC in your research, please cite:
+If you use PowerImpedance in your research, please cite:
 
 ```bibtex
 @misc{PowerImpedance25,

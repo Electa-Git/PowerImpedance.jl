@@ -29,7 +29,7 @@ if nodelist == []
 
         # Check whether the current node is part of Yedge
 
-        nets=PowerImpedanceACDC.netfor!(network, node) # Get nets (designator, pin) connected to the node
+        nets=PowerImpedance.netfor!(network, node) # Get nets (designator, pin) connected to the node
 
 
         # Check whether the node is connected to a source
@@ -75,7 +75,7 @@ if nodelist == []
             designator = nets[1][1] # Get the designator of the element
             ACpin=Symbol(ACpin)
 
-            if PowerImpedanceACDC.netname(network, (designator,ACpin)) === Symbol("") # Check whether this net (designator, pin) exists
+            if PowerImpedance.netname(network, (designator,ACpin)) === Symbol("") # Check whether this net (designator, pin) exists
             
                 isDCnode= true
 
@@ -99,7 +99,7 @@ if nodelist == []
 
             designator = nets[1][1] # Get the designator of the element
             ACpin=Symbol(ACpin)
-            node2=PowerImpedanceACDC.netname(network, (designator,ACpin))
+            node2=PowerImpedance.netname(network, (designator,ACpin))
 
             # Proper node ordering required to match 2x2 admittance matrix of elements [ACd, ACq]
             if occursin(".1", string(ACpin)) # Node 2 is a d node

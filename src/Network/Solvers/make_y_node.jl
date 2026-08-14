@@ -1,7 +1,7 @@
 export make_y_node
 
 function _node_from_pin(network::Network, designator::Symbol, pin::Symbol)
-    return PowerImpedanceACDC.netname(network, (designator, pin))
+    return PowerImpedance.netname(network, (designator, pin))
 end
 
 function _converter_nodes_in_order(network::Network, designator::Symbol, element::Element)
@@ -58,7 +58,7 @@ if nodelist == []
 
                                 ACpin=replace(string(pin), ".1" => ".2") # Replace .1 with .2 to search for the other AC node 
                                 ACpin=Symbol(ACpin)
-                                node2=PowerImpedanceACDC.netname(network, (designator,ACpin)) # ACq
+                                node2=PowerImpedance.netname(network, (designator,ACpin)) # ACq
                                 # Add the nodes to the list [ACd, ACq]
                                 if !in(node, node_list)
                                         push!(node_list,node) 
@@ -72,7 +72,7 @@ if nodelist == []
 
                                 ACpin=replace(string(pin), ".2" => ".1") # Replace .2 with .1 to search for the other AC node 
                                 ACpin=Symbol(ACpin)
-                                node2=PowerImpedanceACDC.netname(network, (designator,ACpin)) # ACd
+                                node2=PowerImpedance.netname(network, (designator,ACpin)) # ACd
                                 # Add the nodes to the list [ACd, ACq]
                                 if !in(node2, node_list)
                                         push!(node_list,node2) 
@@ -126,7 +126,7 @@ if nodelist == []
 
                                             ACpin=replace(string(pin2), ".1" => ".2") # Replace .1 with .2 to search for the other AC node 
                                             ACpin=Symbol(ACpin)
-                                            node2_2=PowerImpedanceACDC.netname(network, (designator2,ACpin)) # ACq
+                                            node2_2=PowerImpedance.netname(network, (designator2,ACpin)) # ACq
                                             # Add the nodes to the list [ACd, ACq]
                                             if !in(node2, node_list)
                                                     push!(node_list,node2) 
@@ -142,7 +142,7 @@ if nodelist == []
 
                                             ACpin=replace(string(pin2), ".2" => ".1") # Replace .2 with .1 to search for the other AC node 
                                             ACpin=Symbol(ACpin)
-                                            node2_1=PowerImpedanceACDC.netname(network, (designator2,ACpin)) # ACd
+                                            node2_1=PowerImpedance.netname(network, (designator2,ACpin)) # ACd
                                             # Add the nodes to the list [ACd, ACq]
                                         if !in(node2_1, node_list)
                                                 push!(node_list,node2_1) 

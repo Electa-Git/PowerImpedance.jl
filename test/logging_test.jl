@@ -1,22 +1,22 @@
 using Logging
 
 @testset "portable log source paths" begin
-    package_root = pkgdir(PowerImpedanceACDC)
+    package_root = pkgdir(PowerImpedance)
     package_file = joinpath(package_root, "src", "Network", "power_flow.jl")
-    @test PowerImpedanceACDC._display_log_path(package_file, package_root) ==
+    @test PowerImpedance._display_log_path(package_file, package_root) ==
           "src/Network/power_flow.jl"
-    @test PowerImpedanceACDC._display_log_path(
+    @test PowerImpedance._display_log_path(
         "/builds/electa/controlgroup/hvdcstability_dev.jl/src/Network/NetworkBuilder/powerflow.jl",
         package_root
     ) == "src/Network/NetworkBuilder/powerflow.jl"
 
     buffer = IOBuffer()
-    logger = PowerImpedanceACDC._relative_path_logger(SimpleLogger(buffer, Logging.Debug))
+    logger = PowerImpedance._relative_path_logger(SimpleLogger(buffer, Logging.Debug))
     Logging.handle_message(
         logger,
         Logging.Warn,
         "constraint warning",
-        PowerImpedanceACDC,
+        PowerImpedance,
         :logging_test,
         :portable_path,
         "/builds/runner/project/src/Network/NetworkBuilder/powerflow.jl",

@@ -1,10 +1,10 @@
-using PowerImpedanceACDC.NetworkBuilder: pin, ⟷, powerflow_optimizer, is_bounded_options, 
+using PowerImpedance.NetworkBuilder: pin, ⟷, powerflow_optimizer, is_bounded_options,
 powerflow_setting, solve_acdcpf, get_y, LinearizedAdmittanceNetwork
 using LinearAlgebra
-using PowerImpedanceACDC
+using PowerImpedance
 using Test
 
-# PIACDC =PowerImpedanceACDC
+# PI = PowerImpedance
 
 @testset "NetworkBuilder unit tests" begin
 	legacy = @network begin
@@ -42,10 +42,10 @@ using Test
 end
 
 
-# This is a PowerImpedanceACDC implementation of the IEEE 39 bus system test system
+# This is a PowerImpedance implementation of the IEEE 39 bus system test system
 # Author: Jan Kircheis 
 # Date: Jan 2026
-# Related PSCAD model to be found under Etch: Control-->PowerImpedanceACDC-->IEEE 39-bus system
+# Related PSCAD model to be found under Etch: Control-->PowerImpedance-->IEEE 39-bus system
 # 345 kV implementation ---> Everything referred to 345 kV
 
 # Arrange environment
@@ -200,7 +200,7 @@ const IEEE39_ELIM_ELEMENTS = [:STATCOM]
 const IEEE39_FREQ_RANGE = (1e0, 5e3, 10)
 
 function build_ieee39bus_with_macro()
-	elec = PowerImpedanceACDC.ElectricalTLC(
+	elec = PowerImpedance.ElectricalTLC(
 		Lᵣ = Lf_ST,
 		Rᵣ = Rf_ST,
 		Sbase = S_ST,
@@ -208,54 +208,54 @@ function build_ieee39bus_with_macro()
 		vDCbase = Vdc_ST,
 	)
 
-	meas = PowerImpedanceACDC.Measurement(
-		v_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
-		i_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+	meas = PowerImpedance.Measurement(
+		v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
+		i_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
 	)
 
-	sync = PowerImpedanceACDC.PLLSynchronization(
-		pi_ctrl = PowerImpedanceACDC.PIControl(
+	sync = PowerImpedance.PLLSynchronization(
+		pi_ctrl = PowerImpedance.PIControl(
 			Kp = 0.397887357729738,
 			Ki = 7.957747154594767,
 		),
-		filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 2π * 80),
+		filter = PowerImpedance.Butterworth(order = 2, ωc = 2π * 80),
 	)
 
-	innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl()
+	innerVoltage = PowerImpedance.NoInnerVoltageControl()
 
-	innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(
+	innerCurrent = PowerImpedance.InnerCurrentPIControl(
+		pi_ctrl = PowerImpedance.PIControl(
 			Kp = 0.254647908947033,
 			Ki = 0.8,
 		),
 	)
 
-	mod = PowerImpedanceACDC.PadeModulation(
+	mod = PowerImpedance.PadeModulation(
 		timeDelay = 200e-6,
 		padeOrderNum = 3,
 		padeOrderDen = 3,
 	)
 
-	limits = PowerImpedanceACDC.Limits(
+	limits = PowerImpedance.Limits(
 		P_min = -1000.0,
 		P_max = 1000.0,
 		Q_min = -1000.0,
 		Q_max = 1000.0,
 	)
 
-	outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
+	outerActive = PowerImpedance.OuterActiveVdcControl(
+		pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0),
 	)
 
-	outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
-		support = PowerImpedanceACDC.VoltageSupportLag(
+	outerReactive = PowerImpedance.OuterReactiveQControl(
+		pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
+		support = PowerImpedance.VoltageSupportLag(
 			K = 5.0,
 			ωc = 1 / 0.5,
 		),
 	)
 
-	setpoint = PowerImpedanceACDC.Setpoint(
+	setpoint = PowerImpedance.Setpoint(
 		Pac = 0.0,
 		Qac = Q_ST*S_ST,
 		θac = 0.0,
@@ -337,7 +337,7 @@ function build_ieee39bus_with_macro()
 
 
 
-		STATCOM = PowerImpedanceACDC.tlc(
+		STATCOM = PowerImpedance.tlc(
 			elec = elec,
 			meas = meas,
 			sync = sync,
@@ -1295,7 +1295,7 @@ end
 
 function ieee39bus_elements()
 
-	elec = PowerImpedanceACDC.ElectricalTLC(
+	elec = PowerImpedance.ElectricalTLC(
 		Lᵣ = Lf_ST,
 		Rᵣ = Rf_ST,
 		Sbase = S_ST,
@@ -1303,54 +1303,54 @@ function ieee39bus_elements()
 		vDCbase = Vdc_ST,
 	)
 
-	meas = PowerImpedanceACDC.Measurement(
-		v_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
-		i_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+	meas = PowerImpedance.Measurement(
+		v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
+		i_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
 	)
 
-	sync = PowerImpedanceACDC.PLLSynchronization(
-		pi_ctrl = PowerImpedanceACDC.PIControl(
+	sync = PowerImpedance.PLLSynchronization(
+		pi_ctrl = PowerImpedance.PIControl(
 			Kp = 0.397887357729738,
 			Ki = 7.957747154594767,
 		),
-		filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 2π * 80),
+		filter = PowerImpedance.Butterworth(order = 2, ωc = 2π * 80),
 	)
 
-	innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl()
+	innerVoltage = PowerImpedance.NoInnerVoltageControl()
 
-	innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(
+	innerCurrent = PowerImpedance.InnerCurrentPIControl(
+		pi_ctrl = PowerImpedance.PIControl(
 			Kp = 0.254647908947033,
 			Ki = 0.8,
 		),
 	)
 
-	mod = PowerImpedanceACDC.PadeModulation(
+	mod = PowerImpedance.PadeModulation(
 		timeDelay = 200e-6,
 		padeOrderNum = 3,
 		padeOrderDen = 3,
 	)
 
-	limits = PowerImpedanceACDC.Limits(
+	limits = PowerImpedance.Limits(
 		P_min = -1000.0,
 		P_max = 1000.0,
 		Q_min = -1000.0,
 		Q_max = 1000.0,
 	)
 
-	outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
+	outerActive = PowerImpedance.OuterActiveVdcControl(
+		pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0),
 	)
 
-	outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
-		support = PowerImpedanceACDC.VoltageSupportLag(
+	outerReactive = PowerImpedance.OuterReactiveQControl(
+		pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
+		support = PowerImpedance.VoltageSupportLag(
 			K = 5.0,
 			ωc = 1 / 0.5,
 		),
 	)
 
-	setpoint = PowerImpedanceACDC.Setpoint(
+	setpoint = PowerImpedance.Setpoint(
 		Pac = 0.0,
 		Qac = Q_ST*S_ST,
 		θac = 0.0,
@@ -1429,7 +1429,7 @@ function ieee39bus_elements()
 
 		G_DC = dc_source(pins = 1, setpoint=Setpoint(Vdc = Vdc_ST/2)), # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
-		STATCOM = PowerImpedanceACDC.tlc(
+		STATCOM = PowerImpedance.tlc(
 			elec = elec,
 			meas = meas,
 			sync = sync,
@@ -2393,13 +2393,13 @@ function ieee39bus_with_nwbuilder_powerflow()
 		options = builder_options,
 	)
 
-	data,elempitopm = convert(builder, PIACDC.PMACDC)
+	data,elempitopm = convert(builder, PI.PMACDC)
 
     options = builder.options
 
     result = solve_acdcpf(
         data,
-        PIACDC._PM.ACPPowerModel,
+        PI._PM.ACPPowerModel,
         powerflow_optimizer(options),
         is_bounded_options(options);
         setting = powerflow_setting(options),
@@ -2489,7 +2489,7 @@ function test_linearizedadmittance_parity(; freq_range = IEEE39_FREQ_RANGE)
 		@test haskey(legacy.elements, key) #"Legacy network is missing element $key"
 		@test haskey(newadmnw.interface.elem, key) #"New network is missing element $key"
 		
-		ylegacy = PIACDC.eval_y.((legacy.elements[key],), s;SI_units = true) #Should be pu (disabled scaling)
+		ylegacy = PI.eval_y.((legacy.elements[key],), s;SI_units = true) #Should be pu (disabled scaling)
 		ynew = get_y(newadmnw,key, s)
 		ynew = [ynew[:,:,i] for i in axes(ynew, 3)]
 

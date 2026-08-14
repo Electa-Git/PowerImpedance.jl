@@ -3,16 +3,20 @@ using Logging
 using Random
 using Statistics
 using Measurements
-using PowerImpedanceACDC
-using PowerImpedanceACDC.NetworkBuilder: ⟷
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: ⟷
 
-const NB = PowerImpedanceACDC.NetworkBuilder
-# CI can set PIACDC_TEST_LOG_LEVEL=error; local runs retain warning output.
+const NB = PowerImpedance.NetworkBuilder
+# CI can set POWERIMPEDANCE_TEST_LOG_LEVEL=error; the former variable remains supported.
 const TEST_LOG_LEVEL =
-    lowercase(get(ENV, "PIACDC_TEST_LOG_LEVEL", "warn")) == "error" ?
+    lowercase(get(
+        ENV,
+        "POWERIMPEDANCE_TEST_LOG_LEVEL",
+        get(ENV, "PIACDC_TEST_LOG_LEVEL", "warn"),
+    )) == "error" ?
     Logging.Error : Logging.Warn
 Logging.global_logger(ConsoleLogger(stderr, TEST_LOG_LEVEL))
-TEST_LOG_LEVEL == Logging.Error && PowerImpedanceACDC._PMACDC.silence()
+TEST_LOG_LEVEL == Logging.Error && PowerImpedance._PMACDC.silence()
 
 function uncertain_builder(axis)
     elements = (
@@ -518,8 +522,8 @@ end
 
 @testset "Extension load order" begin
     project = dirname(Base.active_project())
-    code = "using PowerImpedanceACDC; " *
-           "NB = PowerImpedanceACDC.NetworkBuilder; " *
+    code = "using PowerImpedance; " *
+           "NB = PowerImpedance.NetworkBuilder; " *
            "@assert !NB._measurement_extension_loaded(); " *
            "using Measurements; " *
            "@assert NB._measurement_extension_loaded(); " *

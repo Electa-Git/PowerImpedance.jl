@@ -28,7 +28,7 @@ Wrap a logger so displayed source locations do not expose build-host paths.
 - A logger that displays package paths relative to the repository root.
 """
 function _relative_path_logger(logger::Logging.AbstractLogger = current_logger())
-    return _RelativePathLogger(logger, normpath(pkgdir(PowerImpedanceACDC)))
+    return _RelativePathLogger(logger, normpath(pkgdir(PowerImpedance)))
 end
 
 function Logging.min_enabled_level(logger::_RelativePathLogger)

@@ -1,26 +1,26 @@
 ```@meta
-CurrentModule = PowerImpedanceACDC
+CurrentModule = PowerImpedance
 ```
 
 # API reference
 
 The public interface is grouped by its defining module. Ordinary component
-constructors and downstream solvers belong to `PowerImpedanceACDC`.
+constructors and downstream solvers belong to `PowerImpedance`.
 Gridspace construction, orchestration, and result containers belong to
-`PowerImpedanceACDC.NetworkBuilder`.
+`PowerImpedance.NetworkBuilder`.
 
-## `PowerImpedanceACDC`
+## `PowerImpedance`
 
 ```@autodocs
-Modules = [PowerImpedanceACDC]
+Modules = [PowerImpedance]
 Public = true
 Private = false
 ```
 
-## `PowerImpedanceACDC.NetworkBuilder`
+## `PowerImpedance.NetworkBuilder`
 
 ```@autodocs
-Modules = [PowerImpedanceACDC.NetworkBuilder]
+Modules = [PowerImpedance.NetworkBuilder]
 Public = true
 Private = false
 ```

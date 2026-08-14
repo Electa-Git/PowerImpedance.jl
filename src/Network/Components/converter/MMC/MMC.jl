@@ -361,7 +361,7 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
     convdc["basekVac"] = global_dict["V"] / 1e3
 
     convdc["type_ac"] = pf_type_ac(conv.delta_control)
-    convdc["Vtar"] = (elem.setpoint.Vac/sqrt(2)) / (global_dict["V"] / 1e3) # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages, PowerImpedanceACDC uses amplitude
+    convdc["Vtar"] = (elem.setpoint.Vac/sqrt(2)) / (global_dict["V"] / 1e3) # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages, PowerImpedance uses amplitude
     if convdc["type_ac"] == 2
         data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]

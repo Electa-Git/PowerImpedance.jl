@@ -1,9 +1,9 @@
 using Test
 using Measurements
-using PowerImpedanceACDC
+using PowerImpedance
 
-const TOPOLOGY_NB = PowerImpedanceACDC.NetworkBuilder
-const PIACDC = PowerImpedanceACDC
+const TOPOLOGY_NB = PowerImpedance.NetworkBuilder
+const PI = PowerImpedance
 if !isdefined(@__MODULE__, :NB)
     const NB = TOPOLOGY_NB
 end

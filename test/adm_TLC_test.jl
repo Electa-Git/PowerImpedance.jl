@@ -49,7 +49,7 @@ function tlc_plot_convention(Y::AbstractMatrix)
 end
 
 function common_tlc_blocks(; Vm, Vdc, Lf, Rf)
-    elec = PowerImpedanceACDC.ElectricalTLC(
+    elec = PowerImpedance.ElectricalTLC(
         Lᵣ = Lf,
         Rᵣ = Rf,
         Sbase = 100.0,
@@ -57,35 +57,35 @@ function common_tlc_blocks(; Vm, Vdc, Lf, Rf)
         vDCbase = Vdc,
     )
 
-    meas = PowerImpedanceACDC.Measurement(
-        v_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
-        i_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+    meas = PowerImpedance.Measurement(
+        v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
+        i_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
     )
 
-    sync = PowerImpedanceACDC.PLLSynchronization(
-        pi_ctrl = PowerImpedanceACDC.PIControl(
+    sync = PowerImpedance.PLLSynchronization(
+        pi_ctrl = PowerImpedance.PIControl(
             Kp = 0.397887357729738,
             Ki = 7.957747154594767,
         ),
-        filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 2π * 80),
+        filter = PowerImpedance.Butterworth(order = 2, ωc = 2π * 80),
     )
 
-    innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl()
+    innerVoltage = PowerImpedance.NoInnerVoltageControl()
 
-    innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
-        pi_ctrl = PowerImpedanceACDC.PIControl(
+    innerCurrent = PowerImpedance.InnerCurrentPIControl(
+        pi_ctrl = PowerImpedance.PIControl(
             Kp = 0.254647908947033,
             Ki = 0.8,
         ),
     )
 
-    mod = PowerImpedanceACDC.PadeModulation(
+    mod = PowerImpedance.PadeModulation(
         timeDelay = 200e-6,
         padeOrderNum = 3,
         padeOrderDen = 3,
     )
 
-    limits = PowerImpedanceACDC.Limits(
+    limits = PowerImpedance.Limits(
         P_min = -1000.0,
         P_max = 1000.0,
         Q_min = -1000.0,
@@ -113,7 +113,7 @@ function build_case1_grid()
     vdc_ref_pu = Vdc / elec.vDCbase
     vac_ref_pu = Vac_peak / (elec.vACbase)
 
-    limits = PowerImpedanceACDC.Limits(
+    limits = PowerImpedance.Limits(
         P_min = -100.0,
         P_max = 100.0,
         Q_min = -50.0,
@@ -122,19 +122,19 @@ function build_case1_grid()
 
     vac_ref_pu = Vac_peak / (elec.vACbase)
 
-    outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
-        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
+    outerActive = PowerImpedance.OuterActiveVdcControl(
+        pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0),
     )
 
-    outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
-        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
-        support = PowerImpedanceACDC.VoltageSupportLag(
+    outerReactive = PowerImpedance.OuterReactiveQControl(
+        pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
+        support = PowerImpedance.VoltageSupportLag(
             K = 5.0,
             ωc = 1 / 0.5,
         ),
     )
 
-    setpoint = PowerImpedanceACDC.Setpoint(
+    setpoint = PowerImpedance.Setpoint(
         Pac = Powf,
         Qac = Qowf,
         θac = 0.0,
@@ -143,7 +143,7 @@ function build_case1_grid()
         Vdc = Vdc,
     )
 
-    dut = PowerImpedanceACDC.tlc(
+    dut = PowerImpedance.tlc(
         elec = elec,
         meas = meas,
         sync = sync,
@@ -204,26 +204,26 @@ function build_case2_grid()
     p_ref_pu = Powf / elec.Sbase
     q_ref_pu = -Qowf / elec.Sbase
 
-    limits = PowerImpedanceACDC.Limits(
+    limits = PowerImpedance.Limits(
         P_min = -1000.0,
         P_max = 1000.0,
         Q_min = -1000.0,
         Q_max = 1000.0,
     )
 
-    outerActive = PowerImpedanceACDC.OuterActivePowerControl(
-        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
-        support = PowerImpedanceACDC.FrequencySupportLag(
+    outerActive = PowerImpedance.OuterActivePowerControl(
+        pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
+        support = PowerImpedance.FrequencySupportLag(
             Kω = 5.0,
             ωc = 1 / 0.5,
         ),
     )
 
-    outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
-        pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
+    outerReactive = PowerImpedance.OuterReactiveQControl(
+        pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
     )
 
-    setpoint = PowerImpedanceACDC.Setpoint(
+    setpoint = PowerImpedance.Setpoint(
         Pac = Powf,
         Qac = Qowf,
         θac = 0.0,
@@ -232,7 +232,7 @@ function build_case2_grid()
         Vdc = Vdc,
     )
 
-    dut = PowerImpedanceACDC.tlc(
+    dut = PowerImpedance.tlc(
         elec = elec,
         meas = meas,
         sync = sync,

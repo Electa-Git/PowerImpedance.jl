@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = PowerImpedanceACDC
+CurrentModule = PowerImpedance
 ```
 
 # Impedance and stability analysis
 
-PowerImpedanceACDC exposes scalar analysis methods and more-specific Gridspace
+PowerImpedance exposes scalar analysis methods and more-specific Gridspace
 methods. Existing scalar calls retain their historical arguments and return
 types. Parametric calls return ordered case collections with coordinates,
 statistics, optional numeric samples, and replay provenance.

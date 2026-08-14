@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Rename the package and primary module to `PowerImpedance`, retaining the
+  UUID, a `PowerImpedanceACDC` module alias, and an entry point for manifests
+  that already resolve the former package name.
 - Add deterministic Cartesian `Grid` and `Gridspace` parameterization under `NetworkBuilder`.
 - Add qualified shadow constructors for supported elements and nested configurations.
 - Add Measurements.jl extension-driven Monte Carlo solve and impedance studies.

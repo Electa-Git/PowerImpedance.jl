@@ -1,10 +1,17 @@
 module PowerImpedanceMeasurementsExt
 
-using PowerImpedanceACDC
 using Measurements
 import Random
 
-const NB = PowerImpedanceACDC.NetworkBuilder
+if !isnothing(Base.identify_package(@__MODULE__, "PowerImpedance"))
+    @eval using PowerImpedance
+    const P = PowerImpedance
+else
+    @eval using PowerImpedanceACDC
+    const P = PowerImpedanceACDC
+end
+
+const NB = P.NetworkBuilder
 
 NB._is_measurement(::Measurements.Measurement) = true
 NB._measurement_nominal(value::Measurements.Measurement) = Measurements.value(value)
@@ -104,7 +111,7 @@ function _surrogate_response(
     )
 end
 
-function PowerImpedanceACDC.nyquistplot(
+function P.nyquistplot(
         response::AbstractArray{T, 3},
         frequencies;
         trials::Union{Nothing, Int} = nothing,
@@ -128,7 +135,7 @@ function PowerImpedanceACDC.nyquistplot(
         nodes,
         kind = :external
     )
-    return PowerImpedanceACDC.nyquistplot(
+    return P.nyquistplot(
         surrogate;
         return_samples,
         kwargs...
@@ -136,7 +143,7 @@ function PowerImpedanceACDC.nyquistplot(
 end
 
 for analysis in (:bodeplot, :passivity, :stabilitymargin, :unstable_frequency)
-    @eval function PowerImpedanceACDC.$analysis(
+    @eval function P.$analysis(
             response::AbstractArray{T, 3},
             frequencies,
             args...;
@@ -161,7 +168,7 @@ for analysis in (:bodeplot, :passivity, :stabilitymargin, :unstable_frequency)
             nodes,
             kind = :external
         )
-        return PowerImpedanceACDC.$analysis(
+        return P.$analysis(
             surrogate,
             nothing,
             args...;
@@ -171,7 +178,7 @@ for analysis in (:bodeplot, :passivity, :stabilitymargin, :unstable_frequency)
     end
 end
 
-function PowerImpedanceACDC.EVD(
+function P.EVD(
         response::AbstractArray{T, 3},
         frequencies,
         fmin,
@@ -198,7 +205,7 @@ function PowerImpedanceACDC.EVD(
         nodes,
         kind = :external
     )
-    return PowerImpedanceACDC.EVD(
+    return P.EVD(
         surrogate,
         nothing,
         fmin,
@@ -333,7 +340,7 @@ function _measurement_small_gain(
         return_samples,
         nodes
     )
-    return PowerImpedanceACDC.small_gain(
+    return P.small_gain(
         first_surrogate,
         second_surrogate,
         nothing,
@@ -349,7 +356,7 @@ for (First, Second) in (
     (:(T <: _UncertainResponseNumber), :(S <: Number)),
     (:(T <: Number), :(S <: _UncertainResponseNumber))
 )
-    @eval function PowerImpedanceACDC.small_gain(
+    @eval function P.small_gain(
             first_response::AbstractArray{T, 3},
             second_response::AbstractArray{S, 3},
             frequencies,

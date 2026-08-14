@@ -23,7 +23,7 @@ variables:
   OMP_NUM_THREADS: "1"
   OMP_THREAD_LIMIT: "1"
   MKL_NUM_THREADS: "1"
-  PIACDC_TEST_LOG_LEVEL: "error"
+  POWERIMPEDANCE_TEST_LOG_LEVEL: "error"
 
   # Keep this NO permanently after the first GitHub migration.
   #
