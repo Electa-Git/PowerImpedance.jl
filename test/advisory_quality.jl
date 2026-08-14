@@ -1,7 +1,6 @@
 using Logging
 using PowerImpedanceACDC
 using Aqua
-using JuliaFormatter
 
 function advisory(check, name)
     try
@@ -22,8 +21,4 @@ end
 
 advisory("Aqua unbound arguments") do
     Aqua.test_unbound_args(PowerImpedanceACDC)
-end
-
-advisory("JuliaFormatter") do
-    JuliaFormatter.format("."; overwrite = false) || error("formatting differences found")
 end

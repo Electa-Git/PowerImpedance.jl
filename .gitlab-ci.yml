@@ -124,11 +124,16 @@ extension_tests:
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
 
 
-advisory_quality:
+formatter:
   image: julia:1.12.6-bookworm
   stage: test
   allow_failure: true
-  cache: *julia_cache
+  cache:
+    <<: *julia_cache
+    key: "piacdc-julia-1.12-formatter-v1"
+    fallback_keys:
+      - "piacdc-julia-1.12-base-v1"
+    policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates
@@ -138,7 +143,36 @@ advisory_quality:
       julia -e '
         using Pkg
         Pkg.activate(; temp=true)
-        Pkg.add(["Aqua", "JuliaFormatter"])
+        Pkg.add("JuliaFormatter")
+        using JuliaFormatter
+
+        JuliaFormatter.format("."; overwrite=false) ||
+          @warn "JuliaFormatter advisory check reported formatting differences"
+      '
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+
+advisory_aqua:
+  image: julia:1.12.6-bookworm
+  stage: test
+  allow_failure: true
+  cache:
+    <<: *julia_cache
+    key: "piacdc-julia-1.12-aqua-v1"
+    fallback_keys:
+      - "piacdc-julia-1.12-base-v1"
+    policy: pull-push
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - |
+      julia -e '
+        using Pkg
+        Pkg.activate(; temp=true)
+        Pkg.add("Aqua")
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.precompile()
         include("test/advisory_quality.jl")
@@ -150,8 +184,14 @@ advisory_quality:
 docs_check:
   image: julia:1.12.6-bookworm
   stage: docs
+  needs:
+    - job: test
+      artifacts: false
   cache:
     <<: *julia_cache
+    key: "piacdc-julia-1.12-docs-v1"
+    fallback_keys:
+      - "piacdc-julia-1.12-base-v1"
     policy: pull-push
   before_script:
     - apt-get update
@@ -166,9 +206,6 @@ docs_check:
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.instantiate()
         Pkg.precompile()
-        using Documenter: doctest
-        using PowerImpedanceACDC
-        doctest(PowerImpedanceACDC)
         include("docs/make.jl")
       '
   rules:
@@ -615,6 +652,12 @@ github_release_publish:
 pages:
   image: julia:1.12.6-bookworm
   stage: deploy
+  cache:
+    <<: *julia_cache
+    key: "piacdc-julia-1.12-docs-v1"
+    fallback_keys:
+      - "piacdc-julia-1.12-base-v1"
+    policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates openssh-client
@@ -629,9 +672,6 @@ pages:
         Pkg.Registry.update()
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.instantiate()
-        using Documenter: doctest
-        using PowerImpedanceACDC
-        doctest(PowerImpedanceACDC)
         include("docs/make.jl")
       '
     - rm -rf public
