@@ -6,7 +6,7 @@ stages:
 
 variables:
   JULIA_DEPOT_PATH: "$CI_PROJECT_DIR/.julia"
-  JULIA_PKG_PRECOMPILE_AUTO: "1"
+  JULIA_PKG_PRECOMPILE_AUTO: "0"
 
   # Keep this NO permanently after the first GitHub migration.
   #
@@ -24,9 +24,27 @@ variables:
   GITHUB_LEGACY_TAG: "legacy-github-main-pre-gitlab-authority"
 
 
+# Julia depots are content-addressed, so keep a stable cache across commits and
+# branches. Bump the cache generation when changing Julia minor versions or
+# when deliberately discarding accumulated package versions.
+.julia_cache:
+  cache: &julia_cache
+    key: "piacdc-julia-1.12-lcm-0.2-v1"
+    paths:
+      - .julia/artifacts/
+      - .julia/clones/
+      - .julia/compiled/v1.12/
+      - .julia/packages/
+      - .julia/registries/
+    policy: pull
+
+
 test:
   image: julia:1.12.6-bookworm
   stage: test
+  cache:
+    <<: *julia_cache
+    policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates
@@ -37,8 +55,6 @@ test:
     - |
       julia --project=. -e ' #--compiled-modules=existing
         using Pkg
-        Pkg.Registry.add("General")
-        Pkg.Registry.update()
         Pkg.instantiate()
         Pkg.precompile()
         Pkg.test()
@@ -49,6 +65,7 @@ test:
         Pkg.activate(; temp=true)
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.add(["Measurements", "Plots"])
+        Pkg.precompile()
         include("test/run_extension_tests.jl")
       '
     - |
@@ -56,17 +73,15 @@ test:
         using Pkg
         Pkg.activate(; temp=true)
         Pkg.develop(PackageSpec(path=pwd()))
-        Pkg.add(PackageSpec(
-          name="GetDP",
-          url="https://github.com/Electa-Git/GetDP.jl.git",
-          rev="b1d91b0d8974ea642b772462edcf6e26299fdf0a",
-        ))
-        Pkg.add(PackageSpec(
-          name="LineCableModels",
-          url="https://github.com/Electa-Git/LineCableModels.jl.git",
-          rev="88f5de54202f5a97c7556b4ceac662b997f13de2",
-        ))
-        Pkg.add("Measurements")
+        Pkg.add([
+          PackageSpec(
+            name="LineCableModels",
+            url="https://github.com/Electa-Git/LineCableModels.jl.git",
+            rev="abe355170add20cc0c841e218fed82fe8ffbab51",
+          ),
+          PackageSpec(name="Measurements"),
+        ])
+        Pkg.precompile()
         include("test/run_linecablemodels_extension_tests.jl")
       '
     - |
@@ -75,6 +90,7 @@ test:
         Pkg.activate(; temp=true)
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.add(["TestItems", "TestItemRunner"])
+        Pkg.precompile()
         include("test/run_testitems.jl")
       '
   rules:
@@ -89,6 +105,7 @@ advisory_quality:
   image: julia:1.12.6-bookworm
   stage: test
   allow_failure: true
+  cache: *julia_cache
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates
@@ -100,6 +117,7 @@ advisory_quality:
         Pkg.activate(; temp=true)
         Pkg.add(["Aqua", "JuliaFormatter"])
         Pkg.develop(PackageSpec(path=pwd()))
+        Pkg.precompile()
         include("test/advisory_quality.jl")
       '
   rules:
@@ -109,6 +127,9 @@ advisory_quality:
 docs_check:
   image: julia:1.12.6-bookworm
   stage: docs
+  cache:
+    <<: *julia_cache
+    policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates
@@ -119,10 +140,9 @@ docs_check:
     - |
       julia --project=docs -e ' #--compiled-modules=existing
         using Pkg
-        Pkg.Registry.add("General")
-        Pkg.Registry.update()
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.instantiate()
+        Pkg.precompile()
         using Documenter: doctest
         using PowerImpedanceACDC
         doctest(PowerImpedanceACDC)
