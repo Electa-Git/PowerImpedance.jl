@@ -37,6 +37,7 @@ variables:
       - .julia/packages/
       - .julia/registries/
     policy: pull
+    when: always
 
 
 test:
@@ -56,7 +57,6 @@ test:
       julia --project=. -e ' #--compiled-modules=existing
         using Pkg
         Pkg.instantiate()
-        Pkg.precompile()
         Pkg.test()
       '
     - |

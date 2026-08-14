@@ -512,7 +512,7 @@ end
 end
 
 @testset "Extension load order" begin
-    project = dirname(@__DIR__)
+    project = dirname(Base.active_project())
     code = "using PowerImpedanceACDC; " *
            "NB = PowerImpedanceACDC.NetworkBuilder; " *
            "@assert !NB._measurement_extension_loaded(); " *
@@ -520,7 +520,7 @@ end
            "@assert NB._measurement_extension_loaded(); " *
            "@assert length(collect(NB.Grid(1.0, 1.0))) == 1"
     command = `$(Base.julia_cmd()) --project=$project --startup-file=no -e $code`
-    @test success(pipeline(command; stdout = devnull, stderr = devnull))
+    @test success(command)
 end
 
 if get(ENV, "PIACDC_SKIP_TOPOLOGY_TESTS", "false") != "true"
