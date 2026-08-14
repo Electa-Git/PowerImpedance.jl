@@ -58,7 +58,24 @@ variables:
     when: always
 
 
+.julia_heavy_resources:
+  variables:
+    KUBERNETES_CPU_REQUEST: "4"
+    KUBERNETES_MEMORY_REQUEST: "8Gi"
+
+
+.julia_formatter_resources:
+  variables:
+    KUBERNETES_CPU_REQUEST: "1"
+    KUBERNETES_MEMORY_REQUEST: "2Gi"
+    JULIA_CPU_THREADS: "1"
+    JULIA_NUM_THREADS: "1"
+    JULIA_NUM_PRECOMPILE_TASKS: "1"
+    JULIA_IMAGE_THREADS: "1"
+
+
 test:
+  extends: .julia_heavy_resources
   image: julia:1.12.6-bookworm
   stage: test
   cache:
@@ -87,6 +104,7 @@ test:
 
 
 extension_tests:
+  extends: .julia_heavy_resources
   image: julia:1.12.6-bookworm
   stage: test
   cache:
@@ -141,6 +159,7 @@ extension_tests:
 
 
 formatter:
+  extends: .julia_formatter_resources
   image: julia:1.12.6-bookworm
   stage: test
   allow_failure: true
@@ -170,6 +189,7 @@ formatter:
 
 
 advisory_aqua:
+  extends: .julia_heavy_resources
   image: julia:1.12.6-bookworm
   stage: test
   allow_failure: true
@@ -198,6 +218,7 @@ advisory_aqua:
 
 
 docs_check:
+  extends: .julia_heavy_resources
   image: julia:1.12.6-bookworm
   stage: docs
   needs:
@@ -666,6 +687,7 @@ github_release_publish:
 # ---------------------------------------------------------------------------
 
 pages:
+  extends: .julia_heavy_resources
   image: julia:1.12.6-bookworm
   stage: deploy
   cache:
