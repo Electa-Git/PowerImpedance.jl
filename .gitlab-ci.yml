@@ -7,6 +7,7 @@ stages:
 variables:
   JULIA_DEPOT_PATH: "$CI_PROJECT_DIR/.julia"
   JULIA_PKG_PRECOMPILE_AUTO: "0"
+  PIACDC_TEST_LOG_LEVEL: "error"
 
   # Keep this NO permanently after the first GitHub migration.
   #
@@ -29,12 +30,13 @@ variables:
 # when deliberately discarding accumulated package versions.
 .julia_cache:
   cache: &julia_cache
-    key: "piacdc-julia-1.12-lcm-0.2-v1"
+    key: "piacdc-julia-1.12-base-v1"
+    fallback_keys:
+      - "piacdc-julia-1.12-lcm-0.2-v2"
+      - "piacdc-julia-1.12-lcm-0.2-v1"
     paths:
-      - .julia/artifacts/
       - .julia/clones/
       - .julia/compiled/v1.12/
-      - .julia/packages/
       - .julia/registries/
     policy: pull
     when: always
@@ -59,15 +61,32 @@ test:
         Pkg.instantiate()
         Pkg.test()
       '
-    - |
-      julia -e '
-        using Pkg
-        Pkg.activate(; temp=true)
-        Pkg.develop(PackageSpec(path=pwd()))
-        Pkg.add(["Measurements", "Plots"])
-        Pkg.precompile()
-        include("test/run_extension_tests.jl")
-      '
+
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+    # A release tag MUST run the real test suite.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+
+
+extension_tests:
+  image: julia:1.12.6-bookworm
+  stage: test
+  cache:
+    <<: *julia_cache
+    key: "piacdc-julia-1.12-extensions-lcm-0.2-v1"
+    fallback_keys:
+      - "piacdc-julia-1.12-lcm-0.2-v2"
+      - "piacdc-julia-1.12-lcm-0.2-v1"
+    policy: pull-push
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - julia --version
+    - git --version
     - |
       julia -e '
         using Pkg
@@ -80,18 +99,22 @@ test:
             rev="abe355170add20cc0c841e218fed82fe8ffbab51",
           ),
           PackageSpec(name="Measurements"),
+          PackageSpec(name="Plots"),
+          PackageSpec(name="TestItems"),
+          PackageSpec(name="TestItemRunner"),
         ])
         Pkg.precompile()
-        include("test/run_linecablemodels_extension_tests.jl")
-      '
-    - |
-      julia -e '
-        using Pkg
-        Pkg.activate(; temp=true)
-        Pkg.develop(PackageSpec(path=pwd()))
-        Pkg.add(["TestItems", "TestItemRunner"])
-        Pkg.precompile()
-        include("test/run_testitems.jl")
+
+        project = dirname(Base.active_project())
+        test_files = [
+          "run_extension_tests.jl",
+          "run_linecablemodels_extension_tests.jl",
+          "run_testitems.jl",
+        ]
+        for test_file in test_files
+          path = joinpath(pwd(), "test", test_file)
+          run(`$(Base.julia_cmd()) --project=$project --startup-file=no $path`)
+        end
       '
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'

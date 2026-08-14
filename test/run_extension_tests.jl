@@ -7,7 +7,12 @@ using PowerImpedanceACDC
 using PowerImpedanceACDC.NetworkBuilder: ⟷
 
 const NB = PowerImpedanceACDC.NetworkBuilder
-Logging.global_logger(ConsoleLogger(stderr, Logging.Warn))
+# CI can set PIACDC_TEST_LOG_LEVEL=error; local runs retain warning output.
+const TEST_LOG_LEVEL =
+    lowercase(get(ENV, "PIACDC_TEST_LOG_LEVEL", "warn")) == "error" ?
+    Logging.Error : Logging.Warn
+Logging.global_logger(ConsoleLogger(stderr, TEST_LOG_LEVEL))
+TEST_LOG_LEVEL == Logging.Error && PowerImpedanceACDC._PMACDC.silence()
 
 function uncertain_builder(axis)
     elements = (

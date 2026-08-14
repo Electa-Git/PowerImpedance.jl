@@ -7,9 +7,13 @@ const NB = PowerImpedanceACDC.NetworkBuilder
 
 const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
 
-# Change the following line to choose logging level:
+# CI can set PIACDC_TEST_LOG_LEVEL=error; local runs retain warning output.
 using Logging
-Logging.global_logger(ConsoleLogger(stderr, Logging.Warn)) # possible values: Logging.Debug, Logging.Info (=default value), Logging.Warn, Logging.Error
+const TEST_LOG_LEVEL =
+    lowercase(get(ENV, "PIACDC_TEST_LOG_LEVEL", "warn")) == "error" ?
+    Logging.Error : Logging.Warn
+Logging.global_logger(ConsoleLogger(stderr, TEST_LOG_LEVEL))
+TEST_LOG_LEVEL == Logging.Error && PowerImpedanceACDC._PMACDC.silence()
 
 # Alternatively, you can set the logging level to debug for the PIACDC package only (to avoid vscode debug logging) via an environment variable:
 # ENV["JULIA_DEBUG"]=PowerImpedanceACDC # Warning: this will unfortunanelty not enable the debug logging for the ipopt solver.
