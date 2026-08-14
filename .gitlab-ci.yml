@@ -7,6 +7,22 @@ stages:
 variables:
   JULIA_DEPOT_PATH: "$CI_PROJECT_DIR/.julia"
   JULIA_PKG_PRECOMPILE_AUTO: "0"
+  # Respect the Kubernetes CPU allocation without creating nested thread pools.
+  # The explicit zero-sized interactive pool keeps the total Julia worker count
+  # at CI_JOB_CPU_LIMIT (currently four).
+  JULIA_CPU_THREADS:
+    value: "$CI_JOB_CPU_LIMIT"
+    expand: true
+  JULIA_NUM_THREADS:
+    value: "$CI_JOB_CPU_LIMIT,0"
+    expand: true
+  JULIA_NUM_GC_THREADS: "1"
+  JULIA_NUM_PRECOMPILE_TASKS: "2"
+  JULIA_IMAGE_THREADS: "2"
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
+  OMP_THREAD_LIMIT: "1"
+  MKL_NUM_THREADS: "1"
   PIACDC_TEST_LOG_LEVEL: "error"
 
   # Keep this NO permanently after the first GitHub migration.
