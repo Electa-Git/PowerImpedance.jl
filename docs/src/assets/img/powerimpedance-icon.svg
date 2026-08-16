@@ -15,7 +15,7 @@
      id="description">Three Julia-coloured nodes connected by a triangle around an impedance response.</desc>
   <style>
     @media (prefers-color-scheme: dark) {
-      #triangle { stroke: #f2f2f2; }
+      #triangle { stroke: #7b8284; }
       #g6 { fill: #728cff; }
       #top-node { fill: #55b948; }
       #left-node { fill: #e45b52; }

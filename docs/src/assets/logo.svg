@@ -13,15 +13,6 @@
      id="title">PowerImpedance icon</title>
   <desc
      id="description">Three Julia-coloured nodes connected by a triangle around an impedance response.</desc>
-  <style>
-    @media (prefers-color-scheme: dark) {
-      #triangle { stroke: #f2f2f2; }
-      #g6 { fill: #728cff; }
-      #top-node { fill: #55b948; }
-      #left-node { fill: #e45b52; }
-      #right-node { fill: #b77ad0; }
-    }
-  </style>
   <g
      transform="translate(0.000000,330.000000) scale(0.100000,-0.100000)"
      fill="#265fa8"
