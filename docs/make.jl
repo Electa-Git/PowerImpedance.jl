@@ -274,6 +274,7 @@ function build_pages()
     push!(pages, "Classic scalar interface" => "legacy.md")
 
     development_pages = Any[
+        "PlotBuilder guide" => "developers/plotbuilder.md",
         "Docstrings" => "developers/docstrings.md",
         "Conventions" => "developers/conventions.md",
         "Calculation parity" => "developers/calculation_parity.md",

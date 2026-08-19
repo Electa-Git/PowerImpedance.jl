@@ -1,6 +1,7 @@
 # using JLD2
 ENV["GKSwstype"] = "100"
 using PowerImpedance
+import Plots
 import PowerImpedance: @network
 using Test
 using LinearAlgebra
@@ -31,7 +32,7 @@ TEST_LOG_LEVEL == Logging.Error && PowerImpedance._PMACDC.silence()
 end
 
 @time @testset "PowerImpedance" begin
-        
+        include("plotbuilder_test.jl")
         include("imp_test.jl")
         include("adm_MMC_test.jl")
         include("adm_MMC_compensated_test.jl")

@@ -60,6 +60,15 @@ Frequency-response data can be imported for:
 - Passivity assessment
 - Small-gain analysis
 
+### Optional declarative plotting
+
+The backend-independent `PlotBuilder` describes axes, series, layouts,
+controls, legends, and SVG settings without loading a graphics package.
+Optional CairoMakie, GLMakie, and WGLMakie extensions render harmonic nodal
+impedance magnitude in dBΩ against frequency in Hz. Plots.jl is also optional
+and continues to render the existing stability-analysis figures. See the
+[PlotBuilder guide](docs/src/developers/plotbuilder.md).
+
 ### Parametric and uncertainty studies
 
 Gridspace extends the ordinary component constructors to deterministic

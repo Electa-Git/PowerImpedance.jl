@@ -5,7 +5,7 @@
 # the active-device and passive-network partition. The fused API follows when
 # only the loop gain or final stability result is needed.
 
-using Plots
+import Plots
 using PowerImpedance
 using PowerImpedance.NetworkBuilder: sampled_frequency_response
 
@@ -65,7 +65,7 @@ staged_nyquist = nyquistplot(
     display_plot = false
 );
 
-staged_plot = plot(
+staged_plot = Plots.plot(
     (case.plots.nyquist for case in staged_nyquist)...;
     layout = (1, length(staged_nyquist)),
     size = (1500, 500),
@@ -92,7 +92,7 @@ fused_nyquist = nyquistplot(
     display_plot = false
 );
 
-fused_plot = plot(
+fused_plot = Plots.plot(
     (case.plots.nyquist for case in fused_nyquist)...;
     layout = (1, length(fused_nyquist)),
     size = (1500, 500),

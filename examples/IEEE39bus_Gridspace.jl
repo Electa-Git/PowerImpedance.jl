@@ -5,7 +5,7 @@
 # cable. Driving-point harmonic impedances at three representative buses are
 # overlaid for direct comparison.
 
-using Plots
+import Plots
 using PowerImpedance
 using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState, define, solve
 
@@ -181,7 +181,7 @@ end;
 
 function plot_ieee39_soil_study(study)
     panels = map(eachindex(study.buses)) do bus_index
-        panel = plot(
+        panel = Plots.plot(
             xscale = :log10,
             xlabel = "Frequency [Hz]",
             ylabel = "|Zdd| [dBΩ]",
@@ -193,7 +193,7 @@ function plot_ieee39_soil_study(study)
 
         for (case, soil_resistivity) in zip(study.result, study.soil_resistivities)
             frequency = real.(case.frequencies) ./ (2π)
-            plot!(
+            Plots.plot!(
                 panel,
                 frequency,
                 ieee39_impedance_db(case, bus_index);
@@ -203,16 +203,16 @@ function plot_ieee39_soil_study(study)
         end
 
         spread = maximum_spread_db(study, bus_index)
-        x_min, x_max = xlims(panel)
-        y_min, y_max = ylims(panel)
+        x_min, x_max = Plots.xlims(panel)
+        y_min, y_max = Plots.ylims(panel)
         annotation_x = 10^(log10(x_min) + 0.03 * log10(x_max / x_min))
         annotation_y = y_max - 0.06 * (y_max - y_min)
-        annotate!(panel, annotation_x, annotation_y,
-            text("max spread = $(round(spread; digits = 2)) dB", 8, :left))
+        Plots.annotate!(panel, annotation_x, annotation_y,
+            Plots.text("max spread = $(round(spread; digits = 2)) dB", 8, :left))
         return panel
     end
 
-    return plot(
+    return Plots.plot(
         panels...;
         layout = (length(panels), 1),
         size = (1150, 1050),

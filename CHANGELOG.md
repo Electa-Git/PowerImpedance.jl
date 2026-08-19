@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add backend-independent `UnitHandler` and declarative `PlotBuilder` modules,
+  with optional CairoMakie, GLMakie, WGLMakie, and Plots.jl extensions.
+- Add a harmonic nodal-impedance recipe with driving-point, transfer,
+  overlay, panel, and page selections; interactive controls; and native SVG
+  export from the current figure state.
+- Move the common problem/formulation/result declarations to `Grammar.jl`
+  without changing their root-module identities.
 - Replace NetworkBuilder pin chains with explicit `(node, element, side,
   terminal)` topology rows and component-specific AC/DC port descriptions.
 - Rename the materialized and linearized NetworkBuilder structures to

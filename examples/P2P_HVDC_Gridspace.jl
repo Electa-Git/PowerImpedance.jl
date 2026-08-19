@@ -12,7 +12,7 @@
 # sampled converter or the topology changes.
 
 using Measurements
-using Plots
+import Plots
 using PowerImpedance
 using PowerImpedance.NetworkBuilder: @gridspace, Grid, Gridspace, NetworkState,
                                      define
@@ -293,7 +293,7 @@ transition = determine_impedance(
     seed = 2026
 );
 
-transition_plot = plot(
+transition_plot = Plots.plot(
     xscale = :log10,
     xlabel = "Frequency [Hz]",
     ylabel = "|Z| [dBΩ]",
@@ -304,7 +304,7 @@ transition_plot = plot(
 for (case, share) in zip(transition, characteristic_shares)
     frequency = real.(case.frequencies) ./ (2π)
     magnitude = 20 .* log10.(abs.(vec(case.impedance[1, 1, :])))
-    plot!(transition_plot, frequency, magnitude;
+    Plots.plot!(transition_plot, frequency, magnitude;
         label = "UGC = $(round(Int, 100share))%", linewidth = 2)
 end
 transition_plot
@@ -390,19 +390,19 @@ cable_panels = map(eachindex(characteristic_shares)) do index
     q05_db = [quantile(view(samples_db, row, :), 0.05) for row in axes(samples_db, 1)]
     q95_db = [quantile(view(samples_db, row, :), 0.95) for row in axes(samples_db, 1)]
 
-    panel = plot(frequency, deterministic_db;
+    panel = Plots.plot(frequency, deterministic_db;
         xscale = :log10, label = "nominal", linewidth = 2,
         xlabel = "Frequency [Hz]", ylabel = "|Z| [dBΩ]",
         title = "UGC = $(round(Int, 100characteristic_shares[index]))%",
         framestyle = :box, minorgrid = true)
-    plot!(panel, frequency, mean_db;
+    Plots.plot!(panel, frequency, mean_db;
         ribbon = (mean_db .- q05_db, q95_db .- mean_db),
         label = "±10% geometry: mean, 5–95%", linewidth = 2,
         linestyle = :dash, fillalpha = 0.18)
     panel
 end
 
-plot(cable_panels...;
+Plots.plot(cable_panels...;
     layout = (3, 2), size = (1100, 1100),
     plot_title = "P2P cable-geometry uncertainty at B5")
 
@@ -539,14 +539,14 @@ converter_panels = map(enumerate((:B3d, :B5, :B6d))) do (net_index, net)
     median_db = [median(view(samples_db, row, :)) for row in axes(samples_db, 1)]
     q05_db = [quantile(view(samples_db, row, :), 0.05) for row in axes(samples_db, 1)]
     q95_db = [quantile(view(samples_db, row, :), 0.95) for row in axes(samples_db, 1)]
-    plot(converter_frequency, median_db;
+    Plots.plot(converter_frequency, median_db;
         ribbon = (median_db .- q05_db, q95_db .- median_db),
         xscale = :log10, label = "median, 5–95%", linewidth = 2,
         xlabel = "Frequency [Hz]", ylabel = "|Z| [dBΩ]", title = string(net),
         framestyle = :box, minorgrid = true, fillalpha = 0.2)
 end
 
-plot(converter_panels...;
+Plots.plot(converter_panels...;
     layout = (3, 1), size = (950, 1050),
     plot_title = "P2P converter-parameter uncertainty")
 

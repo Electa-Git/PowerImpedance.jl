@@ -30,6 +30,30 @@ dispatch as `constructor(Grid; kwargs...)`; `constructor(; kwargs...)` remains
 the scalar API. Equivalent qualified `NetworkBuilder.constructor(; kwargs...)`
 forms remain available for compatibility but are intentionally not exported.
 
+## `PowerImpedance.UnitHandler`
+
+```@autodocs
+Modules = [PowerImpedance.UnitHandler]
+Public = true
+Private = false
+```
+
+## `PowerImpedance.PlotBuilder`
+
+```@autodocs
+Modules = [PowerImpedance.PlotBuilder]
+Public = true
+Private = false
+```
+
+### `PowerImpedance.PlotBuilder.BackendHandler`
+
+```@autodocs
+Modules = [PowerImpedance.PlotBuilder.BackendHandler]
+Public = true
+Private = false
+```
+
 Optional-package methods are documented on [Package extensions](package_extensions.md)
 because their extension modules are loaded only when the corresponding weak
 dependencies are present.

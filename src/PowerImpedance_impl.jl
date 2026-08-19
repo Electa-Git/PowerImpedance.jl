@@ -36,7 +36,6 @@ using Munkres: Munkres, munkres
 using NonlinearSolve: NonlinearSolve
 using Parameters: Parameters, @with_kw
 using Peaks: Peaks, argmaxima
-using Plots: Plots, hline!, palette, plot, plot!, scatter!, vline!
 using RobustAndOptimalControl: RobustAndOptimalControl, modal_form
 using SteadyStateDiffEq: SteadyStateDiffEq, NonlinearProblem, SciMLBase, solve
 
@@ -117,8 +116,27 @@ include("Network/Network.jl")
 # New power flow
 include("Network/power_flow.jl")
 
+# Common semantic layer (proto-PowerBlocks grammar)
+include("Grammar.jl")
+
+# Backend-independent unit and plotting descriptions
+include("UnitHandler.jl")
+include("PlotBuilder/PlotBuilder.jl")
+using .PlotBuilder: UIPlot, export_svg
+using .PlotBuilder.BackendHandler: set_backend!
+export UIPlot, export_svg, set_backend!
+
+# Optional Plots.jl forwarding entry points. These remain unexported.
+function plot end
+function plot! end
+function palette end
+function hline! end
+function scatter! end
+function vline! end
+
 # Scientific calculation definitions
 include("Problems.jl")
+include("PlotRecipes.jl")
 
 # Alternative explicit network construction API
 include("Network/NetworkBuilder/NetworkBuilder.jl")

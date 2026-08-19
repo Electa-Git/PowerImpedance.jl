@@ -5,7 +5,7 @@
 # underground cable in a point-to-point HVDC system.
 
 using PowerImpedance
-using Plots
+import Plots
 
 # The P and Q defined here are what is injected into the network.
 transmissionVoltage = 380 / sqrt(3)
@@ -204,13 +204,13 @@ end
 function transition_bode_frame(sample; mag_ylims, phase_ylims = (-180, 180))
     label = "Z @B5, UGC = $(round(sample.x * 100; digits = 2)) %"
 
-    plt = plot(
+    plt = Plots.plot(
         layout = (2, 1),
         size = (950, 700),
         legend = :topright
     )
 
-    plot!(
+    Plots.plot!(
         plt[1],
         sample.f,
         sample.mag_dB;
@@ -225,7 +225,7 @@ function transition_bode_frame(sample; mag_ylims, phase_ylims = (-180, 180))
         title = "Impedance seen at B5 during UGC/OHL transition"
     )
 
-    plot!(
+    Plots.plot!(
         plt[2],
         sample.f,
         sample.phase_deg;

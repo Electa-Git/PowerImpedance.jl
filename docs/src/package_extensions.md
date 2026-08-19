@@ -1,16 +1,21 @@
 # Package extensions
 
-PowerImpedance keeps optional uncertainty packages outside its base
-dependency set. Loading an optional package activates the corresponding Julia
-package extension without replacing the ordinary component constructors or
-scalar solvers.
+PowerImpedance keeps optional uncertainty and plotting packages outside its
+base dependency set. Loading an optional package activates the corresponding
+Julia package extension without replacing the ordinary component constructors
+or scalar solvers.
 
-Two extensions are currently provided:
+The following extensions are provided:
 
 | Extension | Activated by | Purpose |
 |:--|:--|:--|
 | `PowerImpedanceMeasurementsExt` | `Measurements` | Measurements-valued axes, converter-safe Monte Carlo studies, covariance-aware response surrogates, and small-signal analysis |
 | `PowerImpedanceLineCableModelsExt` | `LineCableModels` and `Measurements` | Native and `NetworkBuilder` lines constructed directly from phase-domain `LineParameters` |
+| `PowerImpedancePlotsExt` | `Plots` | Existing Nyquist, Bode, passivity, small-gain, EVD, and parametric plots |
+| `PowerImpedanceMakieExt` | `Makie` | Rendering of declarative PlotBuilder specifications |
+| `PowerImpedanceCairoMakieExt` | `Makie` and `CairoMakie` | Static rendering and native SVG export |
+| `PowerImpedanceGLMakieExt` | `Makie` and `GLMakie` | Interactive desktop figures |
+| `PowerImpedanceWGLMakieExt` | `Makie` and `WGLMakie` | Interactive browser figures |
 
 The extensions are load-order independent. A typical session starts with:
 
@@ -26,6 +31,10 @@ using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define,
 environment. LineCableModels currently requires Julia 1.12. Loading
 LineCableModels is unnecessary for studies that only use ordinary
 PowerImpedance component parameters.
+
+Plots.jl and Makie are independent optional plotting paths. See
+[PlotBuilder guide](developers/plotbuilder.md) for backend selection, qualification when
+both libraries are loaded, and the harmonic-impedance recipe.
 
 The clean workflow depends on what information must be retained:
 

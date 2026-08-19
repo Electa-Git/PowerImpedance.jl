@@ -13,6 +13,11 @@ end
 
 const NB = P.NetworkBuilder
 
+P.UnitHandler.nominal(value::Measurements.Measurement) = Measurements.value(value)
+function P.UnitHandler.standard_uncertainty(value::Measurements.Measurement)
+    return Measurements.uncertainty(value)
+end
+
 NB._is_measurement(::Measurements.Measurement) = true
 NB._measurement_nominal(value::Measurements.Measurement) = Measurements.value(value)
 NB._measurement_error(value::Measurements.Measurement) = Measurements.uncertainty(value)

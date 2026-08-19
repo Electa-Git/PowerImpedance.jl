@@ -1,22 +1,9 @@
-export ProblemDefinition, AbstractFormulation, AbstractResult, compute
 export OperatingPoint, PowerFlowResult, LinearizationResult
 export PowerImpedanceProblem, StabilityProblem
 export NodalImpedance, NodeAdmittance, EdgeAdmittance, LoopGain
 export GeneralizedNyquist, BodeAnalysis, PassivityAnalysis, SmallGainAnalysis
 export EigenvalueAnalysis, FrequencyResponseResult, StabilityResult
 export ParametricProblem, UQuantProblem, Combinatorial, MonteCarlo
-
-"Abstract supertype for scientific calculation specifications."
-abstract type ProblemDefinition end
-
-"Abstract supertype for numerical formulations."
-abstract type AbstractFormulation end
-
-"Abstract supertype for typed calculation results."
-abstract type AbstractResult end
-
-"Generic entry point for a problem and numerical formulation."
-function compute end
 
 """
 $(TYPEDEF)

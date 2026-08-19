@@ -1,0 +1,15 @@
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+PowerImpedance = "8bb8d9d3-c57e-5130-a7c9-cb214ef560ae"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+PowerImpedance = {path = "../.."}
+
+[compat]
+CairoMakie = "0.15"
+GLMakie = "0.13"
+Makie = "0.24.6"
+julia = "1.12"

@@ -4,6 +4,7 @@ using Random
 using Statistics
 using Measurements
 using PowerImpedance
+import Plots
 
 const NB = PowerImpedance.NetworkBuilder
 # CI can set POWERIMPEDANCE_TEST_LOG_LEVEL=error; the former variable remains supported.

@@ -5,6 +5,7 @@ using Statistics
 using LineCableModels
 using Measurements
 using PowerImpedance
+import Plots
 
 const NB = PowerImpedance.NetworkBuilder
 const LCM_EXT = Base.get_extension(
