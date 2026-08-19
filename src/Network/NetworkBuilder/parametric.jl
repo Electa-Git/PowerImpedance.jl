@@ -4,19 +4,23 @@ include("gs_machines.jl")
 include("gs_controls.jl")
 include("gs_converters.jl")
 
-# The legacy constructor infers `Vector{Union{}}` for a network without active
-# elements. Keep the original implementation intact while accepting that empty
-# vector at the additive parametric boundary.
-function LinearizedAdmittanceNetwork(
-        admittances::LinearizedAdmittanceCollection{T},
+# Empty active-element selections can infer `Vector{Union{}}`. Normalize that
+# empty vector at the parametric boundary.
+function NetworkModel(
+        admittances::AdmittanceLookup{T},
         ::Vector{Union{}},
-        passives::Vector{Int64},
-        groundednets::Vector{Int},
-        activenets::Vector{Int},
-        interface::LinearizedInterface
+        passive_elements::Vector{Int64},
+        grounded_nodes::Vector{Int},
+        retained_nodes::Vector{Int},
+        indices::NetworkLookup
 ) where {T <: Number}
-    return LinearizedAdmittanceNetwork(
-        admittances, Int64[], passives, groundednets, activenets, interface
+    return NetworkModel(
+        admittances,
+        Int64[],
+        passive_elements,
+        grounded_nodes,
+        retained_nodes,
+        indices
     )
 end
 
@@ -45,12 +49,12 @@ Compose element Gridspaces into a declarative system Gridspace.
 
 - `elements`: Named tuple whose values are qualified NetworkBuilder shadow
   constructor results.
-- `connections`: Fixed tuple of [`ConnectionDef`](@ref) values.
+- `connections`: Fixed tuple or vector of named topology rows.
 - `options`: Ordinary or explicitly gridded builder options.
 
 # Returns
 
-- A `Gridspace{BuilderState}` whose deterministic cases follow Cartesian-product
+- A `Gridspace{NetworkState}` whose deterministic cases follow Cartesian-product
   order.
 
 # Notes
@@ -62,13 +66,13 @@ rejected by downstream response studies.
 """
 function define(
         elements::NamedTuple{Names, Types},
-        connections::Tuple{Vararg{ConnectionDef}};
+        connections::Union{Tuple, AbstractVector};
         options = (;)
 ) where {Names, Types <: Tuple{Vararg{Gridspace}}}
     element_space = _namedtuple_gridspace(elements)
     option_space = _namedtuple_gridspace(options)
     target = _BuilderMaterializer(connections)
-    return Gridspace{BuilderState}(target, (element_space, option_space), (
+    return Gridspace{NetworkState}(target, (element_space, option_space), (
         :elements, :options))
 end
 
@@ -77,7 +81,7 @@ end
 # dispatch types keep that optimization outside the unchanged scalar API.
 struct _OperatingPointContext
     elements::Dict{Symbol, Any}
-    connections::Any
+    topology::Any
     options::Any
 end
 
@@ -85,8 +89,9 @@ struct _CachedAdmittance{F}
     response::F
 end
 
-struct _LinearizationCache{C, A}
+struct _LinearizationCache{C, P, A}
     context::C
+    powerflow::P
     admittances::A
 end
 
@@ -139,7 +144,7 @@ function _same_study_value(left, right)
     return isequal(left, right)
 end
 
-function _operating_point_context(builder::BuilderState)
+function _operating_point_context(builder::NetworkState)
     elements = Dict{Symbol, Any}(
         name => deepcopy(element)
     for (name, element) in pairs(builder.elements)
@@ -147,19 +152,19 @@ function _operating_point_context(builder::BuilderState)
     )
     return _OperatingPointContext(
         elements,
-        deepcopy(collect(builder.connections.registry)),
+        deepcopy(collect(builder.topology.connections)),
         deepcopy(builder.options)
     )
 end
 
 function _same_operating_point(left::_OperatingPointContext, right::_OperatingPointContext)
     return _same_study_value(left.elements, right.elements) &&
-           _same_study_value(left.connections, right.connections) &&
+           _same_study_value(left.topology, right.topology) &&
            _same_study_value(left.options, right.options)
 end
 
-_linearization_decision(::BuilderState, ::Nothing) = _RefreshLinearization()
-function _linearization_decision(builder::BuilderState, cache::_LinearizationCache)
+_linearization_decision(::NetworkState, ::Nothing) = _RefreshLinearization()
+function _linearization_decision(builder::NetworkState, cache::_LinearizationCache)
     context = _operating_point_context(builder)
     return _same_operating_point(context, cache.context) ?
            _ReuseLinearization(cache) : _RefreshLinearization()
@@ -172,25 +177,38 @@ function build(element::P.Element, cached::_CachedAdmittance)
     return cached.response
 end
 
-function _active_admittance_cache(network::LinearizedAdmittanceNetwork, builder::BuilderState)
+function _active_admittance_cache(network::NetworkModel, builder::NetworkState)
     cached = Dict{Symbol, Any}()
     for (name, element) in pairs(builder.elements)
         (P.is_active(element) && !P.is_source(element)) || continue
-        index = network.interface.elem[name]
-        cached[name] = _CachedAdmittance(network.admittances.Y![index])
+        index = network.indices.elements[name]
+        cached[name] = _CachedAdmittance(network.element_admittances.Y![index])
     end
     return cached
 end
 
-function _linearize(builder::BuilderState, ::_RefreshLinearization)
+function _linearize(builder::NetworkState, ::_RefreshLinearization)
     context = _operating_point_context(builder)
-    network = convert(builder, LinearizedAdmittanceNetwork)
-    cache = _LinearizationCache(context, _active_admittance_cache(network, builder))
+    powerflow = islinear(builder.elements) ? nothing :
+                P.compute(PowerFlowProblem(builder), ACDCPowerFlow())
+    result = P.compute(
+        LinearizationProblem(builder, powerflow),
+        AdmittanceLinearization()
+    )
+    network = result.network_model
+    cache = _LinearizationCache(
+        context,
+        powerflow,
+        _active_admittance_cache(network, builder)
+    )
     return network, cache
 end
 
-function _linearize(builder::BuilderState, decision::_ReuseLinearization)
-    network = LinearizedAdmittanceNetwork(builder, decision.cache.admittances)
+function _linearize(builder::NetworkState, decision::_ReuseLinearization)
+    powerflow = decision.cache.powerflow
+    builder.operating_point = powerflow === nothing ? P.OperatingPoint() :
+                              powerflow.operating_point
+    network = NetworkModel(builder, decision.cache.admittances)
     return network, decision.cache
 end
 
@@ -217,14 +235,28 @@ function _stack_impedance_samples(samples::AbstractVector)
     return stacked
 end
 
-function (runner::_ParametricImpedanceRunner)(builder::BuilderState)
+function (runner::_ParametricImpedanceRunner)(builder::NetworkState)
     decision = _linearization_decision(builder, runner.cache)
     network, runner.cache = _linearize(builder, decision)
-    return determine_impedance(network; runner.keywords...)
+    keywords = runner.keywords
+    result = P.compute(
+        P.PowerImpedanceProblem(
+            network;
+            nodes = keywords.nets,
+            eliminated_elements = get(keywords, :elim_elements, Symbol[]),
+            frequency_range = get(
+                keywords,
+                :freq_range,
+                (0.001, 10_000.0, 2_000)
+            )
+        ),
+        P.NodalImpedance()
+    )
+    return result.response, result.frequencies
 end
 
 """
-    solve(gridspace::Gridspace{BuilderState}; trials=nothing,
+    solve(gridspace::Gridspace{NetworkState}; trials=nothing,
           distribution=:normal, seed=nothing, confidence=0.95,
           tolerance=0.02, return_samples=false)
 
@@ -261,7 +293,7 @@ Throws an error for invalid Monte Carlo controls or a failed case/trial. Trial
 errors report coordinates, case index, trial index, and seed.
 """
 function solve(
-        gridspace::Gridspace{BuilderState};
+        gridspace::Gridspace{NetworkState};
         trials::Union{Nothing, Int} = nothing,
         distribution::Symbol = :normal,
         seed = nothing,
@@ -326,7 +358,7 @@ function solve(
 end
 
 """
-    determine_impedance(gridspace::Gridspace{BuilderState}; trials=nothing,
+    determine_impedance(gridspace::Gridspace{NetworkState}; trials=nothing,
                         distribution=:normal, seed=nothing, confidence=0.95,
                         tolerance=0.02, return_samples=false, kwargs...)
 
@@ -372,7 +404,7 @@ dimensions or frequencies, or a failed case/trial. Trial errors report
 coordinates, case index, trial index, and seed.
 """
 function determine_impedance(
-        gridspace::Gridspace{BuilderState};
+        gridspace::Gridspace{NetworkState};
         trials::Union{Nothing, Int} = nothing,
         distribution::Symbol = :normal,
         seed = nothing,

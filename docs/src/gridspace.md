@@ -7,14 +7,14 @@ to select a lazy constructor, such as `impedance(Grid; ...)`; use `only` to
 materialize a singleton specification. Ordinary `impedance(; ...)` remains
 scalar. Qualified `NetworkBuilder.impedance(; ...)` shadows remain available
 for compatibility, but tutorials do not need a module alias. Grid axes,
-connections, builder orchestration, result types, and the external-response
+connections, study definitions, result types, and the external-response
 adapter are safe selective imports; downstream solvers remain ordinary
 top-level PowerImpedance functions.
 
 ```julia
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define, pin,
-    sampled_frequency_response, ⟷
+using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define,
+    sampled_frequency_response
 
 spec = impedance(Grid; z = 5.0, pins = 1)
 element = only(spec)
@@ -38,9 +38,44 @@ length(matrix_spec) # 1
 
 Nested Gridspaces compose recursively. Cartesian order follows Julia's
 `Iterators.product`: the first axis changes fastest. `define`
-lifts a named tuple of component Gridspaces into a `Gridspace{BuilderState}`.
+lifts a named tuple of component Gridspaces into a `Gridspace{NetworkState}`.
 Connections remain fixed; component parameters and explicitly gridded options
 may vary.
+
+## Explicit study problems
+
+`ParametricProblem` and `UQuantProblem` expose the same calculations through
+the common `compute` entry point:
+
+```julia
+parameter_problem = ParametricProblem(
+    builder_space,
+    NodalImpedance(),
+    (nets = [:bus], freq_range = (1.0, 1e3, 100)),
+)
+parameter_result = compute(parameter_problem, Combinatorial())
+
+uq_problem = UQuantProblem(
+    uncertain_builder_space,
+    LoopGain(),
+    (nodelist = [:bus_d, :bus_q], freq_range = (1.0, 1e3, 100)),
+)
+uq_result = compute(
+    uq_problem,
+    MonteCarlo(
+        trials = 1000,
+        distribution = :normal,
+        seed = 2026,
+        return_samples = true,
+    ),
+)
+```
+
+`Combinatorial` accepts deterministic Gridspace axes and preserves their
+Cartesian order. `MonteCarlo` accepts `:normal` and variance-equivalent
+`:uniform` primitive draws, fixed local seeds, explicit or DKW-selected trial
+counts, and optional retained samples. Each materialized case or numeric trial
+uses the same scalar calculation method as the corresponding direct call.
 
 ## Uncertainty axes
 
@@ -63,8 +98,8 @@ constructors, or admittance kernels. Supported distributions are `:normal`
 and `:uniform`; the uniform interval is chosen to have the requested standard
 deviation.
 
-`solve` executes the unchanged scalar power-flow pipeline for every sampled
-builder. `determine_impedance` also starts with that scalar pipeline, then uses
+`solve` executes the unchanged scalar power-flow sequence for every sampled
+builder. `determine_impedance` also starts with that scalar sequence, then uses
 private dispatch to decide whether the next builder has the same operating-point
 context. If only passive component parameters changed, it rebuilds those
 admittances and reuses the active-device linearization. A change to any active
@@ -148,7 +183,7 @@ inverse and matrix product at each frequency and numeric trial. It never
 inverts an aggregated mean±standard-deviation matrix.
 
 The fused path performs the node and edge calculations from the same sampled
-`BuilderState` and one active-device linearization per trial:
+`NetworkState` and one active-device linearization per trial:
 
 ```julia
 loopgain, node_schema, omega = make_loopgain(
@@ -270,7 +305,7 @@ inputs obey the explicit pairing policy above. Passivity, margins, and unstable
 frequencies are evaluated on numeric trials, never on aggregated matrices.
 
 `check_stability(builder_space, :converter; direction=:ac)` resolves the
-selected converter terminals through the connection registry, partitions the
+selected converter terminals through the network topology, partitions the
 device from the remaining network, constructs `Zrest * inv(Zdevice)` per
 trial, and runs the common Nyquist analysis. Missing, passive, source,
 disconnected, singular, or dimensionally inconsistent selections are rejected

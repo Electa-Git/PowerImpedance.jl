@@ -7,7 +7,7 @@
 
 using Plots
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: BuilderState, Grid, Gridspace, define, solve
+using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState, define, solve
 
 # The parity fixture is the authoritative NetworkBuilder version of this
 # system. Skip its top-level testsets while retaining its model functions and
@@ -102,7 +102,7 @@ end;
 function ieee39_soil_builder_space(
         soil_resistivities = IEEE39_SOIL_RESISTIVITY;
         base_elements = ieee39bus_elements(),
-        cached_powerflow = nothing
+        operating_point = nothing
 )
     connections = ieee39bus_connections()
     function materialize(soil_resistivity)
@@ -111,11 +111,11 @@ function ieee39_soil_builder_space(
             connections;
             options = IEEE39_BUILDER_OPTIONS
         )
-        builder.powerflow = cached_powerflow
+        builder.operating_point = operating_point
         return builder
     end
 
-    return Gridspace{BuilderState}(
+    return Gridspace{NetworkState}(
         materialize,
         (Grid(soil_resistivities),),
         (:soil_resistivity,)
@@ -145,12 +145,12 @@ function run_ieee39_soil_study(;
         freq_range = (1.0, 5e3, 400)
 )
     base_elements = ieee39bus_elements()
-    cached_powerflow = ieee39_reference_powerflow(base_elements)
+    operating_point = ieee39_reference_powerflow(base_elements).operating_point
     result = determine_impedance(
         ieee39_soil_builder_space(
             soil_resistivities;
             base_elements,
-            cached_powerflow
+            operating_point
         );
         nets = ieee39_bus_nets(buses),
         elim_elements = IEEE39_ELIM_ELEMENTS,

@@ -5,7 +5,6 @@ using Statistics
 using LineCableModels
 using Measurements
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: ⟷
 
 const NB = PowerImpedance.NetworkBuilder
 const LCM_EXT = Base.get_extension(
@@ -66,9 +65,10 @@ function passive_line_builder(parameters)
         load = NB.impedance(z = 10.0, pins = 1)
     )
     connections = (
-        NB.pin(:line, 1, 1) ⟷ :n1,
-        NB.pin(:line, 2, 1) ⟷ NB.pin(:load, 1, 1) ⟷ :n2,
-        NB.pin(:load, 2, 1) ⟷ :gnd
+        (node = :n1, element = :line, side = 1, terminal = 1),
+        (node = :n2, element = :line, side = 2, terminal = 1),
+        (node = :n2, element = :load, side = 1, terminal = 1),
+        (node = :gnd, element = :load, side = 2, terminal = 1),
     )
     return NB.define(elements, connections)
 end
@@ -451,12 +451,14 @@ end
         q_load = NB.impedance(z = 10.0, pins = 1)
     )
     connections = (
-        NB.pin(:line, 1, 1) ⟷ :d1,
-        NB.pin(:line, 1, 2) ⟷ :q1,
-        NB.pin(:line, 2, 1) ⟷ NB.pin(:d_load, 1, 1) ⟷ :d2,
-        NB.pin(:d_load, 2, 1) ⟷ :gnd_d,
-        NB.pin(:line, 2, 2) ⟷ NB.pin(:q_load, 1, 1) ⟷ :q2,
-        NB.pin(:q_load, 2, 1) ⟷ :gnd_q
+        (node = :d1, element = :line, side = 1, terminal = 1),
+        (node = :q1, element = :line, side = 1, terminal = 2),
+        (node = :d2, element = :line, side = 2, terminal = 1),
+        (node = :d2, element = :d_load, side = 1, terminal = 1),
+        (node = :gnd_d, element = :d_load, side = 2, terminal = 1),
+        (node = :q2, element = :line, side = 2, terminal = 2),
+        (node = :q2, element = :q_load, side = 1, terminal = 1),
+        (node = :gnd_q, element = :q_load, side = 2, terminal = 1),
     )
     result = NB.determine_impedance(
         NB.define(elements, connections);

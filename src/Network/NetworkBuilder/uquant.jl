@@ -1,7 +1,7 @@
 import Statistics
 
 """One deterministic or uncertainty-aware impedance-study result."""
-struct ImpedanceCase
+struct ImpedanceCase <: P.AbstractResult
     coordinates::Vector{Pair{Tuple, Any}}
     trials::Int
     seed::Union{Nothing, UInt64}
@@ -40,12 +40,12 @@ function ImpedanceCase(
 end
 
 """Ordered collection of [`ImpedanceCase`](@ref) values."""
-struct ParametricImpedance
+struct ParametricImpedance <: P.AbstractResult
     cases::Vector{ImpedanceCase}
 end
 
 """One deterministic or uncertainty-aware power-flow result."""
-struct SolveCase
+struct SolveCase <: P.AbstractResult
     coordinates::Vector{Pair{Tuple, Any}}
     trials::Int
     seed::Union{Nothing, UInt64}
@@ -58,7 +58,7 @@ struct SolveCase
 end
 
 """Ordered collection of [`SolveCase`](@ref) values."""
-struct ParametricSolve
+struct ParametricSolve <: P.AbstractResult
     cases::Vector{SolveCase}
 end
 
@@ -79,7 +79,7 @@ first-order moment and covariance model encoded by Measurements values.
 Keep the complete case when passing a response downstream. Extracting only
 `response` discards retained samples and private replay provenance.
 """
-struct FrequencyResponseCase
+struct FrequencyResponseCase <: P.AbstractResult
     "Gridspace coordinates that identify the deterministic case."
     coordinates::Vector{Pair{Tuple, Any}}
     "Number of Monte Carlo trials represented by the case."
@@ -115,7 +115,7 @@ Store ordered matrix-valued frequency-response cases from one study.
 
 The collection supports `length`, iteration, integer indexing, and `only`.
 """
-struct ParametricFrequencyResponse
+struct ParametricFrequencyResponse <: P.AbstractResult
     "Common response kind."
     kind::Symbol
     "Ordered deterministic cases."
@@ -155,7 +155,7 @@ statistics `mean`, `std`, `min`, `q05`, `median`, `q95`, `max`, and `n`;
 categorical and variable-length outcomes use probabilities and pooled event
 summaries instead.
 """
-struct StabilityCase
+struct StabilityCase <: P.AbstractResult
     "Gridspace coordinates that identify the deterministic case."
     coordinates::Vector{Pair{Tuple, Any}}
     "Number of numeric trials analyzed."
@@ -185,7 +185,7 @@ Store ordered results from one parametric small-signal analysis.
 
 The collection supports `length`, iteration, integer indexing, and `only`.
 """
-struct ParametricStability
+struct ParametricStability <: P.AbstractResult
     "Common analysis identifier."
     analysis::Symbol
     "Ordered deterministic cases."
@@ -404,6 +404,15 @@ _numeric_leaf_count(value::NamedTuple) = sum(_numeric_leaf_count, values(value);
 _numeric_leaf_count(value::Tuple) = sum(_numeric_leaf_count, value; init = 0)
 _numeric_leaf_count(value::AbstractArray) = sum(_numeric_leaf_count, value; init = 0)
 _numeric_leaf_count(value::AbstractDict) = sum(_numeric_leaf_count, values(value); init = 0)
+function _numeric_leaf_count(value::P.OperatingPoint)
+    return sum(values(value.setpoints); init = 0) do setpoint
+        count(field -> getfield(setpoint, field) isa Number, fieldnames(P.Setpoint))
+    end
+end
+function _numeric_leaf_count(value::P.PowerFlowResult)
+    return _numeric_leaf_count(value.result) + _numeric_leaf_count(value.data) +
+           _numeric_leaf_count(value.operating_point)
+end
 _numeric_leaf_count(::Any) = 0
 
 function _scalar_statistics(values::AbstractVector{<:Real})
@@ -447,6 +456,41 @@ function _aggregate_tree(values::AbstractVector)
     first_value = first(values)
     if first_value isa Number && all(value -> value isa Number, values)
         return _aggregate_numbers(values)
+    elseif first_value isa P.PowerFlowResult
+        all(value -> value isa P.PowerFlowResult, values) || throw(
+            ArgumentError("power-flow result types differ across trials"),
+        )
+        result, result_statistics = _aggregate_tree([value.result for value in values])
+        data, data_statistics = _aggregate_tree([value.data for value in values])
+        nodes2bus, node_statistics = _aggregate_tree(
+            [value.nodes2bus for value in values],
+        )
+        elem2comp, element_statistics = _aggregate_tree(
+            [value.elem2comp for value in values],
+        )
+        operating_point, operating_statistics = _aggregate_operating_points(
+            [value.operating_point for value in values],
+        )
+        diagnostics, diagnostic_statistics = _aggregate_tree(
+            [value.diagnostics for value in values],
+        )
+        output = P.PowerFlowResult(
+            result,
+            data,
+            nodes2bus,
+            elem2comp,
+            operating_point,
+            diagnostics
+        )
+        statistics = (
+            result = result_statistics,
+            data = data_statistics,
+            nodes2bus = node_statistics,
+            elem2comp = element_statistics,
+            operating_point = operating_statistics,
+            diagnostics = diagnostic_statistics
+        )
+        return output, statistics
     elseif first_value isa NamedTuple
         keys(first_value) == keys(last(values)) ||
             throw(ArgumentError("power-flow schemas differ across trials"))
@@ -484,6 +528,39 @@ function _aggregate_tree(values::AbstractVector)
     all(==(first_value), values) ||
         throw(ArgumentError("nonnumeric outputs differ across trials"))
     return first_value, nothing
+end
+
+function _aggregate_operating_points(points::AbstractVector{<:P.OperatingPoint})
+    names = Set(keys(first(points).setpoints))
+    all(point -> Set(keys(point.setpoints)) == names, points) || throw(
+        ArgumentError("operating-point element sets differ across trials"),
+    )
+    output = Dict{Symbol, P.Setpoint}()
+    statistics = Dict{Symbol, Any}()
+    for name in keys(first(points).setpoints)
+        setpoints = [point.setpoints[name] for point in points]
+        fields = fieldnames(P.Setpoint)
+        mean_values = Any[]
+        field_statistics = Any[]
+        for field in fields
+            values = [getfield(setpoint, field) for setpoint in setpoints]
+            if all(ismissing, values)
+                push!(mean_values, missing)
+                push!(field_statistics, nothing)
+            elseif all(value -> value isa Real, values)
+                stats = _scalar_statistics(Real[values...])
+                push!(mean_values, Float64(stats.mean))
+                push!(field_statistics, stats)
+            else
+                throw(ArgumentError(
+                    "operating-point field :$field differs in missing-value status across trials",
+                ))
+            end
+        end
+        output[name] = P.Setpoint(; NamedTuple{fields}(Tuple(mean_values))...)
+        statistics[name] = NamedTuple{fields}(Tuple(field_statistics))
+    end
+    return P.OperatingPoint(output), statistics
 end
 
 function _aggregate_impedance(samples::Vector)

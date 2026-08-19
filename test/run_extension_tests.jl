@@ -4,7 +4,6 @@ using Random
 using Statistics
 using Measurements
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: ⟷
 
 const NB = PowerImpedance.NetworkBuilder
 # CI can set POWERIMPEDANCE_TEST_LOG_LEVEL=error; the former variable remains supported.
@@ -24,8 +23,10 @@ function uncertain_builder(axis)
         z2 = NB.impedance(z = 20.0, pins = 1)
     )
     connections = (
-        NB.pin(:z1, 1, 1) ⟷ NB.pin(:z2, 1, 1) ⟷ :n1,
-        NB.pin(:z1, 2, 1) ⟷ NB.pin(:z2, 2, 1) ⟷ :gnd
+        (node = :n1, element = :z1, side = 1, terminal = 1),
+        (node = :n1, element = :z2, side = 1, terminal = 1),
+        (node = :gnd, element = :z1, side = 2, terminal = 1),
+        (node = :gnd, element = :z2, side = 2, terminal = 1),
     )
     return NB.define(elements, connections)
 end
@@ -65,6 +66,25 @@ end
     @test isapprox(Measurements.uncertainty(real(case.impedance[1])), 4 / 9; atol = 0.08)
     @test case.statistics.real[1].n == 1000
 
+    problem_result = compute(
+        UQuantProblem(
+            uncertain_builder(10.0 ± 1.0),
+            NodalImpedance(),
+            (nets = [:n1], freq_range = (1.0, 10.0, 2)),
+        ),
+        MonteCarlo(trials = 32, distribution = :normal, seed = 123,
+            return_samples = true),
+    )
+    direct_result = impedance_study(
+        10.0 ± 1.0;
+        trials = 32,
+        distribution = :normal,
+        seed = 123,
+        return_samples = true,
+    )
+    @test problem_result isa NB.ParametricImpedance
+    @test only(problem_result).samples == only(direct_result).samples
+
     uniform = impedance_study(
         NB.Grid(10.0, NB.AbsoluteError(1.0));
         trials = 1000,
@@ -102,7 +122,7 @@ end
     @test NB._dkw_trials(20, 0.95, 0.02) ==
           ceil(Int, log(40 / 0.05) / (2 * 0.02^2))
 
-    failure_space = NB.Gridspace{NB.BuilderState}(
+    failure_space = NB.Gridspace{NB.NetworkState}(
         _ -> error("deliberate trial failure"),
         (NB.Grid(1.0, NB.AbsoluteError(0.0)),),
         (:failure_axis,)
@@ -390,29 +410,23 @@ end
         )
         connections = if value > 10
             (
-                NB.ConnectionDef([
-                        NB.pin(:z1, 1, 1),
-                        NB.pin(:z2, 1, 1)
-                    ]; name = :n1),
-                NB.ConnectionDef([
-                        NB.pin(:z1, 2, 1),
-                        NB.pin(:z2, 2, 1)
-                    ]; name = :gnd)
+                (node = :n1, element = :z1, side = 1, terminal = 1),
+                (node = :n1, element = :z2, side = 1, terminal = 1),
+                (node = :gnd, element = :z1, side = 2, terminal = 1),
+                (node = :gnd, element = :z2, side = 2, terminal = 1),
             )
         else
             (
-                NB.ConnectionDef([NB.pin(:z1, 1, 1)]; name = :n1),
-                NB.ConnectionDef([
-                        NB.pin(:z1, 2, 1),
-                        NB.pin(:z2, 1, 1)
-                    ]; name = :middle),
-                NB.ConnectionDef([NB.pin(:z2, 2, 1)]; name = :gnd)
+                (node = :n1, element = :z1, side = 1, terminal = 1),
+                (node = :middle, element = :z1, side = 2, terminal = 1),
+                (node = :middle, element = :z2, side = 1, terminal = 1),
+                (node = :gnd, element = :z2, side = 2, terminal = 1),
             )
         end
         return NB.define(elements, connections)
     end
 
-    topology_space = NB.Gridspace{NB.BuilderState}(
+    topology_space = NB.Gridspace{NB.NetworkState}(
         topology_builder,
         (NB.Grid(10.0, NB.AbsoluteError(1.0)),),
         (:topology_axis,)

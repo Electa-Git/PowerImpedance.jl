@@ -46,6 +46,7 @@ const HAS_TODO = isfile(TODO_SRC)
 const HAS_BIBLIOGRAPHY = isfile(BIBLIOGRAPHY_FILE)
 
 const LITERATE_EXAMPLE_FILES = (
+    "Connection_DSL.jl",
     "P2P_HVDC_ALT.jl",
     "P2P_HVDC_Gridspace.jl",
     "IEEE39bus_Gridspace.jl",
@@ -274,7 +275,9 @@ function build_pages()
 
     development_pages = Any[
         "Docstrings" => "developers/docstrings.md",
-        "Conventions" => "developers/conventions.md"
+        "Conventions" => "developers/conventions.md",
+        "Calculation parity" => "developers/calculation_parity.md",
+        "Network-model performance" => "developers/network_model_performance.md"
     ]
 
     todo_page = copy_todo!()

@@ -60,7 +60,7 @@ end
     )
     scalar = only(builders)
     reference, frequencies = TOPOLOGY_NB.determine_impedance(
-        convert(scalar, TOPOLOGY_NB.LinearizedAdmittanceNetwork);
+        convert(scalar, TOPOLOGY_NB.NetworkModel);
         nets = IEEE39_INPUT_PINS,
         elim_elements = IEEE39_ELIM_ELEMENTS,
         freq_range = (1.0, 5e3, 2),
@@ -82,7 +82,7 @@ end
     builders = TOPOLOGY_NB.define(copied_element_spaces(elements), connections; options = builder_options)
     scalar = only(builders)
     reference, frequencies = TOPOLOGY_NB.determine_impedance(
-        convert(scalar, TOPOLOGY_NB.LinearizedAdmittanceNetwork);
+        convert(scalar, TOPOLOGY_NB.NetworkModel);
         nets = [:B5],
         elim_elements = [:c2],
         freq_range = (100.0, 5e3, 2),

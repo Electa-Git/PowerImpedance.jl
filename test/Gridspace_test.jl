@@ -1,6 +1,6 @@
 using Random
 using Distributions
-using PowerImpedance.NetworkBuilder: @gridspace, @relax, ⟷
+using PowerImpedance.NetworkBuilder: @gridspace, @relax
 
 struct GridspacePokemon
     name::Symbol
@@ -8,13 +8,13 @@ end
 
 module ErgonomicBuilderAPI
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: Grid, define, pin, ⟷
+using PowerImpedance.NetworkBuilder: Grid, define
 
 function impedance_study()
     elements = (branch = impedance(Grid; z = Grid([1.0, 2.0]), pins = 1),)
     connections = (
-        pin(:branch, 1, 1) ⟷ :bus,
-        pin(:branch, 2, 1) ⟷ :gnd
+        (node = :bus, element = :branch, side = 1, terminal = 1),
+        (node = :gnd, element = :branch, side = 2, terminal = 1),
     )
     builders = define(elements, connections)
     return determine_impedance(
@@ -88,15 +88,14 @@ end
 
 @testset "NetworkBuilder public import boundary" begin
     safe_exports = (
-        :BuilderState,
-        :Pin,
-        :ConnectionDef,
+        :NetworkState,
+        :NetworkTopology,
+        :AdmittanceLookup,
+        :NetworkLookup,
+        :NetworkModel,
         :define,
         :update!,
         :solve,
-        :pin,
-        Symbol("⟷"),
-        Symbol("↔"),
         :Grid,
         :Gridspace,
         :DeterministicGrid,
@@ -119,6 +118,10 @@ end
         :sampled_frequency_response
     )
     @test all(name -> name in names(NB), safe_exports)
+    @test all(
+        name -> name ∉ names(NB),
+        (:BuilderState, :Pin, :ConnectionDef, :pin, Symbol("⟷"), Symbol("↔")),
+    )
     @test all(name -> name ∉ names(NB), (:impedance, :cable, :overhead_line, :mmc, :tlc))
     @test WildcardBuilderAPI.shared_impedance_generic
     @test WildcardBuilderAPI.shared_loopgain_generic
@@ -176,17 +179,19 @@ end
     @test_throws ArgumentError NB.mmc(P = 1.0, delta_control = NB.ΔdqControlGFL())
 end
 
-@testset "BuilderState Cartesian studies" begin
+@testset "NetworkState Cartesian studies" begin
     elements = (
         z1 = NB.impedance(z = NB.Grid([1.0, 2.0]), pins = 1),
         z2 = NB.impedance(z = 3.0, pins = 1)
     )
     connections = (
-        NB.pin(:z1, 1, 1) ⟷ NB.pin(:z2, 1, 1) ⟷ :n1,
-        NB.pin(:z1, 2, 1) ⟷ NB.pin(:z2, 2, 1) ⟷ :gnd
+        (node = :n1, element = :z1, side = 1, terminal = 1),
+        (node = :n1, element = :z2, side = 1, terminal = 1),
+        (node = :gnd, element = :z1, side = 2, terminal = 1),
+        (node = :gnd, element = :z2, side = 2, terminal = 1),
     )
     builders = NB.define(elements, connections)
-    @test builders isa NB.Gridspace{NB.BuilderState}
+    @test builders isa NB.Gridspace{NB.NetworkState}
     @test length(builders) == 2
     @test [case.elements.z1.element_model.value[1] for case in builders] == [1, 2]
 
@@ -207,10 +212,11 @@ end
 
 @testset "Gridspace linearization cache dispatch" begin
     connections = (
-        NB.pin(:converter, 1, 1) ⟷ NB.pin(:zdc, 1, 1) ⟷ :dc,
-        NB.pin(:zdc, 2, 1) ⟷ :gnd,
-        NB.pin(:converter, 2, 1) ⟷ :ac_d,
-        NB.pin(:converter, 2, 2) ⟷ :ac_q
+        (node = :dc, element = :converter, side = 1, terminal = 1),
+        (node = :dc, element = :zdc, side = 1, terminal = 1),
+        (node = :gnd, element = :zdc, side = 2, terminal = 1),
+        (node = :ac_d, element = :converter, side = 2, terminal = 1),
+        (node = :ac_q, element = :converter, side = 2, terminal = 2),
     )
 
     passive_space = NB.define(
@@ -222,7 +228,7 @@ end
     )
     passive_a, passive_b = collect(passive_space)
     cache = NB._LinearizationCache(
-        NB._operating_point_context(passive_a), Dict{Symbol, Any}()
+        NB._operating_point_context(passive_a), nothing, Dict{Symbol, Any}()
     )
     @test NB._linearization_decision(passive_b, cache) isa NB._ReuseLinearization
 
@@ -237,7 +243,7 @@ end
     )
     active_a, active_b = collect(active_space)
     cache = NB._LinearizationCache(
-        NB._operating_point_context(active_a), Dict{Symbol, Any}()
+        NB._operating_point_context(active_a), nothing, Dict{Symbol, Any}()
     )
     @test NB._linearization_decision(active_b, cache) isa NB._RefreshLinearization
 
@@ -247,10 +253,11 @@ end
             zdc = NB.impedance(z = 1.0, pins = 1)
         ),
         (
-            NB.pin(:converter, 1, 1) ⟷ NB.pin(:zdc, 1, 1) ⟷ :dc_changed,
-            NB.pin(:zdc, 2, 1) ⟷ :gnd,
-            NB.pin(:converter, 2, 1) ⟷ :ac_d,
-            NB.pin(:converter, 2, 2) ⟷ :ac_q
+            (node = :dc_changed, element = :converter, side = 1, terminal = 1),
+            (node = :dc_changed, element = :zdc, side = 1, terminal = 1),
+            (node = :gnd, element = :zdc, side = 2, terminal = 1),
+            (node = :ac_d, element = :converter, side = 2, terminal = 1),
+            (node = :ac_q, element = :converter, side = 2, terminal = 2),
         )
     ))
     @test NB._linearization_decision(changed_topology, cache) isa NB._RefreshLinearization

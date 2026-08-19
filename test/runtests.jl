@@ -1,5 +1,7 @@
 # using JLD2
+ENV["GKSwstype"] = "100"
 using PowerImpedance
+import PowerImpedance: @network
 using Test
 using LinearAlgebra
 import PowerImpedance.NetworkBuilder
@@ -43,6 +45,7 @@ end
         include("Source_test.jl")
         include("NetworkBuilder_test.jl")
         include("ConnectionRegistry_test.jl")
+        include("calculation_model_test.jl")
         include("convert_pmacdc_test.jl")
         include("make_y_node_test.jl")
         include("Transformer_test.jl")

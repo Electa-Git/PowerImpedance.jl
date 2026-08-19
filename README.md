@@ -86,6 +86,34 @@ external Monte Carlo response tensors can be adapted with
 cross-frequency trial dependence. See
 [Package extensions](docs/src/package_extensions.md).
 
+### Explicit network topology and calculations
+
+`NetworkBuilder.define` accepts one named row per connected element terminal:
+
+```julia
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: define
+
+elements = (branch = impedance(z = 2.0, pins = 1),)
+connections = (
+    (node = :bus, element = :branch, side = 1, terminal = 1),
+    (node = :gnd, element = :branch, side = 2, terminal = 1),
+)
+network = define(elements, connections)
+```
+
+`NetworkTopology` derives AC/DC domains and bus indices from component port
+definitions while preserving input-row and first-occurrence node order. The
+public problem/formulation interface evaluates nodal impedance, node and edge
+admittance, loop gain, and downstream stability analyses from either a
+`NetworkState` or an already linearized `NetworkModel`. See
+[Network construction](docs/src/network.md) and the executable
+[Connection DSL tutorial](examples/Connection_DSL.jl).
+
+The Classic network DSL remains available with
+`import PowerImpedance: @network`; the macro is no longer imported by
+`using PowerImpedance`.
+
 ## Example
 
 The figure below shows the admittance characteristics of a point-to-point HVDC

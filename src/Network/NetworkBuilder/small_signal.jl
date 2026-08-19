@@ -77,13 +77,13 @@ end
 
 _is_anonymous_node(node::Symbol) = startswith(String(node), "##")
 
-function _node_key(builder::BuilderState, node::Symbol)
-    rows = filter(row -> row.net == node, builder.connections.registry)
+function _node_key(builder::NetworkState, node::Symbol)
+    rows = filter(row -> row.node == node, builder.topology.connections)
     isempty(rows) && throw(ArgumentError(
-        "node :$node is absent from the BuilderState connection registry",
+        "node :$node is absent from the NetworkState topology",
     ))
     terminals = sort!(collect(Set(
-        (row.elem, row.side, row.terminal, row.elecdomain) for row in rows
+        (row.element, row.side, row.terminal, row.domain) for row in rows
     )))
     return (
         name = _is_anonymous_node(node) ? nothing : node,
@@ -91,10 +91,10 @@ function _node_key(builder::BuilderState, node::Symbol)
     )
 end
 
-_node_keys(builder::BuilderState, nodes) = [_node_key(builder, node) for node in nodes]
+_node_keys(builder::NetworkState, nodes) = [_node_key(builder, node) for node in nodes]
 
-function _resolve_node_keys(builder::BuilderState, keys)
-    candidates = unique(Symbol.(builder.connections.registry.net))
+function _resolve_node_keys(builder::NetworkState, keys)
+    candidates = unique(Symbol.(builder.topology.connections.node))
     candidate_keys = Dict(node => _node_key(builder, node) for node in candidates)
     resolved = Symbol[]
     for key in keys
@@ -113,9 +113,9 @@ function _resolve_node_keys(builder::BuilderState, keys)
     return resolved
 end
 
-function _check_stability_nodes(builder::BuilderState, spec::_CheckStabilitySpec)
+function _check_stability_nodes(builder::NetworkState, spec::_CheckStabilitySpec)
     haskey(builder.elements, spec.element) || throw(ArgumentError(
-        "element :$(spec.element) is not present in the BuilderState",
+        "element :$(spec.element) is not present in the NetworkState",
     ))
     element = builder.elements[spec.element]
     P.is_active(element) || throw(ArgumentError(
@@ -131,28 +131,28 @@ function _check_stability_nodes(builder::BuilderState, spec::_CheckStabilitySpec
              spec.direction === :dc ? 2 :
              throw(ArgumentError("direction must be :ac or :dc"))
     connections = filter(
-        row -> row.elem == spec.element && row.elecdomain == domain && row.bus != 0,
-        builder.connections.registry
+        row -> row.element == spec.element && row.domain == domain && row.bus != 0,
+        builder.topology.connections
     )
     isempty(connections) && throw(ArgumentError(
         "element :$(spec.element) has no connected $(uppercase(string(spec.direction))) terminals",
     ))
     sort!(connections; by = row -> (row.side, row.terminal))
-    return unique(Symbol.(connections.net))
+    return unique(Symbol.(connections.node))
 end
 
 function _device_admittance(
-        network::LinearizedAdmittanceNetwork,
+        network::NetworkModel,
         element_index::Int,
         selected_identifiers::Vector{Int},
         complex_frequencies
 )
-    indices = network.admittances.indices[element_index]
+    indices = network.element_admittances.indices[element_index]
     order = size(indices, 1)
     local_response = Array{ComplexF64}(undef, order, order, length(complex_frequencies))
-    network.admittances.Y![element_index](local_response, complex_frequencies)
+    network.element_admittances.Y![element_index](local_response, complex_frequencies)
     global_identifiers = Int[indices[index, index][1] for index in 1:order]
-    keep = findall(identifier -> identifier ∉ network.groundednets, global_identifiers)
+    keep = findall(identifier -> identifier ∉ network.grounded_nodes, global_identifiers)
     reduced_response = local_response[keep, keep, :]
     kept_identifiers = global_identifiers[keep]
     selected_positions = Int[]
@@ -178,25 +178,25 @@ function _device_admittance(
 end
 
 function _evaluate_response(
-        network::LinearizedAdmittanceNetwork,
+        network::NetworkModel,
         spec::_CheckStabilitySpec,
         requested_nodes::Vector{Symbol},
         freq_range
 )
     frequencies, complex_frequencies = _frequency_axis(freq_range)
     nodes = _node_names(network, requested_nodes)
-    selected_identifiers = Int[network.interface.net[node] for node in nodes]
-    haskey(network.interface.elem, spec.element) || throw(ArgumentError(
+    selected_identifiers = Int[network.indices.nodes[node] for node in nodes]
+    haskey(network.indices.elements, spec.element) || throw(ArgumentError(
         "active element :$(spec.element) was not included in the linearized network",
     ))
-    element_index = network.interface.elem[spec.element]
+    element_index = network.indices.elements[spec.element]
     device_admittance = _device_admittance(
         network,
         element_index,
         selected_identifiers,
         complex_frequencies
     )
-    remainder_elements = setdiff(collect(1:length(network.admittances)), [element_index])
+    remainder_elements = setdiff(collect(1:length(network.element_admittances)), [element_index])
     remainder_admittance = make_y(
         network,
         remainder_elements,
@@ -277,16 +277,16 @@ function _response_tensor(response, frequencies)
     return tensor
 end
 
-function _node_names(network::LinearizedAdmittanceNetwork, requested::Vector{Symbol})
+function _node_names(network::NetworkModel, requested::Vector{Symbol})
     inverse_names = Dict{Int, Symbol}()
-    for (name, identifier) in network.interface.net
+    for (name, identifier) in network.indices.nodes
         get!(inverse_names, identifier, name)
     end
 
     if isempty(requested)
         identifiers = unique(filter(
-            identifier -> identifier ∉ network.groundednets,
-            network.activenets
+            identifier -> identifier ∉ network.grounded_nodes,
+            network.retained_nodes
         ))
         isempty(identifiers) && throw(ArgumentError(
             "the network has no nongrounded active nodes; provide an explicit nodelist",
@@ -298,10 +298,10 @@ function _node_names(network::LinearizedAdmittanceNetwork, requested::Vector{Sym
         "nodelist contains duplicate node names",
     ))
     for node in requested
-        haskey(network.interface.net, node) || throw(ArgumentError(
+        haskey(network.indices.nodes, node) || throw(ArgumentError(
             "node :$node is not present in the linearized network",
         ))
-        network.interface.net[node] ∉ network.groundednets || throw(ArgumentError(
+        network.indices.nodes[node] ∉ network.grounded_nodes || throw(ArgumentError(
             "grounded node :$node cannot be retained in a small-signal response",
         ))
     end
@@ -309,22 +309,22 @@ function _node_names(network::LinearizedAdmittanceNetwork, requested::Vector{Sym
 end
 
 function _evaluate_response(
-        network::LinearizedAdmittanceNetwork,
+        network::NetworkModel,
         kind::Symbol,
         requested_nodes::Vector{Symbol},
         freq_range
 )
     frequencies, complex_frequencies = _frequency_axis(freq_range)
     nodes = _node_names(network, requested_nodes)
-    identifiers = Int[network.interface.net[node] for node in nodes]
+    identifiers = Int[network.indices.nodes[node] for node in nodes]
 
     if kind === :node_admittance
-        response = make_y(network, network.actives, complex_frequencies, identifiers)
+        response = make_y(network, network.active_elements, complex_frequencies, identifiers)
     elseif kind === :edge_admittance
-        response = make_y(network, network.passives, complex_frequencies, identifiers)
+        response = make_y(network, network.passive_elements, complex_frequencies, identifiers)
     elseif kind === :loopgain
-        node_response = make_y(network, network.actives, complex_frequencies, identifiers)
-        edge_response = make_y(network, network.passives, complex_frequencies, identifiers)
+        node_response = make_y(network, network.active_elements, complex_frequencies, identifiers)
+        edge_response = make_y(network, network.passive_elements, complex_frequencies, identifiers)
         response = _loopgain_tensor(edge_response, node_response)
     else
         throw(ArgumentError("unsupported response kind :$kind"))
@@ -332,7 +332,7 @@ function _evaluate_response(
     return response, nodes, frequencies
 end
 
-function (runner::_SmallSignalRunner)(builder::BuilderState)
+function (runner::_SmallSignalRunner)(builder::NetworkState)
     requested_nodes = if runner.node_keys === nothing
         runner.kind isa _CheckStabilitySpec ?
         _check_stability_nodes(builder, runner.kind) : runner.nodes
@@ -341,13 +341,29 @@ function (runner::_SmallSignalRunner)(builder::BuilderState)
     end
     decision = _linearization_decision(builder, runner.cache)
     network, runner.cache = _linearize(builder, decision)
-    response, nodes, frequencies = _evaluate_response(network, runner.kind, requested_nodes, runner.freq_range)
+    response, nodes, frequencies = if runner.kind isa _CheckStabilitySpec
+        _evaluate_response(network, runner.kind, requested_nodes, runner.freq_range)
+    else
+        formulation = runner.kind === :node_admittance ? P.NodeAdmittance() :
+                      runner.kind === :edge_admittance ? P.EdgeAdmittance() :
+                      runner.kind === :loopgain ? P.LoopGain() :
+                      throw(ArgumentError("unsupported response kind $(runner.kind)"))
+        result = P.compute(
+            P.PowerImpedanceProblem(
+                network;
+                nodes = requested_nodes,
+                frequency_range = runner.freq_range
+            ),
+            formulation
+        )
+        (result.response, result.nodes, result.frequencies)
+    end
     canonical_nodes = runner.node_keys === nothing ? nodes : runner.nodes
     return response, canonical_nodes, frequencies
 end
 
 function _new_response_study(
-        gridspace::Gridspace{BuilderState},
+        gridspace::Gridspace{NetworkState},
         trials,
         distribution,
         seed,
@@ -377,7 +393,7 @@ function _new_response_study(
 end
 
 function _inherited_response_study(
-        gridspace::Gridspace{BuilderState},
+        gridspace::Gridspace{NetworkState},
         schema::ParametricNodeSchema,
         trials,
         distribution,
@@ -390,7 +406,7 @@ function _inherited_response_study(
         "the supplied ParametricNodeSchema does not contain replayable study provenance",
     ))
     _same_study_value(study.gridspace, gridspace) || throw(ArgumentError(
-        "the supplied ParametricNodeSchema belongs to a different BuilderState Gridspace",
+        "the supplied ParametricNodeSchema belongs to a different NetworkState Gridspace",
     ))
     trials === nothing || all(value -> value == trials, study.trials) ||
         throw(ArgumentError(
@@ -643,7 +659,7 @@ function _aggregate_response_trials(
 end
 
 function _run_builder_response(
-        gridspace::Gridspace{BuilderState},
+        gridspace::Gridspace{NetworkState},
         kind;
         nodelist = Symbol[],
         freq_range = (1.0, 1.0e3, 1000),
@@ -796,7 +812,7 @@ function _run_builder_response(
 end
 
 function _check_stability_response(
-        gridspace::Gridspace{BuilderState},
+        gridspace::Gridspace{NetworkState},
         element::Symbol;
         direction::Symbol = :dc,
         kwargs...
@@ -808,8 +824,8 @@ function _check_stability_response(
     )
 end
 
-function _singleton_builder_space(builder::BuilderState)
-    return Gridspace{BuilderState}(
+function _singleton_builder_space(builder::NetworkState)
+    return Gridspace{NetworkState}(
         identity,
         (_axis(deepcopy(builder)),),
         (:builder,)
@@ -817,8 +833,8 @@ function _singleton_builder_space(builder::BuilderState)
 end
 
 """
-    make_y_node(builder::BuilderState; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000))
-    make_y_node(gridspace::Gridspace{BuilderState}; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000), uq_kwargs...)
+    make_y_node(builder::NetworkState; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000))
+    make_y_node(gridspace::Gridspace{NetworkState}; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000), uq_kwargs...)
 
 Evaluate the active-element nodal admittance on a logarithmic frequency grid.
 
@@ -833,7 +849,7 @@ Evaluate the active-element nodal admittance on a logarithmic frequency grid.
 
 # Returns
 
-- For `BuilderState`, `(Ynode, nodes, omega)`, where `Ynode` has layout
+- For `NetworkState`, `(Ynode, nodes, omega)`, where `Ynode` has layout
   `n × n × nf` and `omega` is in \\[rad/s\\].
 - For `Gridspace`, `(responses, node_schema, omega)`, where `responses` is a
   `ParametricFrequencyResponse` and `node_schema` preserves case and trial order.
@@ -853,19 +869,24 @@ Throws an error when frequencies are invalid, requested nodes are absent or
 grounded, or a stochastic trial changes its ordered node schema.
 """
 function make_y_node(
-        builder::BuilderState;
+        builder::NetworkState;
         nodelist = Symbol[],
         freq_range = (1.0, 1.0e3, 1000)
 )
-    network = convert(builder, LinearizedAdmittanceNetwork)
-    return _evaluate_response(
-        network, :node_admittance, Symbol.(collect(nodelist)), freq_range
+    result = P.compute(
+        P.PowerImpedanceProblem(
+            builder;
+            nodes = nodelist,
+            frequency_range = freq_range
+        ),
+        P.NodeAdmittance()
     )
+    return result.response, result.nodes, result.frequencies
 end
 
 """
-    make_y_edge(builder::BuilderState; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000))
-    make_y_edge(gridspace::Gridspace{BuilderState}; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000), uq_kwargs...)
+    make_y_edge(builder::NetworkState; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000))
+    make_y_edge(gridspace::Gridspace{NetworkState}; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000), uq_kwargs...)
 
 Evaluate the passive-network nodal admittance on a logarithmic frequency grid.
 
@@ -881,7 +902,7 @@ Evaluate the passive-network nodal admittance on a logarithmic frequency grid.
 
 # Returns
 
-- For `BuilderState`, `(Yedge, nodes, omega)`, where `Yedge` has layout
+- For `NetworkState`, `(Yedge, nodes, omega)`, where `Yedge` has layout
   `n × n × nf` and `omega` is in \\[rad/s\\].
 - For `Gridspace`, `(responses, node_schema, omega)`.
 
@@ -898,19 +919,24 @@ Throws an error when a supplied schema belongs to another study or conflicts
 with explicit Monte Carlo settings.
 """
 function make_y_edge(
-        builder::BuilderState;
+        builder::NetworkState;
         nodelist = Symbol[],
         freq_range = (1.0, 1.0e3, 1000)
 )
-    network = convert(builder, LinearizedAdmittanceNetwork)
-    return _evaluate_response(
-        network, :edge_admittance, Symbol.(collect(nodelist)), freq_range
+    result = P.compute(
+        P.PowerImpedanceProblem(
+            builder;
+            nodes = nodelist,
+            frequency_range = freq_range
+        ),
+        P.EdgeAdmittance()
     )
+    return result.response, result.nodes, result.frequencies
 end
 
 """
-    make_loopgain(builder::BuilderState; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000))
-    make_loopgain(gridspace::Gridspace{BuilderState}; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000), uq_kwargs...)
+    make_loopgain(builder::NetworkState; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000))
+    make_loopgain(gridspace::Gridspace{NetworkState}; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000), uq_kwargs...)
     make_loopgain(Yedge, Ynode; pairing=:auto, trials=nothing, seed=nothing)
 
 Evaluate or compose the return-ratio matrix at every frequency and trial.
@@ -942,7 +968,7 @@ L(j\\omega) = Y_{edge}(j\\omega)^{-1}Y_{node}(j\\omega).
 ```
 
 The fused Gridspace overload constructs `Yedge` and `Ynode` from one sampled
-`BuilderState` and one active-device linearization per trial.
+`NetworkState` and one active-device linearization per trial.
 `:normal` samples the declared nominal values and standard deviations;
 `:uniform` uses variance-equivalent intervals `nominal ± √3 standard_deviation`.
 Derived operations always consume retained or replayed numeric trials, never
@@ -953,23 +979,28 @@ the aggregated mean-and-standard-deviation matrices.
 `pairing=:auto` rejects uncertain inputs without proven shared provenance.
 """
 function make_loopgain(
-        builder::BuilderState;
+        builder::NetworkState;
         nodelist = Symbol[],
         freq_range = (1.0, 1.0e3, 1000)
 )
-    network = convert(builder, LinearizedAdmittanceNetwork)
-    return _evaluate_response(
-        network, :loopgain, Symbol.(collect(nodelist)), freq_range
+    result = P.compute(
+        P.PowerImpedanceProblem(
+            builder;
+            nodes = nodelist,
+            frequency_range = freq_range
+        ),
+        P.LoopGain()
     )
+    return result.response, result.nodes, result.frequencies
 end
 
-function make_y_node(gridspace::Gridspace{BuilderState}; kwargs...)
+function make_y_node(gridspace::Gridspace{NetworkState}; kwargs...)
     _run_builder_response(gridspace, :node_admittance; kwargs...)
 end
-function make_y_edge(gridspace::Gridspace{BuilderState}; kwargs...)
+function make_y_edge(gridspace::Gridspace{NetworkState}; kwargs...)
     _run_builder_response(gridspace, :edge_admittance; kwargs...)
 end
-function make_loopgain(gridspace::Gridspace{BuilderState}; kwargs...)
+function make_loopgain(gridspace::Gridspace{NetworkState}; kwargs...)
     _run_builder_response(gridspace, :loopgain; kwargs...)
 end
 

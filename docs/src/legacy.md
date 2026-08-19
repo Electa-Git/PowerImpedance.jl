@@ -4,15 +4,16 @@ CurrentModule = PowerImpedance
 
 # Classic scalar interface
 
-The original `@network` DSL and scalar analysis methods remain supported so
-existing studies continue to run unchanged. They operate on a mutable
+The `@network` DSL and scalar analysis methods remain supported. The macro now
+requires `import PowerImpedance: @network`; its network semantics are
+unchanged. These methods operate on a mutable
 `Network`, assemble ABCD or nodal matrices, and return the historical scalar
 result types.
 
-New systems should generally use the declarative [NetworkBuilder](network.md)
-interface. It separates elements from connection declarations, supports lazy
-parameter grids through positional dispatch, and enables reproducible
-uncertainty studies without changing scalar component implementations.
+NetworkBuilder separates elements from connection declarations and supports
+lazy parameter grids through positional dispatch without changing scalar
+component implementations. Its row grammar is documented under
+[Network construction](network.md).
 
 The following classic entry points remain documented in the
 [API reference](reference.md): `@network`, `Network`, `add!`, `connect!`,

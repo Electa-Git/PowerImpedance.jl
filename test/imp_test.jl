@@ -1,3 +1,5 @@
+import PowerImpedance: @network
+
 transmissionVoltage = 380 / sqrt(3)
 pHVDC1 = 600
 qC1 = 100

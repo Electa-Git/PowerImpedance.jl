@@ -18,8 +18,8 @@ The extensions are load-order independent. A typical session starts with:
 using PowerImpedance
 using Measurements
 using LineCableModels
-using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define, pin,
-    sampled_frequency_response, solve, ⟷
+using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define,
+    sampled_frequency_response, solve
 ```
 
 `Measurements` and `LineCableModels` must be installed in the active Julia
@@ -50,8 +50,8 @@ Loading Measurements activates uncertain-grid iteration, sampling of
 ```julia
 using PowerImpedance
 using Measurements
-using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define, pin,
-    sampled_frequency_response, solve, ⟷
+using PowerImpedance.NetworkBuilder: AbsoluteError, Grid, define,
+    sampled_frequency_response, solve
 ```
 
 Keyword-only component calls remain scalar constructors. Passing `Grid` as the
@@ -94,7 +94,7 @@ The complete public construction path is:
 4. `component(Grid; kwargs...)` creates `Gridspace` objects; the qualified
    `NetworkBuilder.component(; kwargs...)` spelling remains compatible.
 5. `define(elements, connections; options)` composes them into a
-   `Gridspace{BuilderState}`.
+   `Gridspace{NetworkState}`.
 6. `solve` and `determine_impedance` execute the deterministic cases and
    any trials belonging to each case.
 
@@ -118,8 +118,10 @@ elements = (
 )
 
 connections = (
-    pin(:branch, 1, 1) ⟷ pin(:shunt, 1, 1) ⟷ :bus,
-    pin(:branch, 2, 1) ⟷ pin(:shunt, 2, 1) ⟷ :gnd,
+    (node = :bus, element = :branch, side = 1, terminal = 1),
+    (node = :bus, element = :shunt, side = 1, terminal = 1),
+    (node = :gnd, element = :branch, side = 2, terminal = 1),
+    (node = :gnd, element = :shunt, side = 2, terminal = 1),
 )
 
 builders = define(elements, connections)
@@ -178,7 +180,7 @@ sampling dispatch, as the LineParameters extension does.
 
 ### Power flow and nonlinear components
 
-`solve(builder_space; ...)` runs the unchanged scalar solve pipeline for
+`solve(builder_space; ...)` runs the unchanged scalar solve sequence for
 every physical sample. Each sampled converter or other nonlinear component
 therefore reaches the power-flow and nonlinear-equilibrium solvers as an
 ordinary numeric object.

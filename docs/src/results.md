@@ -44,6 +44,40 @@ Statistics contain mean, sample standard deviation, minimum, 5th percentile,
 median, 95th percentile, maximum, and sample count. Complex responses report
 real and imaginary statistics separately.
 
+## Problem and formulation interface
+
+The public calculation interface separates the requested network quantity from
+the numerical formulation:
+
+```julia
+problem = PowerImpedanceProblem(
+    network_state;
+    nodes = [:bus],
+    eliminated_elements = [:converter],
+    frequency_range = (1.0, 5e3, 400),
+)
+
+impedance = compute(problem, NodalImpedance())
+node_admittance = compute(problem, NodeAdmittance())
+edge_admittance = compute(problem, EdgeAdmittance())
+loop_gain = compute(problem, LoopGain())
+```
+
+Each call returns a `FrequencyResponseResult` containing `kind`, the canonical
+`n × n × nf` response, angular frequencies in rad/s, ordered nodes, the
+`NetworkModel`, and calculation diagnostics. Reusing a problem constructed from
+an existing `NetworkModel` skips power flow and linearization.
+
+`StabilityProblem` accepts a calculated frequency response. The formulations
+`GeneralizedNyquist`, `BodeAnalysis`, `PassivityAnalysis`,
+`SmallGainAnalysis`, and `EigenvalueAnalysis` call the established scalar
+analysis functions without recalculating the operating point. Existing scalar
+function arguments and return values remain available. A scalar
+`FrequencyResponseResult` produces a `StabilityResult`. A
+`ParametricFrequencyResponse` or `ParametricImpedance` produces the existing
+`ParametricStability` collection with per-case statistics, retained or replayed
+trials, and plot objects.
+
 ## Nodal admittance and loop gain
 
 The staged small-signal API keeps the network partition explicit:

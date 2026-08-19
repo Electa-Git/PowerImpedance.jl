@@ -1,6 +1,7 @@
 using Test
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: solve_acdcpf, define, pin, ⟷, powerflow_optimizer, is_bounded_options, powerflow_setting
+using PowerImpedance.NetworkBuilder: solve_acdcpf, define, powerflow_optimizer,
+                                     is_bounded_options, powerflow_setting
 
 
 Vac = 220 #LL-RMS
@@ -10,17 +11,17 @@ Z = 1
         z1 = impedance(z = Z, pins = 3, transformation = true),
     )
     connections = (
-        pin(:z1, 1, 1) ⟷ pin(:sm1, 1, 1),
-        pin(:z1, 1, 2) ⟷ pin(:sm1, 1, 2),
-        pin(:z1, 2, 1) ⟷ :gndD,
-        pin(:z1, 2, 2) ⟷ :gndQ,
-        pin(:sm1, 2, 1) ⟷ :gndD,
-        pin(:sm1, 2, 2) ⟷ :gndQ,
+        (node = :machine_d, element = :z1, side = 1, terminal = 1),
+        (node = :machine_d, element = :sm1, side = 1, terminal = 1),
+        (node = :machine_q, element = :z1, side = 1, terminal = 2),
+        (node = :machine_q, element = :sm1, side = 1, terminal = 2),
+        (node = :gndD, element = :z1, side = 2, terminal = 1),
+        (node = :gndQ, element = :z1, side = 2, terminal = 2),
     )
 
     builder = define(elements, connections)
 
-    data,elempitopm = convert(builder, PowerImpedance.PMACDC)
+    data, _, elempitopm = convert(builder, PowerImpedance.PMACDC)
 
     options = builder.options
 

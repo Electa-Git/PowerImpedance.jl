@@ -50,6 +50,29 @@ equilibrium and active-device linearization. Power-flow warnings therefore
 refer to the sampled physical converter and its constraints, not to an
 aggregated uncertain model.
 
+## Calculated operating point
+
+`compute(NetworkBuilder.PowerFlowProblem(network),
+NetworkBuilder.ACDCPowerFlow())` returns a typed
+`PowerFlowResult`. Its `result`, `data`, `nodes2bus`, and `elem2comp` fields
+retain the PowerModelsACDC calculation and conversion mappings. The
+`operating_point` field contains the per-element `Setpoint` values required by
+active-component linearization; `active_setpoint_values` remains available as
+the corresponding dictionary.
+
+`compute(NetworkBuilder.LinearizationProblem(network, powerflow),
+NetworkBuilder.AdmittanceLinearization())` consumes that exact result and returns a
+`LinearizationResult`. Its `network_model` field is the calculated
+frequency-domain `NetworkModel`, and its `operating_point` field records the
+point used to build the active admittances. These lower-level problem and
+formulation types are intentionally qualified through `NetworkBuilder`; normal
+calls use `solve`, `determine_impedance`, or a public frequency-response
+problem.
+
+Linear networks skip the power-flow solve and use an empty `OperatingPoint`.
+`solve(network_state)` constructs its Classic `Network` result from the same
+`PowerFlowResult`; it does not perform a second power flow.
+
 ## Reuse in parametric studies
 
 The operating point is reusable only while the quantities that determine it

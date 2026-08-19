@@ -1,6 +1,6 @@
 # # Gridspace small-signal stability analysis
 #
-# This tutorial carries a declarative `Gridspace{BuilderState}` through the
+# This tutorial carries a declarative `Gridspace{NetworkState}` through the
 # complete small-signal path. The staged API is shown first because it exposes
 # the active-device and passive-network partition. The fused API follows when
 # only the loop gain or final stability result is needed.

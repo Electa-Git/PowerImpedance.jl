@@ -6,7 +6,7 @@ CurrentModule = PowerImpedance
 
 The public interface is grouped by its defining module. Ordinary component
 constructors and downstream solvers belong to `PowerImpedance`.
-Gridspace construction, orchestration, and result containers belong to
+Gridspace construction, study definitions, and result containers belong to
 `PowerImpedance.NetworkBuilder`.
 
 ## `PowerImpedance`

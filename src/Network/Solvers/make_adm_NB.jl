@@ -1,16 +1,16 @@
-### This file contains the solvers based on the LinearizedAdmittance representation of the network. It includes the functions to build the admittance matrix of the network and to solve for the voltages and currents in the network.
+### Admittance-matrix calculations for NetworkModel.
 
-make_y_node(lanw::LinearizedAdmittanceNetwork, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.actives, s)
-make_y_edge(lanw::LinearizedAdmittanceNetwork, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.passives, s)
+make_y_node(lanw::NetworkModel, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.active_elements, s)
+make_y_edge(lanw::NetworkModel, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.passive_elements, s)
 
 
 ### Input nodes and output nodes as input arguments. Then can be used for determine impedance
-function make_y(lanw::LinearizedAdmittanceNetwork, elemidvec::Vector{Int}, s::AbstractVector{<:Complex}, netidvec::AbstractVector{Int}=lanw.activenets) 
+function make_y(lanw::NetworkModel, elemidvec::Vector{Int}, s::AbstractVector{<:Complex}, netidvec::AbstractVector{Int}=lanw.retained_nodes)
 
     Y = initY(lanw,s) #Zeroes of size nets
     
 
-    consideredadm = getindex(lanw.admittances, elemidvec)
+    consideredadm = getindex(lanw.element_admittances, elemidvec)
     # Add active device admittances
     fill!(Y, consideredadm, s)
 
@@ -30,8 +30,12 @@ function make_y(lanw::LinearizedAdmittanceNetwork, elemidvec::Vector{Int}, s::Ab
 end
 
 
-function Base.fill!(Y::Array{ComplexF64, 3}, admcoll::LinearizedAdmittanceCollection{ComplexF64}, s :: AbstractVector{<:Complex})
-    
+function Base.fill!(Y::Array{ComplexF64, 3}, admcoll::AdmittanceLookup{ComplexF64}, s :: AbstractVector{<:Complex})
+    if isempty(admcoll)
+        fill!(Y, complex(0.0))
+        return Y
+    end
+
     #Y array of size (N, N, length(s)) where N is the number of nodes in the network
     # Allocate matrix to store temporary results (inplace operation)
     maxsize = maximum(size.(admcoll.indices))
@@ -59,13 +63,13 @@ function Base.fill!(Y::Array{ComplexF64, 3}, admcoll::LinearizedAdmittanceCollec
    
 end
 
-function initY(lanw::LinearizedAdmittanceNetwork, s::AbstractVector)
-    N = maximum(values(lanw.interface.net)) #Max Net ID is size of initial matrix
+function initY(lanw::NetworkModel, s::AbstractVector)
+    N = maximum(values(lanw.indices.nodes))
     return Array{ComplexF64, 3}(zeros(N,N, length(s)))
 end
 
-function eliminategrounds(Y::Array{ComplexF64,3}, lanw::LinearizedAdmittanceNetwork, netidvec::Vector{Int})
-    groundnets = lanw.groundednets
+function eliminategrounds(Y::Array{ComplexF64,3}, lanw::NetworkModel, netidvec::Vector{Int})
+    groundnets = lanw.grounded_nodes
     keep = setdiff(axes(Y,1), groundnets)
 
     newnetidvec = setdiff(netidvec, groundnets)
@@ -74,4 +78,3 @@ function eliminategrounds(Y::Array{ComplexF64,3}, lanw::LinearizedAdmittanceNetw
 
     return Y[keep, keep, :], newnetidvec #Only non-grounded nodes are kept
 end
-

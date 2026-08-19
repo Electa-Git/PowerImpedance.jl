@@ -2,7 +2,7 @@
 
 using PowerImpedance
 using Measurements
-using PowerImpedance.NetworkBuilder: Grid, define, pin, ⟷
+using PowerImpedance.NetworkBuilder: Grid, define
 
 # The positional `Grid` selects the lazy constructor. Each ordinary keyword
 # value remains an atomic singleton axis.
@@ -13,8 +13,10 @@ elements = (
 )
 
 connections = (
-    pin(:z1, 1, 1) ⟷ pin(:z2, 1, 1) ⟷ :bus,
-    pin(:z1, 2, 1) ⟷ pin(:z2, 2, 1) ⟷ :gnd
+    (node = :bus, element = :z1, side = 1, terminal = 1),
+    (node = :bus, element = :z2, side = 1, terminal = 1),
+    (node = :gnd, element = :z1, side = 2, terminal = 1),
+    (node = :gnd, element = :z2, side = 2, terminal = 1),
 )
 
 deterministic_builders = define(elements, connections)

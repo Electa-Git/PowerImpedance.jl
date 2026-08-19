@@ -3,7 +3,7 @@ Shared inner-voltage-loop slot for modular converters.
 
 The current modular TLC implementation only provides a pass-through voltage
 loop. The abstraction is kept so voltage-loop implementations can be added
-without changing the surrounding converter orchestration.
+without changing the surrounding converter calculation.
 =#
 
 export AbstractInnerVoltage,

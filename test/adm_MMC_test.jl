@@ -1,5 +1,6 @@
 
 using PowerImpedance
+import PowerImpedance: @network
 using LinearAlgebra
 using Test
 

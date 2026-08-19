@@ -5,6 +5,9 @@ A usage example is provided here to help you become familiar with the package fu
 ## Initializing a network
 First, we set up a network that includes all components and their respective controls. Each component has its own pins, which will be connected to form the network. Let's start by defining the network using the `@network` macro:
 ```julia
+using PowerImpedance
+import PowerImpedance: @network
+
 net = @network begin
     voltageBase = transmissionVoltage
 end

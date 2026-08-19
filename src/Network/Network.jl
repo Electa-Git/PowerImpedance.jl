@@ -1,8 +1,8 @@
 # Main network definition
 
-export Network, add!, connect!, disconnect!, @network,
+export Network, add!, connect!, disconnect!,
         composite_element, eval_abcd
-export power_flow, data, result  # for testing
+export power_flow
 
 import Base: delete!
 

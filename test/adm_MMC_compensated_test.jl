@@ -1,3 +1,5 @@
+import PowerImpedance: @network
+
 function read_validation_data(path::AbstractString)
     lines = readlines(path)
     validation_data = [split(line) for line in lines[2:end]]

@@ -1,4 +1,6 @@
 
+import PowerImpedance: @network
+
 function synchronousmachinecircuit()
 net = @network begin
 

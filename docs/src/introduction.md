@@ -100,5 +100,6 @@ The complete workflow is:
 5. apply the relevant stability or sensitivity analysis.
 
 The scalar workflow and Gridspace workflow use the same component and solver
-kernels. A deterministic or uncertain study changes orchestration and result
-aggregation, not the physical definition of the system.
+kernels. A deterministic or uncertain study evaluates repeated numeric cases
+and aggregates their results without changing the physical definition of the
+system.

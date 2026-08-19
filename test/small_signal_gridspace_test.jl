@@ -13,27 +13,18 @@
         first = NB.impedance(z = 1.0, pins = 1),
         second = NB.impedance(z = 2.0, pins = 1)
     )
-    anonymous_connections = (
-        NB.ConnectionDef([
-            NB.pin(:first, 1, 1),
-            NB.pin(:second, 1, 1)
-        ]),
-        NB.ConnectionDef([
-                NB.pin(:first, 2, 1),
-                NB.pin(:second, 2, 1)
-            ]; name = :gnd)
+    named_connections = (
+        (node = :shared, element = :first, side = 1, terminal = 1),
+        (node = :shared, element = :second, side = 1, terminal = 1),
+        (node = :gnd, element = :first, side = 2, terminal = 1),
+        (node = :gnd, element = :second, side = 2, terminal = 1),
     )
-    first_builder = only(NB.define(anonymous_elements, anonymous_connections))
-    second_builder = only(NB.define(anonymous_elements, anonymous_connections))
-    first_anonymous = only(unique(
-        row.net
-    for row in first_builder.connections.registry
-    if startswith(String(row.net), "##")
-    ))
-    stable_key = NB._node_keys(first_builder, [first_anonymous])
-    resolved_anonymous = only(NB._resolve_node_keys(second_builder, stable_key))
-    @test resolved_anonymous != first_anonymous
-    @test NB._node_key(second_builder, resolved_anonymous) == only(stable_key)
+    first_builder = only(NB.define(anonymous_elements, named_connections))
+    second_builder = only(NB.define(anonymous_elements, named_connections))
+    stable_key = NB._node_keys(first_builder, [:shared])
+    resolved = only(NB._resolve_node_keys(second_builder, stable_key))
+    @test resolved == :shared
+    @test NB._node_key(second_builder, resolved) == only(stable_key)
 
     frequencies = 2pi .* 10.0 .^ range(0, 2; length = 24)
     response = Array{ComplexF64}(undef, 2, 2, length(frequencies))
@@ -357,7 +348,7 @@ end
     @test bodeplot(tensor, frequencies) isa AbstractVector
 end
 
-@testset "BuilderState device partition" begin
+@testset "NetworkState device partition" begin
     builder = build_ieee39bus_with_networkbuilder().builder
     result = check_stability(
         builder,

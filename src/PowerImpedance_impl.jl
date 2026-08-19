@@ -117,6 +117,9 @@ include("Network/Network.jl")
 # New power flow
 include("Network/power_flow.jl")
 
+# Scientific calculation definitions
+include("Problems.jl")
+
 # Alternative explicit network construction API
 include("Network/NetworkBuilder/NetworkBuilder.jl")
 import .NetworkBuilder: determine_impedance, make_loopgain
@@ -145,3 +148,4 @@ include("Tools/unstable_frequency.jl")
 
 
 include("Tools/parametric_stability.jl")
+include("Compute.jl")

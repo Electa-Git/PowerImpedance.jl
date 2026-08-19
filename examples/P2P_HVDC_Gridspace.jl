@@ -14,8 +14,8 @@
 using Measurements
 using Plots
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: @gridspace, BuilderState, Grid,
-                                         Gridspace, define, pin, ⟷
+using PowerImpedance.NetworkBuilder: @gridspace, Grid, Gridspace, NetworkState,
+                                     define
 using Statistics
 
 # ## Fixed network data
@@ -28,21 +28,28 @@ const soil_resistivity = 100.0
 const corridor_length = 100e3;
 
 const connections = (
-    pin(:tl1, 2.1) ⟷ pin(:c1, 2.1) ⟷ :B3d,
-    pin(:tl1, 2.2) ⟷ pin(:c1, 2.2) ⟷ :B3q,
-    pin(:g4, 1.1) ⟷ pin(:tl1, 1.1) ⟷ :B2d,
-    pin(:g4, 1.2) ⟷ pin(:tl1, 1.2) ⟷ :B2q,
-    pin(:g4, 2.1) ⟷ :gndd,
-    pin(:g4, 2.2) ⟷ :gndq,
-    pin(:ugc, 1.1) ⟷ pin(:c1, 1.1) ⟷ :B4,
-    pin(:ugc, 2.1) ⟷ pin(:ohl, 1.1) ⟷ :BX,
-    pin(:ohl, 2.1) ⟷ pin(:c2, 1.1) ⟷ :B5,
-    pin(:tl78, 1.1) ⟷ pin(:c2, 2.1) ⟷ :B6d,
-    pin(:tl78, 1.2) ⟷ pin(:c2, 2.2) ⟷ :B6q,
-    pin(:g1, 1.1) ⟷ pin(:tl78, 2.1) ⟷ :B7d,
-    pin(:g1, 1.2) ⟷ pin(:tl78, 2.2) ⟷ :B7q,
-    pin(:g1, 2.1) ⟷ :gndd,
-    pin(:g1, 2.2) ⟷ :gndq
+    (node = :B3d, element = :tl1, side = 2, terminal = 1),
+    (node = :B3d, element = :c1, side = 2, terminal = 1),
+    (node = :B3q, element = :tl1, side = 2, terminal = 2),
+    (node = :B3q, element = :c1, side = 2, terminal = 2),
+    (node = :B2d, element = :g4, side = 1, terminal = 1),
+    (node = :B2d, element = :tl1, side = 1, terminal = 1),
+    (node = :B2q, element = :g4, side = 1, terminal = 2),
+    (node = :B2q, element = :tl1, side = 1, terminal = 2),
+    (node = :B4, element = :ugc, side = 1, terminal = 1),
+    (node = :B4, element = :c1, side = 1, terminal = 1),
+    (node = :BX, element = :ugc, side = 2, terminal = 1),
+    (node = :BX, element = :ohl, side = 1, terminal = 1),
+    (node = :B5, element = :ohl, side = 2, terminal = 1),
+    (node = :B5, element = :c2, side = 1, terminal = 1),
+    (node = :B6d, element = :tl78, side = 1, terminal = 1),
+    (node = :B6d, element = :c2, side = 2, terminal = 1),
+    (node = :B6q, element = :tl78, side = 1, terminal = 2),
+    (node = :B6q, element = :c2, side = 2, terminal = 2),
+    (node = :B7d, element = :g1, side = 1, terminal = 1),
+    (node = :B7d, element = :tl78, side = 2, terminal = 1),
+    (node = :B7q, element = :g1, side = 1, terminal = 2),
+    (node = :B7q, element = :tl78, side = 2, terminal = 2),
 );
 
 const builder_options = (;
@@ -238,7 +245,7 @@ const corridor_lengths = Grid(map(characteristic_shares) do share
     )
 end);
 
-transition_builders = Gridspace{BuilderState}(
+transition_builders = Gridspace{NetworkState}(
     lengths -> begin
         r1 = nominal_geometry.core_radius
         r2 = r1 + nominal_geometry.insulation_1
@@ -320,7 +327,7 @@ cable_geometry = P2PCableGeometry(
     insulation_3 = Grid(0.07256 - 0.06651, 10 / sqrt(3))
 );
 
-cable_uq_builders = Gridspace{BuilderState}(
+cable_uq_builders = Gridspace{NetworkState}(
     (lengths, geometry) -> begin
         r1 = geometry.core_radius
         r2 = r1 + geometry.insulation_1

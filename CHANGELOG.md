@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Replace NetworkBuilder pin chains with explicit `(node, element, side,
+  terminal)` topology rows and component-specific AC/DC port descriptions.
+- Rename the materialized and linearized NetworkBuilder structures to
+  `NetworkState`, `NetworkTopology`, `AdmittanceLookup`, `NetworkLookup`, and
+  `NetworkModel`, with hard-error migration shims for the retired type names.
+- Add the public problem/formulation/result calculation interface for power
+  impedance, nodal and edge admittance, loop gain, and downstream stability
+  analysis.
+- Use one typed `PowerFlowResult → OperatingPoint → LinearizationResult`
+  sequence for scalar and Gridspace calculations, retaining passive-only
+  operating-point and active-admittance reuse.
+- Add the Literate Connection DSL tutorial and require explicit import of the
+  supported Classic `@network` macro.
 - Rename the package and primary module to `PowerImpedance`, retaining the
   UUID, a `PowerImpedanceACDC` module alias, and an entry point for manifests
   that already resolve the former package name.

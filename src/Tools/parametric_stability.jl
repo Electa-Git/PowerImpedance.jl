@@ -2,12 +2,12 @@ export make_loopgain
 
 const _NB = NetworkBuilder
 
-make_y_node(builder::_NB.BuilderState; kwargs...) = _NB.make_y_node(builder; kwargs...)
-function make_y_node(gridspace::_NB.Gridspace{_NB.BuilderState}; kwargs...)
+make_y_node(builder::_NB.NetworkState; kwargs...) = _NB.make_y_node(builder; kwargs...)
+function make_y_node(gridspace::_NB.Gridspace{_NB.NetworkState}; kwargs...)
     _NB.make_y_node(gridspace; kwargs...)
 end
-make_y_edge(builder::_NB.BuilderState; kwargs...) = _NB.make_y_edge(builder; kwargs...)
-function make_y_edge(gridspace::_NB.Gridspace{_NB.BuilderState}; kwargs...)
+make_y_edge(builder::_NB.NetworkState; kwargs...) = _NB.make_y_edge(builder; kwargs...)
+function make_y_edge(gridspace::_NB.Gridspace{_NB.NetworkState}; kwargs...)
     _NB.make_y_edge(gridspace; kwargs...)
 end
 
@@ -462,7 +462,7 @@ end
 
 """
     nyquistplot(response::Union{NetworkBuilder.ParametricFrequencyResponse, NetworkBuilder.ParametricImpedance}, omega=nothing; kwargs...)
-    nyquistplot(gridspace::NetworkBuilder.Gridspace{NetworkBuilder.BuilderState}; freq_range, uq_kwargs..., plot_kwargs...)
+    nyquistplot(gridspace::NetworkBuilder.Gridspace{NetworkBuilder.NetworkState}; freq_range, uq_kwargs..., plot_kwargs...)
 
 Analyze and plot matched trial eigenloci for every deterministic case.
 
@@ -533,7 +533,7 @@ function nyquistplot(
 end
 
 function nyquistplot(
-        gridspace::_NB.Gridspace{_NB.BuilderState};
+        gridspace::_NB.Gridspace{_NB.NetworkState};
         nodelist = Symbol[],
         freq_range = (1.0, 1.0e3, 1000),
         trials::Union{Nothing, Int} = nothing,
@@ -1602,8 +1602,8 @@ function unstable_frequency(
 end
 
 """
-    check_stability(builder::NetworkBuilder.BuilderState, element::Symbol; direction=:dc, kwargs...)
-    check_stability(gridspace::NetworkBuilder.Gridspace{NetworkBuilder.BuilderState}, element::Symbol; direction=:dc, kwargs...)
+    check_stability(builder::NetworkBuilder.NetworkState, element::Symbol; direction=:dc, kwargs...)
+    check_stability(gridspace::NetworkBuilder.Gridspace{NetworkBuilder.NetworkState}, element::Symbol; direction=:dc, kwargs...)
 
 Partition one active device from the remaining network and run common Nyquist analysis.
 
@@ -1626,7 +1626,7 @@ Partition one active device from the remaining network and run common Nyquist an
 
 At each frequency, the partitioned return ratio is
 `Zrest * inv(Zdevice)`. The selected terminal nodes are resolved from the
-connection registry.
+network topology.
 
 # Errors
 
@@ -1634,7 +1634,7 @@ Throws an error for missing, passive, source, disconnected, singular, or
 dimensionally inconsistent selections.
 """
 function check_stability(
-        gridspace::_NB.Gridspace{_NB.BuilderState},
+        gridspace::_NB.Gridspace{_NB.NetworkState},
         element::Symbol;
         direction::Symbol = :dc,
         freq_range = (1.0, 1.0e3, 1000),
@@ -1680,7 +1680,7 @@ function check_stability(
 end
 
 function check_stability(
-        builder::_NB.BuilderState,
+        builder::_NB.NetworkState,
         element::Symbol;
         kwargs...
 )
@@ -1692,7 +1692,7 @@ function check_stability(
 end
 
 # The NetworkBuilder kernels use n×n×nf tensors. These additive adapters make
-# those tensors valid scalar inputs without altering the legacy Vector{Matrix}
+# those tensors valid scalar inputs without altering the Classic Vector{Matrix}
 # methods or their return values.
 function _matrix_vector(response::AbstractArray{<:Number, 3})
     [response[:, :, index] for index in axes(response, 3)]

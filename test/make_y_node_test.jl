@@ -1,3 +1,5 @@
+import PowerImpedance: @network
+
 function calc_RLC(P,Q,V,component)
 # Function to calculate resistance, inductance or capacitance of a 3-phase series load for a given 1-phase active "P" and reactive power "Q" [MVA]
 # and phase-rms Voltage V [kV]
