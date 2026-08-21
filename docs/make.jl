@@ -11,8 +11,11 @@ const GITLAB_HOST = "gitlab.kuleuven.be"
 const REPOSITORY_PATH = get(
 	ENV,
 	"CI_PROJECT_PATH",
-	"electa/controlgroup/hvdcstability_dev.jl",
+	"electa/controlgroup/PowerImpedance.jl",
 )
+const REPOSITORY_GROUP, REPOSITORY_NAME = rsplit(REPOSITORY_PATH, "/"; limit = 2)
+const REPOSITORY_NAMESPACE, REPOSITORY_PAGES_PATH =
+	split(REPOSITORY_PATH, "/"; limit = 2)
 const REPOSITORY_URL = get(
 	ENV,
 	"CI_PROJECT_URL",
@@ -21,11 +24,9 @@ const REPOSITORY_URL = get(
 const CANONICAL_URL = get(
 	ENV,
 	"CI_PAGES_URL",
-	"https://electa.pages.gitlab.kuleuven.be/controlgroup/hvdcstability_dev.jl",
+	"https://$(REPOSITORY_NAMESPACE).pages.$(GITLAB_HOST)/$(REPOSITORY_PAGES_PATH)",
 )
 
-const REPOSITORY_GROUP = "electa/controlgroup"
-const REPOSITORY_NAME = "hvdcstability_dev.jl"
 const GITLAB_REMOTE = Remotes.GitLab(GITLAB_HOST, REPOSITORY_GROUP, REPOSITORY_NAME)
 
 const EXAMPLES_SRC = joinpath(ROOT_DIR, "examples")

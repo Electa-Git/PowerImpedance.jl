@@ -4,7 +4,7 @@ CurrentModule = PowerImpedanceACDC
 
 # PowerImpedanceACDC
 
-Documentation for [PowerImpedanceACDC](https://gitlab.kuleuven.be/electa/controlgroup/hvdcstability_dev.jl).
+Documentation for [PowerImpedanceACDC](https://gitlab.kuleuven.be/electa/controlgroup/PowerImpedance.jl).
 
 ```@index
 ```
