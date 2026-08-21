@@ -7,7 +7,6 @@
 # Arrange environment
 using PowerImpedance
 import PowerImpedance: @network
-import Plots #;plotlyjs() #Plotlyjs() for dynamic plotting if desired :)
 using DelimitedFiles
 
 

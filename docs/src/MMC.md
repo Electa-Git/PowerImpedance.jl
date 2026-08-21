@@ -12,11 +12,11 @@ assembled from the exported controller objects.
 The converter's power-flow representation determines its AC/DC steady-state
 operating point. The detailed nonlinear model is then equilibrated and
 linearized for frequency-domain evaluation. Electrical and controller
-uncertainty is therefore sampled before these steps; a sampled converter causes
-power flow, equilibrium, and linearization to be repeated.
+uncertainty is sampled before these steps. A sampled converter causes the
+package to repeat power flow, equilibrium, and linearization.
 
 The high-level [`mmc`](@ref) constructor remains available for existing models.
 The composable [`MMC`](@ref), controller, synchronization, modulation, and
 measurement types are listed in the [API reference](reference.md). The
-[P2P HVDC Gridspace tutorial](examples/P2P_HVDC_Gridspace.md) shows passive and
-converter uncertainty in one physical system.
+[P2P HVDC Gridspace tutorial](examples/P2P_HVDC_Gridspace.md) studies how the
+OHL/UGC split, cable geometry, and converter tolerances move resonances.

@@ -1,9 +1,70 @@
 import Base: eltype, extrema, getindex, iterate, length, rand, size
 import Random
-import Distributions
-
 abstract type AbstractGrid end
 abstract type AbstractUncertainGrid <: AbstractGrid end
+
+abstract type AbstractUncertaintyStyle end
+
+struct RelativeUncertainty{T<:Real} <: AbstractUncertaintyStyle
+    percent::T
+end
+
+struct AbsoluteUncertainty <: AbstractUncertaintyStyle end
+
+"""
+$(TYPEDEF)
+
+Store a dependency-free uncertainty descriptor. `sigma` is an absolute
+standard uncertainty in the same physical unit as `nominal`.
+
+$(TYPEDFIELDS)
+"""
+struct UncertainValue{T,S<:AbstractUncertaintyStyle,E}
+    "Nominal parameter value."
+    nominal::T
+
+    "Absolute standard uncertainty in the same physical unit as `nominal`."
+    sigma::E
+
+    "Origin of the uncertainty declaration."
+    style::S
+
+    function UncertainValue(nominal::T, sigma::E, style::S) where {
+        T,S<:AbstractUncertaintyStyle,E
+    }
+        if nominal isa Real && sigma isa Real
+            isfinite(nominal) || throw(ArgumentError(
+                "uncertain nominal values must be finite; got $nominal",
+            ))
+            isfinite(sigma) || throw(ArgumentError(
+                "uncertainty must be finite; got $sigma",
+            ))
+            sigma >= zero(sigma) || throw(ArgumentError(
+                "uncertainty must be nonnegative; got $sigma",
+            ))
+        end
+        return new{T,S,E}(nominal, sigma, style)
+    end
+end
+
+nominal(value::UncertainValue) = value.nominal
+standard_uncertainty(value::UncertainValue) = value.sigma
+uncertainty_style(value::UncertainValue) = value.style
+
+struct AutomaticGridKey
+    token::Base.RefValue{Nothing}
+end
+
+Base.:(==)(left::AutomaticGridKey, right::AutomaticGridKey) = left.token === right.token
+Base.isequal(left::AutomaticGridKey, right::AutomaticGridKey) = left == right
+Base.hash(key::AutomaticGridKey, seed::UInt) = hash(objectid(key.token), seed)
+
+struct NamedGridKey{K}
+    value::K
+end
+
+_grid_key(::Nothing) = AutomaticGridKey(Ref(nothing))
+_grid_key(key) = NamedGridKey(key)
 
 """
     DeterministicGrid
@@ -13,8 +74,9 @@ Represent a finite, explicitly enumerated parameter axis.
 Use [`Grid`](@ref) to construct this type from one value or a collection of
 alternatives.
 """
-struct DeterministicGrid{V<:Tuple} <: AbstractGrid
+struct DeterministicGrid{V<:Tuple,K} <: AbstractGrid
     vals::V
+    key::K
 end
 
 """
@@ -26,9 +88,10 @@ deviations expressed in percent.
 Monte Carlo entry points sample each case with `distribution=:normal` or with
 the variance-equivalent `distribution=:uniform` law.
 """
-struct RelativeGrid{V<:Tuple,P<:Tuple} <: AbstractUncertainGrid
+struct RelativeGrid{V<:Tuple,P<:Tuple,K} <: AbstractUncertainGrid
     vals::V
     rel_err::P
+    key::K
 
     @doc """
         RelativeGrid(vals::V, rel_err::P) where {V<:Tuple,P<:Tuple}
@@ -41,9 +104,9 @@ struct RelativeGrid{V<:Tuple,P<:Tuple} <: AbstractUncertainGrid
     - Throws `ArgumentError` for non-real or non-finite nominal values, or for
       non-real, non-finite, or negative uncertainty values.
     """
-    function RelativeGrid(vals::V, rel_err::P) where {V<:Tuple,P<:Tuple}
+    function RelativeGrid(vals::V, rel_err::P, key::K) where {V<:Tuple,P<:Tuple,K}
         _validate_uncertainty(vals, rel_err, "relative")
-        return new{V,P}(vals, rel_err)
+        return new{V,P,K}(vals, rel_err, key)
     end
 end
 
@@ -56,9 +119,10 @@ deviations in the same physical unit as the nominal value.
 Monte Carlo entry points sample each case with `distribution=:normal` or with
 the variance-equivalent `distribution=:uniform` law.
 """
-struct AbsoluteGrid{V<:Tuple,P<:Tuple} <: AbstractUncertainGrid
+struct AbsoluteGrid{V<:Tuple,P<:Tuple,K} <: AbstractUncertainGrid
     vals::V
     abs_err::P
+    key::K
 
     @doc """
         AbsoluteGrid(vals::V, abs_err::P) where {V<:Tuple,P<:Tuple}
@@ -71,9 +135,9 @@ struct AbsoluteGrid{V<:Tuple,P<:Tuple} <: AbstractUncertainGrid
     - Throws `ArgumentError` for non-real or non-finite nominal values, or for
       non-real, non-finite, or negative uncertainty values.
     """
-    function AbsoluteGrid(vals::V, abs_err::P) where {V<:Tuple,P<:Tuple}
+    function AbsoluteGrid(vals::V, abs_err::P, key::K) where {V<:Tuple,P<:Tuple,K}
         _validate_uncertainty(vals, abs_err, "absolute")
-        return new{V,P}(vals, abs_err)
+        return new{V,P,K}(vals, abs_err, key)
     end
 end
 
@@ -129,7 +193,7 @@ AbsoluteError(x) = AbsoluteError(_grid_values(x))
     Grid(values)
     Grid(values, relative_errors)
     Grid(values, AbsoluteError(errors))
-    component(Grid; kwargs...)
+    component(Grid, keyword arguments...)
 
 Create an explicit deterministic or uncertain parameter axis. Collections passed
 directly to `Grid` are expanded; component shadow constructors deliberately wrap
@@ -137,9 +201,9 @@ ordinary collections as one atomic value.
 
 # Arguments
 
-- `values`: One nominal value or a collection of explicitly enumerated values.
-- `relative_errors`: Relative standard deviations in percent.
-- `errors`: An [`AbsoluteError`](@ref) containing standard deviations in the
+- `values`: one nominal value or a collection of explicitly enumerated values.
+- `relative_errors`: relative standard deviations in percent.
+- `errors`: an [`AbsoluteError`](@ref) containing standard deviations in the
   physical unit of `values`.
 
 # Returns
@@ -149,10 +213,10 @@ ordinary collections as one atomic value.
 
 Passing the `Grid` function itself as the first positional argument to any
 component or configuration constructor selects its lazy NetworkBuilder method.
-For example, `impedance(Grid; z=Grid([1.0, 2.0]), pins=1)` returns a Gridspace,
-whereas `impedance(; z=1.0, pins=1)` remains the scalar constructor. Julia does
-not dispatch on keyword argument types, so this marker makes the selection
-explicit and uniform.
+The call `impedance(Grid, z=Grid([1.0, 2.0]), pins=1)` returns a Gridspace.
+Calling `impedance(z=1.0, pins=1)` uses the scalar constructor. Julia does not
+dispatch on keyword argument types, so the positional marker selects the lazy
+method.
 
 # Notes
 
@@ -162,10 +226,13 @@ The sampling law is selected by the Monte Carlo entry point. `:normal` uses
 Gridspace axes are sampled independently unless a purpose-built object provides
 specialized joint-sampling dispatch.
 """
-Grid(g::AbstractGrid) = g
-Grid(v) = DeterministicGrid(_grid_values(v))
-Grid(v, p) = RelativeGrid(_grid_values(v), _grid_values(p))
-Grid(v, error::AbsoluteError) = AbsoluteGrid(_grid_values(v), error.vals)
+Grid(grid::AbstractGrid; key=nothing) = key === nothing ? grid :
+    throw(ArgumentError("cannot replace the coupling key of an existing Grid"))
+Grid(value; key=nothing) = DeterministicGrid(_grid_values(value), _grid_key(key))
+Grid(value, relative_error; key=nothing) =
+    RelativeGrid(_grid_values(value), _grid_values(relative_error), _grid_key(key))
+Grid(value, error::AbsoluteError; key=nothing) =
+    AbsoluteGrid(_grid_values(value), error.vals, _grid_key(key))
 
 iterate(g::DeterministicGrid, state...) = iterate(g.vals, state...)
 length(g::DeterministicGrid) = length(g.vals)
@@ -179,10 +246,19 @@ length(g::AbsoluteGrid) = length(g.vals) * length(g.abs_err)
 size(g::AbstractUncertainGrid) = (length(g),)
 Base.IteratorSize(::Type{<:AbstractUncertainGrid}) = Base.HasShape{1}()
 
-function iterate(::AbstractUncertainGrid, state...)
-    throw(ArgumentError(
-        "uncertain grid iteration requires Measurements.jl; load it with `using Measurements`",
-    ))
+function iterate(grid::RelativeGrid, state...)
+    item = iterate(Iterators.product(grid.vals, grid.rel_err), state...)
+    item === nothing && return nothing
+    (value, percent), next_state = item
+    sigma = abs(value) * percent / 100
+    return UncertainValue(value, sigma, RelativeUncertainty(percent)), next_state
+end
+
+function iterate(grid::AbsoluteGrid, state...)
+    item = iterate(Iterators.product(grid.vals, grid.abs_err), state...)
+    item === nothing && return nothing
+    (value, error), next_state = item
+    return UncertainValue(value, error, AbsoluteUncertainty()), next_state
 end
 
 function getindex(g::AbstractUncertainGrid, i::Integer)
@@ -217,64 +293,50 @@ function extrema(g::AbsoluteGrid)
     return minimum(first, bounds), maximum(last, bounds)
 end
 
-_distribution(::Val{:normal}, nominal, sigma) = Distributions.Normal(nominal, sigma)
-_distribution(::Val{:uniform}, nominal, sigma) =
-    Distributions.Uniform(nominal - sqrt(3) * sigma, nominal + sqrt(3) * sigma)
-
-function _distribution(distribution::Symbol, nominal, sigma)
-    distribution in (:normal, :uniform) || throw(ArgumentError(
+function _sample_uncertainty(
+    rng::Random.AbstractRNG,
+    value::UncertainValue{<:Real,<:AbstractUncertaintyStyle,<:Real},
+    distribution::Symbol,
+)
+    distribution === :normal && return value.nominal + value.sigma * randn(rng)
+    distribution === :uniform &&
+        return value.nominal + sqrt(3) * value.sigma * (2 * rand(rng) - 1)
+    throw(ArgumentError(
         "unsupported distribution :$distribution; expected :normal or :uniform",
     ))
-    return _distribution(Val(distribution), nominal, sigma)
 end
 
-_distribution_symbol(::Type{<:Distributions.Normal}) = :normal
-_distribution_symbol(::Type{<:Distributions.Uniform}) = :uniform
-_distribution_symbol(distribution::Symbol) = distribution
+function _standard_uncertainty_draw(rng::Random.AbstractRNG, distribution::Symbol)
+    distribution === :normal && return randn(rng)
+    distribution === :uniform && return sqrt(3) * (2 * rand(rng) - 1)
+    throw(ArgumentError(
+        "unsupported distribution :$distribution; expected :normal or :uniform",
+    ))
+end
+
+_realize_uncertainty(value::UncertainValue, standardized::Real) =
+    value.nominal + value.sigma * standardized
 
 function rand(
     rng::Random.AbstractRNG,
-    g::DeterministicGrid;
-    distribution::Symbol = :normal,
-    dist = nothing,
+    value::UncertainValue{<:Real};
+    distribution=:normal,
 )
-    return rand(rng, g.vals)
-end
-rand(g::DeterministicGrid; kwargs...) = rand(Random.default_rng(), g; kwargs...)
-rand(rng::Random.AbstractRNG, g::DeterministicGrid, ::Type) = rand(rng, g)
-rand(g::DeterministicGrid, distribution::Type) =
-    rand(Random.default_rng(), g, distribution)
-
-function rand(
-    rng::Random.AbstractRNG,
-    g::RelativeGrid;
-    distribution::Symbol = :normal,
-    dist = nothing,
-)
-    dist === nothing || (distribution = _distribution_symbol(dist))
-    nominal = rand(rng, g.vals)
-    relative_error = rand(rng, g.rel_err)
-    sigma = abs(nominal) * relative_error / 100
-    return iszero(sigma) ? float(nominal) : rand(rng, _distribution(distribution, nominal, sigma))
+    iszero(value.sigma) && return float(value.nominal)
+    return _realize_uncertainty(value, _standard_uncertainty_draw(rng, distribution))
 end
 
-function rand(
-    rng::Random.AbstractRNG,
-    g::AbsoluteGrid;
-    distribution::Symbol = :normal,
-    dist = nothing,
-)
-    dist === nothing || (distribution = _distribution_symbol(dist))
-    nominal = rand(rng, g.vals)
-    sigma = rand(rng, g.abs_err)
-    return iszero(sigma) ? float(nominal) : rand(rng, _distribution(distribution, nominal, sigma))
+rand(value::UncertainValue; kwargs...) = rand(Random.default_rng(), value; kwargs...)
+
+function rand(rng::Random.AbstractRNG, grid::AbstractGrid; distribution=:normal)
+    length(grid) == 1 || throw(ArgumentError(
+        "rand(Grid) requires one configuration; select a configuration before sampling",
+    ))
+    value = first(grid)
+    return value isa UncertainValue ? rand(rng, value; distribution) : value
 end
 
-rand(g::AbstractUncertainGrid; kwargs...) = rand(Random.default_rng(), g; kwargs...)
-rand(rng::Random.AbstractRNG, g::AbstractUncertainGrid, distribution::Type) =
-    rand(rng, g; distribution = _distribution_symbol(distribution))
-rand(g::AbstractUncertainGrid, distribution::Type) =
-    rand(Random.default_rng(), g, distribution)
+rand(grid::AbstractGrid; kwargs...) = rand(Random.default_rng(), grid; kwargs...)
 
 """Convert numeric leaves to `T` while retaining container structure."""
 recast(::Type{T}, x::Number) where {T<:Real} = convert(T, x)

@@ -138,6 +138,7 @@ macro gridspace(expr)
 		end
 		push!(grid_calls, :($(GlobalRef(@__MODULE__, :_axis))($(f.name))))
 	end
+	push!(kw_params, Expr(:kw, :combine, QuoteNode(:product)))
 
 	params = Expr(:parameters, kw_params...)
 	call_sig = Expr(:call, struct_name, params)
@@ -149,6 +150,7 @@ macro gridspace(expr)
 			$struct_name,
 			$grid_tuple,
 			$name_tuple,
+			combine=combine,
 		)
 	end)
 

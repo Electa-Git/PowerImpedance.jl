@@ -52,7 +52,7 @@ end
 		builder.options,
 	)
 
-	@test updated.operating_point === nothing
+	@test !hasproperty(updated, :operating_point)
 	@test builder.elements[:z1].element_model.value == ComplexF64[3;;]
 	@test Set(updatednetwork.nets[:n1]) == Set(updatednetwork.nets[:n1])
 end

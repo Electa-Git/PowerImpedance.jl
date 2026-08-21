@@ -8,12 +8,12 @@ import PowerImpedance.PlotBuilder
 using PowerImpedance.UnitHandler: nominal, standard_uncertainty
 using PowerImpedance.PlotBuilder:
                                   AbstractTrackSize, FixedTrack, RelativeTrack,
-                                  ContentTrack, GridArea, GridSpec, SlotSpec,
-                                  LayoutSpec, AxisSpec, SeriesSpec, ViewSpec,
-                                  PageSpec, RenderSpec, UIPlot
+                                  ContentTrack, GridArea, GridDefinition, SlotDefinition,
+                                  LayoutDefinition, AxisDefinition, SeriesDefinition, ViewDefinition,
+                                  PageDefinition, RenderDefinition, UIPlot
 const BackendHandler = PlotBuilder.BackendHandler
 
-export build, export_svg
+export build, overlay!, export_svg
 
 const COLORBAR_WIDTH = 140
 const COLORBAR_TICK_LABEL_SIZE = 12
@@ -52,7 +52,7 @@ mutable struct UIContext
 end
 
 struct UIPanel
-    view::ViewSpec
+    view::ViewDefinition
     axis::Any
     plots::Vector{Any}
     groups::Dict{Symbol, Vector{Any}}
@@ -140,13 +140,13 @@ function _decade_ticks(vmin, vmax)
     return values, labels
 end
 
-function _axis_label(spec::Union{Nothing, AxisSpec}, exponent::Int, scale::Symbol)
-    spec === nothing && return ""
-    scale === :log10 && return spec.label
-    iszero(exponent) && return spec.label
+function _axis_label(definition::Union{Nothing, AxisDefinition}, exponent::Int, scale::Symbol)
+    definition === nothing && return ""
+    scale === :log10 && return definition.label
+    iszero(exponent) && return definition.label
     formatted_exponent = replace(string(exponent), "-" => "−")
     return Makie.rich(
-        spec.label,
+        definition.label,
         "  × 10",
         Makie.superscript(
             formatted_exponent;
@@ -162,14 +162,14 @@ end
 _ticks(scale::Symbol) = scale === :log10 ? _decade_ticks : Makie.automatic
 
 function _set_axis_scale!(
-        axis, spec::Union{Nothing, AxisSpec}, dim::Symbol, exponent::Int, scale::Symbol)
-    spec === nothing && throw(ArgumentError("cannot set an absent axis scale"))
-    scale in spec.allowed_scales || throw(
+        axis, definition::Union{Nothing, AxisDefinition}, dim::Symbol, exponent::Int, scale::Symbol)
+    definition === nothing && throw(ArgumentError("cannot set an absent axis scale"))
+    scale in definition.allowed_scales || throw(
         ArgumentError("axis :$dim does not allow scale :$scale"),
     )
     ticks = _ticks(scale)
     formatter = _tickformat(exponent, scale)
-    label = _axis_label(spec, exponent, scale)
+    label = _axis_label(definition, exponent, scale)
     if dim === :x
         axis.xticks[] = ticks
         axis.xtickformat[] = formatter
@@ -186,11 +186,11 @@ function _set_axis_scale!(
     return axis
 end
 
-function _series_group(series::SeriesSpec, index::Int)
+function _series_group(series::SeriesDefinition, index::Int)
     return series.group === nothing ? Symbol("series_$index") : series.group
 end
 
-function _series_visible(panel::UIPanel, series::SeriesSpec, index::Int)
+function _series_visible(panel::UIPanel, series::SeriesDefinition, index::Int)
     group = _series_group(series, index)
     return all(plot_object -> plot_object.visible[], panel.groups[group])
 end
@@ -300,7 +300,7 @@ function _numeric_values(values)
     return nominal_values, any(error -> !iszero(error), errors) ? errors : nothing
 end
 
-function _line_errors!(plots, axis, series::SeriesSpec, x, y, xerror, yerror)
+function _line_errors!(plots, axis, series::SeriesDefinition, x, y, xerror, yerror)
     if yerror !== nothing
         push!(
             plots,
@@ -336,7 +336,7 @@ function _line_errors!(plots, axis, series::SeriesSpec, x, y, xerror, yerror)
     return plots
 end
 
-function draw!(axis, ::Val{:line}, series::SeriesSpec)
+function draw!(axis, ::Val{:line}, series::SeriesDefinition)
     plots = Any[]
     x, xerror = _numeric_values(series.xdata)
     y, yerror = _numeric_values(series.ydata)
@@ -345,46 +345,59 @@ function draw!(axis, ::Val{:line}, series::SeriesSpec)
     return _line_errors!(plots, axis, series, x, y, xerror, yerror)
 end
 
-function draw!(axis, ::Val{:scatter}, series::SeriesSpec)
+function draw!(axis, ::Val{:scatter}, series::SeriesDefinition)
     x, _ = _numeric_values(series.xdata)
     y, _ = _numeric_values(series.ydata)
     return Any[scatter!(axis, x, y;
         label = series.label, visible = series.visible, series.attributes...)]
 end
 
-function draw!(axis, ::Val{:histogram}, series::SeriesSpec)
+function draw!(axis, ::Val{:histogram}, series::SeriesDefinition)
     values, _ = _numeric_values(series.xdata)
     return Any[hist!(axis, values;
         label = series.label, visible = series.visible, series.attributes...)]
 end
 
-function draw!(axis, ::Val{:stairs}, series::SeriesSpec)
+function draw!(axis, ::Val{:stairs}, series::SeriesDefinition)
     x, _ = _numeric_values(series.xdata)
     y, _ = _numeric_values(series.ydata)
     return Any[stairs!(axis, x, y;
         label = series.label, visible = series.visible, series.attributes...)]
 end
 
-function draw!(axis, ::Val{:heatmap}, series::SeriesSpec)
+function draw!(axis, ::Val{:heatmap}, series::SeriesDefinition)
     return Any[heatmap!(axis, series.xdata, series.ydata, series.zdata;
         visible = series.visible, series.attributes...)]
 end
 
-function draw!(axis, ::Val{:polygon}, series::SeriesSpec)
+function draw!(axis, ::Val{:polygon}, series::SeriesDefinition)
     return Any[poly!(axis, series.zdata;
         label = series.label, visible = series.visible, series.attributes...)]
 end
 
-function draw!(axis, ::Val{:hline}, series::SeriesSpec)
+function draw!(axis, ::Val{:hline}, series::SeriesDefinition)
     return Any[hlines!(axis, series.ydata;
         label = series.label, visible = series.visible, series.attributes...)]
 end
 
-function draw!(axis, ::Val{kind}, series::SeriesSpec) where {kind}
+function draw!(axis, ::Val{:vline}, series::SeriesDefinition)
+    return Any[vlines!(axis, series.xdata;
+        label = series.label, visible = series.visible, series.attributes...)]
+end
+
+function draw!(axis, ::Val{:band}, series::SeriesDefinition)
+    x, _ = _numeric_values(series.xdata)
+    lower, _ = _numeric_values(series.ydata)
+    upper, _ = _numeric_values(series.zdata)
+    return Any[band!(axis, x, lower, upper;
+        label = series.label, visible = series.visible, series.attributes...)]
+end
+
+function draw!(axis, ::Val{kind}, series::SeriesDefinition) where {kind}
     throw(ArgumentError("unsupported PlotBuilder primitive :$kind"))
 end
 
-function _axis_attributes(view::ViewSpec)
+function _axis_attributes(view::ViewDefinition)
     axes = (view.xaxis, view.yaxis, view.zaxis)
     axis_attributes = foldl(
         merge,
@@ -394,7 +407,7 @@ function _axis_attributes(view::ViewSpec)
     return merge(axis_attributes, view.attributes)
 end
 
-function _axis(parent, view::ViewSpec, page::PageSpec)
+function _axis(parent, view::ViewDefinition, page::PageDefinition)
     xaxis = view.xaxis
     yaxis = view.yaxis
     x_exponent = xaxis === nothing ? 0 : xaxis.exponent
@@ -471,8 +484,8 @@ function _export_directory()
     return fallback
 end
 
-function _available_path(page::PageSpec)
-    base = _sanitize_filename(page.export_spec.name)
+function _available_path(page::PageDefinition)
+    base = _sanitize_filename(page.export_definition.name)
     stamp = Dates.format(Dates.now(), EXPORT_TIMESTAMP_FORMAT)
     directory = _export_directory()
     candidate = joinpath(directory, "$(base)_$(stamp).svg")
@@ -551,13 +564,13 @@ end
 
 _makie_alignment(value::Symbol) = value === :stretch ? :center : value
 
-function _colorbars!(slot, descriptors, specification::SlotSpec)
+function _colorbars!(slot, descriptors, definition::SlotDefinition)
     isempty(descriptors) && return nothing
     grid = GridLayout(
         width = LEGEND_DOCK_WIDTH,
         tellwidth = true,
-        halign = _makie_alignment(specification.halign),
-        valign = _makie_alignment(specification.valign)
+        halign = _makie_alignment(definition.halign),
+        valign = _makie_alignment(definition.valign)
     )
     grid.default_colgap = Fixed(COLORBAR_LABEL_GAP)
     grid.default_rowgap = Fixed(COLORBAR_ROW_GAP)
@@ -652,7 +665,7 @@ end
 function _legend!(
         slot,
         panels,
-        specification::SlotSpec;
+        definition::SlotDefinition;
         width = nothing,
         overflow::Symbol = :ellipsis
 )
@@ -677,8 +690,8 @@ function _legend!(
         legend_labels;
         dimensions...,
         tellheight = overflow === :show_all,
-        halign = _makie_alignment(specification.halign),
-        valign = _makie_alignment(specification.valign)
+        halign = _makie_alignment(definition.halign),
+        valign = _makie_alignment(definition.valign)
     )
     overflow === :show_all && return (; legend, responsive = nothing)
     title, legend_entries = only(legend.entrygroups[])
@@ -696,7 +709,7 @@ function _legend!(
     return (; legend, responsive)
 end
 
-function _shares_side_dock(page::PageSpec, colorbar_slot_name::Symbol)
+function _shares_side_dock(page::PageDefinition, colorbar_slot_name::Symbol)
     page.legend.enabled || return false
     legend_slot = only(slot for slot in page.layout.slots if slot.name === page.legend.slot)
     colorbar_slot = only(
@@ -706,7 +719,7 @@ function _shares_side_dock(page::PageSpec, colorbar_slot_name::Symbol)
            last(legend_slot.area.rows) < first(colorbar_slot.area.rows)
 end
 
-function _legend_dock_width(page::PageSpec)
+function _legend_dock_width(page::PageDefinition)
     return page.legend.enabled ? LEGEND_DOCK_WIDTH : nothing
 end
 
@@ -714,15 +727,15 @@ _track_size(track::FixedTrack) = Fixed(track.value)
 _track_size(track::RelativeTrack) = Auto(false, track.weight)
 _track_size(::ContentTrack) = Auto(true)
 
-function _apply_grid_spec!(grid, specification::GridSpec)
-    grid.default_rowgap = Fixed(specification.rowgap)
-    grid.default_colgap = Fixed(specification.columngap)
-    isempty(grid.addedrowgaps) || rowgap!(grid, Fixed(specification.rowgap))
-    isempty(grid.addedcolgaps) || colgap!(grid, Fixed(specification.columngap))
-    for (index, track) in enumerate(specification.rows)
+function _apply_grid_definition!(grid, definition::GridDefinition)
+    grid.default_rowgap = Fixed(definition.rowgap)
+    grid.default_colgap = Fixed(definition.columngap)
+    isempty(grid.addedrowgaps) || rowgap!(grid, Fixed(definition.rowgap))
+    isempty(grid.addedcolgaps) || colgap!(grid, Fixed(definition.columngap))
+    for (index, track) in enumerate(definition.rows)
         index <= length(grid.rowsizes) && rowsize!(grid, index, _track_size(track))
     end
-    for (index, track) in enumerate(specification.columns)
+    for (index, track) in enumerate(definition.columns)
         index <= length(grid.colsizes) && colsize!(grid, index, _track_size(track))
     end
     return grid
@@ -732,41 +745,41 @@ function _grid_position(parent, area::GridArea)
     return parent[area.rows, area.columns]
 end
 
-function _materialize_layout(figure, specification::LayoutSpec)
-    PlotBuilder.validate(specification)
-    root_specification = only(filter(grid -> grid.parent === nothing, specification.grids))
-    grids = Dict{Symbol, Any}(root_specification.name => figure.layout)
+function _materialize_layout(figure, definition::LayoutDefinition)
+    PlotBuilder.validate(definition)
+    root_definition = only(filter(grid -> grid.parent === nothing, definition.grids))
+    grids = Dict{Symbol, Any}(root_definition.name => figure.layout)
 
-    pending = [grid for grid in specification.grids if grid.parent !== nothing]
+    pending = [grid for grid in definition.grids if grid.parent !== nothing]
     while !isempty(pending)
         progressed = false
-        for grid_specification in copy(pending)
-            haskey(grids, grid_specification.parent) || continue
-            padding = grid_specification.padding
+        for grid_definition in copy(pending)
+            haskey(grids, grid_definition.parent) || continue
+            padding = grid_definition.padding
             grid = GridLayout(
-                length(grid_specification.rows),
-                length(grid_specification.columns);
+                length(grid_definition.rows),
+                length(grid_definition.columns);
                 alignmode = all(iszero, padding) ? Inside() : Outside(padding...)
             )
-            _grid_position(grids[grid_specification.parent], grid_specification.area)[] = grid
-            grids[grid_specification.name] = grid
-            deleteat!(pending, findfirst(==(grid_specification), pending))
+            _grid_position(grids[grid_definition.parent], grid_definition.area)[] = grid
+            grids[grid_definition.name] = grid
+            deleteat!(pending, findfirst(==(grid_definition), pending))
             progressed = true
         end
         progressed || error("validated layout could not be materialized")
     end
 
-    slot_specs = Dict{Symbol, SlotSpec}()
-    for slot_specification in specification.slots
-        slot_specs[slot_specification.name] = slot_specification
+    slot_definitions = Dict{Symbol, SlotDefinition}()
+    for slot_definition in definition.slots
+        slot_definitions[slot_definition.name] = slot_definition
     end
-    for grid_specification in specification.grids
-        _apply_grid_spec!(grids[grid_specification.name], grid_specification)
+    for grid_definition in definition.grids
+        _apply_grid_definition!(grids[grid_definition.name], grid_definition)
     end
-    return (; grids, slot_specs, collapsed = Set{Tuple{Symbol, Int}}())
+    return (; grids, slot_definitions, collapsed = Set{Tuple{Symbol, Int}}())
 end
 
-function _collapse_slot!(layout::LayoutSpec, materialized, name::Symbol)
+function _collapse_slot!(layout::LayoutDefinition, materialized, name::Symbol)
     index = findfirst(slot -> slot.name === name, layout.slots)
     index === nothing && return nothing
     slot = layout.slots[index]
@@ -795,9 +808,9 @@ function _collapse_slot!(layout::LayoutSpec, materialized, name::Symbol)
     return nothing
 end
 
-function _apply_layout_specs!(layout::LayoutSpec, materialized)
-    for specification in layout.grids
-        _apply_grid_spec!(materialized.grids[specification.name], specification)
+function _apply_layout_definitions!(layout::LayoutDefinition, materialized)
+    for definition in layout.grids
+        _apply_grid_definition!(materialized.grids[definition.name], definition)
     end
     for (grid_name, row) in materialized.collapsed
         parent = materialized.grids[grid_name]
@@ -806,7 +819,7 @@ function _apply_layout_specs!(layout::LayoutSpec, materialized)
     return nothing
 end
 
-function _collapse_empty_dock!(page::PageSpec, materialized, legend)
+function _collapse_empty_dock!(page::PageDefinition, materialized, legend)
     legend === nothing && isempty(page.colorbars) || return nothing
     slot_index = findfirst(slot -> slot.name === page.legend.slot, page.layout.slots)
     slot_index === nothing && return nothing
@@ -820,8 +833,8 @@ function _collapse_empty_dock!(page::PageSpec, materialized, legend)
     return nothing
 end
 
-function _view_positions(views::AbstractVector{<:ViewSpec})
-    isempty(views) && return Tuple{ViewSpec, GridArea}[]
+function _view_positions(views::AbstractVector{<:ViewDefinition})
+    isempty(views) && return Tuple{ViewDefinition, GridArea}[]
     if all(view -> view.placement.area === nothing, views)
         columns = max(1, ceil(Int, sqrt(length(views))))
         return [(
@@ -833,8 +846,8 @@ function _view_positions(views::AbstractVector{<:ViewSpec})
 end
 
 function _slot_position(materialized, name::Symbol)
-    specification = materialized.slot_specs[name]
-    return _grid_position(materialized.grids[specification.parent], specification.area)
+    definition = materialized.slot_definitions[name]
+    return _grid_position(materialized.grids[definition.parent], definition.area)
 end
 
 function _slot_grid(
@@ -845,20 +858,20 @@ function _slot_grid(
         tellwidth::Bool = true,
         tellheight::Bool = true
 )
-    specification = materialized.slot_specs[name]
+    definition = materialized.slot_definitions[name]
     grid = GridLayout(
         width = width,
         height = height,
         tellwidth = tellwidth,
         tellheight = tellheight,
-        halign = _makie_alignment(specification.halign),
-        valign = _makie_alignment(specification.valign)
+        halign = _makie_alignment(definition.halign),
+        valign = _makie_alignment(definition.valign)
     )
     _slot_position(materialized, name)[] = grid
     return grid
 end
 
-function _build_panels(page::PageSpec, materialized)
+function _build_panels(page::PageDefinition, materialized)
     panels = UIPanel[]
     for slot_name in unique(view.placement.slot for view in page.views)
         slot = _slot_grid(
@@ -880,32 +893,32 @@ end
 function _page_supports_log(panels, dim::Symbol)
     isempty(panels) && return false
     return all(panels) do panel
-        specification = dim === :x ? panel.view.xaxis : panel.view.yaxis
-        specification !== nothing && :log10 in specification.allowed_scales
+        definition = dim === :x ? panel.view.xaxis : panel.view.yaxis
+        definition !== nothing && :log10 in definition.allowed_scales
     end
 end
 
-function _build_colorbars!(page::PageSpec, materialized)
+function _build_colorbars!(page::PageDefinition, materialized)
     for slot_name in unique(colorbar.slot for colorbar in page.colorbars)
         descriptors = [colorbar
                        for colorbar in page.colorbars if colorbar.slot === slot_name]
         _colorbars!(
             _slot_position(materialized, slot_name),
             descriptors,
-            materialized.slot_specs[slot_name]
+            materialized.slot_definitions[slot_name]
         )
     end
     return nothing
 end
 
 function _build_page(
-        render_spec::RenderSpec,
-        page::PageSpec,
+        render_definition::RenderDefinition,
+        page::PageDefinition,
         context::UIContext;
         controls::Bool,
         export_mode::Bool
 )
-    PlotBuilder.validate(render_spec)
+    PlotBuilder.validate(render_definition)
     root = only(filter(grid -> grid.parent === nothing, page.layout.grids))
     figure = Figure(size = page.size, figure_padding = root.padding)
     materialized = _materialize_layout(figure, page.layout)
@@ -927,7 +940,7 @@ function _build_page(
         built_legend = _legend!(
             legend_slot_grid[1, 1],
             panels,
-            materialized.slot_specs[page.legend.slot];
+            materialized.slot_definitions[page.legend.slot];
             width = dock_width,
             overflow
         )
@@ -1069,7 +1082,7 @@ function _build_page(
     end
 
     _collapse_empty_dock!(page, materialized, legend)
-    _apply_layout_specs!(page.layout, materialized)
+    _apply_layout_definitions!(page.layout, materialized)
     if responsive_legend !== nothing
         _observe_legend!(responsive_legend, legend_slot_grid, context)
         Makie.update_state_before_display!(figure)
@@ -1078,29 +1091,29 @@ function _build_page(
     end
     page.legend.interactive && legend !== nothing &&
         _observe_visibility_limits!(panels, context)
-    built = UIPlot(render_spec, page, figure, panels, widgets, context)
+    built = UIPlot(render_definition, page, figure, panels, widgets, context)
     plot_reference[] = built
     return built
 end
 
 function build(
-        render_spec::RenderSpec;
+        render_definition::RenderDefinition;
         backend = nothing,
         display::Bool = true,
         controls::Bool = true,
         export_mode::Bool = false,
         export_theme::Union{Nothing, Symbol} = nothing
 )
-    PlotBuilder.validate(render_spec)
+    PlotBuilder.validate(render_definition)
     active = BackendHandler.ensure_backend!(backend)
     built = UIPlot[]
-    for page in render_spec.figures
+    for page in render_definition.figures
         page_export_theme = export_theme === nothing ?
-                            page.export_spec.theme : export_theme
+                            page.export_definition.theme : export_theme
         with_theme(_theme(; export_mode, export_theme = page_export_theme)) do
             context = _context(active, display, page.title, page.status.initial)
             plot = _build_page(
-                render_spec,
+                render_definition,
                 page,
                 context;
                 controls,
@@ -1119,23 +1132,51 @@ function build(
     return built
 end
 
+function overlay!(
+    targets::AbstractVector{<:UIPlot},
+    render_definition::RenderDefinition,
+)
+    length(targets) == length(render_definition.figures) || throw(DimensionMismatch(
+        "the supplied UIPlot collection does not match the rendered page count",
+    ))
+    for (target, page) in zip(targets, render_definition.figures)
+        length(target.panels) == length(page.views) || throw(DimensionMismatch(
+            "the supplied UIPlot does not match the rendered panel count",
+        ))
+        for (panel, view) in zip(target.panels, page.views)
+            for (index, series) in enumerate(view.series)
+                drawn = draw!(panel.axis, Val(series.kind), series)
+                append!(panel.plots, drawn)
+                group = series.group === nothing ?
+                    Symbol("overlay_$(length(panel.plots))_$index") : series.group
+                haskey(panel.groups, group) || push!(panel.group_order, group)
+                append!(get!(panel.groups, group, Any[]), drawn)
+                series.label === nothing || isempty(series.label) ||
+                    (panel.group_labels[group] = series.label)
+            end
+            _reset_panel_limits!(panel)
+        end
+    end
+    return targets
+end
+
 function _current_scale(scale)
     scale === Makie.log10 && return :log10
     scale === Makie.identity && return :linear
     throw(ArgumentError("SVG export supports linear and log10 axis scales"))
 end
 
-function _axis_with_scale(spec::Union{Nothing, AxisSpec}, scale)
-    spec === nothing && return nothing
-    return AxisSpec(
-        spec.dim,
-        spec.quantity,
-        spec.units,
-        spec.label,
+function _axis_with_scale(definition::Union{Nothing, AxisDefinition}, scale)
+    definition === nothing && return nothing
+    return AxisDefinition(
+        definition.dim,
+        definition.quantity,
+        definition.units,
+        definition.label,
         _current_scale(scale);
-        allowed_scales = spec.allowed_scales,
-        exponent = spec.exponent,
-        attributes = spec.attributes
+        allowed_scales = definition.allowed_scales,
+        exponent = definition.exponent,
+        attributes = definition.attributes
     )
 end
 
@@ -1146,9 +1187,9 @@ function _current_limits(axis)
     return xlimits, ylimits
 end
 
-function _current_series(series::SeriesSpec, panel::UIPanel, index::Int)
+function _current_series(series::SeriesDefinition, panel::UIPanel, index::Int)
     visible = _series_visible(panel, series, index)
-    return SeriesSpec(
+    return SeriesDefinition(
         series.kind,
         series.xdata,
         series.ydata,
@@ -1160,10 +1201,10 @@ function _current_series(series::SeriesSpec, panel::UIPanel, index::Int)
     )
 end
 
-function _current_view(view::ViewSpec, panel::UIPanel)
+function _current_view(view::ViewDefinition, panel::UIPanel)
     series = [_current_series(item, panel, index)
               for (index, item) in enumerate(view.series)]
-    return ViewSpec(
+    return ViewDefinition(
         _axis_with_scale(view.xaxis, panel.axis.xscale[]),
         _axis_with_scale(view.yaxis, panel.axis.yscale[]),
         view.zaxis,
@@ -1184,7 +1225,7 @@ function _current_page(plot::UIPlot)
     )
     views = [_current_view(view, panel)
              for (view, panel) in zip(plot.page.views, plot.panels)]
-    return PageSpec(
+    return PageDefinition(
         plot.page.title,
         plot.page.size,
         plot.page.key,
@@ -1194,7 +1235,7 @@ function _current_page(plot::UIPlot)
         legend = plot.page.legend,
         colorbars = plot.page.colorbars,
         status = plot.page.status,
-        export_spec = plot.page.export_spec
+        export_definition = plot.page.export_definition
     )
 end
 
@@ -1207,7 +1248,7 @@ function _block_vertical_bounds(block)
     return Float64(bottom), Float64(top)
 end
 
-function _export_dock_growth(figure, page::PageSpec)
+function _export_dock_growth(figure, page::PageDefinition)
     legends = filter(block -> block isa Legend, figure.content)
     isempty(legends) && return 0.0
     legend_bottom = minimum(first(_block_vertical_bounds(legend)) for legend in legends)
@@ -1237,7 +1278,7 @@ function _export_dock_growth(figure, page::PageSpec)
     return max(0.0, required_bottom - legend_bottom)
 end
 
-function _fit_export_content!(figure, page::PageSpec)
+function _fit_export_content!(figure, page::PageDefinition)
     fitted_size = Makie.resize_to_layout!(figure)
     target_size = Tuple(max.(page.size, ceil.(Int, fitted_size)))
     Makie.resize!(figure, target_size...)
@@ -1264,15 +1305,15 @@ function PlotBuilder.export_svg(
     ),
     )
     output = path === nothing ? _available_path(plot.page) : abspath(String(path))
-    export_theme = theme === nothing ? plot.page.export_spec.theme : theme
-    should_open = open_file === nothing ? plot.page.export_spec.open_file : open_file
+    export_theme = theme === nothing ? plot.page.export_definition.theme : theme
+    should_open = open_file === nothing ? plot.page.export_definition.open_file : open_file
     lowercase(splitext(output)[2]) == ".svg" || throw(
         ArgumentError("SVG export paths must use the .svg extension"),
     )
     ispath(output) && throw(ArgumentError("refusing to overwrite existing file: $output"))
     plot.context.status[] = "Exporting SVG..."
     BackendHandler.with_backend(:cairo) do
-        one_page = RenderSpec(plot.render.spec, PageSpec[_current_page(plot)])
+        one_page = RenderDefinition(plot.render.definition, PageDefinition[_current_page(plot)])
         exported = build(
             one_page;
             backend = :cairo,

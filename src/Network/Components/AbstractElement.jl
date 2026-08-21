@@ -128,9 +128,9 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
 
     # Arguments
 
-    - `element_model`: Component model stored by the element.
-    - `element_value`: Deprecated alias for `element_model`.
-    - `kwargs`: Values for element fields such as `input_pins`, `output_pins`,
+    - `element_model`: component model stored by the element.
+    - `element_value`: deprecated alias for `element_model`.
+    - `kwargs`: values for element fields such as `input_pins`, `output_pins`,
       `transformation`, `connection`, `setpoint`, and `limits`.
 
     # Returns
@@ -163,6 +163,9 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
         elem = new{typeof(model)}()
 
         elem.element_model = model
+        elem.symbol = Symbol()
+        elem.transformation = false
+        elem.connection = true
         elem.setpoint = Setpoint()
         elem.limits = Limits()
         elem.A, elem.B, elem.C, elem.D = fill(Array{ComplexF64}(undef, 0, 0), 4)
@@ -175,9 +178,7 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
             end
         end
 
-        if !isdefined(elem, :transformation)
-            elem.transformation = false
-        elseif elem.transformation
+        if elem.transformation
             elem.input_pins -= 1
             elem.output_pins -= 1
         end

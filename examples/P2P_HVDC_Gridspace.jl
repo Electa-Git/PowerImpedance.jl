@@ -6,13 +6,12 @@
 # 2. bounded uncertainty on every nonzero cable geometry dimension; and
 # 3. bounded uncertainty on physically meaningful MMC parameters.
 #
-# There is one Monte Carlo loop: `determine_impedance` samples every uncertain
-# axis together. It reuses the operating point and active-device linearization
-# while only passive parameters change, and invalidates that cache when a
-# sampled converter or the topology changes.
+# `MonteCarlo` samples all uncertain axes together. Each trial materializes a
+# numeric network before PowerModels runs. The completed responses remain
+# available to PlotBuilder after raw samples are discarded.
 
 using Measurements
-import Plots
+using CairoMakie
 using PowerImpedance
 using PowerImpedance.NetworkBuilder: @gridspace, Grid, Gridspace, NetworkState,
                                      define
@@ -285,29 +284,34 @@ transition_builders = Gridspace{NetworkState}(
     (:corridor_lengths,)
 );
 
-transition = determine_impedance(
+frequency_points = 400 #src
+#md frequency_points = 160
+
+transition_problems = PowerImpedanceProblem(
     transition_builders;
-    nets = [:B5],
-    elim_elements = [:c2],
-    freq_range = (100.0, 5e3, 400),
-    seed = 2026
+    nodes=[:B5],
+    eliminated_elements=[:c2],
+    frequency_range=(100.0, 5e3, frequency_points),
 );
 
-transition_plot = Plots.plot(
-    xscale = :log10,
-    xlabel = "Frequency [Hz]",
-    ylabel = "|Z| [dBΩ]",
-    title = "P2P OHL/UGC transition at B5",
-    framestyle = :box,
-    minorgrid = true
-)
-for (case, share) in zip(transition, characteristic_shares)
-    frequency = real.(case.frequencies) ./ (2π)
-    magnitude = 20 .* log10.(abs.(vec(case.impedance[1, 1, :])))
-    Plots.plot!(transition_plot, frequency, magnitude;
-        label = "UGC = $(round(Int, 100share))%", linewidth = 2)
-end
-transition_plot
+transition = compute(
+    ParametricProblem(transition_problems),
+    Combinatorial(NodalImpedance()),
+);
+
+transition_labels = ["UGC = $(round(Int, 100share))%" for share in characteristic_shares];
+transition_groups = [Symbol("ugc_", round(Int, 100share)) for share in characteristic_shares];
+transition_plot = only(PowerImpedance.plot(
+    transition;
+    entries=(:B5, :B5),
+    labels=transition_labels,
+    series_groups=transition_groups,
+    title="P2P OHL/UGC transition at B5",
+    figure_size=(1000, 620),
+    display_plot=false,
+    controls=false,
+));
+transition_plot.figure
 
 # ## ±10% uncertainty on every cable geometry dimension
 #
@@ -368,43 +372,66 @@ cable_uq_builders = Gridspace{NetworkState}(
 );
 
 cable_trials = 200 #src
-#md cable_trials = 30
-cable_uq = determine_impedance(
+#md cable_trials = 4
+cable_uq_problems = PowerImpedanceProblem(
     cable_uq_builders;
-    nets = [:B5],
-    elim_elements = [:c2],
-    freq_range = (100.0, 5e3, 400),
-    trials = cable_trials,
-    distribution = :uniform,
-    seed = 2027,
-    return_samples = true
+    nodes=[:B5],
+    eliminated_elements=[:c2],
+    frequency_range=(100.0, 5e3, frequency_points),
 );
 
-cable_panels = map(eachindex(characteristic_shares)) do index
-    deterministic = transition[index]
-    uncertain = cable_uq[index]
-    frequency = real.(deterministic.frequencies) ./ (2π)
-    deterministic_db = 20 .* log10.(abs.(vec(deterministic.impedance[1, 1, :])))
-    samples_db = 20 .* log10.(abs.(uncertain.samples[1, 1, :, :]))
-    mean_db = vec(mean(samples_db; dims = 2))
-    q05_db = [quantile(view(samples_db, row, :), 0.05) for row in axes(samples_db, 1)]
-    q95_db = [quantile(view(samples_db, row, :), 0.95) for row in axes(samples_db, 1)]
+cable_uq = compute(
+    ParametricProblem(cable_uq_problems),
+    MonteCarlo(
+        NodalImpedance();
+        trials=cable_trials,
+        distribution=:uniform,
+        seed=2027,
+        return_samples=true,
+    ),
+);
 
-    panel = Plots.plot(frequency, deterministic_db;
-        xscale = :log10, label = "nominal", linewidth = 2,
-        xlabel = "Frequency [Hz]", ylabel = "|Z| [dBΩ]",
-        title = "UGC = $(round(Int, 100characteristic_shares[index]))%",
-        framestyle = :box, minorgrid = true)
-    Plots.plot!(panel, frequency, mean_db;
-        ribbon = (mean_db .- q05_db, q95_db .- mean_db),
-        label = "±10% geometry: mean, 5–95%", linewidth = 2,
-        linestyle = :dash, fillalpha = 0.18)
-    panel
-end
+cable_plot_labels = reduce(vcat, [
+    fill("UGC = $(round(Int, 100share))%, ±10% geometry", length(group))
+    for (share, group) in zip(characteristic_shares, cable_uq.details.plot_data.values)
+]);
+cable_plot_groups = reduce(vcat, [
+    fill(Symbol("ugc_", round(Int, 100share)), length(group))
+    for (share, group) in zip(characteristic_shares, cable_uq.details.plot_data.values)
+]);
+cable_plot = only(PowerImpedance.plot(
+    cable_uq;
+    entries=(:B5, :B5),
+    labels=cable_plot_labels,
+    series_groups=cable_plot_groups,
+    title="P2P cable-geometry uncertainty at B5",
+    figure_size=(1000, 680),
+    display_plot=false,
+    controls=false,
+));
+cable_plot.figure
 
-Plots.plot(cable_panels...;
-    layout = (3, 2), size = (1100, 1100),
-    plot_title = "P2P cable-geometry uncertainty at B5")
+# Peak magnitude and frequency retain trial-to-trial resonance movement for
+# every corridor share. The table complements the trajectory plot with values
+# suitable for automated screening.
+cable_geometry_kpis = map(
+    characteristic_shares,
+    cable_uq.details.plot_data.values,
+) do share, responses
+    frequencies_hz = real.(first(responses).frequencies) ./ (2π)
+    curves_db = hcat((20 .* log10.(abs.(vec(response.response[1, 1, :])))
+                      for response in responses)...)
+    peaks_db = vec(maximum(curves_db; dims=1))
+    peak_frequencies = [frequencies_hz[argmax(view(curves_db, :, trial))]
+                        for trial in axes(curves_db, 2)]
+    return (;
+        ugc_share=share,
+        peak_db_median=median(peaks_db),
+        peak_db_q05=quantile(peaks_db, 0.05),
+        peak_db_q95=quantile(peaks_db, 0.95),
+        peak_frequency_median=median(peak_frequencies),
+    )
+end;
 
 # ## Converter-parameter uncertainty
 #
@@ -414,9 +441,8 @@ Plots.plot(cable_panels...;
 # temperature. These are defensible screening assumptions, not substitutes for
 # project-specific procurement distributions.
 #
-# Unlike the passive study, every converter sample invalidates the active cache.
-# The solver therefore repeats the power flow, converter equilibrium, and
-# linearization inside the same Monte Carlo loop.
+# Every converter trial gets its own numeric power flow, equilibrium, and
+# linearization. Measurements do not enter PowerModels.
 
 const half_corridor = corridor_lengths[4];
 
@@ -502,24 +528,34 @@ converter_uq_builders = define(converter_uq_elements, connections;
     options = builder_options);
 
 converter_trials = 100 #src
-#md converter_trials = 5
-converter_uq = determine_impedance(
+#md converter_trials = 2
+converter_uq_problems = PowerImpedanceProblem(
     converter_uq_builders;
-    nets = [:B3d, :B5, :B6d],
-    freq_range = (100.0, 5e3, 400),
-    trials = converter_trials,
-    distribution = :uniform,
-    seed = 2028,
-    return_samples = true
+    nodes=[:B3d, :B5, :B6d],
+    frequency_range=(100.0, 5e3, frequency_points),
+);
+
+converter_uq = compute(
+    ParametricProblem(converter_uq_problems),
+    MonteCarlo(
+        NodalImpedance();
+        trials=converter_trials,
+        distribution=:uniform,
+        seed=2028,
+        return_samples=true,
+    ),
 );
 
 # Peak impedance and its frequency are direct resonance-screening KPIs. They
 # retain the nonlinear effect of every trial; computing them from the mean
 # impedance would hide trial-to-trial resonance movement.
-converter_case = only(converter_uq)
-converter_frequency = real.(converter_case.frequencies) ./ (2π)
+converter_responses = only(converter_uq.details.plot_data.values)
+converter_frequency = real.(first(converter_responses).frequencies) ./ (2π)
 converter_kpis = map(enumerate((:B3d, :B5, :B6d))) do (net_index, net)
-    samples_db = 20 .* log10.(abs.(converter_case.samples[net_index, net_index, :, :]))
+    samples_db = hcat((
+        20 .* log10.(abs.(vec(response.response[net_index, net_index, :])))
+        for response in converter_responses
+    )...)
     peak_db = vec(maximum(samples_db; dims = 1))
     peak_frequency = [converter_frequency[argmax(view(samples_db, :, trial))]
                       for trial in axes(samples_db, 2)]
@@ -534,21 +570,18 @@ converter_kpis = map(enumerate((:B3d, :B5, :B6d))) do (net_index, net)
     )
 end;
 
-converter_panels = map(enumerate((:B3d, :B5, :B6d))) do (net_index, net)
-    samples_db = 20 .* log10.(abs.(converter_case.samples[net_index, net_index, :, :]))
-    median_db = [median(view(samples_db, row, :)) for row in axes(samples_db, 1)]
-    q05_db = [quantile(view(samples_db, row, :), 0.05) for row in axes(samples_db, 1)]
-    q95_db = [quantile(view(samples_db, row, :), 0.95) for row in axes(samples_db, 1)]
-    Plots.plot(converter_frequency, median_db;
-        ribbon = (median_db .- q05_db, q95_db .- median_db),
-        xscale = :log10, label = "median, 5–95%", linewidth = 2,
-        xlabel = "Frequency [Hz]", ylabel = "|Z| [dBΩ]", title = string(net),
-        framestyle = :box, minorgrid = true, fillalpha = 0.2)
-end
-
-Plots.plot(converter_panels...;
-    layout = (3, 1), size = (950, 1050),
-    plot_title = "P2P converter-parameter uncertainty")
+converter_plot = only(PowerImpedance.plot(
+    converter_uq;
+    entries=[(:B3d, :B3d), (:B5, :B5), (:B6d, :B6d)],
+    grouping=:panels,
+    labels=fill("bounded converter parameters", length(converter_responses)),
+    series_groups=fill(:converter_uncertainty, length(converter_responses)),
+    title="P2P converter-parameter uncertainty",
+    figure_size=(1000, 1050),
+    display_plot=false,
+    controls=false,
+));
+converter_plot.figure
 
 # The numeric KPI table is also available for automated screening.
 converter_kpis

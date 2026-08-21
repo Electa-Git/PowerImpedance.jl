@@ -42,7 +42,7 @@ Classical circuit theory applied to power systems relies on the description of t
 
 The admittance based representation is also gaining popularity for the assessment of harmonic stability in systems with power electronic components [StamatiouBezaBongiornoHarnefors2017, BessegatoHarneforsIlvesNorrga2019](@cite).
 
-Although the admittance representation of the system and its components has a simple definition and a physical dimension, system and component configurations exist without impedance or admittance parameters defined. In Fig. 1a, where the port voltage and current have subscript “ $p$ ” for an input port and “ $s$ ” for the output port, a case is depicted where the series impedance cannot be represented using impedance parameters because of the open connection at the input and at the output port. Similarly, the example from Fig. 1b shows the case of a shunt admittance. It cannot be described using admittance parameters, since the short connection between the ports would give an infinite value for the interconnection admittance. A hybrid port representation could be applied in these cases, but its usage for determining input and output impedance of the network is everything but intuitive.
+Some valid component configurations have neither finite impedance parameters nor finite admittance parameters. Figure 1a shows a series branch with open input and output ports. The open circuit prevents a finite impedance representation. Figure 1b shows a shunt connection whose shorted ports imply infinite interconnection admittance. A hybrid representation could describe either case, but it makes input and output impedance extraction difficult.
 
 ![Figure 1](assets/electromagnetic_stability_simulator/figure-01.png)
 
@@ -58,7 +58,7 @@ voltages and currents at the input ports to those at the output ports.
 
 **Figure 2:** Polyphase power system using multiport ABCD parameters.
 
-As explained, admittance-based representations of networks are becoming a promising approach gaining popularity to be used in impedance-based stability assessments to investigate harmonic stability with power electronic converters [LiuXieLiu2018](@cite), e.g. for Voltage Source Converter High Voltage Direct Current (VSC HVDC) systems [BayoSalas2018, JiTangYangLiLiu2019](@cite). The use of ABCD parameters for such a stability assessment, however, is only recently starting to get attention in literature. Besides [BayoSalas2018](@cite), where the method was proposed to build small network models for analyzing high-frequency interactions in the kHz-range, recently, also [SunWuWangDeJongBlaabjergCukCobben2018](@cite) assessed interactions, but within the bandwidth of the converter controllers (up to several 100 Hz), building on the work from [Wu2014](@cite) to create a network equivalent containing a frequency-dependent model of a single overhead line.
+Admittance-based network models are widely used to assess harmonic stability in converter-dominated systems [LiuXieLiu2018](@cite), including voltage-source-converter high-voltage direct-current (VSC HVDC) systems [BayoSalas2018, JiTangYangLiLiu2019](@cite). ABCD-based network construction has received less attention. Bayo Salas used it to model high-frequency interactions in small networks [BayoSalas2018](@cite). Sun et al. studied interactions within converter-control bandwidths of several hundred hertz [SunWuWangDeJongBlaabjergCukCobben2018](@cite), building on the frequency-dependent overhead-line equivalent in [Wu2014](@cite).
 
 This representation allows an equivalent impedance to be constructed at an arbitrary network
 node while retaining both active and passive component dynamics. The following sections
@@ -97,7 +97,7 @@ where  $i, j \in \{1, 2\}$  and  $i$  denotes the invertible matrix  $\mathbf{B}
 
 **Figure 4:** Parallel connected multiport networks.
 
-It should be noted that the term ‘multiport’ network encompasses both single component with one or more input and output ports, as well as a subnetwork with defined input and output ‘ports’ (or nodes).
+The term ‘multiport network’ includes both an individual component with one or more input and output ports and a subnetwork with defined input and output ports or nodes.
 
 ### Determining the input/output impedance of the network
 
@@ -1031,7 +1031,7 @@ $$\begin{aligned}
 \omega_C &= \Delta\omega + \omega_0.
 \end{aligned}$$
 
-It should be noted that the output current control and circulating current control are implemented in the converter's reference frame. Thus, the rotation should be applied to the corresponding variables before the control law is applied. However, since the converter's internal dynamics is analyzed in the grid's reference frame, the output of the mentioned controls should be restored to the grid's reference frame using the inverse of the rotation matrix, given by:
+The output-current and circulating-current controllers operate in the converter reference frame. Their input variables are rotated into that frame before applying the control laws. The converter dynamics are expressed in the grid reference frame, so the controller outputs are rotated back with the inverse matrix:
 
 $$T(\theta) = \begin{bmatrix} \cos(\theta) & -\sin(\theta) \\ \sin(\theta) & \cos(\theta) \end{bmatrix},$$
 
@@ -1305,11 +1305,11 @@ $$\begin{bmatrix} \mathbf{U}_q \\ \mathbf{I}_q \end{bmatrix} = \begin{bmatrix} \
 
 The equality of voltages  $U_x$  and  $U_y$  is expressed by adding column  $y$  to column  $x$ , removing column  $y$  and replacing  $U_x$  by  $U_z$ . This voltage is an intermediate voltage of the series connection which is not relevant and will be eliminated later.
 
-The fact that the sum of two currents  $I_x$  and  $I_y$  is equal to zero is expressed by adding row  $y$  to row  $x$ , removing row  $y$  and replacing  $I_x$  by 0.
+The condition  $I_x + I_y = 0$  is imposed by adding row  $y$  to row  $x$ . Row  $y$  is then removed and  $I_x$  is replaced by zero.
 
 #### Reduction of the system
 
-The system is reduced by eliminating all intermediate voltages from the voltage vector and all zero entries from the current vector. This is done by first exchanging the intermediate voltages with the zero entries. The procedure to do so is explained in [Wu2014](@cite). After the exchange, the columns corresponding to zero currents and the rows corresponding to intermediate voltages can simple be removed.
+The reduction eliminates the intermediate voltages from the voltage vector and the zero entries from the current vector. First, the intermediate voltages are exchanged with the zero entries using the procedure in [Wu2014](@cite). The columns associated with zero currents and the rows associated with intermediate voltages can then be removed.
 
 Eventually, we obtain an admittance description of the form:
 
@@ -1373,7 +1373,7 @@ shunt admittance $\frac{g_c}{2} + j\frac{b_c}{2}$
 
 $$\mathbf{Y}_{ac} = \begin{bmatrix} (y_s + \frac{g_c}{2} + j\frac{b_c}{2}) \frac{1}{\tau^2} & -\frac{y_s}{\tau \exp(-j\theta_{shift})} \\ -\frac{y_s}{\tau \exp(j\theta_{shift})} & (y_s + \frac{g_c}{2} + j\frac{b_c}{2}) \end{bmatrix}.$$
 
-It should be noted that the AC network is considered as balanced for the power flow solution, and thus, all the components have diagonal matrix models, with equal elements on the matrix diagonal.
+The power-flow model treats the AC network as balanced. Each component therefore has a diagonal matrix model with identical diagonal entries.
 
 ![Figure 26](assets/electromagnetic_stability_simulator/figure-26.png)
 
@@ -1391,7 +1391,7 @@ In the case of the DC impedance, all matrices are of size  $1 \times 1$ , while 
 
 The DC branch model is then given as a Thevenin equivalent series impedance  $r = \Re\{\mathbf{Z}\}$ . The AC branch is modeled as an ideal transformer with  $\tau = 1$  and  $\theta_{\text{shift}} = 0$ , and with  $r_s = \Re\{\mathbf{Z}(j\omega) \langle 1, 1 \rangle\}$ ,  $x_s = \Im\{\mathbf{Z}(j\omega) \langle 1, 1 \rangle\}$ ,  $g_c = 0$  and  $b_c = 0$ .
 
-It should be noted that this only refers to the branches interconnecting several nodes in the system. AC shunt impedances should be treated separately as a shunt component. DC shunt impedances can only be added as DC loads.
+This branch treatment applies only to impedances that connect distinct network nodes. AC shunt impedances are modeled as shunt components, while DC shunt impedances are modeled as DC loads.
 
 #### Transformer
 

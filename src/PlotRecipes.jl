@@ -1,4 +1,4 @@
-export HarmonicImpedancePlotSpec
+export HarmonicImpedancePlotDefinition
 export response_kind, response_values, angular_frequencies, response_nodes
 
 """$(TYPEDSIGNATURES)
@@ -31,17 +31,43 @@ $(TYPEDEF)
 Select the declarative harmonic-impedance magnitude recipe for a scalar
 [`FrequencyResponseResult`](@ref).
 """
-struct HarmonicImpedancePlotSpec <: PlotBuilder.AbstractPlotSpec end
+struct HarmonicImpedancePlotDefinition <: PlotBuilder.AbstractPlotDefinition end
 
 const _IMPEDANCE_ENTRY = Union{Integer, Symbol}
+const _CompletedFrequencyResponseResult = Union{
+    FrequencyResponseResult,
+    AbstractParametricResult{<:FrequencyResponseResult},
+    AbstractUncertaintyResult{<:FrequencyResponseResult},
+}
 
-PlotBuilder.dispatch_on(::Type{HarmonicImpedancePlotSpec}) = FrequencyResponseResult
-PlotBuilder.input_kwargs(::Type{HarmonicImpedancePlotSpec}) = (:entries, :grouping, :xscale)
-PlotBuilder.renderer_kwargs(::Type{HarmonicImpedancePlotSpec}) = (:title, :figure_size)
-function PlotBuilder.input_defaults(::Type{HarmonicImpedancePlotSpec}, result)
-    return (; entries = :diagonal, grouping = :overlay, xscale = :log10)
+_frequency_response_values(result::FrequencyResponseResult) = FrequencyResponseResult[result]
+_frequency_response_values(result::AbstractParametricResult{<:FrequencyResponseResult}) =
+    result.values
+function _frequency_response_values(
+    result::AbstractUncertaintyResult{<:FrequencyResponseResult},
+)
+    hasproperty(result, :values) && return result.values
+    hasproperty(result.details, :plot_data) || throw(ArgumentError(
+        "the uncertainty result does not retain completed frequency-response trajectories",
+    ))
+    return reduce(vcat, result.details.plot_data.values; init=FrequencyResponseResult[])
 end
-function PlotBuilder.renderer_defaults(::Type{HarmonicImpedancePlotSpec}, result)
+
+PlotBuilder.dispatch_on(::Type{HarmonicImpedancePlotDefinition}) =
+    _CompletedFrequencyResponseResult
+PlotBuilder.input_kwargs(::Type{HarmonicImpedancePlotDefinition}) =
+    (:entries, :grouping, :xscale, :labels, :series_groups)
+PlotBuilder.renderer_kwargs(::Type{HarmonicImpedancePlotDefinition}) = (:title, :figure_size)
+function PlotBuilder.input_defaults(::Type{HarmonicImpedancePlotDefinition}, result)
+    return (;
+        entries=:diagonal,
+        grouping=:overlay,
+        xscale=:log10,
+        labels=nothing,
+        series_groups=nothing,
+    )
+end
+function PlotBuilder.renderer_defaults(::Type{HarmonicImpedancePlotDefinition}, result)
     return (; title = "Harmonic nodal impedance", figure_size = :auto)
 end
 
@@ -178,7 +204,7 @@ function _validate_harmonic_response(result::FrequencyResponseResult, entries)
 end
 
 function PlotBuilder.resolve_input(
-        ::Type{HarmonicImpedancePlotSpec}, recipe::PlotBuilder.PlotRecipe
+        ::Type{HarmonicImpedancePlotDefinition}, recipe::PlotBuilder.PlotRecipe
 )
     recipe.input.grouping in (:overlay, :panels, :pages) || throw(
         ArgumentError("grouping must be :overlay, :panels, or :pages"),
@@ -188,7 +214,43 @@ function PlotBuilder.resolve_input(
     )
     recipe.renderer.title isa AbstractString ||
         throw(ArgumentError("title must be a string"))
-    data = _validate_harmonic_response(recipe.object, recipe.input.entries)
+    values = _frequency_response_values(recipe.object)
+    isempty(values) && throw(ArgumentError("the result contains no completed responses"))
+    datasets = [
+        _validate_harmonic_response(value, recipe.input.entries)
+        for value in values
+    ]
+    labels = recipe.input.labels
+    if labels !== nothing
+        labels isa AbstractVector || throw(ArgumentError("labels must be a vector or nothing"))
+        length(labels) == length(datasets) || throw(DimensionMismatch(
+            "labels must contain one entry per completed response",
+        ))
+        all(label -> label === nothing || label isa AbstractString, labels) || throw(
+            ArgumentError("labels must contain strings or nothing"),
+        )
+        labels = Union{Nothing,String}[
+            label === nothing ? nothing : String(label) for label in labels
+        ]
+    end
+    series_groups = recipe.input.series_groups
+    if series_groups !== nothing
+        series_groups isa AbstractVector || throw(
+            ArgumentError("series_groups must be a vector or nothing"),
+        )
+        length(series_groups) == length(datasets) || throw(DimensionMismatch(
+            "series_groups must contain one entry per completed response",
+        ))
+        all(group -> group isa Symbol, series_groups) || throw(
+            ArgumentError("series_groups must contain symbols"),
+        )
+        series_groups = Symbol.(series_groups)
+    end
+    data = first(datasets)
+    all(dataset -> dataset.nodes == data.nodes && dataset.selected == data.selected,
+        datasets) || throw(DimensionMismatch(
+        "harmonic-impedance response nodes or selected entries differ",
+    ))
     requested_size = recipe.renderer.figure_size
     requested_size === :auto ||
         requested_size isa Tuple &&
@@ -200,7 +262,7 @@ function PlotBuilder.resolve_input(
     figure_size = requested_size === :auto ?
                   _harmonic_figure_size(recipe.input.grouping, length(data.selected)) :
                   Tuple(Int.(requested_size))
-    input = merge(recipe.input, (; data))
+    input = merge(recipe.input, (; data, datasets, labels, series_groups))
     renderer = merge(
         recipe.renderer,
         (; title = String(recipe.renderer.title), figure_size)
@@ -209,54 +271,114 @@ function PlotBuilder.resolve_input(
 end
 
 function PlotBuilder.grouping_mode(
-        ::Type{HarmonicImpedancePlotSpec}, mode::Val, recipe::PlotBuilder.PlotRecipe
+        ::Type{HarmonicImpedancePlotDefinition}, mode::Val, recipe::PlotBuilder.PlotRecipe
 )
     return Val(recipe.input.grouping)
 end
 
 function PlotBuilder.group_facets(
-        ::Type{HarmonicImpedancePlotSpec}, mode::Val,
+        ::Type{HarmonicImpedancePlotDefinition}, mode::Val,
         recipe::PlotBuilder.PlotRecipe, page_key
 )
     return Tuple(recipe.input.data.selected)
 end
 
 function PlotBuilder.axis_quantity(
-        ::Type{HarmonicImpedancePlotSpec}, ::Val{:x}, recipe::PlotBuilder.PlotRecipe
+        ::Type{HarmonicImpedancePlotDefinition}, ::Val{:x}, recipe::PlotBuilder.PlotRecipe
 )
     return UnitHandler.QuantityTag{:frequency}()
 end
 function PlotBuilder.axis_quantity(
-        ::Type{HarmonicImpedancePlotSpec}, ::Val{:y}, recipe::PlotBuilder.PlotRecipe
+        ::Type{HarmonicImpedancePlotDefinition}, ::Val{:y}, recipe::PlotBuilder.PlotRecipe
 )
     return UnitHandler.QuantityTag{:impedance_db}()
 end
 
 function PlotBuilder.axis_scale(
-        ::Type{HarmonicImpedancePlotSpec}, ::Val{:x}, recipe::PlotBuilder.PlotRecipe
+        ::Type{HarmonicImpedancePlotDefinition}, ::Val{:x}, recipe::PlotBuilder.PlotRecipe
 )
     return recipe.input.xscale
 end
 function PlotBuilder.axis_scales(
-        ::Type{HarmonicImpedancePlotSpec}, ::Val{:x},
-        recipe::PlotBuilder.PlotRecipe, series::Vector{PlotBuilder.SeriesSpec}
+        ::Type{HarmonicImpedancePlotDefinition}, ::Val{:x},
+        recipe::PlotBuilder.PlotRecipe, series::Vector{PlotBuilder.SeriesDefinition}
 )
     return (:linear, :log10)
 end
 
 function PlotBuilder.series_data(
-        ::Type{HarmonicImpedancePlotSpec}, ::Val{:x},
-        recipe::PlotBuilder.PlotRecipe, entry
+        ::Type{HarmonicImpedancePlotDefinition}, ::Val{:x},
+        recipe::PlotBuilder.PlotRecipe, key
 )
-    return recipe.input.data.frequencies
+    case_index, _ = _harmonic_series_key(key)
+    return recipe.input.datasets[case_index].frequencies
 end
 function PlotBuilder.series_data(
-        ::Type{HarmonicImpedancePlotSpec}, ::Val{:y},
-        recipe::PlotBuilder.PlotRecipe, entry
+        ::Type{HarmonicImpedancePlotDefinition}, ::Val{:y},
+        recipe::PlotBuilder.PlotRecipe, key
 )
+    case_index, entry = _harmonic_series_key(key)
     row, column = entry
-    impedance = @view recipe.input.data.values[row, column, :]
+    impedance = @view recipe.input.datasets[case_index].values[row, column, :]
     return 20 .* log10.(abs.(impedance))
+end
+
+_harmonic_series_key(key::NamedTuple) = (key.case, key.entry)
+_harmonic_series_key(entry) = (1, entry)
+
+function PlotBuilder.series_keys(
+    ::Type{HarmonicImpedancePlotDefinition},
+    mode::Val,
+    ::Val{:overlay},
+    recipe::PlotBuilder.PlotRecipe,
+    page_key,
+    view_key,
+)
+    return tuple((
+        (; case=case_index, entry)
+        for case_index in eachindex(recipe.input.datasets)
+        for entry in recipe.input.data.selected
+    )...)
+end
+
+function _harmonic_faceted_series_keys(
+    ::Type{HarmonicImpedancePlotDefinition},
+    mode::Val,
+    recipe::PlotBuilder.PlotRecipe,
+    page_key,
+    view_key,
+)
+    entry = something(view_key, page_key)
+    return tuple((
+        (; case=case_index, entry)
+        for case_index in eachindex(recipe.input.datasets)
+    )...)
+end
+
+function PlotBuilder.series_keys(
+    definition::Type{HarmonicImpedancePlotDefinition},
+    mode::Val,
+    ::Val{:panels},
+    recipe::PlotBuilder.PlotRecipe,
+    page_key,
+    view_key,
+)
+    return _harmonic_faceted_series_keys(
+        definition, mode, recipe, page_key, view_key,
+    )
+end
+
+function PlotBuilder.series_keys(
+    definition::Type{HarmonicImpedancePlotDefinition},
+    mode::Val,
+    ::Val{:pages},
+    recipe::PlotBuilder.PlotRecipe,
+    page_key,
+    view_key,
+)
+    return _harmonic_faceted_series_keys(
+        definition, mode, recipe, page_key, view_key,
+    )
 end
 
 function _impedance_entry_label(recipe::PlotBuilder.PlotRecipe, entry)
@@ -266,20 +388,39 @@ function _impedance_entry_label(recipe::PlotBuilder.PlotRecipe, entry)
 end
 
 function PlotBuilder.legend_label(
-        ::Type{HarmonicImpedancePlotSpec}, recipe::PlotBuilder.PlotRecipe, entry
+        ::Type{HarmonicImpedancePlotDefinition}, recipe::PlotBuilder.PlotRecipe, key
 )
-    return _impedance_entry_label(recipe, entry)
+    case_index, entry = _harmonic_series_key(key)
+    entry_label = _impedance_entry_label(recipe, entry)
+    if recipe.input.labels !== nothing
+        label = recipe.input.labels[case_index]
+        label === nothing && return nothing
+        return length(recipe.input.data.selected) == 1 ? label : "$entry_label, $label"
+    end
+    return length(recipe.input.datasets) == 1 ? entry_label : "$entry_label, case $case_index"
 end
 
 function PlotBuilder.series_group(
-        ::Type{HarmonicImpedancePlotSpec}, recipe::PlotBuilder.PlotRecipe, entry
+        ::Type{HarmonicImpedancePlotDefinition}, recipe::PlotBuilder.PlotRecipe, key
 )
+    case_index, entry = _harmonic_series_key(key)
     row, column = entry
-    return Symbol("z_$(row)_$(column)")
+    if recipe.input.series_groups !== nothing
+        group = recipe.input.series_groups[case_index]
+        return Symbol("z_$(row)_$(column)_$(group)")
+    end
+    return Symbol("z_$(row)_$(column)_case_$case_index")
+end
+
+function PlotBuilder.series_attributes(
+        ::Type{HarmonicImpedancePlotDefinition}, recipe::PlotBuilder.PlotRecipe, key
+)
+    recipe.object isa AbstractUncertaintyResult || return (; linewidth=2)
+    return (; linewidth=1, alpha=0.16)
 end
 
 function PlotBuilder.view_key(
-        ::Type{HarmonicImpedancePlotSpec}, mode::Val,
+        ::Type{HarmonicImpedancePlotDefinition}, mode::Val,
         recipe::PlotBuilder.PlotRecipe, page_key, entry
 )
     key = entry === nothing ? page_key : entry
@@ -288,7 +429,7 @@ function PlotBuilder.view_key(
 end
 
 function PlotBuilder.default_title(
-        ::Type{HarmonicImpedancePlotSpec}, mode::Val,
+        ::Type{HarmonicImpedancePlotDefinition}, mode::Val,
         recipe::PlotBuilder.PlotRecipe, page_key, entry
 )
     key = entry === nothing ? page_key : entry
@@ -298,32 +439,32 @@ function PlotBuilder.default_title(
 end
 
 function PlotBuilder.default_figsize(
-        ::Type{HarmonicImpedancePlotSpec}, recipe::PlotBuilder.PlotRecipe
+        ::Type{HarmonicImpedancePlotDefinition}, recipe::PlotBuilder.PlotRecipe
 )
     return recipe.renderer.figure_size
 end
 
-function PlotBuilder.layout_spec(
-        ::Type{HarmonicImpedancePlotSpec}, recipe::PlotBuilder.PlotRecipe
+function PlotBuilder.layout_definition(
+        ::Type{HarmonicImpedancePlotDefinition}, recipe::PlotBuilder.PlotRecipe
 )
     return recipe.input.grouping === :panels ? :grid : :single
 end
 
-function PlotBuilder.legend_spec(
-        ::Type{HarmonicImpedancePlotSpec}, recipe::PlotBuilder.PlotRecipe
+function PlotBuilder.legend_definition(
+        ::Type{HarmonicImpedancePlotDefinition}, recipe::PlotBuilder.PlotRecipe
 )
-    return PlotBuilder.LegendSpec(
+    return PlotBuilder.LegendDefinition(
         enabled = recipe.input.grouping === :overlay,
         interactive = true,
         overflow = :ellipsis
     )
 end
 
-function PlotBuilder.export_spec(
-        ::Type{HarmonicImpedancePlotSpec}, recipe::PlotBuilder.PlotRecipe,
+function PlotBuilder.export_definition(
+        ::Type{HarmonicImpedancePlotDefinition}, recipe::PlotBuilder.PlotRecipe,
         title::AbstractString
 )
-    return PlotBuilder.ExportSpec(
+    return PlotBuilder.ExportDefinition(
         theme = recipe.renderer.export_theme,
         name = isempty(title) ? "harmonic_impedance" : title,
         open_file = recipe.renderer.open_export

@@ -5,13 +5,17 @@ Specify an AC/DC power-flow calculation for one materialized network.
 
 $(TYPEDFIELDS)
 """
-struct PowerFlowProblem{N <: NetworkState} <: P.ProblemDefinition
+struct PowerFlowProblem{N <: NetworkState} <: P.AbstractProblemDefinition
     "Materialized network whose operating point is required."
     network::N
 end
 
 "Select the validated PowerModelsACDC power-flow formulation."
-struct ACDCPowerFlow <: P.AbstractFormulation end
+struct ACDCPowerFlow{B} <: P.AbstractFormulation
+    backend::Type{B}
+end
+
+ACDCPowerFlow(; backend::Type{B}=P.PMACDC) where {B} = ACDCPowerFlow{B}(backend)
 
 """
 $(TYPEDEF)
@@ -20,7 +24,7 @@ Specify admittance linearization of one materialized network.
 
 $(TYPEDFIELDS)
 """
-struct LinearizationProblem{N <: NetworkState, F} <: P.ProblemDefinition
+struct LinearizationProblem{N <: NetworkState, F} <: P.AbstractProblemDefinition
     "Materialized network to linearize."
     network::N
     "Previously calculated power-flow result, or `nothing`."
@@ -30,7 +34,12 @@ end
 LinearizationProblem(network::NetworkState) = LinearizationProblem(network, nothing)
 
 "Select frequency-domain admittance linearization."
-struct AdmittanceLinearization <: P.AbstractFormulation end
+struct AdmittanceLinearization{B} <: P.AbstractFormulation
+    backend::Type{B}
+end
+
+AdmittanceLinearization(; backend::Type{B}=P.PIACDC) where {B} =
+    AdmittanceLinearization{B}(backend)
 
 """
     convert(network::NetworkState, NetworkModel)
@@ -87,12 +96,16 @@ function _operating_point(
     return P.OperatingPoint(Dict{Symbol, P.Setpoint}(pairs(setpoints)))
 end
 
-function P.compute(problem::PowerFlowProblem, ::ACDCPowerFlow)
-    network = problem.network
+function P.compute(
+        problem::PowerFlowProblem,
+        formulation::ACDCPowerFlow{P.PMACDC};
+        options::NamedTuple = (;)
+)
+    network = _assert_numeric_powerflow_network(problem.network)
     if islinear(network.elements)
         point = P.OperatingPoint()
-        network.operating_point = point
         return P.PowerFlowResult(
+            formulation,
             nothing,
             nothing,
             _node_bus_mapping(network.topology),
@@ -111,9 +124,9 @@ function P.compute(problem::PowerFlowProblem, ::ACDCPowerFlow)
         setting = powerflow_setting(network.options)
     )
     point = _operating_point(result, global_dict, network, element_mapping)
-    network.operating_point = point
     @info "Setpoints of nonlinear devices: $(point.setpoints)"
     return P.PowerFlowResult(
+        formulation,
         result,
         data,
         _node_bus_mapping(network.topology),
@@ -130,21 +143,23 @@ end
 
 nonlinearsetpoints(powerflow::P.PowerFlowResult) = convert(P.OperatingPoint, powerflow)
 
-function P.compute(problem::LinearizationProblem, ::AdmittanceLinearization)
+function P.compute(
+        problem::LinearizationProblem,
+        formulation::AdmittanceLinearization{P.PIACDC};
+        options::NamedTuple = (;)
+)
     network = problem.network
     powerflow = problem.powerflow
     point = if powerflow isa P.PowerFlowResult
         nonlinearsetpoints(powerflow)
-    elseif network.operating_point !== nothing
-        network.operating_point
     elseif islinear(network.elements)
         P.OperatingPoint()
     else
         nonlinearsetpoints(P.compute(PowerFlowProblem(network), ACDCPowerFlow()))
     end
-    network.operating_point = point
     model = NetworkModel(network, point)
     return P.LinearizationResult(
+        formulation,
         model,
         point,
         (

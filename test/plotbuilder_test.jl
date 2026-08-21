@@ -1,6 +1,6 @@
 const PBTest = PowerImpedance.PlotBuilder
 
-struct TestDeclarativePlot <: PBTest.AbstractPlotSpec end
+struct TestDeclarativePlot <: PBTest.AbstractPlotDefinition end
 PBTest.dispatch_on(::Type{TestDeclarativePlot}) = Vector{Float64}
 PBTest.input_kwargs(::Type{TestDeclarativePlot}) = (:grouping,)
 PBTest.input_defaults(::Type{TestDeclarativePlot}, object) = (; grouping = :overlay)
@@ -24,14 +24,16 @@ PBTest.legend_label(
 ) = "values"
 
 @testset "Grammar relocation" begin
-    @test ProblemDefinition isa DataType
+    @test AbstractProblemDefinition isa DataType
     @test AbstractFormulation isa DataType
-    @test AbstractResult isa DataType
+    @test AbstractResolutionResult isa DataType
     @test isdefined(PowerImpedance, :compute)
     grammar_source = read(joinpath(pkgdir(PowerImpedance), "src", "Grammar.jl"), String)
     problems_source = read(joinpath(pkgdir(PowerImpedance), "src", "Problems.jl"), String)
-    @test occursin("abstract type ProblemDefinition end", grammar_source)
-    @test !occursin("abstract type ProblemDefinition end", problems_source)
+    @test occursin("abstract type AbstractProblemDefinition end", grammar_source)
+    @test !occursin("abstract type AbstractProblemDefinition end", problems_source)
+    @test PowerImpedance.Grammar.compute === PowerImpedance.compute
+    @test PowerImpedance.NetworkBuilder.compute === PowerImpedance.compute
 end
 
 @testset "UnitHandler" begin
@@ -67,7 +69,7 @@ end
           Set((:toolbar, :canvas, :status, :legend, :colorbars))
 
     render = PB.make_render(TestDeclarativePlot, [1.0, 2.0])
-    @test render isa PB.RenderSpec{TestDeclarativePlot}
+    @test render isa PB.RenderDefinition{TestDeclarativePlot}
     @test only(render.figures).views[1].series[1].ydata == [1.0, 2.0]
     @test_throws ArgumentError PB.make_render(TestDeclarativePlot, [1.0]; bad = true)
     @test_throws ArgumentError PB.make_render(TestDeclarativePlot, 1.0)
@@ -82,7 +84,16 @@ function _plot_test_result(; kind = :nodal_impedance, values = nothing,
         response[2, 1, :] .= [3, 30, 300]
         response[2, 2, :] .= [4, 40, 400]
     end
-    return FrequencyResponseResult(kind, response, frequencies, nodes, nothing, nothing)
+    formulation = kind === :nodal_impedance ? NodalImpedance() : NodeAdmittance()
+    return FrequencyResponseResult(
+        formulation,
+        kind,
+        response,
+        frequencies,
+        nodes,
+        nothing,
+        (;),
+    )
 end
 
 @testset "Harmonic impedance plot recipe" begin
@@ -93,7 +104,7 @@ end
     @test angular_frequencies(result) === result.frequencies
     @test response_nodes(result) === result.nodes
 
-    render = PB.make_render(HarmonicImpedancePlotSpec, result)
+    render = PB.make_render(HarmonicImpedancePlotDefinition, result)
     page = only(render.figures)
     @test length(page.views) == 1
     @test length(only(page.views).series) == 2
@@ -110,13 +121,13 @@ end
         frequencies = ComplexF64.(2π .* [10.0, 100.0, 1_000.0])
     )
     complex_frequency_render = PB.make_render(
-        HarmonicImpedancePlotSpec, complex_frequency_result
+        HarmonicImpedancePlotDefinition, complex_frequency_result
     )
     @test only(only(complex_frequency_render.figures).views).series[1].xdata ≈
           [10.0, 100.0, 1_000.0]
 
     panels = PB.make_render(
-        HarmonicImpedancePlotSpec,
+        HarmonicImpedancePlotDefinition,
         result;
         entries = (:right => :left, 1 => 2),
         grouping = :panels,
@@ -130,57 +141,80 @@ end
     @test all(view -> view.xaxis.scale === :linear, only(panels.figures).views)
 
     pages = PB.make_render(
-        HarmonicImpedancePlotSpec, result; entries = :all, grouping = :pages
+        HarmonicImpedancePlotDefinition, result; entries = :all, grouping = :pages
     )
     @test length(pages.figures) == 4
     @test all(page -> length(page.views) == 1, pages.figures)
     @test all(page -> page.size == (900, 560), pages.figures)
 
     automatic_panels = PB.make_render(
-        HarmonicImpedancePlotSpec, result; entries = :all, grouping = :panels
+        HarmonicImpedancePlotDefinition, result; entries = :all, grouping = :panels
     )
     @test only(automatic_panels.figures).size == (900, 640)
 
+    composite = ParametricResult(
+        Combinatorial(NodalImpedance()),
+        [result, result],
+        [(case=1,), (case=2,)],
+        (;),
+    )
+    composite_render = PB.make_render(HarmonicImpedancePlotDefinition, composite)
+    @test length(only(composite_render.figures).views[1].series) == 4
+
+    labeled = PB.make_render(
+        HarmonicImpedancePlotDefinition,
+        composite;
+        entries=(:left, :left),
+        labels=["low resistance", "high resistance"],
+        series_groups=[:low, :high],
+    )
+    labeled_series = only(only(labeled.figures).views).series
+    @test getfield.(labeled_series, :label) == ["low resistance", "high resistance"]
+    @test getfield.(labeled_series, :group) == [:z_1_1_low, :z_1_1_high]
+    @test_throws DimensionMismatch PB.make_render(
+        HarmonicImpedancePlotDefinition, composite; labels=["one"]
+    )
+
     @test_throws ArgumentError PB.make_render(
-        HarmonicImpedancePlotSpec, _plot_test_result(kind = :node_admittance)
+        HarmonicImpedancePlotDefinition, _plot_test_result(kind = :node_admittance)
     )
     @test_throws DimensionMismatch PB.make_render(
-        HarmonicImpedancePlotSpec,
+        HarmonicImpedancePlotDefinition,
         _plot_test_result(values = ones(ComplexF64, 2, 3, 3))
     )
     @test_throws DimensionMismatch PB.make_render(
-        HarmonicImpedancePlotSpec,
+        HarmonicImpedancePlotDefinition,
         _plot_test_result(values = ones(ComplexF64, 2, 2, 2))
     )
     @test_throws ArgumentError PB.make_render(
-        HarmonicImpedancePlotSpec,
+        HarmonicImpedancePlotDefinition,
         _plot_test_result(frequencies = 2π .* [10.0, 10.0, 100.0])
     )
     @test_throws ArgumentError PB.make_render(
-        HarmonicImpedancePlotSpec,
+        HarmonicImpedancePlotDefinition,
         _plot_test_result(frequencies = ComplexF64[2π * 10, 2π * 100 + im, 2π * 1_000])
     )
     @test_throws DomainError PB.make_render(
-        HarmonicImpedancePlotSpec,
+        HarmonicImpedancePlotDefinition,
         _plot_test_result(values = zeros(ComplexF64, 2, 2, 3))
     )
     @test_throws ArgumentError PB.make_render(
-        HarmonicImpedancePlotSpec, result; entries = (:left => :left, 1 => 1)
+        HarmonicImpedancePlotDefinition, result; entries = (:left => :left, 1 => 1)
     )
     @test_throws ArgumentError PB.make_render(
-        HarmonicImpedancePlotSpec, result; entries = :missing => :left
+        HarmonicImpedancePlotDefinition, result; entries = :missing => :left
     )
     @test_throws ArgumentError PB.make_render(
-        HarmonicImpedancePlotSpec, result; entries = 3 => 1
+        HarmonicImpedancePlotDefinition, result; entries = 3 => 1
     )
     @test_throws ArgumentError PB.make_render(
-        HarmonicImpedancePlotSpec, result; grouping = :invalid
+        HarmonicImpedancePlotDefinition, result; grouping = :invalid
     )
     @test_throws ArgumentError PB.make_render(
-        HarmonicImpedancePlotSpec, result; xscale = :ln
+        HarmonicImpedancePlotDefinition, result; xscale = :ln
     )
     @test_throws ArgumentError PB.make_render(
-        HarmonicImpedancePlotSpec, result; figure_size = :small
+        HarmonicImpedancePlotDefinition, result; figure_size = :small
     )
 end
 
@@ -209,14 +243,9 @@ end
     )
 
     @test eltype(angular_frequencies(result)) === ComplexF64
-    render = PowerImpedance.PlotBuilder.make_render(HarmonicImpedancePlotSpec, result)
+    render = PowerImpedance.PlotBuilder.make_render(HarmonicImpedancePlotDefinition, result)
     @test length(only(render.figures).views) == 1
     @test length(only(only(render.figures).views).series) == 2
     @test only(only(render.figures).views).series[1].xdata[begin] ≈ 1.0
     @test only(only(render.figures).views).series[1].xdata[end] ≈ 5.0e3
-end
-
-@testset "Plots extension" begin
-    @test Base.get_extension(PowerImpedance, :PowerImpedancePlotsExt) !== nothing
-    @test PowerImpedance.plot(1:2, [1.0, 2.0]) isa Plots.Plot
 end

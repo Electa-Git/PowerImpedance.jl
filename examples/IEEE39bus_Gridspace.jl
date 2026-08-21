@@ -5,9 +5,9 @@
 # cable. Driving-point harmonic impedances at three representative buses are
 # overlaid for direct comparison.
 
-import Plots
+using CairoMakie
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState, define, solve
+using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState, define
 
 # The parity fixture is the authoritative NetworkBuilder version of this
 # system. Skip its top-level testsets while retaining its model functions and
@@ -101,18 +101,15 @@ end;
 # identify each case as `soil_resistivity = 10`, `100`, or `1000` Ωm.
 function ieee39_soil_builder_space(
         soil_resistivities = IEEE39_SOIL_RESISTIVITY;
-        base_elements = ieee39bus_elements(),
-        operating_point = nothing
+        base_elements = ieee39bus_elements()
 )
     connections = ieee39bus_connections()
     function materialize(soil_resistivity)
-        builder = define(
+        return define(
             ieee39_elements_at_soil_resistivity(base_elements, soil_resistivity),
             connections;
             options = IEEE39_BUILDER_OPTIONS
         )
-        builder.operating_point = operating_point
-        return builder
     end
 
     return Gridspace{NetworkState}(
@@ -122,18 +119,9 @@ function ieee39_soil_builder_space(
     )
 end;
 
-function ieee39_reference_powerflow(base_elements = ieee39bus_elements())
-    builder = define(
-        deepcopy(base_elements),
-        ieee39bus_connections();
-        options = IEEE39_BUILDER_OPTIONS
-    )
-    return solve(builder).powerflow
-end;
-
-# Soil resistivity changes only passive frequency-domain models. The topology,
-# converter parameters, and operating point are unchanged, so all cases reuse
-# this single cached power flow and its active-device linearizations.
+# Soil resistivity changes the passive frequency-domain models. Each case owns
+# its power flow and linearization, which keeps calculation state out of the
+# network definitions.
 
 function ieee39_bus_nets(buses)
     return reduce(vcat, ([Symbol("Bus$(bus)d"), Symbol("Bus$(bus)q")] for bus in buses))
@@ -145,16 +133,16 @@ function run_ieee39_soil_study(;
         freq_range = (1.0, 5e3, 400)
 )
     base_elements = ieee39bus_elements()
-    operating_point = ieee39_reference_powerflow(base_elements).operating_point
-    result = determine_impedance(
-        ieee39_soil_builder_space(
-            soil_resistivities;
-            base_elements,
-            operating_point
-        );
-        nets = ieee39_bus_nets(buses),
-        elim_elements = IEEE39_ELIM_ELEMENTS,
-        freq_range
+    networks = ieee39_soil_builder_space(soil_resistivities; base_elements)
+    problems = PowerImpedanceProblem(
+        networks;
+        nodes=ieee39_bus_nets(buses),
+        eliminated_elements=IEEE39_ELIM_ELEMENTS,
+        frequency_range=freq_range,
+    )
+    result = compute(
+        ParametricProblem(problems),
+        Combinatorial(NodalImpedance()),
     )
     return (;
         soil_resistivities = collect(soil_resistivities), buses = collect(buses), result)
@@ -171,63 +159,42 @@ end;
 
 function ieee39_impedance_db(case, bus_index)
     net_index = 2bus_index - 1
-    return 20 .* log10.(abs.(vec(case.impedance[net_index, net_index, :])))
+    return 20 .* log10.(abs.(vec(case.response[net_index, net_index, :])))
 end;
 
 function maximum_spread_db(study, bus_index)
-    curves = hcat((ieee39_impedance_db(case, bus_index) for case in study.result)...)
+    curves = hcat((ieee39_impedance_db(case, bus_index) for case in study.result.values)...)
     return maximum(maximum(curves; dims = 2) .- minimum(curves; dims = 2))
 end;
 
 function plot_ieee39_soil_study(study)
-    panels = map(eachindex(study.buses)) do bus_index
-        panel = Plots.plot(
-            xscale = :log10,
-            xlabel = "Frequency [Hz]",
-            ylabel = "|Zdd| [dBΩ]",
-            title = "Bus $(study.buses[bus_index])",
-            framestyle = :box,
-            minorgrid = true,
-            legend = :outerright
-        )
-
-        for (case, soil_resistivity) in zip(study.result, study.soil_resistivities)
-            frequency = real.(case.frequencies) ./ (2π)
-            Plots.plot!(
-                panel,
-                frequency,
-                ieee39_impedance_db(case, bus_index);
-                label = "ρsoil = $(soil_resistivity) Ωm",
-                linewidth = 2
-            )
-        end
-
-        spread = maximum_spread_db(study, bus_index)
-        x_min, x_max = Plots.xlims(panel)
-        y_min, y_max = Plots.ylims(panel)
-        annotation_x = 10^(log10(x_min) + 0.03 * log10(x_max / x_min))
-        annotation_y = y_max - 0.06 * (y_max - y_min)
-        Plots.annotate!(panel, annotation_x, annotation_y,
-            Plots.text("max spread = $(round(spread; digits = 2)) dB", 8, :left))
-        return panel
-    end
-
-    return Plots.plot(
-        panels...;
-        layout = (length(panels), 1),
-        size = (1150, 1050),
-        plot_title = "IEEE39 harmonic impedance versus common soil resistivity"
+    entries = [(2index - 1, 2index - 1) for index in eachindex(study.buses)]
+    labels = ["ρsoil = $(value) Ωm" for value in study.soil_resistivities]
+    groups = [Symbol("soil_", replace(string(value), "." => "_"))
+              for value in study.soil_resistivities]
+    handles = PowerImpedance.plot(
+        study.result;
+        entries,
+        grouping=:panels,
+        labels,
+        series_groups=groups,
+        title="IEEE39 harmonic impedance versus common soil resistivity",
+        figure_size=(1150, 1050),
+        display_plot=false,
+        controls=false,
     )
+    return only(handles)
 end;
 
 # The documentation evaluates the same three physical cases with a reduced
 # frequency grid. Running this source file directly uses the full defaults.
 #md ieee39_docs_study = run_ieee39_soil_study(; freq_range = (1.0, 5e3, 160))
-#md plot_ieee39_soil_study(ieee39_docs_study)
+#md ieee39_docs_plot = plot_ieee39_soil_study(ieee39_docs_study)
+#md ieee39_docs_plot.figure
 
 if abspath(PROGRAM_FILE) == @__FILE__ #src
     study = run_ieee39_soil_study() #src
-    display(plot_ieee39_soil_study(study)) #src
+    display(plot_ieee39_soil_study(study).figure) #src
     println( #src
         "Maximum soil-resistivity spreads [dB]: ", #src
         Dict(bus => maximum_spread_db(study, index) for (index, bus) in pairs(study.buses)) #src

@@ -10,7 +10,7 @@ Use [Semantic Versioning](https://semver.org/):
 - Increment `MINOR` for backward-compatible functionality.
 - Increment `PATCH` for backward-compatible fixes.
 
-During initial development (`0.y.z`), the public API is not yet stable. Minor releases may therefore contain breaking changes; describe them clearly in the changelog.
+During initial development (`0.y.z`), the public API is not yet stable. Minor releases may therefore contain breaking changes. Describe them clearly in the changelog.
 
 ## Commit messages
 
@@ -65,4 +65,4 @@ Single-letter names are appropriate for mathematical entities whose domain meani
 
 An additional exception applies when an implementation directly follows a mathematical expression with physical meaning and the technical literature consistently uses a short symbol. Names such as `v` for voltage, `i` for current, and `f` for frequency are acceptable when they preserve a clear correspondence between the code and the documented equation. Use this exception locally and only where the formula makes the meaning unambiguous.
 
-Public API names must remain typeable in ASCII, including keyword arguments. If notation uses a symbol such as ``\eta``, expose an ASCII name such as `eta`; Unicode notation may still be used in the mathematical documentation.
+Public API names must remain typeable in ASCII, including keyword arguments. If notation uses a symbol such as ``\eta``, expose an ASCII name such as `eta`. Unicode notation may still be used in the mathematical documentation.

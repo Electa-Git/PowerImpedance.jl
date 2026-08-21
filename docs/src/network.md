@@ -83,7 +83,7 @@ The complete executable [Connection DSL](examples/Connection_DSL.md) tutorial
 covers AC, DC, transformed d/q, multiconductor, converter, machine, multiway,
 ground, Gridspace, and optional `LineParameters` cases.
 
-## Scientific calculation sequence
+## Calculation sequence
 
 `NetworkState` stores component definitions, `NetworkTopology`, numerical
 options, and an optional `OperatingPoint`. Active-component calculations use
@@ -153,8 +153,8 @@ end
 ```
 
 `Network`, `add!`, `connect!`, and `disconnect!` remain available. The macro is
-not imported by `using PowerImpedance`; code that uses it must import it
-explicitly as shown above.
+not imported by `using PowerImpedance`. Import it explicitly with
+`import PowerImpedance: @network`.
 
 ## Migration from the removed NetworkBuilder names
 

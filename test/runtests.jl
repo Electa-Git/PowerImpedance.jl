@@ -1,7 +1,6 @@
 # using JLD2
 ENV["GKSwstype"] = "100"
 using PowerImpedance
-import Plots
 import PowerImpedance: @network
 using Test
 using LinearAlgebra
@@ -25,11 +24,7 @@ TEST_LOG_LEVEL == Logging.Error && PowerImpedance._PMACDC.silence()
 # Alternatively, set the package-only logging level to debug through an environment variable to avoid VS Code debug logging:
 # ENV["JULIA_DEBUG"]=PowerImpedance # Warning: this will unfortunanelty not enable the debug logging for the ipopt solver.
 
-@testset "Package name compatibility" begin
-    @test nameof(PowerImpedance) === :PowerImpedance
-    @test PowerImpedanceACDC === PowerImpedance
-    @test PowerImpedance.PowerImpedanceACDC === PowerImpedance
-end
+@test nameof(PowerImpedance) === :PowerImpedance
 
 @time @testset "PowerImpedance" begin
         include("plotbuilder_test.jl")
@@ -52,6 +47,6 @@ end
         include("Transformer_test.jl")
         include("logging_test.jl")
         include("Gridspace_test.jl")
-        include("small_signal_gridspace_test.jl")
+        include("stability_plot_recipes_test.jl")
         
 end;

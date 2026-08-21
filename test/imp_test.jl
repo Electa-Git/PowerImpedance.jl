@@ -233,7 +233,6 @@ end
 
 
 # Plotting for visual inspection
-# using Plots
 # plot(omegas./(2*pi), rad2deg.(angle.(getindex.(imp_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Angle [degree]",minorgrid=true, legend=:none, xaxis = :log10)
 # plot!(omegas./(2*pi), rad2deg.(angle.(getindex.(Z_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Angle [degree]",minorgrid=true, legend=:none, xaxis = :log10, line=:dash)
 # plot(omegas./(2*pi), 20*log10.(abs.(getindex.(imp_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Y_11 [dB]",minorgrid=true, legend=:none, xaxis = :log10)

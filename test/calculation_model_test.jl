@@ -3,174 +3,164 @@ using Test
 
 const CALCULATION_NB = PowerImpedance.NetworkBuilder
 
-function passive_calculation_state()
+function passive_calculation_state(; impedance_value=2.0)
     elements = (
-        branch = impedance(z = 2.0, pins = 1),
-        shunt = impedance(z = 4.0, pins = 1)
+        branch=impedance(z=impedance_value, pins=1),
+        shunt=impedance(z=4.0, pins=1),
     )
     connections = (
-        (node = :bus, element = :branch, side = 1, terminal = 1),
-        (node = :bus, element = :shunt, side = 1, terminal = 1),
-        (node = :gnd, element = :branch, side = 2, terminal = 1),
-        (node = :gnd, element = :shunt, side = 2, terminal = 1)
+        (node=:bus, element=:branch, side=1, terminal=1),
+        (node=:bus, element=:shunt, side=1, terminal=1),
+        (node=:gnd, element=:branch, side=2, terminal=1),
+        (node=:gnd, element=:shunt, side=2, terminal=1),
     )
     return CALCULATION_NB.define(elements, connections)
 end
 
-@testset "Problem, formulation, and result calculations" begin
+@testset "Primitive result contracts" begin
     state = passive_calculation_state()
-    powerflow = compute(
-        CALCULATION_NB.PowerFlowProblem(state),
-        CALCULATION_NB.ACDCPowerFlow()
-    )
+    original_impedance = copy(state.elements.branch.element_model.value)
+    powerflow = compute(PowerFlowProblem(state), ACDCPowerFlow())
     @test powerflow isa PowerFlowResult
-    @test powerflow.result === nothing
-    @test powerflow.active_setpoint_values == Dict{Symbol, Setpoint}()
-    @test convert(OperatingPoint, powerflow) === powerflow.operating_point
-
-    linearization = compute(
-        CALCULATION_NB.LinearizationProblem(state, powerflow),
-        CALCULATION_NB.AdmittanceLinearization()
+    @test fieldnames(typeof(powerflow)) == (
+        :formulation,
+        :result,
+        :data,
+        :nodes2bus,
+        :elem2comp,
+        :operating_point,
+        :diagnostics,
     )
+    @test powerflow.result === nothing
+    @test convert(OperatingPoint, powerflow) === powerflow.operating_point
+    @test state.elements.branch.element_model.value == original_impedance
+
+    linearization = compute(LinearizationProblem(state, powerflow),
+        AdmittanceLinearization())
     @test linearization isa LinearizationResult
+    @test fieldnames(typeof(linearization)) == (
+        :formulation,
+        :network_model,
+        :operating_point,
+        :diagnostics,
+    )
     @test linearization.network_model isa CALCULATION_NB.NetworkModel
     @test linearization.operating_point === powerflow.operating_point
 
-    model = linearization.network_model
     frequency_range = (1.0, 100.0, 5)
-    state_problem = PowerImpedanceProblem(
-        state;
-        nodes = [:bus],
-        frequency_range
-    )
+    state_problem = PowerImpedanceProblem(state; nodes=[:bus], frequency_range)
     model_problem = PowerImpedanceProblem(
-        model;
-        nodes = [:bus],
-        frequency_range
+        linearization.network_model;
+        nodes=[:bus],
+        frequency_range,
     )
-
-    for formulation in (
-        NodalImpedance(),
-        NodeAdmittance(),
-        EdgeAdmittance(),
-        LoopGain()
-    )
+    for formulation in (NodalImpedance(), NodeAdmittance(), EdgeAdmittance(), LoopGain())
         from_state = compute(state_problem, formulation)
         from_model = compute(model_problem, formulation)
         @test from_state isa FrequencyResponseResult
+        @test fieldnames(typeof(from_state)) == (
+            :formulation,
+            :kind,
+            :response,
+            :frequencies,
+            :nodes,
+            :network_model,
+            :diagnostics,
+        )
         @test from_state.response ≈ from_model.response
         @test from_state.frequencies == from_model.frequencies
         @test from_state.nodes == [:bus]
     end
 
-    impedance_result = compute(state_problem, NodalImpedance())
-    impedance, frequencies = determine_impedance(
-        state;
-        nets = [:bus],
-        freq_range = frequency_range
+    edge = compute(state_problem, EdgeAdmittance())
+    node = compute(state_problem, NodeAdmittance())
+    loop = compute(state_problem, LoopGain())
+    analyses = (
+        compute(StabilityProblem(loop), GeneralizedNyquist()),
+        compute(StabilityProblem(edge), BodeAnalysis()),
+        compute(StabilityProblem(edge), PassivityAnalysis()),
+        compute(StabilityProblem((node, edge)), SmallGainAnalysis()),
+        compute(StabilityProblem(edge), EigenvalueAnalysis(fmin=1.0, fmax=100.0)),
+        compute(StabilityProblem(loop), UnstableFrequencyAnalysis()),
     )
-    @test impedance_result.response ≈ impedance
-    @test impedance_result.frequencies == frequencies
-
-    node_result = compute(state_problem, NodeAdmittance())
-    edge_result = compute(state_problem, EdgeAdmittance())
-    loop_result = compute(state_problem, LoopGain())
-    @test first(CALCULATION_NB.make_y_node(
-        state;
-        nodelist = [:bus],
-        freq_range = frequency_range
-    )) ≈ node_result.response
-    @test first(CALCULATION_NB.make_y_edge(
-        state;
-        nodelist = [:bus],
-        freq_range = frequency_range
-    )) ≈ edge_result.response
-    @test first(CALCULATION_NB.make_loopgain(
-        state;
-        nodelist = [:bus],
-        freq_range = frequency_range
-    )) ≈ loop_result.response
-
-    bode = compute(StabilityProblem(edge_result), BodeAnalysis())
-    gain = compute(
-        StabilityProblem((node_result, edge_result)),
-        SmallGainAnalysis()
-    )
-    @test bode isa StabilityResult
-    @test bode.analysis == :bode
-    @test gain isa StabilityResult
-    @test gain.analysis == :small_gain
-    @test bodeplot(edge_result) !== nothing
-    @test small_gain(node_result, edge_result) !== nothing
+    @test all(result -> result isa StabilityResult, analyses)
+    @test fieldnames(StabilityResult) == (:formulation, :analysis, :output, :diagnostics)
+    @test all(result -> !hasproperty(result, :plots), analyses)
 end
 
-@testset "Parametric problem enumeration" begin
+function calculation_space(axis)
     connections = (
-        (node = :bus, element = :branch, side = 1, terminal = 1),
-        (node = :gnd, element = :branch, side = 2, terminal = 1)
+        (node=:bus, element=:branch, side=1, terminal=1),
+        (node=:gnd, element=:branch, side=2, terminal=1),
     )
-    space = CALCULATION_NB.define(
-        (branch = CALCULATION_NB.impedance(
-            z = CALCULATION_NB.Grid([1.0, 2.0]),
-            pins = 1
-        ),),
-        connections
+    return CALCULATION_NB.define(
+        (branch=CALCULATION_NB.impedance(z=axis, pins=1),),
+        connections,
     )
-    problem = ParametricProblem(
-        space,
-        NodalImpedance(),
-        (nets = [:bus], freq_range = (1.0, 10.0, 3))
+end
+
+@testset "Composite execution and checkpoints" begin
+    deterministic = calculation_space(Grid([1.0, 2.0]))
+    owned = PowerImpedanceProblem(
+        deterministic;
+        nodes=[:bus],
+        frequency_range=(1.0, 10.0, 3),
     )
-    result = compute(problem, Combinatorial())
-    @test result isa CALCULATION_NB.ParametricImpedance
-    @test length(result) == 2
-    @test all(case -> size(case.impedance) == (1, 1, 3), result)
+    response = compute(
+        ParametricProblem(owned),
+        Combinatorial(NodalImpedance()),
+    )
+    @test response isa ParametricResult{<:FrequencyResponseResult}
+    @test length(response.values) == length(response.space) == 2
+    @test all(value -> size(value.response) == (1, 1, 3), response.values)
 
     edge_response = compute(
-        ParametricProblem(
-            space,
-            EdgeAdmittance(),
-            (nodelist = [:bus], freq_range = (1.0, 10.0, 3))
-        ),
-        Combinatorial()
+        ParametricProblem(owned),
+        Combinatorial(EdgeAdmittance()),
     )
-    @test edge_response isa CALCULATION_NB.ParametricFrequencyResponse
-    for (formulation, options) in (
-        (GeneralizedNyquist(), (display_plot = false,)),
-        (BodeAnalysis(), (display_plot = false,)),
-        (PassivityAnalysis(), (display_plot = false,)),
-        (
-        EigenvalueAnalysis(),
-        (fmin = 1.0, fmax = 10.0, display_plot = false)
-    )
-    )
-        stability = compute(StabilityProblem(edge_response; options), formulation)
-        @test stability isa CALCULATION_NB.ParametricStability
-        @test length(stability) == 2
-    end
-    gain = compute(
-        StabilityProblem(
-            (edge_response, edge_response);
-            options = (display_plot = false,)
-        ),
-        SmallGainAnalysis()
-    )
-    @test gain isa CALCULATION_NB.ParametricStability
-    @test length(gain) == 2
+    checkpoint = preprocess(edge_response, BodeAnalysis())
+    bode = compute(checkpoint, Combinatorial(BodeAnalysis()))
+    @test bode isa ParametricResult{<:StabilityResult}
+    @test all(value -> value.analysis === :bode, bode.values)
 
-    uncertain_space = CALCULATION_NB.define(
-        (branch = CALCULATION_NB.impedance(
-            z = CALCULATION_NB.Grid(1.0, 5.0),
-            pins = 1
-        ),),
-        connections
+    uncertain = calculation_space(Grid(1.0, 5.0))
+    uncertain_owned = PowerImpedanceProblem(
+        uncertain;
+        nodes=[:bus],
+        frequency_range=(1.0, 10.0, 3),
     )
     @test_throws ArgumentError compute(
-        ParametricProblem(
-            uncertain_space,
-            NodalImpedance(),
-            (nets = [:bus], freq_range = (1.0, 10.0, 3))
-        ),
-        Combinatorial()
+        ParametricProblem(uncertain_owned),
+        Combinatorial(NodalImpedance()),
     )
+    monte_carlo = compute(
+        ParametricProblem(uncertain_owned),
+        MonteCarlo(NodalImpedance(); trials=4, seed=42),
+    )
+    @test monte_carlo isa MonteCarloResult{<:FrequencyResponseResult}
+    @test monte_carlo.stats.n == 4
+    @test monte_carlo.details.samples === nothing
+    @test length(only(monte_carlo.details.plot_data.values)) == 4
+
+    stability_checkpoint = preprocess(monte_carlo, BodeAnalysis())
+    monte_carlo_bode = compute(
+        stability_checkpoint,
+        MonteCarlo(BodeAnalysis(); seed=42),
+    )
+    @test monte_carlo_bode isa MonteCarloResult{<:StabilityResult}
+    @test monte_carlo_bode.stats.n == 4
+    @test length(only(monte_carlo_bode.details.plot_data.values)) == 4
+end
+
+@testset "Explicit checkpoint boundaries" begin
+    result = compute(
+        PowerImpedanceProblem(
+            passive_calculation_state();
+            nodes=[:bus],
+            frequency_range=(1.0, 10.0, 2),
+        ),
+        NodalImpedance(),
+    )
+    @test_throws ArgumentError primitives(result, EmpiricalSamples())
+    @test_throws ArgumentError preprocess(result, LineParametersInput())
 end

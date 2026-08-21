@@ -1,9 +1,9 @@
 """
-    AbstractPlotSpec
+    AbstractPlotDefinition
 
 Supertype for backend-neutral PlotBuilder recipe identifiers.
 """
-abstract type AbstractPlotSpec end
+abstract type AbstractPlotDefinition end
 
 """
     PlotRecipe(object, input, renderer)
@@ -37,7 +37,7 @@ struct FixedTrack <: AbstractTrackSize
 
     # Arguments
 
-    - `value`: Finite, nonnegative track size in px.
+    - `value`: finite, nonnegative track size in px.
 
     # Returns
 
@@ -69,7 +69,7 @@ struct RelativeTrack <: AbstractTrackSize
 
     # Arguments
 
-    - `weight`: Finite, positive dimensionless share. Default: `1`.
+    - `weight`: finite, positive dimensionless share. Default: `1`.
 
     # Returns
 
@@ -106,8 +106,8 @@ struct GridArea
 
     # Arguments
 
-    - `rows`: Nonempty range of positive row indices.
-    - `columns`: Nonempty range of positive column indices.
+    - `rows`: nonempty range of positive row indices.
+    - `columns`: nonempty range of positive column indices.
 
     # Returns
 
@@ -138,11 +138,11 @@ end
 GridArea(row::Integer, columns::UnitRange{<:Integer}) = GridArea(Int(row):Int(row), columns)
 
 """
-    GridSpec(name; parent, area, rows, columns, rowgap, columngap, padding)
+    GridDefinition(name; parent, area, rows, columns, rowgap, columngap, padding)
 
 Declare one grid in a backend-neutral named layout tree.
 """
-struct GridSpec
+struct GridDefinition
     "Unique grid name."
     name::Symbol
     "Parent grid name, or `nothing` for the root."
@@ -161,7 +161,7 @@ struct GridSpec
     padding::NTuple{4, Float64}
 end
 
-function GridSpec(
+function GridDefinition(
         name::Symbol;
         parent::Union{Nothing, Symbol} = nothing,
         area::Union{Nothing, GridArea} = nothing,
@@ -182,7 +182,7 @@ function GridSpec(
     all(value -> isfinite(value) && value >= 0, padding) || throw(
         ArgumentError("grid padding must be finite and nonnegative"),
     )
-    return GridSpec(
+    return GridDefinition(
         name,
         parent,
         area,
@@ -195,11 +195,11 @@ function GridSpec(
 end
 
 """
-    SlotSpec(name, parent, area; halign, valign)
+    SlotDefinition(name, parent, area; halign, valign)
 
 Declare a named content destination inside a grid.
 """
-struct SlotSpec
+struct SlotDefinition
     "Unique slot name."
     name::Symbol
     "Parent grid name."
@@ -212,7 +212,7 @@ struct SlotSpec
     valign::Symbol
 end
 
-function SlotSpec(
+function SlotDefinition(
         name::Symbol,
         parent::Symbol,
         area::GridArea;
@@ -225,64 +225,64 @@ function SlotSpec(
     valign in (:top, :center, :bottom, :stretch) || throw(
         ArgumentError("slot vertical alignment must be :top, :center, :bottom, or :stretch"),
     )
-    return SlotSpec(name, parent, area, halign, valign)
+    return SlotDefinition(name, parent, area, halign, valign)
 end
 
 """
-    LayoutSpec(name, grids, slots)
+    LayoutDefinition(name, grids, slots)
 
 Define and validate a backend-neutral named grid tree.
 """
-struct LayoutSpec
+struct LayoutDefinition
     "Layout identity."
     name::Symbol
     "Named root and nested grids."
-    grids::Vector{GridSpec}
+    grids::Vector{GridDefinition}
     "Named content destinations."
-    slots::Vector{SlotSpec}
+    slots::Vector{SlotDefinition}
     @doc """
-        LayoutSpec(name, grids, slots)
+        LayoutDefinition(name, grids, slots)
 
     Construct and validate a named grid layout.
 
     # Arguments
 
-    - `name`: Layout identity.
-    - `grids`: Root and nested [`GridSpec`](@ref) declarations.
-    - `slots`: Named [`SlotSpec`](@ref) destinations.
+    - `name`: layout identity.
+    - `grids`: root and nested [`GridDefinition`](@ref) declarations.
+    - `slots`: named [`SlotDefinition`](@ref) destinations.
 
     # Returns
 
-    - A validated [`LayoutSpec`](@ref).
+    - A validated [`LayoutDefinition`](@ref).
 
     # Errors
 
     - Throws the validation errors documented by [`validate`](@ref).
-    """ function LayoutSpec(
+    """ function LayoutDefinition(
             name::Symbol, grids::AbstractVector, slots::AbstractVector
     )
-        layout = new(name, GridSpec[grids...], SlotSpec[slots...])
+        layout = new(name, GridDefinition[grids...], SlotDefinition[slots...])
         validate(layout)
         return layout
     end
 end
 
 """
-    PlacementSpec([slot], [area])
+    PlacementDefinition([slot], [area])
 
 Assign a view to a named slot with automatic or explicit grid placement.
 """
-struct PlacementSpec
+struct PlacementDefinition
     "Destination slot name."
     slot::Symbol
     "Explicit area inside the slot, or `nothing` for automatic placement."
     area::Union{Nothing, GridArea}
 end
 
-PlacementSpec(slot::Symbol = :canvas) = PlacementSpec(slot, nothing)
+PlacementDefinition(slot::Symbol = :canvas) = PlacementDefinition(slot, nothing)
 
 "Declare page-level reset and SVG controls and their destination slot."
-struct ControlSpec
+struct ControlDefinition
     "Whether to show the reset control."
     reset::Bool
     "Whether to show the SVG export control."
@@ -291,8 +291,8 @@ struct ControlSpec
     slot::Symbol
 end
 
-function ControlSpec(; reset::Bool = true, export_svg::Bool = true, slot::Symbol = :toolbar)
-    ControlSpec(reset, export_svg, slot)
+function ControlDefinition(; reset::Bool = true, export_svg::Bool = true, slot::Symbol = :toolbar)
+    ControlDefinition(reset, export_svg, slot)
 end
 
 const LEGEND_OVERFLOW_MODES = (:ellipsis, :show_all)
@@ -304,7 +304,7 @@ Declare legend visibility, interactivity, destination slot, and overflow mode.
 
 $(TYPEDFIELDS)
 """
-struct LegendSpec
+struct LegendDefinition
     "Whether to render a legend."
     enabled::Bool
     "Whether legend entries control series visibility."
@@ -318,25 +318,25 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Construct a [`LegendSpec`](@ref).
+Construct a [`LegendDefinition`](@ref).
 
 # Keywords
 
-- `enabled`: Render the legend. Default: `true`.
-- `interactive`: Let legend entries control series visibility. Default: `true`.
-- `slot`: Destination layout slot. Default: `:legend`.
-- `overflow`: Use `:ellipsis` to show the largest fitting entry prefix followed
+- `enabled`: render the legend. Default: `true`.
+- `interactive`: let legend entries control series visibility. Default: `true`.
+- `slot`: destination layout slot. Default: `:legend`.
+- `overflow`: use `:ellipsis` to show the largest fitting entry prefix followed
   by `(...)`, or `:show_all` to render every entry. Default: `:ellipsis`.
 
 # Returns
 
-- A validated [`LegendSpec`](@ref).
+- A validated [`LegendDefinition`](@ref).
 
 # Errors
 
 - Throws `ArgumentError` when `overflow` is unsupported.
 """
-function LegendSpec(;
+function LegendDefinition(;
         enabled::Bool = true,
         interactive::Bool = true,
         slot::Symbol = :legend,
@@ -345,15 +345,15 @@ function LegendSpec(;
     overflow in LEGEND_OVERFLOW_MODES || throw(
         ArgumentError("legend overflow must be :ellipsis or :show_all"),
     )
-    return LegendSpec(enabled, interactive, slot, overflow)
+    return LegendDefinition(enabled, interactive, slot, overflow)
 end
 
 """
-    ColorbarSpec(label, colormap, limits, ticks; slot=:colorbars)
+    ColorbarDefinition(label, colormap, limits, ticks; slot=:colorbars)
 
 Declare one backend-neutral colorbar and its destination slot.
 """
-struct ColorbarSpec{C, T}
+struct ColorbarDefinition{C, T}
     "Displayed colorbar label."
     label::String
     "Backend-neutral colormap value."
@@ -366,7 +366,7 @@ struct ColorbarSpec{C, T}
     slot::Symbol
 end
 
-function ColorbarSpec(
+function ColorbarDefinition(
         label::AbstractString,
         colormap,
         limits::Tuple{<:Real, <:Real},
@@ -393,11 +393,11 @@ function ColorbarSpec(
     all(position -> lower <= position <= upper, positions) || throw(
         ArgumentError("colorbar tick positions must lie within the color limits"),
     )
-    return ColorbarSpec(String(label), colormap, (lower, upper), ticks, slot)
+    return ColorbarDefinition(String(label), colormap, (lower, upper), ticks, slot)
 end
 
 "Declare status-line visibility, initial text, and destination slot."
-struct StatusSpec
+struct StatusDefinition
     "Whether to render a status line."
     enabled::Bool
     "Initial status message."
@@ -406,12 +406,12 @@ struct StatusSpec
     slot::Symbol
 end
 
-function StatusSpec(; enabled::Bool = true, initial::AbstractString = "Ready.", slot::Symbol = :status)
-    StatusSpec(enabled, String(initial), slot)
+function StatusDefinition(; enabled::Bool = true, initial::AbstractString = "Ready.", slot::Symbol = :status)
+    StatusDefinition(enabled, String(initial), slot)
 end
 
 "Declare the SVG theme, base filename, and automatic-open behavior."
-struct ExportSpec
+struct ExportDefinition
     "Export theme, either `:default` or `:publication`."
     theme::Symbol
     "Unsanitized base filename."
@@ -420,14 +420,14 @@ struct ExportSpec
     open_file::Bool
 end
 
-function ExportSpec(;
+function ExportDefinition(;
         theme::Symbol = :default,
         name::AbstractString = "powerimpedance_plot",
         open_file::Bool = true
 )
     _validate_export_theme(theme)
     isempty(strip(name)) && throw(ArgumentError("export name cannot be empty"))
-    return ExportSpec(theme, String(name), open_file)
+    return ExportDefinition(theme, String(name), open_file)
 end
 
 const AXIS_SCALES = (:linear, :log10)
@@ -480,11 +480,11 @@ function _reject_reserved(attributes::NamedTuple, reserved::Tuple, owner::Abstra
 end
 
 """
-    AxisSpec(dim, quantity, units, label[, scale]; allowed_scales, exponent, attributes)
+    AxisDefinition(dim, quantity, units, label[, scale]; allowed_scales, exponent, attributes)
 
 Describe one backend-neutral plot axis.
 """
-struct AxisSpec{A <: NamedTuple}
+struct AxisDefinition{A <: NamedTuple}
     "Axis dimension, one of `:x`, `:y`, or `:z`."
     dim::Symbol
     "Semantic quantity tag."
@@ -503,7 +503,7 @@ struct AxisSpec{A <: NamedTuple}
     attributes::A
 end
 
-function AxisSpec(
+function AxisDefinition(
         dim::Symbol,
         quantity::QuantityTag,
         units::Units,
@@ -526,8 +526,8 @@ function AxisSpec(
     scale in allowed_scales || throw(
         ArgumentError("current axis scale :$scale is not allowed"),
     )
-    _reject_reserved(attributes, AXIS_RESERVED_ATTRIBUTES, "AxisSpec")
-    return AxisSpec(
+    _reject_reserved(attributes, AXIS_RESERVED_ATTRIBUTES, "AxisDefinition")
+    return AxisDefinition(
         dim,
         quantity,
         units,
@@ -540,11 +540,11 @@ function AxisSpec(
 end
 
 """
-    SeriesSpec(kind, xdata, ydata, zdata, label; group, visible, attributes)
+    SeriesDefinition(kind, xdata, ydata, zdata, label; group, visible, attributes)
 
 Describe one backend-neutral plotting primitive and its data.
 """
-struct SeriesSpec{X, Y, Z, A <: NamedTuple}
+struct SeriesDefinition{X, Y, Z, A <: NamedTuple}
     "Primitive symbol rendered through `Val` dispatch."
     kind::Symbol
     "Data associated with the x dimension."
@@ -563,7 +563,7 @@ struct SeriesSpec{X, Y, Z, A <: NamedTuple}
     attributes::A
 end
 
-function SeriesSpec(
+function SeriesDefinition(
         kind::Symbol,
         xdata,
         ydata,
@@ -573,31 +573,31 @@ function SeriesSpec(
         visible::Bool = true,
         attributes::NamedTuple = (;)
 )
-    _reject_reserved(attributes, SERIES_RESERVED_ATTRIBUTES, "SeriesSpec")
+    _reject_reserved(attributes, SERIES_RESERVED_ATTRIBUTES, "SeriesDefinition")
     resolved_label = label === nothing ? nothing : String(label)
-    return SeriesSpec(kind, xdata, ydata, zdata, resolved_label, group, visible, attributes)
+    return SeriesDefinition(kind, xdata, ydata, zdata, resolved_label, group, visible, attributes)
 end
 
 """
-    ViewSpec(xaxis, yaxis, zaxis, title, series, key; placement, aspect, limits, attributes)
+    ViewDefinition(xaxis, yaxis, zaxis, title, series, key; placement, aspect, limits, attributes)
 
 Describe one plot panel and its placement.
 """
-struct ViewSpec{A <: NamedTuple}
-    "Specification for the x axis, or `nothing`."
-    xaxis::Union{Nothing, AxisSpec}
-    "Specification for the y axis, or `nothing`."
-    yaxis::Union{Nothing, AxisSpec}
-    "Specification for the z axis, or `nothing`."
-    zaxis::Union{Nothing, AxisSpec}
+struct ViewDefinition{A <: NamedTuple}
+    "Definition for the x axis, or `nothing`."
+    xaxis::Union{Nothing, AxisDefinition}
+    "Definition for the y axis, or `nothing`."
+    yaxis::Union{Nothing, AxisDefinition}
+    "Definition for the z axis, or `nothing`."
+    zaxis::Union{Nothing, AxisDefinition}
     "Displayed panel title."
     title::String
     "Backend-neutral series declarations."
-    series::Vector{SeriesSpec}
+    series::Vector{SeriesDefinition}
     "Semantic panel identity."
     key::NamedTuple
     "Named-slot placement."
-    placement::PlacementSpec
+    placement::PlacementDefinition
     "Renderer-independent aspect declaration."
     aspect::Any
     "Explicit axis limits, or `nothing`."
@@ -606,25 +606,25 @@ struct ViewSpec{A <: NamedTuple}
     attributes::A
 end
 
-function ViewSpec(
+function ViewDefinition(
         xaxis,
         yaxis,
         zaxis,
         title,
         series,
         key::NamedTuple;
-        placement::PlacementSpec = PlacementSpec(),
+        placement::PlacementDefinition = PlacementDefinition(),
         aspect = nothing,
         limits = nothing,
         attributes::NamedTuple = (;)
 )
-    _reject_reserved(attributes, VIEW_RESERVED_ATTRIBUTES, "ViewSpec")
-    return ViewSpec(
+    _reject_reserved(attributes, VIEW_RESERVED_ATTRIBUTES, "ViewDefinition")
+    return ViewDefinition(
         xaxis,
         yaxis,
         zaxis,
         String(title),
-        SeriesSpec[series...],
+        SeriesDefinition[series...],
         key,
         placement,
         aspect,
@@ -634,11 +634,11 @@ function ViewSpec(
 end
 
 """
-    PageSpec(title, size, key, layout, views; controls, legend, colorbars, status, export_spec)
+    PageDefinition(title, size, key, layout, views; controls, legend, colorbars, status, export_definition)
 
 Describe one complete render page using typed backend-neutral components.
 """
-struct PageSpec
+struct PageDefinition
     "Displayed page title."
     title::String
     "Figure width and height in pixels."
@@ -646,70 +646,70 @@ struct PageSpec
     "Semantic page identity."
     key::NamedTuple
     "Named layout tree."
-    layout::LayoutSpec
+    layout::LayoutDefinition
     "Plot panels on the page."
-    views::Vector{ViewSpec}
+    views::Vector{ViewDefinition}
     "Interactive control declaration."
-    controls::ControlSpec
+    controls::ControlDefinition
     "Legend declaration."
-    legend::LegendSpec
+    legend::LegendDefinition
     "Colorbar declarations."
-    colorbars::Vector{ColorbarSpec}
+    colorbars::Vector{ColorbarDefinition}
     "Status-line declaration."
-    status::StatusSpec
+    status::StatusDefinition
     "SVG export declaration."
-    export_spec::ExportSpec
+    export_definition::ExportDefinition
 end
 
-function PageSpec(
+function PageDefinition(
         title::AbstractString,
         size::Tuple{<:Integer, <:Integer},
         key::NamedTuple,
-        layout::LayoutSpec,
+        layout::LayoutDefinition,
         views::AbstractVector;
-        controls::ControlSpec = ControlSpec(),
-        legend::LegendSpec = LegendSpec(),
-        colorbars::AbstractVector = ColorbarSpec[],
-        status::StatusSpec = StatusSpec(),
-        export_spec::ExportSpec = ExportSpec(name = title)
+        controls::ControlDefinition = ControlDefinition(),
+        legend::LegendDefinition = LegendDefinition(),
+        colorbars::AbstractVector = ColorbarDefinition[],
+        status::StatusDefinition = StatusDefinition(),
+        export_definition::ExportDefinition = ExportDefinition(name = title)
 )
     all(>(0), size) || throw(ArgumentError("page dimensions must be positive"))
-    page = PageSpec(
+    page = PageDefinition(
         String(title),
         Tuple(Int.(size)),
         key,
         layout,
-        ViewSpec[views...],
+        ViewDefinition[views...],
         controls,
         legend,
-        ColorbarSpec[colorbars...],
+        ColorbarDefinition[colorbars...],
         status,
-        export_spec
+        export_definition
     )
     validate(page)
     return page
 end
 
 """
-    RenderSpec(spec, figures)
+    RenderDefinition(definition, figures)
 
-Store validated pages produced for one plot specification type.
+Store validated pages produced for one plot definition type.
 """
-struct RenderSpec{S <: AbstractPlotSpec}
-    "Plot specification type."
-    spec::Type{S}
+struct RenderDefinition{S <: AbstractPlotDefinition}
+    "Plot definition type."
+    definition::Type{S}
     "Validated render pages."
-    figures::Vector{PageSpec}
+    figures::Vector{PageDefinition}
 end
 
-function RenderSpec(spec::Type{S}, figures::AbstractVector) where {S <: AbstractPlotSpec}
-    render = RenderSpec(spec, PageSpec[figures...])
+function RenderDefinition(definition::Type{S}, figures::AbstractVector) where {S <: AbstractPlotDefinition}
+    render = RenderDefinition(definition, PageDefinition[figures...])
     validate(render)
     return render
 end
 
 const SUPPORTED_PRIMITIVES = (
-    :line, :scatter, :histogram, :stairs, :heatmap, :polygon, :hline)
+    :line, :scatter, :histogram, :stairs, :heatmap, :polygon, :hline, :vline, :band)
 
 function _overlaps(first::GridArea, second::GridArea)
     !isempty(intersect(first.rows, second.rows)) &&
@@ -738,16 +738,16 @@ function _check_sibling_overlap(children)
 end
 
 """
-    validate(specification)
+    validate(definition)
 
-Validate a layout, page, or complete render specification and return it.
+Validate a layout, page, or complete render definition and return it.
 
 # Errors
 
 - `ArgumentError`, `DimensionMismatch`, or `DomainError` when semantic fields,
   data shapes, layout relationships, placements, or logarithmic data are invalid.
 """
-function validate(layout::LayoutSpec)
+function validate(layout::LayoutDefinition)
     isempty(layout.grids) && throw(ArgumentError("a layout requires at least one grid"))
     grid_names = getfield.(layout.grids, :name)
     slot_names = getfield.(layout.slots, :name)
@@ -799,7 +799,7 @@ function validate(layout::LayoutSpec)
     return layout
 end
 
-function _validate_series(series::SeriesSpec)
+function _validate_series(series::SeriesDefinition)
     series.kind in SUPPORTED_PRIMITIVES || throw(
         ArgumentError("unsupported PlotBuilder primitive :$(series.kind)"),
     )
@@ -822,11 +822,20 @@ function _validate_series(series::SeriesSpec)
         series.zdata === nothing && throw(ArgumentError(":polygon requires geometry data"))
     elseif series.kind === :hline
         series.ydata === nothing && throw(ArgumentError(":hline requires y data"))
+    elseif series.kind === :vline
+        series.xdata === nothing && throw(ArgumentError(":vline requires x data"))
+    elseif series.kind === :band
+        any(isnothing, (series.xdata, series.ydata, series.zdata)) && throw(
+            ArgumentError(":band requires x, lower-y, and upper-y data"),
+        )
+        length(series.xdata) == length(series.ydata) == length(series.zdata) || throw(
+            DimensionMismatch(":band x, lower-y, and upper-y data must have equal lengths"),
+        )
     end
     return series
 end
 
-function _validate_log_axis(view::ViewSpec, axis::AxisSpec)
+function _validate_log_axis(view::ViewDefinition, axis::AxisDefinition)
     :log10 in axis.allowed_scales || return axis
     found = false
     for series in view.series
@@ -849,7 +858,7 @@ function _validate_log_axis(view::ViewSpec, axis::AxisSpec)
     return axis
 end
 
-function _validate_view_limits(view::ViewSpec)
+function _validate_view_limits(view::ViewDefinition)
     view.limits === nothing && return view
     view.limits isa Tuple && length(view.limits) == 2 || throw(
         ArgumentError("view limits must be `(xlimits, ylimits)` or `nothing`"),
@@ -876,14 +885,14 @@ function _validate_view_limits(view::ViewSpec)
     return view
 end
 
-function _validate_view_aspect(view::ViewSpec)
+function _validate_view_aspect(view::ViewDefinition)
     view.aspect === nothing && return view
     view.aspect === :data && return view
     view.aspect isa Real && isfinite(view.aspect) && view.aspect > 0 && return view
     throw(ArgumentError("view aspect must be nothing, :data, or a positive finite number"))
 end
 
-function _required_slots(page::PageSpec)
+function _required_slots(page::PageDefinition)
     required = Symbol[]
     append!(required, unique(view.placement.slot for view in page.views))
     scale_controls = any(
@@ -898,7 +907,7 @@ function _required_slots(page::PageSpec)
     return unique(required)
 end
 
-function _validate_legend_slot(page::PageSpec)
+function _validate_legend_slot(page::PageDefinition)
     page.legend.enabled || return page
     page.legend.overflow === :ellipsis || return page
     slot = only(filter(item -> item.name === page.legend.slot, page.layout.slots))
@@ -913,7 +922,7 @@ function _validate_legend_slot(page::PageSpec)
     return page
 end
 
-function validate(page::PageSpec)
+function validate(page::PageDefinition)
     validate(page.layout)
     slots = Set(getfield.(page.layout.slots, :name))
     missing = setdiff(_required_slots(page), collect(slots))
@@ -959,7 +968,7 @@ function validate(page::PageSpec)
     return page
 end
 
-function validate(render::RenderSpec)
+function validate(render::RenderDefinition)
     foreach(validate, render.figures)
     keys = [page.key for page in render.figures if !isempty(page.key)]
     length(unique(keys)) == length(keys) || throw(
@@ -971,15 +980,15 @@ end
 """
     UIPlot
 
-Hold a backend-neutral render specification together with one built figure,
+Hold a backend-neutral render definition together with one built figure,
 its panels, controls, and backend context. A rendered recipe returns one
 `UIPlot` per declarative page.
 """
-struct UIPlot{S <: AbstractPlotSpec, F, P, W, C}
-    "Complete backend-neutral render specification."
-    render::RenderSpec{S}
+struct UIPlot{S <: AbstractPlotDefinition, F, P, W, C}
+    "Complete backend-neutral render definition."
+    render::RenderDefinition{S}
     "Page represented by this handle."
-    page::PageSpec
+    page::PageDefinition
     "Backend-built figure."
     figure::F
     "Built axes or panels."
@@ -1024,92 +1033,92 @@ function Base.show(io::IO, value::PlotRecipe)
         :renderer => keys(value.renderer)
     )
 end
-function Base.show(io::IO, value::GridSpec)
+function Base.show(io::IO, value::GridDefinition)
     _show_summary(
         io,
-        "GridSpec",
+        "GridDefinition",
         :name => value.name,
         :rows => length(value.rows),
         :columns => length(value.columns)
     )
 end
-function Base.show(io::IO, value::SlotSpec)
+function Base.show(io::IO, value::SlotDefinition)
     _show_summary(
         io,
-        "SlotSpec",
+        "SlotDefinition",
         :name => value.name,
         :parent => value.parent,
         :area => value.area,
         :alignment => (value.halign, value.valign)
     )
 end
-function Base.show(io::IO, value::LayoutSpec)
+function Base.show(io::IO, value::LayoutDefinition)
     _show_summary(
         io,
-        "LayoutSpec",
+        "LayoutDefinition",
         :name => value.name,
         :grids => length(value.grids),
         :slots => length(value.slots)
     )
 end
-function Base.show(io::IO, value::PlacementSpec)
-    _show_summary(io, "PlacementSpec", :slot => value.slot, :area => value.area)
+function Base.show(io::IO, value::PlacementDefinition)
+    _show_summary(io, "PlacementDefinition", :slot => value.slot, :area => value.area)
 end
-function Base.show(io::IO, value::ControlSpec)
+function Base.show(io::IO, value::ControlDefinition)
     _show_summary(
         io,
-        "ControlSpec",
+        "ControlDefinition",
         :reset => value.reset,
         :export_svg => value.export_svg,
         :slot => value.slot
     )
 end
-function Base.show(io::IO, value::LegendSpec)
+function Base.show(io::IO, value::LegendDefinition)
     _show_summary(
         io,
-        "LegendSpec",
+        "LegendDefinition",
         :enabled => value.enabled,
         :interactive => value.interactive,
         :slot => value.slot,
         :overflow => value.overflow
     )
 end
-function Base.show(io::IO, value::ColorbarSpec)
+function Base.show(io::IO, value::ColorbarDefinition)
     _show_summary(
         io,
-        "ColorbarSpec",
+        "ColorbarDefinition",
         :label => value.label,
         :limits => value.limits,
         :ticks => length(first(value.ticks)),
         :slot => value.slot
     )
 end
-function Base.show(io::IO, value::StatusSpec)
-    _show_summary(io, "StatusSpec", :enabled => value.enabled, :slot => value.slot)
+function Base.show(io::IO, value::StatusDefinition)
+    _show_summary(io, "StatusDefinition", :enabled => value.enabled, :slot => value.slot)
 end
-function Base.show(io::IO, value::ExportSpec)
+function Base.show(io::IO, value::ExportDefinition)
     _show_summary(
         io,
-        "ExportSpec",
+        "ExportDefinition",
         :theme => value.theme,
         :name => value.name,
         :open_file => value.open_file
     )
 end
-function Base.show(io::IO, value::AxisSpec)
+function Base.show(io::IO, value::AxisDefinition)
     _show_summary(
         io,
-        "AxisSpec",
+        "AxisDefinition",
         :dimension => value.dim,
         :label => value.label,
         :scale => value.scale,
         :allowed_scales => value.allowed_scales
     )
 end
-function Base.show(io::IO, value::SeriesSpec)
+function Base.show(io::IO, value::SeriesDefinition)
     _show_summary(
         io,
-        "SeriesSpec",
+        "SeriesDefinition",
         :kind => value.kind,
         :x => _data_shape(value.xdata),
         :y => _data_shape(value.ydata),
@@ -1119,30 +1128,30 @@ function Base.show(io::IO, value::SeriesSpec)
         :visible => value.visible
     )
 end
-function Base.show(io::IO, value::ViewSpec)
+function Base.show(io::IO, value::ViewDefinition)
     _show_summary(
         io,
-        "ViewSpec",
+        "ViewDefinition",
         :title => value.title,
         :series => length(value.series),
         :slot => value.placement.slot
     )
 end
-function Base.show(io::IO, value::PageSpec)
+function Base.show(io::IO, value::PageDefinition)
     _show_summary(
         io,
-        "PageSpec",
+        "PageDefinition",
         :title => value.title,
         :size => value.size,
         :views => length(value.views),
         :layout => value.layout.name
     )
 end
-function Base.show(io::IO, value::RenderSpec)
+function Base.show(io::IO, value::RenderDefinition)
     _show_summary(
         io,
-        "RenderSpec",
-        :spec => nameof(value.spec),
+        "RenderDefinition",
+        :definition => nameof(value.definition),
         :pages => length(value.figures)
     )
 end
@@ -1164,20 +1173,20 @@ const _CompactPlotBuilderObject = Union{
     RelativeTrack,
     ContentTrack,
     GridArea,
-    GridSpec,
-    SlotSpec,
-    LayoutSpec,
-    PlacementSpec,
-    ControlSpec,
-    LegendSpec,
-    ColorbarSpec,
-    StatusSpec,
-    ExportSpec,
-    AxisSpec,
-    SeriesSpec,
-    ViewSpec,
-    PageSpec,
-    RenderSpec,
+    GridDefinition,
+    SlotDefinition,
+    LayoutDefinition,
+    PlacementDefinition,
+    ControlDefinition,
+    LegendDefinition,
+    ColorbarDefinition,
+    StatusDefinition,
+    ExportDefinition,
+    AxisDefinition,
+    SeriesDefinition,
+    ViewDefinition,
+    PageDefinition,
+    RenderDefinition,
     UIPlot
 }
 

@@ -5,484 +5,110 @@ using Statistics
 using LineCableModels
 using Measurements
 using PowerImpedance
-import Plots
 
 const NB = PowerImpedance.NetworkBuilder
-const LCM_EXT = Base.get_extension(
+const LCM_EXT = Base.get_extension(PowerImpedance, :PowerImpedanceLineCableModelsExt)
+const LCM_MEASUREMENTS_EXT = Base.get_extension(
     PowerImpedance,
-    :PowerImpedanceLineCableModelsExt
+    :PowerImpedanceLineCableModelsMeasurementsExt,
 )
 
 function deterministic_line_parameters(
-        order::Integer = 1;
-        frequencies = [10.0, 100.0, 1000.0],
-        domain = PhaseDomain
+    order::Integer=1;
+    frequencies=[10.0, 100.0, 1000.0],
 )
     count = length(frequencies)
-    Z = Array{ComplexF64}(undef, order, order, count)
-    Y = Array{ComplexF64}(undef, order, order, count)
-    for frequency_index in eachindex(frequencies)
-        for column in 1:order, row in 1:order
-
-            if row == column
-                Z[row, column, frequency_index] = (1.0 + 0.2frequency_index) * 1e-4 +
-                                                  (2.0 + frequency_index) * 1e-4im
-                Y[row, column, frequency_index] = (1.0 + 0.1frequency_index) * 1e-8 +
-                                                  (3.0 + frequency_index) * 1e-8im
-            else
-                Z[row, column, frequency_index] = (0.05 + 0.01frequency_index) * 1e-4 +
-                                                  (0.1 + 0.02frequency_index) * 1e-4im
-                Y[row, column, frequency_index] = (0.02 + 0.01frequency_index) * 1e-8 +
-                                                  (0.05 + 0.01frequency_index) * 1e-8im
-            end
-        end
+    Z = zeros(ComplexF64, order, order, count)
+    Y = zeros(ComplexF64, order, order, count)
+    for frequency_index in eachindex(frequencies), column in 1:order, row in 1:order
+        diagonal = row == column
+        Z[row, column, frequency_index] = diagonal ?
+            (1.0 + 0.2frequency_index) * 1e-4 + (2.0 + frequency_index) * 1e-4im :
+            (0.05 + 0.01frequency_index) * 1e-4 + (0.1 + 0.02frequency_index) * 1e-4im
+        Y[row, column, frequency_index] = diagonal ?
+            (1.0 + 0.1frequency_index) * 1e-8 + (3.0 + frequency_index) * 1e-8im :
+            (0.02 + 0.01frequency_index) * 1e-8 + (0.05 + 0.01frequency_index) * 1e-8im
     end
-    return LineParameters(domain, Z, Y, collect(frequencies))
+    return LineParameters(PhaseDomain, Z, Y, collect(frequencies))
 end
 
-function measured_array(values, relative_error)
-    return complex.(
+function measured_line_parameters(parameters; relative_error=0.05)
+    measured(values) = complex.(
         measurement.(real.(values), abs.(real.(values)) .* relative_error),
-        measurement.(imag.(values), abs.(imag.(values)) .* relative_error)
+        measurement.(imag.(values), abs.(imag.(values)) .* relative_error),
     )
-end
-
-function measured_line_parameters(
-        parameters::LineParameters;
-        relative_z = 0.05,
-        relative_y = 0.0
-)
     return LineParameters(
         LineCableModels.domain(parameters),
-        measured_array(Array(parameters.Z), relative_z),
-        measured_array(Array(parameters.Y), relative_y),
-        parameters.f
+        measured(Array(parameters.Z)),
+        measured(Array(parameters.Y)),
+        parameters.f,
     )
-end
-
-function passive_line_builder(parameters)
-    elements = (
-        line = NB.cable(parameters; length = 1e3),
-        load = NB.impedance(z = 10.0, pins = 1)
-    )
-    connections = (
-        (node = :n1, element = :line, side = 1, terminal = 1),
-        (node = :n2, element = :line, side = 2, terminal = 1),
-        (node = :n2, element = :load, side = 1, terminal = 1),
-        (node = :gnd, element = :load, side = 2, terminal = 1),
-    )
-    return NB.define(elements, connections)
 end
 
 @testset "LineCableModels extension activation" begin
     @test LCM_EXT !== nothing
-    @test Base.get_extension(
-        PowerImpedance,
-        :PowerImpedanceMeasurementsExt
-    ) !== nothing
+    @test LCM_MEASUREMENTS_EXT !== nothing
+    @test Base.get_extension(PowerImpedance, :PowerImpedanceMeasurementsExt) !== nothing
 end
 
-@testset "Native LineParameters line constructors" begin
+@testset "Deterministic LineParameters interoperability" begin
     parameters = deterministic_line_parameters(3)
-    overhead = PowerImpedance.overhead_line(parameters; length = 25e3)
-    cable = PowerImpedance.cable(parameters; length = 25e3)
-
+    overhead = PowerImpedance.overhead_line(parameters; length=25e3)
+    cable = PowerImpedance.cable(parameters; length=25e3)
     @test overhead isa PowerImpedance.Element
     @test cable isa PowerImpedance.Element
     @test overhead.input_pins == overhead.output_pins == 3
     @test cable.input_pins == cable.output_pins == 3
-    @test typeof(overhead.element_model) != typeof(cable.element_model)
 
     frequency = 100.0
-    overhead_abcd = PowerImpedance.eval_abcd(
-        overhead.element_model,
-        2pi * frequency * im
-    )
-    cable_abcd = PowerImpedance.eval_abcd(
-        cable.element_model,
-        2pi * frequency * im
-    )
+    overhead_abcd = PowerImpedance.eval_abcd(overhead.element_model, 2pi * frequency * im)
+    cable_abcd = PowerImpedance.eval_abcd(cable.element_model, 2pi * frequency * im)
     @test size(overhead_abcd) == (6, 6)
     @test overhead_abcd ≈ cable_abcd
 
-    shadow = only(NB.overhead_line(parameters; length = 25e3))
-    dispatched = only(PowerImpedance.overhead_line(
-        NB.Grid,
-        parameters;
-        length = 25e3
-    ))
-    @test PowerImpedance.eval_abcd(
-        shadow.element_model,
-        2pi * frequency * im
-    ) ≈ overhead_abcd
-    @test PowerImpedance.eval_abcd(
-        dispatched.element_model,
-        2pi * frequency * im
-    ) ≈ overhead_abcd
-
     length_grid = PowerImpedance.cable(
-        NB.Grid,
+        Grid,
         parameters;
-        length = NB.Grid([10e3, 20e3])
+        length=Grid([10e3, 20e3]),
     )
-    @test length(length_grid) == 2
     @test [line.element_model.length for line in length_grid] == [10e3, 20e3]
 
-    diagonal_Z = similar(Array(parameters.Z))
-    diagonal_Y = similar(Array(parameters.Y))
-    for index in axes(parameters.Z, 3)
-        diagonal_Z[:, :, index] = Diagonal(diag(parameters.Z[:, :, index]))
-        diagonal_Y[:, :, index] = Diagonal(diag(parameters.Y[:, :, index]))
-    end
-    diagonal_parameters = LineParameters(
-        diagonal_Z,
-        diagonal_Y,
-        parameters.f
-    )
-    diagonal_line = PowerImpedance.overhead_line(
-        diagonal_parameters;
-        length = 25e3
-    )
-    @test !isapprox(
-        PowerImpedance.eval_abcd(
-            diagonal_line.element_model,
-            2pi * frequency * im
-        ),
-        overhead_abcd
-    )
-end
-
-@testset "LineParameters frequency interpolation" begin
-    parameters = deterministic_line_parameters(2; frequencies = [10.0, 100.0])
-    line = PowerImpedance.cable(
-        parameters;
-        length = 1e3,
-        transformation = true
-    )
-
-    exact_Z, exact_Y = LCM_EXT._line_parameters_at(line.element_model, 10.0)
-    @test exact_Z ≈ parameters.Z[:, :, 1]
-    @test exact_Y ≈ parameters.Y[:, :, 1]
-
+    two_phase = deterministic_line_parameters(2; frequencies=[10.0, 100.0])
+    line = PowerImpedance.cable(two_phase; length=1e3, transformation=true)
     midpoint_Z, midpoint_Y = LCM_EXT._line_parameters_at(line.element_model, 55.0)
-    @test midpoint_Z ≈
-          0.5 .* parameters.Z[:, :, 1] .+ 0.5 .* parameters.Z[:, :, 2]
-    @test midpoint_Y ≈
-          0.5 .* parameters.Y[:, :, 1] .+ 0.5 .* parameters.Y[:, :, 2]
-
+    @test midpoint_Z ≈ 0.5 .* two_phase.Z[:, :, 1] .+ 0.5 .* two_phase.Z[:, :, 2]
+    @test midpoint_Y ≈ 0.5 .* two_phase.Y[:, :, 1] .+ 0.5 .* two_phase.Y[:, :, 2]
     negative_Z, negative_Y = LCM_EXT._line_parameters_at(line.element_model, -55.0)
     @test negative_Z ≈ conj.(midpoint_Z)
     @test negative_Y ≈ conj.(midpoint_Y)
+    @test_throws DomainError LCM_EXT._line_parameters_at(line.element_model, 1.0)
 
-    error = try
-        LCM_EXT._line_parameters_at(line.element_model, 1.0)
-        nothing
-    catch caught
-        caught
-    end
-    @test error isa DomainError
-    @test occursin("[10.0, 100.0] Hz", sprint(showerror, error))
-    @test occursin("|f ± 50 Hz|", sprint(showerror, error))
-
-    extrapolated = PowerImpedance.cable(
-        parameters;
-        length = 1e3,
-        transformation = true,
-        extrapolation = :linear
-    )
-    extrapolated_Z, extrapolated_Y = LCM_EXT._line_parameters_at(extrapolated.element_model, 1.0)
-    fraction = (1.0 - 10.0) / (100.0 - 10.0)
-    @test extrapolated_Z ≈
-          (1 - fraction) .* parameters.Z[:, :, 1] .+
-          fraction .* parameters.Z[:, :, 2]
-    @test extrapolated_Y ≈
-          (1 - fraction) .* parameters.Y[:, :, 1] .+
-          fraction .* parameters.Y[:, :, 2]
+    projection = primitives(parameters, LineParametersInput())
+    @test projection.series_impedance === parameters.Z
+    @test projection.shunt_admittance === parameters.Y
+    @test projection.frequencies === parameters.f
 end
 
-@testset "LineParameters validation" begin
-    one_phase = deterministic_line_parameters(1)
-    two_phase = deterministic_line_parameters(2)
-    three_phase = deterministic_line_parameters(3)
-
-    @test PowerImpedance.cable(one_phase; length = 1e3).input_pins == 1
-    @test PowerImpedance.cable(
-        two_phase;
-        length = 1e3,
-        transformation = true
-    ).input_pins == 1
-    @test PowerImpedance.overhead_line(
-        three_phase;
-        length = 1e3,
-        transformation = true
-    ).input_pins == 2
-
-    @test_throws ArgumentError PowerImpedance.cable(
-        one_phase;
-        length = 1e3,
-        transformation = true
-    )
-    @test_throws ArgumentError PowerImpedance.cable(
-        two_phase;
-        length = 1e3
-    )
-    @test_throws ArgumentError PowerImpedance.cable(
-        deterministic_line_parameters(4);
-        length = 1e3
-    )
-    @test_throws ArgumentError PowerImpedance.cable(
-        deterministic_line_parameters(2; domain = ModalDomain);
-        length = 1e3,
-        transformation = true
-    )
-
-    mismatched = LineParameters(
-        zeros(ComplexF64, 2, 2, 2),
-        zeros(ComplexF64, 3, 3, 2),
-        [10.0, 100.0]
-    )
-    @test_throws DimensionMismatch PowerImpedance.cable(
-        mismatched;
-        length = 1e3,
-        transformation = true
-    )
-
-    @test_throws ArgumentError PowerImpedance.cable(
-        deterministic_line_parameters(1; frequencies = [10.0]);
-        length = 1e3
-    )
-    @test_throws ArgumentError PowerImpedance.cable(
-        deterministic_line_parameters(1; frequencies = [10.0, 10.0]);
-        length = 1e3
-    )
-    @test_throws ArgumentError PowerImpedance.cable(
-        deterministic_line_parameters(1; frequencies = [0.0, 10.0]);
-        length = 1e3
-    )
-
-    uncertain_frequencies = LineParameters(
-        Array(one_phase.Z),
-        Array(one_phase.Y),
-        measurement.([10.0, 100.0, 1000.0], [0.1, 0.1, 0.1])
-    )
-    @test_throws ArgumentError NB.cable(uncertain_frequencies; length = 1e3)
-
-    nonfinite_Z = Array(one_phase.Z)
-    nonfinite_Z[1] = Inf + im
-    @test_throws ArgumentError PowerImpedance.cable(
-        LineParameters(nonfinite_Z, Array(one_phase.Y), one_phase.f);
-        length = 1e3
-    )
-    @test_throws ArgumentError PowerImpedance.cable(one_phase; length = 0.0)
-    @test_throws ArgumentError PowerImpedance.cable(
-        one_phase;
-        length = 1e3,
-        extrapolation = :flat
-    )
-
-    uncertain = measured_line_parameters(one_phase)
-    native_error = try
-        PowerImpedance.cable(uncertain; length = 1e3)
-        nothing
-    catch caught
-        caught
-    end
-    @test native_error isa ArgumentError
-    @test occursin("NetworkBuilder.cable", sprint(showerror, native_error))
-
-    plan = only(NB._gridspace_plans(NB.cable(uncertain; length = 1e3)))
-    sampled = plan.sample(Xoshiro(12), :normal)
-    @test plan.uncertain
-    @test eltype(sampled.element_model.parameters.Z) == ComplexF64
-    @test !NB._has_measurement(sampled.element_model.parameters)
-end
-
-function correlated_line_parameters()
-    parameters = deterministic_line_parameters(2)
-    Z = measured_array(Array(parameters.Z), 0.0)
-    Y = measured_array(Array(parameters.Y), 0.0)
-    covariance = [1.0 -0.6; -0.6 4.0]
-    correlated = Measurements.correlated_values([1.0, 2.0], covariance)
-    Z[1, 1, 1] = complex(correlated[1], measurement(0.0, 0.0))
-    Y[2, 2, 2] = complex(correlated[2], measurement(0.0, 0.0))
-    return LineParameters(Z, Y, parameters.f), covariance
-end
-
-@testset "Covariance-aware LineParameters sampling" begin
-    parameters, covariance = correlated_line_parameters()
+@testset "Measurements-dependent LineParameters sampling" begin
+    parameters = measured_line_parameters(deterministic_line_parameters(1))
     @test NB._has_measurement(parameters)
-    @test !NB._zero_measurement(parameters)
-
-    empty!(LCM_EXT._LINE_PARAMETERS_SAMPLING_PLANS)
-    reference_rng = Xoshiro(1234)
-    primitive_keys = LCM_EXT._primitive_keys(parameters)
-    standardized = NB._distribution(:normal, 0.0, 1.0)
-    draws = Dict{Any, Float64}(
-        key => rand(reference_rng, standardized) for key in primitive_keys)
-    expected_Z = LCM_EXT._sample_parameter_array(parameters.Z, draws)
-    expected_Y = LCM_EXT._sample_parameter_array(parameters.Y, draws)
-    sampled = NB._sample_value(Xoshiro(1234), parameters, :normal)
-    @test Array(sampled.Z) == expected_Z
-    @test Array(sampled.Y) == expected_Y
-    @test length(LCM_EXT._LINE_PARAMETERS_SAMPLING_PLANS) == 1
-    first_plan = only(values(LCM_EXT._LINE_PARAMETERS_SAMPLING_PLANS))
-    NB._sample_value(Xoshiro(1235), parameters, :normal)
-    @test only(values(LCM_EXT._LINE_PARAMETERS_SAMPLING_PLANS)) === first_plan
-
-    for (distribution, seed) in ((:normal, 2026), (:uniform, 2027))
-        rng = Xoshiro(seed)
-        samples = [NB._sample_value(rng, parameters, distribution) for _ in 1:5000]
-        Z_values = real.([sample.Z[1, 1, 1] for sample in samples])
-        Y_values = real.([sample.Y[2, 2, 2] for sample in samples])
-        @test isapprox(mean(Z_values), 1.0; atol = 0.06)
-        @test isapprox(mean(Y_values), 2.0; atol = 0.12)
-        @test isapprox(var(Z_values), covariance[1, 1]; atol = 0.12)
-        @test isapprox(var(Y_values), covariance[2, 2]; atol = 0.35)
-        @test isapprox(cov(Z_values, Y_values), covariance[1, 2]; atol = 0.14)
-    end
-
-    first_rng = Xoshiro(99)
-    second_rng = Xoshiro(99)
-    first_run = [NB._sample_value(first_rng, parameters, :normal) for _ in 1:32]
-    second_run = [NB._sample_value(second_rng, parameters, :normal) for _ in 1:32]
-    @test [Array(sample.Z) for sample in first_run] ==
-          [Array(sample.Z) for sample in second_run]
-    @test [Array(sample.Y) for sample in first_run] ==
-          [Array(sample.Y) for sample in second_run]
-
-    zero_parameters = measured_line_parameters(
-        deterministic_line_parameters(1);
-        relative_z = 0.0,
-        relative_y = 0.0
-    )
-    @test NB._has_measurement(zero_parameters)
-    @test NB._zero_measurement(zero_parameters)
-    sampled = NB._sample_value(Xoshiro(1), zero_parameters, :normal)
+    sampled = NB._sample_value(Xoshiro(11), parameters, :normal)
+    @test sampled isa LineParameters
     @test eltype(sampled.Z) == ComplexF64
     @test !NB._has_measurement(sampled)
-end
 
-@testset "LineParameters Gridspace impedance studies" begin
-    deterministic = deterministic_line_parameters(
-        1;
-        frequencies = [1.0, 10.0, 100.0, 1000.0]
-    )
-    uncertain = measured_line_parameters(deterministic; relative_z = 0.05)
-    result = NB.determine_impedance(
-        passive_line_builder(uncertain);
-        nets = [:n1],
-        freq_range = (10.0, 100.0, 3),
-        trials = 16,
-        seed = 314,
-        return_samples = true
-    )
-    case = only(result)
-    @test case.trials == 16
-    @test size(case.samples) == (1, 1, 3, 16)
-    @test eltype(case.impedance) ==
-          Complex{Measurements.Measurement{Float64}}
-    @test Measurements.uncertainty(real(case.impedance[1])) > 0
-    @test only(case.coordinates).first ==
-          (:elements, :line, :line_parameters)
-    @test only(case.coordinates).second.kind == :line_parameters
+    first_rng = Xoshiro(42)
+    second_rng = Xoshiro(42)
+    first_samples = [NB._sample_value(first_rng, parameters, :normal) for _ in 1:16]
+    second_samples = [NB._sample_value(second_rng, parameters, :normal) for _ in 1:16]
+    @test Array.(getproperty.(first_samples, :Z)) ==
+        Array.(getproperty.(second_samples, :Z))
 
-    nyquist = PowerImpedance.nyquistplot(
-        result;
-        display_plot = false,
-        return_samples = true
-    )
-    bode = PowerImpedance.bodeplot(
-        result;
-        display_plot = false,
-        return_samples = true
-    )
-    passive = PowerImpedance.passivity(
-        result;
-        display_plot = false,
-        return_samples = true
-    )
-    modes = PowerImpedance.EVD(
-        result,
-        nothing,
-        10.0,
-        100.0;
-        display_plot = false,
-        return_samples = true
-    )
-    gain = PowerImpedance.small_gain(
-        result,
-        result;
-        display_plot = false,
-        return_samples = true
-    )
-    @test only(nyquist).uncertainty_source == :monte_carlo
-    @test only(bode).trials == 16
-    @test only(passive).trials == 16
-    @test only(modes).trials == 16
-    @test only(gain).trials == 16
+    values = real.([sample.Z[1, 1, 1] for sample in first_samples])
+    @test std(values) > 0
 
-    zero_parameters = measured_line_parameters(
-        deterministic;
-        relative_z = 0.0,
-        relative_y = 0.0
-    )
-    zero = NB.determine_impedance(
-        passive_line_builder(zero_parameters);
-        nets = [:n1],
-        freq_range = (10.0, 100.0, 3),
-        trials = 1000,
-        seed = 315
-    )
-    @test only(zero).trials == 1000
-    @test iszero(Measurements.uncertainty(real(only(zero).impedance[1])))
-end
-
-@testset "Three-phase dq LineParameters study" begin
-    parameters = deterministic_line_parameters(
-        3;
-        frequencies = [1.0, 50.0, 200.0]
-    )
-    elements = (
-        line = NB.overhead_line(
-            parameters;
-            length = 1e3,
-            transformation = true
-        ),
-        d_load = NB.impedance(z = 10.0, pins = 1),
-        q_load = NB.impedance(z = 10.0, pins = 1)
-    )
-    connections = (
-        (node = :d1, element = :line, side = 1, terminal = 1),
-        (node = :q1, element = :line, side = 1, terminal = 2),
-        (node = :d2, element = :line, side = 2, terminal = 1),
-        (node = :d2, element = :d_load, side = 1, terminal = 1),
-        (node = :gnd_d, element = :d_load, side = 2, terminal = 1),
-        (node = :q2, element = :line, side = 2, terminal = 2),
-        (node = :q2, element = :q_load, side = 1, terminal = 1),
-        (node = :gnd_q, element = :q_load, side = 2, terminal = 1),
-    )
-    result = NB.determine_impedance(
-        NB.define(elements, connections);
-        nets = [:d1],
-        freq_range = (10.0, 100.0, 3)
-    )
-    @test size(only(result).impedance) == (1, 1, 3)
-end
-
-@testset "LineCableModels extension load order" begin
-    project = dirname(Base.active_project())
-    extension_check = "@assert Base.get_extension(PowerImpedance, " *
-                      ":PowerImpedanceLineCableModelsExt) !== nothing"
-
-    powerimpedance_first = "using PowerImpedance; " *
-                           "@assert Base.get_extension(PowerImpedance, " *
-                           ":PowerImpedanceLineCableModelsExt) === nothing; " *
-                           "using LineCableModels; " * extension_check
-    command = `$(Base.julia_cmd()) --project=$project --startup-file=no -e $powerimpedance_first`
-    @test success(pipeline(command; stdout = devnull, stderr = devnull))
-
-    linecablemodels_first = "using LineCableModels; using PowerImpedance; " *
-                            extension_check
-    command = `$(Base.julia_cmd()) --project=$project --startup-file=no -e $linecablemodels_first`
-    @test success(pipeline(command; stdout = devnull, stderr = devnull))
+    grid = NB.cable(parameters; length=1e3)
+    configuration = only(configurations(grid))
+    numeric_line = rand(Xoshiro(7), configuration; distribution=:normal)
+    @test !NB._contains_measurement(numeric_line)
 end

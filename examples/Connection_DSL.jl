@@ -304,10 +304,14 @@ grid_connections = (
 network_space = define(grid_elements, grid_connections);
 length(network_space)
 
-grid_impedance = determine_impedance(
+grid_problems = PowerImpedanceProblem(
     network_space;
-    nets = [:bus],
-    freq_range = (1.0, 1e3, 40)
+    nodes = [:bus],
+    frequency_range = (1.0, 1e3, 40)
+);
+grid_impedance = compute(
+    ParametricProblem(grid_problems),
+    Combinatorial(NodalImpedance())
 );
 grid_impedance
 

@@ -2,8 +2,17 @@ export OperatingPoint, PowerFlowResult, LinearizationResult
 export PowerImpedanceProblem, StabilityProblem
 export NodalImpedance, NodeAdmittance, EdgeAdmittance, LoopGain
 export GeneralizedNyquist, BodeAnalysis, PassivityAnalysis, SmallGainAnalysis
-export EigenvalueAnalysis, FrequencyResponseResult, StabilityResult
-export ParametricProblem, UQuantProblem, Combinatorial, MonteCarlo
+export EigenvalueAnalysis, UnstableFrequencyAnalysis
+export FrequencyResponseResult, StabilityResult
+
+const _FORMULATION_BACKENDS = IdDict{Any,DataType}()
+
+function _register_backend!(formulation::Type, backend::Type)
+    _FORMULATION_BACKENDS[formulation] = backend
+    return backend
+end
+
+_default_backend(formulation::Type) = get(_FORMULATION_BACKENDS, formulation, PIACDC)
 
 """
 $(TYPEDEF)
@@ -14,56 +23,63 @@ $(TYPEDFIELDS)
 """
 struct OperatingPoint
     "Calculated steady-state values indexed by element name."
-    setpoints::Dict{Symbol, Setpoint}
+    setpoints::Dict{Symbol,Setpoint}
 end
 
-OperatingPoint() = OperatingPoint(Dict{Symbol, Setpoint}())
+OperatingPoint() = OperatingPoint(Dict{Symbol,Setpoint}())
 Base.getindex(point::OperatingPoint, element::Symbol) = point.setpoints[element]
-function Base.get(point::OperatingPoint, element::Symbol, default)
+Base.get(point::OperatingPoint, element::Symbol, default) =
     get(point.setpoints, element, default)
-end
 Base.keys(point::OperatingPoint) = keys(point.setpoints)
 Base.isempty(point::OperatingPoint) = isempty(point.setpoints)
 
 """
 $(TYPEDEF)
 
-Store one PowerModelsACDC power-flow calculation and the operating point
-derived from it.
+Store one PowerModelsACDC power-flow calculation and its operating point.
 
 $(TYPEDFIELDS)
 """
-struct PowerFlowResult{R, D, N, E, G} <: AbstractResult
+struct PowerFlowResult{F,R,D,N,E,G} <: AbstractResolutionResult
+    "Resolved power-flow formulation."
+    formulation::F
+
     "PowerModelsACDC solution and termination information."
     result::R
+
     "PowerModelsACDC input data used by the calculation."
     data::D
+
     "Mapping from PowerImpedance nodes to power-flow buses."
     nodes2bus::N
+
     "Mapping from PowerImpedance elements to power-flow components."
     elem2comp::E
+
     "Steady-state quantities used for active-element linearization."
     operating_point::OperatingPoint
+
     "Convergence status and solver diagnostics."
     diagnostics::G
 end
+
 
 function Base.getproperty(result::PowerFlowResult, field::Symbol)
     field === :active_setpoint_values && return getfield(result, :operating_point).setpoints
     return getfield(result, field)
 end
 
-function Base.propertynames(::PowerFlowResult, private::Bool = false)
-    fields = (
+function Base.propertynames(::PowerFlowResult, private::Bool=false)
+    return (
+        :formulation,
         :result,
         :data,
         :nodes2bus,
         :elem2comp,
         :operating_point,
         :diagnostics,
-        :active_setpoint_values
+        :active_setpoint_values,
     )
-    return fields
 end
 
 """
@@ -73,11 +89,16 @@ Store a linearized network and the operating point used to construct it.
 
 $(TYPEDFIELDS)
 """
-struct LinearizationResult{M, G} <: AbstractResult
+struct LinearizationResult{F,M,G} <: AbstractResolutionResult
+    "Resolved linearization formulation."
+    formulation::F
+
     "Linearized frequency-domain network model."
     network_model::M
+
     "Steady-state point about which active elements were linearized."
     operating_point::OperatingPoint
+
     "Linearization diagnostics."
     diagnostics::G
 end
@@ -89,85 +110,150 @@ Specify a network frequency-response calculation.
 
 $(TYPEDFIELDS)
 """
-struct PowerImpedanceProblem{N, K, E, F} <: ProblemDefinition
+struct PowerImpedanceProblem{N,K,E,F} <: AbstractProblemDefinition
     "Materialized network state or linearized network model."
     network::N
+
     "Ordered retained node names."
     nodes::K
+
     "Elements excluded from the response calculation."
     eliminated_elements::E
+
     "Minimum frequency, maximum frequency, and point count in hertz."
     frequency_range::F
 end
 
-"""
-    PowerImpedanceProblem(network; nodes=Symbol[], eliminated_elements=Symbol[],
-                          frequency_range=(0.001, 10_000.0, 2_000))
 
-Construct a network frequency-response problem.
-"""
 function PowerImpedanceProblem(
-        network;
-        nodes = Symbol[],
-        eliminated_elements = Symbol[],
-        frequency_range = (0.001, 10_000.0, 2_000)
+    network;
+    nodes=Symbol[],
+    eliminated_elements=Symbol[],
+    frequency_range=(0.001, 10_000.0, 2_000),
 )
     return PowerImpedanceProblem(
         network,
         Symbol.(collect(nodes)),
         Symbol.(collect(eliminated_elements)),
-        frequency_range
+        frequency_range,
     )
 end
 
 """
 $(TYPEDEF)
 
-Specify a small-signal analysis of a calculated frequency response.
+Specify a small-signal analysis of completed frequency-response results.
 
 $(TYPEDFIELDS)
 """
-struct StabilityProblem{R, K} <: ProblemDefinition
-    "Frequency-response result or numeric response."
+struct StabilityProblem{R} <: AbstractProblemDefinition
+    "One frequency-response result or an explicit pair for small-gain analysis."
     response::R
-    "Analysis options forwarded to the scalar stability method."
-    options::K
+end
+
+abstract type AbstractPowerImpedanceFormulation{B} <: AbstractFormulation end
+
+for Formulation in (:NodalImpedance, :NodeAdmittance, :EdgeAdmittance, :LoopGain)
+    @eval begin
+        struct $Formulation{B} <: AbstractPowerImpedanceFormulation{B}
+            backend::Type{B}
+        end
+
+        function $Formulation(; backend::Type{B}=_default_backend($Formulation)) where {B}
+            return $Formulation{B}(backend)
+        end
+
+        _register_backend!($Formulation, PIACDC)
+    end
 end
 
 """
-    StabilityProblem(response; options=(;))
+$(TYPEDEF)
 
-Construct a downstream small-signal analysis problem from a calculated
-frequency response and analysis options.
+Apply generalized Nyquist analysis to a loop-gain response.
+
+`order_maxima` is the neighborhood order used to identify oscillatory peaks.
 """
-StabilityProblem(response; options = (;)) = StabilityProblem(response, options)
+struct GeneralizedNyquist{B} <: AbstractPowerImpedanceFormulation{B}
+    backend::Type{B}
+    order_maxima::Int
+end
 
-"Calculate nodal impedance with the validated network reduction method."
-struct NodalImpedance <: AbstractFormulation end
+function GeneralizedNyquist(;
+    backend::Type{B}=_default_backend(GeneralizedNyquist),
+    order_maxima::Integer=5,
+) where {B}
+    order_maxima > 0 || throw(ArgumentError("order_maxima must be positive"))
+    return GeneralizedNyquist{B}(backend, Int(order_maxima))
+end
+_register_backend!(GeneralizedNyquist, PIACDC)
 
-"Calculate the admittance contributed by active elements."
-struct NodeAdmittance <: AbstractFormulation end
+for Formulation in (:BodeAnalysis, :PassivityAnalysis, :SmallGainAnalysis)
+    @eval begin
+        struct $Formulation{B} <: AbstractPowerImpedanceFormulation{B}
+            backend::Type{B}
+        end
 
-"Calculate the admittance contributed by passive elements."
-struct EdgeAdmittance <: AbstractFormulation end
+        function $Formulation(; backend::Type{B}=_default_backend($Formulation)) where {B}
+            return $Formulation{B}(backend)
+        end
 
-"Calculate the matrix loop gain from node and edge admittances."
-struct LoopGain <: AbstractFormulation end
+        _register_backend!($Formulation, PIACDC)
+    end
+end
 
-"Apply the generalized Nyquist analysis."
-struct GeneralizedNyquist <: AbstractFormulation end
+"""
+$(TYPEDEF)
 
-"Apply the Bode magnitude-and-phase analysis."
-struct BodeAnalysis <: AbstractFormulation end
+Apply eigenvalue analysis between `fmin` and `fmax` in hertz.
 
-"Apply the passivity analysis."
-struct PassivityAnalysis <: AbstractFormulation end
+$(TYPEDFIELDS)
+"""
+struct EigenvalueAnalysis{B} <: AbstractPowerImpedanceFormulation{B}
+    "Resolved calculation backend."
+    backend::Type{B}
 
-"Apply the small-gain analysis."
-struct SmallGainAnalysis <: AbstractFormulation end
+    "Lower assessment frequency \\[Hz\\]."
+    fmin::Float64
 
-"Apply the eigenvalue-decomposition analysis."
-struct EigenvalueAnalysis <: AbstractFormulation end
+    "Upper assessment frequency \\[Hz\\]."
+    fmax::Float64
+
+    "Whether to calculate the inverse-determinant index."
+    determinant::Bool
+end
+
+function EigenvalueAnalysis(;
+    backend::Type{B}=_default_backend(EigenvalueAnalysis),
+    fmin::Real=0.001,
+    fmax::Real=10_000.0,
+    determinant::Bool=false,
+) where {B}
+    0 < fmin < fmax || throw(ArgumentError("require 0 < fmin < fmax"))
+    return EigenvalueAnalysis{B}(backend, Float64(fmin), Float64(fmax), determinant)
+end
+_register_backend!(EigenvalueAnalysis, PIACDC)
+
+"""
+$(TYPEDEF)
+
+Detect oscillatory frequencies from complementary-sensitivity peaks.
+
+`order_maxima` is the neighborhood order used to select candidate peaks.
+"""
+struct UnstableFrequencyAnalysis{B} <: AbstractPowerImpedanceFormulation{B}
+    backend::Type{B}
+    order_maxima::Int
+end
+
+function UnstableFrequencyAnalysis(;
+    backend::Type{B}=_default_backend(UnstableFrequencyAnalysis),
+    order_maxima::Integer=5,
+) where {B}
+    order_maxima > 0 || throw(ArgumentError("order_maxima must be positive"))
+    return UnstableFrequencyAnalysis{B}(backend, Int(order_maxima))
+end
+_register_backend!(UnstableFrequencyAnalysis, PIACDC)
 
 """
 $(TYPEDEF)
@@ -176,17 +262,25 @@ Store one scalar matrix frequency response.
 
 $(TYPEDFIELDS)
 """
-struct FrequencyResponseResult{R, F, N, M, G} <: AbstractResult
+struct FrequencyResponseResult{F,R,W,N,M,G} <: AbstractResolutionResult
+    "Resolved response formulation."
+    formulation::F
+
     "Response identifier."
     kind::Symbol
-    "Numeric response with dimensions `n × n × nf`."
+
+    "Numeric response with dimensions `n x n x nf`."
     response::R
+
     "Angular frequencies \\[rad/s\\]."
-    frequencies::F
+    frequencies::W
+
     "Ordered response nodes."
     nodes::N
-    "Linearized network used for the calculation."
+
+    "Linearized network used by the calculation."
     network_model::M
+
     "Calculation diagnostics."
     diagnostics::G
 end
@@ -194,115 +288,20 @@ end
 """
 $(TYPEDEF)
 
-Store one scalar small-signal analysis.
+Store one completed small-signal analysis without graphics objects.
 
 $(TYPEDFIELDS)
 """
-struct StabilityResult{O, P, G} <: AbstractResult
+struct StabilityResult{F,O,G} <: AbstractResolutionResult
+    "Resolved stability formulation."
+    formulation::F
+
     "Analysis identifier."
     analysis::Symbol
+
     "Calculated analysis quantities."
     output::O
-    "Constructed plot object or plot collection."
-    plots::P
-    "Analysis diagnostics."
+
+    "Calculation diagnostics."
     diagnostics::G
-end
-
-"""
-$(TYPEDEF)
-
-Specify deterministic evaluation of a parameter space.
-
-$(TYPEDFIELDS)
-"""
-struct ParametricProblem{S, F, O} <: ProblemDefinition
-    "Parameter space containing the materialized network cases."
-    space::S
-    "Scalar formulation applied to each case."
-    formulation::F
-    "Keyword options passed to the calculation."
-    options::O
-end
-
-"""
-    ParametricProblem(space, formulation)
-
-Construct a deterministic parameter-enumeration problem with no additional
-calculation options.
-"""
-ParametricProblem(space, formulation) = ParametricProblem(space, formulation, (;))
-
-"""
-$(TYPEDEF)
-
-Specify uncertainty propagation through a parameter space.
-
-$(TYPEDFIELDS)
-"""
-struct UQuantProblem{S, F, O} <: ProblemDefinition
-    "Parameter space containing deterministic and uncertain network cases."
-    space::S
-    "Scalar formulation applied to each numeric trial."
-    formulation::F
-    "Keyword options passed to the calculation."
-    options::O
-end
-
-"""
-    UQuantProblem(space, formulation)
-
-Construct an uncertainty-quantification problem with no additional calculation
-options.
-"""
-UQuantProblem(space, formulation) = UQuantProblem(space, formulation, (;))
-
-"Enumerate every deterministic parameter combination."
-struct Combinatorial <: AbstractFormulation end
-
-"""
-$(TYPEDEF)
-
-Specify a Monte Carlo calculation over an uncertain Gridspace.
-
-$(TYPEDFIELDS)
-"""
-struct MonteCarlo{S} <: AbstractFormulation
-    "Requested trial count, or `nothing` for DKW sizing."
-    trials::Union{Nothing, Int}
-    "Primitive sampling distribution."
-    distribution::Symbol
-    "Master random seed."
-    seed::S
-    "Simultaneous confidence level."
-    confidence::Float64
-    "DKW tolerance."
-    tolerance::Float64
-    "Whether to retain numeric trial samples."
-    return_samples::Bool
-end
-
-"""
-    MonteCarlo(; trials=nothing, distribution=:normal, seed=nothing,
-                 confidence=0.95, tolerance=0.02, return_samples=false)
-
-Specify sampling, DKW sizing, reproducibility, and sample-retention options for
-an uncertainty calculation.
-"""
-function MonteCarlo(;
-        trials = nothing,
-        distribution::Symbol = :normal,
-        seed = nothing,
-        confidence::Real = 0.95,
-        tolerance::Real = 0.02,
-        return_samples::Bool = false
-)
-    return MonteCarlo(
-        isnothing(trials) ? nothing : Int(trials),
-        distribution,
-        seed,
-        Float64(confidence),
-        Float64(tolerance),
-        return_samples
-    )
 end

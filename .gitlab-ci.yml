@@ -134,7 +134,6 @@ extension_tests:
             rev="abe355170add20cc0c841e218fed82fe8ffbab51",
           ),
           PackageSpec(name="Measurements"),
-          PackageSpec(name="Plots"),
           PackageSpec(name="TestItems"),
           PackageSpec(name="TestItemRunner"),
         ])
@@ -180,7 +179,10 @@ plotting_tests:
         using Pkg
         Pkg.activate(; temp=true)
         Pkg.develop(PackageSpec(path=pwd()))
-        Pkg.add(PackageSpec(name="CairoMakie", version="0.15"))
+        Pkg.add([
+          PackageSpec(name="CairoMakie", version="0.15"),
+          PackageSpec(name="WGLMakie", version="0.13"),
+        ])
         Pkg.precompile()
 
         project = dirname(Base.active_project())
@@ -192,6 +194,8 @@ plotting_tests:
           )
           run(command)
         end
+        wgl_test = joinpath(pwd(), "integration", "plotting", "wgl_load_test.jl")
+        run(`$(Base.julia_cmd()) --project=$project --startup-file=no $wgl_test`)
       '
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'

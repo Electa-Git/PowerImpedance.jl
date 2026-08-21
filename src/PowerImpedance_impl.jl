@@ -124,23 +124,21 @@ include("UnitHandler.jl")
 include("PlotBuilder/PlotBuilder.jl")
 using .PlotBuilder: UIPlot, export_svg
 using .PlotBuilder.BackendHandler: set_backend!
-export UIPlot, export_svg, set_backend!
+export PlotBuilder, UIPlot, export_svg, set_backend!
 
-# Optional Plots.jl forwarding entry points. These remain unexported.
+# Optional Makie plotting entry point. The Makie extension owns its methods.
 function plot end
-function plot! end
-function palette end
-function hline! end
-function scatter! end
-function vline! end
 
-# Scientific calculation definitions
+# Calculation definitions
 include("Problems.jl")
 include("PlotRecipes.jl")
 
 # Alternative explicit network construction API
 include("Network/NetworkBuilder/NetworkBuilder.jl")
 import .NetworkBuilder: determine_impedance, make_loopgain
+import .NetworkBuilder: PowerFlowProblem, ACDCPowerFlow
+import .NetworkBuilder: LinearizationProblem, AdmittanceLinearization
+export PowerFlowProblem, ACDCPowerFlow, LinearizationProblem, AdmittanceLinearization
 
 # Including network solvers
 include("Network/Solvers/make_abcd.jl")
@@ -156,14 +154,7 @@ include("Network/Solvers/stability.jl")
 # Including tools
 include("Tools/abcd_parameters.jl")
 include("Tools/kron.jl")
-include("Tools/nyquistplot.jl")
-include("Tools/small_gain.jl")
 include("Tools/stabilitymargin.jl")
-include("Tools/EVD.jl")
-include("Tools/bodeplot.jl")
-include("Tools/passivity.jl")
-include("Tools/unstable_frequency.jl")
-
-
-include("Tools/parametric_stability.jl")
+include("ScientificStability.jl")
 include("Compute.jl")
+include("StabilityPlotRecipes.jl")

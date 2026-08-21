@@ -11,6 +11,29 @@ else
     error("POWERIMPEDANCE_PLOTTING_LOAD_ORDER must be power_first or makie_first")
 end
 
+function cairo_stability_responses()
+    impedance = cairo_frequency_response()
+    loop_gain = FrequencyResponseResult(
+        LoopGain(),
+        :loopgain,
+        0.1 .* impedance.response,
+        impedance.frequencies,
+        impedance.nodes,
+        impedance.network_model,
+        (;),
+    )
+    admittance = FrequencyResponseResult(
+        NodeAdmittance(),
+        :node_admittance,
+        impedance.response,
+        impedance.frequencies,
+        impedance.nodes,
+        impedance.network_model,
+        (;),
+    )
+    return loop_gain, admittance
+end
+
 function cairo_frequency_response()
     frequency = 10.0 .^ range(0, 4; length = 80)
     response = Array{ComplexF64}(undef, 2, 2, length(frequency))
@@ -19,6 +42,7 @@ function cairo_frequency_response()
                                   0.25 + im * value / 300 4 + im * value / 50]
     end
     return FrequencyResponseResult(
+        NodalImpedance(),
         :nodal_impedance,
         response,
         2π .* frequency,
@@ -35,6 +59,7 @@ function cairo_legend_response(node_count::Int = 12)
         response[node, node, :] .= node .* (1 .+ im .* frequency ./ 100)
     end
     return FrequencyResponseResult(
+        NodalImpedance(),
         :nodal_impedance,
         response,
         2π .* frequency,
@@ -55,6 +80,7 @@ function cairo_square_response(node_count::Int)
                                     (1 .+ im .* frequency ./ (80 + 10row + column))
     end
     return FrequencyResponseResult(
+        NodalImpedance(),
         :nodal_impedance,
         response,
         2π .* frequency,
@@ -286,4 +312,78 @@ end
           minimum(box.widths[1] for box in nine_boxes) < 1
     @test maximum(box.widths[2] for box in nine_boxes) -
           minimum(box.widths[2] for box in nine_boxes) < 1
+end
+
+@testset "CairoMakie completed stability plotting" begin
+    loop_gain, admittance = cairo_stability_responses()
+    completed = (
+        compute(StabilityProblem(loop_gain), GeneralizedNyquist()),
+        compute(StabilityProblem(loop_gain), BodeAnalysis()),
+        compute(StabilityProblem(admittance), PassivityAnalysis()),
+        compute(StabilityProblem((admittance, admittance)), SmallGainAnalysis()),
+        compute(
+            StabilityProblem(admittance),
+            EigenvalueAnalysis(fmin=1.0, fmax=1.0e4, determinant=true),
+        ),
+        compute(StabilityProblem(loop_gain), UnstableFrequencyAnalysis()),
+    )
+
+    for result in completed
+        handles = PowerImpedance.plot(
+            result;
+            backend=:cairo,
+            display_plot=false,
+            controls=false,
+            open_export=false,
+        )
+        @test handles isa Vector{UIPlot}
+        @test !isempty(handles)
+        @test all(handle -> !isempty(handle.panels), handles)
+    end
+
+    bode_result = completed[2]
+    targets = PowerImpedance.plot(
+        bode_result;
+        backend=:cairo,
+        display_plot=false,
+        controls=false,
+        open_export=false,
+    )
+    initial_series = sum(
+        length(panel.plots) for target in targets for panel in target.panels
+    )
+    updated = bodeplot(
+        loop_gain;
+        plots=targets,
+        display_plot=false,
+        open_export=false,
+    )
+    @test updated === targets
+    @test sum(
+        length(panel.plots) for target in targets for panel in target.panels
+    ) > initial_series
+
+    siso = FrequencyResponseResult(
+        LoopGain(),
+        :loopgain,
+        loop_gain.response[1:1, 1:1, :],
+        loop_gain.frequencies,
+        loop_gain.nodes[1:1],
+        loop_gain.network_model,
+        (;),
+    )
+    siso_bode = compute(StabilityProblem(siso), BodeAnalysis())
+    target = only(PowerImpedance.plot(
+        siso_bode;
+        backend=:cairo,
+        display_plot=false,
+        controls=false,
+        open_export=false,
+    ))
+    @test bodeplot(
+        siso;
+        plots=target,
+        display_plot=false,
+        open_export=false,
+    ) === target
 end

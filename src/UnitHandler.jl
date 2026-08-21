@@ -243,7 +243,7 @@ nominal(value::Number) = value
 """$(TYPEDSIGNATURES)
 
 Return the standard uncertainty of a number. Deterministic numbers return
-zero; optional uncertainty extensions specialize this method.
+zero. Optional uncertainty extensions specialize this method.
 """
 standard_uncertainty(value::Number) = zero(real(value))
 

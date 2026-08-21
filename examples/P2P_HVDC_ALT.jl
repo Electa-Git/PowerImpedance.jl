@@ -5,7 +5,8 @@
 # underground cable in a point-to-point HVDC system.
 
 using PowerImpedance
-import Plots
+using CairoMakie
+using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState
 
 # The P and Q defined here are what is injected into the network.
 transmissionVoltage = 380 / sqrt(3)
@@ -41,7 +42,7 @@ connections = (
     (node = :B7q, element = :tl78, side = 2, terminal = 2)
 )
 
-# Pro-tip: define bounded quantities directly from the top-level API, rather than hacking through the build_acdcpf options.
+# Bus-voltage bounds belong in the builder options used for every case.
 builder_options = (;
     voltageBase = transmissionVoltage,
     power_flow = (;
@@ -51,10 +52,12 @@ builder_options = (;
     )
 )
 
-# Wrap the network components into a function that can be called with different values of `x` to sweep the OHL/UGC transition, returning a tuple of elements:
+# `x` is the fraction of the corridor implemented as underground cable. A 100 m
+# regularization at either endpoint avoids singular zero-length line models.
 function ohl_to_ugc(x)
+    share = clamp(x, 1e-3, 1 - 1e-3)
     ohl_model = overhead_line(
-        length = L * (1 - (x + 1e-3)),
+        length = L * (1 - share),
         conductors = Conductors(
             organization = :flat,
             nᵇ = 2,
@@ -73,7 +76,7 @@ function ohl_to_ugc(x)
     )
 
     ugc_model = cable(
-        length = L * (x + 1e-3),
+        length = L * share,
         positions = [(-0.5, 1), (0.5, 1)],
         C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
         I1 = Insulator(rᵢ = 0.02622, rₒ = 0.06006, ϵᵣ = 2.67, μᵣ = 1.469),
@@ -167,172 +170,96 @@ function ohl_to_ugc(x)
     )
 end
 
-# Some plots and eye-candy:
-function transition_bode_sample(x, zgrid, omega_ac)
-    Zg = vec(zgrid[1, 1, :])
+# The transition is one deterministic Gridspace axis. The axis keeps the OHL
+# and UGC lengths paired, so the study never evaluates an impossible Cartesian
+# product of independent corridor lengths.
+function transition_network_space(x_values)
+    shares = Grid(collect(x_values))
+    return Gridspace{NetworkState}(
+        share -> NetworkBuilder.define(
+            ohl_to_ugc(share),
+            connections;
+            options=builder_options,
+        ),
+        (shares,),
+        (:ugc_share,),
+    )
+end
 
-    f = real.(omega_ac ./ (2π))
-    mag_dB = 20 .* log10.(abs.(Zg))
-    phase_deg = angle.(Zg) .* (180 / π)
-
+function transition_peak(response, share)
+    magnitude_db = 20 .* log10.(abs.(vec(response.response[1, 1, :])))
+    frequencies_hz = real.(response.frequencies) ./ (2π)
+    peak_index = argmax(magnitude_db)
     return (;
-        x = x,
-        f = f,
-        mag_dB = mag_dB,
-        phase_deg = phase_deg
+        ugc_share=share,
+        peak_magnitude_db=magnitude_db[peak_index],
+        peak_frequency_hz=frequencies_hz[peak_index],
     )
 end
 
-function padded_limits(values; padding = 0.08)
-    finite_values = values[isfinite.(values)]
-
-    isempty(finite_values) &&
-        error("Cannot determine plot limits from non-finite values.")
-
-    vmin = minimum(finite_values)
-    vmax = maximum(finite_values)
-
-    if vmin == vmax
-        delta = max(abs(vmin), 1.0)
-        return (vmin - delta, vmax + delta)
+function save_transition_animation(study; filename="transition_harmonic_peaks.mp4", fps=8)
+    panel = only(study.plot.panels)
+    groups = panel.group_order
+    CairoMakie.record(study.plot.figure, filename, eachindex(groups); framerate=fps) do frame
+        for (index, group) in pairs(groups)
+            foreach(plot -> plot.visible[] = index == frame, panel.groups[group])
+        end
     end
-
-    delta = padding * (vmax - vmin)
-    return (vmin - delta, vmax + delta)
-end
-
-function transition_bode_frame(sample; mag_ylims, phase_ylims = (-180, 180))
-    label = "Z @B5, UGC = $(round(sample.x * 100; digits = 2)) %"
-
-    plt = Plots.plot(
-        layout = (2, 1),
-        size = (950, 700),
-        legend = :topright
-    )
-
-    Plots.plot!(
-        plt[1],
-        sample.f,
-        sample.mag_dB;
-        xaxis = :log10,
-        ylabel = "Magnitude [dB]",
-        label = label,
-        linewidth = 2,
-        minorgrid = true,
-        framestyle = :box,
-        xlims = (minimum(sample.f), maximum(sample.f)),
-        ylims = mag_ylims,
-        title = "Impedance seen at B5 during UGC/OHL transition"
-    )
-
-    Plots.plot!(
-        plt[2],
-        sample.f,
-        sample.phase_deg;
-        xaxis = :log10,
-        xlabel = "Frequency [Hz]",
-        ylabel = "Phase [deg]",
-        label = "",
-        legend = :none,
-        linewidth = 2,
-        minorgrid = true,
-        framestyle = :box,
-        xlims = (minimum(sample.f), maximum(sample.f)),
-        ylims = phase_ylims,
-        yticks = -360:90:360
-    )
-
-    return plt
-end
-
-function save_transition_animation(
-        samples;
-        filename = "transition_harmonic_peaks.mp4",
-        fps = 8
-)
-    isempty(samples) && error("No transition samples were generated.")
-
-    all_mag = reduce(vcat, (sample.mag_dB for sample in samples))
-    mag_ylims = padded_limits(all_mag)
-
-    anim = Plots.Animation()
-
-    for sample in samples
-        plt = transition_bode_frame(sample; mag_ylims = mag_ylims)
-        Plots.frame(anim, plt)
-    end
-
-    Plots.mp4(anim, filename; fps = fps)
+    foreach(group -> foreach(plot -> plot.visible[] = true, panel.groups[group]), groups)
     return filename
 end
 
-# Welcome to the new world order:
 function run_transition_study(;
         x_values = 0.0:0.02:1.0,
-        animation_filename = "transition_harmonic_peaks.mp4",
+        frequency_range = (100.0, 5e3, 1000),
+        animation_filename = nothing,
         animation_fps = 8,
-        show_static_plots = false
+        display_plot = false
 )
-    builder = nothing
-    cached_powerflow = nothing
-    samples = NamedTuple[]
-
-    for x in x_values
-        elements = ohl_to_ugc(x)
-
-        if builder === nothing
-            @time begin
-                builder = NetworkBuilder.define(elements, connections; options = builder_options)
-                solved = NetworkBuilder.solve(builder)
-                cached_powerflow = solved.powerflow
-            end
-
-            cached_powerflow === nothing &&
-                error("Expected power-flow results from an active network.")
-        else
-            @time NetworkBuilder.update!(
-                builder;
-                elements = elements,
-                operating_point = cached_powerflow.operating_point
-            )
-        end
-
-        @time zgrid, omega_ac = NetworkBuilder.determine_impedance(
-            builder;
-            elim_elements = [:c2],
-            nets = [:B5],
-            freq_range = (100, 5000, 1000)
-        )
-
-        sample = transition_bode_sample(x, zgrid, omega_ac)
-        push!(samples, sample)
-
-        if show_static_plots
-            Zg = vec(zgrid[1, 1, :])
-            display(
-                bodeplot(
-                Zg,
-                omega_ac;
-                legend = "Z @B5, UGC=$(round(x * 100; digits = 2)) %"
-            ),
-            )
-        end
-    end
-
-    save_transition_animation(
-        samples;
-        filename = animation_filename,
-        fps = animation_fps
+    shares = collect(x_values)
+    problems = PowerImpedanceProblem(
+        transition_network_space(shares);
+        nodes=[:B5],
+        eliminated_elements=[:c2],
+        frequency_range,
     )
-
-    return samples
+    result = compute(
+        ParametricProblem(problems),
+        Combinatorial(NodalImpedance()),
+    )
+    labels = ["UGC = $(round(100share; digits=1))%" for share in shares]
+    groups = [Symbol("ugc_", replace(string(round(100share; digits=1)), "." => "_"))
+              for share in shares]
+    plot = only(PowerImpedance.plot(
+        result;
+        entries=(:B5, :B5),
+        labels,
+        series_groups=groups,
+        title="Impedance at B5 during the OHL/UGC transition",
+        figure_size=(950, 700),
+        display_plot,
+        controls=false,
+    ))
+    peaks = [transition_peak(response, share)
+             for (response, share) in zip(result.values, shares)]
+    study = (; result, plot, peaks)
+    animation_filename === nothing || save_transition_animation(
+        study;
+        filename=animation_filename,
+        fps=animation_fps,
+    )
+    return study
 end
 
-# This runs locally, but we are not creating MP4 animations inside a CI pipeline, innit?
-if abspath(PROGRAM_FILE) == @__FILE__
-    @time samples = run_transition_study(
-        x_values = 0.0:0.02:1.0,
-        animation_filename = "transition_harmonic_peaks.mp4",
-        animation_fps = 8
-    )
-end
+# The documentation uses five corridor shares and a reduced frequency grid.
+#md transition_docs = run_transition_study(; x_values=0.0:0.25:1.0, frequency_range=(100.0, 5e3, 160))
+#md transition_docs.plot.figure
+#
+# The peak table records the resonance movement seen in the plotted curves.
+#md transition_docs.peaks
+
+if abspath(PROGRAM_FILE) == @__FILE__ #src
+    study = run_transition_study(; animation_filename="transition_harmonic_peaks.mp4") #src
+    display(study.plot.figure) #src
+    println(study.peaks) #src
+end #src

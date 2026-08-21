@@ -2,21 +2,39 @@ module NetworkBuilder
 
 ### Set up module and imports
 import TypedTables: Table
-using DocStringExtensions: TYPEDEF, TYPEDFIELDS
+using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
+
+using ..Grammar: AbstractGrid, AbstractUncertainGrid, AbsoluteError, AbsoluteGrid
+using ..Grammar: Configuration, DeterministicGrid, Grid, Gridspace, RelativeGrid
+using ..Grammar: UncertainValue, configuration_manifest, configurations
+using ..Grammar: has_uncertainty, materialize, nominal, standard_uncertainty
+using ..Grammar: @gridspace, @relax
+using ..Grammar: AbstractProblemDefinition, AbstractFormulation
+using ..Grammar: AbstractResolutionResult, AbstractParametricResult
+using ..Grammar: AbstractUncertaintyResult
+using ..Grammar: compute, primitives, preprocess
+using ..Grammar: ParametricProblem, Combinatorial, LinearError, MonteCarlo
+using ..Grammar: ParametricResult, LinearErrorResult, MonteCarloResult
+using ..Grammar: LineParametersInput, EmpiricalSamples, MeasurementsSurrogate
+import ..Grammar: _axis, _direct_value, _gridspace_axis, _materialize
 
 export NetworkState, NetworkTopology, AdmittanceLookup, NetworkLookup, NetworkModel
 export define, update!, solve
-export AbsoluteError, AbsoluteGrid, DeterministicGrid, Grid, Gridspace, RelativeGrid
+export PowerFlowProblem, ACDCPowerFlow, LinearizationProblem, AdmittanceLinearization
+export AbstractGrid, AbstractUncertainGrid, AbsoluteError, AbsoluteGrid
+export Configuration, DeterministicGrid, Grid, Gridspace, RelativeGrid, UncertainValue
+export configurations, materialize, has_uncertainty, configuration_manifest
+export nominal, standard_uncertainty
 export @gridspace, @relax
-export ImpedanceCase, ParametricImpedance, SolveCase, ParametricSolve
-export FrequencyResponseCase, ParametricFrequencyResponse, ParametricNodeSchema
-export StabilityCase, ParametricStability, make_loopgain, sampled_frequency_response
+export AbstractProblemDefinition, AbstractFormulation, AbstractResolutionResult
+export AbstractParametricResult, AbstractUncertaintyResult
+export compute, primitives, preprocess
+export ParametricProblem, Combinatorial, LinearError, MonteCarlo
+export ParametricResult, LinearErrorResult, MonteCarloResult
+export LineParametersInput, EmpiricalSamples, MeasurementsSurrogate
+export make_y_node, make_y_edge, make_loopgain
 
 const P = parentmodule(@__MODULE__)
-
-include("gridspace/grid.jl")
-include("gridspace/gridspace.jl")
-include("gridspace/macros.jl")
 
 #convenience macro to create typedtable types
 macro Table(ex)
@@ -48,8 +66,8 @@ include("legacy.jl")
 """
 $(TYPEDEF)
 
-Store one materialized NetworkBuilder system: ordinary numeric elements, its
-topology, numerical options, and an optional calculated operating point.
+Store one materialized NetworkBuilder system with ordinary numeric elements,
+topology, and numerical options.
 
 Construct systems with [`define`](@ref) rather than calling this type directly.
 
@@ -62,8 +80,6 @@ mutable struct NetworkState
     topology::NetworkTopology
     "Numerical and power-flow options."
     options::NamedTuple
-    "Cached steady-state point for active-element linearization."
-    operating_point::Union{Nothing, P.OperatingPoint}
 end
 
 function Base.show(io::IO, bs::NetworkState)
@@ -75,16 +91,16 @@ function Base.show(io::IO, bs::NetworkState)
 end
 
 """
-    define(elements, connections; options=(;))
+$(TYPEDSIGNATURES)
 
 Construct a scalar [`NetworkState`](@ref) from ordinary elements and fixed
 connections.
 
 # Arguments
 
-- `elements`: Named tuple of scalar PowerImpedance elements.
-- `connections`: Tuple or vector of named topology rows.
-- `options`: Builder and power-flow options.
+- `elements`: named tuple of scalar PowerImpedance elements.
+- `connections`: tuple or vector of named topology rows.
+- `options`: builder and power-flow options.
 
 # Returns
 
@@ -107,44 +123,38 @@ function define(
         @info "The following elements are not connected according to their definition and will be ignored: $(nonconnectedid). If you want to include them, set connection=true in their definition."
     end
     topology = NetworkTopology(elements, connections)
-    return NetworkState(connected_elements, topology, options, nothing)
+    return NetworkState(connected_elements, topology, options)
 end
 
 """
-    update!(network; elements=network.elements,
-            topology=network.topology, options=network.options,
-            operating_point=nothing)
+$(TYPEDSIGNATURES)
 
 Replace fields of an existing [`NetworkState`](@ref).
 
 # Arguments
 
-- `builder`: Mutable system definition to update.
-- `elements`: Replacement named tuple of scalar elements.
-- `topology`: Replacement node–element incidence relation.
-- `options`: Replacement builder options.
-- `operating_point`: Optional compatible steady-state operating point.
-
+- `builder`: mutable system definition to update.
+- `elements`: replacement named tuple of scalar elements.
+- `topology`: replacement node-element incidence relation.
+- `options`: replacement builder options.
 # Returns
 
-- A named tuple containing the resulting `operating_point`.
+- The updated network.
 
 # Notes
 
-Changing the state clears its previous operating point.
+Calculated operating points are returned by `compute` and are not cached here.
 """
 function update!(
         builder::NetworkState;
         elements = builder.elements,
         topology = builder.topology,
-        options = builder.options,
-        operating_point = nothing
+        options = builder.options
 )
     builder.elements = elements
     builder.topology = topology
     builder.options = options
-    builder.operating_point = operating_point
-    return (; operating_point = builder.operating_point)
+    return builder
 end
 
 """
@@ -154,7 +164,7 @@ Build and solve one ordinary numeric NetworkBuilder system.
 
 # Arguments
 
-- `builder`: Materialized system definition.
+- `builder`: materialized system definition.
 
 # Returns
 
@@ -198,7 +208,6 @@ end
 function _solve(builder::NetworkState)
     network = build_network(builder.elements, builder.topology, builder.options)
     if islinear(builder.elements)
-        builder.operating_point = P.OperatingPoint()
         @info "Network only consists of linear elements. Skipping power flow."
         return (; powerflow = nothing, network)
     end

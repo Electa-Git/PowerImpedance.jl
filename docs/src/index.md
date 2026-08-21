@@ -20,10 +20,9 @@ The package provides analytical models for:
 - synchronous and induction machines; and
 - black-box passive and converter frequency responses.
 
-The resulting systems can be studied through driving-point and transfer
-impedances, nodal and edge admittances, generalized Nyquist plots, Bode plots,
-passivity, small-gain criteria, stability margins, unstable-frequency scans,
-and eigenvalue-decomposition tools.
+Driving-point and transfer impedances describe the resulting systems. Nodal and
+edge admittances support generalized Nyquist, Bode, passivity, small-gain,
+stability-margin, unstable-frequency, and eigenvalue analyses.
 
 Gridspace extends the same physical constructors to deterministic parameter
 sweeps and uncertainty quantification. It preserves the ordinary scalar API,
@@ -44,23 +43,6 @@ Then load it with:
 ```julia
 using PowerImpedance
 ```
-
-### Former package name
-
-The package and module were formerly named `PowerImpedanceACDC`. The UUID is
-unchanged. After importing the renamed package, the former module name remains
-an exported alias, so existing qualified calls need no immediate rewrite:
-
-```julia
-using PowerImpedance
-
-PowerImpedanceACDC.make_y_node === PowerImpedance.make_y_node
-```
-
-The source tree also retains a compatibility entry point for existing
-manifests that already resolve `PowerImpedanceACDC` to this UUID. New
-environments must add and import `PowerImpedance`, because Julia project
-metadata cannot expose the same UUID under two package names.
 
 Optional interoperability is activated by loading `Measurements` or
 `LineCableModels` in the same environment. See [Package extensions](package_extensions.md)

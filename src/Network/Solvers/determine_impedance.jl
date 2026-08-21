@@ -1,17 +1,36 @@
 export determine_impedance
 
 """
-    function determine_impedance(network::Network; input_pins :: Array{Any},
-        output_pins :: Array{Any}, elim_elements :: Array{Symbol},
-         freq_range = (0.001, 10000, 2000))
+$(TYPEDSIGNATURES)
 
-Estimation of the impedance visible from the port, between input and
-output pins. Port pins can possibly be connected to some elements, which
-should not be considered for the impedance estimation. Those elements
-are listed as `elim_elements`.
+Calculate the impedance seen at a Classic `Network` port over a logarithmic frequency grid. Elements in `elim_elements` are excluded when tracing the subnetwork between `input_pins` and `output_pins`.
 
-Specification for the impedance estimation is given on the example of the following
-network that consists of the DC voltage source and a cable.
+# Arguments
+
+- `network`: connected Classic network.
+- `input_pins`: ordered input nodes of the port.
+- `output_pins`: ordered reference or output nodes of the port.
+- `elim_elements`: elements excluded from the traced subnetwork.
+- `freq_range`: tuple `(fmin, fmax, count)` that defines the logarithmic frequency grid in hertz. Default: `(0.001, 10_000, 2_000)`.
+
+# Returns
+
+- `impedance`: complex port-impedance matrix at each frequency, in ohms.
+- `angular_frequencies`: angular-frequency vector in radians per second.
+- `topology`: dictionary containing the traced node, element, and output-node lists.
+
+# Notes
+
+The method normalizes the entries of `input_pins` and `output_pins` in place.
+
+# Errors
+
+- Throws `ArgumentError` when either port list is empty.
+
+# Example
+
+The following network contains a DC voltage source and a frequency-dependent cable:
+
 ```
 using PowerImpedance
 import PowerImpedance: @network
@@ -28,19 +47,18 @@ net = @network begin
     vs[2.1] ⟷ c[2.1] ⟷  gnd
 end
 ```
-To determine impedance visible from the voltage source `vs`, the following command
-should be called:
-```
-imp, omega = determine_impedance(net, elim_elements = [:vs], input_pins = Any[:Node1], output_pins = Any[:gnd],
-         freq_range = (0.01, 10000, 2000))
-```
-Impedance is determined inside network `net`, from the element `vs` and the port defined
-with `input_pins` as array consisting of `Node1` and the `output_pins` containing
-array with `gnd`. Impedance is estimated for the frequency in Hz within the range
-0.01 to 10000 over 2000 points.
 
-The function returns complex impedance map and two arrays: first is the impedance
-array and the second one is frequency array.
+Exclude the voltage source to calculate the network impedance seen from its terminals:
+
+```
+impedance, angular_frequencies, topology = determine_impedance(
+    net;
+    elim_elements = [:vs],
+    input_pins = [:Node1],
+    output_pins = [:gnd],
+    freq_range = (0.01, 10_000, 2_000),
+)
+```
 """
 function determine_impedance(network::Network; input_pins::Array{Symbol},
         output_pins::Array{Symbol}, elim_elements::Array{Symbol},

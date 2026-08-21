@@ -65,8 +65,7 @@ Frequency-response data can be imported for:
 The backend-independent `PlotBuilder` describes axes, series, layouts,
 controls, legends, and SVG settings without loading a graphics package.
 Optional CairoMakie, GLMakie, and WGLMakie extensions render harmonic nodal
-impedance magnitude in dBΩ against frequency in Hz. Plots.jl is also optional
-and continues to render the existing stability-analysis figures. See the
+impedance and completed stability-analysis results. See the
 [PlotBuilder guide](docs/src/developers/plotbuilder.md).
 
 ### Parametric and uncertainty studies
@@ -78,26 +77,23 @@ the first positional argument selects the lazy NetworkBuilder form. Selected
 component parameters can then receive `Grid(...)` values without qualifying
 every constructor through the `NetworkBuilder` namespace.
 
-The same parametric study implementation covers impedance, nodal admittance, loop gain, and
-small-signal stability analysis. It preserves numeric Monte Carlo trials,
-repeats power flow and linearization when active devices or topology change,
-and reuses the active operating point for passive-only variations. Parametric
-overloads are available for Nyquist, Bode, small-gain, passivity, EVD,
-stability-margin, and unstable-frequency analysis. See the
+The same composite grammar covers power flow, impedance, nodal admittance,
+loop gain, and small-signal stability analysis. `Combinatorial`, `LinearError`,
+and `MonteCarlo` return typed results with aligned configuration metadata. Every
+PowerModels trial receives a numeric network realization. The package can
+reconstruct aggregate bus values as Measurements after the local Monte Carlo
+run. See the
 [Gridspace guide](docs/src/gridspace.md).
 
 Optional package extensions provide covariance-aware `Measurements` sampling
-and direct construction of overhead lines and cables from phase-domain
+and construction of overhead lines and cables from phase-domain
 `LineParameters` objects produced by
-[LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl). Exact
-external Monte Carlo response tensors can be adapted with
-`NetworkBuilder.sampled_frequency_response` while preserving cross-entry and
-cross-frequency trial dependence. See
+[LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl). See
 [Package extensions](docs/src/package_extensions.md).
 
 ### Explicit network topology and calculations
 
-`NetworkBuilder.define` accepts one named row per connected element terminal:
+`NetworkBuilder.define` accepts one row per connected element terminal:
 
 ```julia
 using PowerImpedance
@@ -127,7 +123,7 @@ The Classic network DSL remains available with
 
 The figure below shows the admittance characteristics of a point-to-point HVDC
 link consisting of two MMCs. The analytical results are validated against
-PSCAD EMT simulations. A step-by-step implementation is available in the
+PSCAD EMT simulations. A step-by-step model is available in the
 `examples` folder.
 
 ![Validation against PSCAD](docs/src/pictures/P2P_validation.png)
@@ -146,28 +142,10 @@ Then load the package:
 using PowerImpedance
 ```
 
-### Compatibility with the former name
-
-The package and its primary module were formerly named `PowerImpedanceACDC`.
-The package UUID is unchanged, and `PowerImpedance` exports the former module
-name as an alias, so qualified references remain valid after changing the
-import:
-
-```julia
-using PowerImpedance
-
-PowerImpedanceACDC.determine_impedance === PowerImpedance.determine_impedance
-```
-
-An existing manifest that already resolves `PowerImpedanceACDC` to this UUID
-can also use the retained compatibility entry point. Fresh environments should
-install and import `PowerImpedance`; Julia package metadata cannot assign two
-package names to one UUID.
-
 The Measurements extension activates when `Measurements` is loaded. Direct
-`LineParameters` interoperability activates when both
-[LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl) and
-`Measurements` are loaded.
+deterministic `LineParameters` interoperability activates with
+[LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl). Loading
+both packages adds Measurements-aware line-parameter sampling.
 
 ## Citation
 
@@ -188,7 +166,7 @@ available in [`CITATION.bib`](CITATION.bib).
 ## Contributors
 
 - **Aleksandra Lekic**
-  - Initial implementation
+  - Initial package code
   - MMCs
   - Overhead lines
   - Cables
@@ -199,7 +177,7 @@ available in [`CITATION.bib`](CITATION.bib).
   - Two-level converters
   - Synchronous generators
   - Time-delay models
-  - Initial bipolar implementation
+  - Initial bipolar model
 
 - **Thomas Roose**
   - Generalized Nyquist analysis
@@ -210,7 +188,7 @@ available in [`CITATION.bib`](CITATION.bib).
   - Passivity analysis
   - Small-gain analysis
   - Oscillation-mode identification
-  - Phase-Shift Criterion implementation
+  - Phase-Shift Criterion method
   - MMC models
   - Two-level converter models
   - Synchronous machine models
@@ -219,13 +197,13 @@ available in [`CITATION.bib`](CITATION.bib).
   - MMC models
   - Component validation
   - Multinodal stability analysis
-  - Black-box model implementation
+  - Black-box models
   - Transformers
 
 - **Robbe Vander Eeckt**
   - Component validation
   - Two-level converters
-  - Power-flow implementation
+  - Power-flow solver integration
   - Induction machines
   - Code development
 
@@ -242,7 +220,7 @@ available in [`CITATION.bib`](CITATION.bib).
   - Extension modules for Measurements and [LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl)
 
 - **Luis Müller**
-  - Bipolar implementation
+  - Bipolar model
   - Code development
 
 - **Paulin Eliat-Eliat**

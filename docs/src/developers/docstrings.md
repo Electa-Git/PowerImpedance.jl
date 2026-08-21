@@ -75,7 +75,7 @@ function transfer_impedance(resistance, inductance, frequency)
 - `$(IMPORTS)` inserts the modules imported by a documented module.
 - `$(EXPORTS)` inserts the names exported by a documented module.
 
-These expressions are Julia string interpolations evaluated while the docstring is attached. Use only abbreviations that add information to the rendered docstring; do not repeat their generated content manually.
+These expressions are Julia string interpolations evaluated while the docstring is attached. Use only abbreviations that add information to the rendered docstring. Do not repeat their generated content manually.
 
 ## Documentation templates
 

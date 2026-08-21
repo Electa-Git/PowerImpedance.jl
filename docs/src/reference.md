@@ -7,12 +7,21 @@ CurrentModule = PowerImpedance
 The public interface is grouped by its defining module. Ordinary component
 constructors and downstream solvers belong to `PowerImpedance`.
 Gridspace construction, study definitions, and result containers belong to
+`PowerImpedance.Grammar` and are re-exported by the package root and
 `PowerImpedance.NetworkBuilder`.
 
 ## `PowerImpedance`
 
 ```@autodocs
 Modules = [PowerImpedance]
+Public = true
+Private = false
+```
+
+## `PowerImpedance.Grammar`
+
+```@autodocs
+Modules = [PowerImpedance.Grammar]
 Public = true
 Private = false
 ```
