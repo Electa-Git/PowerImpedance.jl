@@ -41,15 +41,15 @@ variables:
   GITHUB_LEGACY_TAG: "legacy-github-main-pre-gitlab-authority"
 
 
-# Julia depots are content-addressed, so keep a stable cache across commits and
-# branches. Bump the cache generation when changing Julia minor versions or
-# when deliberately discarding accumulated package versions.
+# Julia precompile caches contain absolute source paths.
+# Each key includes the project path slug so a repository rename starts a clean cache.
+# Bump the generation when changing Julia minor versions or discarding package versions.
 .julia_cache:
   cache: &julia_cache
-    key: "piacdc-julia-1.12-base-v1"
+    key: "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-base-v1"
     fallback_keys:
-      - "piacdc-julia-1.12-lcm-0.2-v2"
-      - "piacdc-julia-1.12-lcm-0.2-v1"
+      - "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-lcm-0.2-v2"
+      - "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-lcm-0.2-v1"
     paths:
       - .julia/clones/
       - .julia/compiled/v1.12/
@@ -110,10 +110,10 @@ extension_tests:
   stage: test
   cache:
     <<: *julia_cache
-    key: "piacdc-julia-1.12-extensions-lcm-0.2-v1"
+    key: "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-extensions-lcm-0.2-v1"
     fallback_keys:
-      - "piacdc-julia-1.12-lcm-0.2-v2"
-      - "piacdc-julia-1.12-lcm-0.2-v1"
+      - "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-lcm-0.2-v2"
+      - "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-lcm-0.2-v1"
     policy: pull-push
   before_script:
     - apt-get update
@@ -164,9 +164,9 @@ plotting_tests:
   stage: test
   cache:
     <<: *julia_cache
-    key: "piacdc-julia-1.12-makie-0.24-v1"
+    key: "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-makie-0.24-v1"
     fallback_keys:
-      - "piacdc-julia-1.12-base-v1"
+      - "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-base-v1"
     policy: pull-push
   before_script:
     - apt-get update
@@ -210,9 +210,9 @@ formatter:
   allow_failure: true
   cache:
     <<: *julia_cache
-    key: "piacdc-julia-1.12-formatter-v1"
+    key: "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-formatter-v1"
     fallback_keys:
-      - "piacdc-julia-1.12-base-v1"
+      - "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-base-v1"
     policy: pull-push
   before_script:
     - apt-get update
@@ -240,9 +240,9 @@ advisory_aqua:
   allow_failure: true
   cache:
     <<: *julia_cache
-    key: "piacdc-julia-1.12-aqua-v1"
+    key: "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-aqua-v1"
     fallback_keys:
-      - "piacdc-julia-1.12-base-v1"
+      - "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-base-v1"
     policy: pull-push
   before_script:
     - apt-get update
@@ -271,9 +271,9 @@ docs_check:
       artifacts: false
   cache:
     <<: *julia_cache
-    key: "piacdc-julia-1.12-docs-v2"
+    key: "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-docs-v1"
     fallback_keys:
-      - "piacdc-julia-1.12-base-v1"
+      - "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-base-v1"
     policy: pull-push
   before_script:
     - apt-get update
@@ -726,9 +726,9 @@ pages:
   stage: deploy
   cache:
     <<: *julia_cache
-    key: "piacdc-julia-1.12-docs-v2"
+    key: "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-docs-v1"
     fallback_keys:
-      - "piacdc-julia-1.12-base-v1"
+      - "piacdc-$CI_PROJECT_PATH_SLUG-julia-1.12-base-v1"
     policy: pull-push
   before_script:
     - apt-get update
