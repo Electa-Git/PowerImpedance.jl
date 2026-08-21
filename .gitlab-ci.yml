@@ -271,7 +271,7 @@ docs_check:
       artifacts: false
   cache:
     <<: *julia_cache
-    key: "piacdc-julia-1.12-docs-v1"
+    key: "piacdc-julia-1.12-docs-v2"
     fallback_keys:
       - "piacdc-julia-1.12-base-v1"
     policy: pull-push
@@ -726,7 +726,7 @@ pages:
   stage: deploy
   cache:
     <<: *julia_cache
-    key: "piacdc-julia-1.12-docs-v1"
+    key: "piacdc-julia-1.12-docs-v2"
     fallback_keys:
       - "piacdc-julia-1.12-base-v1"
     policy: pull-push
