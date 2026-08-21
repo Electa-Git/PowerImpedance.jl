@@ -1,0 +1,9 @@
+format_version=1
+source_commit=e8bf10bdc330d8edf46a02d1aff8be4598081f1f
+julia_version=1.12.7
+powermodels_version=0.21.6
+powermodelsacdc_version=0.10.0
+ipopt_version=1.15.0
+dependency_manifest_sha256=06a3dafe83210a8601900763279372e2f7d0015dccf4505a5ef0ea82133abef1
+frequency_unit=rad_per_second
+complex_storage=real_imaginary_columns
