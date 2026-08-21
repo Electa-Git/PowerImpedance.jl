@@ -23,55 +23,32 @@ function (target::_KeywordMaterializer{F, N})(values...) where {F, N}
     _construct_keywords(target.constructor, N, values)
 end
 
-function _keyword_gridspace(::Type{T}, constructor; kwargs...) where {T}
-    names = keys(kwargs)
-    axes = map(_axis, Tuple(values(kwargs)))
-    target = _KeywordMaterializer{typeof(constructor), names}(constructor)
-    return Gridspace{T}(target, axes, names)
+function _keyword_gridspace(
+    ::Type{Target},
+    constructor;
+    kwargs...,
+) where {Target}
+    inputs = (; kwargs...)
+    names = keys(inputs)
+    materializer = _KeywordMaterializer{typeof(constructor),names}(constructor)
+    return _lift_gridspace(Target, materializer, inputs, Val(:product))
 end
 
-function _keyword_gridspace(constructor; kwargs...)
-    return _keyword_gridspace(Any, constructor; kwargs...)
-end
-
-const SHADOW_CONSTRUCTOR_MANIFEST = Pair{Symbol, Symbol}[]
-const SHADOW_CONSTRUCTOR_EXCLUSIONS = (
-    AbstractElementModel = :abstract_type,
-    AbstractLinFreqDomain = :abstract_type,
-    AbstractStateSpace = :abstract_type,
-    AbstractMMC = :abstract_type,
-    AbstractTLC = :abstract_type,
-    Controller = :abstract_type,
-    Network = :legacy_network_container,
-    determine_impedance = :computational_function,
-    power_flow = :computational_function,
-    eval_abcd = :computational_function
-)
-
-function _register_shadow!(name::Symbol, category::Symbol)
-    any(first(entry) == name for entry in SHADOW_CONSTRUCTOR_MANIFEST) ||
-        push!(SHADOW_CONSTRUCTOR_MANIFEST, name => category)
-    return nothing
-end
-
-macro shadow(category, name, target = name)
-    category_value = category isa QuoteNode ? category : QuoteNode(category)
-    name_value = name isa QuoteNode ? name : QuoteNode(name)
+macro gridconstructor(constructor, target_type)
+    constructor_name = constructor isa Expr ? constructor.args[end] : constructor
     grid_doc = """
-        $(name)(Grid; kwargs...)
+        $(constructor_name)(Grid; kwargs...)
 
-    Construct a lazy `Gridspace` through positional dispatch while preserving
-    `$(name)(; kwargs...)` as the ordinary scalar constructor. Only explicit
-    `Grid` values or nested Gridspaces introduce parameter axes; other keyword
-    values remain atomic.
+    Construct a typed `Gridspace` for `$(constructor_name)`. Only explicit
+    `Grid` values or nested Gridspaces introduce parameter axes. Other keyword
+    values remain atomic. The keyword-only method remains the scalar constructor.
     """
     return esc(quote
-        _register_shadow!($name_value, $category_value)
-		@doc $grid_doc function $(name)(; kwargs...)
-            return _keyword_gridspace($(target); kwargs...)
-        end
-        function $(target)(::typeof(Grid); kwargs...)
-            return $(name)(; kwargs...)
+        @doc $grid_doc function $(constructor)(
+            ::typeof(Grid);
+            kwargs...,
+        )
+            return _keyword_gridspace($(target_type), $(constructor); kwargs...)
         end
     end)
 end

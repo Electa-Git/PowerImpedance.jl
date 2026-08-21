@@ -199,9 +199,7 @@ AbsoluteError(x) = AbsoluteError(_grid_values(x))
     Grid(values, AbsoluteError(errors))
     component(Grid, keyword arguments...)
 
-Create an explicit deterministic or uncertain parameter axis. Collections passed
-directly to `Grid` are expanded; component shadow constructors deliberately wrap
-ordinary collections as one atomic value.
+Create an explicit deterministic or uncertain parameter axis. Collections passed directly to `Grid` are expanded. Component Gridspace constructors retain ordinary collections as one atomic value.
 
 # Arguments
 

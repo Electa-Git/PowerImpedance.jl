@@ -10,8 +10,8 @@ const NB = PowerImpedance.NetworkBuilder
 
 function impedance_space(axis)
     elements = (
-        branch=NB.impedance(z=axis, pins=1),
-        shunt=NB.impedance(z=20.0, pins=1),
+        branch=impedance(Grid; z=axis, pins=1),
+        shunt=impedance(z=20.0, pins=1),
     )
     connections = (
         (node=:bus, element=:branch, side=1, terminal=1),

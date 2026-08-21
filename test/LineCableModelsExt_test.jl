@@ -52,6 +52,9 @@ end
 end
 
 @testset "Deterministic LineParameters interoperability" begin
+    @test !isdefined(NB, :overhead_line)
+    @test !isdefined(NB, :cable)
+
     parameters = deterministic_line_parameters(3)
     overhead = PowerImpedance.overhead_line(parameters; length=25e3)
     cable = PowerImpedance.cable(parameters; length=25e3)
@@ -67,9 +70,9 @@ end
     @test overhead_abcd ≈ cable_abcd
 
     length_grid = PowerImpedance.cable(
-        Grid,
+        PowerImpedance.Grid,
         parameters;
-        length=Grid([10e3, 20e3]),
+        length=PowerImpedance.Grid([10e3, 20e3]),
     )
     @test [line.element_model.length for line in length_grid] == [10e3, 20e3]
 
@@ -107,8 +110,8 @@ end
     values = real.([sample.Z[1, 1, 1] for sample in first_samples])
     @test std(values) > 0
 
-    grid = NB.cable(parameters; length=1e3)
-    configuration = only(configurations(grid))
+    grid = PowerImpedance.cable(PowerImpedance.Grid, parameters; length=1e3)
+    configuration = only(PowerImpedance.configurations(grid))
     numeric_line = rand(Xoshiro(7), configuration; distribution=:normal)
     @test !NB._contains_measurement(numeric_line)
 end

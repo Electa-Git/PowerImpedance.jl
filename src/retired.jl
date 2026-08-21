@@ -42,6 +42,6 @@ function LinearizedAdmittanceNetwork(args...; kwargs...)
     _retired_name(
         :LinearizedAdmittanceNetwork,
         :NetworkModel,
-        "model = convert(network, NetworkModel)"
+        "model = compute(LinearizationProblem(network), AdmittanceLinearization()).network_model"
     )
 end

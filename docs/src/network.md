@@ -118,7 +118,10 @@ problem = PowerImpedanceProblem(
 
 impedance_result = compute(problem, NodalImpedance())
 
-model = convert(network, PowerImpedance.NetworkBuilder.NetworkModel)
+model = compute(
+    LinearizationProblem(network),
+    AdmittanceLinearization(),
+).network_model
 edge_result = compute(
     PowerImpedanceProblem(
         model;

@@ -26,9 +26,8 @@ stability-margin, unstable-frequency, and eigenvalue analyses.
 
 Gridspace extends the same physical constructors to deterministic parameter
 sweeps and uncertainty quantification. It preserves the ordinary scalar API,
-samples nonlinear components before solving, and repeats the power flow and
-linearization whenever an active device, source, topology, or builder option
-changes.
+samples each uncertain network into ordinary numeric components, and performs
+the required power flow and linearization for every materialized configuration.
 
 ## Installation
 

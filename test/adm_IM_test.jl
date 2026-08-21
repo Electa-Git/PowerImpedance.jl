@@ -35,7 +35,10 @@ function inductionmachinecircuit()
         )
 
 
-    linearizedadmittancenetwork = convert(builder, NB.NetworkModel)
+    linearizedadmittancenetwork = compute(
+        LinearizationProblem(builder),
+        AdmittanceLinearization(),
+    ).network_model
 
     return linearizedadmittancenetwork
 end
@@ -72,6 +75,5 @@ end
     @test isapprox(Y_im, Y_pscad, rtol=1e-3,atol=1e-6)
 
 end
-
 
 

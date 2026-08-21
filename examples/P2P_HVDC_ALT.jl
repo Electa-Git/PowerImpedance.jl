@@ -100,7 +100,7 @@ function ohl_to_ugc(x)
             transformation = true
         ),
 
-        c1 = only(NetworkBuilder.mmc(Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
+        c1 = only(mmc(Grid; Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
             P_max = 1500, P_min = -1500, P = -pHVDC1, Q = qC1, Q_max = 500,
             Q_min = -500,
             occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
@@ -111,7 +111,7 @@ function ohl_to_ugc(x)
             padeOrderDen = 5
         )),
 
-        c2 = only(NetworkBuilder.mmc(Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
+        c2 = only(mmc(Grid; Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
             P_max = 1000, P_min = -1000, P = pHVDC1, Q = qC2, Q_max = 1000,
             Q_min = -1000,
             vACbase_LL_RMS = 333, turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,

@@ -18,7 +18,8 @@ using PowerImpedance
 using PowerImpedance.NetworkBuilder: define
 
 elements = (
-    branch = PowerImpedance.NetworkBuilder.impedance(
+    branch = impedance(
+        Grid;
         z = Grid([1.0, 2.0]),
         pins = 1,
     ),

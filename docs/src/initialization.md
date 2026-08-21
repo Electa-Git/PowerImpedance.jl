@@ -52,22 +52,9 @@ aggregated uncertain model.
 
 ## Calculated operating point
 
-`compute(NetworkBuilder.PowerFlowProblem(network),
-NetworkBuilder.ACDCPowerFlow())` returns a typed
-`PowerFlowResult`. Its `result`, `data`, `nodes2bus`, and `elem2comp` fields
-retain the PowerModelsACDC calculation and conversion mappings. The
-`operating_point` field contains the per-element `Setpoint` values required by
-active-component linearization; `active_setpoint_values` remains available as
-the corresponding dictionary.
+`compute(PowerFlowProblem(network), ACDCPowerFlow())` returns a typed `PowerFlowResult`. Its `result`, `data`, `nodes2bus`, and `elem2comp` fields retain the PowerModelsACDC calculation and conversion mappings. The `operating_point` field contains the per-element `Setpoint` values required by active-component linearization. `active_setpoint_values` provides the corresponding dictionary.
 
-`compute(NetworkBuilder.LinearizationProblem(network, powerflow),
-NetworkBuilder.AdmittanceLinearization())` consumes that exact result and returns a
-`LinearizationResult`. Its `network_model` field is the calculated
-frequency-domain `NetworkModel`, and its `operating_point` field records the
-point used to build the active admittances. These lower-level problem and
-formulation types are intentionally qualified through `NetworkBuilder`; normal
-calls use `solve`, `determine_impedance`, or a public frequency-response
-problem.
+`compute(LinearizationProblem(network, powerflow), AdmittanceLinearization())` consumes that exact result and returns a `LinearizationResult`. Its `network_model` field contains the calculated frequency-domain `NetworkModel`. Its `operating_point` field records the point used to build the active admittances. The package root and `NetworkBuilder` re-export the same problem and formulation types.
 
 Linear networks skip the power-flow solve and use an empty `OperatingPoint`.
 `solve(network_state)` constructs its Classic `Network` result from the same
@@ -75,14 +62,8 @@ Linear networks skip the power-flow solve and use an empty `OperatingPoint`.
 
 ## Reuse in parametric studies
 
-The operating point is reusable only while the quantities that determine it
-remain unchanged:
+Every materialized network configuration performs its own required power flow before linearization. Passive parameters can change the power-flow solution and the active-device setpoints, so their classification does not authorize reuse.
 
-- passive-only parameter changes rebuild the passive frequency-domain models
-  while reusing compatible active-device setpoints and linearizations;
-- converter, other active-element, source, topology, or builder-option changes
-  repeat power flow, nonlinear equilibrium, and linearization.
+An explicit `preprocess` call may pair completed parametric `PowerFlowResult` values with their originating network configurations. This path reuses only those exact results. There is no implicit operating-point cache or nominal-network substitution.
 
-Gridspace applies this rule per case and per Monte Carlo trial. It does not
-send `Measurement` values into JuMP or PowerModelsACDC; uncertain values are
-sampled into ordinary numeric components first.
+Each Monte Carlo trial samples a complete numeric network before calling JuMP or PowerModelsACDC. The aggregate reconstructs supported bus-level `Measurement` values from the completed numeric solves.

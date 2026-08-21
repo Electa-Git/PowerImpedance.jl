@@ -113,7 +113,7 @@ Construct the frequency-domain network model at a calculated operating point.
 Ideal sources are omitted from the element admittance lookup and their external
 nodes are included in the grounded-node selection.
 """
-function NetworkModel(network::NetworkState, operating_point)
+function NetworkModel(network::NetworkState, operating_point)::NetworkModel{ComplexF64}
     elements = filter(element -> !P.is_source(element), network.elements)
     admittances = Vector{AdmFunc{ComplexF64}}(undef, length(elements))
     positions = Vector{Matrix{Tuple{Int, Int}}}(undef, length(elements))

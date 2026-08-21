@@ -82,9 +82,26 @@ end
     @test collect(nested) == [(1, 3, 4), (2, 3, 4), (1, 3, 5), (2, 3, 5)]
 
     matrix = [1.0 2.0; 3.0 4.0]
-    atomic = NB.impedance(z = matrix, pins = 2)
+    atomic = @inferred impedance(Grid; z = matrix, pins = 2)
     @test length(atomic) == 1
     @test only(atomic).element_model.value == matrix
+    @test eltype(atomic) === PowerImpedance.Element
+    @test !isdefined(NB, :impedance)
+
+    varying = @inferred impedance(Grid; z = Grid((1.0, 2.0)), pins = 1)
+    fixed = impedance(z = 3.0, pins = 1)
+    mixed_connections = (
+        (node = :bus, element = :varying, side = 1, terminal = 1),
+        (node = :gnd, element = :varying, side = 2, terminal = 1),
+        (node = :bus, element = :fixed, side = 1, terminal = 1),
+        (node = :gnd, element = :fixed, side = 2, terminal = 1),
+    )
+    networks = @inferred NB.define((; varying, fixed), mixed_connections)
+    @test networks isa Gridspace{NB.NetworkState}
+    @test length(networks) == 2
+    @test all(network -> network.elements.fixed === fixed, networks)
+    @test @inferred(PowerFlowProblem(networks)) isa
+          Gridspace{PowerFlowProblem{NB.NetworkState}}
 
     macro_grid = GridspaceMacroExample(x = Grid([1, 2]))
     @test [(case.x, case.y) for case in macro_grid] == [(1, 2), (2, 2)]

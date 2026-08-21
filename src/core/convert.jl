@@ -41,17 +41,6 @@ end
 AdmittanceLinearization(; backend::Type{B}=P.PIACDC) where {B} =
     AdmittanceLinearization{B}(backend)
 
-"""
-    convert(network::NetworkState, NetworkModel)
-
-Calculate the operating point required by active elements and construct the
-frequency-domain network model. Linear networks skip power flow.
-"""
-function Base.convert(network::NetworkState, ::Type{NetworkModel})
-    result = P.compute(LinearizationProblem(network), AdmittanceLinearization())
-    return result.network_model
-end
-
 function islinear(elements)
     for elem in values(elements)
         if !P.islinear(elem)

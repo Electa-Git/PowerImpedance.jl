@@ -8,8 +8,8 @@ const NB = PowerImpedance.NetworkBuilder
 # ordinary numeric component separately for each Monte Carlo trial.
 
 elements = (
-    branch=NB.impedance(z=Grid(2.0, 5.0; key=:branch_impedance), pins=1),
-    shunt=NB.impedance(z=4.0, pins=1),
+    branch=impedance(Grid; z=Grid(2.0, 5.0; key=:branch_impedance), pins=1),
+    shunt=impedance(z=4.0, pins=1),
 )
 connections = (
     (node=:bus, element=:branch, side=1, terminal=1),

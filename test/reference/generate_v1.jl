@@ -62,8 +62,8 @@ end
 
 function impedance_space(axis)
     elements = (
-        z1=NB.impedance(z=axis, pins=1),
-        z2=NB.impedance(z=20.0, pins=1),
+        z1=impedance(Grid; z=axis, pins=1),
+        z2=impedance(z=20.0, pins=1),
     )
     connections = (
         (node=:n1, element=:z1, side=1, terminal=1),

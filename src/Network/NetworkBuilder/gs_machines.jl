@@ -1,12 +1,11 @@
-@shadow :element inductionmachine P.inductionmachine
-@shadow :element synchronousmachine P.synchronousmachine
+@gridconstructor P.inductionmachine P.Element
+@gridconstructor P.synchronousmachine P.Element
 
-@shadow :configuration ElectricalIM P.ElectricalIM
-@shadow :configuration MechanicalIM P.MechanicalIM
-@shadow :configuration InductionMachine P.InductionMachine
-@shadow :configuration ElectricalSM P.ElectricalSM
-@shadow :configuration MechanicalSM P.MechanicalSM
-@shadow :configuration GovernorSM P.GovernorSM
-@shadow :configuration AVRSM P.AVRSM
-@shadow :configuration SynchronousMachine P.SynchronousMachine
-
+@gridconstructor P.ElectricalIM P.ElectricalIM
+@gridconstructor P.MechanicalIM P.MechanicalIM
+@gridconstructor P.InductionMachine P.InductionMachine
+@gridconstructor P.ElectricalSM P.ElectricalSM
+@gridconstructor P.MechanicalSM P.MechanicalSM
+@gridconstructor P.GovernorSM P.GovernorSM
+@gridconstructor P.AVRSM P.AVRSM
+@gridconstructor P.SynchronousMachine P.SynchronousMachine

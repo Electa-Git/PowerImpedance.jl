@@ -1,26 +1,26 @@
-@shadow :configuration ElectricalMMC P.ElectricalMMC
-@shadow :configuration NoTotalEnergyControl P.NoTotalEnergyControl
-@shadow :configuration TotalEnergyControl P.TotalEnergyControl
-@shadow :configuration ΣEnergyControl P.ΣEnergyControl
-@shadow :configuration ΔEnergyControl P.ΔEnergyControl
-@shadow :configuration NoZeroSequenceCurrentControl P.NoZeroSequenceCurrentControl
-@shadow :configuration NoCirculatingCurrentSuppressionControl P.NoCirculatingCurrentSuppressionControl
-@shadow :configuration ZeroSequenceCurrentControl P.ZeroSequenceCurrentControl
-@shadow :configuration CirculatingCurrentSuppressionControl P.CirculatingCurrentSuppressionControl
-@shadow :configuration CirculatingCurrentControl P.CirculatingCurrentControl
-@shadow :configuration UncompensatedModulation P.UncompensatedModulation
-@shadow :configuration CompensatedModulation P.CompensatedModulation
-@shadow :configuration ΔdqControlGFL P.ΔdqControlGFL
-@shadow :configuration ΔdqControlGFM P.ΔdqControlGFM
-@shadow :configuration ΣdqzControlTEC P.ΣdqzControlTEC
-@shadow :configuration ΣdqzControlLEC P.ΣdqzControlLEC
-@shadow :configuration MMC P.MMC
+@gridconstructor P.ElectricalMMC P.ElectricalMMC
+@gridconstructor P.NoTotalEnergyControl P.NoTotalEnergyControl
+@gridconstructor P.TotalEnergyControl P.TotalEnergyControl
+@gridconstructor P.ΣEnergyControl P.ΣEnergyControl
+@gridconstructor P.ΔEnergyControl P.ΔEnergyControl
+@gridconstructor P.NoZeroSequenceCurrentControl P.NoZeroSequenceCurrentControl
+@gridconstructor P.NoCirculatingCurrentSuppressionControl P.NoCirculatingCurrentSuppressionControl
+@gridconstructor P.ZeroSequenceCurrentControl P.ZeroSequenceCurrentControl
+@gridconstructor P.CirculatingCurrentSuppressionControl P.CirculatingCurrentSuppressionControl
+@gridconstructor P.CirculatingCurrentControl P.CirculatingCurrentControl
+@gridconstructor P.UncompensatedModulation P.UncompensatedModulation
+@gridconstructor P.CompensatedModulation P.CompensatedModulation
+@gridconstructor P.ΔdqControlGFL P.ΔdqControlGFL
+@gridconstructor P.ΔdqControlGFM P.ΔdqControlGFM
+@gridconstructor P.ΣdqzControlTEC P.ΣdqzControlTEC
+@gridconstructor P.ΣdqzControlLEC P.ΣdqzControlLEC
+@gridconstructor P.MMC P.MMC
 
-@shadow :configuration ElectricalTLC P.ElectricalTLC
-@shadow :configuration NoModulation P.NoModulation
-@shadow :configuration DelayModulation P.DelayModulation
-@shadow :configuration PadeModulation P.PadeModulation
-@shadow :configuration TLC P.TLC
+@gridconstructor P.ElectricalTLC P.ElectricalTLC
+@gridconstructor P.NoModulation P.NoModulation
+@gridconstructor P.DelayModulation P.DelayModulation
+@gridconstructor P.PadeModulation P.PadeModulation
+@gridconstructor P.TLC P.TLC
 
 const _MMC_MODULAR_KEYS = Set((
     :elec, :meas, :sync, :delta_control, :sigma_control, :modulation, :setpoint, :limits,
@@ -277,19 +277,27 @@ function (::_ConverterMaterializer{:tlc,N})(values...) where {N}
     return route === :legacy ? _legacy_tlc(kwargs) : P.tlc(; kwargs...)
 end
 
-function mmc(; kwargs...)
+function _mmc_gridspace(; kwargs...)
     names = keys(kwargs)
     _check_converter_keywords("mmc", names, _MMC_MODULAR_KEYS, _MMC_LEGACY_KEYS)
-    return Gridspace{Any}(
-        _ConverterMaterializer{:mmc,names}(), map(_axis, Tuple(values(kwargs))), names,
+    inputs = (; kwargs...)
+    return _lift_gridspace(
+        P.Element,
+        _ConverterMaterializer{:mmc,names}(),
+        inputs,
+        Val(:product),
     )
 end
 
-function tlc(; kwargs...)
+function _tlc_gridspace(; kwargs...)
     names = keys(kwargs)
     _check_converter_keywords("tlc", names, _TLC_MODULAR_KEYS, _TLC_LEGACY_KEYS)
-    return Gridspace{Any}(
-        _ConverterMaterializer{:tlc,names}(), map(_axis, Tuple(values(kwargs))), names,
+    inputs = (; kwargs...)
+    return _lift_gridspace(
+        P.Element,
+        _ConverterMaterializer{:tlc,names}(),
+        inputs,
+        Val(:product),
     )
 end
 
@@ -300,7 +308,7 @@ Construct a lazy MMC `Gridspace` through positional dispatch. The keyword set
 may use either the modular API or the supported legacy API, but the two forms
 cannot be mixed. Ordinary keyword-only calls remain scalar constructors.
 """
-P.mmc(::typeof(Grid); kwargs...) = mmc(; kwargs...)
+P.mmc(::typeof(Grid); kwargs...) = _mmc_gridspace(; kwargs...)
 
 """
     tlc(Grid; kwargs...)
@@ -310,7 +318,4 @@ The keyword set may use either the modular API or the supported legacy API, but
 the two forms cannot be mixed. Ordinary keyword-only calls remain scalar
 constructors.
 """
-P.tlc(::typeof(Grid); kwargs...) = tlc(; kwargs...)
-
-_register_shadow!(:mmc, :element)
-_register_shadow!(:tlc, :element)
+P.tlc(::typeof(Grid); kwargs...) = _tlc_gridspace(; kwargs...)

@@ -8,8 +8,8 @@ const NB = PowerImpedance.NetworkBuilder
 
 function uncertain_parallel_impedance_space()
     elements = (
-        z1=NB.impedance(z=Grid(10.0, AbsoluteError(1.0)), pins=1),
-        z2=NB.impedance(z=20.0, pins=1),
+        z1=impedance(Grid; z=Grid(10.0, AbsoluteError(1.0)), pins=1),
+        z2=impedance(z=20.0, pins=1),
     )
     connections = (
         (node=:n1, element=:z1, side=1, terminal=1),
@@ -51,7 +51,7 @@ end
 function uncertain_impedance_space(; shared=false)
     key = shared ? :shared : nothing
     elements = (
-        z=NB.impedance(z=Grid(2.0, 5.0; key), pins=1),
+        z=impedance(Grid; z=Grid(2.0, 5.0; key), pins=1),
     )
     connections = (
         (node=:bus, element=:z, side=1, terminal=1),

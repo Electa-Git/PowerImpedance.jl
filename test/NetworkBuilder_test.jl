@@ -2702,7 +2702,10 @@ end
 function test_linearizedadmittance_parity(; freq_range = IEEE39_FREQ_RANGE)
 	legacy = build_ieee39bus_with_macro()
 	built = build_ieee39bus_with_networkbuilder().builder
-	newadmnw = convert(built, NetworkModel)
+	newadmnw = compute(
+		LinearizationProblem(built),
+		AdmittanceLinearization(),
+	).network_model
 
 	freqs = range(freq_range[1], freq_range[2], step=freq_range[3])
 	s = 1im .* 2π .* freqs
@@ -2737,7 +2740,10 @@ end
 function test_ynode_and_edge_parity(; freq_range = IEEE39_FREQ_RANGE)
 	legacy = build_ieee39bus_with_macro()
 	built = build_ieee39bus_with_networkbuilder().builder
-	newadmnw = convert(built, NetworkModel)
+	newadmnw = compute(
+		LinearizationProblem(built),
+		AdmittanceLinearization(),
+	).network_model
 	Z, omega = determine_impedance(legacy; input_pins=[:Bus9d, :Bus9q], output_pins=[:gndD, :gndQ], elim_elements=[:STATCOM], freq_range)
 	s = omega .*im
 	yedge = NB.make_y_edge(newadmnw, s)
@@ -2759,7 +2765,10 @@ end
 function test_determine_impedance_parity(; freq_range = IEEE39_FREQ_RANGE)
 	legacy = build_ieee39bus_with_macro()
 	built = build_ieee39bus_with_networkbuilder().builder
-	newadmnw = convert(built, NetworkModel)
+	newadmnw = compute(
+		LinearizationProblem(built),
+		AdmittanceLinearization(),
+	).network_model
 	Z, omega = determine_impedance(legacy; input_pins=[:Bus9d, :Bus9q], output_pins=[:gndD, :gndQ], elim_elements=[:STATCOM], freq_range)
 	Znew, omega_new = NB.determine_impedance(newadmnw; nets=[:Bus9d, :Bus9q], elim_elements=[:STATCOM], freq_range)
 	Zresh = cat(Z...; dims=3)

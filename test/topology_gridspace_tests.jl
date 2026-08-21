@@ -9,7 +9,8 @@ if !isdefined(@__MODULE__, :NB)
 end
 
 function copied_space(value; uncertain = false)
-    axis = uncertain ? TOPOLOGY_NB.Grid(0.0 ± 0.0) : TOPOLOGY_NB.Grid(nothing)
+    axis = uncertain ? TOPOLOGY_NB.Grid(0.0, AbsoluteError(0.0)) :
+           TOPOLOGY_NB.Grid(nothing)
     return TOPOLOGY_NB.Gridspace{typeof(value)}(
         _ -> deepcopy(value),
         (axis,),
@@ -34,14 +35,50 @@ function include_fixture_definitions(path)
     return Base.include(skip_testsets, @__MODULE__, path)
 end
 
-function assert_zero_uncertainty_impedance(case, reference, frequencies; trials = 1000)
-    @test case.trials == trials
+function include_example_definitions(path)
+    function is_plot_backend(argument)
+        return argument === :CairoMakie ||
+               argument isa Expr &&
+               argument.head === :. &&
+               first(argument.args) === :CairoMakie
+    end
+    skip_plot_backend(expression) = if expression isa Expr &&
+                                       expression.head in (:using, :import) &&
+                                       any(is_plot_backend, expression.args)
+        :(nothing)
+    else
+        expression
+    end
+    return Base.include(skip_plot_backend, @__MODULE__, path)
+end
+
+function assert_zero_uncertainty_impedance(result, reference, frequencies)
+    @test result isa LinearErrorResult{<:FrequencyResponseResult}
+    case = only(result.values)
     @test case.frequencies == frequencies
-    @test size(case.impedance) == size(reference)
-    @test Measurements.value.(real.(case.impedance)) ≈ real.(reference)
-    @test Measurements.value.(imag.(case.impedance)) ≈ imag.(reference)
-    @test all(iszero, Measurements.uncertainty.(real.(case.impedance)))
-    @test all(iszero, Measurements.uncertainty.(imag.(case.impedance)))
+    @test size(case.response) == size(reference)
+    @test Measurements.value.(real.(case.response)) ≈ real.(reference)
+    @test Measurements.value.(imag.(case.response)) ≈ imag.(reference)
+    @test all(iszero, Measurements.uncertainty.(real.(case.response)))
+    @test all(iszero, Measurements.uncertainty.(imag.(case.response)))
+end
+
+function zero_uncertainty_response(
+    builders;
+    nodes,
+    eliminated_elements,
+    frequency_range,
+)
+    problems = PowerImpedanceProblem(
+        builders;
+        nodes,
+        eliminated_elements,
+        frequency_range,
+    )
+    return compute(
+        ParametricProblem(problems),
+        LinearError(NodalImpedance()),
+    )
 end
 
 @testset "IEEE39 zero-uncertainty Gridspace" begin
@@ -59,41 +96,46 @@ end
         options,
     )
     scalar = only(builders)
+    model = compute(
+        LinearizationProblem(scalar),
+        AdmittanceLinearization(),
+    ).network_model
     reference, frequencies = TOPOLOGY_NB.determine_impedance(
-        convert(scalar, TOPOLOGY_NB.NetworkModel);
+        model;
         nets = IEEE39_INPUT_PINS,
         elim_elements = IEEE39_ELIM_ELEMENTS,
         freq_range = (1.0, 5e3, 2),
     )
-    result = TOPOLOGY_NB.determine_impedance(
+    result = zero_uncertainty_response(
         builders;
-        trials = 1000,
-        seed = 39,
-        nets = IEEE39_INPUT_PINS,
-        elim_elements = IEEE39_ELIM_ELEMENTS,
-        freq_range = (1.0, 5e3, 2),
+        nodes=IEEE39_INPUT_PINS,
+        eliminated_elements=IEEE39_ELIM_ELEMENTS,
+        frequency_range=(1.0, 5e3, 2),
     )
-    assert_zero_uncertainty_impedance(only(result), reference, frequencies)
+    assert_zero_uncertainty_impedance(result, reference, frequencies)
 end
 
 @testset "P2P HVDC zero-uncertainty Gridspace" begin
-    include(joinpath(@__DIR__, "..", "examples", "P2P_HVDC_ALT.jl"))
+    example_path = joinpath(@__DIR__, "..", "examples", "P2P_HVDC_ALT.jl")
+    include_example_definitions(example_path)
     elements = ohl_to_ugc(0.5)
     builders = TOPOLOGY_NB.define(copied_element_spaces(elements), connections; options = builder_options)
     scalar = only(builders)
+    model = compute(
+        LinearizationProblem(scalar),
+        AdmittanceLinearization(),
+    ).network_model
     reference, frequencies = TOPOLOGY_NB.determine_impedance(
-        convert(scalar, TOPOLOGY_NB.NetworkModel);
+        model;
         nets = [:B5],
         elim_elements = [:c2],
         freq_range = (100.0, 5e3, 2),
     )
-    result = TOPOLOGY_NB.determine_impedance(
+    result = zero_uncertainty_response(
         builders;
-        trials = 1000,
-        seed = 17,
-        nets = [:B5],
-        elim_elements = [:c2],
-        freq_range = (100.0, 5e3, 2),
+        nodes=[:B5],
+        eliminated_elements=[:c2],
+        frequency_range=(100.0, 5e3, 2),
     )
-    assert_zero_uncertainty_impedance(only(result), reference, frequencies)
+    assert_zero_uncertainty_impedance(result, reference, frequencies)
 end

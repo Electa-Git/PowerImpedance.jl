@@ -31,13 +31,15 @@
   impedance, nodal and edge admittance, loop gain, and downstream stability
   analysis.
 - Use one typed `PowerFlowResult → OperatingPoint → LinearizationResult`
-  sequence for scalar and Gridspace calculations, retaining passive-only
-  operating-point and active-admittance reuse.
+  sequence for scalar and Gridspace calculations. Each materialized network
+  receives its own required power-flow solution, and explicit preprocessing
+  pairs completed checkpoints with their source configurations.
 - Add the Literate Connection DSL tutorial and require explicit import of the
   supported Classic `@network` macro.
 - Add deterministic Cartesian `Grid` and `Gridspace` parameterization under
   `PowerImpedance.Grammar`.
-- Add qualified shadow constructors for supported elements and nested configurations.
+- Add explicit `constructor(Grid; kwargs...)` methods for supported elements
+  and nested configurations without a duplicate NetworkBuilder constructor family.
 - Add optional LineCableModels.jl `LineParameters` line constructors with
   covariance-aware Gridspace sampling.
 - Retain ordered configurations, statistics, optional raw samples, plotting

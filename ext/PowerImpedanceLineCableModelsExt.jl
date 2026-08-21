@@ -135,7 +135,7 @@ function _uncertain_native_error(kind::Symbol)
     constructor = kind === :overhead_line ? "overhead_line" : "cable"
     return ArgumentError(
         "uncertain LineParameters and line lengths must be sampled before line evaluation; " *
-        "use `PowerImpedance.NetworkBuilder.$constructor(parameters; ...)`",
+        "use `PowerImpedance.$constructor(Grid, parameters; ...)`",
     )
 end
 
@@ -229,67 +229,25 @@ function _line_parameters_gridspace(
     order = _validate_line_parameters(parameters)
     transformation isa Bool && _validate_configuration(order, transformation)
     target = _LineParametersElementMaterializer(constructor)
-    axes = map(NB._axis, (
-        parameters,
-        length,
-        transformation,
-        connection,
-        extrapolation
-    ))
-    names = (
-        :line_parameters,
-        :length,
-        :transformation,
-        :connection,
-        :extrapolation
+    inputs = (
+        line_parameters=parameters,
+        length=length,
+        transformation=transformation,
+        connection=connection,
+        extrapolation=extrapolation,
     )
-    return NB.Gridspace{P.Element}(target, axes, names)
-end
-
-function NB.overhead_line(
-        parameters::LCM.LineParameters;
-        length,
-        transformation = false,
-        connection = true,
-        extrapolation = :error
-)
-    return _line_parameters_gridspace(
-        P.overhead_line,
-        parameters;
-        length,
-        transformation,
-        connection,
-        extrapolation
-    )
-end
-
-function NB.cable(
-        parameters::LCM.LineParameters;
-        length,
-        transformation = false,
-        connection = true,
-        extrapolation = :error
-)
-    return _line_parameters_gridspace(
-        P.cable,
-        parameters;
-        length,
-        transformation,
-        connection,
-        extrapolation
-    )
+    return NB._lift_gridspace(P.Element, target, inputs, Val(:product))
 end
 
 """
 $(TYPEDSIGNATURES)
 
 Construct a lazy overhead-line `Gridspace` from phase-domain, per-metre line
-parameters through the same positional marker used by every NetworkBuilder
-component shadow.
+parameters through the package's explicit positional `Grid` marker.
 
 # Arguments
 
-- `Grid`: the `PowerImpedance.NetworkBuilder.Grid` constructor, used here
+- `Grid`: the `PowerImpedance.Grid` constructor, used here
   as a positional dispatch marker.
 - `parameters`: phase-domain `LineParameters` with `Z` in [Ω/m], `Y` in [S/m],
   and deterministic frequencies in [Hz].
@@ -306,8 +264,8 @@ component shadow.
 
 # Notes
 
-The scalar `NetworkBuilder.overhead_line` method remains a supported
-compatibility form.
+The keyword-only `overhead_line(parameters; ...)` method remains the scalar
+constructor.
 """
 function P.overhead_line(
         ::typeof(NB.Grid),
@@ -317,7 +275,8 @@ function P.overhead_line(
         connection = true,
         extrapolation = :error
 )
-    return NB.overhead_line(
+    return _line_parameters_gridspace(
+        P.overhead_line,
         parameters;
         length,
         transformation,
@@ -346,7 +305,8 @@ function P.cable(
         connection = true,
         extrapolation = :error
 )
-    return NB.cable(
+    return _line_parameters_gridspace(
+        P.cable,
         parameters;
         length,
         transformation,

@@ -46,6 +46,7 @@ end
     )
     @test linearization.network_model isa CALCULATION_NB.NetworkModel
     @test linearization.operating_point === powerflow.operating_point
+    @test !applicable(convert, state, CALCULATION_NB.NetworkModel)
 
     frequency_range = (1.0, 100.0, 5)
     state_problem = PowerImpedanceProblem(state; nodes=[:bus], frequency_range)
@@ -94,7 +95,7 @@ function calculation_space(axis)
         (node=:gnd, element=:branch, side=2, terminal=1),
     )
     return CALCULATION_NB.define(
-        (branch=CALCULATION_NB.impedance(z=axis, pins=1),),
+        (branch=impedance(Grid; z=axis, pins=1),),
         connections,
     )
 end
@@ -113,6 +114,30 @@ end
     @test response isa ParametricResult{<:FrequencyResponseResult}
     @test length(response.values) == length(response.space) == 2
     @test all(value -> size(value.response) == (1, 1, 3), response.values)
+
+    power_flows = compute(
+        ParametricProblem(PowerFlowProblem(deterministic)),
+        Combinatorial(ACDCPowerFlow()),
+    )
+    linearization_problems = preprocess(power_flows, AdmittanceLinearization())
+    linearizations = compute(
+        linearization_problems,
+        Combinatorial(AdmittanceLinearization()),
+    )
+    @test linearizations isa ParametricResult{<:LinearizationResult}
+    @test all(index ->
+        linearizations.values[index].operating_point ===
+        power_flows.values[index].operating_point,
+        eachindex(linearizations.values),
+    )
+    staged_problems = preprocess(
+        linearizations,
+        NodalImpedance();
+        options=(nodes=[:bus], frequency_range=(1.0, 10.0, 3)),
+    )
+    staged = compute(staged_problems, Combinatorial(NodalImpedance()))
+    @test map(value -> value.response, staged.values) ≈
+          map(value -> value.response, response.values)
 
     edge_response = compute(
         ParametricProblem(owned),

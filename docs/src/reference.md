@@ -34,10 +34,7 @@ Public = true
 Private = false
 ```
 
-Every component and configuration shadow is available through positional
-dispatch as `constructor(Grid; kwargs...)`; `constructor(; kwargs...)` remains
-the scalar API. Equivalent qualified `NetworkBuilder.constructor(; kwargs...)`
-forms remain available for compatibility but are intentionally not exported.
+Component and configuration Gridspaces use positional dispatch as `constructor(Grid; kwargs...)`. The keyword-only `constructor(; kwargs...)` method remains the scalar API. `NetworkBuilder` does not define a second constructor family.
 
 ## `PowerImpedance.UnitHandler`
 

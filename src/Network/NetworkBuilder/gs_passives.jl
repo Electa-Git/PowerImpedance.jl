@@ -1,17 +1,17 @@
-@shadow :element impedance P.impedance
-@shadow :element transformer P.transformer
-@shadow :element cable P.cable
-@shadow :element overhead_line P.overhead_line
-@shadow :element blackbox_line P.blackbox_line
-@shadow :element ac_source P.ac_source
-@shadow :element dc_source P.dc_source
-@shadow :element blackbox_MMC P.blackbox_MMC
+@gridconstructor P.impedance P.Element
+@gridconstructor P.transformer P.Element
+@gridconstructor P.cable P.Element
+@gridconstructor P.overhead_line P.Element
+@gridconstructor P.blackbox_line P.Element
+@gridconstructor P.ac_source P.Element
+@gridconstructor P.dc_source P.Element
+@gridconstructor P.blackbox_MMC P.Element
 
-@shadow :configuration Conductor P.Conductor
-@shadow :configuration Insulator P.Insulator
-@shadow :configuration Conductors P.Conductors
-@shadow :configuration Groundwires P.Groundwires
-@shadow :configuration Overhead_line P.Overhead_line
-@shadow :configuration Setpoint P.Setpoint
-@shadow :configuration SetpointPU P.SetpointPU
-@shadow :configuration Limits P.Limits
+@gridconstructor P.Conductor P.Conductor
+@gridconstructor P.Insulator P.Insulator
+@gridconstructor P.Conductors P.Conductors
+@gridconstructor P.Groundwires P.Groundwires
+@gridconstructor P.Overhead_line P.Overhead_line
+@gridconstructor P.Setpoint P.Setpoint
+@gridconstructor P.SetpointPU P.SetpointPU
+@gridconstructor P.Limits P.Limits

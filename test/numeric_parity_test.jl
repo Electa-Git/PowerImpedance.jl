@@ -64,6 +64,31 @@ function parity_powerflow_state(shunt_impedance=1.0)
     return PARITY_NB.define(elements, connections)
 end
 
+function parity_powerflow_space(shunt_impedances)
+    voltage = 220.0
+    elements = (
+        sm1=synchronousmachine(
+            elec=ElectricalSM(rt=1e-10, lt=1e-10),
+            setpoint=Setpoint(Pac=50.0, Qac=10.0, Vac=voltage / sqrt(3)),
+        ),
+        z1=impedance(
+            Grid;
+            z=Grid(shunt_impedances),
+            pins=3,
+            transformation=true,
+        ),
+    )
+    connections = (
+        (node=:machine_d, element=:z1, side=1, terminal=1),
+        (node=:machine_d, element=:sm1, side=1, terminal=1),
+        (node=:machine_q, element=:z1, side=1, terminal=2),
+        (node=:machine_q, element=:sm1, side=1, terminal=2),
+        (node=:gnd_d, element=:z1, side=2, terminal=1),
+        (node=:gnd_q, element=:z1, side=2, terminal=2),
+    )
+    return PARITY_NB.define(elements, connections)
+end
+
 function parity_powerflow_numbers(powerflow, prefix)
     numbers = Dict{String,Float64}()
     solution = powerflow.result["solution"]
@@ -381,11 +406,12 @@ end
     test_powerflow_reference(deterministic, "powerflow.deterministic")
 
     axis_values = parity_real_vector("powerflow.replay.axis_values")
-    for (trial, axis_value) in enumerate(axis_values)
-        powerflow = compute(
-            PowerFlowProblem(parity_powerflow_state(axis_value)),
-            ACDCPowerFlow(),
-        )
+    study = compute(
+        ParametricProblem(PowerFlowProblem(parity_powerflow_space(axis_values))),
+        Combinatorial(ACDCPowerFlow()),
+    )
+    @test study isa ParametricResult{<:PowerFlowResult}
+    for (trial, powerflow) in enumerate(study.values)
         test_powerflow_reference(powerflow, "powerflow.replay.trial.$trial")
     end
 end

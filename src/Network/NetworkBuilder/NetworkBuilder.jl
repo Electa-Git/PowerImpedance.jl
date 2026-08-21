@@ -16,7 +16,7 @@ using ..Grammar: compute, primitives, preprocess
 using ..Grammar: ParametricProblem, Combinatorial, LinearError, MonteCarlo
 using ..Grammar: ParametricResult, LinearErrorResult, MonteCarloResult
 using ..Grammar: LineParametersInput, EmpiricalSamples, MeasurementsSurrogate
-import ..Grammar: _axis, _direct_value, _gridspace_axis, _materialize
+import ..Grammar: _axis, _direct_value, _gridspace_axis, _lift_gridspace, _materialize
 
 export NetworkState, NetworkTopology, AdmittanceLookup, NetworkLookup, NetworkModel
 export define, update!, solve
@@ -93,24 +93,38 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Construct a scalar [`NetworkState`](@ref) from ordinary elements and fixed
-connections.
+Construct a [`NetworkState`](@ref) or a lazy space of network states from scalar and parametric elements.
 
 # Arguments
 
-- `elements`: named tuple of scalar PowerImpedance elements.
+- `elements`: Named tuple of scalar elements and element Gridspaces.
 - `connections`: tuple or vector of named topology rows.
 - `options`: builder and power-flow options.
 
 # Returns
 
-- A `NetworkState`. If the element values are Gridspaces, more-specific
-  dispatch returns a `Gridspace{NetworkState}`.
+- A `NetworkState` when every input is scalar.
+- A `Gridspace{NetworkState}` when an element or direct option is parametric.
 """
 function define(
         elements::NamedTuple,
         connections::Union{Tuple, AbstractVector};
         options = (;)
+)
+    inputs = (Tuple(values(elements))..., Tuple(values(options))...)
+    style = _network_input_style(inputs)
+    return _define_network(style, elements, connections, options)
+end
+
+_network_input_style(::Tuple{}) = Val(false)
+_network_input_style(::Tuple{<:Union{AbstractGrid,Gridspace},Vararg}) = Val(true)
+_network_input_style(inputs::Tuple) = _network_input_style(Base.tail(inputs))
+
+function _define_network(
+    ::Val{false},
+    elements::NamedTuple,
+    connections::Union{Tuple,AbstractVector},
+    options::NamedTuple,
 )
     connected_names = Tuple(
         name for name in keys(elements) if elements[name].connection

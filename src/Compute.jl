@@ -56,7 +56,8 @@ function _linearized_model(network::NetworkBuilder.NetworkState, options)
         AdmittanceLinearization();
         options,
     )
-    return result.network_model, result
+    model = result.network_model::NetworkBuilder.NetworkModel{ComplexF64}
+    return model, result
 end
 
 function _frequency_response(
@@ -153,38 +154,82 @@ function determine_impedance(
     return result.response, result.frequencies
 end
 
-function PowerFlowProblem(space::Gridspace{<:NetworkBuilder.NetworkState})
-    return Gridspace{PowerFlowProblem}(
-        network -> PowerFlowProblem(network),
-        (space,),
-        (:network,),
+struct _PowerFlowProblemMaterializer end
+
+function (::_PowerFlowProblemMaterializer)(
+    network::NetworkBuilder.NetworkState,
+)::PowerFlowProblem{NetworkBuilder.NetworkState}
+    return PowerFlowProblem(network)
+end
+
+struct _LinearizationProblemMaterializer end
+
+function (::_LinearizationProblemMaterializer)(
+    network::NetworkBuilder.NetworkState,
+)::LinearizationProblem{NetworkBuilder.NetworkState,Nothing}
+    return LinearizationProblem(network)
+end
+
+struct _PowerImpedanceProblemMaterializer{K,E,F}
+    nodes::K
+    eliminated_elements::E
+    frequency_range::F
+end
+
+function (materializer::_PowerImpedanceProblemMaterializer{K,E,F})(
+    network::Network,
+)::PowerImpedanceProblem{Network,K,E,F} where {K,E,F,Network}
+    return PowerImpedanceProblem(
+        network,
+        materializer.nodes,
+        materializer.eliminated_elements,
+        materializer.frequency_range,
     )
 end
 
-function LinearizationProblem(
-    space::Gridspace{<:NetworkBuilder.NetworkState};
-    powerflow=nothing,
-)
-    return Gridspace{LinearizationProblem}(
-        network -> LinearizationProblem(network, powerflow),
-        (space,),
-        (:network,),
+function PowerFlowProblem(space::Gridspace{<:NetworkBuilder.NetworkState})
+    return Grammar._lift_gridspace(
+        PowerFlowProblem{NetworkBuilder.NetworkState},
+        _PowerFlowProblemMaterializer(),
+        (; network=space),
+        Val(:product),
+    )
+end
+
+function LinearizationProblem(space::Gridspace{<:NetworkBuilder.NetworkState})
+    return Grammar._lift_gridspace(
+        LinearizationProblem{NetworkBuilder.NetworkState,Nothing},
+        _LinearizationProblemMaterializer(),
+        (; network=space),
+        Val(:product),
     )
 end
 
 function PowerImpedanceProblem(
-    space::Gridspace{<:NetworkBuilder.NetworkState};
+    space::Gridspace{Network};
     nodes=Symbol[],
     eliminated_elements=Symbol[],
     frequency_range=(0.001, 10_000.0, 2_000),
-)
-    target = network -> PowerImpedanceProblem(
-        network;
-        nodes,
-        eliminated_elements,
+) where {Network<:Union{NetworkBuilder.NetworkState,NetworkBuilder.NetworkModel}}
+    selected_nodes = Symbol.(collect(nodes))
+    excluded_elements = Symbol.(collect(eliminated_elements))
+    materializer = _PowerImpedanceProblemMaterializer(
+        selected_nodes,
+        excluded_elements,
         frequency_range,
     )
-    return Gridspace{PowerImpedanceProblem}(target, (space,), (:network,))
+    target_type = PowerImpedanceProblem{
+        Network,
+        typeof(selected_nodes),
+        typeof(excluded_elements),
+        typeof(frequency_range),
+    }
+    return Grammar._lift_gridspace(
+        target_type,
+        materializer,
+        (; network=space),
+        Val(:product),
+    )
 end
 
 function _stability_input(response::FrequencyResponseResult)
@@ -356,9 +401,148 @@ function compute(
     return StabilityResult(formulation, :unstable_frequency, output, (;))
 end
 
+struct _CheckpointInput{C,V}
+    coordinate::C
+    value::V
+end
+
+Grammar._direct_value(input::_CheckpointInput) = input.value
+Grammar._manifest_value(input::_CheckpointInput) = input.coordinate
+
+function _checkpoint_grid(result::ParametricResult)
+    length(result.values) == length(result.space) || throw(DimensionMismatch(
+        "checkpoint values and coordinates differ in length",
+    ))
+    return Grid(map(_CheckpointInput, result.space, result.values))
+end
+
+function _aligned_source_problems(result::ParametricResult)
+    hasproperty(result.details, :source_space) || throw(ArgumentError(
+        "checkpoint preprocessing requires the source problem space",
+    ))
+    iterator = configurations(result.details.source_space)
+    next_item = iterate(iterator)
+    problems = Any[]
+    for coordinate in result.space
+        found = false
+        while next_item !== nothing
+            configuration, state = next_item
+            next_item = iterate(iterator, state)
+            isequal(configuration_manifest(configuration), coordinate) || continue
+            push!(problems, materialize(configuration))
+            found = true
+            break
+        end
+        found || throw(ArgumentError(
+            "checkpoint coordinate is absent from its source problem space",
+        ))
+    end
+    return _typed_results(problems)
+end
+
+struct _PowerFlowCheckpointMaterializer end
+
+function (::_PowerFlowCheckpointMaterializer)(checkpoint)
+    return LinearizationProblem(checkpoint.problem.network, checkpoint.result)
+end
+
+struct _LinearizationCheckpointMaterializer{K,E,F}
+    nodes::K
+    eliminated_elements::E
+    frequency_range::F
+end
+
+function (materializer::_LinearizationCheckpointMaterializer)(linearization)
+    return PowerImpedanceProblem(
+        linearization.network_model,
+        materializer.nodes,
+        materializer.eliminated_elements,
+        materializer.frequency_range,
+    )
+end
+
+const _FrequencyResponseFormulation = Union{
+    NodalImpedance,
+    NodeAdmittance,
+    EdgeAdmittance,
+    LoopGain,
+}
+
+const _StabilityFormulation = Union{
+    GeneralizedNyquist,
+    BodeAnalysis,
+    PassivityAnalysis,
+    SmallGainAnalysis,
+    EigenvalueAnalysis,
+    UnstableFrequencyAnalysis,
+}
+
+function preprocess(
+    result::ParametricResult{<:PowerFlowResult},
+    ::AdmittanceLinearization;
+    options::NamedTuple=(;),
+)
+    source_problems = _aligned_source_problems(result)
+    paired = map(source_problems, result.values) do problem, value
+        (problem=problem, result=value)
+    end
+    checkpoints = Grid(map(_CheckpointInput, result.space, paired))
+    network_type = typeof(first(source_problems).network)
+    powerflow_type = eltype(result.values)
+    space = Grammar._lift_gridspace(
+        LinearizationProblem{network_type,powerflow_type},
+        _PowerFlowCheckpointMaterializer(),
+        (; checkpoint=checkpoints),
+        Val(:product),
+    )
+    return ParametricProblem(space, options)
+end
+
+function preprocess(
+    result::LinearizationResult,
+    ::_FrequencyResponseFormulation;
+    options::NamedTuple=(;),
+)
+    return PowerImpedanceProblem(
+        result.network_model;
+        nodes=get(options, :nodes, Symbol[]),
+        eliminated_elements=get(options, :eliminated_elements, Symbol[]),
+        frequency_range=get(options, :frequency_range, (0.001, 10_000.0, 2_000)),
+    )
+end
+
+function preprocess(
+    result::ParametricResult{<:LinearizationResult},
+    ::_FrequencyResponseFormulation;
+    options::NamedTuple=(;),
+)
+    nodes = Symbol.(collect(get(options, :nodes, Symbol[])))
+    eliminated_elements = Symbol.(collect(get(options, :eliminated_elements, Symbol[])))
+    frequency_range = get(options, :frequency_range, (0.001, 10_000.0, 2_000))
+    materializer = _LinearizationCheckpointMaterializer(
+        nodes,
+        eliminated_elements,
+        frequency_range,
+    )
+    model_type = typeof(first(result.values).network_model)
+    target_type = PowerImpedanceProblem{
+        model_type,
+        typeof(nodes),
+        typeof(eliminated_elements),
+        typeof(frequency_range),
+    }
+    space = Grammar._lift_gridspace(
+        target_type,
+        materializer,
+        (; linearization=_checkpoint_grid(result)),
+        Val(:product),
+    )
+    return ParametricProblem(space)
+end
+
 function preprocess(
     result::FrequencyResponseResult,
-    ::AbstractPowerImpedanceFormulation;
+    ::_StabilityFormulation;
     options::NamedTuple=(;),
 )
     return StabilityProblem(result)
@@ -366,11 +550,16 @@ end
 
 function preprocess(
     result::ParametricResult{<:FrequencyResponseResult},
-    ::AbstractPowerImpedanceFormulation;
+    ::_StabilityFormulation;
     options::NamedTuple=(;),
 )
-    responses = Grid(result.values)
-    space = Gridspace{StabilityProblem}(StabilityProblem, (responses,), (:response,))
+    result_type = eltype(result.values)
+    space = Grammar._lift_gridspace(
+        StabilityProblem{result_type},
+        StabilityProblem,
+        (; response=_checkpoint_grid(result)),
+        Val(:product),
+    )
     return ParametricProblem(space, (
         checkpoint_space=result.space,
         checkpoint_details=result.details,
@@ -379,7 +568,7 @@ end
 
 function preprocess(
     result::MonteCarloResult{<:FrequencyResponseResult},
-    ::AbstractPowerImpedanceFormulation;
+    ::_StabilityFormulation;
     options::NamedTuple=(;),
 )
     return StabilityProblem(result)
@@ -416,10 +605,35 @@ function _calculation_manifest(method, options, manifests)
     )
 end
 
-function _deterministic_compute(problem, method, options, result_constructor)
-    method.backend === PIACDC || throw(ArgumentError(
-        "unsupported higher-order backend $(method.backend)",
-    ))
+function _deterministic_details(problem, method, options, manifests, failures)
+    return (
+        manifest=_calculation_manifest(method, options, manifests),
+        failures=(items=failures,),
+        source_space=problem.space,
+    )
+end
+
+function _deterministic_compute_error(problem, method, options, result_constructor)
+    iterator = configurations(problem.space)
+    first_item = iterate(iterator)
+    first_item === nothing && throw(ArgumentError("calculation produced no configurations"))
+    configuration, state = first_item
+    first_value = compute(materialize(configuration), method.inner; options)
+    first_manifest = configuration_manifest(configuration)
+    values = typeof(first_value)[first_value]
+    manifests = typeof(first_manifest)[first_manifest]
+    while true
+        item = iterate(iterator, state)
+        item === nothing && break
+        configuration, state = item
+        push!(values, compute(materialize(configuration), method.inner; options))
+        push!(manifests, configuration_manifest(configuration))
+    end
+    details = _deterministic_details(problem, method, options, manifests, Any[])
+    return result_constructor(method, values, manifests, details)
+end
+
+function _deterministic_compute_record(problem, method, options, result_constructor)
     values = Any[]
     manifests = Any[]
     failures = Any[]
@@ -430,16 +644,36 @@ function _deterministic_compute(problem, method, options, result_constructor)
             push!(values, compute(primitive_problem, method.inner; options))
             push!(manifests, manifest)
         catch error
-            method.failure_policy === :error && rethrow()
             push!(failures, _failure_record(manifest, nothing, nothing, :compute, error))
         end
     end
     typed = _typed_results(values)
-    details = (
-        manifest=_calculation_manifest(method, options, manifests),
-        failures=(items=failures,),
-    )
+    details = _deterministic_details(problem, method, options, manifests, failures)
     return result_constructor(method, typed, manifests, details)
+end
+
+function _deterministic_compute(
+    problem,
+    method::Combinatorial{<:Any,<:Any,:error},
+    options,
+    result_constructor,
+)
+    method.backend === PIACDC || throw(ArgumentError(
+        "unsupported higher-order backend $(method.backend)",
+    ))
+    return _deterministic_compute_error(problem, method, options, result_constructor)
+end
+
+function _deterministic_compute(
+    problem,
+    method::Combinatorial{<:Any,<:Any,:record},
+    options,
+    result_constructor,
+)
+    method.backend === PIACDC || throw(ArgumentError(
+        "unsupported higher-order backend $(method.backend)",
+    ))
+    return _deterministic_compute_record(problem, method, options, result_constructor)
 end
 
 function compute(

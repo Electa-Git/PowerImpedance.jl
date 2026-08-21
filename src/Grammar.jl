@@ -32,10 +32,10 @@ abstract type AbstractFormulation end
 abstract type AbstractProblemResult end
 
 "Abstract supertype for deterministic parameter-study results containing `T`."
-abstract type AbstractParametricResult{T} end
+abstract type AbstractParametricResult{T} <: AbstractProblemResult end
 
 "Abstract supertype for uncertainty-study results containing `T`."
-abstract type AbstractUncertaintyResult{T} end
+abstract type AbstractUncertaintyResult{T} <: AbstractProblemResult end
 
 "Calculate `problem` with `formulation`."
 function compute end
@@ -83,7 +83,7 @@ Enumerate every deterministic configuration and apply `inner`.
 
 $(TYPEDFIELDS)
 """
-struct Combinatorial{F, B} <: AbstractFormulation
+struct Combinatorial{F, B, P} <: AbstractFormulation
     "Scalar formulation applied to each materialized problem."
     inner::F
 
@@ -99,7 +99,8 @@ function Combinatorial(
         backend::Type{B} = PIACDC,
         failure_policy::Symbol = :error
 ) where {F, B}
-    return Combinatorial{F, B}(inner, backend, _failure_policy(failure_policy))
+    policy = _failure_policy(failure_policy)
+    return Combinatorial{F, B, policy}(inner, backend, policy)
 end
 
 """
@@ -109,7 +110,7 @@ Propagate first-order uncertainty through `inner` without random sampling.
 
 $(TYPEDFIELDS)
 """
-struct LinearError{F, B} <: AbstractFormulation
+struct LinearError{F, B, P} <: AbstractFormulation
     "Scalar formulation evaluated with uncertainty-aware numeric values."
     inner::F
 
@@ -125,7 +126,8 @@ function LinearError(
         backend::Type{B} = PIACDC,
         failure_policy::Symbol = :error
 ) where {F, B}
-    return LinearError{F, B}(inner, backend, _failure_policy(failure_policy))
+    policy = _failure_policy(failure_policy)
+    return LinearError{F, B, policy}(inner, backend, policy)
 end
 
 """
@@ -135,7 +137,7 @@ Specify Monte Carlo evaluation of uncertain configurations.
 
 $(TYPEDFIELDS)
 """
-struct MonteCarlo{F, B, S} <: AbstractFormulation
+struct MonteCarlo{F, B, S, P} <: AbstractFormulation
     "Scalar formulation applied to every numeric trial."
     inner::F
 
@@ -185,7 +187,8 @@ function MonteCarlo(
         ))
     0 < confidence < 1 || throw(ArgumentError("confidence must lie in (0, 1)"))
     tolerance > 0 || throw(ArgumentError("tolerance must be positive"))
-    return MonteCarlo{F, B, typeof(seed)}(
+    policy = _failure_policy(failure_policy)
+    return MonteCarlo{F, B, typeof(seed), policy}(
         inner,
         backend,
         trial_count,
@@ -194,7 +197,7 @@ function MonteCarlo(
         Float64(confidence),
         Float64(tolerance),
         return_samples,
-        _failure_policy(failure_policy)
+        policy
     )
 end
 

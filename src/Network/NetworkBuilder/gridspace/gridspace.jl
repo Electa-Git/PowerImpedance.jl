@@ -1,8 +1,8 @@
-"Typed blueprint interface for staged construction of a concrete `Target`."
-abstract type AbstractSpec{Target} end
+"Typed construction definition that materializes a concrete `Target`."
+abstract type AbstractDefinition{Target} end
 
-target_type(::Type{<:AbstractSpec{Target}}) where {Target} = Target
-target_type(spec::AbstractSpec) = target_type(typeof(spec))
+target_type(::Type{<:AbstractDefinition{Target}}) where {Target} = Target
+target_type(definition::AbstractDefinition) = target_type(typeof(definition))
 
 struct ConstantAxis{T}
     value::T
@@ -60,7 +60,7 @@ to this space and is either `:product` or `:zip`.
 
 $(TYPEDFIELDS)
 """
-struct Gridspace{Target,F,A<:Tuple,N<:Tuple,C} <: AbstractSpec{Target}
+struct Gridspace{Target,F,A<:Tuple,N<:Tuple,C} <: AbstractDefinition{Target}
     "Callable that constructs `Target` from one selection of the direct axes."
     target::F
 
@@ -107,11 +107,49 @@ end
 Gridspace{Target}(axes::Tuple; combine::Symbol=:product) where {Target} =
     Gridspace{Target}(Target, axes; combine)
 
+function _lift_gridspace(
+    ::Type{Target},
+    materializer,
+    inputs::NamedTuple{Names};
+    combine::Symbol=:product,
+) where {Target,Names}
+    combine in (:product, :zip) || throw(ArgumentError(
+        "combine must be :product or :zip; got :$combine",
+    ))
+    return _lift_gridspace(
+        Target,
+        materializer,
+        inputs,
+        Val(combine),
+    )
+end
+
+function _lift_gridspace(
+    ::Type{Target},
+    materializer::F,
+    inputs::NamedTuple{Names},
+    ::Val{Combine},
+) where {Target,F,Names,Combine}
+    axes = map(_gridspace_axis, Tuple(values(inputs)))
+    return Gridspace{
+        Target,
+        F,
+        typeof(axes),
+        typeof(Names),
+        Val{Combine},
+    }(
+        materializer,
+        axes,
+        Names,
+        Val(Combine),
+    )
+end
+
 Grid(space::Gridspace; key=nothing) = key === nothing ? space :
     throw(ArgumentError("Gridspace coupling is defined by its child Grids"))
 
 _gridspace_axis(value::ConstantAxis) = value
-_gridspace_axis(value::Union{AbstractGrid,AbstractSpec}) = value
+_gridspace_axis(value::Union{AbstractGrid,AbstractDefinition}) = value
 _gridspace_axis(value) = ConstantAxis(value)
 
 # Retained for internal constructor code while the Gridspace implementation is
@@ -140,7 +178,7 @@ function _axis_cases(grid::AbstractGrid)
     )
 end
 
-_axis_cases(spec::AbstractSpec) = configurations(spec)
+_axis_cases(definition::AbstractDefinition) = configurations(definition)
 
 _axis_value(selection::AxisSelection) = ResolvedGridValue(selection.value, selection.key)
 _axis_value(configuration::Configuration) = configuration
@@ -235,11 +273,11 @@ function configurations(space::Gridspace{Target}) where {Target}
     )
 end
 
-function gridspace(spec::AbstractSpec)
-    throw(MethodError(gridspace, (spec,)))
+function gridspace(definition::AbstractDefinition)
+    throw(MethodError(gridspace, (definition,)))
 end
 
-configurations(spec::AbstractSpec) = configurations(gridspace(spec))
+configurations(definition::AbstractDefinition) = configurations(gridspace(definition))
 
 function _direct_uncertain end
 function _direct_uncertainty_latent end
@@ -265,7 +303,7 @@ function _resolved_direct(value::ResolvedGridValue, cache::Dict)
         end
         return _direct_uncertain(value.value, latent)
     end
-    return value.value
+    return _direct_value(value.value)
 end
 
 _resolved_direct(configuration::Configuration, cache::Dict) =
@@ -310,7 +348,7 @@ function _random_value(
         return _realize_uncertainty(value.value, standardized)
     end
     return applicable(_external_sample, rng, value.value, distribution) ?
-        _external_sample(rng, value.value, distribution) : value.value
+        _external_sample(rng, value.value, distribution) : _direct_value(value.value)
 end
 
 _random_value(
@@ -343,8 +381,12 @@ end
 Base.rand(configuration::Configuration; kwargs...) =
     rand(Random.default_rng(), configuration; kwargs...)
 
-function Base.rand(rng::Random.AbstractRNG, spec::AbstractSpec; distribution=:normal)
-    iterator = configurations(spec)
+function Base.rand(
+    rng::Random.AbstractRNG,
+    definition::AbstractDefinition;
+    distribution=:normal,
+)
+    iterator = configurations(definition)
     first_item = iterate(iterator)
     first_item === nothing && throw(ArgumentError("cannot sample an empty Gridspace"))
     configuration, state = first_item
@@ -354,37 +396,40 @@ function Base.rand(rng::Random.AbstractRNG, spec::AbstractSpec; distribution=:no
     return rand(rng, configuration; distribution)
 end
 
-Base.rand(spec::AbstractSpec; kwargs...) = rand(Random.default_rng(), spec; kwargs...)
+Base.rand(definition::AbstractDefinition; kwargs...) =
+    rand(Random.default_rng(), definition; kwargs...)
 
-function Base.iterate(spec::AbstractSpec)
-    iterator = configurations(spec)
+function Base.iterate(definition::AbstractDefinition)
+    iterator = configurations(definition)
     item = iterate(iterator)
     item === nothing && return nothing
     configuration, state = item
     return materialize(configuration), state
 end
 
-function Base.iterate(spec::AbstractSpec, state)
-    iterator = configurations(spec)
+function Base.iterate(definition::AbstractDefinition, state)
+    iterator = configurations(definition)
     item = iterate(iterator, state)
     item === nothing && return nothing
     configuration, next_state = item
     return materialize(configuration), next_state
 end
 
-Base.IteratorSize(::Type{<:AbstractSpec}) = Base.HasLength()
-Base.IteratorEltype(::Type{<:AbstractSpec}) = Base.HasEltype()
-Base.eltype(::Type{<:AbstractSpec{Target}}) where {Target} = Target
-Base.length(spec::AbstractSpec) = count(_ -> true, configurations(spec))
-Base.size(spec::AbstractSpec) = (length(spec),)
-Base.getindex(spec::AbstractSpec, index::Integer) = first(Iterators.drop(spec, index - 1))
+Base.IteratorSize(::Type{<:AbstractDefinition}) = Base.HasLength()
+Base.IteratorEltype(::Type{<:AbstractDefinition}) = Base.HasEltype()
+Base.eltype(::Type{<:AbstractDefinition{Target}}) where {Target} = Target
+Base.length(definition::AbstractDefinition) = count(_ -> true, configurations(definition))
+Base.size(definition::AbstractDefinition) = (length(definition),)
+Base.getindex(definition::AbstractDefinition, index::Integer) =
+    first(Iterators.drop(definition, index - 1))
 
 has_uncertainty(value::UncertainValue) = true
 has_uncertainty(value::ResolvedGridValue) = has_uncertainty(value.value)
 has_uncertainty(configuration::Configuration) = any(has_uncertainty, configuration.values)
 has_uncertainty(value) = applicable(_external_has_uncertainty, value) &&
     _external_has_uncertainty(value)
-has_uncertainty(spec::AbstractSpec) = any(has_uncertainty, configurations(spec))
+has_uncertainty(definition::AbstractDefinition) =
+    any(has_uncertainty, configurations(definition))
 
 _manifest_value(value::UncertainValue) = (
     nominal=value.nominal,
