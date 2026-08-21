@@ -65,3 +65,9 @@ for the supported combinations and data structures.
 
 The theoretical background retained from the original package documentation
 is cited through the project [bibliography](bibliography.md).
+
+## User statistics
+
+![Top Julia package-server regions observed for PowerImpedance.jl](assets/user-statistics.svg)
+
+The map is generated in CI from Julia's public package-server request logs. It shows the top server regions by the sum of `request_addrs` for requests marked as user traffic. These regional aggregates are useful adoption indicators, but they are not a count of distinct people and must not be read as country-level telemetry.

@@ -288,6 +288,8 @@ docs_check:
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.instantiate()
         Pkg.precompile()
+        include("docs/package_stats.jl")
+        main()
         include("docs/make.jl")
       '
   rules:
@@ -626,7 +628,7 @@ github_release_reconcile_once:
 # ABSOLUTELY NO FORCE PUSH.
 #
 # GitHub main must already be an ancestor of the tagged GitLab commit.
-# The live push remains commented out pending clearance.
+# Valid release tags publish automatically after the preflight succeeds.
 # ---------------------------------------------------------------------------
 
 github_release_publish:
@@ -699,31 +701,18 @@ github_release_publish:
         exit 1
       fi
 
-      echo
-      echo "Running real Git push dry-run..."
-      echo
-
       git push \
-        --dry-run \
         --atomic \
         github \
         "${CI_COMMIT_SHA}:refs/heads/main" \
         "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
 
       echo
-      echo "Dry-run passed."
-      echo "DRY-RUN ONLY: release was not published."
-
-      # LIVE PUSH DISABLED PENDING CLEARANCE:
-      # git push \
-      #   --atomic \
-      #   github \
-      #   "${CI_COMMIT_SHA}:refs/heads/main" \
-      #   "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+      echo "Published ${CI_COMMIT_TAG} to GitHub."
 
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/ && $GITHUB_RECONCILE_ONCE != "YES"'
-      when: manual
+      when: on_success
       allow_failure: false
 
 
@@ -755,6 +744,8 @@ pages:
         Pkg.Registry.update()
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.instantiate()
+        include("docs/package_stats.jl")
+        main()
         include("docs/make.jl")
       '
     - rm -rf public

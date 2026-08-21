@@ -51,7 +51,6 @@ const LITERATE_EXAMPLE_FILES = (
     "P2P_HVDC_ALT.jl",
     "P2P_HVDC_Gridspace.jl",
     "IEEE39bus_Gridspace.jl",
-    "Gridspace_uncertainty.jl",
     "SmallSignal_Gridspace.jl"
 )
 
