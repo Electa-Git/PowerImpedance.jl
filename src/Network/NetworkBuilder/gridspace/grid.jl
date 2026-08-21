@@ -3,13 +3,13 @@ import Random
 abstract type AbstractGrid end
 abstract type AbstractUncertainGrid <: AbstractGrid end
 
-abstract type AbstractUncertaintyStyle end
+abstract type AbstractUncertainty end
 
-struct RelativeUncertainty{T<:Real} <: AbstractUncertaintyStyle
+struct RelativeUncertainty{T <: Real} <: AbstractUncertainty
     percent::T
 end
 
-struct AbsoluteUncertainty <: AbstractUncertaintyStyle end
+struct AbsoluteUncertainty <: AbstractUncertainty end
 
 """
 $(TYPEDEF)
@@ -19,7 +19,7 @@ standard uncertainty in the same physical unit as `nominal`.
 
 $(TYPEDFIELDS)
 """
-struct UncertainValue{T,S<:AbstractUncertaintyStyle,E}
+struct UncertainValue{T, S <: AbstractUncertainty, E}
     "Nominal parameter value."
     nominal::T
 
@@ -30,7 +30,7 @@ struct UncertainValue{T,S<:AbstractUncertaintyStyle,E}
     style::S
 
     function UncertainValue(nominal::T, sigma::E, style::S) where {
-        T,S<:AbstractUncertaintyStyle,E
+            T, S <: AbstractUncertainty, E
     }
         if nominal isa Real && sigma isa Real
             isfinite(nominal) || throw(ArgumentError(
@@ -43,7 +43,7 @@ struct UncertainValue{T,S<:AbstractUncertaintyStyle,E}
                 "uncertainty must be nonnegative; got $sigma",
             ))
         end
-        return new{T,S,E}(nominal, sigma, style)
+        return new{T, S, E}(nominal, sigma, style)
     end
 end
 
@@ -74,7 +74,7 @@ Represent a finite, explicitly enumerated parameter axis.
 Use [`Grid`](@ref) to construct this type from one value or a collection of
 alternatives.
 """
-struct DeterministicGrid{V<:Tuple,K} <: AbstractGrid
+struct DeterministicGrid{V <: Tuple, K} <: AbstractGrid
     vals::V
     key::K
 end
@@ -88,7 +88,7 @@ deviations expressed in percent.
 Monte Carlo entry points sample each case with `distribution=:normal` or with
 the variance-equivalent `distribution=:uniform` law.
 """
-struct RelativeGrid{V<:Tuple,P<:Tuple,K} <: AbstractUncertainGrid
+struct RelativeGrid{V <: Tuple, P <: Tuple, K} <: AbstractUncertainGrid
     vals::V
     rel_err::P
     key::K
@@ -104,9 +104,9 @@ struct RelativeGrid{V<:Tuple,P<:Tuple,K} <: AbstractUncertainGrid
     - Throws `ArgumentError` for non-real or non-finite nominal values, or for
       non-real, non-finite, or negative uncertainty values.
     """
-    function RelativeGrid(vals::V, rel_err::P, key::K) where {V<:Tuple,P<:Tuple,K}
+    function RelativeGrid(vals::V, rel_err::P, key::K) where {V <: Tuple, P <: Tuple, K}
         _validate_uncertainty(vals, rel_err, "relative")
-        return new{V,P,K}(vals, rel_err, key)
+        return new{V, P, K}(vals, rel_err, key)
     end
 end
 
@@ -119,7 +119,7 @@ deviations in the same physical unit as the nominal value.
 Monte Carlo entry points sample each case with `distribution=:normal` or with
 the variance-equivalent `distribution=:uniform` law.
 """
-struct AbsoluteGrid{V<:Tuple,P<:Tuple,K} <: AbstractUncertainGrid
+struct AbsoluteGrid{V <: Tuple, P <: Tuple, K} <: AbstractUncertainGrid
     vals::V
     abs_err::P
     key::K
@@ -135,9 +135,9 @@ struct AbsoluteGrid{V<:Tuple,P<:Tuple,K} <: AbstractUncertainGrid
     - Throws `ArgumentError` for non-real or non-finite nominal values, or for
       non-real, non-finite, or negative uncertainty values.
     """
-    function AbsoluteGrid(vals::V, abs_err::P, key::K) where {V<:Tuple,P<:Tuple,K}
+    function AbsoluteGrid(vals::V, abs_err::P, key::K) where {V <: Tuple, P <: Tuple, K}
         _validate_uncertainty(vals, abs_err, "absolute")
-        return new{V,P,K}(vals, abs_err, key)
+        return new{V, P, K}(vals, abs_err, key)
     end
 end
 
@@ -147,7 +147,7 @@ end
 Mark nonnegative `errors` as absolute standard deviations in the same physical
 unit as the corresponding nominal values.
 """
-struct AbsoluteError{T<:Tuple}
+struct AbsoluteError{T <: Tuple}
     vals::T
 
     @doc """
@@ -159,7 +159,7 @@ struct AbsoluteError{T<:Tuple}
 
     - Throws `ArgumentError` for non-real, non-finite, or negative values.
     """
-    function AbsoluteError(vals::T) where {T<:Tuple}
+    function AbsoluteError(vals::T) where {T <: Tuple}
         _validate_errors(vals, "absolute")
         return new{T}(vals)
     end
@@ -171,9 +171,11 @@ _grid_values(x) = (x,)
 
 function _validate_errors(errors::Tuple, kind::AbstractString)
     for error in errors
-        error isa Real || throw(ArgumentError("$kind errors must be real numbers; got $(typeof(error))"))
+        error isa Real ||
+            throw(ArgumentError("$kind errors must be real numbers; got $(typeof(error))"))
         isfinite(error) || throw(ArgumentError("$kind errors must be finite; got $error"))
-        error >= zero(error) || throw(ArgumentError("$kind errors must be nonnegative; got $error"))
+        error >= zero(error) ||
+            throw(ArgumentError("$kind errors must be nonnegative; got $error"))
     end
     return nothing
 end
@@ -181,8 +183,10 @@ end
 function _validate_uncertainty(vals::Tuple, errors::Tuple, kind::AbstractString)
     _validate_errors(errors, kind)
     for nominal in vals
-        nominal isa Real || throw(ArgumentError("$kind uncertainty requires real nominal values; got $(typeof(nominal))"))
-        isfinite(nominal) || throw(ArgumentError("$kind nominal values must be finite; got $nominal"))
+        nominal isa Real ||
+            throw(ArgumentError("$kind uncertainty requires real nominal values; got $(typeof(nominal))"))
+        isfinite(nominal) ||
+            throw(ArgumentError("$kind nominal values must be finite; got $nominal"))
     end
     return nothing
 end
@@ -226,13 +230,17 @@ The sampling law is selected by the Monte Carlo entry point. `:normal` uses
 Gridspace axes are sampled independently unless a purpose-built object provides
 specialized joint-sampling dispatch.
 """
-Grid(grid::AbstractGrid; key=nothing) = key === nothing ? grid :
+function Grid(grid::AbstractGrid; key = nothing)
+    key === nothing ? grid :
     throw(ArgumentError("cannot replace the coupling key of an existing Grid"))
-Grid(value; key=nothing) = DeterministicGrid(_grid_values(value), _grid_key(key))
-Grid(value, relative_error; key=nothing) =
+end
+Grid(value; key = nothing) = DeterministicGrid(_grid_values(value), _grid_key(key))
+function Grid(value, relative_error; key = nothing)
     RelativeGrid(_grid_values(value), _grid_values(relative_error), _grid_key(key))
-Grid(value, error::AbsoluteError; key=nothing) =
+end
+function Grid(value, error::AbsoluteError; key = nothing)
     AbsoluteGrid(_grid_values(value), error.vals, _grid_key(key))
+end
 
 iterate(g::DeterministicGrid, state...) = iterate(g.vals, state...)
 length(g::DeterministicGrid) = length(g.vals)
@@ -294,9 +302,9 @@ function extrema(g::AbsoluteGrid)
 end
 
 function _sample_uncertainty(
-    rng::Random.AbstractRNG,
-    value::UncertainValue{<:Real,<:AbstractUncertaintyStyle,<:Real},
-    distribution::Symbol,
+        rng::Random.AbstractRNG,
+        value::UncertainValue{<:Real, <:AbstractUncertainty, <:Real},
+        distribution::Symbol
 )
     distribution === :normal && return value.nominal + value.sigma * randn(rng)
     distribution === :uniform &&
@@ -314,13 +322,14 @@ function _standard_uncertainty_draw(rng::Random.AbstractRNG, distribution::Symbo
     ))
 end
 
-_realize_uncertainty(value::UncertainValue, standardized::Real) =
+function _realize_uncertainty(value::UncertainValue, standardized::Real)
     value.nominal + value.sigma * standardized
+end
 
 function rand(
-    rng::Random.AbstractRNG,
-    value::UncertainValue{<:Real};
-    distribution=:normal,
+        rng::Random.AbstractRNG,
+        value::UncertainValue{<:Real};
+        distribution = :normal
 )
     iszero(value.sigma) && return float(value.nominal)
     return _realize_uncertainty(value, _standard_uncertainty_draw(rng, distribution))
@@ -328,7 +337,7 @@ end
 
 rand(value::UncertainValue; kwargs...) = rand(Random.default_rng(), value; kwargs...)
 
-function rand(rng::Random.AbstractRNG, grid::AbstractGrid; distribution=:normal)
+function rand(rng::Random.AbstractRNG, grid::AbstractGrid; distribution = :normal)
     length(grid) == 1 || throw(ArgumentError(
         "rand(Grid) requires one configuration; select a configuration before sampling",
     ))
@@ -339,18 +348,19 @@ end
 rand(grid::AbstractGrid; kwargs...) = rand(Random.default_rng(), grid; kwargs...)
 
 """Convert numeric leaves to `T` while retaining container structure."""
-recast(::Type{T}, x::Number) where {T<:Real} = convert(T, x)
-recast(::Type{T}, x::AbstractArray) where {T<:Real} = map(value -> recast(T, value), x)
-recast(::Type{T}, x::Tuple) where {T<:Real} = map(value -> recast(T, value), x)
-recast(::Type{T}, x::NamedTuple) where {T<:Real} = map(value -> recast(T, value), x)
+recast(::Type{T}, x::Number) where {T <: Real} = convert(T, x)
+recast(::Type{T}, x::AbstractArray) where {T <: Real} = map(value -> recast(T, value), x)
+recast(::Type{T}, x::Tuple) where {T <: Real} = map(value -> recast(T, value), x)
+recast(::Type{T}, x::NamedTuple) where {T <: Real} = map(value -> recast(T, value), x)
 recast(::Type{<:Real}, x) = x
 
 _relax_eltype(x::Number) = typeof(x)
 _relax_eltype(x::AbstractArray) = eltype(x) <: Number ? eltype(x) : Union{}
 _relax_eltype(x::Tuple) = isempty(x) ? Union{} : promote_type(map(_relax_eltype, x)...)
-_relax_eltype(x) = try
-    T = eltype(typeof(x))
-    T <: Number ? T : Union{}
-catch
-    Union{}
-end
+_relax_eltype(x) =
+    try
+        T = eltype(typeof(x))
+        T <: Number ? T : Union{}
+    catch
+        Union{}
+    end

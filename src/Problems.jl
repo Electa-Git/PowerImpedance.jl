@@ -5,7 +5,7 @@ export GeneralizedNyquist, BodeAnalysis, PassivityAnalysis, SmallGainAnalysis
 export EigenvalueAnalysis, UnstableFrequencyAnalysis
 export FrequencyResponseResult, StabilityResult
 
-const _FORMULATION_BACKENDS = IdDict{Any,DataType}()
+const _FORMULATION_BACKENDS = IdDict{Any, DataType}()
 
 function _register_backend!(formulation::Type, backend::Type)
     _FORMULATION_BACKENDS[formulation] = backend
@@ -23,13 +23,14 @@ $(TYPEDFIELDS)
 """
 struct OperatingPoint
     "Calculated steady-state values indexed by element name."
-    setpoints::Dict{Symbol,Setpoint}
+    setpoints::Dict{Symbol, Setpoint}
 end
 
-OperatingPoint() = OperatingPoint(Dict{Symbol,Setpoint}())
+OperatingPoint() = OperatingPoint(Dict{Symbol, Setpoint}())
 Base.getindex(point::OperatingPoint, element::Symbol) = point.setpoints[element]
-Base.get(point::OperatingPoint, element::Symbol, default) =
+function Base.get(point::OperatingPoint, element::Symbol, default)
     get(point.setpoints, element, default)
+end
 Base.keys(point::OperatingPoint) = keys(point.setpoints)
 Base.isempty(point::OperatingPoint) = isempty(point.setpoints)
 
@@ -40,7 +41,7 @@ Store one PowerModelsACDC power-flow calculation and its operating point.
 
 $(TYPEDFIELDS)
 """
-struct PowerFlowResult{F,R,D,N,E,G} <: AbstractResolutionResult
+struct PowerFlowResult{F, R, D, N, E, G} <: AbstractProblemResult
     "Resolved power-flow formulation."
     formulation::F
 
@@ -63,13 +64,12 @@ struct PowerFlowResult{F,R,D,N,E,G} <: AbstractResolutionResult
     diagnostics::G
 end
 
-
 function Base.getproperty(result::PowerFlowResult, field::Symbol)
     field === :active_setpoint_values && return getfield(result, :operating_point).setpoints
     return getfield(result, field)
 end
 
-function Base.propertynames(::PowerFlowResult, private::Bool=false)
+function Base.propertynames(::PowerFlowResult, private::Bool = false)
     return (
         :formulation,
         :result,
@@ -78,7 +78,7 @@ function Base.propertynames(::PowerFlowResult, private::Bool=false)
         :elem2comp,
         :operating_point,
         :diagnostics,
-        :active_setpoint_values,
+        :active_setpoint_values
     )
 end
 
@@ -89,7 +89,7 @@ Store a linearized network and the operating point used to construct it.
 
 $(TYPEDFIELDS)
 """
-struct LinearizationResult{F,M,G} <: AbstractResolutionResult
+struct LinearizationResult{F, M, G} <: AbstractProblemResult
     "Resolved linearization formulation."
     formulation::F
 
@@ -110,7 +110,7 @@ Specify a network frequency-response calculation.
 
 $(TYPEDFIELDS)
 """
-struct PowerImpedanceProblem{N,K,E,F} <: AbstractProblemDefinition
+struct PowerImpedanceProblem{N, K, E, F} <: AbstractProblemDefinition
     "Materialized network state or linearized network model."
     network::N
 
@@ -124,18 +124,17 @@ struct PowerImpedanceProblem{N,K,E,F} <: AbstractProblemDefinition
     frequency_range::F
 end
 
-
 function PowerImpedanceProblem(
-    network;
-    nodes=Symbol[],
-    eliminated_elements=Symbol[],
-    frequency_range=(0.001, 10_000.0, 2_000),
+        network;
+        nodes = Symbol[],
+        eliminated_elements = Symbol[],
+        frequency_range = (0.001, 10_000.0, 2_000)
 )
     return PowerImpedanceProblem(
         network,
         Symbol.(collect(nodes)),
         Symbol.(collect(eliminated_elements)),
-        frequency_range,
+        frequency_range
     )
 end
 
@@ -159,7 +158,7 @@ for Formulation in (:NodalImpedance, :NodeAdmittance, :EdgeAdmittance, :LoopGain
             backend::Type{B}
         end
 
-        function $Formulation(; backend::Type{B}=_default_backend($Formulation)) where {B}
+        function $Formulation(; backend::Type{B} = _default_backend($Formulation)) where {B}
             return $Formulation{B}(backend)
         end
 
@@ -180,8 +179,8 @@ struct GeneralizedNyquist{B} <: AbstractPowerImpedanceFormulation{B}
 end
 
 function GeneralizedNyquist(;
-    backend::Type{B}=_default_backend(GeneralizedNyquist),
-    order_maxima::Integer=5,
+        backend::Type{B} = _default_backend(GeneralizedNyquist),
+        order_maxima::Integer = 5
 ) where {B}
     order_maxima > 0 || throw(ArgumentError("order_maxima must be positive"))
     return GeneralizedNyquist{B}(backend, Int(order_maxima))
@@ -194,7 +193,7 @@ for Formulation in (:BodeAnalysis, :PassivityAnalysis, :SmallGainAnalysis)
             backend::Type{B}
         end
 
-        function $Formulation(; backend::Type{B}=_default_backend($Formulation)) where {B}
+        function $Formulation(; backend::Type{B} = _default_backend($Formulation)) where {B}
             return $Formulation{B}(backend)
         end
 
@@ -224,10 +223,10 @@ struct EigenvalueAnalysis{B} <: AbstractPowerImpedanceFormulation{B}
 end
 
 function EigenvalueAnalysis(;
-    backend::Type{B}=_default_backend(EigenvalueAnalysis),
-    fmin::Real=0.001,
-    fmax::Real=10_000.0,
-    determinant::Bool=false,
+        backend::Type{B} = _default_backend(EigenvalueAnalysis),
+        fmin::Real = 0.001,
+        fmax::Real = 10_000.0,
+        determinant::Bool = false
 ) where {B}
     0 < fmin < fmax || throw(ArgumentError("require 0 < fmin < fmax"))
     return EigenvalueAnalysis{B}(backend, Float64(fmin), Float64(fmax), determinant)
@@ -247,8 +246,8 @@ struct UnstableFrequencyAnalysis{B} <: AbstractPowerImpedanceFormulation{B}
 end
 
 function UnstableFrequencyAnalysis(;
-    backend::Type{B}=_default_backend(UnstableFrequencyAnalysis),
-    order_maxima::Integer=5,
+        backend::Type{B} = _default_backend(UnstableFrequencyAnalysis),
+        order_maxima::Integer = 5
 ) where {B}
     order_maxima > 0 || throw(ArgumentError("order_maxima must be positive"))
     return UnstableFrequencyAnalysis{B}(backend, Int(order_maxima))
@@ -262,7 +261,7 @@ Store one scalar matrix frequency response.
 
 $(TYPEDFIELDS)
 """
-struct FrequencyResponseResult{F,R,W,N,M,G} <: AbstractResolutionResult
+struct FrequencyResponseResult{F, R, W, N, M, G} <: AbstractProblemResult
     "Resolved response formulation."
     formulation::F
 
@@ -292,7 +291,7 @@ Store one completed small-signal analysis without graphics objects.
 
 $(TYPEDFIELDS)
 """
-struct StabilityResult{F,O,G} <: AbstractResolutionResult
+struct StabilityResult{F, O, G} <: AbstractProblemResult
     "Resolved stability formulation."
     formulation::F
 

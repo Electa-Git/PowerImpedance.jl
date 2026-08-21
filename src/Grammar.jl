@@ -10,7 +10,7 @@ using DocStringExtensions: TYPEDEF, TYPEDFIELDS
 
 import ..PowerImpedance: PIACDC
 
-export AbstractProblemDefinition, AbstractFormulation, AbstractResolutionResult
+export AbstractProblemDefinition, AbstractFormulation, AbstractProblemResult
 export AbstractParametricResult, AbstractUncertaintyResult
 export compute, primitives, preprocess
 export AbstractGrid, AbstractUncertainGrid, Grid, DeterministicGrid
@@ -29,7 +29,7 @@ abstract type AbstractProblemDefinition end
 abstract type AbstractFormulation end
 
 "Abstract supertype for completed calculation results."
-abstract type AbstractResolutionResult end
+abstract type AbstractProblemResult end
 
 "Abstract supertype for deterministic parameter-study results containing `T`."
 abstract type AbstractParametricResult{T} end
@@ -57,7 +57,7 @@ Specify evaluation of a PowerImpedance-owned parameter space.
 
 $(TYPEDFIELDS)
 """
-struct ParametricProblem{S,O} <: AbstractProblemDefinition
+struct ParametricProblem{S, O} <: AbstractProblemDefinition
     "Space whose configurations materialize owned problems."
     space::S
 
@@ -65,8 +65,9 @@ struct ParametricProblem{S,O} <: AbstractProblemDefinition
     options::O
 end
 
-ParametricProblem(space, options::NamedTuple=(;)) =
-    ParametricProblem{typeof(space),typeof(options)}(space, options)
+function ParametricProblem(space, options::NamedTuple = (;))
+    ParametricProblem{typeof(space), typeof(options)}(space, options)
+end
 
 function _failure_policy(value::Symbol)
     value in (:error, :record) || throw(ArgumentError(
@@ -82,7 +83,7 @@ Enumerate every deterministic configuration and apply `inner`.
 
 $(TYPEDFIELDS)
 """
-struct Combinatorial{F,B} <: AbstractFormulation
+struct Combinatorial{F, B} <: AbstractFormulation
     "Scalar formulation applied to each materialized problem."
     inner::F
 
@@ -93,13 +94,12 @@ struct Combinatorial{F,B} <: AbstractFormulation
     failure_policy::Symbol
 end
 
-
 function Combinatorial(
-    inner::F;
-    backend::Type{B}=PIACDC,
-    failure_policy::Symbol=:error,
-) where {F,B}
-    return Combinatorial{F,B}(inner, backend, _failure_policy(failure_policy))
+        inner::F;
+        backend::Type{B} = PIACDC,
+        failure_policy::Symbol = :error
+) where {F, B}
+    return Combinatorial{F, B}(inner, backend, _failure_policy(failure_policy))
 end
 
 """
@@ -109,7 +109,7 @@ Propagate first-order uncertainty through `inner` without random sampling.
 
 $(TYPEDFIELDS)
 """
-struct LinearError{F,B} <: AbstractFormulation
+struct LinearError{F, B} <: AbstractFormulation
     "Scalar formulation evaluated with uncertainty-aware numeric values."
     inner::F
 
@@ -120,13 +120,12 @@ struct LinearError{F,B} <: AbstractFormulation
     failure_policy::Symbol
 end
 
-
 function LinearError(
-    inner::F;
-    backend::Type{B}=PIACDC,
-    failure_policy::Symbol=:error,
-) where {F,B}
-    return LinearError{F,B}(inner, backend, _failure_policy(failure_policy))
+        inner::F;
+        backend::Type{B} = PIACDC,
+        failure_policy::Symbol = :error
+) where {F, B}
+    return LinearError{F, B}(inner, backend, _failure_policy(failure_policy))
 end
 
 """
@@ -136,7 +135,7 @@ Specify Monte Carlo evaluation of uncertain configurations.
 
 $(TYPEDFIELDS)
 """
-struct MonteCarlo{F,B,S} <: AbstractFormulation
+struct MonteCarlo{F, B, S} <: AbstractFormulation
     "Scalar formulation applied to every numeric trial."
     inner::F
 
@@ -144,7 +143,7 @@ struct MonteCarlo{F,B,S} <: AbstractFormulation
     backend::Type{B}
 
     "Requested trial count, or `nothing` for DKW sizing."
-    trials::Union{Nothing,Int}
+    trials::Union{Nothing, Int}
 
     "Primitive sampling distribution."
     distribution::Symbol
@@ -165,28 +164,28 @@ struct MonteCarlo{F,B,S} <: AbstractFormulation
     failure_policy::Symbol
 end
 
-
 function MonteCarlo(
-    inner::F;
-    backend::Type{B}=PIACDC,
-    trials=nothing,
-    distribution::Symbol=:normal,
-    seed=nothing,
-    confidence::Real=0.95,
-    tolerance::Real=0.02,
-    return_samples::Bool=false,
-    failure_policy::Symbol=:error,
-) where {F,B}
+        inner::F;
+        backend::Type{B} = PIACDC,
+        trials = nothing,
+        distribution::Symbol = :normal,
+        seed = nothing,
+        confidence::Real = 0.95,
+        tolerance::Real = 0.02,
+        return_samples::Bool = false,
+        failure_policy::Symbol = :error
+) where {F, B}
     distribution in (:normal, :uniform) || throw(ArgumentError(
         "distribution must be :normal or :uniform; got :$distribution",
     ))
     trial_count = isnothing(trials) ? nothing : Int(trials)
-    trial_count === nothing || trial_count > 0 || throw(ArgumentError(
-        "trials must be positive",
-    ))
+    trial_count === nothing || trial_count > 0 ||
+        throw(ArgumentError(
+            "trials must be positive",
+        ))
     0 < confidence < 1 || throw(ArgumentError("confidence must lie in (0, 1)"))
     tolerance > 0 || throw(ArgumentError("tolerance must be positive"))
-    return MonteCarlo{F,B,typeof(seed)}(
+    return MonteCarlo{F, B, typeof(seed)}(
         inner,
         backend,
         trial_count,
@@ -195,7 +194,7 @@ function MonteCarlo(
         Float64(confidence),
         Float64(tolerance),
         return_samples,
-        _failure_policy(failure_policy),
+        _failure_policy(failure_policy)
     )
 end
 
@@ -206,7 +205,7 @@ Store deterministic primitive results and their resolved configurations.
 
 $(TYPEDFIELDS)
 """
-struct ParametricResult{T,F,V<:AbstractVector{T},S,D} <: AbstractParametricResult{T}
+struct ParametricResult{T, F, V <: AbstractVector{T}, S, D} <: AbstractParametricResult{T}
     "Higher-order formulation used for the study."
     formulation::F
 
@@ -220,7 +219,6 @@ struct ParametricResult{T,F,V<:AbstractVector{T},S,D} <: AbstractParametricResul
     details::D
 end
 
-
 """
 $(TYPEDEF)
 
@@ -228,7 +226,7 @@ Store primitive results calculated by direct first-order propagation.
 
 $(TYPEDFIELDS)
 """
-struct LinearErrorResult{T,F,V<:AbstractVector{T},S,D} <: AbstractUncertaintyResult{T}
+struct LinearErrorResult{T, F, V <: AbstractVector{T}, S, D} <: AbstractUncertaintyResult{T}
     "`LinearError` formulation used for the study."
     formulation::F
 
@@ -242,7 +240,6 @@ struct LinearErrorResult{T,F,V<:AbstractVector{T},S,D} <: AbstractUncertaintyRes
     details::D
 end
 
-
 """
 $(TYPEDEF)
 
@@ -250,7 +247,7 @@ Store Monte Carlo statistics and their resolved trial configurations.
 
 $(TYPEDFIELDS)
 """
-struct MonteCarloResult{T,F,Sv,S,D} <: AbstractUncertaintyResult{T}
+struct MonteCarloResult{T, F, Sv, S, D} <: AbstractUncertaintyResult{T}
     "`MonteCarlo` formulation used for the study."
     formulation::F
 
@@ -264,13 +261,13 @@ struct MonteCarloResult{T,F,Sv,S,D} <: AbstractUncertaintyResult{T}
     details::D
 end
 
-
-function MonteCarloResult{T}(formulation, stats, space, details=(;)) where {T}
-    return MonteCarloResult{T,typeof(formulation),typeof(stats),typeof(space),typeof(details)}(
+function MonteCarloResult{T}(formulation, stats, space, details = (;)) where {T}
+    return MonteCarloResult{
+        T, typeof(formulation), typeof(stats), typeof(space), typeof(details)}(
         formulation,
         stats,
         space,
-        details,
+        details
     )
 end
 
@@ -278,30 +275,30 @@ end
 struct LineParametersInput{B} <: AbstractFormulation
     backend::Type{B}
 end
-LineParametersInput(; backend::Type{B}=PIACDC) where {B} =
-    LineParametersInput{B}(backend)
+LineParametersInput(; backend::Type{B} = PIACDC) where {B} = LineParametersInput{B}(backend)
 
 "Select retained whole-trial values from a completed donor checkpoint."
 struct EmpiricalSamples{B} <: AbstractFormulation
     backend::Type{B}
 end
-EmpiricalSamples(; backend::Type{B}=PIACDC) where {B} = EmpiricalSamples{B}(backend)
+EmpiricalSamples(; backend::Type{B} = PIACDC) where {B} = EmpiricalSamples{B}(backend)
 
 "Construct an explicit Measurements moment surrogate from a donor checkpoint."
 struct MeasurementsSurrogate{B} <: AbstractFormulation
     backend::Type{B}
 end
-MeasurementsSurrogate(; backend::Type{B}=PIACDC) where {B} =
+function MeasurementsSurrogate(; backend::Type{B} = PIACDC) where {B}
     MeasurementsSurrogate{B}(backend)
+end
 
-function primitives(result, projection::AbstractFormulation; options::NamedTuple=(;))
+function primitives(result, projection::AbstractFormulation; options::NamedTuple = (;))
     throw(ArgumentError(
         "no primitives projection from $(typeof(result)) with $(typeof(projection)); " *
         "define PowerImpedance.Grammar.primitives for this checkpoint and projection",
     ))
 end
 
-function preprocess(result, formulation::AbstractFormulation; options::NamedTuple=(;))
+function preprocess(result, formulation::AbstractFormulation; options::NamedTuple = (;))
     throw(ArgumentError(
         "no preprocessing path from $(typeof(result)) to $(typeof(formulation)); " *
         "define PowerImpedance.Grammar.preprocess before starting the next calculation",
@@ -310,9 +307,8 @@ end
 
 end
 
-
 using .Grammar: AbstractProblemDefinition, AbstractFormulation
-using .Grammar: AbstractResolutionResult, AbstractParametricResult
+using .Grammar: AbstractProblemResult, AbstractParametricResult
 using .Grammar: AbstractUncertaintyResult
 import .Grammar: compute, primitives, preprocess
 using .Grammar: AbstractGrid, AbstractUncertainGrid, Grid, DeterministicGrid
@@ -325,7 +321,7 @@ using .Grammar: ParametricResult, LinearErrorResult, MonteCarloResult
 using .Grammar: LineParametersInput, EmpiricalSamples, MeasurementsSurrogate
 
 export Grammar
-export AbstractProblemDefinition, AbstractFormulation, AbstractResolutionResult
+export AbstractProblemDefinition, AbstractFormulation, AbstractProblemResult
 export AbstractParametricResult, AbstractUncertaintyResult
 export compute, primitives, preprocess
 export AbstractGrid, AbstractUncertainGrid, Grid, DeterministicGrid

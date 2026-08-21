@@ -10,7 +10,7 @@ using ..Grammar: UncertainValue, configuration_manifest, configurations
 using ..Grammar: has_uncertainty, materialize, nominal, standard_uncertainty
 using ..Grammar: @gridspace, @relax
 using ..Grammar: AbstractProblemDefinition, AbstractFormulation
-using ..Grammar: AbstractResolutionResult, AbstractParametricResult
+using ..Grammar: AbstractProblemResult, AbstractParametricResult
 using ..Grammar: AbstractUncertaintyResult
 using ..Grammar: compute, primitives, preprocess
 using ..Grammar: ParametricProblem, Combinatorial, LinearError, MonteCarlo
@@ -26,7 +26,7 @@ export Configuration, DeterministicGrid, Grid, Gridspace, RelativeGrid, Uncertai
 export configurations, materialize, has_uncertainty, configuration_manifest
 export nominal, standard_uncertainty
 export @gridspace, @relax
-export AbstractProblemDefinition, AbstractFormulation, AbstractResolutionResult
+export AbstractProblemDefinition, AbstractFormulation, AbstractProblemResult
 export AbstractParametricResult, AbstractUncertaintyResult
 export compute, primitives, preprocess
 export ParametricProblem, Combinatorial, LinearError, MonteCarlo

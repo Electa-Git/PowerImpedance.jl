@@ -26,7 +26,7 @@ PBTest.legend_label(
 @testset "Grammar relocation" begin
     @test AbstractProblemDefinition isa DataType
     @test AbstractFormulation isa DataType
-    @test AbstractResolutionResult isa DataType
+    @test AbstractProblemResult isa DataType
     @test isdefined(PowerImpedance, :compute)
     grammar_source = read(joinpath(pkgdir(PowerImpedance), "src", "Grammar.jl"), String)
     problems_source = read(joinpath(pkgdir(PowerImpedance), "src", "Problems.jl"), String)
@@ -92,7 +92,7 @@ function _plot_test_result(; kind = :nodal_impedance, values = nothing,
         frequencies,
         nodes,
         nothing,
-        (;),
+        (;)
     )
 end
 
@@ -155,8 +155,8 @@ end
     composite = ParametricResult(
         Combinatorial(NodalImpedance()),
         [result, result],
-        [(case=1,), (case=2,)],
-        (;),
+        [(case = 1,), (case = 2,)],
+        (;)
     )
     composite_render = PB.make_render(HarmonicImpedancePlotDefinition, composite)
     @test length(only(composite_render.figures).views[1].series) == 4
@@ -164,15 +164,15 @@ end
     labeled = PB.make_render(
         HarmonicImpedancePlotDefinition,
         composite;
-        entries=(:left, :left),
-        labels=["low resistance", "high resistance"],
-        series_groups=[:low, :high],
+        entries = (:left, :left),
+        labels = ["low resistance", "high resistance"],
+        series_groups = [:low, :high]
     )
     labeled_series = only(only(labeled.figures).views).series
     @test getfield.(labeled_series, :label) == ["low resistance", "high resistance"]
     @test getfield.(labeled_series, :group) == [:z_1_1_low, :z_1_1_high]
     @test_throws DimensionMismatch PB.make_render(
-        HarmonicImpedancePlotDefinition, composite; labels=["one"]
+        HarmonicImpedancePlotDefinition, composite; labels = ["one"]
     )
 
     @test_throws ArgumentError PB.make_render(
