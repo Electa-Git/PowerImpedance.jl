@@ -980,9 +980,9 @@ end
 """
     UIPlot
 
-Hold a backend-neutral render definition together with one built figure,
-its panels, controls, and backend context. A rendered recipe returns one
-`UIPlot` per declarative page.
+Hold a backend-neutral render definition together with one built figure, its panels, controls, and backend context.
+A rendered recipe returns one `UIPlot` per declarative page.
+Call `close(plot)` when the handle is no longer needed to release its backend resources and observable callbacks.
 """
 struct UIPlot{S <: AbstractPlotDefinition, F, P, W, C}
     "Complete backend-neutral render definition."

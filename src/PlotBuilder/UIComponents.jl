@@ -984,10 +984,11 @@ function _build_page(
                 )
                 column += 1
                 widgets[:reset] = reset
-                on(reset.clicks) do _
+                observer = on(reset.clicks) do _
                     foreach(_reset_panel_limits!, panels)
                     context.status[] = "Axis limits reset"
                 end
+                push!(context.observers, observer)
             end
             if definitions.export_svg
                 save_button = Button(
@@ -999,13 +1000,14 @@ function _build_page(
                 )
                 column += 1
                 widgets[:export_svg] = save_button
-                on(save_button.clicks) do _
+                observer = on(save_button.clicks) do _
                     try
                         PlotBuilder.export_svg(plot_reference[])
                     catch error
                         context.status[] = sprint(showerror, error)
                     end
                 end
+                push!(context.observers, observer)
             end
             if xlog_available
                 active = !isempty(panels) && all(
@@ -1017,7 +1019,7 @@ function _build_page(
                 Label(toolbar[1, column], "log x")
                 column += 1
                 widgets[:xlog] = xlog
-                on(xlog.active) do enabled
+                observer = on(xlog.active) do enabled
                     scale = enabled ? :log10 : :linear
                     foreach(
                         panel -> _set_axis_scale!(
@@ -1034,6 +1036,7 @@ function _build_page(
                                        "x-axis scale set to log" :
                                        "x-axis scale set to linear"
                 end
+                push!(context.observers, observer)
             end
             if ylog_available
                 active = !isempty(panels) && all(
@@ -1044,7 +1047,7 @@ function _build_page(
                 column += 1
                 Label(toolbar[1, column], "log y")
                 widgets[:ylog] = ylog
-                on(ylog.active) do enabled
+                observer = on(ylog.active) do enabled
                     scale = enabled ? :log10 : :linear
                     foreach(
                         panel -> _set_axis_scale!(
@@ -1061,6 +1064,7 @@ function _build_page(
                                        "y-axis scale set to log" :
                                        "y-axis scale set to linear"
                 end
+                push!(context.observers, observer)
             end
         else
             _collapse_slot!(page.layout, materialized, page.controls.slot)
@@ -1130,6 +1134,21 @@ function build(
         end
     end
     return built
+end
+
+function Base.close(plot::UIPlot)
+    foreach(Makie.Observables.off, plot.context.observers)
+    empty!(plot.context.observers)
+    if plot.context.window !== nothing
+        try
+            close(plot.context.window)
+        finally
+            plot.context.window = nothing
+        end
+    end
+    Makie.current_figure() === plot.figure && Makie.current_figure!(nothing)
+    empty!(plot.figure)
+    return nothing
 end
 
 function overlay!(
@@ -1322,9 +1341,13 @@ function PlotBuilder.export_svg(
             export_mode = true,
             export_theme
         )
-        exported_plot = only(exported)
-        _fit_export_content!(exported_plot.figure, exported_plot.page)
-        Makie.save(output, exported_plot.figure)
+        try
+            exported_plot = only(exported)
+            _fit_export_content!(exported_plot.figure, exported_plot.page)
+            Makie.save(output, exported_plot.figure)
+        finally
+            foreach(close, exported)
+        end
     end
     opened = should_open && _open_export(output)
     message = if opened

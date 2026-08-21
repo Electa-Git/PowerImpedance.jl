@@ -11,6 +11,22 @@ else
     error("POWERIMPEDANCE_PLOTTING_LOAD_ORDER must be power_first or makie_first")
 end
 
+const TRACKED_UI_PLOTS = UIPlot[]
+
+function track_ui_plots(plots::Vector{<:UIPlot})
+    append!(TRACKED_UI_PLOTS, plots)
+    return plots
+end
+
+function close_tracked_ui_plots!()
+    foreach(close, Iterators.reverse(TRACKED_UI_PLOTS))
+    empty!(TRACKED_UI_PLOTS)
+    Makie.current_figure!(nothing)
+    return nothing
+end
+
+atexit(close_tracked_ui_plots!)
+
 function cairo_stability_responses()
     impedance = cairo_frequency_response()
     loop_gain = FrequencyResponseResult(
@@ -128,13 +144,13 @@ end
     @test set_backend!(:cairo) === :cairo
 
     result = cairo_frequency_response()
-    plots = Makie.plot(
+    plots = track_ui_plots(Makie.plot(
         result;
         backend = :cairo,
         display_plot = false,
         open_export = false,
         export_theme = :publication
-    )
+    ))
     @test plots isa Vector{UIPlot}
     @test length(plots) == 1
     handle = only(plots)
@@ -146,12 +162,12 @@ end
 
     computed_result = computed_frequency_response()
     @test eltype(angular_frequencies(computed_result)) === ComplexF64
-    computed_plot = only(Makie.plot(
+    computed_plot = only(track_ui_plots(Makie.plot(
         computed_result;
         backend = :cairo,
         display_plot = false,
         open_export = false
-    ))
+    )))
     @test computed_plot isa UIPlot
     @test length(computed_plot.panels) == 1
     @test length(only(computed_plot.panels).plots) == 2
@@ -193,11 +209,11 @@ end
     contrast_response = cairo_frequency_response()
     contrast_response.response[1, 1, :] .= 1.0e6
     contrast_response.response[2, 2, :] .= 1.0
-    contrast = only(Makie.plot(
+    contrast = only(track_ui_plots(Makie.plot(
         contrast_response;
         display_plot = false,
         open_export = false
-    ))
+    )))
     contrast_axis = only(contrast.panels).axis
     initial_limits = contrast_axis.finallimits[]
     initial_maximum = initial_limits.origin[2] + initial_limits.widths[2]
@@ -245,12 +261,12 @@ end
         )
     end
 
-    compact = only(Makie.plot(
+    compact = only(track_ui_plots(Makie.plot(
         cairo_legend_response();
         display_plot = false,
         open_export = false,
         figure_size = (650, 320)
-    ))
+    )))
     compact_legend = compact.controls[:legend]
     compact_panel = only(compact.panels)
     complete_labels = [compact_panel.group_labels[group]
@@ -270,7 +286,7 @@ end
     @test last(legend_labels(compact_legend)) == "(...)"
     @test visibility_state(compact) == hidden_state
 
-    panels = PowerImpedance.plot(
+    panels = track_ui_plots(PowerImpedance.plot(
         result;
         entries = :all,
         grouping = :panels,
@@ -278,7 +294,7 @@ end
         display_plot = false,
         controls = false,
         open_export = false
-    )
+    ))
     panel_plot = only(panels)
     @test length(panel_plot.panels) == 4
     @test isempty(panel_plot.controls)
@@ -292,14 +308,14 @@ end
     @test maximum(box.widths[2] for box in panel_boxes) -
           minimum(box.widths[2] for box in panel_boxes) < 1
 
-    nine_panels = only(PowerImpedance.plot(
+    nine_panels = only(track_ui_plots(PowerImpedance.plot(
         cairo_square_response(3);
         entries = :all,
         grouping = :panels,
         backend = :cairo,
         display_plot = false,
         open_export = false
-    ))
+    )))
     @test nine_panels.page.size == (1140, 910)
     @test length(nine_panels.panels) == 9
     @test !haskey(nine_panels.controls, :legend)
@@ -329,26 +345,26 @@ end
     )
 
     for result in completed
-        handles = PowerImpedance.plot(
+        handles = track_ui_plots(PowerImpedance.plot(
             result;
             backend=:cairo,
             display_plot=false,
             controls=false,
             open_export=false,
-        )
+        ))
         @test handles isa Vector{UIPlot}
         @test !isempty(handles)
         @test all(handle -> !isempty(handle.panels), handles)
     end
 
     bode_result = completed[2]
-    targets = PowerImpedance.plot(
+    targets = track_ui_plots(PowerImpedance.plot(
         bode_result;
         backend=:cairo,
         display_plot=false,
         controls=false,
         open_export=false,
-    )
+    ))
     initial_series = sum(
         length(panel.plots) for target in targets for panel in target.panels
     )
@@ -373,13 +389,13 @@ end
         (;),
     )
     siso_bode = compute(StabilityProblem(siso), BodeAnalysis())
-    target = only(PowerImpedance.plot(
+    target = only(track_ui_plots(PowerImpedance.plot(
         siso_bode;
         backend=:cairo,
         display_plot=false,
         controls=false,
         open_export=false,
-    ))
+    )))
     @test bodeplot(
         siso;
         plots=target,
@@ -387,3 +403,17 @@ end
         open_export=false,
     ) === target
 end
+
+@testset "CairoMakie UIPlot lifecycle" begin
+    handles = copy(TRACKED_UI_PLOTS)
+    @test !isempty(handles)
+    close_tracked_ui_plots!()
+    @test all(isempty(handle.context.observers) for handle in handles)
+    @test all(isempty(handle.figure.content) for handle in handles)
+    @test all(isempty(handle.figure.scene.plots) for handle in handles)
+    @test Makie.current_figure() === nothing
+end
+
+GC.gc(true)
+yield()
+GC.gc(true)
