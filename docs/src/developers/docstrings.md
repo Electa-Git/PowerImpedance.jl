@@ -224,7 +224,7 @@ result = $(FUNCTIONNAME)(1.0, 0.5) # [unit]
 function function_name(arg1, arg2)
 ````
 
-Examples must use meaningful input values. Include an expected result or behavior only when it can be stated accurately. Dedicated cross-reference lists are not maintained in docstrings.
+Examples must use physically valid, dimensionally consistent input values. For nonphysical inputs, use representative values that exercise the documented behavior. Include an expected result or behavior only when it can be stated accurately. Dedicated cross-reference lists are not maintained in docstrings.
 
 ### Modules
 

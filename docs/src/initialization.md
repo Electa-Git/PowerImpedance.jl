@@ -71,7 +71,7 @@ problem.
 
 Linear networks skip the power-flow solve and use an empty `OperatingPoint`.
 `solve(network_state)` constructs its Classic `Network` result from the same
-`PowerFlowResult`; it does not perform a second power flow.
+`PowerFlowResult`. It does not perform a second power flow.
 
 ## Reuse in parametric studies
 

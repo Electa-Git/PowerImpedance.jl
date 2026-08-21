@@ -15,7 +15,9 @@ differ because the two representations construct buses in different orders.
 Values were therefore compared through element-to-component mappings and
 through the complete set of physical node names assigned to each AC or DC bus.
 
-The comparison covers every returned field for:
+The frozen reference contains every numeric field returned in the `bus`, `gen`,
+and `branch` solution groups, together with every numeric field of the calculated
+STATCOM `Setpoint`, for:
 
 - 49 AC buses and 2 DC buses;
 - 10 AC generators and 1 DC generator;

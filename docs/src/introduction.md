@@ -19,7 +19,7 @@ impedance-based or nodal-admittance-based stability assessment
 Some elementary interconnections do not admit a finite impedance or admittance
 description. An ideal series branch has no finite open-circuit impedance
 matrix, while an ideal shunt connection has no finite short-circuit admittance
-matrix. The two cases are illustrated below.
+matrix.
 
 ![Examples for which a direct impedance or admittance parameterization is not finite.](pictures/abcd/examples.png)
 
