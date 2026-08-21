@@ -2,6 +2,7 @@ using CairoMakie
 using CSV
 using DataFrames
 using Downloads
+using GeoMakie
 
 const PACKAGE_UUID = "8bb8d9d3-c57e-5130-a7c9-cb214ef560ae"
 const LOG_URL = "https://julialang-logs.s3.amazonaws.com/public_outputs/current/package_requests_by_region.csv.gz"
@@ -9,52 +10,98 @@ const DEFAULT_OUTPUT = joinpath(@__DIR__, "src", "assets", "user-statistics.svg"
 
 # Julia package-server regions are operational regions, not user countries.
 const REGION_LOCATION = Dict(
-    "us-east" => (label = "US East", longitude = -77.0, latitude = 38.0),
-    "us-west" => (label = "US West", longitude = -122.0, latitude = 38.0),
-    "eu-central" => (label = "EU Central", longitude = 10.0, latitude = 50.0),
-    "eu-north" => (label = "EU North", longitude = 18.0, latitude = 60.0),
-    "au" => (label = "Australia", longitude = 151.0, latitude = -33.0),
-    "jp" => (label = "Japan", longitude = 139.7, latitude = 35.7),
-    "in" => (label = "India", longitude = 77.2, latitude = 28.6),
-    "kr" => (label = "Korea", longitude = 127.0, latitude = 37.5),
-    "sa" => (label = "South America", longitude = -46.6, latitude = -23.5),
-    "sg" => (label = "Singapore", longitude = 103.8, latitude = 1.3),
-    "cn-east" => (label = "China East", longitude = 121.5, latitude = 31.2),
-    "cn-northeast" => (label = "China Northeast", longitude = 123.4, latitude = 41.8),
-    "cn-southeast" => (label = "China Southeast", longitude = 113.3, latitude = 23.1),
+    "us-east" => (
+        label = "US East",
+        longitude = -77.0,
+        latitude = 38.0,
+        offset = (12, 14),
+        align = (:left, :bottom),
+    ),
+    "us-west" => (
+        label = "US West",
+        longitude = -122.0,
+        latitude = 38.0,
+        offset = (-12, 14),
+        align = (:right, :bottom),
+    ),
+    "eu-central" => (
+        label = "EU Central",
+        longitude = 10.0,
+        latitude = 50.0,
+        offset = (0, 18),
+        align = (:center, :bottom),
+    ),
+    "eu-north" => (
+        label = "EU North",
+        longitude = 18.0,
+        latitude = 60.0,
+        offset = (0, 18),
+        align = (:center, :bottom),
+    ),
+    "au" => (
+        label = "Australia",
+        longitude = 151.0,
+        latitude = -33.0,
+        offset = (0, 18),
+        align = (:center, :bottom),
+    ),
+    "jp" => (
+        label = "Japan",
+        longitude = 139.7,
+        latitude = 35.7,
+        offset = (12, 14),
+        align = (:left, :bottom),
+    ),
+    "in" => (
+        label = "India",
+        longitude = 77.2,
+        latitude = 28.6,
+        offset = (0, 18),
+        align = (:center, :bottom),
+    ),
+    "kr" => (
+        label = "Korea",
+        longitude = 127.0,
+        latitude = 37.5,
+        offset = (-12, 14),
+        align = (:right, :bottom),
+    ),
+    "sa" => (
+        label = "South America",
+        longitude = -46.6,
+        latitude = -23.5,
+        offset = (0, 18),
+        align = (:center, :bottom),
+    ),
+    "sg" => (
+        label = "Singapore",
+        longitude = 103.8,
+        latitude = 1.3,
+        offset = (0, -18),
+        align = (:center, :top),
+    ),
+    "cn-east" => (
+        label = "China East",
+        longitude = 121.5,
+        latitude = 31.2,
+        offset = (-12, 14),
+        align = (:right, :bottom),
+    ),
+    "cn-northeast" => (
+        label = "China Northeast",
+        longitude = 123.4,
+        latitude = 41.8,
+        offset = (12, 14),
+        align = (:left, :bottom),
+    ),
+    "cn-southeast" => (
+        label = "China Southeast",
+        longitude = 113.3,
+        latitude = 23.1,
+        offset = (0, -18),
+        align = (:center, :top),
+    ),
 )
-
-# A low-detail silhouette keeps the generated asset small and avoids adding a geospatial plotting dependency to the documentation project.
-const LAND = [
-    [
-        (-168, 15),
-        (-165, 70),
-        (-120, 74),
-        (-82, 50),
-        (-53, 52),
-        (-82, 10),
-        (-102, 8),
-        (-116, 28),
-    ],
-    [(-82, 12), (-52, 8), (-35, -10), (-54, -56), (-76, -50), (-81, -5)],
-    [
-        (-18, 35),
-        (2, 72),
-        (45, 70),
-        (65, 55),
-        (105, 78),
-        (180, 65),
-        (145, 40),
-        (122, 22),
-        (104, 5),
-        (52, 12),
-        (35, 30),
-    ],
-    [(-18, 35), (15, 37), (51, 12), (40, -35), (18, -35), (-5, 5)],
-    [(112, -10), (154, -10), (153, -42), (115, -36)],
-    [(-52, 60), (-25, 82), (-12, 62)],
-    [(45, -13), (51, -12), (50, -25), (43, -24)],
-]
 
 function package_regions(path::AbstractString)
     frame = CSV.read(path, DataFrame)
@@ -84,24 +131,31 @@ function package_regions(path::AbstractString)
 end
 
 function draw_statistics(rows, dates, output::AbstractString)
-    figure = Figure(size = (980, 540), backgroundcolor = RGBf(0.95, 0.97, 0.99))
-    axis = Axis(
-        figure[1, 1];
-        aspect = DataAspect(),
-        backgroundcolor = RGBf(0.68, 0.86, 0.97),
-        limits = (-180, 180, -60, 88),
+    figure = Figure(
+        size = (1050, 460),
+        figure_padding = 8,
+        backgroundcolor = RGBf(0.95, 0.97, 0.99),
     )
-    hidedecorations!(axis)
-    hidespines!(axis)
-    for polygon in LAND
-        poly!(
-            axis,
-            Point2f.(first.(polygon), last.(polygon));
-            color = RGBf(0.96, 0.96, 0.93),
-            strokecolor = RGBf(0.78, 0.80, 0.79),
-            strokewidth = 0.8,
-        )
-    end
+    axis = GeoAxis(
+        figure[2, 1];
+        dest = "+proj=eqearth",
+        width = 1000,
+        height = 360,
+        xticklabelsvisible = false,
+        yticklabelsvisible = false,
+        xgridvisible = false,
+        ygridvisible = false,
+    )
+    axis.scene.backgroundcolor[] = RGBf(0.68, 0.86, 0.97)
+    poly!(
+        axis,
+        GeoMakie.land();
+        color = RGBf(0.96, 0.96, 0.93),
+        strokecolor = RGBf(0.68, 0.72, 0.73),
+        strokewidth = 0.5,
+    )
+    xlims!(axis, -180, 180)
+    ylims!(axis, -60, 88)
 
     if isempty(rows)
         text!(
@@ -131,9 +185,10 @@ function draw_statistics(rows, dates, output::AbstractString)
             text!(
                 axis,
                 location.longitude,
-                location.latitude + 5;
+                location.latitude;
                 text = "$(location.label) · $(round(Int, row.request_addrs))",
-                align = (:center, :bottom),
+                offset = location.offset,
+                align = location.align,
                 fontsize = 13,
                 color = RGBf(0.05, 0.10, 0.15),
             )
@@ -142,18 +197,19 @@ function draw_statistics(rows, dates, output::AbstractString)
     end
 
     Label(
-        figure[0, 1],
+        figure[1, 1],
         "PowerImpedance.jl package clients";
         fontsize = 25,
         font = :bold,
         color = RGBf(0.05, 0.10, 0.15),
     )
     Label(
-        figure[2, 1],
+        figure[3, 1],
         "Top Julia package-server regions · summed request addresses · $period";
         fontsize = 13,
         color = RGBf(0.22, 0.28, 0.34),
     )
+    rowgap!(figure.layout, 3)
     mkpath(dirname(output))
     save(output, figure)
     return output
