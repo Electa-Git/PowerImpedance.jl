@@ -1,4 +1,4 @@
-const _MIGRATION_DOCUMENTATION = "https://electa.pages.gitlab.kuleuven.be/controlgroup/hvdcstability_dev.jl/network/" *
+const _MIGRATION_DOCUMENTATION = "https://electa.pages.gitlab.kuleuven.be/controlgroup/PowerImpedance.jl/network/" *
                                  "#migration-from-the-removed-networkbuilder-names"
 
 function _retired_name(old::Symbol, replacement::Symbol, example::AbstractString)

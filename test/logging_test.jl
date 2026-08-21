@@ -6,7 +6,7 @@ using Logging
     @test PowerImpedance._display_log_path(package_file, package_root) ==
           "src/Network/power_flow.jl"
     @test PowerImpedance._display_log_path(
-        "/builds/electa/controlgroup/hvdcstability_dev.jl/src/Network/NetworkBuilder/powerflow.jl",
+        "/builds/electa/controlgroup/PowerImpedance.jl/src/Network/NetworkBuilder/powerflow.jl",
         package_root
     ) == "src/Network/NetworkBuilder/powerflow.jl"
 
