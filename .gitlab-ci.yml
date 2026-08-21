@@ -43,12 +43,11 @@ variables:
 
 # Julia precompile caches contain absolute source paths.
 # The project slug prevents reuse after a repository move.
-# The file digest invalidates a cache whenever its environment or this CI configuration changes.
+# Project-file digests separate dependency environments without invalidating caches for CI-only edits.
 .julia_cache:
   cache: &julia_cache
     key:
       files:
-        - .gitlab-ci.yml
         - Project.toml
       prefix: "$CI_PROJECT_PATH_SLUG-base"
     paths:
@@ -63,8 +62,8 @@ variables:
   cache: &julia_plotting_cache
     key:
       files:
-        - .gitlab-ci.yml
-        - integration/plotting/Project.toml
+        - Project.toml
+        - integration/plotting/headless/Project.toml
       prefix: "$CI_PROJECT_PATH_SLUG-plotting"
     paths:
       - .julia/clones/
@@ -78,7 +77,7 @@ variables:
   cache: &julia_docs_cache
     key:
       files:
-        - .gitlab-ci.yml
+        - Project.toml
         - docs/Project.toml
       prefix: "$CI_PROJECT_PATH_SLUG-docs"
     paths:
@@ -143,7 +142,6 @@ extension_tests:
     <<: *julia_cache
     key:
       files:
-        - .gitlab-ci.yml
         - Project.toml
       prefix: "$CI_PROJECT_PATH_SLUG-extensions"
     policy: pull-push
@@ -190,49 +188,19 @@ extension_tests:
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
 
 
-plotting_precompile:
-  extends: .julia_heavy_resources
-  image: julia:1.12.6-bookworm
-  stage: test
-  timeout: 30m
-  cache:
-    <<: *julia_plotting_cache
-    policy: pull-push
-  before_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends git ca-certificates
-    - rm -rf /var/lib/apt/lists/*
-  script:
-    - julia --version
-    - |
-      julia --project=integration/plotting --startup-file=no -e '
-        using Pkg
-        Pkg.instantiate()
-        using PowerImpedance
-        using CairoMakie
-        using WGLMakie
-      '
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
-
-
 plotting_tests:
   extends: .julia_heavy_resources
   image: julia:1.12.6-bookworm
   stage: test
-  timeout: 20m
+  timeout: 1h
   needs:
-    - job: plotting_precompile
+    - job: test
       artifacts: false
-  variables:
-    JULIA_CPU_THREADS: "1"
-    JULIA_NUM_THREADS: "1"
-    JULIA_IMAGE_THREADS: "1"
   cache:
-    <<: *julia_plotting_cache
-    policy: pull
+    - <<: *julia_cache
+      policy: pull
+    - <<: *julia_plotting_cache
+      policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates
@@ -240,21 +208,31 @@ plotting_tests:
   script:
     - julia --version
     - |
-      julia --project=integration/plotting --startup-file=no -e '
+      julia --project=integration/plotting/headless --startup-file=no -e '
         using Pkg
         Pkg.instantiate()
+        Pkg.precompile()
 
         project = dirname(Base.active_project())
         test_file = joinpath(pwd(), "integration", "plotting", "cairo_tests.jl")
+        test_environment = (
+          "JULIA_CPU_THREADS" => "1",
+          "JULIA_NUM_THREADS" => "1",
+          "JULIA_IMAGE_THREADS" => "1",
+        )
         for load_order in ("power_first", "makie_first")
           command = addenv(
             `$(Base.julia_cmd()) --project=$project --startup-file=no $test_file`,
+            test_environment...,
             "POWERIMPEDANCE_PLOTTING_LOAD_ORDER" => load_order,
           )
           run(command)
         end
         wgl_test = joinpath(pwd(), "integration", "plotting", "wgl_load_test.jl")
-        run(`$(Base.julia_cmd()) --project=$project --startup-file=no $wgl_test`)
+        run(addenv(
+          `$(Base.julia_cmd()) --project=$project --startup-file=no $wgl_test`,
+          test_environment...,
+        ))
       '
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -271,7 +249,6 @@ formatter:
     <<: *julia_cache
     key:
       files:
-        - .gitlab-ci.yml
         - Project.toml
       prefix: "$CI_PROJECT_PATH_SLUG-formatter"
     policy: pull-push
@@ -303,7 +280,6 @@ advisory_aqua:
     <<: *julia_cache
     key:
       files:
-        - .gitlab-ci.yml
         - Project.toml
       prefix: "$CI_PROJECT_PATH_SLUG-aqua"
     policy: pull-push

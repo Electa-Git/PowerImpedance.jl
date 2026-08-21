@@ -1,0 +1,13 @@
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+PowerImpedance = "8bb8d9d3-c57e-5130-a7c9-cb214ef560ae"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
+
+[sources]
+PowerImpedance = {path = "../../.."}
+
+[compat]
+CairoMakie = "0.15"
+WGLMakie = "0.13"
+julia = "1.12"
