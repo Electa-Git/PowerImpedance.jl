@@ -1,24 +1,43 @@
-using Logging
 using PowerImpedance
 using Aqua
 
-function advisory(check, name)
-    try
-        check()
-        @info "$name advisory check passed"
-    catch error
-        @warn "$name advisory check reported findings" exception = (error, catch_backtrace())
+function undocumented_names(root::Module)
+    findings = Pair{Module,Symbol}[]
+    VERSION < v"1.11" && return findings
+
+    function visit(current::Module)
+        for name in Base.Docs.undocumented_names(current)
+            name == nameof(root) || push!(findings, current => name)
+        end
+
+        for name in names(current; all = true)
+            isdefined(current, name) || continue
+            value = getproperty(current, name)
+            value isa Module || continue
+            value === current && continue
+            parentmodule(value) === current || continue
+            visit(value)
+        end
     end
+
+    visit(root)
+    return findings
 end
 
-advisory("Aqua") do
-    Aqua.test_all(PowerImpedance; unbound_args = false, undefined_exports = false)
-end
+findings = undocumented_names(PowerImpedance)
 
-advisory("Aqua undefined exports") do
-    Aqua.test_undefined_exports(PowerImpedance)
-end
+if isempty(findings)
+    println(stderr, "Aqua undocumented-names advisory passed")
+else
+    redirect_stderr(devnull) do
+        Aqua.test_undocumented_names(PowerImpedance; broken = true)
+    end
 
-advisory("Aqua unbound arguments") do
-    Aqua.test_unbound_args(PowerImpedance)
+    println(
+        stderr,
+        "Aqua undocumented-names advisory reported $(length(findings)) module-local findings:",
+    )
+    for (owner, name) in findings
+        println(stderr, "  ", owner, ".", name)
+    end
 end

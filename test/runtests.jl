@@ -27,6 +27,7 @@ TEST_LOG_LEVEL == Logging.Error && PowerImpedance._PMACDC.silence()
 @test nameof(PowerImpedance) === :PowerImpedance
 
 @time @testset "PowerImpedance" begin
+        include("aqua.jl")
         include("plotbuilder_test.jl")
         include("imp_test.jl")
         include("adm_MMC_test.jl")
@@ -49,5 +50,6 @@ TEST_LOG_LEVEL == Logging.Error && PowerImpedance._PMACDC.silence()
         include("logging_test.jl")
         include("Gridspace_test.jl")
         include("stability_plot_recipes_test.jl")
-        
 end;
+
+include("advisory_quality.jl")
