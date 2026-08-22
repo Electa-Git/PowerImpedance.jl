@@ -206,7 +206,7 @@ function draw_statistics(rows, dates, land_path::AbstractString, output::Abstrac
 
     Label(
         figure[1, 1],
-        "PowerImpedance.jl package clients";
+        "PowerImpedance.jl package users";
         fontsize = 25,
         font = :bold,
         color = RGBf(0.05, 0.10, 0.15)
