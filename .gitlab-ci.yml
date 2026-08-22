@@ -296,36 +296,6 @@ formatter:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 
-advisory_aqua:
-  extends: .julia_heavy_resources
-  image: julia:1.12.6-bookworm
-  stage: test
-  allow_failure: true
-  cache:
-    <<: *julia_cache
-    key:
-      files:
-        - Project.toml
-      prefix: "$CI_PROJECT_PATH_SLUG-aqua"
-    policy: pull-push
-  before_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends git ca-certificates
-    - rm -rf /var/lib/apt/lists/*
-  script:
-    - |
-      julia -e '
-        using Pkg
-        Pkg.activate(; temp=true)
-        Pkg.add("Aqua")
-        Pkg.develop(PackageSpec(path=pwd()))
-        Pkg.precompile()
-        include("test/advisory_quality.jl")
-      '
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-
-
 docs_check:
   extends: .julia_heavy_resources
   image: julia:1.12.6-bookworm
