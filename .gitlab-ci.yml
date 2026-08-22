@@ -31,20 +31,7 @@ variables:
   CODECOV_CLI_VERSION: "v11.3.1"
   CODECOV_SLUG: "Electa-Git/PowerImpedance.jl"
 
-  # Keep this NO permanently after the first GitHub migration.
-  #
-  # For the ONE-TIME history reconciliation only, override this with
-  # a protected project CI/CD variable:
-  #
-  #   GITHUB_RECONCILE_ONCE = YES
-  #
-  GITHUB_RECONCILE_ONCE: "NO"
-
   GITHUB_REMOTE_URL: "git@github.com:Electa-Git/PowerImpedance.jl.git"
-
-  # Keeps the current manually-maintained GitHub history reachable after
-  # the one-time transition to GitLab-authoritative history.
-  GITHUB_LEGACY_TAG: "legacy-github-main-pre-gitlab-authority"
 
 
 # Julia precompile caches contain absolute source paths.
@@ -319,10 +306,29 @@ docs_check:
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.instantiate()
         Pkg.precompile()
+
+        if occursin(r"^v\d+\.\d+\.\d+$", get(ENV, "CI_COMMIT_TAG", ""))
+          statistics = `timeout 10m $(Base.julia_cmd()) --project=docs/statistics --startup-file=no docs/statistics/make.jl`
+          try
+            success(statistics) || @warn "User-statistics map generation failed; using the committed map"
+          catch error
+            @warn "User-statistics map generation could not start; using the committed map" exception = (error, catch_backtrace())
+          end
+        end
+
         include("docs/make.jl")
       '
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - docs/build/
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+    # Stable release documentation links to its public GitHub source snapshot.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      variables:
+        POWERIMPEDANCE_DOCS_TARGET: "github"
 
     # Release tags must also prove that documentation still builds.
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
@@ -472,15 +478,9 @@ github_release_preflight:
         exit 0
       fi
 
-      if [ "${GITHUB_RECONCILE_ONCE:-NO}" = "YES" ]; then
-        echo "PASS WITH MIGRATION ARMED:"
-        echo "GitHub history is not fast-forwardable."
-        echo "The one-time reconciliation job is explicitly enabled."
-        exit 0
-      fi
-
       echo "FAIL:"
-      echo "GitHub requires the one-time history reconciliation."
+      echo "GitHub main is not an ancestor of this release."
+      echo "Run the protected github_force_reconcile job from the latest default-branch pipeline."
       echo "No write operation was attempted."
       exit 1
 
@@ -497,162 +497,31 @@ github_release_preflight:
 
 
 # ---------------------------------------------------------------------------
-# ONE-TIME MIGRATION
+# MANUAL RECONCILIATION
 #
-# This job DOES NOT normally exist.
-#
-# It appears only when:
-#
-#   1. this is a valid version tag pipeline; and
-#   2. protected variable GITHUB_RECONCILE_ONCE == YES
-#
-# It:
-#
-# Its dry-run models an atomic operation that would:
-#
-#   - preserve the current GitHub main under a legacy tag;
-#   - replace GitHub main with the tagged GitLab history;
-#   - publish the release tag;
-#   - uses --force-with-lease, never naked --force;
-#
-# The live push remains commented out pending clearance.
-#
-# After the first migration, GITHUB_RECONCILE_ONCE must return to NO.
+# Protect the github-force-reconcile environment in GitLab and grant its
+# deployment permission only to maintainers authorized to rewrite GitHub main.
 # ---------------------------------------------------------------------------
 
-github_release_reconcile_once:
+github_force_reconcile:
   extends: .github_release_base
   stage: deploy
-
-  # Prevent two GitHub publication jobs from operating concurrently.
   resource_group: github-release
-
+  environment:
+    name: github-force-reconcile
+    url: https://github.com/Electa-Git/PowerImpedance.jl
+    action: prepare
   script:
-    - |
-      set -eu
-
-      VERSION="$(
-        sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Project.toml |
-        head -n 1
-      )"
-
-      test -n "${CI_COMMIT_TAG:-}" || {
-        echo "REFUSED: not a tag pipeline"
-        exit 1
-      }
-
-      test "$CI_COMMIT_TAG" = "v${VERSION}" || {
-        echo "REFUSED:"
-        echo "tag '$CI_COMMIT_TAG' != Project.toml version 'v${VERSION}'"
-        exit 1
-      }
-
-      git fetch --no-tags origin \
-        "+refs/heads/${CI_DEFAULT_BRANCH}:refs/remotes/origin/${CI_DEFAULT_BRANCH}"
-
-      git fetch origin \
-        "+refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
-
-      git fetch --no-tags github \
-        "+refs/heads/main:refs/remotes/github/main"
-
-      git merge-base --is-ancestor \
-        "$CI_COMMIT_SHA" \
-        "refs/remotes/origin/${CI_DEFAULT_BRANCH}" || {
-          echo "REFUSED:"
-          echo "tagged commit is not on ${CI_DEFAULT_BRANCH}"
-          exit 1
-        }
-
-      GITHUB_MAIN_SHA="$(git rev-parse refs/remotes/github/main)"
-
-      # If this is already fast-forwardable, there is no justification
-      # whatsoever for invoking the migration mechanism.
-      if git merge-base --is-ancestor \
-        refs/remotes/github/main \
-        "$CI_COMMIT_SHA"
-      then
-        echo "REFUSED:"
-        echo "reconciliation is unnecessary."
-        echo "GitHub can already be updated by normal publication."
-        exit 1
-      fi
-
-      # Never overwrite an existing release tag.
-      if git ls-remote \
-        --exit-code \
-        --tags \
-        github \
-        "refs/tags/${CI_COMMIT_TAG}" >/dev/null 2>&1
-      then
-        echo "REFUSED:"
-        echo "GitHub tag ${CI_COMMIT_TAG} already exists."
-        exit 1
-      fi
-
-      # The preservation tag must also be new.
-      if git ls-remote \
-        --exit-code \
-        --tags \
-        github \
-        "refs/tags/${GITHUB_LEGACY_TAG}" >/dev/null 2>&1
-      then
-        echo "REFUSED:"
-        echo "GitHub legacy-preservation tag already exists."
-        exit 1
-      fi
-
-      echo
-      echo "ONE-TIME MIGRATION PLAN"
-      echo
-      echo "old GitHub main:"
-      echo "  ${GITHUB_MAIN_SHA}"
-      echo
-      echo "will be preserved as:"
-      echo "  ${GITHUB_LEGACY_TAG}"
-      echo
-      echo "new GitHub main:"
-      echo "  ${CI_COMMIT_SHA}"
-      echo
-      echo "release tag:"
-      echo "  ${CI_COMMIT_TAG}"
-      echo
-
-      echo "Running real Git push dry-run..."
-      echo
-
-      git push \
-        --dry-run \
-        --atomic \
-        --force-with-lease="refs/heads/main:${GITHUB_MAIN_SHA}" \
-        github \
-        "${GITHUB_MAIN_SHA}:refs/tags/${GITHUB_LEGACY_TAG}" \
-        "${CI_COMMIT_SHA}:refs/heads/main" \
-        "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
-
-      echo
-      echo "Dry-run passed."
-      echo "DRY-RUN ONLY: atomic migration was not performed."
-
-      # LIVE PUSH DISABLED PENDING CLEARANCE:
-      # git push \
-      #   --atomic \
-      #   --force-with-lease="refs/heads/main:${GITHUB_MAIN_SHA}" \
-      #   github \
-      #   "${GITHUB_MAIN_SHA}:refs/tags/${GITHUB_LEGACY_TAG}" \
-      #   "${CI_COMMIT_SHA}:refs/heads/main" \
-      #   "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
-
+    - ./ci/force_reconcile_github.sh
+  manual_confirmation: "Force GitHub main to the current GitLab main and archive the previous GitHub main?"
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/ && $GITHUB_RECONCILE_ONCE == "YES"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       when: manual
-      allow_failure: false
+      allow_failure: true
 
 
 # ---------------------------------------------------------------------------
 # PERMANENT RELEASE PUBLICATION
-#
-# After the one-time reconciliation this is the only normal release path.
 #
 # ABSOLUTELY NO FORCE PUSH.
 #
@@ -740,7 +609,7 @@ github_release_publish:
       echo "Published ${CI_COMMIT_TAG} to GitHub."
 
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/ && $GITHUB_RECONCILE_ONCE != "YES"'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
       when: on_success
       allow_failure: false
 
@@ -804,7 +673,50 @@ github_release_coverage:
         --file coverage/lcov.info \
         --name "$CI_COMMIT_TAG"
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/ && $GITHUB_RECONCILE_ONCE != "YES"'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+      when: on_success
+      allow_failure: false
+
+
+# GitHub Pages contains only stable tagged releases. GitLab Pages remains the
+# mutable development documentation for the default branch.
+github_release_docs:
+  image: julia:1.12.6-bookworm
+  stage: release_report
+  needs:
+    - job: docs_check
+      artifacts: true
+    - job: github_release_publish
+      artifacts: false
+  resource_group: github-release
+  cache:
+    <<: *julia_docs_cache
+    policy: pull
+  variables:
+    KUBERNETES_CPU_REQUEST: "1"
+    KUBERNETES_MEMORY_REQUEST: "2Gi"
+    JULIA_CPU_THREADS: "1"
+    JULIA_NUM_THREADS: "1"
+    JULIA_NUM_PRECOMPILE_TASKS: "1"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates coreutils
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - |
+      export DOCUMENTER_KEY="$(base64 --wrap=0 "$GITHUB_DEPLOY_KEY")"
+      julia --startup-file=no -e '
+        using Pkg
+        Pkg.activate(; temp=true)
+        Pkg.add(PackageSpec(name="Documenter", version="1.17"))
+        include("docs/deploy_github.jl")
+      '
+  environment:
+    name: github-pages
+    url: https://electa-git.github.io/PowerImpedance.jl/stable/
+    deployment_tier: production
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
       when: on_success
       allow_failure: false
 

@@ -12,27 +12,47 @@ const ROOT_DIR = normpath(joinpath(@__DIR__, ".."))
 const DOCS_SRC_DIR = joinpath(@__DIR__, "src")
 const BUILD_DIR = joinpath(@__DIR__, "build")
 
+const DOCS_TARGET = get(ENV, "POWERIMPEDANCE_DOCS_TARGET", "gitlab")
+DOCS_TARGET in ("gitlab", "github") ||
+    error("Unsupported documentation target: $DOCS_TARGET")
+const PUBLIC_RELEASE_DOCS = DOCS_TARGET == "github"
+
 const GITLAB_HOST = "gitlab.kuleuven.be"
-const REPOSITORY_PATH = get(
+const GITLAB_REPOSITORY_PATH = get(
     ENV,
     "CI_PROJECT_PATH",
     "electa/controlgroup/PowerImpedance.jl"
 )
-const REPOSITORY_GROUP, REPOSITORY_NAME = rsplit(REPOSITORY_PATH, "/"; limit = 2)
-const REPOSITORY_NAMESPACE, REPOSITORY_PAGES_PATH =
-    split(REPOSITORY_PATH, "/"; limit = 2)
-const REPOSITORY_URL = get(
+const GITLAB_REPOSITORY_GROUP, GITLAB_REPOSITORY_NAME = rsplit(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
+const GITLAB_REPOSITORY_NAMESPACE, GITLAB_REPOSITORY_PAGES_PATH = split(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
+const GITLAB_REPOSITORY_URL = get(
     ENV,
     "CI_PROJECT_URL",
-    "https://$(GITLAB_HOST)/$(REPOSITORY_PATH)"
+    "https://$(GITLAB_HOST)/$(GITLAB_REPOSITORY_PATH)"
 )
-const CANONICAL_URL = get(
+const GITLAB_PAGES_URL = get(
     ENV,
     "CI_PAGES_URL",
-    "https://$(REPOSITORY_NAMESPACE).pages.$(GITLAB_HOST)/$(REPOSITORY_PAGES_PATH)"
+    "https://$(GITLAB_REPOSITORY_NAMESPACE).pages.$(GITLAB_HOST)/$(GITLAB_REPOSITORY_PAGES_PATH)"
 )
 
-const GITLAB_REMOTE = Remotes.GitLab(GITLAB_HOST, REPOSITORY_GROUP, REPOSITORY_NAME)
+const GITHUB_REPOSITORY_PATH = "Electa-Git/PowerImpedance.jl"
+const GITHUB_REPOSITORY_URL = "https://github.com/$GITHUB_REPOSITORY_PATH"
+const GITHUB_PAGES_URL = "https://electa-git.github.io/PowerImpedance.jl"
+
+const GITLAB_REMOTE = Remotes.GitLab(
+    GITLAB_HOST,
+    GITLAB_REPOSITORY_GROUP,
+    GITLAB_REPOSITORY_NAME
+)
+const GITHUB_REMOTE = Remotes.GitHub(GITHUB_REPOSITORY_PATH)
+
+const REPOSITORY_PATH = PUBLIC_RELEASE_DOCS ? GITHUB_REPOSITORY_PATH :
+                        GITLAB_REPOSITORY_PATH
+const REPOSITORY_URL = PUBLIC_RELEASE_DOCS ? GITHUB_REPOSITORY_URL : GITLAB_REPOSITORY_URL
+const CANONICAL_URL = PUBLIC_RELEASE_DOCS ? "$GITHUB_PAGES_URL/stable/" : GITLAB_PAGES_URL
+const REPOSITORY_REMOTE = PUBLIC_RELEASE_DOCS ? GITHUB_REMOTE : GITLAB_REMOTE
+const EDIT_LINK = PUBLIC_RELEASE_DOCS ? :commit : "main"
 
 const EXAMPLES_SRC = joinpath(ROOT_DIR, "examples")
 const EXAMPLES_DOC = joinpath(DOCS_SRC_DIR, "examples")
@@ -329,10 +349,10 @@ makedocs(;
     modules = [PowerImpedance],
     authors = metadata.authors,
     sitename = "$(metadata.name).jl",
-    repo = GITLAB_REMOTE,
+    repo = REPOSITORY_REMOTE,
     format = Documenter.HTML(;
         canonical = CANONICAL_URL,
-        edit_link = "main",
+        edit_link = EDIT_LINK,
         assets = html_assets(),
         mathengine = math_engine(),
         prettyurls = running_in_ci(),
