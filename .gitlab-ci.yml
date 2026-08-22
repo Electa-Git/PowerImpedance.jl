@@ -288,11 +288,15 @@ docs_check:
   image: julia:1.12.6-bookworm
   stage: docs
   needs:
-    - job: test
+    - job: plotting_tests
       artifacts: false
   cache:
-    <<: *julia_docs_cache
-    policy: pull-push
+    - <<: *julia_cache
+      policy: pull
+    - <<: *julia_plotting_cache
+      policy: pull
+    - <<: *julia_docs_cache
+      policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates
@@ -730,8 +734,12 @@ pages:
   image: julia:1.12.6-bookworm
   stage: deploy
   cache:
-    <<: *julia_docs_cache
-    policy: pull-push
+    - <<: *julia_cache
+      policy: pull
+    - <<: *julia_plotting_cache
+      policy: pull
+    - <<: *julia_docs_cache
+      policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates openssh-client
