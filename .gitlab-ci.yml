@@ -3,6 +3,7 @@ stages:
   - docs
   - release_check
   - deploy
+  - release_report
 
 variables:
   JULIA_DEPOT_PATH: "$CI_PROJECT_DIR/.julia"
@@ -24,6 +25,11 @@ variables:
   OMP_THREAD_LIMIT: "1"
   MKL_NUM_THREADS: "1"
   POWERIMPEDANCE_TEST_LOG_LEVEL: "error"
+
+  # Codecov represents the public GitHub release mirror. Coverage is uploaded
+  # only after the corresponding release commit has been published there.
+  CODECOV_CLI_VERSION: "v11.3.1"
+  CODECOV_SLUG: "Electa-Git/PowerImpedance.jl"
 
   # Keep this NO permanently after the first GitHub migration.
   #
@@ -123,8 +129,27 @@ test:
         using Pkg
         Pkg.instantiate()
         include("test/core_plotting_load_test.jl")
-        Pkg.test()
+
+        coverage_file = joinpath(pwd(), "coverage", "lcov.info")
+        mkpath(dirname(coverage_file))
+        rm(coverage_file; force=true)
+
+        if isempty(get(ENV, "CI_COMMIT_TAG", ""))
+          # Keep ordinary branch and merge-request pipelines at their existing
+          # runtime. The empty artifact is never consumed outside a release.
+          Pkg.test()
+          touch(coverage_file)
+        else
+          Pkg.test(; coverage=coverage_file)
+          isfile(coverage_file) && filesize(coverage_file) > 0 ||
+            error("Pkg.test did not produce a nonempty LCOV report")
+        end
       '
+
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - coverage/lcov.info
 
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -746,6 +771,70 @@ github_release_publish:
       echo
       echo "Published ${CI_COMMIT_TAG} to GitHub."
 
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/ && $GITHUB_RECONCILE_ONCE != "YES"'
+      when: on_success
+      allow_failure: false
+
+
+# Publish coverage only after the same commit exists on the public GitHub
+# mirror. Keeping this separate from github_release_publish makes a failed
+# upload independently retryable after the irreversible Git push succeeds.
+github_release_coverage:
+  image: debian:bookworm-slim
+  stage: release_report
+  needs:
+    - job: test
+      artifacts: true
+    - job: github_release_publish
+      artifacts: false
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates curl git gnupg
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - |
+      set -eu
+
+      test -n "${CODECOV_TOKEN:-}" || {
+        echo "FAIL: protected GitLab CI/CD variable CODECOV_TOKEN is missing"
+        exit 1
+      }
+
+      test -s coverage/lcov.info || {
+        echo "FAIL: the release test job did not provide coverage/lcov.info"
+        exit 1
+      }
+
+      # Verify the downloaded uploader with Codecov's published signing key
+      # and checksum before executing it.
+      curl -fsSLo /tmp/codecov \
+        "https://cli.codecov.io/${CODECOV_CLI_VERSION}/linux/codecov"
+      curl -fsSLo /tmp/codecov.SHA256SUM \
+        "https://cli.codecov.io/${CODECOV_CLI_VERSION}/linux/codecov.SHA256SUM"
+      curl -fsSLo /tmp/codecov.SHA256SUM.sig \
+        "https://cli.codecov.io/${CODECOV_CLI_VERSION}/linux/codecov.SHA256SUM.sig"
+      curl -fsSL https://keybase.io/codecovsecops/pgp_keys.asc |
+        gpg --batch --no-default-keyring \
+          --keyring /tmp/codecov-trustedkeys.gpg --import
+      gpgv --keyring /tmp/codecov-trustedkeys.gpg \
+        /tmp/codecov.SHA256SUM.sig /tmp/codecov.SHA256SUM
+      (cd /tmp && sha256sum --check codecov.SHA256SUM)
+      chmod +x /tmp/codecov
+
+      # GitLab executes the tests, but Codecov associates this report with the
+      # GitHub release mirror. Explicit metadata prevents GitLab CI discovery
+      # from selecting the private self-hosted GitLab project as the provider.
+      /tmp/codecov --verbose upload-process \
+        --disable-search \
+        --fail-on-error \
+        --token "$CODECOV_TOKEN" \
+        --slug "$CODECOV_SLUG" \
+        --git-service github \
+        --commit-sha "$CI_COMMIT_SHA" \
+        --branch main \
+        --file coverage/lcov.info \
+        --name "$CI_COMMIT_TAG"
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/ && $GITHUB_RECONCILE_ONCE != "YES"'
       when: on_success

@@ -1,5 +1,10 @@
 # PowerImpedance.jl
 
+[![Release CI](https://img.shields.io/badge/release%20CI-passing-brightgreen.svg)](https://gitlab.kuleuven.be/electa/controlgroup/PowerImpedance.jl/-/pipelines?ref=main)
+[![Coverage](https://codecov.io/github/Electa-Git/PowerImpedance.jl/branch/main/graph/badge.svg)](https://app.codecov.io/github/Electa-Git/PowerImpedance.jl)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://electa.pages.gitlab.kuleuven.be/controlgroup/PowerImpedance.jl/)
+[![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
+
 PowerImpedance is a Julia package for frequency-domain analysis of modern
 AC, DC, and hybrid power systems. It provides impedance and admittance
 characterization, AC/DC power-flow initialization, and fast small-signal
