@@ -1,0 +1,14 @@
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
+GeoJSON = "61d90e0f-e114-555e-ac52-39dfb47a3ef9"
+
+[compat]
+CSV = "0.10"
+CairoMakie = "0.15"
+Downloads = "1"
+GeoInterface = "1"
+GeoJSON = "0.8"
+julia = "1.12"

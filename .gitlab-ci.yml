@@ -319,8 +319,6 @@ docs_check:
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.instantiate()
         Pkg.precompile()
-        include("docs/package_stats.jl")
-        main()
         include("docs/make.jl")
       '
   rules:
@@ -836,8 +834,14 @@ pages:
         Pkg.Registry.update()
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.instantiate()
-        include("docs/package_stats.jl")
-        main()
+        # Package-server telemetry is optional documentation data.
+        # A failed refresh leaves the committed map in place.
+        statistics = `timeout 10m $(Base.julia_cmd()) --project=docs/statistics --startup-file=no docs/statistics/make.jl`
+        try
+          success(statistics) || @warn "User-statistics map generation failed; using the committed map"
+        catch error
+          @warn "User-statistics map generation could not start; using the committed map" exception = (error, catch_backtrace())
+        end
         include("docs/make.jl")
       '
     - rm -rf public

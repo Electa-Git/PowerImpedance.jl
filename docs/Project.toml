@@ -1,21 +1,14 @@
 [deps]
-CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Changelog = "5217a498-cd5d-4ec6-b8c2-9b85a09b6e3e"
-DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
-Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
-GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
 Git = "d7ba0133-e1db-5d97-8f8c-041e4b3a1eb2"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
 PowerImpedance = "8bb8d9d3-c57e-5130-a7c9-cb214ef560ae"
 
 [compat]
-CSV = "0.10"
 CairoMakie = "0.15"
-DataFrames = "1"
 Documenter = "1.17"
-GeoMakie = "0.7"
 Measurements = "2"
