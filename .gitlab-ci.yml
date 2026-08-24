@@ -510,6 +510,7 @@ github_release_preflight:
 github_force_reconcile:
   extends: .github_release_base
   stage: deploy
+  needs: []
   resource_group: github-release
   environment:
     name: github-force-reconcile

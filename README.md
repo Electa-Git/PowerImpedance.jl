@@ -2,12 +2,13 @@
 
 [![Coverage](https://codecov.io/github/Electa-Git/PowerImpedance.jl/branch/main/graph/badge.svg)](https://app.codecov.io/github/Electa-Git/PowerImpedance.jl)
 [![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://electa-git.github.io/PowerImpedance.jl/stable/)
+[![Release CI](https://github.com/Electa-Git/PowerImpedance.jl/actions/workflows/release-ci.yml/badge.svg?event=push)](https://github.com/Electa-Git/PowerImpedance.jl/actions/workflows/release-ci.yml)
 
 PowerImpedance is a Julia package for frequency-domain analysis of modern
 AC, DC, and hybrid power systems. It provides impedance and admittance
 characterization, AC/DC power-flow initialization, and fast small-signal
 stability assessment using analytical models validated against PSCAD EMT
-simulations with the  [Z-tool](https://github.com/Electa-Git/Z-tool). T. The
+simulations with the [Z-tool](https://github.com/Electa-Git/Z-tool). The
 analytical component models have been validated over the frequency range from
 0.1 Hz to 5 kHz.
 

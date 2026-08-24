@@ -1,0 +1,58 @@
+name: Release CI
+
+run-name: Validate ${{ github.ref_name }} publication
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-publication:
+    name: Validate published release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the published tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_version="$({ sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Project.toml || true; } | head -n 1)"
+          expected_tag="v${release_version}"
+
+          test -n "$release_version" || {
+            echo "Could not read the package version from Project.toml."
+            exit 1
+          }
+
+          test "$GITHUB_REF_NAME" = "$expected_tag" || {
+            echo "Tag $GITHUB_REF_NAME does not match Project.toml version $expected_tag."
+            exit 1
+          }
+
+          tag_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          main_commit="$(git rev-parse refs/remotes/origin/main)"
+
+          test "$tag_commit" = "$GITHUB_SHA" || {
+            echo "The workflow commit does not match the published tag."
+            exit 1
+          }
+
+          test "$tag_commit" = "$main_commit" || {
+            echo "The published release tag does not match GitHub main."
+            exit 1
+          }
+
+          echo "Validated $GITHUB_REF_NAME at $tag_commit."
