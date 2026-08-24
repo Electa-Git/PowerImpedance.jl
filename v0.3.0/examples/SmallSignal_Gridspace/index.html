@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Gridspace small-signal stability analysis · PowerImpedance.jl</title><meta name="title" content="Gridspace small-signal stability analysis · PowerImpedance.jl"/><meta property="og:title" content="Gridspace small-signal stability analysis · PowerImpedance.jl"/><meta property="twitter:title" content="Gridspace small-signal stability analysis · PowerImpedance.jl"/><meta name="description" content="Documentation for PowerImpedance.jl."/><meta property="og:description" content="Documentation for PowerImpedance.jl."/><meta property="twitter:description" content="Documentation for PowerImpedance.jl."/><meta property="og:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/SmallSignal_Gridspace/"/><meta property="twitter:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/SmallSignal_Gridspace/"/><link rel="canonical" href="https://electa-git.github.io/PowerImpedance.jl/stable/examples/SmallSignal_Gridspace/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/documentercitations/citations-hover.css" rel="stylesheet" type="text/css"/><link href="../../assets/documentercitations/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../../assets/custom.js"></script><script src="../../assets/documentercitations/citations-data.js"></script><script src="../../assets/documentercitations/citations-hover.js"></script><script src="../../assets/documentercitations/citations-backlinks.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="PowerImpedance.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="PowerImpedance.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">PowerImpedance.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../introduction/">Introduction</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../network/">Network construction</a></li><li><a class="tocitem" href="../../initialization/">Power-flow initialization</a></li><li><a class="tocitem" href="../../results/">Impedance and stability analysis</a></li><li><a class="tocitem" href="../../gridspace/">Parametric and uncertainty studies</a></li><li><a class="tocitem" href="../../package_extensions/">Package extensions</a></li><li><a class="tocitem" href="../../manual/fundamental_concepts/">Fundamental concepts</a></li><li><input class="collapse-toggle" id="menuitem-3-7" type="checkbox" checked/><label class="tocitem" for="menuitem-3-7"><span class="docs-label">Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../">Overview</a></li><li><a class="tocitem" href="../Connection_DSL/">Connection DSL</a></li><li><a class="tocitem" href="../IEEE39bus_Gridspace/">IEEE39 Gridspace soil-resistivity study</a></li><li><a class="tocitem" href="../P2P_HVDC_ALT/">P2P HVDC parametric OHL/UGC transition</a></li><li><a class="tocitem" href="../P2P_HVDC_Gridspace/">P2P HVDC studies with Gridspace</a></li><li class="is-active"><a class="tocitem" href>Gridspace small-signal stability analysis</a></li></ul></li></ul></li><li><span class="tocitem">Components</span><ul><li><a class="tocitem" href="../../source/">Voltage sources</a></li><li><a class="tocitem" href="../../impedance/">Lumped impedance</a></li><li><a class="tocitem" href="../../transformer/">Transformer</a></li><li><a class="tocitem" href="../../transmission_line/">Transmission lines and cables</a></li><li><a class="tocitem" href="../../MMC/">Modular multilevel converter</a></li><li><a class="tocitem" href="../../TLC/">Two-level converter</a></li></ul></li><li><a class="tocitem" href="../../reference/">API Reference</a></li><li><a class="tocitem" href="../../legacy/">Classic scalar interface</a></li><li><span class="tocitem">Developers</span><ul><li><a class="tocitem" href="../../developers/plotbuilder/">PlotBuilder guide</a></li><li><a class="tocitem" href="../../developers/docstrings/">Docstrings</a></li><li><a class="tocitem" href="../../developers/conventions/">Conventions</a></li><li><a class="tocitem" href="../../developers/calculation_parity/">Calculation parity</a></li><li><a class="tocitem" href="../../developers/network_model_performance/">Network-model performance</a></li><li><a class="tocitem" href="../../CHANGELOG/">Changelog</a></li></ul></li><li><a class="tocitem" href="../../bibliography/">Bibliography</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Gridspace small-signal stability analysis</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Gridspace small-signal stability analysis</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl/blob/457ba27831a3841c97e14b9c832840390df946f4/examples/SmallSignal_Gridspace.jl" title="View source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Gridspace-small-signal-stability-analysis"><a class="docs-heading-anchor" href="#Gridspace-small-signal-stability-analysis">Gridspace small-signal stability analysis</a><a id="Gridspace-small-signal-stability-analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Gridspace-small-signal-stability-analysis" title="Permalink"></a></h1><pre><code class="language-julia hljs">using PowerImpedance
+
+const NB = PowerImpedance.NetworkBuilder</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">PowerImpedance.NetworkBuilder</code></pre><p>The network declaration is lazy. Its uncertain branch is realized as an ordinary numeric component separately for each Monte Carlo trial.</p><pre><code class="language-julia hljs">elements = (
+    branch=impedance(Grid; z=Grid(2.0, 5.0; key=:branch_impedance), pins=1),
+    shunt=impedance(z=4.0, pins=1),
+)
+connections = (
+    (node=:bus, element=:branch, side=1, terminal=1),
+    (node=:bus, element=:shunt, side=1, terminal=1),
+    (node=:gnd, element=:branch, side=2, terminal=1),
+    (node=:gnd, element=:shunt, side=2, terminal=1),
+)
+network_space = NB.define(elements, connections)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Gridspace{PowerImpedance.NetworkBuilder.NetworkState, PowerImpedance.NetworkBuilder._BuilderMaterializer{NTuple{4, @NamedTuple{node::Symbol, element::Symbol, side::Int64, terminal::Int64}}}, Tuple{Gridspace{NamedTuple{(:branch, :shunt)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :shunt)}, Tuple{Gridspace{PowerImpedance.Element, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}, Tuple{RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, PowerImpedance.Grammar.ConstantAxis{PowerImpedance.Element{PowerImpedance.Impedance}}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._BuilderMaterializer{NTuple{4, @NamedTuple{node::Symbol, element::Symbol, side::Int64, terminal::Int64}}}(((node = :bus, element = :branch, side = 1, terminal = 1), (node = :bus, element = :shunt, side = 1, terminal = 1), (node = :gnd, element = :branch, side = 2, terminal = 1), (node = :gnd, element = :shunt, side = 2, terminal = 1))), (Gridspace{NamedTuple{(:branch, :shunt)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :shunt)}, Tuple{Gridspace{PowerImpedance.Element, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}, Tuple{RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, PowerImpedance.Grammar.ConstantAxis{PowerImpedance.Element{PowerImpedance.Impedance}}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :shunt)}(), (Gridspace{PowerImpedance.Element, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}, Tuple{RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}(PowerImpedance.impedance), (RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}((2.0,), (5.0,), PowerImpedance.Grammar.NamedGridKey{Symbol}(:branch_impedance)), PowerImpedance.Grammar.ConstantAxis{Int64}(1)), (:z, :pins), Val{:product}()), PowerImpedance.Grammar.ConstantAxis{PowerImpedance.Element{PowerImpedance.Impedance}}(PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+))), (:branch, :shunt), Val{:product}()), Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}(PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}(), (), (), Val{:product}())), (:elements, :options), Val{:product}())</code></pre><p>First complete the frequency-response calculations.</p><pre><code class="language-julia hljs">response_problems = PowerImpedanceProblem(
+    network_space;
+    nodes=[:bus],
+    frequency_range=(1.0, 1e3, 80),
+)
+responses = compute(
+    ParametricProblem(response_problems),
+    MonteCarlo(LoopGain(); trials=200, seed=2026),
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">MonteCarloResult{FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}, MonteCarlo{LoopGain{PowerImpedance.PIACDC}, PowerImpedance.PIACDC, Int64, :error}, @NamedTuple{n::Int64, groups::Vector{Any}}, Vector{Any}, @NamedTuple{manifest::@NamedTuple{version::Int64, package::Symbol, formulation::DataType, backend::DataType, options::@NamedTuple{}, configurations::Vector{Any}}, groups::@NamedTuple{items::Vector{Any}}, failures::@NamedTuple{items::Vector{Any}}, samples::Nothing, plot_data::@NamedTuple{values::Vector{Any}}, replay::@NamedTuple{version::Int64, source_space::Gridspace{PowerImpedanceProblem{PowerImpedance.NetworkBuilder.NetworkState, Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}, PowerImpedance._PowerImpedanceProblemMaterializer{Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}, Tuple{Gridspace{PowerImpedance.NetworkBuilder.NetworkState, PowerImpedance.NetworkBuilder._BuilderMaterializer{NTuple{4, @NamedTuple{node::Symbol, element::Symbol, side::Int64, terminal::Int64}}}, Tuple{Gridspace{NamedTuple{(:branch, :shunt)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :shunt)}, Tuple{Gridspace{PowerImpedance.Element, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}, Tuple{RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, PowerImpedance.Grammar.ConstantAxis{PowerImpedance.Element{PowerImpedance.Impedance}}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}}, Tuple{Symbol}, Val{:product}}, master_seed::UInt64, case_seeds::Vector{UInt64}, trial_counts::Vector{Int64}, distribution::Symbol, study_id::UInt64}, coupling::Nothing}}(MonteCarlo{LoopGain{PowerImpedance.PIACDC}, PowerImpedance.PIACDC, Int64, :error}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), PowerImpedance.PIACDC, 200, :normal, 2026, 0.95, 0.02, false, :error), (n = 200, groups = Any[(response = [(real = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200), imag = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200));;; (real = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200), imag = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200));;; (real = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200), imag = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200));;; … ;;; (real = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200), imag = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200));;; (real = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200), imag = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200));;; (real = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200), imag = (mean = 0.0, std = 0.0, min = 0.0, q05 = 0.0, median = 0.0, q95 = 0.0, max = 0.0, n = 200))], frequencies = [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], nodes = [:bus], kind = :loopgain)]), Any[(configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 1, seed = 0x9e3779b97f4a7bff), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 2, seed = 0x3c6ef372fe94ffc0), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 3, seed = 0xdaa66d2c7ddf73d5), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 4, seed = 0x78dde6e5fd29f7be), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 5, seed = 0x1715609f7c746b83), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 6, seed = 0xb54cda58fbbeef94), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 7, seed = 0x538454127b096379), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 8, seed = 0xf1bbcdcbfa53e742), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 9, seed = 0x8ff34785799e5b57), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 10, seed = 0x2e2ac13ef8e8df38)  …  (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 191, seed = 0x0b63d165f8929441), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 192, seed = 0xa99b4b1f77dd082a), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 193, seed = 0x47d2c4d8f7278c3f), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 194, seed = 0xe60a3e9276720000), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 195, seed = 0x8441b84bf5bc8415), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 196, seed = 0x22793205750707fe), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 197, seed = 0xc0b0abbef4517bc3), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 198, seed = 0x5ee82578739bffd4), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 199, seed = 0xfd1f9f31f2e673b9), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 200, seed = 0x9b5718eb7230f782)], (manifest = (version = 1, package = :PowerImpedance, formulation = LoopGain{PowerImpedance.PIACDC}, backend = PowerImpedance.PIACDC, options = NamedTuple(), configurations = Any[(configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 1, seed = 0x9e3779b97f4a7bff), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 2, seed = 0x3c6ef372fe94ffc0), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 3, seed = 0xdaa66d2c7ddf73d5), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 4, seed = 0x78dde6e5fd29f7be), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 5, seed = 0x1715609f7c746b83), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 6, seed = 0xb54cda58fbbeef94), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 7, seed = 0x538454127b096379), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 8, seed = 0xf1bbcdcbfa53e742), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 9, seed = 0x8ff34785799e5b57), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 10, seed = 0x2e2ac13ef8e8df38)  …  (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 191, seed = 0x0b63d165f8929441), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 192, seed = 0xa99b4b1f77dd082a), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 193, seed = 0x47d2c4d8f7278c3f), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 194, seed = 0xe60a3e9276720000), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 195, seed = 0x8441b84bf5bc8415), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 196, seed = 0x22793205750707fe), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 197, seed = 0xc0b0abbef4517bc3), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 198, seed = 0x5ee82578739bffd4), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 199, seed = 0xfd1f9f31f2e673b9), (configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), trial = 200, seed = 0x9b5718eb7230f782)]), groups = (items = Any[(configuration = (network = (elements = (branch = (z = (nominal = 2.0, sigma = 0.1, style = :relative), pins = 1), shunt = PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+)), options = NamedTuple()),), range = 1:200, n = 200)],), failures = (items = Any[],), samples = nothing, plot_data = (values = Any[FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}[FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[]))  …  FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[])), FrequencyResponseResult{LoopGain{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{Float64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}, eliminated_elements::Vector{Symbol}}}(LoopGain{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :loopgain, ComplexF64[0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; … ;;; 0.0 + 0.0im;;; 0.0 + 0.0im;;; 0.0 + 0.0im], [6.283185307179586, 6.857322138094809, 7.483921706379357, 8.167777884615655, 8.91412259371316, 9.728665830325355, 10.617639351840587, 11.587844353163856, 12.646703500046279, 13.802317717049268  …  2860.274514300728, 3121.6370024182966, 3406.881936033127, 3718.191614552606, 4057.9477487343347, 4428.749682240211, 4833.434278216189, 5275.097623042436, 5757.118713300791, 6283.185307179586], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, Setpoint}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)), eliminated_elements = Symbol[]))]],), replay = (version = 1, source_space = Gridspace{PowerImpedanceProblem{PowerImpedance.NetworkBuilder.NetworkState, Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}, PowerImpedance._PowerImpedanceProblemMaterializer{Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}, Tuple{Gridspace{PowerImpedance.NetworkBuilder.NetworkState, PowerImpedance.NetworkBuilder._BuilderMaterializer{NTuple{4, @NamedTuple{node::Symbol, element::Symbol, side::Int64, terminal::Int64}}}, Tuple{Gridspace{NamedTuple{(:branch, :shunt)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :shunt)}, Tuple{Gridspace{PowerImpedance.Element, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}, Tuple{RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, PowerImpedance.Grammar.ConstantAxis{PowerImpedance.Element{PowerImpedance.Impedance}}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}}, Tuple{Symbol}, Val{:product}}(PowerImpedance._PowerImpedanceProblemMaterializer{Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}([:bus], Symbol[], (1.0, 1000.0, 80)), (Gridspace{PowerImpedance.NetworkBuilder.NetworkState, PowerImpedance.NetworkBuilder._BuilderMaterializer{NTuple{4, @NamedTuple{node::Symbol, element::Symbol, side::Int64, terminal::Int64}}}, Tuple{Gridspace{NamedTuple{(:branch, :shunt)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :shunt)}, Tuple{Gridspace{PowerImpedance.Element, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}, Tuple{RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, PowerImpedance.Grammar.ConstantAxis{PowerImpedance.Element{PowerImpedance.Impedance}}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._BuilderMaterializer{NTuple{4, @NamedTuple{node::Symbol, element::Symbol, side::Int64, terminal::Int64}}}(((node = :bus, element = :branch, side = 1, terminal = 1), (node = :bus, element = :shunt, side = 1, terminal = 1), (node = :gnd, element = :branch, side = 2, terminal = 1), (node = :gnd, element = :shunt, side = 2, terminal = 1))), (Gridspace{NamedTuple{(:branch, :shunt)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :shunt)}, Tuple{Gridspace{PowerImpedance.Element, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}, Tuple{RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, PowerImpedance.Grammar.ConstantAxis{PowerImpedance.Element{PowerImpedance.Impedance}}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :shunt)}(), (Gridspace{PowerImpedance.Element, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}, Tuple{RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :pins)}(PowerImpedance.impedance), (RelativeGrid{Tuple{Float64}, Tuple{Float64}, PowerImpedance.Grammar.NamedGridKey{Symbol}}((2.0,), (5.0,), PowerImpedance.Grammar.NamedGridKey{Symbol}(:branch_impedance)), PowerImpedance.Grammar.ConstantAxis{Int64}(1)), (:z, :pins), Val{:product}()), PowerImpedance.Grammar.ConstantAxis{PowerImpedance.Element{PowerImpedance.Impedance}}(PowerImpedance.Element{PowerImpedance.Impedance}(Symbol(&quot;&quot;), Dict(Symbol(&quot;1.1&quot;) =&gt; Symbol(&quot;&quot;), Symbol(&quot;2.1&quot;) =&gt; Symbol(&quot;&quot;)), 1, 1, PowerImpedance.Impedance
+  value: Array{ComplexF64}((1, 1)) ComplexF64[4.0 + 0.0im;;]
+  ABCD: Array{ComplexF64}((2, 2)) ComplexF64[1.0 + 0.0im 4.0 + 0.0im; 0.0 - 0.0im 1.0 + 0.0im]
+, Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), Matrix{ComplexF64}(undef, 0, 0), false, true, Setpoint
+  Pac: Missing missing
+  Qac: Missing missing
+  θac: Missing missing
+  Vac: Missing missing
+  Pdc: Missing missing
+  Vdc: Missing missing
+, PowerImpedance.Limits
+  P_min: Float64 0.9
+  P_max: Float64 1.1
+  Q_min: Float64 -0.5
+  Q_max: Float64 0.5
+))), (:branch, :shunt), Val{:product}()), Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}(PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}(), (), (), Val{:product}())), (:elements, :options), Val{:product}()),), (:network,), Val{:product}()), master_seed = 0x00000000000007ea, case_seeds = UInt64[0x9e3779b97f4a7bff], trial_counts = [200], distribution = :normal, study_id = 0x1eed7b4d1a29f63a), coupling = nothing))</code></pre><p><code>preprocess</code> is the explicit checkpoint between completed responses and the stability calculation. The second call reuses those exact trajectories.</p><pre><code class="language-julia hljs">stability_problem = preprocess(responses, GeneralizedNyquist())
+stability = compute(
+    stability_problem,
+    MonteCarlo(GeneralizedNyquist(); seed=2026),
+)
+
+(;
+    trials=stability.stats.n,
+    failures=stability.details.failures.items,
+    analysis=stability.details.categorical.analysis,
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(trials = 200, failures = Any[], analysis = :nyquist)</code></pre><p>Plot definitions consume the completed result without rerunning the analysis. Building the render definition does not load Makie.</p><pre><code class="language-julia hljs">render = PlotBuilder.make_render(
+    NyquistPlotDefinition,
+    stability;
+    zoom=true,
+    title=&quot;Uncertain loop gain&quot;,
+)
+
+length(render.figures)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1</code></pre><p>Load one Makie backend to create a <code>UIPlot</code> from the same result:</p><pre><code class="language-julia hljs">using CairoMakie
+handle = plot(stability; zoom=true, display_plot=false)</code></pre><p>Back to <a href="../">Examples</a></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../P2P_HVDC_Gridspace/">« P2P HVDC studies with Gridspace</a><a class="docs-footer-nextpage" href="../../source/">Voltage sources »</a><div class="flexbox-break"></div><p class="footer-message"><a href="https://github.com/Electa-Git/PowerImpedance.jl">PowerImpedance.jl</a> v0.3.0 supported by the Etch Competence Hub of EnergyVille, financed by the Flemish Government.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 24 August 2026 23:08">Monday 24 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

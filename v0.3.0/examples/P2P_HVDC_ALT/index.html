@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>P2P HVDC parametric OHL/UGC transition · PowerImpedance.jl</title><meta name="title" content="P2P HVDC parametric OHL/UGC transition · PowerImpedance.jl"/><meta property="og:title" content="P2P HVDC parametric OHL/UGC transition · PowerImpedance.jl"/><meta property="twitter:title" content="P2P HVDC parametric OHL/UGC transition · PowerImpedance.jl"/><meta name="description" content="Documentation for PowerImpedance.jl."/><meta property="og:description" content="Documentation for PowerImpedance.jl."/><meta property="twitter:description" content="Documentation for PowerImpedance.jl."/><meta property="og:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/P2P_HVDC_ALT/"/><meta property="twitter:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/P2P_HVDC_ALT/"/><link rel="canonical" href="https://electa-git.github.io/PowerImpedance.jl/stable/examples/P2P_HVDC_ALT/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/documentercitations/citations-hover.css" rel="stylesheet" type="text/css"/><link href="../../assets/documentercitations/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../../assets/custom.js"></script><script src="../../assets/documentercitations/citations-data.js"></script><script src="../../assets/documentercitations/citations-hover.js"></script><script src="../../assets/documentercitations/citations-backlinks.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="PowerImpedance.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="PowerImpedance.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">PowerImpedance.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../introduction/">Introduction</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../network/">Network construction</a></li><li><a class="tocitem" href="../../initialization/">Power-flow initialization</a></li><li><a class="tocitem" href="../../results/">Impedance and stability analysis</a></li><li><a class="tocitem" href="../../gridspace/">Parametric and uncertainty studies</a></li><li><a class="tocitem" href="../../package_extensions/">Package extensions</a></li><li><a class="tocitem" href="../../manual/fundamental_concepts/">Fundamental concepts</a></li><li><input class="collapse-toggle" id="menuitem-3-7" type="checkbox" checked/><label class="tocitem" for="menuitem-3-7"><span class="docs-label">Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../">Overview</a></li><li><a class="tocitem" href="../Connection_DSL/">Connection DSL</a></li><li><a class="tocitem" href="../IEEE39bus_Gridspace/">IEEE39 Gridspace soil-resistivity study</a></li><li class="is-active"><a class="tocitem" href>P2P HVDC parametric OHL/UGC transition</a></li><li><a class="tocitem" href="../P2P_HVDC_Gridspace/">P2P HVDC studies with Gridspace</a></li><li><a class="tocitem" href="../SmallSignal_Gridspace/">Gridspace small-signal stability analysis</a></li></ul></li></ul></li><li><span class="tocitem">Components</span><ul><li><a class="tocitem" href="../../source/">Voltage sources</a></li><li><a class="tocitem" href="../../impedance/">Lumped impedance</a></li><li><a class="tocitem" href="../../transformer/">Transformer</a></li><li><a class="tocitem" href="../../transmission_line/">Transmission lines and cables</a></li><li><a class="tocitem" href="../../MMC/">Modular multilevel converter</a></li><li><a class="tocitem" href="../../TLC/">Two-level converter</a></li></ul></li><li><a class="tocitem" href="../../reference/">API Reference</a></li><li><a class="tocitem" href="../../legacy/">Classic scalar interface</a></li><li><span class="tocitem">Developers</span><ul><li><a class="tocitem" href="../../developers/plotbuilder/">PlotBuilder guide</a></li><li><a class="tocitem" href="../../developers/docstrings/">Docstrings</a></li><li><a class="tocitem" href="../../developers/conventions/">Conventions</a></li><li><a class="tocitem" href="../../developers/calculation_parity/">Calculation parity</a></li><li><a class="tocitem" href="../../developers/network_model_performance/">Network-model performance</a></li><li><a class="tocitem" href="../../CHANGELOG/">Changelog</a></li></ul></li><li><a class="tocitem" href="../../bibliography/">Bibliography</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>P2P HVDC parametric OHL/UGC transition</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>P2P HVDC parametric OHL/UGC transition</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl/blob/457ba27831a3841c97e14b9c832840390df946f4/examples/P2P_HVDC_ALT.jl" title="View source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="P2P-HVDC-parametric-OHL/UGC-transition"><a class="docs-heading-anchor" href="#P2P-HVDC-parametric-OHL/UGC-transition">P2P HVDC parametric OHL/UGC transition</a><a id="P2P-HVDC-parametric-OHL/UGC-transition-1"></a><a class="docs-heading-anchor-permalink" href="#P2P-HVDC-parametric-OHL/UGC-transition" title="Permalink"></a></h1><p>This example demonstrates the <code>NetworkBuilder</code> workflow for reusing a cached power-flow solution while sweeping the relative share of overhead line and underground cable in a point-to-point HVDC system.</p><pre><code class="language-julia hljs">using PowerImpedance
+using CairoMakie
+using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState</code></pre><p>The P and Q defined here are what is injected into the network.</p><pre><code class="language-julia hljs">transmissionVoltage = 380 / sqrt(3)
+pHVDC1 = 100
+qC1 = 100
+qC2 = 100
+
+rho = 100.0
+L = 100e3
+
+connections = (
+    (node = :B3d, element = :tl1, side = 2, terminal = 1),
+    (node = :B3d, element = :c1, side = 2, terminal = 1),
+    (node = :B3q, element = :tl1, side = 2, terminal = 2),
+    (node = :B3q, element = :c1, side = 2, terminal = 2),
+    (node = :B2d, element = :g4, side = 1, terminal = 1),
+    (node = :B2d, element = :tl1, side = 1, terminal = 1),
+    (node = :B2q, element = :g4, side = 1, terminal = 2),
+    (node = :B2q, element = :tl1, side = 1, terminal = 2),
+    (node = :B4, element = :ugc, side = 1, terminal = 1),
+    (node = :B4, element = :c1, side = 1, terminal = 1),
+    (node = :BX, element = :ugc, side = 2, terminal = 1),
+    (node = :BX, element = :ohl, side = 1, terminal = 1),
+    (node = :B5, element = :ohl, side = 2, terminal = 1),
+    (node = :B5, element = :c2, side = 1, terminal = 1),
+    (node = :B6d, element = :tl78, side = 1, terminal = 1),
+    (node = :B6d, element = :c2, side = 2, terminal = 1),
+    (node = :B6q, element = :tl78, side = 1, terminal = 2),
+    (node = :B6q, element = :c2, side = 2, terminal = 2),
+    (node = :B7d, element = :g1, side = 1, terminal = 1),
+    (node = :B7d, element = :tl78, side = 2, terminal = 1),
+    (node = :B7q, element = :g1, side = 1, terminal = 2),
+    (node = :B7q, element = :tl78, side = 2, terminal = 2)
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((node = :B3d, element = :tl1, side = 2, terminal = 1), (node = :B3d, element = :c1, side = 2, terminal = 1), (node = :B3q, element = :tl1, side = 2, terminal = 2), (node = :B3q, element = :c1, side = 2, terminal = 2), (node = :B2d, element = :g4, side = 1, terminal = 1), (node = :B2d, element = :tl1, side = 1, terminal = 1), (node = :B2q, element = :g4, side = 1, terminal = 2), (node = :B2q, element = :tl1, side = 1, terminal = 2), (node = :B4, element = :ugc, side = 1, terminal = 1), (node = :B4, element = :c1, side = 1, terminal = 1), (node = :BX, element = :ugc, side = 2, terminal = 1), (node = :BX, element = :ohl, side = 1, terminal = 1), (node = :B5, element = :ohl, side = 2, terminal = 1), (node = :B5, element = :c2, side = 1, terminal = 1), (node = :B6d, element = :tl78, side = 1, terminal = 1), (node = :B6d, element = :c2, side = 2, terminal = 1), (node = :B6q, element = :tl78, side = 1, terminal = 2), (node = :B6q, element = :c2, side = 2, terminal = 2), (node = :B7d, element = :g1, side = 1, terminal = 1), (node = :B7d, element = :tl78, side = 2, terminal = 1), (node = :B7q, element = :g1, side = 1, terminal = 2), (node = :B7q, element = :tl78, side = 2, terminal = 2))</code></pre><p>Bus-voltage bounds belong in the builder options used for every case.</p><pre><code class="language-julia hljs">builder_options = (;
+    voltageBase = transmissionVoltage,
+    power_flow = (;
+        is_bounded = (;
+        bus_voltage = true,
+    ),
+    )
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(voltageBase = 219.3931022920578, power_flow = (is_bounded = (bus_voltage = true,),))</code></pre><p><code>x</code> is the fraction of the corridor implemented as underground cable. A 100 m regularization at either endpoint avoids singular zero-length line models.</p><pre><code class="language-julia hljs">function ohl_to_ugc(x)
+    share = clamp(x, 1e-3, 1 - 1e-3)
+    ohl_model = overhead_line(
+        length = L * (1 - share),
+        conductors = Conductors(
+            organization = :flat,
+            nᵇ = 2,
+            nˢᵇ = 1,
+            Rᵈᶜ = 0.0266, rᶜ = 44.8e-3 / 2,
+            yᵇᶜ = 18.0, Δyᵇᶜ = 0.0, Δxᵇᶜ = 7.3, Δ̃xᵇᶜ = 0.0,
+            dˢᵇ = 0.0,
+            dˢᵃᵍ = 6.0
+        ),
+        groundwires = Groundwires(
+            nᵍ = 2,
+            Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
+            Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0
+        ), earth_parameters = (1, 1, rho),
+        transformation = true
+    )
+
+    ugc_model = cable(
+        length = L * share,
+        positions = [(-0.5, 1), (0.5, 1)],
+        C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
+        I1 = Insulator(rᵢ = 0.02622, rₒ = 0.06006, ϵᵣ = 2.67, μᵣ = 1.469),
+        C2 = Conductor(rᵢ = 0.06006, rₒ = 0.06336, ρ = 2.14e-7, μᵣ = 1.0),
+        I2 = Insulator(rᵢ = 0.06336, rₒ = 0.06636, ϵᵣ = 2.3, μᵣ = 1.0),
+        C3 = Conductor(rᵢ = 0.06636, rₒ = 0.06651, ρ = 2.826e-8, μᵣ = 1.0),
+        I3 = Insulator(rᵢ = 0.06651, rₒ = 0.07256, ϵᵣ = 2.3, μᵣ = 1.0),
+        earth_parameters = (1, 1, rho),
+        transformation = true
+    )
+
+    return (;
+        g1 = ac_source(
+            V = transmissionVoltage,
+            P = pHVDC1,
+            P_min = -2000,
+            P_max = 2000,
+            Q_max = 1000,
+            Q_min = -1000,
+            pins = 3,
+            transformation = true
+        ),
+
+        c1 = only(mmc(Grid; Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
+            P_max = 1500, P_min = -1500, P = -pHVDC1, Q = qC1, Q_max = 500,
+            Q_min = -500,
+            occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
+            ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
+            pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
+            q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
+            dc = PI_control(Kₚ = 6, Kᵢ = 15), timeDelay = 200e-6, padeOrderNum = 5,
+            padeOrderDen = 5
+        )),
+
+        c2 = only(mmc(Grid; Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
+            P_max = 1000, P_min = -1000, P = pHVDC1, Q = qC2, Q_max = 1000,
+            Q_min = -1000,
+            vACbase_LL_RMS = 333, turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
+            Lₐᵣₘ = 30e-3,
+            occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
+            ccc = PI_control(Kₚ = 1 * 0.1048, Kᵢ = 1 * 48.1914),
+            pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
+            p = PI_control(Kₚ = 1 * 0.1, Kᵢ = 31.4159),
+            q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159), timeDelay = 200e-6,
+            padeOrderNum = 5, padeOrderDen = 5
+        )),
+
+        ugc = ugc_model,
+        ohl = ohl_model,
+
+        g4 = ac_source(
+            V = transmissionVoltage,
+            P = pHVDC1,
+            P_min = -2000,
+            P_max = 2000,
+            Q_max = 1000,
+            Q_min = -1000,
+            pins = 3,
+            transformation = true
+        ),
+
+        tl1 = overhead_line(length = 25e3,
+            conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1,
+                Rᵈᶜ = 0.063,
+                rᶜ = 0.015, yᵇᶜ = 30,
+                Δyᵇᶜ = 0, Δxᵇᶜ = 10, Δ̃xᵇᶜ = 0, dˢᵇ = 0, dˢᵃᵍ = 10),
+            groundwires = Groundwires(
+                nᵍ = 2,
+                Rᵍᵈᶜ = 0.92,
+                rᵍ = 0.0062,
+                Δxᵍ = 6.5,
+                Δyᵍ = 7.5,
+                dᵍˢᵃᵍ = 10
+            ),
+            earth_parameters = (1, 1, 100), transformation = true),
+
+        tl78 = overhead_line(length = 90e3,
+            conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1,
+                Rᵈᶜ = 0.063,
+                rᶜ = 0.015, yᵇᶜ = 30,
+                Δyᵇᶜ = 0, Δxᵇᶜ = 10, Δ̃xᵇᶜ = 0, dˢᵇ = 0, dˢᵃᵍ = 10),
+            groundwires = Groundwires(
+                nᵍ = 2,
+                Rᵍᵈᶜ = 0.92,
+                rᵍ = 0.0062,
+                Δxᵍ = 6.5,
+                Δyᵍ = 7.5,
+                dᵍˢᵃᵍ = 10
+            ),
+            earth_parameters = (1, 1, 100), transformation = true)
+    )
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ohl_to_ugc (generic function with 1 method)</code></pre><p>The transition is one deterministic Gridspace axis. The axis keeps the OHL and UGC lengths paired, so the study never evaluates an impossible Cartesian product of independent corridor lengths.</p><pre><code class="language-julia hljs">function transition_network_space(x_values)
+    shares = Grid(collect(x_values))
+    return Gridspace{NetworkState}(
+        share -&gt; NetworkBuilder.define(
+            ohl_to_ugc(share),
+            connections;
+            options=builder_options,
+        ),
+        (shares,),
+        (:ugc_share,),
+    )
+end
+
+function transition_peak(response, share)
+    magnitude_db = 20 .* log10.(abs.(vec(response.response[1, 1, :])))
+    frequencies_hz = real.(response.frequencies) ./ (2π)
+    peak_index = argmax(magnitude_db)
+    return (;
+        ugc_share=share,
+        peak_magnitude_db=magnitude_db[peak_index],
+        peak_frequency_hz=frequencies_hz[peak_index],
+    )
+end
+
+function save_transition_animation(study; filename=&quot;transition_harmonic_peaks.mp4&quot;, fps=8)
+    panel = only(study.plot.panels)
+    groups = panel.group_order
+    CairoMakie.record(study.plot.figure, filename, eachindex(groups); framerate=fps) do frame
+        for (index, group) in pairs(groups)
+            foreach(plot -&gt; plot.visible[] = index == frame, panel.groups[group])
+        end
+    end
+    foreach(group -&gt; foreach(plot -&gt; plot.visible[] = true, panel.groups[group]), groups)
+    return filename
+end
+
+function run_transition_study(;
+        x_values = 0.0:0.02:1.0,
+        frequency_range = (100.0, 5e3, 1000),
+        animation_filename = nothing,
+        animation_fps = 8,
+        display_plot = false
+)
+    shares = collect(x_values)
+    problems = PowerImpedanceProblem(
+        transition_network_space(shares);
+        nodes=[:B5],
+        eliminated_elements=[:c2],
+        frequency_range,
+    )
+    result = compute(
+        ParametricProblem(problems),
+        Combinatorial(NodalImpedance()),
+    )
+    labels = [&quot;UGC = $(round(100share; digits=1))%&quot; for share in shares]
+    groups = [Symbol(&quot;ugc_&quot;, replace(string(round(100share; digits=1)), &quot;.&quot; =&gt; &quot;_&quot;))
+              for share in shares]
+    plot = only(PowerImpedance.plot(
+        result;
+        entries=(:B5, :B5),
+        labels,
+        series_groups=groups,
+        title=&quot;Impedance at B5 during the OHL/UGC transition&quot;,
+        figure_size=(950, 700),
+        display_plot,
+        controls=false,
+    ))
+    peaks = [transition_peak(response, share)
+             for (response, share) in zip(result.values, shares)]
+    study = (; result, plot, peaks)
+    animation_filename === nothing || save_transition_animation(
+        study;
+        filename=animation_filename,
+        fps=animation_fps,
+    )
+    return study
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">run_transition_study (generic function with 1 method)</code></pre><p>The documentation uses five corridor shares and a reduced frequency grid.</p><pre><code class="language-julia hljs">transition_docs = run_transition_study(; x_values=0.0:0.25:1.0, frequency_range=(100.0, 5e3, 160))
+transition_docs.plot.figure</code></pre><img src="18a93c9c.png" alt="Example block output"/><p>The peak table records the resonance movement seen in the plotted curves.</p><pre><code class="language-julia hljs">transition_docs.peaks</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{@NamedTuple{ugc_share::Float64, peak_magnitude_db::Float64, peak_frequency_hz::Float64}}:
+ (ugc_share = 0.0, peak_magnitude_db = 81.60277581473912, peak_frequency_hz = 648.7633256344882)
+ (ugc_share = 0.25, peak_magnitude_db = 88.10466174239298, peak_frequency_hz = 1061.190149929239)
+ (ugc_share = 0.5, peak_magnitude_db = 80.24156979251983, peak_frequency_hz = 1324.223600336173)
+ (ugc_share = 0.75, peak_magnitude_db = 81.27235060389673, peak_frequency_hz = 2770.267466604895)
+ (ugc_share = 1.0, peak_magnitude_db = 68.29267240961721, peak_frequency_hz = 209.1993728175229)</code></pre><p>Back to <a href="../">Examples</a></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../IEEE39bus_Gridspace/">« IEEE39 Gridspace soil-resistivity study</a><a class="docs-footer-nextpage" href="../P2P_HVDC_Gridspace/">P2P HVDC studies with Gridspace »</a><div class="flexbox-break"></div><p class="footer-message"><a href="https://github.com/Electa-Git/PowerImpedance.jl">PowerImpedance.jl</a> v0.3.0 supported by the Etch Competence Hub of EnergyVille, financed by the Flemish Government.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 24 August 2026 23:08">Monday 24 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

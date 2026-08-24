@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>IEEE39 Gridspace soil-resistivity study · PowerImpedance.jl</title><meta name="title" content="IEEE39 Gridspace soil-resistivity study · PowerImpedance.jl"/><meta property="og:title" content="IEEE39 Gridspace soil-resistivity study · PowerImpedance.jl"/><meta property="twitter:title" content="IEEE39 Gridspace soil-resistivity study · PowerImpedance.jl"/><meta name="description" content="Documentation for PowerImpedance.jl."/><meta property="og:description" content="Documentation for PowerImpedance.jl."/><meta property="twitter:description" content="Documentation for PowerImpedance.jl."/><meta property="og:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/IEEE39bus_Gridspace/"/><meta property="twitter:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/IEEE39bus_Gridspace/"/><link rel="canonical" href="https://electa-git.github.io/PowerImpedance.jl/stable/examples/IEEE39bus_Gridspace/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/documentercitations/citations-hover.css" rel="stylesheet" type="text/css"/><link href="../../assets/documentercitations/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../../assets/custom.js"></script><script src="../../assets/documentercitations/citations-data.js"></script><script src="../../assets/documentercitations/citations-hover.js"></script><script src="../../assets/documentercitations/citations-backlinks.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="PowerImpedance.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="PowerImpedance.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">PowerImpedance.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../introduction/">Introduction</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../network/">Network construction</a></li><li><a class="tocitem" href="../../initialization/">Power-flow initialization</a></li><li><a class="tocitem" href="../../results/">Impedance and stability analysis</a></li><li><a class="tocitem" href="../../gridspace/">Parametric and uncertainty studies</a></li><li><a class="tocitem" href="../../package_extensions/">Package extensions</a></li><li><a class="tocitem" href="../../manual/fundamental_concepts/">Fundamental concepts</a></li><li><input class="collapse-toggle" id="menuitem-3-7" type="checkbox" checked/><label class="tocitem" for="menuitem-3-7"><span class="docs-label">Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../">Overview</a></li><li><a class="tocitem" href="../Connection_DSL/">Connection DSL</a></li><li class="is-active"><a class="tocitem" href>IEEE39 Gridspace soil-resistivity study</a><ul class="internal"><li><a class="tocitem" href="#Apply-one-resistivity-value-everywhere"><span>Apply one resistivity value everywhere</span></a></li><li><a class="tocitem" href="#Overlay-the-harmonic-impedances"><span>Overlay the harmonic impedances</span></a></li></ul></li><li><a class="tocitem" href="../P2P_HVDC_ALT/">P2P HVDC parametric OHL/UGC transition</a></li><li><a class="tocitem" href="../P2P_HVDC_Gridspace/">P2P HVDC studies with Gridspace</a></li><li><a class="tocitem" href="../SmallSignal_Gridspace/">Gridspace small-signal stability analysis</a></li></ul></li></ul></li><li><span class="tocitem">Components</span><ul><li><a class="tocitem" href="../../source/">Voltage sources</a></li><li><a class="tocitem" href="../../impedance/">Lumped impedance</a></li><li><a class="tocitem" href="../../transformer/">Transformer</a></li><li><a class="tocitem" href="../../transmission_line/">Transmission lines and cables</a></li><li><a class="tocitem" href="../../MMC/">Modular multilevel converter</a></li><li><a class="tocitem" href="../../TLC/">Two-level converter</a></li></ul></li><li><a class="tocitem" href="../../reference/">API Reference</a></li><li><a class="tocitem" href="../../legacy/">Classic scalar interface</a></li><li><span class="tocitem">Developers</span><ul><li><a class="tocitem" href="../../developers/plotbuilder/">PlotBuilder guide</a></li><li><a class="tocitem" href="../../developers/docstrings/">Docstrings</a></li><li><a class="tocitem" href="../../developers/conventions/">Conventions</a></li><li><a class="tocitem" href="../../developers/calculation_parity/">Calculation parity</a></li><li><a class="tocitem" href="../../developers/network_model_performance/">Network-model performance</a></li><li><a class="tocitem" href="../../CHANGELOG/">Changelog</a></li></ul></li><li><a class="tocitem" href="../../bibliography/">Bibliography</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>IEEE39 Gridspace soil-resistivity study</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>IEEE39 Gridspace soil-resistivity study</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl/blob/457ba27831a3841c97e14b9c832840390df946f4/examples/IEEE39bus_Gridspace.jl" title="View source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="IEEE39-Gridspace-soil-resistivity-study"><a class="docs-heading-anchor" href="#IEEE39-Gridspace-soil-resistivity-study">IEEE39 Gridspace soil-resistivity study</a><a id="IEEE39-Gridspace-soil-resistivity-study-1"></a><a class="docs-heading-anchor-permalink" href="#IEEE39-Gridspace-soil-resistivity-study" title="Permalink"></a></h1><p>This example reuses the NetworkBuilder model exercised by the IEEE39 parity tests and applies one shared soil-resistivity grid to every overhead line and cable. Driving-point harmonic impedances at three representative buses are overlaid for direct comparison.</p><pre><code class="language-julia hljs">using CairoMakie
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState, define</code></pre><p>The parity fixture is the authoritative NetworkBuilder version of this system. Skip its top-level testsets while retaining its model functions and constants. This keeps the example synchronized with the parity test rather than maintaining a second thousand-line copy of the system.</p><pre><code class="language-julia hljs">function include_ieee39_networkbuilder_fixture()
+    isdefined(@__MODULE__, :ieee39bus_elements) &amp;&amp; return nothing
+
+    skip_testsets(expression) =
+        if expression isa Expr &amp;&amp;
+           expression.head === :macrocall &amp;&amp;
+           expression.args[1] === Symbol(&quot;@testset&quot;)
+            :(nothing)
+        else
+            expression
+        end
+
+    path = joinpath(pkgdir(PowerImpedance), &quot;test&quot;, &quot;NetworkBuilder_test.jl&quot;)
+    Base.include(skip_testsets, @__MODULE__, path)
+    return nothing
+end;
+
+include_ieee39_networkbuilder_fixture();</code></pre><p>The requested input repeats 1000 Ωm. Duplicate values produce identical solves and curves, so the grid retains its three unique physical cases.</p><pre><code class="language-julia hljs">const IEEE39_REQUESTED_SOIL_RESISTIVITY = (10.0, 100.0, 1000.0, 1000.0)
+const IEEE39_SOIL_RESISTIVITY = Tuple(unique(IEEE39_REQUESTED_SOIL_RESISTIVITY))
+const IEEE39_REPRESENTATIVE_BUSES = (9, 16, 29)
+
+const IEEE39_BUILDER_OPTIONS = (;
+    voltageBase = Vm1,
+    power_flow = (; is_bounded = (; bus_voltage = true))
+);</code></pre><h2 id="Apply-one-resistivity-value-everywhere"><a class="docs-heading-anchor" href="#Apply-one-resistivity-value-everywhere">Apply one resistivity value everywhere</a><a id="Apply-one-resistivity-value-everywhere-1"></a><a class="docs-heading-anchor-permalink" href="#Apply-one-resistivity-value-everywhere" title="Permalink"></a></h2><pre><code class="language-julia hljs">function element_at_soil_resistivity(element, soil_resistivity)
+    model = element.element_model
+
+    if model isa PowerImpedance.Overhead_line
+        return overhead_line(
+            length = model.length,
+            conductors = deepcopy(model.conductors),
+            groundwires = deepcopy(model.groundwires),
+            earth_parameters = (
+                model.earth_parameters[1],
+                model.earth_parameters[2],
+                soil_resistivity
+            ),
+            transformation = element.transformation,
+            connection = element.connection
+        )
+    elseif model isa PowerImpedance.Cable
+        conductors = NamedTuple{Tuple(keys(model.conductors))}(
+            Tuple(deepcopy(value) for value in values(model.conductors)),
+        )
+        insulators = NamedTuple{Tuple(keys(model.insulators))}(
+            Tuple(deepcopy(value) for value in values(model.insulators)),
+        )
+        return cable(;
+            length = model.length,
+            positions = deepcopy(model.positions),
+            earth_parameters = (
+                model.earth_parameters[1],
+                model.earth_parameters[2],
+                soil_resistivity
+            ),
+            configuration = model.configuration,
+            type = model.type,
+            eliminate = model.eliminate,
+            transformation = element.transformation,
+            connection = element.connection,
+            conductors...,
+            insulators...
+        )
+    end
+
+    return deepcopy(element)
+end;
+
+function ieee39_elements_at_soil_resistivity(base_elements, soil_resistivity)
+    names = keys(base_elements)
+    elements = map(values(base_elements)) do element
+        element_at_soil_resistivity(element, soil_resistivity)
+    end
+    return NamedTuple{names}(Tuple(elements))
+end;</code></pre><p>One <code>Grid</code> axis changes all line models together. The resulting coordinates identify each case as <code>soil_resistivity = 10</code>, <code>100</code>, or <code>1000</code> Ωm.</p><pre><code class="language-julia hljs">function ieee39_soil_builder_space(
+        soil_resistivities = IEEE39_SOIL_RESISTIVITY;
+        base_elements = ieee39bus_elements()
+)
+    connections = ieee39bus_connections()
+    function materialize(soil_resistivity)
+        return define(
+            ieee39_elements_at_soil_resistivity(base_elements, soil_resistivity),
+            connections;
+            options = IEEE39_BUILDER_OPTIONS
+        )
+    end
+
+    return Gridspace{NetworkState}(
+        materialize,
+        (Grid(soil_resistivities),),
+        (:soil_resistivity,)
+    )
+end;</code></pre><p>Soil resistivity changes the passive frequency-domain models. Each case owns its power flow and linearization, which keeps calculation state out of the network definitions.</p><pre><code class="language-julia hljs">function ieee39_bus_nets(buses)
+    return reduce(vcat, ([Symbol(&quot;Bus$(bus)d&quot;), Symbol(&quot;Bus$(bus)q&quot;)] for bus in buses))
+end;
+
+function run_ieee39_soil_study(;
+        soil_resistivities = IEEE39_SOIL_RESISTIVITY,
+        buses = IEEE39_REPRESENTATIVE_BUSES,
+        freq_range = (1.0, 5e3, 400)
+)
+    base_elements = ieee39bus_elements()
+    networks = ieee39_soil_builder_space(soil_resistivities; base_elements)
+    problems = PowerImpedanceProblem(
+        networks;
+        nodes=ieee39_bus_nets(buses),
+        eliminated_elements=IEEE39_ELIM_ELEMENTS,
+        frequency_range=freq_range,
+    )
+    result = compute(
+        ParametricProblem(problems),
+        Combinatorial(NodalImpedance()),
+    )
+    return (;
+        soil_resistivities = collect(soil_resistivities), buses = collect(buses), result)
+end;</code></pre><h2 id="Overlay-the-harmonic-impedances"><a class="docs-heading-anchor" href="#Overlay-the-harmonic-impedances">Overlay the harmonic impedances</a><a id="Overlay-the-harmonic-impedances-1"></a><a class="docs-heading-anchor-permalink" href="#Overlay-the-harmonic-impedances" title="Permalink"></a></h2><p>The d-axis diagonal entry is used as the driving-point impedance at each bus. <code>maximum_spread_db</code> quantifies whether soil resistivity visibly separates the curves and makes the sensitivity check reproducible. A reduced validation scan gave maximum separations of about 0.97 dB at Bus 9, 0.82 dB at Bus 16, and 1.08 dB at Bus 29, so soil resistivity remains a visible KPI and no fallback parameter scan is needed.</p><pre><code class="language-julia hljs">function ieee39_impedance_db(case, bus_index)
+    net_index = 2bus_index - 1
+    return 20 .* log10.(abs.(vec(case.response[net_index, net_index, :])))
+end;
+
+function maximum_spread_db(study, bus_index)
+    curves = hcat((ieee39_impedance_db(case, bus_index) for case in study.result.values)...)
+    return maximum(maximum(curves; dims = 2) .- minimum(curves; dims = 2))
+end;
+
+function plot_ieee39_soil_study(study)
+    entries = [(2index - 1, 2index - 1) for index in eachindex(study.buses)]
+    labels = [&quot;ρsoil = $(value) Ωm&quot; for value in study.soil_resistivities]
+    groups = [Symbol(&quot;soil_&quot;, replace(string(value), &quot;.&quot; =&gt; &quot;_&quot;))
+              for value in study.soil_resistivities]
+    handles = PowerImpedance.plot(
+        study.result;
+        entries,
+        grouping=:panels,
+        labels,
+        series_groups=groups,
+        title=&quot;IEEE39 harmonic impedance versus common soil resistivity&quot;,
+        figure_size=(1150, 1050),
+        display_plot=false,
+        controls=false,
+    )
+    return only(handles)
+end;</code></pre><p>The documentation evaluates the same three physical cases with a reduced frequency grid. Running this source file directly uses the full defaults.</p><pre><code class="language-julia hljs">ieee39_docs_study = run_ieee39_soil_study(; freq_range = (1.0, 5e3, 160))
+ieee39_docs_plot = plot_ieee39_soil_study(ieee39_docs_study)
+ieee39_docs_plot.figure</code></pre><img src="f1049dc4.png" alt="Example block output"/><p>Back to <a href="../">Examples</a></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../Connection_DSL/">« Connection DSL</a><a class="docs-footer-nextpage" href="../P2P_HVDC_ALT/">P2P HVDC parametric OHL/UGC transition »</a><div class="flexbox-break"></div><p class="footer-message"><a href="https://github.com/Electa-Git/PowerImpedance.jl">PowerImpedance.jl</a> v0.3.0 supported by the Etch Competence Hub of EnergyVille, financed by the Flemish Government.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 24 August 2026 23:08">Monday 24 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

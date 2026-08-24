@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>PlotBuilder guide · PowerImpedance.jl</title><meta name="title" content="PlotBuilder guide · PowerImpedance.jl"/><meta property="og:title" content="PlotBuilder guide · PowerImpedance.jl"/><meta property="twitter:title" content="PlotBuilder guide · PowerImpedance.jl"/><meta name="description" content="Documentation for PowerImpedance.jl."/><meta property="og:description" content="Documentation for PowerImpedance.jl."/><meta property="twitter:description" content="Documentation for PowerImpedance.jl."/><meta property="og:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/developers/plotbuilder/"/><meta property="twitter:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/developers/plotbuilder/"/><link rel="canonical" href="https://electa-git.github.io/PowerImpedance.jl/stable/developers/plotbuilder/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/documentercitations/citations-hover.css" rel="stylesheet" type="text/css"/><link href="../../assets/documentercitations/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../../assets/custom.js"></script><script src="../../assets/documentercitations/citations-data.js"></script><script src="../../assets/documentercitations/citations-hover.js"></script><script src="../../assets/documentercitations/citations-backlinks.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="PowerImpedance.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="PowerImpedance.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">PowerImpedance.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../introduction/">Introduction</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../network/">Network construction</a></li><li><a class="tocitem" href="../../initialization/">Power-flow initialization</a></li><li><a class="tocitem" href="../../results/">Impedance and stability analysis</a></li><li><a class="tocitem" href="../../gridspace/">Parametric and uncertainty studies</a></li><li><a class="tocitem" href="../../package_extensions/">Package extensions</a></li><li><a class="tocitem" href="../../manual/fundamental_concepts/">Fundamental concepts</a></li><li><input class="collapse-toggle" id="menuitem-3-7" type="checkbox"/><label class="tocitem" for="menuitem-3-7"><span class="docs-label">Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../examples/">Overview</a></li><li><a class="tocitem" href="../../examples/Connection_DSL/">Connection DSL</a></li><li><a class="tocitem" href="../../examples/IEEE39bus_Gridspace/">IEEE39 Gridspace soil-resistivity study</a></li><li><a class="tocitem" href="../../examples/P2P_HVDC_ALT/">P2P HVDC parametric OHL/UGC transition</a></li><li><a class="tocitem" href="../../examples/P2P_HVDC_Gridspace/">P2P HVDC studies with Gridspace</a></li><li><a class="tocitem" href="../../examples/SmallSignal_Gridspace/">Gridspace small-signal stability analysis</a></li></ul></li></ul></li><li><span class="tocitem">Components</span><ul><li><a class="tocitem" href="../../source/">Voltage sources</a></li><li><a class="tocitem" href="../../impedance/">Lumped impedance</a></li><li><a class="tocitem" href="../../transformer/">Transformer</a></li><li><a class="tocitem" href="../../transmission_line/">Transmission lines and cables</a></li><li><a class="tocitem" href="../../MMC/">Modular multilevel converter</a></li><li><a class="tocitem" href="../../TLC/">Two-level converter</a></li></ul></li><li><a class="tocitem" href="../../reference/">API Reference</a></li><li><a class="tocitem" href="../../legacy/">Classic scalar interface</a></li><li><span class="tocitem">Developers</span><ul><li class="is-active"><a class="tocitem" href>PlotBuilder guide</a><ul class="internal"><li><a class="tocitem" href="#Definitions"><span>Definitions</span></a></li><li><a class="tocitem" href="#Harmonic-impedance"><span>Harmonic impedance</span></a></li><li><a class="tocitem" href="#Stability-definitions"><span>Stability definitions</span></a></li><li><a class="tocitem" href="#Rendered-gallery"><span>Rendered gallery</span></a></li><li><a class="tocitem" href="#Makie-rendering"><span>Makie rendering</span></a></li><li><a class="tocitem" href="#SVG-export"><span>SVG export</span></a></li><li><a class="tocitem" href="#Custom-definitions"><span>Custom definitions</span></a></li></ul></li><li><a class="tocitem" href="../docstrings/">Docstrings</a></li><li><a class="tocitem" href="../conventions/">Conventions</a></li><li><a class="tocitem" href="../calculation_parity/">Calculation parity</a></li><li><a class="tocitem" href="../network_model_performance/">Network-model performance</a></li><li><a class="tocitem" href="../../CHANGELOG/">Changelog</a></li></ul></li><li><a class="tocitem" href="../../bibliography/">Bibliography</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Developers</a></li><li class="is-active"><a href>PlotBuilder guide</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>PlotBuilder guide</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl/blob/457ba27831a3841c97e14b9c832840390df946f4/docs/src/developers/plotbuilder.md" title="View source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="PlotBuilder-guide"><a class="docs-heading-anchor" href="#PlotBuilder-guide">PlotBuilder guide</a><a id="PlotBuilder-guide-1"></a><a class="docs-heading-anchor-permalink" href="#PlotBuilder-guide" title="Permalink"></a></h1><p>PlotBuilder converts completed calculation results into backend-neutral render definitions. <code>PlotBuilder.make_render</code> does not load Makie or repeat a numerical calculation.</p><h2 id="Definitions"><a class="docs-heading-anchor" href="#Definitions">Definitions</a><a id="Definitions-1"></a><a class="docs-heading-anchor-permalink" href="#Definitions" title="Permalink"></a></h2><p>The public definitions are:</p><ul><li><code>HarmonicImpedancePlotDefinition</code></li><li><code>NyquistPlotDefinition</code></li><li><code>BodePlotDefinition</code></li><li><code>PassivityPlotDefinition</code></li><li><code>SmallGainPlotDefinition</code></li><li><code>EigenvaluePlotDefinition</code></li><li><code>UnstableFrequencyPlotDefinition</code></li></ul><pre><code class="language-julia hljs">render = PlotBuilder.make_render(
+    NyquistPlotDefinition,
+    completed_nyquist;
+    zoom = true,
+)</code></pre><p>A <code>RenderDefinition</code> contains <code>PageDefinition</code> values. Each page contains its layout, views, controls, legend, colorbars, status, and export definition. Views contain typed axes and series. Supported series primitives include lines, scatter markers, horizontal and vertical references, and bands.</p><h2 id="Harmonic-impedance"><a class="docs-heading-anchor" href="#Harmonic-impedance">Harmonic impedance</a><a id="Harmonic-impedance-1"></a><a class="docs-heading-anchor-permalink" href="#Harmonic-impedance" title="Permalink"></a></h2><p>The harmonic definition accepts primitive and composite completed frequency responses. It supports diagonal, complete-matrix, and selected entries. The layout can overlay curves or separate them into panels and pages. Frequency axes may be linear or logarithmic, with node labels and dBΩ conversion.</p><pre><code class="language-julia hljs">render = PlotBuilder.make_render(
+    HarmonicImpedancePlotDefinition,
+    impedance_result;
+    entries = :all,
+    grouping = :panels,
+)</code></pre><h2 id="Stability-definitions"><a class="docs-heading-anchor" href="#Stability-definitions">Stability definitions</a><a id="Stability-definitions-1"></a><a class="docs-heading-anchor-permalink" href="#Stability-definitions" title="Permalink"></a></h2><p>Stability definitions accept <code>StabilityResult</code>, <code>ParametricResult{&lt;:StabilityResult}</code>, and supported uncertainty results. Composite definitions read completed trajectories from <code>details.plot_data</code>.</p><p>Nyquist renders matched modes, conjugate branches, reference geometry, direction markers, indentation gaps, zoom, ensemble traces, and quantile spread. Bode renders aligned magnitude and phase channels. The other definitions preserve passivity bands, small-gain references, eigenvalue views, the optional determinant page, and unstable-frequency markers and aggregate probabilities.</p><h2 id="Rendered-gallery"><a class="docs-heading-anchor" href="#Rendered-gallery">Rendered gallery</a><a id="Rendered-gallery-1"></a><a class="docs-heading-anchor-permalink" href="#Rendered-gallery" title="Permalink"></a></h2><p>The gallery uses completed scalar responses so the figures are quick to rebuild. The same definitions accept results from full network calculations and composite studies.</p><pre><code class="language-julia hljs">using CairoMakie
+using PowerImpedance
+
+frequency_hz = 10.0 .^ range(0, 3; length=240)
+omega = 2π .* frequency_hz
+
+series_rlc = 0.35 .+ im .* (omega .* 2.5e-3 .- 1 ./ (omega .* 45e-6))
+impedance_response = FrequencyResponseResult(
+    NodalImpedance(),
+    :nodal_impedance,
+    reshape(series_rlc, 1, 1, :),
+    omega,
+    [:terminal],
+    nothing,
+    (;),
+)
+
+only(PowerImpedance.plot(
+    impedance_response;
+    title=&quot;Series RLC driving-point impedance&quot;,
+    display_plot=false,
+    controls=false,
+)).figure</code></pre><img src="e787bc8f.png" alt="Example block output"/><p>The generalized Nyquist and Bode figures below use one completed loop-gain sweep.</p><pre><code class="language-julia hljs">theta = range(-0.95π, 0.95π; length=length(omega))
+loop_locus = -0.15 .+ 0.92 .* exp.(im .* theta)
+loop_response = FrequencyResponseResult(
+    LoopGain(),
+    :loopgain,
+    reshape(loop_locus, 1, 1, :),
+    omega,
+    [:mode],
+    nothing,
+    (;),
+)
+nyquist_result = compute(StabilityProblem(loop_response), GeneralizedNyquist())
+
+only(PowerImpedance.plot(
+    nyquist_result;
+    title=&quot;Generalized Nyquist locus&quot;,
+    display_plot=false,
+    controls=false,
+)).figure</code></pre><img src="a8f0d533.png" alt="Example block output"/><pre><code class="language-julia hljs">bode_result = compute(StabilityProblem(loop_response), BodeAnalysis())
+
+only(PowerImpedance.plot(
+    bode_result;
+    title=&quot;Loop-gain magnitude and phase&quot;,
+    display_plot=false,
+    controls=false,
+)).figure</code></pre><img src="74345ccf.png" alt="Example block output"/><p>Passivity and modal plots consume a completed nodal-admittance sweep.</p><pre><code class="language-julia hljs">admittance_response = FrequencyResponseResult(
+    NodeAdmittance(),
+    :node_admittance,
+    reshape(1 ./ series_rlc, 1, 1, :),
+    omega,
+    [:terminal],
+    nothing,
+    (;),
+)
+passivity_result = compute(StabilityProblem(admittance_response), PassivityAnalysis())
+
+only(PowerImpedance.plot(
+    passivity_result;
+    title=&quot;Passivity index&quot;,
+    display_plot=false,
+    controls=false,
+)).figure</code></pre><img src="177dd70b.png" alt="Example block output"/><pre><code class="language-julia hljs">eigenvalue_result = compute(
+    StabilityProblem(admittance_response),
+    EigenvalueAnalysis(fmin=1.0, fmax=1e3, determinant=true),
+)
+
+first(PowerImpedance.plot(
+    eigenvalue_result;
+    title=&quot;Admittance eigenvalue&quot;,
+    display_plot=false,
+    controls=false,
+)).figure</code></pre><img src="b1280873.png" alt="Example block output"/><p>The small-gain and frequency-detection definitions use the same completed sweeps.</p><pre><code class="language-julia hljs">small_gain_result = compute(
+    StabilityProblem((impedance_response, admittance_response)),
+    SmallGainAnalysis(),
+)
+
+only(PowerImpedance.plot(
+    small_gain_result;
+    title=&quot;Small-gain assessment&quot;,
+    display_plot=false,
+    controls=false,
+)).figure</code></pre><img src="0a4d7c2c.png" alt="Example block output"/><pre><code class="language-julia hljs">detected_result = compute(
+    StabilityProblem(loop_response),
+    UnstableFrequencyAnalysis(order_maxima=3),
+)
+
+only(PowerImpedance.plot(
+    detected_result;
+    title=&quot;Complementary-sensitivity peaks&quot;,
+    display_plot=false,
+    controls=false,
+)).figure</code></pre><img src="aecffe1f.png" alt="Example block output"/><h2 id="Makie-rendering"><a class="docs-heading-anchor" href="#Makie-rendering">Makie rendering</a><a id="Makie-rendering-1"></a><a class="docs-heading-anchor-permalink" href="#Makie-rendering" title="Permalink"></a></h2><p>Install and load one backend:</p><pre><code class="language-julia hljs">using PowerImpedance
+using CairoMakie
+
+handles = PowerImpedance.plot(result; display_plot = false)
+handle = only(handles)</code></pre><p>CairoMakie produces static output. GLMakie and WGLMakie provide interactive controls for reset, scale switching, legend visibility, and export. The layout responds to figure resizing.</p><p><code>PowerImpedance.plot</code> and <code>Makie.plot</code> select a definition from the result kind or analysis. Bode plotting can add completed series to an existing <code>UIPlot</code> or a vector of <code>UIPlot</code> handles through the <code>plots</code> keyword.</p><h2 id="SVG-export"><a class="docs-heading-anchor" href="#SVG-export">SVG export</a><a id="SVG-export-1"></a><a class="docs-heading-anchor-permalink" href="#SVG-export" title="Permalink"></a></h2><pre><code class="language-julia hljs">export_svg(
+    handle;
+    path = &quot;stability.svg&quot;,
+    theme = :publication,
+    open_file = false,
+)</code></pre><p>Existing paths are not overwritten. Omitting <code>path</code> creates a timestamped name. Export uses CairoMakie while retaining current scales, limits, and series visibility.</p><h2 id="Custom-definitions"><a class="docs-heading-anchor" href="#Custom-definitions">Custom definitions</a><a id="Custom-definitions-1"></a><a class="docs-heading-anchor-permalink" href="#Custom-definitions" title="Permalink"></a></h2><p>Custom recipes subtype <code>PlotBuilder.AbstractPlotDefinition</code> and specialize the grammar accessors for accepted input, axes, series, grouping, layouts, controls, and export. Use the <code>Definition</code> suffix for data-model types and the matching <code>*_definition</code> accessor names.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../legacy/">« Classic scalar interface</a><a class="docs-footer-nextpage" href="../docstrings/">Docstrings »</a><div class="flexbox-break"></div><p class="footer-message"><a href="https://github.com/Electa-Git/PowerImpedance.jl">PowerImpedance.jl</a> v0.3.0 supported by the Etch Competence Hub of EnergyVille, financed by the Flemish Government.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 24 August 2026 23:08">Monday 24 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
