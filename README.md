@@ -1,5 +1,7 @@
 # PowerImpedance.jl
 
+<img src="docs/src/assets/logo.svg" align="left" width="150" alt="PowerImpedance.jl logo" style="margin-right: 20px;"/>
+
 [![Coverage](https://codecov.io/github/Electa-Git/PowerImpedance.jl/branch/main/graph/badge.svg)](https://app.codecov.io/github/Electa-Git/PowerImpedance.jl)
 [![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://electa-git.github.io/PowerImpedance.jl/stable/)
