@@ -1,6 +1,18 @@
 # PowerImpedance.jl
 
-<img src="docs/src/assets/logo.svg" align="left" width="150" alt="PowerImpedance.jl logo" style="margin-right: 20px;"/>
+<picture>
+  <source
+    media="(prefers-color-scheme: dark)"
+    srcset="docs/src/assets/logo-dark.svg">
+  <source
+    media="(prefers-color-scheme: light)"
+    srcset="docs/src/assets/logo.svg">
+  <img
+    src="docs/src/assets/logo.svg"
+    align="left"
+    width="150"
+    alt="PowerImpedance.jl logo">
+</picture>
 
 [![Coverage](https://codecov.io/github/Electa-Git/PowerImpedance.jl/branch/main/graph/badge.svg)](https://app.codecov.io/github/Electa-Git/PowerImpedance.jl)
 [![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
