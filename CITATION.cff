@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the software and the conference paper below."
+type: software
+title: "PowerImpedance: Impedance-Based Stability Analysis"
+authors:
+  - name: "Etch"
+# The source citation specifies March 2025 but no day.
+date-released: "2025-03-01"
+repository-code: "https://github.com/Electa-Git/PowerImpedance.jl"
+
+preferred-citation:
+  type: conference-paper
+  title: "Small-signal stability analysis of HVDC cable systems with an open-source cable modeling toolbox"
+  authors:
+    - family-names: "Kircheis"
+      given-names: "Jan"
+    - family-names: "Martins-Britto"
+      given-names: "Amauri"
+    - family-names: "Beerten"
+      given-names: "Jef"
+    - family-names: "Van Hertem"
+      given-names: "Dirk"
+  collection-title: "Jicable HVDC'25 International Symposium on HVDC Cable Systems"
+  year: 2025
+  month: 10
+  conference:
+    name: "Jicable HVDC'25 International Symposium on HVDC Cable Systems"
+    city: "Turin"
+    country: "IT"
+    date-start: "2025-10-20"
+    date-end: "2025-10-22"
+  url: "https://lirias.kuleuven.be/4270005"

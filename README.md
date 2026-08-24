@@ -7,7 +7,7 @@ PowerImpedance is a Julia package for frequency-domain analysis of modern
 AC, DC, and hybrid power systems. It provides impedance and admittance
 characterization, AC/DC power-flow initialization, and fast small-signal
 stability assessment using analytical models validated against PSCAD EMT
-simulations with the Z-tool [[1]](#reference-1), [[2]](#reference-2). The
+simulations with the  [Z-tool](https://github.com/Electa-Git/Z-tool). T. The
 analytical component models have been validated over the frequency range from
 0.1 Hz to 5 kHz.
 
@@ -163,9 +163,6 @@ If you use PowerImpedance in your research, please cite:
 }
 ```
 
-Complete BibTeX metadata for the software and its supporting publications is
-available in [`CITATION.bib`](CITATION.bib).
-
 ## Contributors
 
 - **Aleksandra Lekic**
@@ -239,21 +236,6 @@ git config core.hooksPath .githooks
 ```
 
 The hook never blocks a commit.
-
-## References
-
-<a id="reference-1"></a>
-**[1]** F. J. Cifuentes Garcia, T. Roose, Ö. C. Sakinci, D. Lee, L. Dewangan,
-E. Avdiaj, and J. Beerten, “Automated Frequency-Domain Small-Signal Stability
-Analysis of Electrical Energy Hubs,” *2024 IEEE PES Innovative Smart Grid
-Technologies Europe (ISGT EUROPE)*, pp. 1–6, 2024.
-[doi:10.1109/ISGTEUROPE62998.2024.10863484](https://doi.org/10.1109/ISGTEUROPE62998.2024.10863484)
-
-<a id="reference-2"></a>
-**[2]** F. J. Cifuentes Garcia and J. Beerten, “Z-Tool: Frequency-domain
-characterization of EMT models for small-signal stability analysis,” *Electric
-Power Systems Research*, vol. 252, art. 112405, 2026.
-[doi:10.1016/j.epsr.2025.112405](https://doi.org/10.1016/j.epsr.2025.112405)
 
 ## Acknowledgements
 
