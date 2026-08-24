@@ -517,7 +517,7 @@ github_force_reconcile:
     url: https://github.com/Electa-Git/PowerImpedance.jl
     action: prepare
   script:
-    - ./ci/force_reconcile_github.sh
+    - ./.gitlab/force_reconcile_github.sh
   manual_confirmation: "Force GitHub main to the current GitLab main and archive the previous GitHub main?"
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
