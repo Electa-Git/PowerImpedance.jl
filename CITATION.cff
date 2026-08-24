@@ -5,7 +5,7 @@ title: "PowerImpedance: Impedance-Based Stability Analysis"
 version: "0.3.0"
 authors:
   - name: "Etch"
-date-released: "2026-08-24"
+date-released: "2026-08-25"
 repository-code: "https://github.com/Electa-Git/PowerImpedance.jl"
 
 preferred-citation:

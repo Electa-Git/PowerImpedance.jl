@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## [0.3.0] - 2026-08-24
+## [0.3.0] - 2026-08-25
 
 - Rename the registered package successor from `PowerImpedanceACDC` to
   `PowerImpedance` with a new package UUID.
