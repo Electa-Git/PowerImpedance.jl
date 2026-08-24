@@ -1,17 +1,25 @@
 export check_stability
 
 """
-    function check_stability(net :: Network, mmc :: Element, direction :: Symbol = :dc)
-This function determines two impedances inside the network, from which it forms the feedback
-transfer function. It allows "cutting" the power
-network next to the converter on its dc or ac side (determined by `direction` parameter).
-Afterwards, it is chacked the impedance `Z_conv` obtained by "looking" in the converter and the other
-one `Z_h` from the converter to the remaining of the circuit.
+$(TYPEDSIGNATURES)
 
-Using previous two impedances, the feedback transfer function is estimated as `Z_h Y_conv`.
+Calculate the converter and network impedances at a selected partition of a Classic network. The method forms the minor-loop gain as `Z_network / Z_device` and reports the phase margin at each detected unity-gain crossing.
 
-The impedances are calculated for the angular frequencies whose range is defined by
-`omega_range`.
+# Arguments
+
+- `net`: connected Classic network.
+- `mmc`: active converter or synchronous-machine element at the partition.
+- `direction`: partition side. `:dc` selects the DC terminals. Other values select the AC terminals. Default: `:dc`.
+- `omega_range`: legacy logarithmic frequency-grid tuple used by the impedance calculation. Default: `(0, 4, 1_000)`.
+
+# Returns
+
+- `impedance_data`: one `[Z_device Z_network Z_network/Z_device]` row for each frequency.
+- `angular_frequencies`: angular-frequency vector in radians per second.
+
+# Errors
+
+- Throws `ArgumentError` when `mmc` is not an active converter or synchronous machine.
 """
 function check_stability(net :: Network, mmc :: Element; direction :: Symbol = :dc,
     omega_range = (0, 4, 1000))

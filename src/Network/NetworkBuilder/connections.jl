@@ -1,327 +1,361 @@
-#### Intermediate data structures for defining connections ##########
-"""
- Pin(elementid::Symbol, side::Int, terminal::Int)
- Represents a pin of an element, identified by the element's ID, the side of the element, and the terminal number on that side.
-"""
-struct Pin
-	elementid::Symbol
-	side::Int
-	terminal::Int
+"Typed row stored by [`NetworkTopology`](@ref)."
+const TopologyConnection = @NamedTuple{
+    node::Symbol,
+    bus::Int,
+    element::Symbol,
+    side::Int,
+    terminal::Int,
+    domain::Int
+}
 
-	function Pin(elementid::Symbol, side::Int, terminal::Int)
-		side > 0 || throw(ArgumentError("Pin side must be >= 1, got $side."))
-		terminal > 0 ||
-			throw(ArgumentError("Pin terminal must be >= 1, got $terminal."))
-		return new(elementid, side, terminal)
-	end
+"Required fields of one user-supplied topology row."
+const _TOPOLOGY_ROW_FIELDS = (:node, :element, :side, :terminal)
+
+"Describe one externally connected side of an element."
+struct _PortDescription
+    side::Int
+    terminals::Int
+    domain::Int
+end
+
+function _two_port_description(element::P.Element, domain::Int)
+    return (
+        _PortDescription(1, P.nip(element), domain),
+        _PortDescription(2, P.nop(element), domain)
+    )
+end
+
+function _single_port_description(element::P.Element, domain::Int)
+    (_PortDescription(1, P.nip(element), domain),)
+end
+
+function _converter_port_description(element::P.Element)
+    (
+        _PortDescription(1, P.nip(element), 2),
+        _PortDescription(2, P.nop(element), 1)
+    )
+end
+
+function _port_descriptions(element::P.Element{<:P.Source})
+    _single_port_description(element, P.pmtype(element) == "gen" ? 1 : 2)
+end
+
+function _port_descriptions(element::P.Element{<:P.Impedance})
+    _two_port_description(element, P.is_three_phase(element) ? 1 : 0)
+end
+
+_port_descriptions(element::P.Element{<:P.Transformer}) = _two_port_description(element, 1)
+
+function _port_descriptions(element::P.Element{<:P.Transmission_line})
+    _two_port_description(element, P.is_three_phase(element) ? 1 : 0)
+end
+
+function _port_descriptions(element::P.Element{<:P.AbstractConverter})
+    _converter_port_description(element)
+end
+
+_port_descriptions(element::P.Element{<:P.Converter}) = _converter_port_description(element)
+
+function _port_descriptions(element::P.Element{<:P.SynchronousMachine})
+    _single_port_description(element, 1)
+end
+
+function _port_descriptions(element::P.Element{<:P.InductionMachine})
+    _single_port_description(element, 1)
+end
+
+function _port_descriptions(element::P.Element)
+    throw(
+        ArgumentError(
+        "no NetworkBuilder port description is defined for " *
+        "$(typeof(element.element_model))",
+    ),
+    )
+end
+
+function _port_description(element::P.Element, side::Int)
+    ports = _port_descriptions(element)
+    index = findfirst(port -> port.side == side, ports)
+    index === nothing && throw(
+        ArgumentError(
+        "element $(typeof(element.element_model)) has no externally connected side $side",
+    ),
+    )
+    return ports[index]
+end
+
+function _validate_topology_row(row)
+    row isa NamedTuple || throw(
+        ArgumentError(
+        "each connection must be a named tuple with fields " *
+        "(node, element, side, terminal); received $(typeof(row))",
+    ),
+    )
+    Set(propertynames(row)) == Set(_TOPOLOGY_ROW_FIELDS) || throw(
+        ArgumentError(
+        "connection fields must be exactly " *
+        "(node, element, side, terminal); received $(propertynames(row))",
+    ),
+    )
+    row.node isa Symbol || throw(ArgumentError("connection node must be a Symbol"))
+    row.element isa Symbol || throw(ArgumentError("connection element must be a Symbol"))
+    row.side isa Integer || throw(ArgumentError("connection side must be an integer"))
+    row.terminal isa Integer ||
+        throw(ArgumentError("connection terminal must be an integer"))
+    row.side > 0 || throw(ArgumentError("connection side must be positive"))
+    row.terminal > 0 || throw(ArgumentError("connection terminal must be positive"))
+    return (
+        node = row.node,
+        element = row.element,
+        side = Int(row.side),
+        terminal = Int(row.terminal)
+    )
+end
+
+mutable struct _DisjointSet{T}
+    parent::Dict{T, T}
+end
+
+_DisjointSet{T}() where {T} = _DisjointSet(Dict{T, T}())
+
+function _find!(sets::_DisjointSet{T}, item::T) where {T}
+    parent = get!(sets.parent, item, item)
+    if parent != item
+        sets.parent[item] = _find!(sets, parent)
+    end
+    return sets.parent[item]
+end
+
+function _union!(sets::_DisjointSet{T}, left::T, right::T) where {T}
+    left_root = _find!(sets, left)
+    right_root = _find!(sets, right)
+    left_root == right_root || (sets.parent[right_root] = left_root)
+    return nothing
+end
+
+function _resolved_topology_domains(elements::NamedTuple, rows)
+    sets = _DisjointSet{Tuple{Symbol, Int}}()
+    node_sides = Dict{Symbol, Vector{Tuple{Symbol, Int}}}()
+    element_sides = Dict{Symbol, Vector{Tuple{Symbol, Int}}}()
+
+    for row in rows
+        side = (row.element, row.side)
+        _find!(sets, side)
+        push!(get!(node_sides, row.node, Tuple{Symbol, Int}[]), side)
+        push!(get!(element_sides, row.element, Tuple{Symbol, Int}[]), side)
+    end
+
+    for sides in values(node_sides)
+        first_side = first(sides)
+        for side in Iterators.drop(sides, 1)
+            _union!(sets, first_side, side)
+        end
+    end
+
+    # A one-conductor impedance or line has no intrinsic AC/DC marker. Its two
+    # physical sides must nevertheless belong to one electrical domain.
+    for (element_name, sides) in element_sides
+        ports = _port_descriptions(elements[element_name])
+        all(iszero(port.domain) for port in ports) || continue
+        first_side = first(sides)
+        for side in Iterators.drop(sides, 1)
+            _union!(sets, first_side, side)
+        end
+    end
+
+    fixed_domains = Dict{Tuple{Symbol, Int}, Set{Int}}()
+    root_nodes = Dict{Tuple{Symbol, Int}, Set{Symbol}}()
+    for row in rows
+        root = _find!(sets, (row.element, row.side))
+        iszero(row.domain) || push!(get!(fixed_domains, root, Set{Int}()), row.domain)
+        push!(get!(root_nodes, root, Set{Symbol}()), row.node)
+    end
+
+    root_domain = Dict{Tuple{Symbol, Int}, Int}()
+    for (root, nodes) in root_nodes
+        domains = get(fixed_domains, root, Set{Int}())
+        length(domains) <= 1 || throw(
+            ArgumentError(
+            "topology containing node :$(first(sort!(collect(nodes)))) " *
+            "mixes electrical domains 1 and 2",
+        ),
+        )
+        # An otherwise unclassified one-conductor passive network retains the
+        # established DC interpretation used by the power-flow conversion.
+        root_domain[root] = isempty(domains) ? 2 : only(domains)
+    end
+
+    return [merge(row, (; domain = root_domain[_find!(sets, (row.element, row.side))]))
+            for row in rows]
 end
 
 """
-    Collection of pins of elements and the name of the connection
+$(TYPEDEF)
+
+Store the node incidence relation used by NetworkBuilder calculations.
+
+Each stored row identifies a node, its power-flow bus, an element side and
+terminal, and the electrical domain. Construct a topology through
+[`define`](@ref) or `NetworkTopology(elements, connections)`.
+
+$(TYPEDFIELDS)
 """
-struct ConnectionDef
-	name::Union{Symbol, Nothing}
-	endpoints::Vector{Pin}
-end
-
-ConnectionDef(endpoints::Vector{Pin};name=nothing) = ConnectionDef(name, endpoints)
-ConnectionDef(endpoint::Pin;name=nothing) = ConnectionDef([endpoint,]; name)
-ConnectionDef(name::Symbol) = ConnectionDef(name, Pin[])
-ConnectionDef(conn::ConnectionDef; name=conn.name) = ConnectionDef(name, conn.endpoints)
-
-
-"""
-	⟷(left, right)
-Connects corresponding pins or gives names to the nets
-
-
-Returns intermediate ConnectionDef (parsed as NamedTuple afterwards).
-"""
-function ⟷(left,right) 
-	
-	left_conn = ConnectionDef(left)
-	right_conn = ConnectionDef(right)
-	
-	if !isnothing(left_conn.name) && !isnothing(right_conn.name) && left_conn.name != right_conn.name
-		throw(ArgumentError("Cannot connect two named nets with different names: :$(left_conn.name) and :$(right_conn.name)."))
-	else 
-		name = !isnothing(left_conn.name) ? left_conn.name : right_conn.name
-		endpoints = vcat(left_conn.endpoints, right_conn.endpoints)
-		return ConnectionDef(endpoints; name)
-	end
-end
-
-
-↔(left, right) = left ⟷ right
-
-########## ConnectionsRegistry ############
-"""
-
-Fields:
-- `nets`: NamedTuple with net names and a collection of connected element pins, e.g. `:net1 => (Pin(:element1, 1, 1), Pin(:element2, 2, 1))`
-- `busregistry`: Table collecting bus information bus, elem, side, and, electrical domain 
-"""
-struct ConnectionsRegistry
-    registry::@Table{net::Symbol,bus::Int, elem::Symbol, side::Int, terminal::Int, elecdomain::Int} 
+struct NetworkTopology
+    "Typed node–element incidence rows."
+    connections::Table{TopologyConnection,
+        1,
+        NamedTuple{
+            (:node, :bus, :element, :side, :terminal, :domain),
+            Tuple{Vector{Symbol}, Vector{Int}, Vector{Symbol},
+                Vector{Int}, Vector{Int}, Vector{Int}}
+        }}
 end
 
 """
-	ConnectionsRegistry(elements, connections)
+    NetworkTopology(elements, connections)
 
-Build a `ConnectionsRegistry` from `elements` and connection definitions.
+Construct the topology of a materialized network from named connection rows.
 
-Each connection definition must provide a `name` and `endpoints`. Endpoints in
-the same connection are assigned the same bus, and the registry records the net name, bus number, element, side, terminal, and electrical domain.
+# Arguments
+
+- `elements`: Named tuple of ordinary PowerImpedance elements.
+- `connections`: Tuple or vector of named tuples with the fields `node`,
+  `element`, `side`, and `terminal`.
+
+# Returns
+
+- A `NetworkTopology` with typed rows and deterministic bus numbering.
+
+# Errors
+
+- Throws `ArgumentError` for malformed rows, missing elements, invalid ports,
+  duplicate terminal assignments, or nodes that mix AC and DC terminals.
 """
+function NetworkTopology(elements::NamedTuple, connections::Union{Tuple, AbstractVector})
+    rows = NamedTuple[]
+    terminal_nodes = Dict{Tuple{Symbol, Int, Int}, Symbol}()
 
-function ConnectionsRegistry(elements, connections::Tuple{Vararg{ConnectionDef}}, nonconnected_elements = Set())
-	
-	#1. Do checks of connections
+    for supplied in connections
+        row = _validate_topology_row(supplied)
+        haskey(elements, row.element) || throw(
+            ArgumentError("connection references missing element :$(row.element)"),
+        )
+        element = elements[row.element]
+        element isa P.Element || throw(
+            ArgumentError("NetworkBuilder element :$(row.element) must be an Element"),
+        )
+        element.connection || continue
 
-	# perform merges
-	connections_vec = mergebyname(connections) # Merge same netname connections 
-	connections_vec = mergebysharedpin(connections_vec) #Merge with shared pin
-	connections_vec = updateemptyname(connections_vec) # Update empty names to random unique symbol
-	# connections = Tuple(connections_vec)
+        port = _port_description(element, row.side)
+        row.terminal <= port.terminals || throw(
+            ArgumentError(
+            "element :$(row.element) side $(row.side) has $(port.terminals) " *
+            "terminal(s); received terminal $(row.terminal)",
+        ),
+        )
+        terminal_key = (row.element, row.side, row.terminal)
+        if haskey(terminal_nodes, terminal_key)
+            throw(
+                ArgumentError(
+                "element :$(row.element) side $(row.side) terminal " *
+                "$(row.terminal) is assigned more than once",
+            ),
+            )
+        end
+        terminal_nodes[terminal_key] = row.node
 
+        push!(rows, merge(row, (; domain = port.domain)))
+    end
+    rows = _resolved_topology_domains(elements, rows)
 
+    side_sets = Dict(
+        1 => _DisjointSet{Tuple{Symbol, Int}}(),
+        2 => _DisjointSet{Tuple{Symbol, Int}}()
+    )
+    node_sides = Dict{Tuple{Int, Symbol}, Vector{Tuple{Symbol, Int}}}()
+    for row in rows
+        side_key = (row.element, row.side)
+        _find!(side_sets[row.domain], side_key)
+        push!(get!(node_sides, (row.domain, row.node), Tuple{Symbol, Int}[]), side_key)
+    end
 
-	#2. Populate registry
-	registry = Table(net=Symbol[], bus=Int[], elem=Symbol[], side=Int[], terminal=Int[], elecdomain=Int[])
-	for conndef in connections_vec
-	
-		examplepin = first(conndef.endpoints) #All endpoints should be connected to same bus
-		elecdomain = P.elecdomain(elements[examplepin.elementid], examplepin.side)
-		bus = internbus(registry, conndef.name, examplepin.elementid, examplepin.side, elecdomain) #Check if net already has a bus via element and side, otherwise assign next bus		
-		# TODO: Check whether sides of all other elements are already connected to the same bus of the examplepin + all same elec domain
-		for pin in conndef.endpoints
-			@assert pin.elementid in keys(elements) "Element :$(pin.elementid) defined in connection but not found in elements."
-				
-			push!(registry, (;net=conndef.name, bus, elem=pin.elementid, side=pin.side, terminal=pin.terminal, elecdomain))
-		
-			
-		end
-        	end
+    for ((domain, _), sides) in node_sides
+        isempty(sides) && continue
+        first_side = first(sides)
+        for side in Iterators.drop(sides, 1)
+            _union!(side_sets[domain], first_side, side)
+        end
+    end
 
-	#Take out connections for non-connected elements (if any)
-	connectfilterfunc(row) = row.elem ∉ nonconnected_elements
+    ground_roots = Set{Tuple{Int, Tuple{Symbol, Int}}}()
+    for row in rows
+        P.isgroundnet(row.node) || continue
+        root = _find!(side_sets[row.domain], (row.element, row.side))
+        push!(ground_roots, (row.domain, root))
+    end
 
-	registry = filter(connectfilterfunc, registry)
-
-	return ConnectionsRegistry(registry)
+    bus_by_root = Dict{Tuple{Int, Tuple{Symbol, Int}}, Int}()
+    next_bus = Dict(1 => 1, 2 => 1)
+    stored = Table(
+        node = Symbol[],
+        bus = Int[],
+        element = Symbol[],
+        side = Int[],
+        terminal = Int[],
+        domain = Int[]
+    )
+    for row in rows
+        root = _find!(side_sets[row.domain], (row.element, row.side))
+        root_key = (row.domain, root)
+        bus = if root_key in ground_roots
+            0
+        else
+            get!(bus_by_root, root_key) do
+                assigned = next_bus[row.domain]
+                next_bus[row.domain] = assigned + 1
+                assigned
+            end
+        end
+        push!(stored, (; row.node, bus, row.element, row.side, row.terminal, row.domain))
+    end
+    return NetworkTopology(stored)
 end
 
-###### Accessor functions for ConnectionsRegistry ########
-
-"""
-
-We search if a given element and side already exist in the registry. IF yes, they should have the same bus. Busid consists of Int + elecdomain
-"""
-function internbus(registry::Table, net::Symbol, element::Symbol, side::Int, elecdomain::Int)
-	# Find if bus already exists for element and side
-	busfilterfunc(row) = row.elem == element && row.side == side	
-    busfilter = map(busfilterfunc, registry)
-
-	if any(busfilter)
-		bus_vec = registry.bus[busfilter]
-		@assert length(bus_vec) == 1 "Multiple buses found for element :$element side $side. This should not happen, check your connections!"
-		return bus_vec[1]
-	else
-		if !P.isgroundnet(net)
-			
-			domainbus = (filter(row -> row.elecdomain == elecdomain, registry)).bus
-			nextbus = maximum(domainbus; init=0) + 1
-		else
-			nextbus = 0 # Ground bus is always bus 0
-		end
-		return nextbus
-	end
+"Return all nongrounded AC topology rows."
+function acconnections(topology::NetworkTopology)
+    return filter(row -> row.domain == 1 && row.bus != 0, topology.connections)
 end
 
-#### Helper functions to Connectionregistry
-
-"""
-    acconnections(registry)
-
-Return all AC connections with a nonzero (nongrounded) bus.
-"""
-function acconnections(registry::ConnectionsRegistry)
-	#Filter out ground bus and DC bus
-	return filter(row -> (row.elecdomain == 1) && row.bus !=0, registry.registry)
+"Return all nongrounded DC topology rows."
+function dcconnections(topology::NetworkTopology)
+    return filter(row -> row.domain == 2 && row.bus != 0, topology.connections)
 end
 
-"""
-    dcconnections(registry)
-
-Return all DC connections with a nonzero (nongrounded) bus.
-"""
-function dcconnections(registry::ConnectionsRegistry)
-	return filter(row -> row.elecdomain == 2 && row.bus !=0, registry.registry)
-end
-"""
-    sortedcomponentconnections(registry, component; kwargs...)
-
-Return the connections of `component` sorted by domain, side, and terminal.
-"""
-sortedcomponentconnections(registry::ConnectionsRegistry, component::Symbol; kwargs...) = sortedcomponentconnections(registry.registry, component; kwargs...)
-
-function sortedcomponentconnections(registry::Table, component::Symbol;withground=false, acfirst=true)
-	# Find connections of component
-	compconn = filter(row -> row.elem == component, registry)
-	# Filter out the ground connections if necessary ()
-	groundfilt(row) = row.bus != 0
-	if !withground
-		filter!(groundfilt, compconn)
-	end
-	#Sorting depends if we want ac first (elecdomain=1 so first)
-	sortfunc(row) = acfirst ? (row.elecdomain, row.side, row.terminal) : (row.side, row.terminal)
-
-	sort!(compconn, by = sortfunc)
-	
-	return compconn
-
+"Return the topology rows of one element in electrical and terminal order."
+function sortedcomponentconnections(
+        topology::NetworkTopology,
+        component::Symbol;
+        kwargs...
+)
+    return sortedcomponentconnections(topology.connections, component; kwargs...)
 end
 
-
-
-
-
-######## Util functions ########
-"""
-    updateemptyname(conns)
-
-Assign unique names to unnamed connections.
-"""
-function updateemptyname(conns::Vector{ConnectionDef})
-	for i in eachindex(conns)
-		if isnothing(conns[i].name)
-			conns[i] = ConnectionDef(conns[i].endpoints; name=gensym())
-		end
-	end
-	return conns
-end
-"""
-    mergebyname(conns)
-
-Merge connections that share the same name.
-"""
-function mergebyname(conns::Tuple{Vararg{ConnectionDef}})
-	named = Dict{Symbol, Vector{Pin}}()
-	unnamed = ConnectionDef[]
-	for c in conns
-		if c.name === nothing
-			push!(unnamed, c)
-		else
-			push!(get!(named, c.name, Pin[]), c.endpoints...)
-		end
-	end
-	out = ConnectionDef[]
-	for (nm, pins) in named
-		push!(out, ConnectionDef(pins; name=nm))
-	end
-	append!(out, unnamed)
-	return out
-
-end
-"""
-    mergebysharedpin(conns)
-
-Merge connections that share at least one pin.
-"""
-function mergebysharedpin(conns::Vector{ConnectionDef})
-	# union-find via iterative merging
-	changed = true
-	conns = copy(conns)
-	pin_id(p::Pin) = (p.elementid, p.side, p.terminal)
-	while changed
-		changed = false
-		n = length(conns)
-		i = 1
-		while i <= n
-			j = i+1
-			while j <= n
-				seti = Set(pin_id.(conns[i].endpoints))
-				setj = Set(pin_id.(conns[j].endpoints))
-				if !isempty(intersect(seti, setj))
-					# merge j into i
-					allpins = vcat(conns[i].endpoints, conns[j].endpoints)
-					# remove duplicate pins
-					unique_pins = Dict{Tuple,Pin}()
-					for p in allpins
-						unique_pins[pin_id(p)] = p
-					end
-					mergedpins = collect(values(unique_pins))
-					# determine name (prefer existing name if any)
-					name = conns[i].name === nothing ? conns[j].name : conns[i].name
-					conns[i] = ConnectionDef(mergedpins; name=name)
-					splice!(conns, j)
-					n -= 1
-					changed = true
-					continue
-				end
-				j += 1
-			end
-			i += 1
-		end
-	end
-	return conns
+function sortedcomponentconnections(
+        connections::Table,
+        component::Symbol;
+        withground::Bool = false,
+        acfirst::Bool = true
+)
+    selected = filter(row -> row.element == component, connections)
+    withground || filter!(row -> row.bus != 0, selected)
+    order(row) = acfirst ? (row.domain, row.side, row.terminal) :
+                 (row.side, row.terminal)
+    sort!(selected; by = order)
+    return selected
 end
 
-pin(element::Symbol, side::Integer, terminal::Integer) =
-	Pin(element, Int(side), Int(terminal))
-
-pin(element::Symbol, name) = begin
-	side, terminal = parse_pin_name(name)
-	Pin(element, side, terminal)
-end
-
-"""
-Parse a pin name in the form "side.terminal", Symbol 1.1, or a tuple (side, terminal) into a (side, terminal) pair of integers.
-"""
-function parse_pin_name(name)
-	name isa Tuple{<:Integer, <:Integer} && return (Int(name[1]), Int(name[2]))
-
-	parts = split(string(name), ".")
-	length(parts) == 2 ||
-		throw(
-			ArgumentError(
-				"Pin name must contain side and terminal in the form side.terminal, got $(repr(name)).",
-			),
-		)
-
-	all(!isempty(part) for part in parts) ||
-		throw(ArgumentError("Pin name cannot contain empty side or terminal: $(repr(name))."))
-
-	try
-		side = parse(Int, parts[1])
-		terminal = parse(Int, parts[2])
-		side > 0 || throw(ArgumentError("Pin side must be >= 1, got $side."))
-		terminal > 0 || throw(ArgumentError("Pin terminal must be >= 1, got $terminal."))
-		return (side, terminal)
-	catch err
-		err isa ArgumentError && rethrow()
-		throw(
-			ArgumentError(
-				"Pin name must contain integer side and terminal in the form side.terminal, got $(repr(name)).",
-			),
-		)
-	end
-end
-"""
-Generate a unique pin name based on the element, side, and terminal. The name is in the form "side.terminal", e.g. "1.1" for side 1 terminal 1.
-This is the legacy naming convention for pins in PIACDC
-"""
-pin_name(pin::Pin) = Symbol("$(pin.side).$(pin.terminal)")
+"Return the Classic network pin name associated with a side and terminal."
 pin_name(side::Int, terminal::Int) = Symbol("$(side).$(terminal)")
 
-function Base.getproperty(pin::Pin, field::Symbol)
-	field === :name && return pin_name(pin)
-	return getfield(pin, field)
-end
-
-function Base.propertynames(::Pin, private::Bool = false)
-	props = (:element, :side, :terminal, :name)
-	return private ? props : props
-end
-
-connrowtonwpin(row) = (row.elem, pin_name(row.side, row.terminal))
+"Convert one topology row to the Classic network pin representation."
+connection_to_classic_pin(row) = (row.element, pin_name(row.side, row.terminal))

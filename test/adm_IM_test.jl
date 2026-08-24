@@ -1,4 +1,3 @@
-import PowerImpedanceACDC.NetworkBuilder: ⟷, pin
 function inductionmachinecircuit()
     transmissionVoltage = 220 / sqrt(3)
     g1 = ac_source(setpoint=Setpoint(Vac = transmissionVoltage, Pac = -500), pins = 3, transformation = true)
@@ -11,16 +10,14 @@ function inductionmachinecircuit()
     elements = (;g1,im1,imp)
 
     connections = (
-            pin(:im1, 1.1) ⟷ pin(:imp, 1.1),
-            pin(:im1, 1.2) ⟷ pin(:imp, 1.2),
-
-            pin(:imp, 2.1) ⟷ pin(:g1, 1.1),
-            pin(:imp, 2.2) ⟷ pin(:g1, 1.2),
-
-            pin(:g1, 2.1) ⟷ :gndd,
-            pin(:g1, 2.2) ⟷ :gndq,
-            pin(:im1, 2.1) ⟷ :gndd,
-            pin(:im1, 2.2) ⟷ :gndq,
+            (node = :machine_d, element = :im1, side = 1, terminal = 1),
+            (node = :machine_d, element = :imp, side = 1, terminal = 1),
+            (node = :machine_q, element = :im1, side = 1, terminal = 2),
+            (node = :machine_q, element = :imp, side = 1, terminal = 2),
+            (node = :grid_d, element = :imp, side = 2, terminal = 1),
+            (node = :grid_d, element = :g1, side = 1, terminal = 1),
+            (node = :grid_q, element = :imp, side = 2, terminal = 2),
+            (node = :grid_q, element = :g1, side = 1, terminal = 2),
     )
 
     builder_options = (;
@@ -38,7 +35,10 @@ function inductionmachinecircuit()
         )
 
 
-    linearizedadmittancenetwork = convert(builder, NB.LinearizedAdmittanceNetwork) 
+    linearizedadmittancenetwork = compute(
+        LinearizationProblem(builder),
+        AdmittanceLinearization(),
+    ).network_model
 
     return linearizedadmittancenetwork
 end
@@ -75,7 +75,5 @@ end
     @test isapprox(Y_im, Y_pscad, rtol=1e-3,atol=1e-6)
 
 end
-
-
 
 

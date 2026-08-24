@@ -1,22 +1,34 @@
 # using JLD2
-using PowerImpedanceACDC
+ENV["GKSwstype"] = "100"
+using PowerImpedance
+import PowerImpedance: @network
 using Test
 using LinearAlgebra
-import PowerImpedanceACDC.NetworkBuilder
-const NB = PowerImpedanceACDC.NetworkBuilder
+import PowerImpedance.NetworkBuilder
+const NB = PowerImpedance.NetworkBuilder
 
-const PIACDC = PowerImpedanceACDC # Alias for easier access in tests
+const PI = PowerImpedance # Alias for easier access in tests
 
-# Change the following line to choose logging level:
+# CI can set POWERIMPEDANCE_TEST_LOG_LEVEL=error; the former variable remains supported.
 using Logging
-Logging.global_logger(ConsoleLogger(stderr, Logging.Warn)) # possible values: Logging.Debug, Logging.Info (=default value), Logging.Warn, Logging.Error
+const TEST_LOG_LEVEL =
+    lowercase(get(
+        ENV,
+        "POWERIMPEDANCE_TEST_LOG_LEVEL",
+        get(ENV, "PIACDC_TEST_LOG_LEVEL", "warn"),
+    )) == "error" ?
+    Logging.Error : Logging.Warn
+Logging.global_logger(ConsoleLogger(stderr, TEST_LOG_LEVEL))
+TEST_LOG_LEVEL == Logging.Error && PowerImpedance._PMACDC.silence()
 
-# Alternatively, you can set the logging level to debug for the PIACDC package only (to avoid vscode debug logging) via an environment variable:
-# ENV["JULIA_DEBUG"]=PowerImpedanceACDC # Warning: this will unfortunanelty not enable the debug logging for the ipopt solver.
+# Alternatively, set the package-only logging level to debug through an environment variable to avoid VS Code debug logging:
+# ENV["JULIA_DEBUG"]=PowerImpedance # Warning: this will unfortunanelty not enable the debug logging for the ipopt solver.
 
+@test nameof(PowerImpedance) === :PowerImpedance
 
-@time @testset "PowerImpedanceACDC" begin
-        
+@time @testset "PowerImpedance" begin
+        include("aqua.jl")
+        include("plotbuilder_test.jl")
         include("imp_test.jl")
         include("adm_MMC_test.jl")
         include("adm_MMC_compensated_test.jl")
@@ -30,8 +42,14 @@ Logging.global_logger(ConsoleLogger(stderr, Logging.Warn)) # possible values: Lo
         include("Source_test.jl")
         include("NetworkBuilder_test.jl")
         include("ConnectionRegistry_test.jl")
+        include("calculation_model_test.jl")
+        include("numeric_parity_test.jl")
         include("convert_pmacdc_test.jl")
         include("make_y_node_test.jl")
         include("Transformer_test.jl")
-        
+        include("logging_test.jl")
+        include("Gridspace_test.jl")
+        include("stability_plot_recipes_test.jl")
 end;
+
+include("advisory_quality.jl")

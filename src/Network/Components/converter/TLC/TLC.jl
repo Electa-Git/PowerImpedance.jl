@@ -30,8 +30,8 @@ $(TYPEDFIELDS)
 
 # Details
 
-The field order defines the state ordering used by [`statenames`](@ref) and the
-execution order used in [`state_space!`](@ref).
+The field order defines the state ordering used by `statenames` and the
+execution order used in `state_space!`.
 """
 struct TLC{
     E<:ElectricalTLC,
@@ -252,9 +252,51 @@ function state_space!(F, x, inputs, setpoint_pu::SetpointPU, c::TLC)
 end
 
 """
-Construct a TLC `Element` with modular subblocks.
+    tlc(; elec=ElectricalTLC(), meas=Measurement(),
+        sync=NoSynchronization(), outerActive=NoOuterActiveControl(),
+        outerReactive=NoOuterReactiveControl(),
+        innerVoltage=NoInnerVoltageControl(),
+        innerCurrent=NoInnerCurrentControl(), mod=NoModulation(),
+        setpoint=Setpoint(), limits=Limits(), connection=true)
 
-$(SIGNATURES)
+Construct a two-level voltage-source converter from composable plant, signal,
+control, and modulation blocks.
+
+# Arguments
+
+- `elec`: TLC electrical plant and physical base quantities.
+- `meas`: Converter measurement and filtering block.
+- `sync`: Synchronization model.
+- `outerActive`: Active-power or DC-voltage outer control.
+- `outerReactive`: Reactive-power or AC-voltage outer control.
+- `innerVoltage`: Inner voltage-control block.
+- `innerCurrent`: Inner current-control block.
+- `mod`: Modulation and delay block.
+- `setpoint`: AC/DC steady-state operating point.
+- `limits`: Active- and reactive-power limits in the converter base.
+- `connection`: Whether NetworkBuilder includes the converter in the system.
+
+# Returns
+
+- An `Element` with one DC terminal group and one transformed AC terminal group.
+
+# Notes
+
+The selected synchronization and outer-control blocks determine the converter's
+AC and DC power-flow modes. Frequency-domain evaluation equilibrates and
+linearizes the complete numeric converter at the solved operating point.
+
+# Examples
+
+```julia
+converter = tlc(
+    sync = PLLSynchronization(),
+    outerActive = OuterActivePowerControl(),
+    outerReactive = OuterReactiveQControl(),
+    innerCurrent = InnerCurrentPIControl(),
+    setpoint = Setpoint(Pac = 100.0, Qac = 0.0, Vac = 220.0, Vdc = 640.0),
+)
+```
 """
 function tlc(;
     elec::ElectricalTLC = ElectricalTLC(),
@@ -396,7 +438,7 @@ function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global
     convdc["basekVac"] = global_dict["V"] / 1e3
 
     convdc["type_ac"] = pf_type_ac(conv.outerReactive)
-    convdc["Vtar"] = (elem.setpoint.Vac/sqrt(2)) / ( global_dict["V"] / 1e3) # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages, PowerImpedanceACDC uses amplitude  
+    convdc["Vtar"] = (elem.setpoint.Vac/sqrt(2)) / ( global_dict["V"] / 1e3) # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages, PowerImpedance uses amplitude
     if convdc["type_ac"] == 2
         data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]

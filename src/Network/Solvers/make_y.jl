@@ -47,7 +47,7 @@ function make_y(net :: Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}}, s 
     dictACDC[:element_list] = [:tl1, :dc_line, :c1, :c2]
 
     # Create the y matrix with respect to the elements and nodes defined in dictACDC
-    dummy=PowerImpedanceACDC.make_y(net,dictACDC)
+    dummy=PowerImpedance.make_y(net,dictACDC)
 """
 function make_y(net :: Network, dict::Dict{Symbol, Array{Union{Symbol,Int}}}, s :: Complex)
 

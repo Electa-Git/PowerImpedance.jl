@@ -51,10 +51,25 @@ function _terminal_voltage(vm, terminal::String)
 end
 
 """
-	function power_flow(net :: Network)
-Forms the dictionary needed for solving the power flow problem using
-package PowerModelsACDC. After successful power flow solving, it updates
-the operating point of the active devices """
+$(TYPEDSIGNATURES)
+
+Build the PowerModelsACDC representation of a Classic network, solve its AC/DC power flow, and update active-element setpoints with the solved operating point.
+
+# Arguments
+
+- `net`: classic network to solve.
+
+# Returns
+
+- `result`: PowerModelsACDC solver result.
+- `data`: PowerModelsACDC input dictionary.
+- `nodes2bus`: mapping from Classic network nodes to PowerModels bus identifiers.
+- `elem2comp`: mapping from Classic elements to PowerModels component identifiers.
+
+# Notes
+
+This method mutates active elements in `net` by replacing their operating setpoints with solved values.
+"""
 function power_flow(net::Network)
 	# global result, nodes2bus, elem2comp, data, global_dict
 	global_dict = PowerModelsACDC._get_pu_bases(1000, net.voltageBase[1]) # 3-PH MVA, LL-RMS, Original setting was 100,320
@@ -851,5 +866,3 @@ function update_actives_setpoints!(data, delta)
 
 
 end
-
-

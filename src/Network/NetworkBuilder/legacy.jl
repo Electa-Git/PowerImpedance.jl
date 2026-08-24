@@ -1,53 +1,65 @@
-function updateelempins!(elements, connectionsregistry)
-	for (name, element) in pairs(elements)
-		pins = filter(row -> row.elem == name, connectionsregistry.registry)
-		for pin in pins
-			legacypinname = pin_name(pin.side, pin.terminal)
-			net = pin.net
-			element.pins[legacypinname] = net
-		end
-	end
-end
+function build_network(
+        elements::NamedTuple,
+        topology::NetworkTopology,
+        options::NamedTuple
+)
+    connections = deepcopy(topology.connections)
 
-function build_network(elements::NamedTuple, connections::ConnectionsRegistry, options::NamedTuple)
-	
-    ## Add not connected side of single-port elements to ground
-	connreg = deepcopy(connections.registry)	
-    singleportconnections = filter(row -> !P.isgroundnet(row.net) && P.issingleport(elements[row.elem]), connreg)
-    elemsidetable = Table(elements = singleportconnections.elem, side = singleportconnections.side, elecdomain=singleportconnections.elecdomain)
-    elemsidetable = Table(unique(elemsidetable))
-	for row in elemsidetable
-        to_add_side = row.side == 1 ? 2 : 1
-        to_add_pins = row.side == 1 ? P.nip(elements[row.elements]) : P.nop(elements[row.elements])
-        for pin in 1:to_add_pins
-            newrow = (; net = Symbol("gnd"), bus=0, elem = row.elements, side = to_add_side, terminal = pin, elecdomain = row.elecdomain)
-            push!(connreg, newrow)
+    # The Classic network represents one-port devices with a second side tied to
+    # ground. This conversion does not modify the NetworkTopology.
+    single_port_rows = filter(
+        row -> !P.isgroundnet(row.node) && P.issingleport(elements[row.element]),
+        connections
+    )
+    connected_sides = unique(
+        Table(
+        element = single_port_rows.element,
+        side = single_port_rows.side,
+        domain = single_port_rows.domain
+    ),
+    )
+    for row in connected_sides
+        ground_side = row.side == 1 ? 2 : 1
+        terminal_count = row.side == 1 ? P.nip(elements[row.element]) :
+                         P.nop(elements[row.element])
+        for terminal in 1:terminal_count
+            push!(
+                connections,
+                (
+                    node = :gnd,
+                    bus = 0,
+                    element = row.element,
+                    side = ground_side,
+                    terminal,
+                    domain = row.domain
+                )
+            )
         end
     end
 
-    elements = deepcopy(elements) # Avoid rewriting of elements in new version
+    network_elements = deepcopy(elements)
     network = P.Network()
-	network.voltageBase[1] = option_value(options, :voltageBase, network.voltageBase[1])
+    network.voltageBase[1] = option_value(
+        options,
+        :voltageBase,
+        network.voltageBase[1]
+    )
 
-	for (name, element) in pairs(elements)
-		element isa P.Element ||
-			throw(ArgumentError("NetworkBuilder element :$name must be an Element."))
-		P.add!(network, name, element)
-	end
+    for (name, element) in pairs(network_elements)
+        element isa P.Element || throw(
+            ArgumentError("NetworkBuilder element :$name must be an Element"),
+        )
+        P.add!(network, name, element)
+    end
 
-	netnames = unique(connreg.net) # Collection of net names
-	
-	for net in netnames
-		net_entries = filter(r -> r.net == net, connreg)
-		networkpins = Any[map(connrowtonwpin, net_entries)...]
-		push!(networkpins, net) # Add net name as pin for backward compatibility with previous behavior
-		P.connect!(network, networkpins...)
-		
-	end
+    for node in unique(connections.node)
+        rows = filter(row -> row.node == node, connections)
+        classic_pins = Any[map(connection_to_classic_pin, rows)...]
+        push!(classic_pins, node)
+        P.connect!(network, classic_pins...)
+    end
 
     P.check_lumped_elements(network)
-
-	
-	P.connect!(network)
-	return network
+    P.connect!(network)
+    return network
 end

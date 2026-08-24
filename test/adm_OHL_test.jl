@@ -30,7 +30,7 @@ bundled_ohl = overhead_line(length = 50e3,
 	transformation = true,
 )
 
-(Z_bundled, Y_bundled) = PowerImpedanceACDC.eval_parameters(
+(Z_bundled, Y_bundled) = PowerImpedance.eval_parameters(
 	bundled_ohl.element_model, 1im*2π*50)
 @test size(Z_bundled) == (2, 2)
 @test size(Y_bundled) == (2, 2)
@@ -57,7 +57,7 @@ Y_validation=transpose.(matrices)
 # Obtain analytical data
 Y_OHL = []
 for k in eachindex(omegas)
-	Y1 = PowerImpedanceACDC.get_y(grid.elements[:labanimal], 1im*omegas[k])
+	Y1 = PowerImpedance.get_y(grid.elements[:labanimal], 1im*omegas[k])
 	push!(Y_OHL, Y1) # Keep sign of Ydc, swapping sign of Yacs
 end
 

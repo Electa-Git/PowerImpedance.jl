@@ -1,15 +1,109 @@
 stages:
   - test
   - docs
+  - release_check
   - deploy
+  - release_report
 
 variables:
   JULIA_DEPOT_PATH: "$CI_PROJECT_DIR/.julia"
-  JULIA_PKG_PRECOMPILE_AUTO: "1"
+  JULIA_PKG_PRECOMPILE_AUTO: "0"
+  # Respect the Kubernetes CPU allocation without creating nested thread pools.
+  # The explicit zero-sized interactive pool keeps the total Julia worker count
+  # at CI_JOB_CPU_LIMIT (currently four).
+  JULIA_CPU_THREADS:
+    value: "$CI_JOB_CPU_LIMIT"
+    expand: true
+  JULIA_NUM_THREADS:
+    value: "$CI_JOB_CPU_LIMIT,0"
+    expand: true
+  JULIA_NUM_GC_THREADS: "1"
+  JULIA_NUM_PRECOMPILE_TASKS: "2"
+  JULIA_IMAGE_THREADS: "2"
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
+  OMP_THREAD_LIMIT: "1"
+  MKL_NUM_THREADS: "1"
+  POWERIMPEDANCE_TEST_LOG_LEVEL: "error"
+
+  # Codecov represents the public GitHub release mirror. Coverage is uploaded
+  # only after the corresponding release commit has been published there.
+  CODECOV_CLI_VERSION: "v11.3.1"
+  CODECOV_SLUG: "Electa-Git/PowerImpedance.jl"
+
+  GITHUB_REMOTE_URL: "git@github.com:Electa-Git/PowerImpedance.jl.git"
+
+
+# Julia precompile caches contain absolute source paths.
+# The project slug prevents reuse after a repository move.
+# Project-file digests separate dependency environments without invalidating caches for CI-only edits.
+.julia_cache:
+  cache: &julia_cache
+    key:
+      files:
+        - Project.toml
+      prefix: "$CI_PROJECT_PATH_SLUG-base"
+    paths:
+      - .julia/clones/
+      - .julia/compiled/
+      - .julia/registries/
+    policy: pull
+    when: on_success
+
+
+.julia_plotting_cache:
+  cache: &julia_plotting_cache
+    key:
+      files:
+        - Project.toml
+        - integration/plotting/headless/Project.toml
+      prefix: "$CI_PROJECT_PATH_SLUG-plotting"
+    paths:
+      - .julia/clones/
+      - .julia/compiled/
+      - .julia/registries/
+    policy: pull
+    when: on_success
+
+
+.julia_docs_cache:
+  cache: &julia_docs_cache
+    key:
+      files:
+        - Project.toml
+        - docs/Project.toml
+      prefix: "$CI_PROJECT_PATH_SLUG-docs"
+    paths:
+      - .julia/clones/
+      - .julia/compiled/
+      - .julia/registries/
+    policy: pull
+    when: on_success
+
+
+.julia_heavy_resources:
+  variables:
+    KUBERNETES_CPU_REQUEST: "4"
+    KUBERNETES_MEMORY_REQUEST: "8Gi"
+
+
+.julia_formatter_resources:
+  variables:
+    KUBERNETES_CPU_REQUEST: "1"
+    KUBERNETES_MEMORY_REQUEST: "2Gi"
+    JULIA_CPU_THREADS: "1"
+    JULIA_NUM_THREADS: "1"
+    JULIA_NUM_PRECOMPILE_TASKS: "1"
+    JULIA_IMAGE_THREADS: "1"
+
 
 test:
-  image: julia:1.11.2-bookworm
+  extends: .julia_heavy_resources
+  image: julia:1.12.6-bookworm
   stage: test
+  cache:
+    <<: *julia_cache
+    policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates
@@ -20,19 +114,49 @@ test:
     - |
       julia --project=. -e ' #--compiled-modules=existing
         using Pkg
-        Pkg.Registry.add("General")
-        Pkg.Registry.update()
         Pkg.instantiate()
-        Pkg.precompile()
-        Pkg.test()
+        include("test/core_plotting_load_test.jl")
+
+        coverage_file = joinpath(pwd(), "coverage", "lcov.info")
+        mkpath(dirname(coverage_file))
+        rm(coverage_file; force=true)
+
+        if isempty(get(ENV, "CI_COMMIT_TAG", ""))
+          # Keep ordinary branch and merge-request pipelines at their existing
+          # runtime. The empty artifact is never consumed outside a release.
+          Pkg.test()
+          touch(coverage_file)
+        else
+          Pkg.test(; coverage=coverage_file)
+          isfile(coverage_file) && filesize(coverage_file) > 0 ||
+            error("Pkg.test did not produce a nonempty LCOV report")
+        end
       '
+
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - coverage/lcov.info
+
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
-docs_check:
-  image: julia:1.11.2-bookworm
-  stage: docs
+    # A release tag MUST run the real test suite.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+
+
+extension_tests:
+  extends: .julia_heavy_resources
+  image: julia:1.12.6-bookworm
+  stage: test
+  cache:
+    <<: *julia_cache
+    key:
+      files:
+        - Project.toml
+      prefix: "$CI_PROJECT_PATH_SLUG-extensions"
+    policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates
@@ -41,23 +165,581 @@ docs_check:
     - julia --version
     - git --version
     - |
-      julia --project=docs -e ' #--compiled-modules=existing 
+      julia -e '
         using Pkg
-        Pkg.Registry.add("General")
-        Pkg.Registry.update()
+        Pkg.activate(; temp=true)
         Pkg.develop(PackageSpec(path=pwd()))
+        Pkg.add([
+          PackageSpec(
+            name="LineCableModels",
+            url="https://github.com/Electa-Git/LineCableModels.jl.git",
+            rev="abe355170add20cc0c841e218fed82fe8ffbab51",
+          ),
+          PackageSpec(name="Measurements"),
+          PackageSpec(name="TestItems"),
+          PackageSpec(name="TestItemRunner"),
+        ])
+        Pkg.precompile()
+
+        project = dirname(Base.active_project())
+        test_files = [
+          "run_extension_tests.jl",
+          "run_linecablemodels_extension_tests.jl",
+          "run_testitems.jl",
+        ]
+        for test_file in test_files
+          path = joinpath(pwd(), "test", test_file)
+          run(`$(Base.julia_cmd()) --project=$project --startup-file=no $path`)
+        end
+      '
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+    # A release tag MUST run the real test suite.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+
+
+plotting_tests:
+  extends: .julia_heavy_resources
+  image: julia:1.12.6-bookworm
+  stage: test
+  timeout: 1h
+  needs:
+    - job: test
+      artifacts: false
+  cache:
+    - <<: *julia_cache
+      policy: pull
+    - <<: *julia_plotting_cache
+      policy: pull-push
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - julia --version
+    - |
+      julia --project=integration/plotting/headless --startup-file=no -e '
+        using Pkg
         Pkg.instantiate()
-        using Documenter: doctest
-        using PowerImpedanceACDC
-        doctest(PowerImpedanceACDC)
-        include("docs/make.jl")
+        Pkg.precompile()
+
+        project = dirname(Base.active_project())
+        test_file = joinpath(pwd(), "integration", "plotting", "cairo_tests.jl")
+        test_environment = (
+          "JULIA_CPU_THREADS" => "1",
+          "JULIA_NUM_THREADS" => "1",
+          "JULIA_IMAGE_THREADS" => "1",
+        )
+        for load_order in ("power_first", "makie_first")
+          command = addenv(
+            `$(Base.julia_cmd()) --project=$project --startup-file=no $test_file`,
+            test_environment...,
+            "POWERIMPEDANCE_PLOTTING_LOAD_ORDER" => load_order,
+          )
+          run(command)
+        end
+        wgl_test = joinpath(pwd(), "integration", "plotting", "wgl_load_test.jl")
+        run(addenv(
+          `$(Base.julia_cmd()) --project=$project --startup-file=no $wgl_test`,
+          test_environment...,
+        ))
+      '
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+
+
+formatter:
+  extends: .julia_formatter_resources
+  image: julia:1.12.6-bookworm
+  stage: test
+  allow_failure: true
+  cache:
+    <<: *julia_cache
+    key:
+      files:
+        - Project.toml
+      prefix: "$CI_PROJECT_PATH_SLUG-formatter"
+    policy: pull-push
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - |
+      julia -e '
+        using Pkg
+        Pkg.activate(; temp=true)
+        Pkg.add("JuliaFormatter")
+        using JuliaFormatter
+
+        JuliaFormatter.format("."; overwrite=false) ||
+          @warn "JuliaFormatter advisory check reported formatting differences"
       '
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
-pages:
-  image: julia:1.11.2-bookworm
+
+docs_check:
+  extends: .julia_heavy_resources
+  image: julia:1.12.6-bookworm
+  stage: docs
+  needs:
+    - job: plotting_tests
+      artifacts: false
+  cache:
+    - <<: *julia_cache
+      policy: pull
+    - <<: *julia_plotting_cache
+      policy: pull
+    - <<: *julia_docs_cache
+      policy: pull-push
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - julia --version
+    - git --version
+    - |
+      julia --project=docs -e ' #--compiled-modules=existing
+        using Pkg
+        Pkg.develop(PackageSpec(path=pwd()))
+        Pkg.instantiate()
+        Pkg.precompile()
+
+        if occursin(r"^v\d+\.\d+\.\d+$", get(ENV, "CI_COMMIT_TAG", ""))
+          statistics = `timeout 10m $(Base.julia_cmd()) --project=docs/statistics --startup-file=no docs/statistics/make.jl`
+          try
+            success(statistics) || @warn "User-statistics map generation failed; using the committed map"
+          catch error
+            @warn "User-statistics map generation could not start; using the committed map" exception = (error, catch_backtrace())
+          end
+        end
+
+        include("docs/make.jl")
+      '
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - docs/build/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+    # Stable release documentation links to its public GitHub source snapshot.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      variables:
+        POWERIMPEDANCE_DOCS_TARGET: "github"
+
+    # Release tags must also prove that documentation still builds.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+
+
+# ---------------------------------------------------------------------------
+# GitHub publication infrastructure
+# ---------------------------------------------------------------------------
+
+.github_release_base:
+  image: alpine:3.22
+
+  variables:
+    # Release jobs need enough history to perform ancestry checks.
+    GIT_DEPTH: "0"
+    GIT_TERMINAL_PROMPT: "0"
+
+  before_script:
+    - apk add --no-cache git openssh-client
+
+    - mkdir -p "$HOME/.ssh"
+    - chmod 700 "$HOME/.ssh"
+
+    # Both variables must be GitLab CI/CD variables of Type = File.
+    - cp "$GITHUB_DEPLOY_KEY" "$HOME/.ssh/id_ed25519"
+    - cp "$GITHUB_KNOWN_HOSTS" "$HOME/.ssh/known_hosts"
+
+    - chmod 600 "$HOME/.ssh/id_ed25519"
+    - chmod 644 "$HOME/.ssh/known_hosts"
+
+    - |
+      cat > "$HOME/.ssh/config" <<'EOF'
+      Host github.com
+        IdentityFile ~/.ssh/id_ed25519
+        IdentitiesOnly yes
+      EOF
+
+    - chmod 600 "$HOME/.ssh/config"
+
+    - git remote remove github 2>/dev/null || true
+    - git remote add github "$GITHUB_REMOTE_URL"
+
+
+# ---------------------------------------------------------------------------
+# READ-ONLY PREFLIGHT
+#
+# On main:
+#   manual diagnostic only; never blocks Pages.
+#
+# On a release tag:
+#   automatic gate after tests/docs.
+#
+# This performs only fetch/read operations. It cannot modify GitHub.
+# ---------------------------------------------------------------------------
+
+github_release_preflight:
+  extends: .github_release_base
+  stage: release_check
+
+  script:
+    - |
+      set -eu
+
+      # Proves SSH authentication and repository access.
+      git ls-remote github HEAD >/dev/null
+
+      # Get authoritative GitLab main.
+      git fetch --no-tags origin \
+        "+refs/heads/${CI_DEFAULT_BRANCH}:refs/remotes/origin/${CI_DEFAULT_BRANCH}"
+
+      # Get currently published GitHub main.
+      git fetch --no-tags github \
+        "+refs/heads/main:refs/remotes/github/main"
+
+      VERSION="$(
+        sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Project.toml |
+        head -n 1
+      )"
+
+      test -n "$VERSION" || {
+        echo "FAIL: could not read version from Project.toml"
+        exit 1
+      }
+
+      EXPECTED_TAG="v${VERSION}"
+      GITHUB_MAIN_SHA="$(git rev-parse refs/remotes/github/main)"
+
+      echo
+      echo "GitLab candidate : $CI_COMMIT_SHA"
+      echo "GitHub main      : $GITHUB_MAIN_SHA"
+      echo "Project version  : $VERSION"
+      echo "Expected tag     : $EXPECTED_TAG"
+      echo
+
+      echo "Left/right commit counts (GitHub/GitLab):"
+      git rev-list \
+        --left-right \
+        --count \
+        refs/remotes/github/main..."$CI_COMMIT_SHA" || true
+
+      echo
+
+      STATUS="DIVERGED"
+
+      if git merge-base --is-ancestor \
+        refs/remotes/github/main \
+        "$CI_COMMIT_SHA"
+      then
+        STATUS="FAST_FORWARD"
+
+      elif git merge-base --is-ancestor \
+        "$CI_COMMIT_SHA" \
+        refs/remotes/github/main
+      then
+        STATUS="GITHUB_AHEAD"
+      fi
+
+      echo "Publication topology: $STATUS"
+      echo
+
+      # Manual main-branch preflight is informational only.
+      if [ -z "${CI_COMMIT_TAG:-}" ]; then
+        echo "READ-ONLY PREFLIGHT COMPLETE."
+        echo "GitHub was not modified."
+        exit 0
+      fi
+
+      # From here down we are validating an actual release-tag pipeline.
+
+      test "$CI_COMMIT_TAG" = "$EXPECTED_TAG" || {
+        echo "FAIL:"
+        echo "tag '$CI_COMMIT_TAG' != expected '$EXPECTED_TAG'"
+        exit 1
+      }
+
+      git merge-base --is-ancestor \
+        "$CI_COMMIT_SHA" \
+        "refs/remotes/origin/${CI_DEFAULT_BRANCH}" || {
+          echo "FAIL:"
+          echo "tagged commit is not on ${CI_DEFAULT_BRANCH}"
+          exit 1
+        }
+
+      if [ "$STATUS" = "FAST_FORWARD" ]; then
+        echo "PASS:"
+        echo "normal GitHub publication is possible."
+        exit 0
+      fi
+
+      echo "FAIL:"
+      echo "GitHub main is not an ancestor of this release."
+      echo "Run the protected github_force_reconcile job from the latest default-branch pipeline."
+      echo "No write operation was attempted."
+      exit 1
+
+  rules:
+    # Release tags run this automatically and failures block deployment.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+      when: on_success
+      allow_failure: false
+
+    # On normal main pipelines this is merely an optional diagnostic.
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+      allow_failure: true
+
+
+# ---------------------------------------------------------------------------
+# MANUAL RECONCILIATION
+#
+# Protect the github-force-reconcile environment in GitLab and grant its
+# deployment permission only to maintainers authorized to rewrite GitHub main.
+# ---------------------------------------------------------------------------
+
+github_force_reconcile:
+  extends: .github_release_base
   stage: deploy
+  resource_group: github-release
+  environment:
+    name: github-force-reconcile
+    url: https://github.com/Electa-Git/PowerImpedance.jl
+    action: prepare
+  script:
+    - ./ci/force_reconcile_github.sh
+  manual_confirmation: "Force GitHub main to the current GitLab main and archive the previous GitHub main?"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+      allow_failure: true
+
+
+# ---------------------------------------------------------------------------
+# PERMANENT RELEASE PUBLICATION
+#
+# ABSOLUTELY NO FORCE PUSH.
+#
+# GitHub main must already be an ancestor of the tagged GitLab commit.
+# Valid release tags publish automatically after the preflight succeeds.
+# ---------------------------------------------------------------------------
+
+github_release_publish:
+  extends: .github_release_base
+  stage: deploy
+
+  resource_group: github-release
+
+  script:
+    - |
+      set -eu
+
+      VERSION="$(
+        sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Project.toml |
+        head -n 1
+      )"
+
+      test -n "${CI_COMMIT_TAG:-}" || {
+        echo "REFUSED: not a tag pipeline"
+        exit 1
+      }
+
+      test "$CI_COMMIT_TAG" = "v${VERSION}" || {
+        echo "REFUSED:"
+        echo "tag '$CI_COMMIT_TAG' != Project.toml version 'v${VERSION}'"
+        exit 1
+      }
+
+      git fetch --no-tags origin \
+        "+refs/heads/${CI_DEFAULT_BRANCH}:refs/remotes/origin/${CI_DEFAULT_BRANCH}"
+
+      git fetch origin \
+        "+refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+
+      git fetch --no-tags github \
+        "+refs/heads/main:refs/remotes/github/main"
+
+      # Release commit must be part of authoritative GitLab main.
+      git merge-base --is-ancestor \
+        "$CI_COMMIT_SHA" \
+        "refs/remotes/origin/${CI_DEFAULT_BRANCH}" || {
+          echo "REFUSED:"
+          echo "tagged commit is not on ${CI_DEFAULT_BRANCH}"
+          exit 1
+        }
+
+      # This is the permanent anti-bullshit guard.
+      #
+      # If somebody starts independently committing to GitHub again,
+      # publication stops instead of silently rewriting anything.
+      git merge-base --is-ancestor \
+        refs/remotes/github/main \
+        "$CI_COMMIT_SHA" || {
+          echo "REFUSED:"
+          echo "GitHub main is not an ancestor of this release."
+          echo "GitHub has diverged from authoritative GitLab history."
+          echo "Force-push is intentionally absent."
+          exit 1
+        }
+
+      # Existing release tags are immutable.
+      if git ls-remote \
+        --exit-code \
+        --tags \
+        github \
+        "refs/tags/${CI_COMMIT_TAG}" >/dev/null 2>&1
+      then
+        echo "REFUSED:"
+        echo "GitHub tag ${CI_COMMIT_TAG} already exists."
+        exit 1
+      fi
+
+      git push \
+        --atomic \
+        github \
+        "${CI_COMMIT_SHA}:refs/heads/main" \
+        "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+
+      echo
+      echo "Published ${CI_COMMIT_TAG} to GitHub."
+
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+      when: on_success
+      allow_failure: false
+
+
+# Publish coverage only after the same commit exists on the public GitHub
+# mirror. Keeping this separate from github_release_publish makes a failed
+# upload independently retryable after the irreversible Git push succeeds.
+github_release_coverage:
+  image: debian:bookworm-slim
+  stage: release_report
+  needs:
+    - job: test
+      artifacts: true
+    - job: github_release_publish
+      artifacts: false
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates curl git gnupg
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - |
+      set -eu
+
+      test -n "${CODECOV_TOKEN:-}" || {
+        echo "FAIL: protected GitLab CI/CD variable CODECOV_TOKEN is missing"
+        exit 1
+      }
+
+      test -s coverage/lcov.info || {
+        echo "FAIL: the release test job did not provide coverage/lcov.info"
+        exit 1
+      }
+
+      # Verify the downloaded uploader with Codecov's published signing key
+      # and checksum before executing it.
+      curl -fsSLo /tmp/codecov \
+        "https://cli.codecov.io/${CODECOV_CLI_VERSION}/linux/codecov"
+      curl -fsSLo /tmp/codecov.SHA256SUM \
+        "https://cli.codecov.io/${CODECOV_CLI_VERSION}/linux/codecov.SHA256SUM"
+      curl -fsSLo /tmp/codecov.SHA256SUM.sig \
+        "https://cli.codecov.io/${CODECOV_CLI_VERSION}/linux/codecov.SHA256SUM.sig"
+      curl -fsSL https://keybase.io/codecovsecops/pgp_keys.asc |
+        gpg --batch --no-default-keyring \
+          --keyring /tmp/codecov-trustedkeys.gpg --import
+      gpgv --keyring /tmp/codecov-trustedkeys.gpg \
+        /tmp/codecov.SHA256SUM.sig /tmp/codecov.SHA256SUM
+      (cd /tmp && sha256sum --check codecov.SHA256SUM)
+      chmod +x /tmp/codecov
+
+      # GitLab executes the tests, but Codecov associates this report with the
+      # GitHub release mirror. Explicit metadata prevents GitLab CI discovery
+      # from selecting the private self-hosted GitLab project as the provider.
+      /tmp/codecov --verbose upload-process \
+        --disable-search \
+        --fail-on-error \
+        --token "$CODECOV_TOKEN" \
+        --slug "$CODECOV_SLUG" \
+        --git-service github \
+        --commit-sha "$CI_COMMIT_SHA" \
+        --branch main \
+        --file coverage/lcov.info \
+        --name "$CI_COMMIT_TAG"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+      when: on_success
+      allow_failure: false
+
+
+# GitHub Pages contains only stable tagged releases. GitLab Pages remains the
+# mutable development documentation for the default branch.
+github_release_docs:
+  image: julia:1.12.6-bookworm
+  stage: release_report
+  needs:
+    - job: docs_check
+      artifacts: true
+    - job: github_release_publish
+      artifacts: false
+  resource_group: github-release
+  cache:
+    <<: *julia_docs_cache
+    policy: pull
+  variables:
+    KUBERNETES_CPU_REQUEST: "1"
+    KUBERNETES_MEMORY_REQUEST: "2Gi"
+    JULIA_CPU_THREADS: "1"
+    JULIA_NUM_THREADS: "1"
+    JULIA_NUM_PRECOMPILE_TASKS: "1"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates coreutils
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - |
+      export DOCUMENTER_KEY="$(base64 --wrap=0 "$GITHUB_DEPLOY_KEY")"
+      julia --startup-file=no -e '
+        using Pkg
+        Pkg.activate(; temp=true)
+        Pkg.add(PackageSpec(name="Documenter", version="1.17"))
+        include("docs/deploy_github.jl")
+      '
+  environment:
+    name: github-pages
+    url: https://electa-git.github.io/PowerImpedance.jl/stable/
+    deployment_tier: production
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: on_success
+      allow_failure: false
+
+
+# ---------------------------------------------------------------------------
+# Existing GitLab Pages deployment
+# ---------------------------------------------------------------------------
+
+pages:
+  extends: .julia_heavy_resources
+  image: julia:1.12.6-bookworm
+  stage: deploy
+  cache:
+    - <<: *julia_cache
+      policy: pull
+    - <<: *julia_plotting_cache
+      policy: pull
+    - <<: *julia_docs_cache
+      policy: pull-push
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates openssh-client
@@ -72,9 +754,14 @@ pages:
         Pkg.Registry.update()
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.instantiate()
-        using Documenter: doctest
-        using PowerImpedanceACDC
-        doctest(PowerImpedanceACDC)
+        # Package-server telemetry is optional documentation data.
+        # A failed refresh leaves the committed map in place.
+        statistics = `timeout 10m $(Base.julia_cmd()) --project=docs/statistics --startup-file=no docs/statistics/make.jl`
+        try
+          success(statistics) || @warn "User-statistics map generation failed; using the committed map"
+        catch error
+          @warn "User-statistics map generation could not start; using the committed map" exception = (error, catch_backtrace())
+        end
         include("docs/make.jl")
       '
     - rm -rf public

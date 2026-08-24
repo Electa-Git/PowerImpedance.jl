@@ -1,10 +1,16 @@
-using PowerImpedanceACDC.NetworkBuilder: pin, ⟷, powerflow_optimizer, is_bounded_options, 
-powerflow_setting, solve_acdcpf, get_y, LinearizedAdmittanceNetwork
+using PowerImpedance.NetworkBuilder: powerflow_optimizer, is_bounded_options,
+powerflow_setting, solve_acdcpf, get_y, NetworkModel
 using LinearAlgebra
-using PowerImpedanceACDC
+using PowerImpedance
+import PowerImpedance: @network
 using Test
 
-# PIACDC =PowerImpedanceACDC
+if !isdefined(@__MODULE__, :PI)
+	const PI = PowerImpedance
+end
+if !isdefined(@__MODULE__, :NB)
+	const NB = PowerImpedance.NetworkBuilder
+end
 
 @testset "NetworkBuilder unit tests" begin
 	legacy = @network begin
@@ -17,12 +23,18 @@ using Test
 
 	elements = (; z1 = impedance(z = 1, pins = 1), z2 = impedance(z = 2, pins = 1))
 	connections = (
-		pin(:z1, 1,1) ⟷ pin(:z2, 1.1) ⟷ :n1,
-		pin(:z1, 2.1) ⟷ pin(:z2, 2,1) ⟷ :gnd,
+		(node = :n1, element = :z1, side = 1, terminal = 1),
+		(node = :n1, element = :z2, side = 1, terminal = 1),
+		(node = :gnd, element = :z1, side = 2, terminal = 1),
+		(node = :gnd, element = :z2, side = 2, terminal = 1),
 	)
 
 	builder = NetworkBuilder.define(elements, connections)
-	buildernetwork = NetworkBuilder.build_network(builder.elements, builder.connections, builder.options)
+	buildernetwork = NetworkBuilder.build_network(
+		builder.elements,
+		builder.topology,
+		builder.options,
+	)
 
 	@test collect(keys(buildernetwork.elements)) == collect(keys(legacy.elements))
 	@test Set(buildernetwork.nets[:n1]) == Set(legacy.nets[:n1])
@@ -34,18 +46,22 @@ using Test
 
 	updated_elements = (; z1 = impedance(z = 3, pins = 1), z2 = impedance(z = 4, pins = 1))
 	updated = NetworkBuilder.update!(builder; elements = updated_elements)
-	updatednetwork = NetworkBuilder.build_network(builder.elements, builder.connections, builder.options)
+	updatednetwork = NetworkBuilder.build_network(
+		builder.elements,
+		builder.topology,
+		builder.options,
+	)
 
-	@test updated.powerflow === nothing
+	@test !hasproperty(updated, :operating_point)
 	@test builder.elements[:z1].element_model.value == ComplexF64[3;;]
 	@test Set(updatednetwork.nets[:n1]) == Set(updatednetwork.nets[:n1])
 end
 
 
-# This is a PowerImpedanceACDC implementation of the IEEE 39 bus system test system
+# This is a PowerImpedance implementation of the IEEE 39 bus system test system
 # Author: Jan Kircheis 
 # Date: Jan 2026
-# Related PSCAD model to be found under Etch: Control-->PowerImpedanceACDC-->IEEE 39-bus system
+# Related PSCAD model to be found under Etch: Control-->PowerImpedance-->IEEE 39-bus system
 # 345 kV implementation ---> Everything referred to 345 kV
 
 # Arrange environment
@@ -200,7 +216,7 @@ const IEEE39_ELIM_ELEMENTS = [:STATCOM]
 const IEEE39_FREQ_RANGE = (1e0, 5e3, 10)
 
 function build_ieee39bus_with_macro()
-	elec = PowerImpedanceACDC.ElectricalTLC(
+	elec = PowerImpedance.ElectricalTLC(
 		Lᵣ = Lf_ST,
 		Rᵣ = Rf_ST,
 		Sbase = S_ST,
@@ -208,54 +224,54 @@ function build_ieee39bus_with_macro()
 		vDCbase = Vdc_ST,
 	)
 
-	meas = PowerImpedanceACDC.Measurement(
-		v_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
-		i_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+	meas = PowerImpedance.Measurement(
+		v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
+		i_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
 	)
 
-	sync = PowerImpedanceACDC.PLLSynchronization(
-		pi_ctrl = PowerImpedanceACDC.PIControl(
+	sync = PowerImpedance.PLLSynchronization(
+		pi_ctrl = PowerImpedance.PIControl(
 			Kp = 0.397887357729738,
 			Ki = 7.957747154594767,
 		),
-		filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 2π * 80),
+		filter = PowerImpedance.Butterworth(order = 2, ωc = 2π * 80),
 	)
 
-	innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl()
+	innerVoltage = PowerImpedance.NoInnerVoltageControl()
 
-	innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(
+	innerCurrent = PowerImpedance.InnerCurrentPIControl(
+		pi_ctrl = PowerImpedance.PIControl(
 			Kp = 0.254647908947033,
 			Ki = 0.8,
 		),
 	)
 
-	mod = PowerImpedanceACDC.PadeModulation(
+	mod = PowerImpedance.PadeModulation(
 		timeDelay = 200e-6,
 		padeOrderNum = 3,
 		padeOrderDen = 3,
 	)
 
-	limits = PowerImpedanceACDC.Limits(
+	limits = PowerImpedance.Limits(
 		P_min = -1000.0,
 		P_max = 1000.0,
 		Q_min = -1000.0,
 		Q_max = 1000.0,
 	)
 
-	outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
+	outerActive = PowerImpedance.OuterActiveVdcControl(
+		pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0),
 	)
 
-	outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
-		support = PowerImpedanceACDC.VoltageSupportLag(
+	outerReactive = PowerImpedance.OuterReactiveQControl(
+		pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
+		support = PowerImpedance.VoltageSupportLag(
 			K = 5.0,
 			ωc = 1 / 0.5,
 		),
 	)
 
-	setpoint = PowerImpedanceACDC.Setpoint(
+	setpoint = PowerImpedance.Setpoint(
 		Pac = 0.0,
 		Qac = Q_ST*S_ST,
 		θac = 0.0,
@@ -337,7 +353,7 @@ function build_ieee39bus_with_macro()
 
 
 
-		STATCOM = PowerImpedanceACDC.tlc(
+		STATCOM = PowerImpedance.tlc(
 			elec = elec,
 			meas = meas,
 			sync = sync,
@@ -1295,7 +1311,7 @@ end
 
 function ieee39bus_elements()
 
-	elec = PowerImpedanceACDC.ElectricalTLC(
+	elec = PowerImpedance.ElectricalTLC(
 		Lᵣ = Lf_ST,
 		Rᵣ = Rf_ST,
 		Sbase = S_ST,
@@ -1303,54 +1319,54 @@ function ieee39bus_elements()
 		vDCbase = Vdc_ST,
 	)
 
-	meas = PowerImpedanceACDC.Measurement(
-		v_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
-		i_ac = PowerImpedanceACDC.Butterworth(order = 2, ωc = 0.5e4),
+	meas = PowerImpedance.Measurement(
+		v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
+		i_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
 	)
 
-	sync = PowerImpedanceACDC.PLLSynchronization(
-		pi_ctrl = PowerImpedanceACDC.PIControl(
+	sync = PowerImpedance.PLLSynchronization(
+		pi_ctrl = PowerImpedance.PIControl(
 			Kp = 0.397887357729738,
 			Ki = 7.957747154594767,
 		),
-		filter = PowerImpedanceACDC.Butterworth(order = 2, ωc = 2π * 80),
+		filter = PowerImpedance.Butterworth(order = 2, ωc = 2π * 80),
 	)
 
-	innerVoltage = PowerImpedanceACDC.NoInnerVoltageControl()
+	innerVoltage = PowerImpedance.NoInnerVoltageControl()
 
-	innerCurrent = PowerImpedanceACDC.InnerCurrentPIControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(
+	innerCurrent = PowerImpedance.InnerCurrentPIControl(
+		pi_ctrl = PowerImpedance.PIControl(
 			Kp = 0.254647908947033,
 			Ki = 0.8,
 		),
 	)
 
-	mod = PowerImpedanceACDC.PadeModulation(
+	mod = PowerImpedance.PadeModulation(
 		timeDelay = 200e-6,
 		padeOrderNum = 3,
 		padeOrderDen = 3,
 	)
 
-	limits = PowerImpedanceACDC.Limits(
+	limits = PowerImpedance.Limits(
 		P_min = -1000.0,
 		P_max = 1000.0,
 		Q_min = -1000.0,
 		Q_max = 1000.0,
 	)
 
-	outerActive = PowerImpedanceACDC.OuterActiveVdcControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5.0, Ki = 5.0),
+	outerActive = PowerImpedance.OuterActiveVdcControl(
+		pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0),
 	)
 
-	outerReactive = PowerImpedanceACDC.OuterReactiveQControl(
-		pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.04, Ki = 40.0),
-		support = PowerImpedanceACDC.VoltageSupportLag(
+	outerReactive = PowerImpedance.OuterReactiveQControl(
+		pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
+		support = PowerImpedance.VoltageSupportLag(
 			K = 5.0,
 			ωc = 1 / 0.5,
 		),
 	)
 
-	setpoint = PowerImpedanceACDC.Setpoint(
+	setpoint = PowerImpedance.Setpoint(
 		Pac = 0.0,
 		Qac = Q_ST*S_ST,
 		θac = 0.0,
@@ -1429,7 +1445,7 @@ function ieee39bus_elements()
 
 		G_DC = dc_source(pins = 1, setpoint=Setpoint(Vdc = Vdc_ST/2)), # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
-		STATCOM = PowerImpedanceACDC.tlc(
+		STATCOM = PowerImpedance.tlc(
 			elec = elec,
 			meas = meas,
 			sync = sync,
@@ -2161,200 +2177,341 @@ end
 
 function ieee39bus_connections()
 	return (
-
-		# Sources grounding
-
-		pin(:G30, 2.1) ⟷ :gndD,
-		pin(:G30, 2.2) ⟷ :gndQ,
-		pin(:G31, 2.1) ⟷ :gndD,
-		pin(:G31, 2.2) ⟷ :gndQ,
-		pin(:G32, 2.1) ⟷ :gndD,
-		pin(:G32, 2.2) ⟷ :gndQ,
-		pin(:G33, 2.1) ⟷ :gndD,
-		pin(:G33, 2.2) ⟷ :gndQ,
-		pin(:G34, 2.1) ⟷ :gndD,
-		pin(:G34, 2.2) ⟷ :gndQ,
-		pin(:G35, 2.1) ⟷ :gndD,
-		pin(:G35, 2.2) ⟷ :gndQ,
-		pin(:G36, 2.1) ⟷ :gndD,
-		pin(:G36, 2.2) ⟷ :gndQ,
-		pin(:G37, 2.1) ⟷ :gndD,
-		pin(:G37, 2.2) ⟷ :gndQ,
-		pin(:G38, 2.1) ⟷ :gndD,
-		pin(:G38, 2.2) ⟷ :gndQ,
-		pin(:G39, 2.1) ⟷ :gndD,
-		pin(:G39, 2.2) ⟷ :gndQ,
-		pin(:G_DC, 2.1) ⟷ :gndDC,
-
-		# Loads grounding
-
-		pin(:LoadB3, 2.1) ⟷ :gndD,
-		pin(:LoadB3, 2,2) ⟷ :gndQ,
-		pin(:LoadB4a, 2.1) ⟷ :gndD,
-		pin(:LoadB4a, 2.2) ⟷ :gndQ,
-		pin(:LoadB4b, 2.1) ⟷ :gndD,
-		pin(:LoadB4b, 2.2) ⟷ :gndQ,
-		pin(:LoadB5, 2.1) ⟷ :gndD,
-		pin(:LoadB5, 2.2) ⟷ :gndQ,
-		pin(:LoadB7, 2.1) ⟷ :gndD,
-		pin(:LoadB7, 2.2) ⟷ :gndQ,
-		pin(:LoadB8, 2.1) ⟷ :gndD,
-		pin(:LoadB8, 2.2) ⟷ :gndQ,
-		pin(:LoadB12, 2.1) ⟷ :gndD,
-		pin(:LoadB12, 2.2) ⟷ :gndQ,
-		pin(:LoadB15, 2.1) ⟷ :gndD,
-		pin(:LoadB15, 2.2) ⟷ :gndQ,
-		pin(:LoadB16, 2.1) ⟷ :gndD,
-		pin(:LoadB16, 2.2) ⟷ :gndQ,
-		pin(:LoadB18, 2.1) ⟷ :gndD,
-		pin(:LoadB18, 2.2) ⟷ :gndQ,
-		pin(:LoadB20, 2.1) ⟷ :gndD,
-		pin(:LoadB20, 2.2) ⟷ :gndQ,
-		pin(:LoadB21, 2.1) ⟷ :gndD,
-		pin(:LoadB21, 2.2) ⟷ :gndQ,
-		pin(:LoadB23, 2.1) ⟷ :gndD,
-		pin(:LoadB23, 2.2) ⟷ :gndQ,
-		pin(:LoadB24, 2.1) ⟷ :gndD,
-		pin(:LoadB24, 2.2) ⟷ :gndQ,
-		pin(:LoadB25, 2.1) ⟷ :gndD,
-		pin(:LoadB25, 2,2) ⟷ :gndQ,
-		pin(:LoadB26, 2.1) ⟷ :gndD,
-		pin(:LoadB26, 2.2) ⟷ :gndQ,
-		pin(:LoadB27, 2.1) ⟷ :gndD,
-		pin(:LoadB27, 2.2) ⟷ :gndQ,
-		pin(:LoadB28, 2.1) ⟷ :gndD,
-		pin(:LoadB28, 2.2) ⟷ :gndQ,
-		pin(:LoadB29, 2.1) ⟷ :gndD,
-		pin(:LoadB29, 2.2) ⟷ :gndQ,
-		pin(:LoadB31, 2.1) ⟷ :gndD,
-		pin(:LoadB31, 2.2) ⟷ :gndQ,
-		pin(:LoadB39, 2.1) ⟷ :gndD,
-		pin(:LoadB39, 2.2) ⟷ :gndQ,
-
-		# Sources
-
-		pin(:G30, 1.1) ⟷ pin(:Zg30, 1.1),
-		pin(:G30, 1.2) ⟷ pin(:Zg30, 1.2),
-		pin(:G31, 1.1) ⟷ pin(:Zg31, 1.1),
-		pin(:G31, 1.2) ⟷ pin(:Zg31, 1.2),
-		pin(:G32, 1.1) ⟷ pin(:Zg32, 1.1),
-		pin(:G32, 1,2) ⟷ pin(:Zg32, 1.2),
-		pin(:G33, 1.1) ⟷ pin(:Zg33, 1,1),
-		pin(:G33, 1,2) ⟷ pin(:Zg33, 1,2),
-		pin(:G34, 1.1) ⟷ pin(:Zg34, 1.1),
-		pin(:G34, 1.2) ⟷ pin(:Zg34, 1.2),
-		pin(:G35, 1.1) ⟷ pin(:Zg35, 1.1),
-		pin(:G35, 1.2) ⟷ pin(:Zg35, 1.2),
-		pin(:G36, 1.1) ⟷ pin(:Zg36, 1.1),
-		pin(:G36, 1.2) ⟷ pin(:Zg36, 1.2),
-		pin(:G37, 1.1) ⟷ pin(:Zg37, 1.1),
-		pin(:G37, 1.2) ⟷ pin(:Zg37, 1.2),
-		pin(:G38, 1.1) ⟷ pin(:Zg38, 1.1),
-		pin(:G38, 1.2) ⟷ pin(:Zg38, 1.2),
-		pin(:G39, 1.1) ⟷ pin(:Zg39, 1.1),
-		pin(:G39, 1.2) ⟷ pin(:Zg39, 1.2),
-		pin(:G_DC, 1.1) ⟷ pin(:dummy_impedance, 2.1),
-		pin(:T1_39, 1.1) ⟷ pin(:T1_2, 1.1) ⟷ :Bus1d,
-		pin(:T1_39, 1.2) ⟷ pin(:T1_2, 1.2) ⟷ :Bus1q,
-		pin(:T2_25, 1.1) ⟷ pin(:T1_2, 2.1) ⟷ pin(:T2_3, 1.1) ⟷ pin(:TR2_30, 1.1) ⟷ :Bus2d,
-		pin(:T2_25, 1.2) ⟷ pin(:T1_2, 2.2) ⟷ pin(:T2_3, 1.2) ⟷ pin(:TR2_30, 1.2) ⟷ :Bus2q,
-		pin(:T2_3, 2.1) ⟷ pin(:T3_18, 1.1) ⟷ pin(:T3_4, 1.1) ⟷ pin(:LoadB3, 1.1) ⟷ :Bus3d,
-		pin(:T2_3, 2.2) ⟷ pin(:T3_18, 1.2) ⟷ pin(:T3_4, 1.2) ⟷ pin(:LoadB3, 1.2) ⟷ :Bus3q,
-		pin(:T3_4, 2.1) ⟷
-		pin(:T4_5, 1.1) ⟷
-		pin(:T4_14, 1.1) ⟷ pin(:LoadB4a, 1.1) ⟷ pin(:LoadB4b, 1.1) ⟷ :Bus4d,
-		pin(:T3_4, 2.2) ⟷
-		pin(:T4_5, 1.2) ⟷
-		pin(:T4_14, 1.2) ⟷ pin(:LoadB4a, 1.2) ⟷ pin(:LoadB4b, 1.2) ⟷ :Bus4q,
-		pin(:T4_5, 2.1) ⟷ pin(:T5_6, 1.1) ⟷ pin(:T5_8, 1.1) ⟷ pin(:LoadB5, 1.1) ⟷ :Bus5d,
-		pin(:T4_5, 2.2) ⟷ pin(:T5_6, 1.2) ⟷ pin(:T5_8, 1.2) ⟷ pin(:LoadB5, 1.2) ⟷ :Bus5q,
-		pin(:T5_6, 2.1) ⟷ pin(:T6_7, 1.1) ⟷ pin(:T6_11, 1.1) ⟷ pin(:TR6_31, 1.1) ⟷ :Bus6d,
-		pin(:T5_6, 2.2) ⟷ pin(:T6_7, 1.2) ⟷ pin(:T6_11, 1.2) ⟷ pin(:TR6_31, 1.2) ⟷ :Bus6q,
-		pin(:T6_7, 2.1) ⟷ pin(:T7_8, 1.1) ⟷ pin(:LoadB7, 1.1) ⟷ :Bus7d,
-		pin(:T6_7, 2.2) ⟷ pin(:T7_8, 1.2) ⟷ pin(:LoadB7, 1.2) ⟷ :Bus7q,
-		pin(:T7_8, 2.1) ⟷ pin(:T8_9, 1.1) ⟷ pin(:T5_8, 2.1) ⟷ pin(:LoadB8, 1.1) ⟷ :Bus8d,
-		pin(:T7_8, 2.2) ⟷ pin(:T8_9, 1.2) ⟷ pin(:T5_8, 2.2) ⟷ pin(:LoadB8, 1.2) ⟷ :Bus8q,
-		pin(:T8_9, 2.1) ⟷ pin(:T9_39, 1.1) ⟷ pin(:STATCOM, 2.1) ⟷ :Bus9d,
-		pin(:T8_9, 2.2) ⟷ pin(:T9_39, 1.2) ⟷ pin(:STATCOM, 2.2) ⟷ :Bus9q,
-		pin(:dummy_impedance, 1.1) ⟷ pin(:STATCOM, 1.1),
-		pin(:T10_11, 1.1) ⟷ pin(:T10_13, 1.1) ⟷ pin(:TR10_32, 1.1) ⟷ :Bus10d,
-		pin(:T10_11, 1.2) ⟷ pin(:T10_13, 1.2) ⟷ pin(:TR10_32, 1.2) ⟷ :Bus10q,
-		pin(:T10_11, 2.1) ⟷ pin(:T6_11, 2.1) ⟷ pin(:TR11_12, 1.1) ⟷ :Bus11d,
-		pin(:T10_11, 2.2) ⟷ pin(:T6_11, 2.2) ⟷ pin(:TR11_12, 1.2) ⟷ :Bus11q,
-		pin(:TR11_12, 2.1) ⟷ pin(:TR12_13, 1.1) ⟷ pin(:LoadB12, 1.1) ⟷ :Bus12d,
-		pin(:TR11_12, 2.2) ⟷ pin(:TR12_13, 1.2) ⟷ pin(:LoadB12, 1.2) ⟷ :Bus12q,
-		pin(:T10_13, 2.1) ⟷ pin(:T13_14, 1.1) ⟷ pin(:TR12_13, 2.1) ⟷ :Bus13d,
-		pin(:T10_13, 2.2) ⟷ pin(:T13_14, 1.2) ⟷ pin(:TR12_13, 2.2) ⟷ :Bus13q,
-		pin(:T14_15, 1.1) ⟷ pin(:T13_14, 2.1) ⟷ pin(:T4_14, 2.1) ⟷ :Bus14d,
-		pin(:T14_15, 1.2) ⟷ pin(:T13_14, 2.2) ⟷ pin(:T4_14, 2.2) ⟷ :Bus14q,
-		pin(:T14_15, 2.1) ⟷ pin(:T15_16, 1.1) ⟷ pin(:LoadB15, 1.1) ⟷ :Bus15d,
-		pin(:T14_15, 2.2) ⟷ pin(:T15_16, 1.2) ⟷ pin(:LoadB15, 1.2) ⟷ :Bus15q,
-		pin(:T15_16, 2.1) ⟷
-		pin(:T16_17, 1.1) ⟷
-		pin(:T16_19, 1.1) ⟷
-		pin(:T16_21, 1.1) ⟷ pin(:T16_24, 1.1) ⟷ pin(:LoadB16, 1.1) ⟷ :Bus16d,
-		pin(:T15_16, 2.2) ⟷
-		pin(:T16_17, 1.2) ⟷
-		pin(:T16_19, 1.2) ⟷
-		pin(:T16_21, 1.2) ⟷ pin(:T16_24, 1.2) ⟷ pin(:LoadB16, 1.2) ⟷ :Bus16q,
-		pin(:T16_17, 2.1) ⟷ pin(:T17_18, 1.1) ⟷ pin(:T17_27, 1.1) ⟷ :Bus17d,
-		pin(:T16_17, 2.2) ⟷ pin(:T17_18, 1.2) ⟷ pin(:T17_27, 1.2) ⟷ :Bus17q,
-		pin(:T17_18, 2.1) ⟷ pin(:LoadB18, 1.1) ⟷ pin(:T3_18, 2.1) ⟷ :Bus18d,
-		pin(:T17_18, 2.2) ⟷ pin(:LoadB18, 1.2) ⟷ pin(:T3_18, 2.2) ⟷ :Bus18q,
-		pin(:T16_19, 2.1) ⟷ pin(:TR19_20, 1.1) ⟷ pin(:TR19_33, 1.1) ⟷ :Bus19d,
-		pin(:T16_19, 2.2) ⟷ pin(:TR19_20, 1.2) ⟷ pin(:TR19_33, 1.2) ⟷ :Bus19q,
-		pin(:TR19_20, 2.1) ⟷ pin(:TR20_34, 1.1) ⟷ pin(:LoadB20, 1.1) ⟷ :Bus20d,
-		pin(:TR19_20, 2.2) ⟷ pin(:TR20_34, 1.2) ⟷ pin(:LoadB20, 1.2) ⟷ :Bus20q,
-		pin(:T16_21, 2.1) ⟷ pin(:LoadB21, 1.1) ⟷ pin(:T21_22, 1.1) ⟷ :Bus21d,
-		pin(:T16_21, 2.2) ⟷ pin(:LoadB21, 1.2) ⟷ pin(:T21_22, 1.2) ⟷ :Bus21q,
-		pin(:T21_22, 2.1) ⟷ pin(:T22_23, 1.1) ⟷ pin(:TR22_35, 1.1) ⟷ :Bus22d,
-		pin(:T21_22, 2.2) ⟷ pin(:T22_23, 1.2) ⟷ pin(:TR22_35, 1.2) ⟷ :Bus22q,
-		pin(:T22_23, 2.1) ⟷
-		pin(:LoadB23, 1.1) ⟷ pin(:T23_24, 1.1) ⟷ pin(:TR23_36, 1.1) ⟷ :Bus23d,
-		pin(:T22_23, 2.2) ⟷
-		pin(:LoadB23, 1.2) ⟷ pin(:T23_24, 1.2) ⟷ pin(:TR23_36, 1.2) ⟷ :Bus23q,
-		pin(:T16_24, 2.1) ⟷ pin(:T23_24, 2.1) ⟷ pin(:LoadB24, 1.1) ⟷ :Bus24d,
-		pin(:T16_24, 2.2) ⟷ pin(:T23_24, 2.2) ⟷ pin(:LoadB24, 1.2) ⟷ :Bus24q,
-		pin(:T2_25, 2.1) ⟷
-		pin(:LoadB25, 1.1) ⟷ pin(:T25_26, 1.1) ⟷ pin(:TR25_37, 1.1) ⟷ :Bus25d,
-		pin(:T2_25, 2.2) ⟷
-		pin(:LoadB25, 1.2) ⟷ pin(:T25_26, 1.2) ⟷ pin(:TR25_37, 1.2) ⟷ :Bus25q,
-		pin(:T25_26, 2.1) ⟷
-		pin(:LoadB26, 1.1) ⟷
-		pin(:T26_27, 1.1) ⟷ pin(:T26_28, 1.1) ⟷ pin(:T26_29, 1.1) ⟷ :Bus26d,
-		pin(:T25_26, 2.2) ⟷
-		pin(:LoadB26, 1.2) ⟷
-		pin(:T26_27, 1.2) ⟷ pin(:T26_28, 1.2) ⟷ pin(:T26_29, 1.2) ⟷ :Bus26q,
-		pin(:T26_27, 2.1) ⟷ pin(:T17_27, 2.1) ⟷ pin(:LoadB27, 1.1) ⟷ :Bus27d,
-		pin(:T26_27, 2.2) ⟷ pin(:T17_27, 2.2) ⟷ pin(:LoadB27, 1.2) ⟷ :Bus27q,
-		pin(:T26_28, 2.1) ⟷ pin(:T28_29, 1.1) ⟷ pin(:LoadB28, 1.1) ⟷ :Bus28d,
-		pin(:T26_28, 2.2) ⟷ pin(:T28_29, 1.2) ⟷ pin(:LoadB28, 1.2) ⟷ :Bus28q,
-		pin(:T26_29, 2.1) ⟷
-		pin(:LoadB29, 1.1) ⟷ pin(:T28_29, 2.1) ⟷ pin(:TR29_38, 1.1) ⟷ :Bus29d,
-		pin(:T26_29, 2.2) ⟷
-		pin(:LoadB29, 1.2) ⟷ pin(:T28_29, 2.2) ⟷ pin(:TR29_38, 1.2) ⟷ :Bus29q,
-		pin(:TR2_30, 2.1) ⟷ pin(:Zg30, 2.1) ⟷ :Bus30d,
-		pin(:TR2_30, 2.2) ⟷ pin(:Zg30, 2.2) ⟷ :Bus30q,
-		pin(:TR6_31, 2.1) ⟷ pin(:Zg31, 2.1) ⟷ :Bus31d,
-		pin(:TR6_31, 2.2) ⟷ pin(:Zg31, 2.2) ⟷ :Bus31q,
-		pin(:TR10_32, 2.1) ⟷ pin(:Zg32, 2.1) ⟷ pin(:LoadB31, 1.1) ⟷ :Bus32d,
-		pin(:TR10_32, 2.2) ⟷ pin(:Zg32, 2.2) ⟷ pin(:LoadB31, 1.2) ⟷ :Bus32q,
-		pin(:TR19_33, 2.1) ⟷ pin(:Zg33, 2.1) ⟷ :Bus33d,
-		pin(:TR19_33, 2.2) ⟷ pin(:Zg33, 2.2) ⟷ :Bus33q,
-		pin(:TR20_34, 2.1) ⟷ pin(:Zg34, 2.1) ⟷ :Bus34d,
-		pin(:TR20_34, 2.2) ⟷ pin(:Zg34, 2.2) ⟷ :Bus34q,
-		pin(:TR22_35, 2.1) ⟷ pin(:Zg35, 2.1) ⟷ :Bus35d,
-		pin(:TR22_35, 2.2) ⟷ pin(:Zg35, 2.2) ⟷ :Bus35q,
-		pin(:TR23_36, 2.1) ⟷ pin(:Zg36, 2.1) ⟷ :Bus36d,
-		pin(:TR23_36, 2.2) ⟷ pin(:Zg36, 2.2) ⟷ :Bus36q,
-		pin(:TR25_37, 2.1) ⟷ pin(:Zg37, 2.1) ⟷ :Bus37d,
-		pin(:TR25_37, 2.2) ⟷ pin(:Zg37, 2.2) ⟷ :Bus37q,
-		pin(:TR29_38, 2.1) ⟷ pin(:Zg38, 2.1) ⟷ :Bus38d,
-		pin(:TR29_38, 2.2) ⟷ pin(:Zg38, 2.2) ⟷ :Bus38q,
-		pin(:Zg39, 2.1) ⟷
-		pin(:T1_39, 2.1) ⟷ pin(:T9_39, 2.1) ⟷ pin(:LoadB39, 1.1) ⟷ :Bus39d,
-		pin(:Zg39, 2.2) ⟷
-		pin(:T1_39, 2.2) ⟷ pin(:T9_39, 2.2) ⟷ pin(:LoadB39, 1.2) ⟷ :Bus39q)
+		(node = :gndD, element = :LoadB3, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB3, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB4a, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB4a, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB4b, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB4b, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB5, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB5, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB7, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB7, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB8, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB8, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB12, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB12, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB15, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB15, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB16, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB16, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB18, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB18, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB20, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB20, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB21, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB21, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB23, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB23, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB24, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB24, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB25, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB25, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB26, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB26, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB27, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB27, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB28, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB28, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB29, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB29, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB31, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB31, side = 2, terminal = 2),
+		(node = :gndD, element = :LoadB39, side = 2, terminal = 1),
+		(node = :gndQ, element = :LoadB39, side = 2, terminal = 2),
+		(node = :link_G30_Zg30_1, element = :G30, side = 1, terminal = 1),
+		(node = :link_G30_Zg30_1, element = :Zg30, side = 1, terminal = 1),
+		(node = :link_G30_Zg30_2, element = :G30, side = 1, terminal = 2),
+		(node = :link_G30_Zg30_2, element = :Zg30, side = 1, terminal = 2),
+		(node = :link_G31_Zg31_1, element = :G31, side = 1, terminal = 1),
+		(node = :link_G31_Zg31_1, element = :Zg31, side = 1, terminal = 1),
+		(node = :link_G31_Zg31_2, element = :G31, side = 1, terminal = 2),
+		(node = :link_G31_Zg31_2, element = :Zg31, side = 1, terminal = 2),
+		(node = :link_G32_Zg32_1, element = :G32, side = 1, terminal = 1),
+		(node = :link_G32_Zg32_1, element = :Zg32, side = 1, terminal = 1),
+		(node = :link_G32_Zg32_2, element = :G32, side = 1, terminal = 2),
+		(node = :link_G32_Zg32_2, element = :Zg32, side = 1, terminal = 2),
+		(node = :link_G33_Zg33_1, element = :G33, side = 1, terminal = 1),
+		(node = :link_G33_Zg33_1, element = :Zg33, side = 1, terminal = 1),
+		(node = :link_G33_Zg33_2, element = :G33, side = 1, terminal = 2),
+		(node = :link_G33_Zg33_2, element = :Zg33, side = 1, terminal = 2),
+		(node = :link_G34_Zg34_1, element = :G34, side = 1, terminal = 1),
+		(node = :link_G34_Zg34_1, element = :Zg34, side = 1, terminal = 1),
+		(node = :link_G34_Zg34_2, element = :G34, side = 1, terminal = 2),
+		(node = :link_G34_Zg34_2, element = :Zg34, side = 1, terminal = 2),
+		(node = :link_G35_Zg35_1, element = :G35, side = 1, terminal = 1),
+		(node = :link_G35_Zg35_1, element = :Zg35, side = 1, terminal = 1),
+		(node = :link_G35_Zg35_2, element = :G35, side = 1, terminal = 2),
+		(node = :link_G35_Zg35_2, element = :Zg35, side = 1, terminal = 2),
+		(node = :link_G36_Zg36_1, element = :G36, side = 1, terminal = 1),
+		(node = :link_G36_Zg36_1, element = :Zg36, side = 1, terminal = 1),
+		(node = :link_G36_Zg36_2, element = :G36, side = 1, terminal = 2),
+		(node = :link_G36_Zg36_2, element = :Zg36, side = 1, terminal = 2),
+		(node = :link_G37_Zg37_1, element = :G37, side = 1, terminal = 1),
+		(node = :link_G37_Zg37_1, element = :Zg37, side = 1, terminal = 1),
+		(node = :link_G37_Zg37_2, element = :G37, side = 1, terminal = 2),
+		(node = :link_G37_Zg37_2, element = :Zg37, side = 1, terminal = 2),
+		(node = :link_G38_Zg38_1, element = :G38, side = 1, terminal = 1),
+		(node = :link_G38_Zg38_1, element = :Zg38, side = 1, terminal = 1),
+		(node = :link_G38_Zg38_2, element = :G38, side = 1, terminal = 2),
+		(node = :link_G38_Zg38_2, element = :Zg38, side = 1, terminal = 2),
+		(node = :link_G39_Zg39_1, element = :G39, side = 1, terminal = 1),
+		(node = :link_G39_Zg39_1, element = :Zg39, side = 1, terminal = 1),
+		(node = :link_G39_Zg39_2, element = :G39, side = 1, terminal = 2),
+		(node = :link_G39_Zg39_2, element = :Zg39, side = 1, terminal = 2),
+		(node = :link_G_DC_dummy_impedance_1, element = :G_DC, side = 1, terminal = 1),
+		(node = :link_G_DC_dummy_impedance_1, element = :dummy_impedance, side = 2, terminal = 1),
+		(node = :Bus1d, element = :T1_39, side = 1, terminal = 1),
+		(node = :Bus1d, element = :T1_2, side = 1, terminal = 1),
+		(node = :Bus1q, element = :T1_39, side = 1, terminal = 2),
+		(node = :Bus1q, element = :T1_2, side = 1, terminal = 2),
+		(node = :Bus2d, element = :T2_25, side = 1, terminal = 1),
+		(node = :Bus2d, element = :T1_2, side = 2, terminal = 1),
+		(node = :Bus2d, element = :T2_3, side = 1, terminal = 1),
+		(node = :Bus2d, element = :TR2_30, side = 1, terminal = 1),
+		(node = :Bus2q, element = :T2_25, side = 1, terminal = 2),
+		(node = :Bus2q, element = :T1_2, side = 2, terminal = 2),
+		(node = :Bus2q, element = :T2_3, side = 1, terminal = 2),
+		(node = :Bus2q, element = :TR2_30, side = 1, terminal = 2),
+		(node = :Bus3d, element = :T2_3, side = 2, terminal = 1),
+		(node = :Bus3d, element = :T3_18, side = 1, terminal = 1),
+		(node = :Bus3d, element = :T3_4, side = 1, terminal = 1),
+		(node = :Bus3d, element = :LoadB3, side = 1, terminal = 1),
+		(node = :Bus3q, element = :T2_3, side = 2, terminal = 2),
+		(node = :Bus3q, element = :T3_18, side = 1, terminal = 2),
+		(node = :Bus3q, element = :T3_4, side = 1, terminal = 2),
+		(node = :Bus3q, element = :LoadB3, side = 1, terminal = 2),
+		(node = :Bus4d, element = :T3_4, side = 2, terminal = 1),
+		(node = :Bus4d, element = :T4_5, side = 1, terminal = 1),
+		(node = :Bus4d, element = :T4_14, side = 1, terminal = 1),
+		(node = :Bus4d, element = :LoadB4a, side = 1, terminal = 1),
+		(node = :Bus4d, element = :LoadB4b, side = 1, terminal = 1),
+		(node = :Bus4q, element = :T3_4, side = 2, terminal = 2),
+		(node = :Bus4q, element = :T4_5, side = 1, terminal = 2),
+		(node = :Bus4q, element = :T4_14, side = 1, terminal = 2),
+		(node = :Bus4q, element = :LoadB4a, side = 1, terminal = 2),
+		(node = :Bus4q, element = :LoadB4b, side = 1, terminal = 2),
+		(node = :Bus5d, element = :T4_5, side = 2, terminal = 1),
+		(node = :Bus5d, element = :T5_6, side = 1, terminal = 1),
+		(node = :Bus5d, element = :T5_8, side = 1, terminal = 1),
+		(node = :Bus5d, element = :LoadB5, side = 1, terminal = 1),
+		(node = :Bus5q, element = :T4_5, side = 2, terminal = 2),
+		(node = :Bus5q, element = :T5_6, side = 1, terminal = 2),
+		(node = :Bus5q, element = :T5_8, side = 1, terminal = 2),
+		(node = :Bus5q, element = :LoadB5, side = 1, terminal = 2),
+		(node = :Bus6d, element = :T5_6, side = 2, terminal = 1),
+		(node = :Bus6d, element = :T6_7, side = 1, terminal = 1),
+		(node = :Bus6d, element = :T6_11, side = 1, terminal = 1),
+		(node = :Bus6d, element = :TR6_31, side = 1, terminal = 1),
+		(node = :Bus6q, element = :T5_6, side = 2, terminal = 2),
+		(node = :Bus6q, element = :T6_7, side = 1, terminal = 2),
+		(node = :Bus6q, element = :T6_11, side = 1, terminal = 2),
+		(node = :Bus6q, element = :TR6_31, side = 1, terminal = 2),
+		(node = :Bus7d, element = :T6_7, side = 2, terminal = 1),
+		(node = :Bus7d, element = :T7_8, side = 1, terminal = 1),
+		(node = :Bus7d, element = :LoadB7, side = 1, terminal = 1),
+		(node = :Bus7q, element = :T6_7, side = 2, terminal = 2),
+		(node = :Bus7q, element = :T7_8, side = 1, terminal = 2),
+		(node = :Bus7q, element = :LoadB7, side = 1, terminal = 2),
+		(node = :Bus8d, element = :T7_8, side = 2, terminal = 1),
+		(node = :Bus8d, element = :T8_9, side = 1, terminal = 1),
+		(node = :Bus8d, element = :T5_8, side = 2, terminal = 1),
+		(node = :Bus8d, element = :LoadB8, side = 1, terminal = 1),
+		(node = :Bus8q, element = :T7_8, side = 2, terminal = 2),
+		(node = :Bus8q, element = :T8_9, side = 1, terminal = 2),
+		(node = :Bus8q, element = :T5_8, side = 2, terminal = 2),
+		(node = :Bus8q, element = :LoadB8, side = 1, terminal = 2),
+		(node = :Bus9d, element = :T8_9, side = 2, terminal = 1),
+		(node = :Bus9d, element = :T9_39, side = 1, terminal = 1),
+		(node = :Bus9d, element = :STATCOM, side = 2, terminal = 1),
+		(node = :Bus9q, element = :T8_9, side = 2, terminal = 2),
+		(node = :Bus9q, element = :T9_39, side = 1, terminal = 2),
+		(node = :Bus9q, element = :STATCOM, side = 2, terminal = 2),
+		(node = :link_dummy_impedance_STATCOM_1, element = :dummy_impedance, side = 1, terminal = 1),
+		(node = :link_dummy_impedance_STATCOM_1, element = :STATCOM, side = 1, terminal = 1),
+		(node = :Bus10d, element = :T10_11, side = 1, terminal = 1),
+		(node = :Bus10d, element = :T10_13, side = 1, terminal = 1),
+		(node = :Bus10d, element = :TR10_32, side = 1, terminal = 1),
+		(node = :Bus10q, element = :T10_11, side = 1, terminal = 2),
+		(node = :Bus10q, element = :T10_13, side = 1, terminal = 2),
+		(node = :Bus10q, element = :TR10_32, side = 1, terminal = 2),
+		(node = :Bus11d, element = :T10_11, side = 2, terminal = 1),
+		(node = :Bus11d, element = :T6_11, side = 2, terminal = 1),
+		(node = :Bus11d, element = :TR11_12, side = 1, terminal = 1),
+		(node = :Bus11q, element = :T10_11, side = 2, terminal = 2),
+		(node = :Bus11q, element = :T6_11, side = 2, terminal = 2),
+		(node = :Bus11q, element = :TR11_12, side = 1, terminal = 2),
+		(node = :Bus12d, element = :TR11_12, side = 2, terminal = 1),
+		(node = :Bus12d, element = :TR12_13, side = 1, terminal = 1),
+		(node = :Bus12d, element = :LoadB12, side = 1, terminal = 1),
+		(node = :Bus12q, element = :TR11_12, side = 2, terminal = 2),
+		(node = :Bus12q, element = :TR12_13, side = 1, terminal = 2),
+		(node = :Bus12q, element = :LoadB12, side = 1, terminal = 2),
+		(node = :Bus13d, element = :T10_13, side = 2, terminal = 1),
+		(node = :Bus13d, element = :T13_14, side = 1, terminal = 1),
+		(node = :Bus13d, element = :TR12_13, side = 2, terminal = 1),
+		(node = :Bus13q, element = :T10_13, side = 2, terminal = 2),
+		(node = :Bus13q, element = :T13_14, side = 1, terminal = 2),
+		(node = :Bus13q, element = :TR12_13, side = 2, terminal = 2),
+		(node = :Bus14d, element = :T14_15, side = 1, terminal = 1),
+		(node = :Bus14d, element = :T13_14, side = 2, terminal = 1),
+		(node = :Bus14d, element = :T4_14, side = 2, terminal = 1),
+		(node = :Bus14q, element = :T14_15, side = 1, terminal = 2),
+		(node = :Bus14q, element = :T13_14, side = 2, terminal = 2),
+		(node = :Bus14q, element = :T4_14, side = 2, terminal = 2),
+		(node = :Bus15d, element = :T14_15, side = 2, terminal = 1),
+		(node = :Bus15d, element = :T15_16, side = 1, terminal = 1),
+		(node = :Bus15d, element = :LoadB15, side = 1, terminal = 1),
+		(node = :Bus15q, element = :T14_15, side = 2, terminal = 2),
+		(node = :Bus15q, element = :T15_16, side = 1, terminal = 2),
+		(node = :Bus15q, element = :LoadB15, side = 1, terminal = 2),
+		(node = :Bus16d, element = :T15_16, side = 2, terminal = 1),
+		(node = :Bus16d, element = :T16_17, side = 1, terminal = 1),
+		(node = :Bus16d, element = :T16_19, side = 1, terminal = 1),
+		(node = :Bus16d, element = :T16_21, side = 1, terminal = 1),
+		(node = :Bus16d, element = :T16_24, side = 1, terminal = 1),
+		(node = :Bus16d, element = :LoadB16, side = 1, terminal = 1),
+		(node = :Bus16q, element = :T15_16, side = 2, terminal = 2),
+		(node = :Bus16q, element = :T16_17, side = 1, terminal = 2),
+		(node = :Bus16q, element = :T16_19, side = 1, terminal = 2),
+		(node = :Bus16q, element = :T16_21, side = 1, terminal = 2),
+		(node = :Bus16q, element = :T16_24, side = 1, terminal = 2),
+		(node = :Bus16q, element = :LoadB16, side = 1, terminal = 2),
+		(node = :Bus17d, element = :T16_17, side = 2, terminal = 1),
+		(node = :Bus17d, element = :T17_18, side = 1, terminal = 1),
+		(node = :Bus17d, element = :T17_27, side = 1, terminal = 1),
+		(node = :Bus17q, element = :T16_17, side = 2, terminal = 2),
+		(node = :Bus17q, element = :T17_18, side = 1, terminal = 2),
+		(node = :Bus17q, element = :T17_27, side = 1, terminal = 2),
+		(node = :Bus18d, element = :T17_18, side = 2, terminal = 1),
+		(node = :Bus18d, element = :LoadB18, side = 1, terminal = 1),
+		(node = :Bus18d, element = :T3_18, side = 2, terminal = 1),
+		(node = :Bus18q, element = :T17_18, side = 2, terminal = 2),
+		(node = :Bus18q, element = :LoadB18, side = 1, terminal = 2),
+		(node = :Bus18q, element = :T3_18, side = 2, terminal = 2),
+		(node = :Bus19d, element = :T16_19, side = 2, terminal = 1),
+		(node = :Bus19d, element = :TR19_20, side = 1, terminal = 1),
+		(node = :Bus19d, element = :TR19_33, side = 1, terminal = 1),
+		(node = :Bus19q, element = :T16_19, side = 2, terminal = 2),
+		(node = :Bus19q, element = :TR19_20, side = 1, terminal = 2),
+		(node = :Bus19q, element = :TR19_33, side = 1, terminal = 2),
+		(node = :Bus20d, element = :TR19_20, side = 2, terminal = 1),
+		(node = :Bus20d, element = :TR20_34, side = 1, terminal = 1),
+		(node = :Bus20d, element = :LoadB20, side = 1, terminal = 1),
+		(node = :Bus20q, element = :TR19_20, side = 2, terminal = 2),
+		(node = :Bus20q, element = :TR20_34, side = 1, terminal = 2),
+		(node = :Bus20q, element = :LoadB20, side = 1, terminal = 2),
+		(node = :Bus21d, element = :T16_21, side = 2, terminal = 1),
+		(node = :Bus21d, element = :LoadB21, side = 1, terminal = 1),
+		(node = :Bus21d, element = :T21_22, side = 1, terminal = 1),
+		(node = :Bus21q, element = :T16_21, side = 2, terminal = 2),
+		(node = :Bus21q, element = :LoadB21, side = 1, terminal = 2),
+		(node = :Bus21q, element = :T21_22, side = 1, terminal = 2),
+		(node = :Bus22d, element = :T21_22, side = 2, terminal = 1),
+		(node = :Bus22d, element = :T22_23, side = 1, terminal = 1),
+		(node = :Bus22d, element = :TR22_35, side = 1, terminal = 1),
+		(node = :Bus22q, element = :T21_22, side = 2, terminal = 2),
+		(node = :Bus22q, element = :T22_23, side = 1, terminal = 2),
+		(node = :Bus22q, element = :TR22_35, side = 1, terminal = 2),
+		(node = :Bus23d, element = :T22_23, side = 2, terminal = 1),
+		(node = :Bus23d, element = :LoadB23, side = 1, terminal = 1),
+		(node = :Bus23d, element = :T23_24, side = 1, terminal = 1),
+		(node = :Bus23d, element = :TR23_36, side = 1, terminal = 1),
+		(node = :Bus23q, element = :T22_23, side = 2, terminal = 2),
+		(node = :Bus23q, element = :LoadB23, side = 1, terminal = 2),
+		(node = :Bus23q, element = :T23_24, side = 1, terminal = 2),
+		(node = :Bus23q, element = :TR23_36, side = 1, terminal = 2),
+		(node = :Bus24d, element = :T16_24, side = 2, terminal = 1),
+		(node = :Bus24d, element = :T23_24, side = 2, terminal = 1),
+		(node = :Bus24d, element = :LoadB24, side = 1, terminal = 1),
+		(node = :Bus24q, element = :T16_24, side = 2, terminal = 2),
+		(node = :Bus24q, element = :T23_24, side = 2, terminal = 2),
+		(node = :Bus24q, element = :LoadB24, side = 1, terminal = 2),
+		(node = :Bus25d, element = :T2_25, side = 2, terminal = 1),
+		(node = :Bus25d, element = :LoadB25, side = 1, terminal = 1),
+		(node = :Bus25d, element = :T25_26, side = 1, terminal = 1),
+		(node = :Bus25d, element = :TR25_37, side = 1, terminal = 1),
+		(node = :Bus25q, element = :T2_25, side = 2, terminal = 2),
+		(node = :Bus25q, element = :LoadB25, side = 1, terminal = 2),
+		(node = :Bus25q, element = :T25_26, side = 1, terminal = 2),
+		(node = :Bus25q, element = :TR25_37, side = 1, terminal = 2),
+		(node = :Bus26d, element = :T25_26, side = 2, terminal = 1),
+		(node = :Bus26d, element = :LoadB26, side = 1, terminal = 1),
+		(node = :Bus26d, element = :T26_27, side = 1, terminal = 1),
+		(node = :Bus26d, element = :T26_28, side = 1, terminal = 1),
+		(node = :Bus26d, element = :T26_29, side = 1, terminal = 1),
+		(node = :Bus26q, element = :T25_26, side = 2, terminal = 2),
+		(node = :Bus26q, element = :LoadB26, side = 1, terminal = 2),
+		(node = :Bus26q, element = :T26_27, side = 1, terminal = 2),
+		(node = :Bus26q, element = :T26_28, side = 1, terminal = 2),
+		(node = :Bus26q, element = :T26_29, side = 1, terminal = 2),
+		(node = :Bus27d, element = :T26_27, side = 2, terminal = 1),
+		(node = :Bus27d, element = :T17_27, side = 2, terminal = 1),
+		(node = :Bus27d, element = :LoadB27, side = 1, terminal = 1),
+		(node = :Bus27q, element = :T26_27, side = 2, terminal = 2),
+		(node = :Bus27q, element = :T17_27, side = 2, terminal = 2),
+		(node = :Bus27q, element = :LoadB27, side = 1, terminal = 2),
+		(node = :Bus28d, element = :T26_28, side = 2, terminal = 1),
+		(node = :Bus28d, element = :T28_29, side = 1, terminal = 1),
+		(node = :Bus28d, element = :LoadB28, side = 1, terminal = 1),
+		(node = :Bus28q, element = :T26_28, side = 2, terminal = 2),
+		(node = :Bus28q, element = :T28_29, side = 1, terminal = 2),
+		(node = :Bus28q, element = :LoadB28, side = 1, terminal = 2),
+		(node = :Bus29d, element = :T26_29, side = 2, terminal = 1),
+		(node = :Bus29d, element = :LoadB29, side = 1, terminal = 1),
+		(node = :Bus29d, element = :T28_29, side = 2, terminal = 1),
+		(node = :Bus29d, element = :TR29_38, side = 1, terminal = 1),
+		(node = :Bus29q, element = :T26_29, side = 2, terminal = 2),
+		(node = :Bus29q, element = :LoadB29, side = 1, terminal = 2),
+		(node = :Bus29q, element = :T28_29, side = 2, terminal = 2),
+		(node = :Bus29q, element = :TR29_38, side = 1, terminal = 2),
+		(node = :Bus30d, element = :TR2_30, side = 2, terminal = 1),
+		(node = :Bus30d, element = :Zg30, side = 2, terminal = 1),
+		(node = :Bus30q, element = :TR2_30, side = 2, terminal = 2),
+		(node = :Bus30q, element = :Zg30, side = 2, terminal = 2),
+		(node = :Bus31d, element = :TR6_31, side = 2, terminal = 1),
+		(node = :Bus31d, element = :Zg31, side = 2, terminal = 1),
+		(node = :Bus31q, element = :TR6_31, side = 2, terminal = 2),
+		(node = :Bus31q, element = :Zg31, side = 2, terminal = 2),
+		(node = :Bus32d, element = :TR10_32, side = 2, terminal = 1),
+		(node = :Bus32d, element = :Zg32, side = 2, terminal = 1),
+		(node = :Bus32d, element = :LoadB31, side = 1, terminal = 1),
+		(node = :Bus32q, element = :TR10_32, side = 2, terminal = 2),
+		(node = :Bus32q, element = :Zg32, side = 2, terminal = 2),
+		(node = :Bus32q, element = :LoadB31, side = 1, terminal = 2),
+		(node = :Bus33d, element = :TR19_33, side = 2, terminal = 1),
+		(node = :Bus33d, element = :Zg33, side = 2, terminal = 1),
+		(node = :Bus33q, element = :TR19_33, side = 2, terminal = 2),
+		(node = :Bus33q, element = :Zg33, side = 2, terminal = 2),
+		(node = :Bus34d, element = :TR20_34, side = 2, terminal = 1),
+		(node = :Bus34d, element = :Zg34, side = 2, terminal = 1),
+		(node = :Bus34q, element = :TR20_34, side = 2, terminal = 2),
+		(node = :Bus34q, element = :Zg34, side = 2, terminal = 2),
+		(node = :Bus35d, element = :TR22_35, side = 2, terminal = 1),
+		(node = :Bus35d, element = :Zg35, side = 2, terminal = 1),
+		(node = :Bus35q, element = :TR22_35, side = 2, terminal = 2),
+		(node = :Bus35q, element = :Zg35, side = 2, terminal = 2),
+		(node = :Bus36d, element = :TR23_36, side = 2, terminal = 1),
+		(node = :Bus36d, element = :Zg36, side = 2, terminal = 1),
+		(node = :Bus36q, element = :TR23_36, side = 2, terminal = 2),
+		(node = :Bus36q, element = :Zg36, side = 2, terminal = 2),
+		(node = :Bus37d, element = :TR25_37, side = 2, terminal = 1),
+		(node = :Bus37d, element = :Zg37, side = 2, terminal = 1),
+		(node = :Bus37q, element = :TR25_37, side = 2, terminal = 2),
+		(node = :Bus37q, element = :Zg37, side = 2, terminal = 2),
+		(node = :Bus38d, element = :TR29_38, side = 2, terminal = 1),
+		(node = :Bus38d, element = :Zg38, side = 2, terminal = 1),
+		(node = :Bus38q, element = :TR29_38, side = 2, terminal = 2),
+		(node = :Bus38q, element = :Zg38, side = 2, terminal = 2),
+		(node = :Bus39d, element = :Zg39, side = 2, terminal = 1),
+		(node = :Bus39d, element = :T1_39, side = 2, terminal = 1),
+		(node = :Bus39d, element = :T9_39, side = 2, terminal = 1),
+		(node = :Bus39d, element = :LoadB39, side = 1, terminal = 1),
+		(node = :Bus39q, element = :Zg39, side = 2, terminal = 2),
+		(node = :Bus39q, element = :T1_39, side = 2, terminal = 2),
+		(node = :Bus39q, element = :T9_39, side = 2, terminal = 2),
+		(node = :Bus39q, element = :LoadB39, side = 1, terminal = 2),
+	)
 end
 
 function build_ieee39bus_with_networkbuilder()
@@ -2393,19 +2550,19 @@ function ieee39bus_with_nwbuilder_powerflow()
 		options = builder_options,
 	)
 
-	data,elempitopm = convert(builder, PIACDC.PMACDC)
+	data, _, elempitopm = convert(builder, PI.PMACDC)
 
     options = builder.options
 
     result = solve_acdcpf(
         data,
-        PIACDC._PM.ACPPowerModel,
+        PI._PM.ACPPowerModel,
         powerflow_optimizer(options),
         is_bounded_options(options);
         setting = powerflow_setting(options),
     )
 
-	network = NB.build_network(builder.elements, builder.connections, builder.options)
+	network = NB.build_network(builder.elements, builder.topology, builder.options)
 
 
 	return (; builder, solved=(;data, result, elempitopm), network )
@@ -2446,10 +2603,18 @@ function test_ieee39bus_networkbuilder_parity(; freq_range = IEEE39_FREQ_RANGE)
 end
 
 function test_nwbuilder_powerflow_parity(; freq_range = IEEE39_FREQ_RANGE)
-	legacypf = build_ieee39bus_with_networkbuilder().solved.powerflow
-	newpf = ieee39bus_with_nwbuilder_powerflow().solved
+	sharedpf = build_ieee39bus_with_networkbuilder().solved.powerflow
+	direct_case = ieee39bus_with_nwbuilder_powerflow()
+	newpf = direct_case.solved
+	classic_network = NB.build_network(
+		direct_case.builder.elements,
+		direct_case.builder.topology,
+		direct_case.builder.options,
+	)
+	classic_result, classic_data, classic_nodes2bus, classic_elem2comp =
+		PI.power_flow(classic_network)
 
-	function dicts_approx_equal(dict1, dict2; atol = 1e-5)
+	function dicts_approx_equal(dict1, dict2; atol = 1e-8)
 		keys1 = keys(dict1)
 		keys2 = keys(dict2)
 		if keys1 != keys2
@@ -2462,13 +2627,70 @@ function test_nwbuilder_powerflow_parity(; freq_range = IEEE39_FREQ_RANGE)
 				if !dicts_approx_equal(val1, val2; atol)
 					return false
 				end
-			elseif !isapprox(val1, val2; atol)
+			elseif val1 isa Number && val2 isa Number
+				isapprox(val1, val2; atol) || return false
+			elseif !isequal(val1, val2)
 				return false
 			end
 		end
 		return true
 	end
-	@test dicts_approx_equal(newpf.result["solution"]["convdc"]["1"], legacypf.result["solution"]["convdc"]["1"]; atol = 1e-5)
+	normalize_mapping(mapping) = Dict(
+		name => value isa NamedTuple ? (value.pmtype, value.compkey) : Tuple(value)
+		for (name, value) in mapping
+	)
+
+	# The shared calculation and the direct NetworkBuilder parameterization use
+	# the same PowerModelsACDC model and therefore have the same complete result.
+	@test sharedpf.result["termination_status"] == newpf.result["termination_status"]
+	@test dicts_approx_equal(sharedpf.result["solution"], newpf.result["solution"])
+
+	# The Classic route numbers buses in construction order. Compare complete
+	# component and bus solutions through their semantic mappings instead of
+	# comparing those incidental integer identifiers.
+	shared_elements = normalize_mapping(sharedpf.elem2comp)
+	classic_elements = normalize_mapping(classic_elem2comp)
+	@test shared_elements == classic_elements == normalize_mapping(newpf.elempitopm)
+	for (element, (group, index)) in shared_elements
+		haskey(sharedpf.result["solution"], group) || continue
+		@test dicts_approx_equal(
+			sharedpf.result["solution"][group][string(index)],
+			classic_result["solution"][group][string(index)],
+		)
+	end
+
+	typed_bus_nodes = Dict{Tuple{Symbol,Int},Set{Symbol}}()
+	for (node, bus) in sharedpf.nodes2bus
+		bus[1] === :ground && continue
+		push!(get!(typed_bus_nodes, bus, Set{Symbol}()), node)
+	end
+	for ((domain, typed_bus), nodes) in typed_bus_nodes
+		@test haskey(classic_nodes2bus, nodes)
+		classic_group, classic_bus = classic_nodes2bus[nodes]
+		typed_group = domain === :ac ? "bus" : "busdc"
+		@test classic_group == typed_group
+		@test dicts_approx_equal(
+			sharedpf.result["solution"][typed_group][string(typed_bus)],
+			classic_result["solution"][classic_group][string(classic_bus)],
+		)
+	end
+
+	@test sharedpf.result["termination_status"] == classic_result["termination_status"]
+	@test Set(keys(sharedpf.result["solution"])) ==
+	      Set(keys(classic_result["solution"]))
+	for group in ("bus", "busdc", "gen", "gendc", "branch", "branchdc", "convdc")
+		@test length(sharedpf.data[group]) == length(classic_data[group])
+	end
+	@test Set(keys(sharedpf.nodes2bus)) ==
+	      Set(row.node for row in ieee39bus_connections())
+	@test sharedpf.active_setpoint_values === sharedpf.operating_point.setpoints
+	for field in fieldnames(Setpoint)
+		@test isapprox(
+			getfield(classic_network.elements[:STATCOM].setpoint, field),
+			getfield(sharedpf.operating_point[:STATCOM], field);
+			atol = 1e-8,
+		)
+	end
 
 	# @test isequal(legacypf, builtpf)
 	# @test axes(z_built) == axes(z_legacy)
@@ -2480,16 +2702,19 @@ end
 function test_linearizedadmittance_parity(; freq_range = IEEE39_FREQ_RANGE)
 	legacy = build_ieee39bus_with_macro()
 	built = build_ieee39bus_with_networkbuilder().builder
-	newadmnw = convert(built, LinearizedAdmittanceNetwork)
+	newadmnw = compute(
+		LinearizationProblem(built),
+		AdmittanceLinearization(),
+	).network_model
 
 	freqs = range(freq_range[1], freq_range[2], step=freq_range[3])
 	s = 1im .* 2π .* freqs
 	elemkeys = [:STATCOM, :T1_39, :T9_39, :LoadB39]
 	for key in elemkeys
 		@test haskey(legacy.elements, key) #"Legacy network is missing element $key"
-		@test haskey(newadmnw.interface.elem, key) #"New network is missing element $key"
+		@test haskey(newadmnw.indices.elements, key) #"New network is missing element $key"
 		
-		ylegacy = PIACDC.eval_y.((legacy.elements[key],), s;SI_units = true) #Should be pu (disabled scaling)
+		ylegacy = PI.eval_y.((legacy.elements[key],), s;SI_units = true) #Should be pu (disabled scaling)
 		ynew = get_y(newadmnw,key, s)
 		ynew = [ynew[:,:,i] for i in axes(ynew, 3)]
 
@@ -2515,7 +2740,10 @@ end
 function test_ynode_and_edge_parity(; freq_range = IEEE39_FREQ_RANGE)
 	legacy = build_ieee39bus_with_macro()
 	built = build_ieee39bus_with_networkbuilder().builder
-	newadmnw = convert(built, LinearizedAdmittanceNetwork)
+	newadmnw = compute(
+		LinearizationProblem(built),
+		AdmittanceLinearization(),
+	).network_model
 	Z, omega = determine_impedance(legacy; input_pins=[:Bus9d, :Bus9q], output_pins=[:gndD, :gndQ], elim_elements=[:STATCOM], freq_range)
 	s = omega .*im
 	yedge = NB.make_y_edge(newadmnw, s)
@@ -2537,7 +2765,10 @@ end
 function test_determine_impedance_parity(; freq_range = IEEE39_FREQ_RANGE)
 	legacy = build_ieee39bus_with_macro()
 	built = build_ieee39bus_with_networkbuilder().builder
-	newadmnw = convert(built, LinearizedAdmittanceNetwork)
+	newadmnw = compute(
+		LinearizationProblem(built),
+		AdmittanceLinearization(),
+	).network_model
 	Z, omega = determine_impedance(legacy; input_pins=[:Bus9d, :Bus9q], output_pins=[:gndD, :gndQ], elim_elements=[:STATCOM], freq_range)
 	Znew, omega_new = NB.determine_impedance(newadmnw; nets=[:Bus9d, :Bus9q], elim_elements=[:STATCOM], freq_range)
 	Zresh = cat(Z...; dims=3)
@@ -2604,13 +2835,15 @@ end
 	)
 
 	connections = (
-		pin(:a, 1.1) ⟷ pin(:open_line, 1.1) ⟷ pin(:b, 1.1) ⟷ :B,
-		pin(:a, 2.1) ⟷ :gnd,
-		pin(:b, 2.1) ⟷ :gnd,
+		(node = :B, element = :a, side = 1, terminal = 1),
+		(node = :B, element = :open_line, side = 1, terminal = 1),
+		(node = :B, element = :b, side = 1, terminal = 1),
+		(node = :gnd, element = :a, side = 2, terminal = 1),
+		(node = :gnd, element = :b, side = 2, terminal = 1),
 	)
 
 	builder = NetworkBuilder.define(elements, connections)
-	network= NB.build_network(builder.elements, builder.connections, builder.options)
+	network = NB.build_network(builder.elements, builder.topology, builder.options)
 
 	@test !haskey(network.elements, :open_line)
 	@test network.elements[:a].pins[Symbol("1.1")] == :B

@@ -117,6 +117,12 @@ table {
     max-width: 100%;
 }
 
+/* Keep the final row visibly closed in long reference tables. */
+article#documenter-page table tr:last-child td {
+    border-bottom-width: 1px;
+    border-bottom-style: solid;
+}
+
 /* Fix for DataFrame scrollbars */
 .data-frame {
     overflow-x: auto !important;

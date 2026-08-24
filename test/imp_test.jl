@@ -1,3 +1,5 @@
+import PowerImpedance: @network
+
 transmissionVoltage = 380 / sqrt(3)
 pHVDC1 = 600
 qC1 = 100
@@ -12,7 +14,7 @@ net = @network begin
 		setpoint = Setpoint(
 		Vac = transmissionVoltage,
 		Pac = pHVDC1),
-		limits = PowerImpedanceACDC.Limits(
+		limits = PowerImpedance.Limits(
 		P_min = -2000,
 		P_max = 2000,
 		Q_max = 1000,
@@ -24,30 +26,30 @@ net = @network begin
 
 	# HVDC link 1
 	# MMC1 controls the DC voltage, and is situated at the remote end.
-	c1 = PowerImpedanceACDC.mmc(
-		elec = PowerImpedanceACDC.ElectricalMMC(vDC_base = 800, 
+	c1 = PowerImpedance.mmc(
+		elec = PowerImpedance.ElectricalMMC(vDC_base = 800,
 		),
-		sync = PowerImpedanceACDC.PLLSynchronization(
-			pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
+		sync = PowerImpedance.PLLSynchronization(
+			pi_ctrl = PowerImpedance.PIControl(Kp = 0.28, Ki = 12.5664),
 		),
-		delta_control = PowerImpedanceACDC.ΔdqControlGFL(
-			outer_active = PowerImpedanceACDC.OuterActiveVdcControl(
-				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 5, Ki = 15),
+		delta_control = PowerImpedance.ΔdqControlGFL(
+			outer_active = PowerImpedance.OuterActiveVdcControl(
+				pi_ctrl = PowerImpedance.PIControl(Kp = 5, Ki = 15),
 			),
-			outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
-				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
+			outer_reactive = PowerImpedance.OuterReactiveQControl(
+				pi_ctrl = PowerImpedance.PIControl(Kp = 0.1, Ki = 31.4159),
 			),
-			occ = PowerImpedanceACDC.InnerCurrentPIControl(
-				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.7691, Ki = 522.7654),
+			occ = PowerImpedance.InnerCurrentPIControl(
+				pi_ctrl = PowerImpedance.PIControl(Kp = 0.7691, Ki = 522.7654),
 				activate_ω_c_multiplication = false
 			),
 		),
-		sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
-			ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
-				PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
+		sigma_control = PowerImpedance.ΣdqzControlTEC(
+			ccsc = PowerImpedance.CirculatingCurrentSuppressionControl(
+				PowerImpedance.PIControl(Kp = 0.1048, Ki = 48.1914),
 			),
 		),
-		setpoint = PowerImpedanceACDC.Setpoint(
+		setpoint = PowerImpedance.Setpoint(
 			Pac = -pHVDC1,
 			Qac = qC1,
 			θac = 0.0,
@@ -55,7 +57,7 @@ net = @network begin
 			Pdc = -pHVDC1,
 			Vdc = 800,
 		),
-		limits = PowerImpedanceACDC.Limits(
+		limits = PowerImpedance.Limits(
 			P_min = -1500,
 			P_max = 1500,
 			Q_min = -500,
@@ -63,35 +65,35 @@ net = @network begin
 		),
 	)
 	# MMC2 controls P&Q. It is connected to bus 7. Define the transformer impedance parameters at the converter side!
-	c2 = PowerImpedanceACDC.mmc(
-		elec = PowerImpedanceACDC.ElectricalMMC(
+	c2 = PowerImpedance.mmc(
+		elec = PowerImpedance.ElectricalMMC(
 			vDC_base = 800,
 			vACbase_LL_RMS = 333,
 			turnsRatio = 333 / 380,
 			Lᵣ = 0.0461,
 			Rᵣ = 0.4103,
 		),
-		sync = PowerImpedanceACDC.PLLSynchronization(
-			pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.28, Ki = 12.5664),
+		sync = PowerImpedance.PLLSynchronization(
+			pi_ctrl = PowerImpedance.PIControl(Kp = 0.28, Ki = 12.5664),
 		),
-		delta_control = PowerImpedanceACDC.ΔdqControlGFL(
-			outer_active = PowerImpedanceACDC.OuterActivePowerControl(
-				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
+		delta_control = PowerImpedance.ΔdqControlGFL(
+			outer_active = PowerImpedance.OuterActivePowerControl(
+				pi_ctrl = PowerImpedance.PIControl(Kp = 0.1, Ki = 31.4159),
 			),
-			outer_reactive = PowerImpedanceACDC.OuterReactiveQControl(
-				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.1, Ki = 31.4159),
+			outer_reactive = PowerImpedance.OuterReactiveQControl(
+				pi_ctrl = PowerImpedance.PIControl(Kp = 0.1, Ki = 31.4159),
 			),
-			occ = PowerImpedanceACDC.InnerCurrentPIControl(
-				pi_ctrl = PowerImpedanceACDC.PIControl(Kp = 0.7691, Ki = 522.7654),
+			occ = PowerImpedance.InnerCurrentPIControl(
+				pi_ctrl = PowerImpedance.PIControl(Kp = 0.7691, Ki = 522.7654),
 				activate_ω_c_multiplication = false
 			),
 		),
-		sigma_control = PowerImpedanceACDC.ΣdqzControlTEC(
-			ccsc = PowerImpedanceACDC.CirculatingCurrentSuppressionControl(
-				PowerImpedanceACDC.PIControl(Kp = 0.1048, Ki = 48.1914),
+		sigma_control = PowerImpedance.ΣdqzControlTEC(
+			ccsc = PowerImpedance.CirculatingCurrentSuppressionControl(
+				PowerImpedance.PIControl(Kp = 0.1048, Ki = 48.1914),
 			),
 		),
-		setpoint = PowerImpedanceACDC.Setpoint(
+		setpoint = PowerImpedance.Setpoint(
 			Pac = pHVDC1,
 			Qac = qC2,
 			θac = 0.0,
@@ -99,7 +101,7 @@ net = @network begin
 			Pdc = pHVDC1,
 			Vdc = 800,
 		),
-		limits = PowerImpedanceACDC.Limits(
+		limits = PowerImpedance.Limits(
 			P_min = -1000,
 			P_max = 1000,
 			Q_min = -1000,
@@ -119,7 +121,7 @@ net = @network begin
 	g4 = ac_source(setpoint = Setpoint(
 		Vac = transmissionVoltage,
 		Pac = pHVDC1),
-		limits = PowerImpedanceACDC.Limits(
+		limits = PowerImpedance.Limits(
 		P_min = -2000,
 		P_max = 2000,
 		Q_max = 1000,
@@ -231,7 +233,6 @@ end
 
 
 # Plotting for visual inspection
-# using Plots
 # plot(omegas./(2*pi), rad2deg.(angle.(getindex.(imp_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Angle [degree]",minorgrid=true, legend=:none, xaxis = :log10)
 # plot!(omegas./(2*pi), rad2deg.(angle.(getindex.(Z_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Angle [degree]",minorgrid=true, legend=:none, xaxis = :log10, line=:dash)
 # plot(omegas./(2*pi), 20*log10.(abs.(getindex.(imp_ac, 2, 2))),xlabel= "Frequency[Hz]",ylabel= "Admittance Y_11 [dB]",minorgrid=true, legend=:none, xaxis = :log10)

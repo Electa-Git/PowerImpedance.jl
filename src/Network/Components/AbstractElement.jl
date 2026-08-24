@@ -17,36 +17,44 @@ struct PMACDC end
 # PB.ToolType(::PMACDC) = IsTool()
 
 
-"""
-Struct guarantees representation of the component like a multiport
-network using ABCD parameters. It consists of:
-- element unique symbol inside constructed network - `symbol`
-- dictionary that maps pins inside the network (to network nodes) - `pins`
-- number of input pins - `input_pins`
-- number of output pins - `output_pins`
-- component definition - `element_model`
-- transformation flag - `transformation`
-- connection flag - `connection`
-"""
+"Abstract supertype for every physical component model stored in an `Element`."
 abstract type AbstractElementModel end
 
 abstract type AbstractLinFreqDomain <: AbstractElementModel end
 
 abstract type AbstractStateSpace <: AbstractElementModel end
 
+"""
+    Setpoint(; Pac=missing, Qac=missing, θac=missing, Vac=missing,
+             Pdc=missing, Vdc=missing)
 
+Store an AC/DC steady-state operating point.
 
+# Arguments
 
+- `Pac`: AC active power `\\[MW\\]`.
+- `Qac`: AC reactive power `\\[MVAr\\]`.
+- `θac`: AC voltage angle `\\[rad\\]`.
+- `Vac`: phase-voltage amplitude `\\[kV\\]`.
+- `Pdc`: DC active power `\\[MW\\]`.
+- `Vdc`: DC voltage `\\[kV\\]`.
+
+Every field defaults to `missing`; the power-flow pipeline fills quantities
+that are not fixed by the component's control mode.
+"""
 @with_kw struct Setpoint
-    
-    # Power flow results
+	"AC active power `\\[MW\\]`."
     Pac ::Union{Float64, Missing} = missing              # active power [MW]
+	"AC reactive power `\\[MVAr\\]`."
     Qac ::Union{Float64, Missing} = missing                # reactive power [MVA]
+	"AC voltage angle `\\[rad\\]`."
     θac ::Union{Float64, Missing} = missing
+	"AC phase-voltage amplitude `\\[kV\\]`."
     Vac ::Union{Float64, Missing} = missing#220*sqrt(2/3)             # AC voltage, amplitude [kV]
 
-    # DC
+	"DC active power `\\[MW\\]`."
     Pdc::Union{Float64, Missing} = missing
+	"DC voltage `\\[kV\\]`."
     Vdc::Union{Float64, Missing} = missing
    
 end
@@ -60,33 +68,86 @@ end
     p_dc::Float64 = 0
     v_dc::Float64 = 1
 end
+"""
+    Limits(; P_min=0.9, P_max=1.1, Q_min=-0.5, Q_max=0.5)
 
-
-
+Store active- and reactive-power limits in the component's per-unit base.
+"""
 @with_kw struct Limits
-    #Limits 
+	"Minimum active power `\\[pu\\]`."
     P_min ::Float64 = 0.9         # min active power output [pu]
+	"Maximum active power `\\[pu\\]`."
     P_max ::Float64 = 1.1          # max active power output [pu]
+	"Minimum reactive power `\\[pu\\]`."
     Q_min ::Float64 = -0.5          # min reactive power output [pu]
+	"Maximum reactive power `\\[pu\\]`."
     Q_max ::Float64 = 0.5           # max reactive power output [pu]
 end
 
 
+"""
+$(TYPEDEF)
 
+Represent one physical component as a multiport element with ABCD blocks,
+network pins, coordinate-transformation state, operating-point data, and
+connection state.
+
+$(TYPEDFIELDS)
+"""
 mutable struct Element{T<: Any} #TODO: consider making this an immutable struct, and use a constructor to handle the logic of setting the fields
+    "Element name assigned when inserted into a network."
     symbol::Symbol
+    "Mapping from local pin names to network-node names."
     pins :: Dict{Symbol, Symbol}
+    "Number of externally visible input pins."
     input_pins :: Int
+    "Number of externally visible output pins."
     output_pins :: Int
+    "Physical component model."
     element_model :: T #AbstractElementModel  # component defined type
+    "ABCD ``\\mathbf{A}`` block."
     A::Matrix{ComplexF64}  
+    "ABCD ``\\mathbf{B}`` block."
     B::Matrix{ComplexF64} 
+    "ABCD ``\\mathbf{C}`` block."
     C::Matrix{ComplexF64} 
+    "ABCD ``\\mathbf{D}`` block."
     D::Matrix{ComplexF64} 
+    "Whether the element exposes transformed external coordinates."
     transformation :: Bool
+    "Whether the element participates in network construction."
     connection :: Bool # True = Element is connected, False= Element is disconnected 
+    "Steady-state operating point."
     setpoint::Setpoint
+    "Power-flow operating limits."
     limits::Limits
+    @doc """
+        Element(; element_model=nothing, element_value=nothing, kwargs...)
+
+    Construct an `Element` around one physical component model.
+
+    # Arguments
+
+    - `element_model`: component model stored by the element.
+    - `element_value`: deprecated alias for `element_model`.
+    - `kwargs`: values for element fields such as `input_pins`, `output_pins`,
+      `transformation`, `connection`, `setpoint`, and `limits`.
+
+    # Returns
+
+    - An initialized `Element` whose pins reflect the requested terminal counts.
+
+    # Notes
+
+    When `transformation=true`, the externally visible input and output pin
+    counts are each reduced by one to match the transformed representation.
+
+    # Errors
+
+    - Throws `UndefKeywordError` if neither component-model keyword is supplied.
+    - Throws `ArgumentError` when both model keywords differ or a keyword is not
+      an `Element` field.
+    """
     function Element(; element_model=nothing, element_value=nothing, args...)
         
 
@@ -102,6 +163,9 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
         elem = new{typeof(model)}()
 
         elem.element_model = model
+        elem.symbol = Symbol()
+        elem.transformation = false
+        elem.connection = true
         elem.setpoint = Setpoint()
         elem.limits = Limits()
         elem.A, elem.B, elem.C, elem.D = fill(Array{ComplexF64}(undef, 0, 0), 4)
@@ -114,9 +178,7 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
             end
         end
 
-        if !isdefined(elem, :transformation)
-            elem.transformation = false
-        elseif elem.transformation
+        if elem.transformation
             elem.input_pins -= 1
             elem.output_pins -= 1
         end

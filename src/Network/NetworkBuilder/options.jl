@@ -1,4 +1,4 @@
-#### Options are passed to the BuilderState through hierarchical NamedTuples. 
+#### Options are passed to the NetworkState through hierarchical NamedTuples.
 #### The following functions are used to extract the options from the NamedTuples.
 """
 Retrieve the value of a specific option, returning a default value if the option is not set.

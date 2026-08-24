@@ -1,8 +1,8 @@
 # Main network definition
 
-export Network, add!, connect!, disconnect!, @network,
+export Network, add!, connect!, disconnect!,
         composite_element, eval_abcd
-export power_flow, data, result  # for testing
+export power_flow
 
 import Base: delete!
 
@@ -29,10 +29,18 @@ end
 ########################################################################################################################################################################################
 # add and delete function with various methods to handle -----------------> elements
 """
-    add!(n::Network, elem::Element)
-Adds the element `elem` to the network `n`, creating and returning a new, unique
-reference designator, leaving its pins unconnected. #FP: It will be connected with the pin connection at the end of the code (usually at the end)
-Returns the element designator, if the element `elem` is already connected to the network `n`.
+$(TYPEDSIGNATURES)
+
+Add `elem` to `n` under a generated designator and leave its pins unconnected. If an equal element already belongs to the network, return its existing designator.
+
+# Arguments
+
+- `n`: classic network that receives the element.
+- `elem`: element to add.
+
+# Returns
+
+The generated or existing element designator.
 """
 function add!(n::Network, elem::Element)
     for (k, v) in n.elements 

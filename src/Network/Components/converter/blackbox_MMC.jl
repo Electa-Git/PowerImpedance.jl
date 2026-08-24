@@ -1,4 +1,4 @@
-# This is a PowerImpedanceACDC element in order to model a MMC converter soley based on frequency scans, e.g.
+# This is a PowerImpedance element in order to model a MMC converter soley based on frequency scans, e.g.
 # imported Two-port admittance matrix. It is a blackbox model, meaning that the internal structure of the converter is not modeled.
 # The converter is represented by its imported Y-parameters.
 
@@ -14,6 +14,27 @@ mutable struct OP
     Iac::Float64        # AC current [kA]
     Ymmc::Vector{Matrix{ComplexF64}}
     
+    @doc """
+        OP(Vdc, Vac, Pac, Qac, Pdc, Iac, n, Nf)
+
+    Construct one black-box converter operating point and allocate its sampled
+    admittance matrices.
+
+    # Arguments
+
+    - `Vdc`: DC voltage `\\[pu\\]`.
+    - `Vac`: AC voltage `\\[pu\\]`.
+    - `Pac`: AC active power `\\[MW\\]`.
+    - `Qac`: AC reactive power `\\[MVAr\\]`.
+    - `Pdc`: DC active power `\\[MW\\]`.
+    - `Iac`: AC current `\\[kA\\]`.
+    - `n`: Admittance-matrix order.
+    - `Nf`: Number of frequency samples.
+
+    # Returns
+
+    - An `OP` with `Nf` zero-valued `n × n` complex admittance matrices.
+    """
     function OP(Vdc, Vac, Pac, Qac, Pdc, Iac, n, Nf)
         new(Vdc, Vac, Pac, Qac, Pdc, Iac, [zeros(ComplexF64, n, n) for _ in 1:Nf])
     end
@@ -201,7 +222,7 @@ function blackbox_MMC(;args...)
     converter.itp = linear_interpolation((Vac_vals, Pac_vals, Qac_vals, freq), Ymmc_4d, extrapolation_bc=Line())
 
 
-    # Return complete PowerImpedanceACDC element
+    # Return complete PowerImpedance element
     elem = Element(input_pins = 1, output_pins = 2, element_value = converter, transformation = false, connection = connection)
 
 end
@@ -247,8 +268,6 @@ function eval_parameters(converter :: Blackbox_MMC, s :: Complex)
 
 
 end
-
-
 
 
 

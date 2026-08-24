@@ -1,4 +1,6 @@
 
+import PowerImpedance: @network
+
 function synchronousmachinecircuit()
 net = @network begin
 
@@ -89,7 +91,7 @@ end
     adm_ac = 0 .* Y_pscad
     Ybase = 1000/380^2
     for (i,s) in enumerate(s_vec) 
-        adm_ac[i] =  Ybase*PowerImpedanceACDC.eval_y(net.elements[:sg1], s)
+        adm_ac[i] =  Ybase*PowerImpedance.eval_y(net.elements[:sg1], s)
     end
 
     

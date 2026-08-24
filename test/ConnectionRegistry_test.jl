@@ -1,479 +1,298 @@
-using PowerImpedanceACDC.NetworkBuilder: pin, ⟷, Pin, ConnectionDef, ConnectionsRegistry, ↔
+using PowerImpedance
+using Test
 
+const NB = PowerImpedance.NetworkBuilder
 
-@testset "Pin Creation and Parsing" begin
-    @testset "Pin creation with explicit side and terminal" begin
-        # Test basic pin creation using explicit integer arguments.
-        # Validates that pins are created with correct element, side, and terminal fields.
-        p = pin(:elem1, 1, 1)
-        @test p.elementid == :elem1
-        @test p.side == 1
-        @test p.terminal == 1
-        @test isa(p, Pin)
-    end
+row(node, element, side, terminal) = (; node, element, side, terminal)
 
-    @testset "Pin creation with tuple notation" begin
-        # Test pin creation using tuple notation (side, terminal).
-        # Verifies that both explicit integers and tuple unpacking work identically.
-        p1 = pin(:elem1, 1, 2)
-        p2 = pin(:elem1, (1, 2))
-        @test p1.elementid == p2.elementid
-        @test p1.side == p2.side
-        @test p1.terminal == p2.terminal
-    end
+@testset "NetworkTopology named rows" begin
+    elements = (
+        z1 = impedance(z = 1.0, pins = 1),
+        z2 = impedance(z = 2.0, pins = 1),
+        z3 = impedance(z = 3.0, pins = 1)
+    )
+    connections = (
+        row(:n1, :z1, 1, 1),
+        row(:n1, :z2, 1, 1),
+        row(:n1, :z3, 1, 1),
+        row(:gnd, :z1, 2, 1),
+        row(:gnd, :z2, 2, 1),
+        row(:gnd, :z3, 2, 1)
+    )
+    topology = NB.NetworkTopology(elements, connections)
 
-    @testset "Pin creation with string notation" begin
-        # Test pin creation using legacy string notation "side.terminal".
-        # Ensures backward compatibility with existing naming convention.
-        p = pin(:elem1, "1.1")
-        @test p.side == 1
-        @test p.terminal == 1
-        
-        p2 = pin(:elem2, "3.5")
-        @test p2.side == 3
-        @test p2.terminal == 5
-    end
+    @test topology.connections.node == [:n1, :n1, :n1, :gnd, :gnd, :gnd]
+    @test topology.connections.element == [:z1, :z2, :z3, :z1, :z2, :z3]
+    @test all(==(1), topology.connections.bus[1:3])
+    @test all(iszero, topology.connections.bus[4:6])
+    @test all(==(2), topology.connections.domain)
 
-    @testset "Pin creation with symbol string notation" begin
-        # Test pin creation using symbol notation for legacy format.
-        # Validates that symbols are correctly parsed as "side.terminal".
-        p = pin(:elem1, Symbol("2.3"))
-        @test p.side == 2
-        @test p.terminal == 3
-    end
+    builder = NB.define(elements, collect(connections))
+    @test builder isa NB.NetworkState
+    @test builder.topology.connections == topology.connections
+    @test collect(keys(builder.elements)) == collect(keys(elements))
 
-    @testset "Pin name property" begin
-        # Test that pin.name property correctly generates legacy naming format.
-        # Verifies the computed property returns correct Symbol format.
-        p = pin(:elem1, 1, 1)
-        @test p.name == Symbol("1.1")
-        
-        p2 = pin(:elem2, 2, 5)
-        @test p2.name == Symbol("2.5")
-    end
-
-    @testset "Pin validation - invalid side" begin
-        # Test error handling for invalid side numbers (must be >= 1).
-        # Ensures proper validation of pin parameters.
-        @test_throws ArgumentError pin(:elem1, 0, 1)
-        @test_throws ArgumentError pin(:elem1, "0.1")
-        @test_throws ArgumentError pin(:elem1, (-1, 1))
-    end
-
-    @testset "Pin validation - invalid terminal" begin
-        # Test error handling for invalid terminal numbers (must be >= 1).
-        # Ensures proper validation of terminal indices.
-        @test_throws ArgumentError pin(:elem1, 1, 0)
-        @test_throws ArgumentError pin(:elem1, "1.0")
-        @test_throws ArgumentError pin(:elem1, (1, -2))
-    end
-
-    @testset "Pin validation - malformed string" begin
-        # Test error handling for malformed pin name strings.
-        # Validates that strings without proper "side.terminal" format are rejected.
-        @test_throws ArgumentError pin(:elem1, "1")
-        @test_throws ArgumentError pin(:elem1, "1.2.3")
-        @test_throws ArgumentError pin(:elem1, "a.b")
-        @test_throws ArgumentError pin(:elem1, "1.")
-        @test_throws ArgumentError pin(:elem1, ".1")
-    end
-
-    @testset "Pin type conversion" begin
-        # Test that pin side and terminal are correctly converted to Int.
-        # Ensures consistency regardless of input numeric type.
-        p = pin(:elem1, Int32(1), Int64(2))
-        @test p.side === 1  # Exactly Int
-        @test p.terminal === 2
-        
-        p2 = pin(:elem1, UInt8(3), UInt16(4))
-        @test p2.side === 3
-        @test p2.terminal === 4
-    end
-
-    @testset "Pin equality and hashing" begin
-        # Test that pins with identical parameters are treated as equal.
-        # Validates that pins can be used in sets and dictionaries.
-        p1 = pin(:elem1, 1, 1)
-        p2 = pin(:elem1, 1, 1)
-        p3 = pin(:elem1, 1, 2)
-        
-        @test p1 == p2
-        @test p1 ≠ p3
-        @test hash(p1) == hash(p2)
-    end
+    reordered = NB.NetworkTopology(
+        elements,
+        ((element = :z1, terminal = 1, node = :n1, side = 1),)
+    )
+    @test only(reordered.connections).node == :n1
 end
 
-@testset "ConnectionDef Structure" begin
-    @testset "ConnectionDef with single pin" begin
-        # Test creating a connection definition with a single endpoint.
-        # Verifies that single pins are wrapped in a vector.
-        p = pin(:elem1, 1, 1)
-        conn = ConnectionDef(p)
-        @test conn.endpoints == [p]
-        @test conn.name === nothing
-    end
+@testset "NetworkTopology component ports" begin
+    overhead = overhead_line(
+        length = 1e3,
+        conductors = Conductors(organization = :flat, nᵇ = 3),
+        transformation = true
+    )
+    cable_element = cable(
+        length = 1e3,
+        positions = [(-1.0, 1.0), (0.0, 1.0), (1.0, 1.0)],
+        C1 = Conductor(rₒ = 0.01),
+        transformation = true
+    )
+    blackbox_line_element = blackbox_line(
+        data_type = :Ztool,
+        n = 3,
+        transformation = true
+    )
+    transformer_element = transformer(
+        pins = 3,
+        n = 1.0,
+        Rₚ = 0.1,
+        Lₚ = 1e-3,
+        Rₛ = 0.1,
+        Lₛ = 1e-3,
+        transformation = true
+    )
+    two_level = tlc()
+    delta_control = ΔdqControlGFL(
+        outer_active = NoOuterActiveControl(),
+        outer_reactive = NoOuterReactiveControl(),
+        occ = NoInnerCurrentControl()
+    )
+    modular_multilevel = mmc(
+        sync = NoSynchronization(),
+        delta_control = delta_control,
+        sigma_control = ΣdqzControlTEC()
+    )
+    blackbox_converter = PowerImpedance.Element(
+        input_pins = 1,
+        output_pins = 2,
+        element_model = PowerImpedance.Blackbox_MMC()
+    )
 
-    @testset "ConnectionDef with named connection" begin
-        # Test creating a named connection definition.
-        # Ensures names are stored correctly in the ConnectionDef structure.
-        p = pin(:elem1, 1, 1)
-        conn = ConnectionDef(p; name=:net1)
-        @test conn.endpoints == [p]
-        @test conn.name == :net1
-    end
+    families = (
+        dc_source = dc_source(),
+        ac_source = ac_source(pins = 3, transformation = true),
+        impedance = impedance(z = 1.0, pins = 3, transformation = true),
+        transformer = transformer_element,
+        overhead = overhead,
+        cable = cable_element,
+        blackbox_line = blackbox_line_element,
+        mmc = modular_multilevel,
+        tlc = two_level,
+        blackbox_converter = blackbox_converter,
+        synchronous_machine = synchronousmachine(),
+        induction_machine = inductionmachine()
+    )
 
-    @testset "ConnectionDef with vector of pins" begin
-        # Test creating a connection definition with multiple pins.
-        # Validates vector of endpoints are properly stored.
-        p1 = pin(:elem1, 1, 1)
-        p2 = pin(:elem2, 1, 1)
-        conn = ConnectionDef([p1, p2]; name=:bus1)
-        @test conn.endpoints == [p1, p2]
-        @test conn.name == :bus1
+    @test [(port.side, port.terminals, port.domain)
+           for port in NB._port_descriptions(families.dc_source)] == [(1, 1, 2)]
+    @test [(port.side, port.terminals, port.domain)
+           for port in NB._port_descriptions(families.ac_source)] == [(1, 2, 1)]
+    for name in (:mmc, :tlc, :blackbox_converter)
+        @test [(port.side, port.terminals, port.domain)
+               for port in NB._port_descriptions(families[name])] ==
+              [(1, 1, 2), (2, 2, 1)]
     end
+    for name in (:impedance, :transformer, :overhead, :cable, :blackbox_line)
+        @test [(port.side, port.terminals, port.domain)
+               for port in NB._port_descriptions(families[name])] ==
+              [(1, 2, 1), (2, 2, 1)]
+    end
+    @test only(NB._port_descriptions(families.synchronous_machine)).domain == 1
+    @test only(NB._port_descriptions(families.induction_machine)).domain == 1
+    @test all(
+        iszero(port.domain)
+    for port in NB._port_descriptions(impedance(z = 1.0, pins = 1))
+    )
 end
 
-@testset "Connection Operator ⟷" begin
-    @testset "Connect two pins" begin
-        # Test the ⟷ operator to connect two pins.
-        # Verifies that the connection creates proper ConnectionDef with both endpoints.
-        p1 = pin(:elem1, 1, 1)
-        p2 = pin(:elem2, 1, 1)
-        conn = p1 ⟷ p2
-        
-        @test conn.name === nothing
-        @test Set(conn.endpoints) == Set([p1, p2])
-    end
+@testset "NetworkTopology infers scalar passive domains" begin
+    elements = (
+        ac = impedance(z = 1.0, pins = 3, transformation = true),
+        d_load = impedance(z = 2.0, pins = 1)
+    )
+    connections = (
+        row(:d, :ac, 1, 1),
+        row(:d, :d_load, 1, 1),
+        row(:gnd_d, :d_load, 2, 1)
+    )
+    topology = NB.NetworkTopology(elements, connections)
+    @test all(==(1), topology.connections.domain)
 
-    @testset "Connect pin to named net" begin
-        # Test connecting a pin to a named net (symbol).
-        # Validates that the connection name is correctly assigned.
-        p = pin(:elem1, 1, 1)
-        conn = p ⟷ :net1
-        
-        @test conn.name == :net1
-        @test p in conn.endpoints
-    end
+    dc = NB.NetworkTopology(
+        (branch = impedance(z = 2.0, pins = 1),),
+        (row(:dc, :branch, 1, 1), row(:gnd, :branch, 2, 1))
+    )
+    @test all(==(2), dc.connections.domain)
 
-    @testset "Connect named net to pin" begin
-        # Test connecting a named net (symbol) to a pin (reversed order).
-        # Ensures operator is commutative for name assignment.
-        p = pin(:elem1, 1, 1)
-        conn = :net1 ⟷ p
-        
-        @test conn.name == :net1
-        @test p in conn.endpoints
+    active_elements = (
+        machine = synchronousmachine(),
+        load = impedance(z = 2.0, pins = 1)
+    )
+    active_connections = (
+        row(:d, :machine, 1, 1),
+        row(:q, :machine, 1, 2),
+        row(:d, :load, 1, 1),
+        row(:gnd_d, :load, 2, 1)
+    )
+    active_network = NB.define(active_elements, active_connections)
+    error = try
+        PowerImpedance.compute(
+            NB.PowerFlowProblem(active_network),
+            NB.ACDCPowerFlow()
+        )
+        nothing
+    catch caught
+        caught
     end
-
-    @testset "Chain multiple connections" begin
-        # Test chaining multiple connections using ⟷.
-        # Validates that all endpoints are properly accumulated.
-        p1 = pin(:elem1, 1, 1)
-        p2 = pin(:elem2, 1, 1)
-        p3 = pin(:elem3, 1, 1)
-        
-        conn = p1 ⟷ p2 ⟷ p3
-        
-        @test Set(conn.endpoints) == Set([p1, p2, p3])
-        @test conn.name === nothing
-    end
-
-    @testset "Named connection in chain" begin
-        # Test chaining connections with a named endpoint.
-        # Ensures name propagates correctly through the chain.
-        p1 = pin(:elem1, 1, 1)
-        p2 = pin(:elem2, 1, 1)
-        
-        conn = p1 ⟷ p2 ⟷ :bus1
-        
-        @test conn.name == :bus1
-        @test Set(conn.endpoints) == Set([p1, p2])
-    end
-
-    @testset "Name conflict detection" begin
-        # Test that connecting nets with conflicting names raises an error.
-        # Ensures data integrity by preventing ambiguous connections.
-        conn1 = pin(:elem1, 1, 1) ⟷ :net1
-        conn2 = pin(:elem2, 1, 1) ⟷ :net2
-        
-        @test_throws ArgumentError conn1 ⟷ conn2
-    end
-
-    @testset "Same name concatenation" begin
-        # Test that connecting nets with the same name succeeds.
-        # Validates that same-named nets can be merged.
-        p1 = pin(:elem1, 1, 1) ⟷ :net1
-        p2 = pin(:elem2, 1, 1) ⟷ :net1
-        
-        conn = p1 ⟷ p2
-        @test conn.name == :net1
-        @test Set(conn.endpoints) == Set([pin(:elem1, 1, 1), pin(:elem2, 1, 1)])
-    end
-
-    @testset "Bidirectional operator ↔" begin
-        # Test that ↔ operator works identically to ⟷.
-        # Ensures both operators are equivalent.
-        p1 = pin(:elem1, 1, 1)
-        p2 = pin(:elem2, 1, 1)
-        
-        conn1 = p1 ⟷ p2
-        conn2 = p1 ↔ p2
-        
-        @test Set(conn1.endpoints) == Set(conn2.endpoints)
-        @test conn1.name == conn2.name
-    end
+    @test error isa ArgumentError
+    @test occursin("transformed three-phase element", sprint(showerror, error))
 end
 
-@testset "ConnectionsRegistry Creation" begin
-    @testset "Registry from simple connections" begin
-        # Test creating a registry from basic connection definitions.
-        # Validates proper mapping of elements to buses.
-        elements = (; 
-            z1 = impedance(z=1, pins=1),
-            z2 = impedance(z=2, pins=1)
-        )
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ pin(:z2, 1, 1) ⟷ :n1,
-            pin(:z1, 2, 1) ⟷ pin(:z2, 2, 1) ⟷ :gnd,
-        )
-        
-        registry = ConnectionsRegistry(elements, connections)
-        
-        @test registry.registry.net !== nothing
-        @test :n1 in registry.registry.net
-        @test :gnd in registry.registry.net
-    end
+@testset "NetworkTopology physical one-port rows" begin
+    elements = (
+        grid = ac_source(pins = 3, transformation = true),
+        machine = synchronousmachine(),
+        line = impedance(z = 1.0, pins = 3, transformation = true)
+    )
+    connections = (
+        row(:grid_d, :grid, 1, 1),
+        row(:grid_d, :line, 1, 1),
+        row(:grid_q, :grid, 1, 2),
+        row(:grid_q, :line, 1, 2),
+        row(:machine_d, :line, 2, 1),
+        row(:machine_d, :machine, 1, 1),
+        row(:machine_q, :line, 2, 2),
+        row(:machine_q, :machine, 1, 2)
+    )
+    topology = NB.NetworkTopology(elements, connections)
+    @test all(
+        row -> row.side == 1,
+        filter(row -> row.element in (:grid, :machine), topology.connections)
+    )
+    @test isempty(filter(row -> PowerImpedance.isgroundnet(row.node), topology.connections))
 
-    @testset "Registry bus assignment" begin
-        # Test that registry correctly assigns bus numbers to connections.
-        # Validates that same net endpoints share the same bus number.
-        elements = (; 
-            z1 = impedance(z=1, pins=1),
-            z2 = impedance(z=2, pins=1)
-        )
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ pin(:z2, 1, 1) ⟷ :net1,
-        )
-        
-        registry = ConnectionsRegistry(elements, connections)
-        
-        # Find entries for net1
-        net1_entries = filter(r -> r.net == :net1, registry.registry)
-        
-        # All entries for same net should have same bus
-        @test length(unique(net1_entries.bus)) == 1
-    end
-
-    @testset "Registry element-side tracking" begin
-        # Test that registry correctly tracks element, side, and terminal information.
-        # Ensures proper mapping of physical connections.
-        elements = (; 
-            z1 = impedance(z=1, pins=2),
-        )
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ :net1,
-            pin(:z1, 2, 1) ⟷ :gnd,
-        )
-        
-        registry = ConnectionsRegistry(elements, connections)
-        
-        @test any(r -> r.elem == :z1 && r.side == 1 && r.terminal == 1, registry.registry)
-        @test any(r -> r.elem == :z1 && r.side == 2 && r.terminal == 1, registry.registry)
-    end
-
-    @testset "Registry with disconnected element" begin
-        # Test registry behavior with disconnected elements (connection=false).
-        # Validates that disconnected elements are not included.
-        elements = (; 
-            z1 = impedance(z=1, pins=1),
-            z2 = impedance(z=2, pins=1)
-        )
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ :net1,
-        )
-        
-        registry = ConnectionsRegistry(elements, connections)
-        
-        # Only z1 should be in registry, not z2
-        elem_in_registry = unique(registry.registry.elem)
-        @test :z1 in elem_in_registry
-    end
-
-    @testset "Registry merge by name" begin
-        # Test that connections with same net name are merged.
-        # Validates that split connection definitions are properly combined.
-        elements = (; 
-            z1 = impedance(z=1, pins=1),
-            z2 = impedance(z=2, pins=1),
-            z3 = impedance(z=3, pins=1),
-        )
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ :net1,
-            pin(:z2, 1, 1) ⟷ :net1,
-            pin(:z3, 1, 1) ⟷ :net1,
-        )
-        
-        registry = ConnectionsRegistry(elements, connections)
-        
-        # All three should be on same bus
-        net1_entries = filter(r -> r.net == :net1, registry.registry)
-        @test length(unique(net1_entries.bus)) == 1
-        @test length(net1_entries) == 3
-    end
-
-    
-    @testset "Registry electrical domain tracking" begin
-        # Test that registry tracks electrical domain information.
-        # Validates domain assignments for multi-domain systems.
-        elements = (; 
-            z1 = impedance(z=1, pins=1),
-        )
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ :net1,
-        )
-        
-        registry = ConnectionsRegistry(elements, connections)
-        
-        # Electrical domain should be assigned
-        @test !isempty(registry.registry.elecdomain)
-    end
+    classic = NB.build_network(elements, topology, (;))
+    @test haskey(classic.nets, :grid_d)
+    @test haskey(classic.nets, :machine_q)
 end
 
-@testset "Edge Cases and Error Handling" begin
-    @testset "Empty connections tuple" begin
-        # Test handling of empty connections tuple.
-        # Validates that empty input is handled gracefully.
-        elements = (; z1 = impedance(z=1, pins=1))
-        connections = ()
-        
-        registry = ConnectionsRegistry(elements, connections)
-        @test isempty(registry.registry)
-    end
+@testset "NetworkTopology validation" begin
+    dc = impedance(z = 1.0, pins = 1)
+    ac = impedance(z = 1.0, pins = 3, transformation = true)
+    elements = (; dc, ac)
 
-    @testset "Multiple pins on same element-side" begin
-        # Test connection of multiple terminals on same element side.
-        # Validates that multi-terminal connections work correctly.
-        elements = (; z1 = impedance(z=1, pins=2))
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ :net1,
-            pin(:z1, 1, 2) ⟷ :net2,
+    @test_throws ArgumentError NB.NetworkTopology(
+        elements,
+        ((node = :n1, element = :dc, side = 1),)
+    )
+    @test_throws ArgumentError NB.NetworkTopology(
+        elements,
+        (row(:n1, :missing, 1, 1),)
+    )
+    @test_throws ArgumentError NB.NetworkTopology(
+        elements,
+        (row(:n1, :dc, 3, 1),)
+    )
+    @test_throws ArgumentError NB.NetworkTopology(
+        elements,
+        (row(:n1, :dc, 1, 2),)
+    )
+    @test_throws ArgumentError NB.NetworkTopology(
+        elements,
+        (row(:n1, :dc, 1, 1), row(:n2, :dc, 1, 1))
+    )
+    mixed_elements = (
+        dc_source = dc_source(),
+        ac_source = ac_source(pins = 3, transformation = true)
+    )
+    @test_throws ArgumentError NB.NetworkTopology(
+        mixed_elements,
+        (row(:mixed, :dc_source, 1, 1), row(:mixed, :ac_source, 1, 1))
+    )
+    bridge_elements = (
+        dc_source = dc_source(),
+        ac_source = ac_source(pins = 3, transformation = true),
+        bridge = impedance(z = 1.0, pins = 1)
+    )
+    @test_throws ArgumentError NB.NetworkTopology(
+        bridge_elements,
+        (
+            row(:dc_bus, :dc_source, 1, 1),
+            row(:dc_bus, :bridge, 1, 1),
+            row(:ac_bus, :ac_source, 1, 1),
+            row(:ac_bus, :bridge, 2, 1)
         )
-        
-        registry = ConnectionsRegistry(elements, connections)
-        
-        net1_entries = filter(r -> r.net == :net1, registry.registry)
-        net2_entries = filter(r -> r.net == :net2, registry.registry)
-        
-        @test length(net1_entries) == 1
-        @test length(net2_entries) == 1
-        # Different nets should same bus bcs same sid
-        @test net1_entries.bus[1] == net2_entries.bus[1]
-    end
+    )
 
-    @testset "Many chained connections" begin
-        # Test chaining large number of connections.
-        # Validates performance and correctness with complex topologies.
-        n = 20
-        pins = [pin(Symbol("elem$i"), 1, 1) for i in 1:n]
-        
-        # Create chain
-        conn = pins[1]
-        for i in 2:n
-            conn = conn ⟷ pins[i]
+    off = impedance(z = 2.0, pins = 1)
+    off.connection = false
+    builder = NB.define(
+        (; dc, off),
+        (row(:n1, :dc, 1, 1), row(:ignored, :off, 1, 1))
+    )
+    @test !haskey(builder.elements, :off)
+    @test all(!=(:off), builder.topology.connections.element)
+end
+
+@testset "Retired NetworkBuilder names" begin
+    replacements = (
+        BuilderState = "NetworkState",
+        ConnectionsRegistry = "NetworkTopology",
+        LinearizedAdmittanceCollection = "AdmittanceLookup",
+        LinearizedInterface = "NetworkLookup",
+        LinearizedAdmittanceNetwork = "NetworkModel"
+    )
+    for (removed, replacement) in pairs(replacements)
+        error = try
+            getfield(NB, removed)()
+            nothing
+        catch caught
+            caught
         end
-        conn = conn ⟷ :bus_large
-        
-        @test length(conn.endpoints) == n
-        @test conn.name == :bus_large
+        @test error isa ArgumentError
+        @test occursin(String(removed), sprint(showerror, error))
+        @test occursin(replacement, sprint(showerror, error))
+        @test occursin("migration", sprint(showerror, error))
     end
-
-    @testset "Element not in elements dict" begin
-        # Test handling of pin references to non-existent elements.
-        # Validates proper error handling for undefined elements.
-        elements = (; z1 = impedance(z=1, pins=1))
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ pin(:z2, 1, 1) ⟷ :net1,
-        )
-        
-        # Should not error during registry creation, but elements dict is separate concern
-        # This test documents current behavior
-        @test_throws AssertionError ConnectionsRegistry(elements, connections)
-        
-        
-    end
-
-    @testset "Special characters in net names" begin
-        # Test that net names with special characters are handled correctly.
-        # Validates robustness of naming convention.
-        p = pin(:elem1, 1, 1)
-        conn = p ⟷ Symbol("net_1")
-        @test conn.name == Symbol("net_1")
-        
-        conn2 = p ⟷ Symbol("net-2")
-        @test conn2.name == Symbol("net-2")
-    end
-
-    @testset "Ground net naming convention" begin
-        # Test common ground net naming patterns.
-        # Validates that standard conventions work correctly.
-        p1 = pin(:z1, 1, 1) ⟷ :gnd
-        p2 = pin(:z2, 1, 1) ⟷ :gnd_1
-        p3 = pin(:z3, 1, 1) ⟷ Symbol("gnd.0")
-        
-        @test p1.name == :gnd
-        @test p2.name == :gnd_1
-        @test p3.name == Symbol("gnd.0")
-    end
+    @test !isdefined(NB, :pin)
+    @test !isdefined(NB, :Pin)
+    @test !isdefined(NB, :ConnectionDef)
+    @test !isdefined(NB, Symbol("⟷"))
+    @test !isdefined(NB, Symbol("↔"))
 end
 
-@testset "Integration with NetworkBuilder" begin
-    @testset "Simple two-element circuit" begin
-        # Integration test: Create registry and build simple network.
-        # Validates end-to-end workflow with NetworkBuilder.
-        elements = (; 
-            z1 = impedance(z=1, pins=1),
-            z2 = impedance(z=2, pins=1)
-        )
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ pin(:z2, 1, 1) ⟷ :n1,
-            pin(:z1, 2, 1) ⟷ pin(:z2, 2, 1) ⟷ :gnd,
-        )
-        
-        builder = NetworkBuilder.define(elements, connections)
-        network = NetworkBuilder.build_network(builder.elements, builder.connections, builder.options)
-        @test :n1 in keys(network.nets)
-        @test :gnd in keys(network.nets)
-    end
+module ClassicNetworkDSLTest
+import PowerImpedance: @network
+using PowerImpedance: impedance
 
-    @testset "Multi-node network" begin
-        # Integration test: Create registry for larger network.
-        # Validates scalability with more complex topologies.
-        elements = (; 
-            z1 = impedance(z=1, pins=1),
-            z2 = impedance(z=2, pins=1),
-            z3 = impedance(z=3, pins=1),
-        )
-        
-        connections = (
-            pin(:z1, 1, 1) ⟷ pin(:z2, 1, 1) ⟷ :n1,
-            pin(:z2, 2, 1) ⟷ pin(:z3, 1, 1) ⟷ :n2,
-            pin(:z1, 2, 1) ⟷ pin(:z3, 2, 1) ⟷ :gnd,
-        )
-        
-        builder = NetworkBuilder.define(elements, connections)
-        network = NB.build_network(builder.elements, builder.connections, builder.options)
-        
-        @test :n1 in keys(network.nets)
-        @test :n2 in keys(network.nets)
-        @test :gnd in keys(network.nets)
+function build()
+    return @network begin
+        z1 = impedance(z = 1.0, pins = 1)
+        z2 = impedance(z = 2.0, pins = 1)
+        z1[1.1] ⟷ z2[1.1] ⟷ n1
+        z1[2.1] ⟷ z2[2.1] ⟷ gnd
     end
+end
+end
+
+@testset "Explicit Classic network DSL import" begin
+    classic = ClassicNetworkDSLTest.build()
+    @test Set(classic.nets[:n1]) ==
+          Set([(:z1, Symbol("1.1")), (:z2, Symbol("1.1"))])
+    @test Set(classic.nets[:gnd]) ==
+          Set([(:z1, Symbol("2.1")), (:z2, Symbol("2.1"))])
 end

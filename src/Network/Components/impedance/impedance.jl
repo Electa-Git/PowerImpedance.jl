@@ -6,30 +6,6 @@ export impedance
 end
 
 
-"""
-	impedance(;z :: Union{Int, Float64,  Array{Int}} = 0, pins :: Int = 0)
-Creates impedance with specified number of input/output pins `pins`. The impedance expression
- `exp` has to be given in Ω and can have both numerical and symbolic value (example: `z = s-2`).
-
-Pins are named: `1.1`, `1.2`, ..., `1.pins` and `2.1`, `2.2`, ..., `2.pins`
-
-In the case of 1×1 impedance, parameter `z` has only one value.
-Example: `impedance(z = 1000, pins = 1)`
-
-If the impedance is multiport, then its value
-is given as an array `[val]` with one, `pins` or `pins × pins` number of elements. In the case of one element,
-then the impedance has only diagonal nonzero values equal to `val`. In the case of `pins` number of elements,
-the impedance has only diagonal nonzero values equal to the values in an array `val`. If the array has the size
-`pin × pin`, impedance matrix has the size `pin × pin` and all its values defined.
-Examples (OUTDATED):
-```julia
-impedance(z = [s], pins = 3)    # 3×3 impedance with diagonal values equal s
-impedance(z = [2,s,s/2], pins = 3) # 3×3 impedance with diagonal values equal 2, s, 0.5s, respectively
-impedance(z = [1,s,3,4], pins = 2) # 2×2 impedance with all values defined
-```
-
-"""
-
 # Normalize user z into a pins×pins matrix (ComplexF64)
 function _z_matrix(z, pins::Int)
 	if pins == 0
@@ -97,6 +73,39 @@ function _abcd_from_z(Z::AbstractMatrix{<:Complex}, pins::Int)
 	return m1 \ m2
 end
 
+"""
+    impedance(; z=0, pins::Int=0, transformation=false)
+
+Construct a constant or frequency-dependent series impedance multiport.
+
+# Arguments
+
+- `z`: Impedance specification `\\[Ω\\]`. A number produces an equal diagonal;
+  a collection with `pins` entries produces an unequal diagonal; a collection
+  with `pins^2` entries produces the complete matrix; and a callable `z(s)` is
+  evaluated at complex frequency `s`.
+- `pins`: Port order. When zero, a numeric scalar implies one pin and an array
+  length must be a perfect square from which the order can be inferred.
+- `transformation`: Whether to expose a supported transformed representation.
+
+# Returns
+
+- An `Element` containing the normalized dense impedance representation.
+
+# Errors
+
+- Throws `ArgumentError` when the impedance shape is incompatible with `pins`
+  or when `pins=0` cannot be inferred from the supplied array.
+
+# Examples
+
+```julia
+single = impedance(z = 5.0, pins = 1)
+diagonal = impedance(z = [1.0, 2.0, 3.0], pins = 3)
+coupled = impedance(z = [1.0 0.1; 0.1 2.0], pins = 2)
+dynamic = impedance(z = s -> 0.1 + s * 2e-3, pins = 1)
+```
+"""
 function impedance(; z = 0, pins::Int = 0, transformation = false)
 	imp = Impedance()
 	connection = true
@@ -207,4 +216,3 @@ function convert!(data, elem::Element{<:Impedance}, ::Type{PMACDC}, key, buses, 
 	branchdc["r"] = real(z)
 	return nothing
 end
-

@@ -28,42 +28,55 @@ export transformer
 end
 
 """
-	function transformer(;args...)
-Creates a dc or a single phase transfromer, or a three-phase transformer in YY
-or ΔY configuration.
+    transformer(def=:explicit; transformer_kwargs...)
+
+Construct a one-phase or balanced three-phase transformer element.
+
+# Arguments
+
+- `def`: Parameterization mode. `:explicit` uses the supplied equivalent-circuit
+  values. `:tests` derives them from the open- and short-circuit test fields.
+- `pins`: Number of phase-domain terminals. Default: `1`.
+- `organization`: Three-phase winding organization, `:YY` or `:ΔY`.
+- `ω`: Rated angular frequency `\\[rad/s\\]`.
+- `V₁ᵒ`, `V₁ˢ`, `V₂ᵒ`, `V₂ˢ`: Open- and short-circuit voltages
+  `\\[V\\]` used by `def=:tests`.
+- `I₁ᵒ`, `I₁ˢ`: Open- and short-circuit primary currents `\\[A\\]`.
+- `P₁ᵒ`, `P₁ˢ`: Open- and short-circuit losses `\\[W\\]`.
+- `n`: Primary-to-secondary turns ratio `\\[dimensionless\\]`.
+- `Lₚ`, `Lₛ`, `Lₘ`: Primary, secondary, and magnetizing inductances
+  `\\[H\\]`.
+- `Rₚ`, `Rₛ`, `Rₘ`: Primary, secondary, and magnetizing resistances
+  `\\[Ω\\]`.
+- `Cₜ`, `Cₛ`: Turn-to-turn and stray capacitances `\\[F\\]`.
+- `hasRω`: Whether winding resistance is frequency dependent.
+- `k`: Winding-resistance frequency exponent `\\[dimensionless\\]`.
+- `transformation`: Whether to expose transformed three-phase coordinates.
+
+# Returns
+
+- An `Element` containing the detailed transformer model.
+
+# Errors
+
+- Throws `ArgumentError` for an unknown transformer keyword. Invalid or zero
+  test data can also make the `:tests` calculation undefined.
+
+# Examples
 
 ```julia
-@with_kw mutable struct Transformer
-
-	pins :: Int = 1                     # marks single or three phase
-	organization :: Symbol = :YY        # three phase organization (:YY or :ΔY)
-
-	ω :: Union{Int, Float64} = 2*π*50   # rated frequency in [Hz]
-	V₁ᵒ :: Union{Int, Float64} = 0      # open circuit primary voltage [V]
-	V₁ˢ :: Union{Int, Float64} = 0      # short circuit primary voltage [V]
-	I₁ᵒ :: Union{Int, Float64} = 0      # open circuit primary current [V]
-	I₁ˢ :: Union{Int, Float64} = 0      # short circuit primary current [V]
-	P₁ᵒ :: Union{Int, Float64} = 0      # open circuit losses on primary side [W]
-	P₁ˢ :: Union{Int, Float64} = 0      # short circuit losses on primary side [W]
-	V₂ᵒ :: Union{Int, Float64} = 0      # open circuit secondary voltage [V]
-	V₂ˢ :: Union{Int, Float64} = 0      # short circuit secondary voltage [V]
-
-	n :: Union{Int, Float64} = 0        # turn ratio
-	Lₚ :: Union{Int, Float64} = 0       # primary side inductance [H]
-	Rₚ :: Union{Int, Float64} = 0       # primary side resistance [Ω]
-	Rₛ :: Union{Int, Float64} = 0       # secondary side resistance [Ω]
-	Lₛ :: Union{Int, Float64} = 0       # secondary side inductance [H]
-	Lₘ :: Union{Int, Float64} = 0      # magnetising inductance [H]
-	Rₘ :: Union{Int, Float64} = 0      # magnetising resistance [Ω]
-	Cₜ :: Union{Int, Float64} = 0       # turn-to-turn capacitance [F]
-	Cₛ :: Union{Int, Float64} = 0       # stray capacitance [F]
-end
+transformer_element = transformer(
+    :explicit;
+    pins = 3,
+    organization = :YY,
+    n = 1.1,
+    Rₚ = 0.1,
+    Lₚ = 1e-3,
+    Rₛ = 0.1,
+    Lₛ = 1e-3,
+)
 ```
-
-Pins: `1.1`, `2.1` for single phase transformer and `1.1`, `1.2`, `1.3`, `2.1`,
-`2.2`, `2.3` for a three-phase transformer.
 """
-
 function transformer(def=:explicit; args...)
 	t = Transformer()
 	transformation = false
@@ -265,4 +278,3 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
 	branch["b_to"] = imag(yc) / 2
 	return nothing
 end
-

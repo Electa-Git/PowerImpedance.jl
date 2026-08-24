@@ -34,7 +34,7 @@ Y_validation=transpose.(matrices)
 # Obtain analytical data
 Y_cable = []
 for k in eachindex(omegas)
-	Y1 = PowerImpedanceACDC.get_y(grid.elements[:labanimal], 1im*omegas[k])
+	Y1 = PowerImpedance.get_y(grid.elements[:labanimal], 1im*omegas[k])
 	push!(Y_cable, Y1)
 end
 
