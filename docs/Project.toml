@@ -6,7 +6,7 @@ DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
 Git = "d7ba0133-e1db-5d97-8f8c-041e4b3a1eb2"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
-PowerImpedance = "8bb8d9d3-c57e-5130-a7c9-cb214ef560ae"
+PowerImpedance = "2b9e73d6-9f99-4895-a28a-fad5d1cd90f9"
 
 [compat]
 CairoMakie = "0.15"

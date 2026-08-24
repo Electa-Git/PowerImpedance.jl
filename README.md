@@ -28,6 +28,10 @@ simulations with the [Z-tool](https://github.com/Electa-Git/Z-tool). The
 analytical component models have been validated over the frequency range from
 0.1 Hz to 5 kHz.
 
+PowerImpedance is the renamed successor to `PowerImpedanceACDC`. Because Julia
+package identities are immutable after registration, PowerImpedance uses a new
+UUID and is installed as a distinct package.
+
 ## Supported components
 
 ### Analytical models

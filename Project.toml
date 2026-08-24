@@ -1,6 +1,6 @@
 name = "PowerImpedance"
-uuid = "8bb8d9d3-c57e-5130-a7c9-cb214ef560ae"
-version = "0.2.0"
+uuid = "2b9e73d6-9f99-4895-a28a-fad5d1cd90f9"
+version = "0.3.0"
 
 [deps]
 ControlSystemsBase = "aaaaaaaa-a6ca-5380-bf3e-84a91bcd477e"
@@ -39,7 +39,10 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
 [sources]
-PowerModelsACDC = {rev = "master", url = "https://github.com/Electa-Git/PowerModelsACDC.jl.git"}
+# Development pin for the PowerModelsACDC induction-machine support used by
+# this package. Registration must wait until this tree has a registered release;
+# registry installations ignore this source override.
+PowerModelsACDC = {rev = "8b8752720d454bba26237eb3a8012f6467bf48bd", url = "https://github.com/Electa-Git/PowerModelsACDC.jl.git"}
 
 [compat]
 Aqua = "0.8"

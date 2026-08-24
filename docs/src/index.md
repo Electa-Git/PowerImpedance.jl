@@ -9,6 +9,9 @@ package for AC, DC, and hybrid power systems. It combines detailed passive and
 active component models with multiport network assembly, AC/DC power-flow
 initialization, impedance extraction, and stability-analysis tools.
 
+PowerImpedance is the renamed successor to `PowerImpedanceACDC`. It has a new
+package UUID because registered Julia package identities are immutable.
+
 ## Capabilities
 
 The package provides analytical models for:

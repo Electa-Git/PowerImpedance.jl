@@ -4,7 +4,7 @@ using Downloads
 using GeoInterface
 using GeoJSON
 
-const PACKAGE_UUID = "8bb8d9d3-c57e-5130-a7c9-cb214ef560ae"
+const PACKAGE_UUID = "2b9e73d6-9f99-4895-a28a-fad5d1cd90f9"
 const LOG_URL = "https://julialang-logs.s3.amazonaws.com/public_outputs/current/package_requests_by_region.csv.gz"
 const LAND_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_110m_land.geojson"
 const DEFAULT_OUTPUT = joinpath(@__DIR__, "src", "assets", "user-statistics.svg")

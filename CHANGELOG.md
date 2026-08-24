@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [0.3.0] - 2026-08-24
+
+- Rename the registered package successor from `PowerImpedanceACDC` to
+  `PowerImpedance` with a new package UUID.
 - Define the computational grammar, Gridspace code, composite formulations, and
   result abstractions in `PowerImpedance.Grammar`.
 - Add `Combinatorial`, `LinearError`, and `MonteCarlo` execution for owned

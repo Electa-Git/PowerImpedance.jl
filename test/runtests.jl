@@ -19,7 +19,9 @@ const TEST_LOG_LEVEL =
     )) == "error" ?
     Logging.Error : Logging.Warn
 Logging.global_logger(ConsoleLogger(stderr, TEST_LOG_LEVEL))
-TEST_LOG_LEVEL == Logging.Error && PowerImpedance._PMACDC.silence()
+if TEST_LOG_LEVEL == Logging.Error && isdefined(PowerImpedance._PMACDC, :silence)
+    PowerImpedance._PMACDC.silence()
+end
 
 # Alternatively, set the package-only logging level to debug through an environment variable to avoid VS Code debug logging:
 # ENV["JULIA_DEBUG"]=PowerImpedance # Warning: this will unfortunanelty not enable the debug logging for the ipopt solver.
