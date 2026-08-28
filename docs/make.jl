@@ -56,13 +56,10 @@ const EDIT_LINK = PUBLIC_RELEASE_DOCS ? :commit : "main"
 
 const EXAMPLES_SRC = joinpath(ROOT_DIR, "examples")
 const EXAMPLES_DOC = joinpath(DOCS_SRC_DIR, "examples")
-const CHANGELOG_SRC = joinpath(ROOT_DIR, "CHANGELOG.md")
-const CHANGELOG_DOC = joinpath(DOCS_SRC_DIR, "CHANGELOG.md")
 const TODO_SRC = joinpath(ROOT_DIR, "TODO.md")
 const TODO_DOC = joinpath(DOCS_SRC_DIR, "TODO.md")
 const BIBLIOGRAPHY_FILE = joinpath(DOCS_SRC_DIR, "bibliography.bib")
 
-const HAS_CHANGELOG = isfile(CHANGELOG_SRC)
 const HAS_TODO = isfile(TODO_SRC)
 const HAS_BIBLIOGRAPHY = isfile(BIBLIOGRAPHY_FILE)
 
@@ -83,10 +80,6 @@ const HAS_LITERATE_EXAMPLES = !isempty(LITERATE_EXAMPLE_PATHS)
 
 if HAS_LITERATE_EXAMPLES
     using Literate
-end
-
-if HAS_CHANGELOG
-    using Changelog
 end
 
 if HAS_BIBLIOGRAPHY
@@ -207,19 +200,6 @@ function build_example_pages()
     return "Examples" => example_pages
 end
 
-function generate_changelog!()
-    HAS_CHANGELOG || return nothing
-
-    Changelog.generate(
-        Changelog.Documenter(),
-        CHANGELOG_SRC,
-        CHANGELOG_DOC;
-        repo = REPOSITORY_PATH
-    )
-
-    return "Changelog" => "CHANGELOG.md"
-end
-
 function copy_todo!()
     HAS_TODO || return nothing
 
@@ -304,9 +284,6 @@ function build_pages()
 
     todo_page = copy_todo!()
     isnothing(todo_page) || push!(development_pages, todo_page)
-
-    changelog_page = generate_changelog!()
-    isnothing(changelog_page) || push!(development_pages, changelog_page)
 
     push!(pages, "Developers" => development_pages)
 
