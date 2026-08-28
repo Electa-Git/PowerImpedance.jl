@@ -3,13 +3,20 @@ using Test
 const LOAD_ORDER = Symbol(get(ENV, "POWERIMPEDANCE_PLOTTING_LOAD_ORDER", "power_first"))
 if LOAD_ORDER === :makie_first
     using CairoMakie
+    using GraphMakie
     using PowerImpedance
 elseif LOAD_ORDER === :power_first
     using PowerImpedance
     using CairoMakie
+    using GraphMakie
 else
     error("POWERIMPEDANCE_PLOTTING_LOAD_ORDER must be power_first or makie_first")
 end
+using Graphs
+
+include("diagram_fixture.jl")
+include("diagram_tests.jl")
+include("diagram_plotbuilder_tests.jl")
 
 const TRACKED_UI_PLOTS = UIPlot[]
 

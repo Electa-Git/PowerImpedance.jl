@@ -9,8 +9,9 @@ using PowerImpedance.UnitHandler: nominal, standard_uncertainty
 using PowerImpedance.PlotBuilder:
                                   AbstractTrackSize, FixedTrack, RelativeTrack,
                                   ContentTrack, GridArea, GridDefinition, SlotDefinition,
-                                  LayoutDefinition, AxisDefinition, SeriesDefinition, ViewDefinition,
-                                  PageDefinition, RenderDefinition, UIPlot
+                                  LayoutDefinition, AxisDefinition, SeriesDefinition,
+                                  PrimitiveRender, ViewDefinition, PageDefinition,
+                                  RenderDefinition, UIPlot
 const BackendHandler = PlotBuilder.BackendHandler
 
 export build, overlay!, export_svg
@@ -58,6 +59,7 @@ struct UIPanel
     groups::Dict{Symbol, Vector{Any}}
     group_labels::Dict{Symbol, String}
     group_order::Vector{Symbol}
+    artifacts::Dict{Symbol, Any}
 end
 
 mutable struct ResponsiveLegend
@@ -394,8 +396,17 @@ function draw!(axis, ::Val{:band}, series::SeriesDefinition)
 end
 
 function draw!(axis, ::Val{kind}, series::SeriesDefinition) where {kind}
-    throw(ArgumentError("unsupported PlotBuilder primitive :$kind"))
+    rendered = PlotBuilder.render_primitive!(axis, Val(kind), series)
+    rendered isa PrimitiveRender || throw(
+        ArgumentError(
+        "the :$kind primitive renderer must return PlotBuilder.PrimitiveRender",
+    ),
+    )
+    return rendered
 end
+
+_draw_parts(rendered::PrimitiveRender) = (rendered.plots, rendered.state)
+_draw_parts(plots::AbstractVector) = (Any[plots...], nothing)
 
 function _axis_attributes(view::ViewDefinition)
     axes = (view.xaxis, view.yaxis, view.zaxis)
@@ -436,12 +447,14 @@ function _axis(parent, view::ViewDefinition, page::PageDefinition)
     groups = Dict{Symbol, Vector{Any}}()
     group_labels = Dict{Symbol, String}()
     group_order = Symbol[]
+    artifacts = Dict{Symbol, Any}()
     for (index, series) in enumerate(view.series)
-        drawn = draw!(axis, Val(series.kind), series)
+        drawn, artifact = _draw_parts(draw!(axis, Val(series.kind), series))
         append!(plots, drawn)
         group = series.group === nothing ? Symbol("series_$index") : series.group
         haskey(groups, group) || push!(group_order, group)
         append!(get!(groups, group, Any[]), drawn)
+        artifact === nothing || (artifacts[group] = artifact)
         if series.label !== nothing && !isempty(series.label)
             group_labels[group] = series.label
         end
@@ -451,9 +464,11 @@ function _axis(parent, view::ViewDefinition, page::PageDefinition)
         xlims!(axis, xlimits...)
         ylims!(axis, ylimits...)
     else
-        _reset_panel_limits!(UIPanel(view, axis, plots, groups, group_labels, group_order))
+        _reset_panel_limits!(
+            UIPanel(view, axis, plots, groups, group_labels, group_order, artifacts)
+        )
     end
-    return UIPanel(view, axis, plots, groups, group_labels, group_order)
+    return UIPanel(view, axis, plots, groups, group_labels, group_order, artifacts)
 end
 
 function _sanitize_filename(value::AbstractString)
@@ -1095,7 +1110,14 @@ function _build_page(
     end
     page.legend.interactive && legend !== nothing &&
         _observe_visibility_limits!(panels, context)
-    built = UIPlot(render_definition, page, figure, panels, widgets, context)
+    artifacts = Dict{Symbol, Any}()
+    for panel in panels, (key, artifact) in pairs(panel.artifacts)
+        haskey(artifacts, key) && throw(
+            ArgumentError("rendered primitive artifact key :$key is not unique on the page"),
+        )
+        artifacts[key] = artifact
+    end
+    built = UIPlot(render_definition, page, figure, panels, widgets, artifacts, context)
     plot_reference[] = built
     return built
 end
@@ -1164,12 +1186,19 @@ function overlay!(
         ))
         for (panel, view) in zip(target.panels, page.views)
             for (index, series) in enumerate(view.series)
-                drawn = draw!(panel.axis, Val(series.kind), series)
+                drawn, artifact = _draw_parts(draw!(panel.axis, Val(series.kind), series))
                 append!(panel.plots, drawn)
                 group = series.group === nothing ?
                     Symbol("overlay_$(length(panel.plots))_$index") : series.group
                 haskey(panel.groups, group) || push!(panel.group_order, group)
                 append!(get!(panel.groups, group, Any[]), drawn)
+                if artifact !== nothing
+                    haskey(target.artifacts, group) && throw(
+                        ArgumentError("rendered primitive artifact key :$group already exists"),
+                    )
+                    panel.artifacts[group] = artifact
+                    target.artifacts[group] = artifact
+                end
                 series.label === nothing || isempty(series.label) ||
                     (panel.group_labels[group] = series.label)
             end

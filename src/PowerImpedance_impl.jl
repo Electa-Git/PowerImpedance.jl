@@ -129,6 +129,31 @@ export PlotBuilder, UIPlot, export_svg, set_backend!
 # Optional Makie plotting entry point. The Makie extension owns its methods.
 function plot end
 
+"""
+    diagram(network::NetworkBuilder.NetworkState; kwargs...)
+    diagram(network::NetworkBuilder.NetworkState, powerflow::PowerFlowResult; kwargs...)
+
+Render a single-line network diagram through the optional GraphMakie extension.
+
+# Arguments
+
+- `network`: Materialized network whose topology is rendered.
+- `powerflow`: Optional completed result used to enrich the topology with
+  PowerModels input and solution records.
+
+# Returns
+
+- An extension-owned diagram handle exposing its Makie figure, projection,
+  resolved positions, and selection state.
+
+# Notes
+
+This function never calculates power flow. Load `GraphMakie` and one Makie
+backend before calling it.
+"""
+function diagram end
+export diagram
+
 # Calculation definitions
 include("Problems.jl")
 include("PlotRecipes.jl")

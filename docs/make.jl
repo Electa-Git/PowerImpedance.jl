@@ -68,6 +68,7 @@ const HAS_BIBLIOGRAPHY = isfile(BIBLIOGRAPHY_FILE)
 
 const LITERATE_EXAMPLE_FILES = (
     "Connection_DSL.jl",
+    "Network_Diagram.jl",
     "P2P_HVDC_ALT.jl",
     "P2P_HVDC_Gridspace.jl",
     "IEEE39bus_Gridspace.jl",

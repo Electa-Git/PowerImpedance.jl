@@ -579,6 +579,28 @@ function SeriesDefinition(
 end
 
 """
+$(TYPEDEF)
+
+Store plots and extension-owned state returned by a custom PlotBuilder
+primitive renderer.
+
+$(TYPEDFIELDS)
+"""
+struct PrimitiveRender{S}
+    "Makie plot objects owned by the rendered primitive."
+    plots::Vector{Any}
+    "Extension-owned state retained by the built `UIPlot`."
+    state::S
+end
+
+function PrimitiveRender(plots, state)
+    applicable(iterate, plots) || throw(
+        ArgumentError("primitive plots must be an iterable collection"),
+    )
+    return PrimitiveRender{typeof(state)}(Any[plots...], state)
+end
+
+"""
     ViewDefinition(xaxis, yaxis, zaxis, title, series, key; placement, aspect, limits, attributes)
 
 Describe one plot panel and its placement.
@@ -709,7 +731,17 @@ function RenderDefinition(definition::Type{S}, figures::AbstractVector) where {S
 end
 
 const SUPPORTED_PRIMITIVES = (
-    :line, :scatter, :histogram, :stairs, :heatmap, :polygon, :hline, :vline, :band)
+    :line,
+    :scatter,
+    :histogram,
+    :stairs,
+    :heatmap,
+    :polygon,
+    :hline,
+    :vline,
+    :band,
+    :network_diagram
+)
 
 function _overlaps(first::GridArea, second::GridArea)
     !isempty(intersect(first.rows, second.rows)) &&
@@ -830,6 +862,13 @@ function _validate_series(series::SeriesDefinition)
         )
         length(series.xdata) == length(series.ydata) == length(series.zdata) || throw(
             DimensionMismatch(":band x, lower-y, and upper-y data must have equal lengths"),
+        )
+    elseif series.kind === :network_diagram
+        any(isnothing, (series.xdata, series.ydata, series.zdata)) && throw(
+            ArgumentError(":network_diagram requires x, y, and projection data"),
+        )
+        length(series.xdata) == length(series.ydata) || throw(
+            DimensionMismatch(":network_diagram x and y coordinates must have equal lengths"),
         )
     end
     return series
@@ -984,7 +1023,7 @@ Hold a backend-neutral render definition together with one built figure, its pan
 A rendered recipe returns one `UIPlot` per declarative page.
 Call `close(plot)` when the handle is no longer needed to release its backend resources and observable callbacks.
 """
-struct UIPlot{S <: AbstractPlotDefinition, F, P, W, C}
+struct UIPlot{S <: AbstractPlotDefinition, F, P, W, A, C}
     "Complete backend-neutral render definition."
     render::RenderDefinition{S}
     "Page represented by this handle."
@@ -995,8 +1034,22 @@ struct UIPlot{S <: AbstractPlotDefinition, F, P, W, C}
     panels::P
     "Interactive control objects keyed by purpose."
     controls::W
+    "Extension-owned rendered primitive state keyed by series group."
+    artifacts::A
     "Active backend and status context."
     context::C
+end
+
+function UIPlot(render, page, figure, panels, controls, context)
+    return UIPlot(
+        render,
+        page,
+        figure,
+        panels,
+        controls,
+        Dict{Symbol, Any}(),
+        context
+    )
 end
 
 function _show_summary(io::IO, name::AbstractString, fields::Pair...)
@@ -1128,6 +1181,14 @@ function Base.show(io::IO, value::SeriesDefinition)
         :visible => value.visible
     )
 end
+function Base.show(io::IO, value::PrimitiveRender)
+    _show_summary(
+        io,
+        "PrimitiveRender",
+        :plots => length(value.plots),
+        :state => nameof(typeof(value.state))
+    )
+end
 function Base.show(io::IO, value::ViewDefinition)
     _show_summary(
         io,
@@ -1163,6 +1224,7 @@ function Base.show(io::IO, value::UIPlot)
         "UIPlot",
         :title => value.page.title,
         :panels => length(value.panels),
+        :artifacts => collect(keys(value.artifacts)),
         :backend => backend
     )
 end
@@ -1184,6 +1246,7 @@ const _CompactPlotBuilderObject = Union{
     ExportDefinition,
     AxisDefinition,
     SeriesDefinition,
+    PrimitiveRender,
     ViewDefinition,
     PageDefinition,
     RenderDefinition,

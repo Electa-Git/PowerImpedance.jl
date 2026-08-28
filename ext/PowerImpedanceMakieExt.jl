@@ -20,6 +20,10 @@ renderfig(figure) = display(figure)
 include(joinpath(@__DIR__, "..", "src", "PlotBuilder", "UIComponents.jl"))
 using .UIComponents
 
+function PlotBuilder.build(render::PlotBuilder.RenderDefinition; kwargs...)
+    return UIComponents.build(render; kwargs...)
+end
+
 import PowerImpedance: plot
 
 function _scale_symbol(value)
