@@ -9,6 +9,7 @@ calculation.
 The public definitions are:
 
 - `HarmonicImpedancePlotDefinition`
+- `NetworkDiagramDefinition`
 - `NyquistPlotDefinition`
 - `BodePlotDefinition`
 - `PassivityPlotDefinition`
@@ -28,6 +29,33 @@ A `RenderDefinition` contains `PageDefinition` values. Each page contains its
 layout, views, controls, legend, colorbars, status, and export definition.
 Views contain typed axes and series. Supported series primitives include
 lines, scatter markers, horizontal and vertical references, and bands.
+
+## Network diagrams
+
+`NetworkDiagramDefinition` accepts a materialized `NetworkState` and an
+optional completed `PowerFlowResult`. The GraphMakie extension resolves its
+typed projection and deterministic layout once, then retains that state as a
+custom PlotBuilder primitive. Standalone `diagram` rendering and PlotBuilder
+therefore share glyphs, roles, positions, and selection behavior.
+
+```julia
+using NetworkLayout
+
+render = PlotBuilder.make_render(
+    NetworkDiagramDefinition,
+    network;
+    powerflow,
+    graph_layout = NetworkLayout.Stress(seed = 1),
+)
+```
+
+The built page has a single full-width canvas, no legend, and only linear axes,
+so its toolbar contains reset and SVG export without logarithmic-scale toggles.
+Its default `figure_size = :auto` is resolved from the network-layout bounds so
+the initial window follows the diagram aspect instead of leaving a large empty
+canvas. Explicit pixel dimensions remain supported.
+The resulting `UIPlot` retains the exact diagram handle at
+`artifacts[:network_diagram]`.
 
 ## Harmonic impedance
 
@@ -204,6 +232,9 @@ handle = only(handles)
 CairoMakie produces static output. GLMakie and WGLMakie provide interactive
 controls for reset, scale switching, legend visibility, and export. The layout
 responds to figure resizing.
+
+Controls are recipe-dependent: network diagrams keep reset and export while
+omitting scale switches and legends.
 
 `PowerImpedance.plot` and `Makie.plot` select a definition from the result kind
 or analysis. Bode plotting can add completed series to an existing `UIPlot` or

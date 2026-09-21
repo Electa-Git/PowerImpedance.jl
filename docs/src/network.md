@@ -83,6 +83,95 @@ The complete executable [Connection DSL](examples/Connection_DSL.md) tutorial
 covers AC, DC, transformed d/q, multiconductor, converter, machine, multiway,
 ground, Gridspace, and optional `LineParameters` cases.
 
+## Single-line network diagrams
+
+Network diagrams are provided by the optional GraphMakie extension. Install and
+load `GraphMakie`, `Graphs`, and `NetworkLayout` together with one Makie backend;
+they are weak dependencies and are not loaded by core PowerImpedance.
+
+```julia
+using PowerImpedance
+using PowerImpedance.NetworkBuilder: define
+using GraphMakie
+using Graphs
+using NetworkLayout
+using CairoMakie
+
+view = diagram(network; interactive = false)
+view.figure
+```
+
+`diagram(network)` projects `network.topology.connections` into a deterministic
+bipartite layout: physical buses and named PowerImpedance components are both
+vertices. AC and DC bus numbers remain distinct through their `(domain, bus)`
+identity, transformed conductor coordinates aggregate at one busbar, parallel
+components remain separate, and ground is represented on the component rather
+than as one global bus vertex.
+
+If power flow has already been computed, pass the completed result explicitly:
+
+```julia
+powerflow = compute(PowerFlowProblem(network), ACDCPowerFlow())
+view = diagram(network, powerflow; interactive = false)
+```
+
+Rendering never solves or reconverts the network. The network remains the
+source of topology, element identity, sides, terminals, and node names. The
+supplied `PowerFlowResult` only enriches that projection from its retained
+`data`, `result`, `nodes2bus`, and `elem2comp` payloads. A result whose mappings
+do not agree with the network raises an error.
+
+The returned handle exposes `figure`, `axis`, `plots`, `model`, and resolved
+`positions`. `selected` is a Makie `Observable` whose value is `nothing`, a bus
+key, or a component key. `details` is another `Observable` with structured bus
+or component information suitable for an external side panel. With an
+interactive backend, clicking a bus or component updates both observables.
+
+The same renderer is available as the `NetworkDiagramDefinition` PlotBuilder
+recipe:
+
+```julia
+handles = PowerImpedance.plot(
+    network,
+    powerflow;
+    display_plot = false,
+    open_export = false,
+)
+ui = only(handles)
+diagram_view = ui.artifacts[:network_diagram]
+```
+
+This form retains PlotBuilder's responsive layout, reset-view button, status
+line, and SVG export button. Network diagrams intentionally have no logarithmic
+axis control or legend, and the diagram canvas uses the full available content
+width. By default, `figure_size = :auto` fits the initial window to the resolved
+network-layout aspect; pass an explicit `(width, height)` tuple to override it.
+`diagram_view` is the same extension-owned handle returned by `diagram`,
+including `selected` and `details`. Use `graph_layout` for a NetworkLayout
+algorithm because PlotBuilder reserves `layout` for its page layout.
+
+CairoMakie exports the same figure through ordinary Makie functions:
+
+```julia
+save("network.svg", view.figure)
+```
+
+For browser rendering, activate WGLMakie instead; the diagram construction path
+is unchanged and the figure can be embedded by a Bonito application without
+making Bonito a PowerImpedance dependency:
+
+```julia
+using WGLMakie
+using GraphMakie
+
+view = diagram(network, powerflow)
+view.figure
+```
+
+The complete executable [Hybrid AC/DC network diagram](examples/Network_Diagram.md)
+builds a small two-bus AC/two-bus DC example with a converter, AC and DC
+branches, a source, and a grounded load.
+
 ## Calculation sequence
 
 `NetworkState` stores component definitions, `NetworkTopology`, numerical

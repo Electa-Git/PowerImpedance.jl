@@ -1,4 +1,4 @@
-export HarmonicImpedancePlotDefinition
+export HarmonicImpedancePlotDefinition, NetworkDiagramDefinition
 export response_kind, response_values, angular_frequencies, response_nodes
 
 """$(TYPEDSIGNATURES)
@@ -32,6 +32,18 @@ Select the declarative harmonic-impedance magnitude recipe for a scalar
 [`FrequencyResponseResult`](@ref).
 """
 struct HarmonicImpedancePlotDefinition <: PlotBuilder.AbstractPlotDefinition end
+
+"""
+$(TYPEDEF)
+
+Select the optional GraphMakie single-line network-diagram recipe for a
+materialized `NetworkBuilder.NetworkState`.
+
+Loading GraphMakie provides the recipe implementation and renderer. A supplied
+`PowerFlowResult` enriches the network topology without triggering a solve or
+conversion.
+"""
+struct NetworkDiagramDefinition <: PlotBuilder.AbstractPlotDefinition end
 
 const _IMPEDANCE_ENTRY = Union{Integer, Symbol}
 const _CompletedFrequencyResponseResult = Union{

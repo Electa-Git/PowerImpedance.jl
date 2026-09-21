@@ -6,6 +6,7 @@
 # overlaid for direct comparison.
 
 using CairoMakie
+using GraphMakie
 using PowerImpedance
 using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState, define
 
@@ -42,6 +43,34 @@ const IEEE39_BUILDER_OPTIONS = (;
     voltageBase = Vm1,
     power_flow = (; is_bounded = (; bus_voltage = true))
 );
+
+# ## Inspect the network topology
+#
+# `NetworkDiagramDefinition` projects the materialized network directly; it
+# does not run power flow or repeat a conversion. The Cairo backend renders the
+# same PlotBuilder recipe used by the interactive GL and WGL backends. Its
+# automatic figure size follows the portrait-oriented IEEE39 layout while the
+# reset and SVG-export controls remain visible.
+
+function plot_ieee39_network_diagram(network)
+    return only(PowerImpedance.plot(
+        network;
+        backend = :cairo,
+        display_plot = false,
+        interactive = false,
+        title = "IEEE39 network diagram",
+        export_theme = :publication,
+        open_export = false
+    ))
+end;
+
+#md ieee39_docs_network = define(
+#md     ieee39bus_elements(),
+#md     ieee39bus_connections();
+#md     options = IEEE39_BUILDER_OPTIONS,
+#md )
+#md ieee39_docs_diagram = plot_ieee39_network_diagram(ieee39_docs_network)
+#md ieee39_docs_diagram.figure
 
 # ## Apply one resistivity value everywhere
 
@@ -193,6 +222,12 @@ end;
 #md ieee39_docs_plot.figure
 
 if abspath(PROGRAM_FILE) == @__FILE__ #src
+    network = define( #src
+        ieee39bus_elements(), #src
+        ieee39bus_connections(); #src
+        options = IEEE39_BUILDER_OPTIONS #src
+    ) #src
+    display(plot_ieee39_network_diagram(network).figure) #src
     study = run_ieee39_soil_study() #src
     display(plot_ieee39_soil_study(study).figure) #src
     println( #src

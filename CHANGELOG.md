@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Depend on the registered PowerModelsACDC 0.10.1 release instead of a pinned
+  development revision.
+- Keep the changelog at the repository root as the single authoritative file;
+  remove the generated documentation copy and its `Changelog.jl` dependency.
+
 ## [0.3.0] - 2026-08-25
 
 - Rename the registered package successor from `PowerImpedanceACDC` to

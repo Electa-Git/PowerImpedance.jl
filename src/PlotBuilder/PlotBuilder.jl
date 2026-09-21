@@ -15,8 +15,9 @@ export AbstractPlotDefinition, PlotRecipe
 export AbstractTrackSize, FixedTrack, RelativeTrack, ContentTrack
 export GridArea, GridDefinition, SlotDefinition, LayoutDefinition, PlacementDefinition
 export ControlDefinition, LegendDefinition, ColorbarDefinition, StatusDefinition, ExportDefinition
-export AxisDefinition, SeriesDefinition, ViewDefinition, PageDefinition, RenderDefinition, UIPlot
-export make_render, export_svg
+export AxisDefinition, SeriesDefinition, PrimitiveRender, ViewDefinition
+export PageDefinition, RenderDefinition, UIPlot
+export make_render, build, render_primitive!, export_svg
 export dispatch_on, input_kwargs, renderer_kwargs, input_defaults, renderer_defaults
 export parse_kwargs, resolve_input, recipe_mode, grouping_mode
 export page_facets, group_facets, geom_axes, axis_quantity, axis_unit, axis_label
@@ -50,5 +51,23 @@ Export the current state of a `UIPlot` through an explicitly loaded
 CairoMakie extension.
 """
 function export_svg end
+
+"""
+$(TYPEDSIGNATURES)
+
+Build a [`RenderDefinition`](@ref) through the active optional plotting
+extension.
+"""
+function build end
+
+"""
+$(TYPEDSIGNATURES)
+
+Render an extension-owned PlotBuilder primitive on a backend axis.
+
+Implementations return a [`PrimitiveRender`](@ref) containing the Makie plots
+and the extension-owned state retained by the resulting [`UIPlot`](@ref).
+"""
+function render_primitive! end
 
 end

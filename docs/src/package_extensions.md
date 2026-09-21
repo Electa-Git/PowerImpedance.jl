@@ -9,6 +9,7 @@ calculations do not load a graphics package.
 | `PowerImpedanceLineCableModelsExt` | `LineCableModels` | Deterministic phase-domain `LineParameters` interoperability |
 | `PowerImpedanceLineCableModelsMeasurementsExt` | `LineCableModels` and `Measurements` | Joint sampling of Measurements-valued line parameters |
 | `PowerImpedanceMakieExt` | `Makie` | PlotBuilder rendering and `plot` methods |
+| `PowerImpedanceGraphMakieExt` | `Makie`, `GraphMakie`, `Graphs`, and `NetworkLayout` | Reusable topology and solved-state network diagrams |
 | `PowerImpedanceCairoMakieExt` | `Makie` and `CairoMakie` | Static rendering and SVG export |
 | `PowerImpedanceGLMakieExt` | `Makie` and `GLMakie` | Interactive desktop rendering |
 | `PowerImpedanceWGLMakieExt` | `Makie` and `WGLMakie` | Interactive browser rendering |
