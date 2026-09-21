@@ -6,8 +6,6 @@ calculations do not load a graphics package.
 | Extension | Activated by | Purpose |
 |:--|:--|:--|
 | `PowerImpedanceMeasurementsExt` | `Measurements` | Direct uncertainty materialization, covariance-preserving first-order results, and numeric trial sampling |
-| `PowerImpedanceLineCableModelsExt` | `LineCableModels` | Deterministic phase-domain `LineParameters` interoperability |
-| `PowerImpedanceLineCableModelsMeasurementsExt` | `LineCableModels` and `Measurements` | Joint sampling of Measurements-valued line parameters |
 | `PowerImpedanceMakieExt` | `Makie` | PlotBuilder rendering and `plot` methods |
 | `PowerImpedanceGraphMakieExt` | `Makie`, `GraphMakie`, `Graphs`, and `NetworkLayout` | Reusable topology and solved-state network diagrams |
 | `PowerImpedanceCairoMakieExt` | `Makie` and `CairoMakie` | Static rendering and SVG export |
@@ -35,23 +33,9 @@ aggregate reconstructs Measurements for solved AC and DC bus fields only.
 
 ## LineCableModels
 
-Deterministic `LineParameters` can be passed directly to `overhead_line` or
-`cable`:
-
-```julia
-using LineCableModels
-using PowerImpedance
-
-line = cable(parameters; length = 25e3)
-```
-
-The deterministic extension validates the phase domain, conductor count,
-frequency order, transformation, and extrapolation policy. It also provides the
-explicit `LineParametersInput` projection.
-
-Loading Measurements as well activates joint sampling of Measurements-valued
-`Z` and `Y` arrays. One trial preserves their shared primitive identities and
-constructs a plain numeric `LineParameters` object before line evaluation.
+LineCableModels interoperability is temporarily dormant while
+LineCableModels.jl awaits registration. The extension source and dedicated tests
+are retained for restoration once it can again be declared as a weak dependency.
 
 ## Makie backends
 

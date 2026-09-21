@@ -56,12 +56,10 @@ obtain a compact terminal model [Ametani1980, RivasMarti2002](@cite).
 
 ## LineCableModels interoperability
 
-When `LineCableModels` and `Measurements` are loaded, a phase-domain,
-per-metre `LineParameters` object can be passed directly as the first argument
-to `overhead_line` or `cable`. Deterministic native construction and
-Gridspace-aware uncertain construction preserve the dense ``\mathbf{Z}`` and
-``\mathbf{Y}`` matrices. See [Package extensions](package_extensions.md) for
-frequency coverage, interpolation, covariance, and sampling methods.
+LineCableModels interoperability is temporarily dormant while
+LineCableModels.jl awaits registration. Native line constructors remain
+available; the compatibility extension and its tests will be restored once
+LineCableModels can be declared as a registered weak dependency.
 
 See [`overhead_line`](@ref), [`cable`](@ref), [`Conductors`](@ref),
 [`Groundwires`](@ref), [`Conductor`](@ref), and [`Insulator`](@ref) for the

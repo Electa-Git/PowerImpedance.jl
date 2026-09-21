@@ -170,11 +170,6 @@ extension_tests:
         Pkg.activate(; temp=true)
         Pkg.develop(PackageSpec(path=pwd()))
         Pkg.add([
-          PackageSpec(
-            name="LineCableModels",
-            url="https://github.com/Electa-Git/LineCableModels.jl.git",
-            rev="abe355170add20cc0c841e218fed82fe8ffbab51",
-          ),
           PackageSpec(name="Measurements"),
           PackageSpec(name="TestItems"),
           PackageSpec(name="TestItemRunner"),
@@ -184,9 +179,10 @@ extension_tests:
         project = dirname(Base.active_project())
         test_files = [
           "run_extension_tests.jl",
-          "run_linecablemodels_extension_tests.jl",
           "run_testitems.jl",
         ]
+        # LineCableModels extension tests intentionally remain dormant until
+        # LineCableModels.jl is registered and can be restored as a weakdep.
         for test_file in test_files
           path = joinpath(pwd(), "test", test_file)
           run(`$(Base.julia_cmd()) --project=$project --startup-file=no $path`)
