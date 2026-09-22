@@ -81,7 +81,7 @@ selection because the perturbation voltage of an ideal voltage source is zero.
 
 The complete executable [Connection DSL](examples/Connection_DSL.md) tutorial
 covers AC, DC, transformed d/q, multiconductor, converter, machine, multiway,
-ground, Gridspace, and optional `LineParameters` cases.
+ground and Gridspace cases.
 
 ## Single-line network diagrams
 

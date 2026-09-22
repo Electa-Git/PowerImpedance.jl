@@ -555,7 +555,7 @@ The new  $\mathbf{Y}$  parameters are then given by:
 
 $$\tilde{\mathbf{Y}} = \mathbf{Y}_{11} - \mathbf{Y}_{12} \mathbf{Y}_{22}^{-1} \mathbf{Y}_{21}.$$
 
-### Transformation between $\mathbf{Y}$ and ABCD parameters
+### Transformation between $\mathbf{Y}$ and ABCD parameters {#transformation-y-abcd}
 
 The  $\mathbf{Y}$  matrix can be separated into submatrices belonging to input (superscript “p”), output (superscript “s”), and their interconnecting nodes as:
 
@@ -1401,7 +1401,7 @@ This branch treatment applies only to impedances that connect distinct network n
 Because the detailed transformer model does not map directly to the branch model
 in Fig. 26, its $\mathbf{Y}$ parameters are first extracted from the ABCD matrix
 using the conversion given under [Transformation between $\mathbf{Y}$ and ABCD
-parameters](@ref).
+parameters](@ref transformation-y-abcd).
 
 In the case of DC branches, since ABCD parameters are each of size  $1 \times 1$  (i.e. scalars), the tap value can be determined as  $\tau = \sqrt{\frac{A}{D}}$ , while the series impedance is obtained as  $r = \Re\{\frac{B}{\tau}\}$ .
 

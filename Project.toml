@@ -1,6 +1,6 @@
 name = "PowerImpedance"
 uuid = "2b9e73d6-9f99-4895-a28a-fad5d1cd90f9"
-version = "0.3.0"
+version = "0.3.1"
 
 [deps]
 ControlSystemsBase = "aaaaaaaa-a6ca-5380-bf3e-84a91bcd477e"

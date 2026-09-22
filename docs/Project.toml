@@ -8,6 +8,9 @@ Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
 PowerImpedance = "2b9e73d6-9f99-4895-a28a-fad5d1cd90f9"
 
+[sources]
+PowerImpedance = {path = "C:\\Users\\rvandere\\.julia\\dev\\PowerImpedance"}
+
 [compat]
 CairoMakie = "0.15"
 Documenter = "1.17"

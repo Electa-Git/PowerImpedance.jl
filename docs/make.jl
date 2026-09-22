@@ -67,10 +67,13 @@ const LITERATE_EXAMPLE_FILES = (
     "Connection_DSL.jl",
     "Network_Diagram.jl",
     "P2P_HVDC_ALT.jl",
-    "P2P_HVDC_Gridspace.jl",
     "IEEE39bus_Gridspace.jl",
     "SmallSignal_Gridspace.jl"
 )
+
+# P2P_HVDC_Gridspace currently depends on an obsolete converter-workflow
+# example. Keep its source for repair, but do not generate or execute it in
+# documentation CI until it is again compatible with the public package API.
 
 const LITERATE_EXAMPLE_PATHS = [joinpath(EXAMPLES_SRC, file)
                                 for file in LITERATE_EXAMPLE_FILES
