@@ -9,7 +9,7 @@ Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
 PowerImpedance = "2b9e73d6-9f99-4895-a28a-fad5d1cd90f9"
 
 [sources]
-PowerImpedance = {path = "C:\\Users\\rvandere\\.julia\\dev\\PowerImpedance"}
+PowerImpedance = {path = ".."}
 
 [compat]
 CairoMakie = "0.15"
