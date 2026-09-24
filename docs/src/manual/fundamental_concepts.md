@@ -461,7 +461,7 @@ $$\begin{bmatrix} v_p \\ i_p \end{bmatrix} = \begin{bmatrix} \frac{a_{11}+a_{22}
 
 which represents the equivalent single-port model.
 
-### Reduction of the ABCD matrix
+### [Reduction of the ABCD matrix](@id reduction_ABCD)
 
 When the outer conducting layers of a cross-bonded cable are grounded, the ABCD matrix can be reduced by eliminating the corresponding port variables.
 
@@ -882,7 +882,7 @@ The ABCD matrix of one major section is derived as follows:
 - Apply the A-B-C to C-A-B transposition to every minor section after the first: $\mathbf{M}_{CB}\mathbf{T}\mathbf{M}_{\eta,i}\mathbf{T}^{-1}$. The matrix $\mathbf{M}_{CB}$ represents a nonideal sheath bond with impedance $Z_{CB}$. It is the identity matrix except for the series-impedance block that couples sheath currents to sheath voltages. For $n_c=3$ cables, with the sheath as the second of $n_l$ conducting layers, this block is
 
   $$\mathbf{M}_{CB}\left\langle n_c+1:2n_c,\;n_cn_l+n_c+1:n_cn_l+2n_c\right\rangle = \operatorname{diag}\{2Z_{CB}\}_{n_c\times n_c}.$$
-- Apply the ABCD reduction described under [Reduction of the ABCD matrix](@ref).
+- Apply the ABCD reduction described under [Reduction of the ABCD matrix](@ref reduction_ABCD).
 
 The unreduced ABCD matrix of major section $\eta$ is
 
