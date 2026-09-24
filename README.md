@@ -109,11 +109,10 @@ reconstruct aggregate bus values as Measurements after the local Monte Carlo
 run. See the
 [Gridspace guide](docs/src/gridspace.md).
 
-Optional package extensions provide covariance-aware `Measurements` sampling
-and construction of overhead lines and cables from phase-domain
-`LineParameters` objects produced by
-[LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl). See
-[Package extensions](docs/src/package_extensions.md).
+Optional package extensions provide covariance-aware `Measurements` sampling.
+LineCableModels interoperability is temporarily dormant while
+[LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl) awaits
+registration. See [Package extensions](docs/src/package_extensions.md).
 
 ### Explicit network topology and calculations
 
@@ -166,10 +165,10 @@ Then load the package:
 using PowerImpedance
 ```
 
-The Measurements extension activates when `Measurements` is loaded. Direct
-deterministic `LineParameters` interoperability activates with
-[LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl). Loading
-both packages adds Measurements-aware line-parameter sampling.
+The Measurements extension activates when `Measurements` is loaded.
+LineCableModels interoperability is temporarily dormant while
+[LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl) awaits
+registration.
 
 ## Citation
 
@@ -238,7 +237,8 @@ If you use PowerImpedance in your research, please cite:
   - Continuous integration
   - Parametric studies
   - Uncertainty quantification
-  - Extension modules for Measurements and [LineCableModels.jl](https://github.com/Electa-Git/LineCableModels.jl)
+  - Extension modules for Measurements; LineCableModels interoperability is
+    temporarily dormant pending its registration
 
 - **Luis Müller**
   - Bipolar model

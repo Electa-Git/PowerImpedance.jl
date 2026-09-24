@@ -49,7 +49,7 @@ function parity_powerflow_state(shunt_impedance=1.0)
     elements = (
         sm1=synchronousmachine(
             elec=ElectricalSM(rt=1e-10, lt=1e-10),
-            setpoint=Setpoint(Pac=50.0, Qac=10.0, Vac=voltage / sqrt(3)),
+            setpoint=Setpoint(Pac=50.0, Qac=10.0, Vac=voltage / sqrt(3)*sqrt(2)),
         ),
         z1=impedance(z=shunt_impedance, pins=3, transformation=true),
     )
@@ -69,7 +69,7 @@ function parity_powerflow_space(shunt_impedances)
     elements = (
         sm1=synchronousmachine(
             elec=ElectricalSM(rt=1e-10, lt=1e-10),
-            setpoint=Setpoint(Pac=50.0, Qac=10.0, Vac=voltage / sqrt(3)),
+            setpoint=Setpoint(Pac=50.0, Qac=10.0, Vac=voltage / sqrt(3)*sqrt(2)),
         ),
         z1=impedance(
             Grid;

@@ -32,7 +32,7 @@ using LinearAlgebra: LinearAlgebra, Diagonal, I, UpperHessenberg, det, eigvals,
 using Logging: Logging, current_logger
 using LsqFit: LsqFit, curve_fit
 using Markdown: Markdown, @doc_str
-using Munkres: Munkres, munkres
+using Hungarian: Hungarian, hungarian
 using NonlinearSolve: NonlinearSolve
 using Parameters: Parameters, @with_kw
 using Peaks: Peaks, argmaxima

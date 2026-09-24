@@ -12,7 +12,7 @@ net = @network begin
 
 	g1 = ac_source(
 		setpoint = Setpoint(
-		Vac = transmissionVoltage,
+		Vac = transmissionVoltage*sqrt(2),
 		Pac = pHVDC1),
 		limits = PowerImpedance.Limits(
 		P_min = -2000,
@@ -119,7 +119,7 @@ net = @network begin
 		transformation = true)
 
 	g4 = ac_source(setpoint = Setpoint(
-		Vac = transmissionVoltage,
+		Vac = transmissionVoltage*sqrt(2),
 		Pac = pHVDC1),
 		limits = PowerImpedance.Limits(
 		P_min = -2000,

@@ -46,9 +46,10 @@ Then load it with:
 using PowerImpedance
 ```
 
-Optional interoperability is activated by loading `Measurements` or
-`LineCableModels` in the same environment. See [Package extensions](package_extensions.md)
-for the supported combinations and data structures.
+Optional interoperability is activated by loading `Measurements` in the same
+environment. LineCableModels interoperability is temporarily dormant pending
+its registration. See [Package extensions](package_extensions.md) for the
+supported combinations and data structures.
 
 ## Where to start
 

@@ -62,7 +62,7 @@ dc_solution.powerflow
 
 ac_elements = (
     grid = ac_source(
-        setpoint = Setpoint(Vac = 220 / sqrt(3)),
+        setpoint = Setpoint(Vac = 220 * sqrt(2/3)),
         pins = 3,
         transformation = true
     ),
@@ -317,7 +317,8 @@ grid_impedance
 
 # ## Lines constructed from `LineParameters`
 #
-# Loading LineCableModels and Measurements activates the optional extension.
+# LineCableModels interoperability is dormant until LineCableModels.jl is
+# registered and restored as a PowerImpedance weak dependency.
 # A phase-domain, per-metre `LineParameters` result then replaces only the line
 # model definition; the connection rows are unchanged. The documentation
 # environment does not install LineCableModels, so this executable pattern is

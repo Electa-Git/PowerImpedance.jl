@@ -461,7 +461,7 @@ $$\begin{bmatrix} v_p \\ i_p \end{bmatrix} = \begin{bmatrix} \frac{a_{11}+a_{22}
 
 which represents the equivalent single-port model.
 
-### Reduction of the ABCD matrix
+### [Reduction of the ABCD matrix](@id reduction_ABCD)
 
 When the outer conducting layers of a cross-bonded cable are grounded, the ABCD matrix can be reduced by eliminating the corresponding port variables.
 
@@ -555,7 +555,7 @@ The new  $\mathbf{Y}$  parameters are then given by:
 
 $$\tilde{\mathbf{Y}} = \mathbf{Y}_{11} - \mathbf{Y}_{12} \mathbf{Y}_{22}^{-1} \mathbf{Y}_{21}.$$
 
-### Transformation between $\mathbf{Y}$ and ABCD parameters
+### [Transformation between $\mathbf{Y}$ and ABCD parameters](@id transformation-y-abcd)
 
 The  $\mathbf{Y}$  matrix can be separated into submatrices belonging to input (superscript “p”), output (superscript “s”), and their interconnecting nodes as:
 
@@ -882,7 +882,7 @@ The ABCD matrix of one major section is derived as follows:
 - Apply the A-B-C to C-A-B transposition to every minor section after the first: $\mathbf{M}_{CB}\mathbf{T}\mathbf{M}_{\eta,i}\mathbf{T}^{-1}$. The matrix $\mathbf{M}_{CB}$ represents a nonideal sheath bond with impedance $Z_{CB}$. It is the identity matrix except for the series-impedance block that couples sheath currents to sheath voltages. For $n_c=3$ cables, with the sheath as the second of $n_l$ conducting layers, this block is
 
   $$\mathbf{M}_{CB}\left\langle n_c+1:2n_c,\;n_cn_l+n_c+1:n_cn_l+2n_c\right\rangle = \operatorname{diag}\{2Z_{CB}\}_{n_c\times n_c}.$$
-- Apply the ABCD reduction described under [Reduction of the ABCD matrix](@ref).
+- Apply the ABCD reduction described under [Reduction of the ABCD matrix](@ref reduction_ABCD).
 
 The unreduced ABCD matrix of major section $\eta$ is
 
@@ -1401,7 +1401,7 @@ This branch treatment applies only to impedances that connect distinct network n
 Because the detailed transformer model does not map directly to the branch model
 in Fig. 26, its $\mathbf{Y}$ parameters are first extracted from the ABCD matrix
 using the conversion given under [Transformation between $\mathbf{Y}$ and ABCD
-parameters](@ref).
+parameters](@ref transformation-y-abcd).
 
 In the case of DC branches, since ABCD parameters are each of size  $1 \times 1$  (i.e. scalars), the tap value can be determined as  $\tau = \sqrt{\frac{A}{D}}$ , while the series impedance is obtained as  $r = \Re\{\frac{B}{\tau}\}$ .
 

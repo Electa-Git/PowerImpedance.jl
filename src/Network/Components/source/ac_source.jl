@@ -58,6 +58,10 @@ source = ac_source(
 function ac_source(; setpoint = Setpoint(;Vac=220/sqrt(3)), pins=1, limits=Limits(), transformation=false, connection=true, args...)
     source = Source()
 
+    if haskey(args, :V)
+        @warn "The legacy `V` field of `ac_source` is not used for power flow and was defined as phase RMS voltage; `setpoint.Vac` is phase peak voltage. Pass the converted voltage through `setpoint=Setpoint(Vac=...)` instead."
+    end
+
     for (key, val) in pairs(args)
         if key in propertynames(source)
             setfield!(source, key, val)

@@ -8,10 +8,10 @@ net = @network begin
 
         # Values used in the SG validation
     
-        sg1 = synchronousmachine(setpoint=Setpoint(Vac =1.000177992* 380/sqrt(3), Pac= 900), 
+        sg1 = synchronousmachine(setpoint=Setpoint(Vac =1.000177992* 380/sqrt(3)*sqrt(2), Pac= 900), 
                                         elec=ElectricalSM(Vᵃᶜ_base = 380.0)
                                 )
-        g2 = ac_source(setpoint=Setpoint(Vac = 380/sqrt(3)), pins = 3, transformation = true) #impedance(z=160, pins=3, transformation = true)
+        g2 = ac_source(setpoint=Setpoint(Vac = 380/sqrt(3)*sqrt(2)), pins = 3, transformation = true) #impedance(z=160, pins=3, transformation = true)
 
         # imp=impedance(z=0.00, pins=3, transformation = true)
 

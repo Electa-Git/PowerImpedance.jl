@@ -1,5 +1,14 @@
 ############################  common/kernels/delay.jl  ############################
 
+struct Delay 
+    timeDelay::Float64
+    n_inputs::Int
+    
+end
+
+
+
+
 #=
 Generic Pade delay implementation for converter state-space models.
 

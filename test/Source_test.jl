@@ -7,7 +7,7 @@ grid = Network()
 add!(
 	grid,
 	:labanimal_AC,
-	ac_source(pins = 3, setpoint=Setpoint(Vac = Vm), transformation = true)
+	ac_source(pins = 3, setpoint=Setpoint(Vac = Vm*sqrt(2)), transformation = true)
 )
 
 add!(

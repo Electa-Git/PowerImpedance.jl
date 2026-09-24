@@ -18,5 +18,6 @@ package to repeat power flow, equilibrium, and linearization.
 The high-level [`mmc`](@ref) constructor remains available for existing models.
 The composable [`MMC`](@ref), controller, synchronization, modulation, and
 measurement types are listed in the [API reference](reference.md). The
-[P2P HVDC Gridspace tutorial](examples/P2P_HVDC_Gridspace.md) studies how the
+The P2P HVDC Gridspace tutorial is temporarily withheld while its converter
+workflow is updated for the current public API. It previously studied how the
 OHL/UGC split, cable geometry, and converter tolerances move resonances.

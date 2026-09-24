@@ -345,7 +345,8 @@ function injection_initialization!(data, elem2comp, comp2elem, ac_bus, elem, glo
 	((data["gen"])[key])["pmax"] = lm.P_max / S_base
 	((data["gen"])[key])["qmin"] = lm.Q_min / S_base
 	((data["gen"])[key])["qmax"] = lm.Q_max / S_base
-	((data["gen"])[key])["vg"] = sp.Vac / V_base #Accesor function to treat multiple field names for AC Voltage
+	println(sp.Vac, " ", V_base, " ", sp.Vac / V_base, " ", sp.Vac / V_base/sqrt(2))
+	((data["gen"])[key])["vg"] = sp.Vac / V_base/sqrt(2) #Accesor function to treat multiple field names for AC Voltage
 
 	# not using
 	((data["gen"])[key])["model"] = 1
@@ -813,7 +814,7 @@ function solve_acdcpf_relax(data::Dict{String, Any}, model_type::Type, solver; k
 		_PMACDC.ref_add_sssc!,
 		_PMACDC.ref_add_flex_load!,
 		_PMACDC.ref_add_gendc!,
-		# _PMACDC.ref_add_im!,
+		_PMACDC.ref_add_im!,
 	]
 	pm = _PM.instantiate_model(
 		data,

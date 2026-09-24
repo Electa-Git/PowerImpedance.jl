@@ -48,7 +48,7 @@ function _trajectory_eigenvalues(response)
             abs(loci[frequency_index - 1, left] - current[right])
             for left in 1:order, right in 1:order
         ]
-        loci[frequency_index, :] = current[munkres(distances)]
+        loci[frequency_index, :] = current[first(hungarian(distances))]
     end
     return loci
 end
@@ -65,7 +65,7 @@ function _match_loci(loci, reference)
             size(loci, 1),
         )
     end
-    permutation = munkres(distances)
+    permutation,_ = hungarian(distances)
     return loci[:, permutation], permutation
 end
 
@@ -251,7 +251,7 @@ function _evd_trial(response, frequencies, fmin, fmax)
             abs(eigenvalues[frequency_index - 1, left] - decomposition.values[right])
             for left in 1:order, right in 1:order
         ]
-        permutation = munkres(distances)
+        permutation,_ = hungarian(distances)
         eigenvalues[frequency_index, :] = decomposition.values[permutation]
         eigenvectors[frequency_index] = decomposition.vectors[:, permutation]
     end

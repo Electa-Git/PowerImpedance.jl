@@ -117,5 +117,5 @@ bode = compute(bode_problems, MonteCarlo(BodeAnalysis(); seed = 2026))
 ```
 
 No implicit averaging, flattening, or passthrough conversion is provided.
-`primitives` exposes only explicit projections such as `LineParametersInput`,
-`EmpiricalSamples`, and `MeasurementsSurrogate`.
+`primitives` exposes explicit projections such as `EmpiricalSamples` and
+`MeasurementsSurrogate`.
