@@ -90,8 +90,8 @@ function ohl_to_ugc(x)
 
     return (;
         g1 = ac_source(
-            V = transmissionVoltage,
-            P = pHVDC1,
+            setpoint = Setpoint(Vac = transmissionVoltage*sqrt(2),
+            Pac = pHVDC1),
             P_min = -2000,
             P_max = 2000,
             Q_max = 1000,
@@ -128,8 +128,8 @@ function ohl_to_ugc(x)
         ohl = ohl_model,
 
         g4 = ac_source(
-            V = transmissionVoltage,
-            P = pHVDC1,
+            setpoint = Setpoint(Vac = transmissionVoltage*sqrt(2),
+            Pac = pHVDC1),
             P_min = -2000,
             P_max = 2000,
             Q_max = 1000,

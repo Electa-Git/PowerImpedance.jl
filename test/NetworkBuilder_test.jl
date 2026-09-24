@@ -287,16 +287,16 @@ function build_ieee39bus_with_macro()
 
 
 		# Sources @ 345 kV
-		G30=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
-		G31=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
-		G32=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
-		G33=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
-		G34=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
-		G35=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
-		G36=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
-		G37=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
-		G38=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
-		G39=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true)
+		G30=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
+		G31=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
+		G32=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
+		G33=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
+		G34=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
+		G35=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
+		G36=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
+		G37=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
+		G38=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
+		G39=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true)
 		# Source impedances @ 345 kV
 		Zg30=impedance(
 			z = (s::Complex) -> (0.191736 + s*0.0122063),
@@ -1381,16 +1381,16 @@ function ieee39bus_elements()
 
 
 		# Sources @ 345 kV
-		G30 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
-		G31 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
-		G32 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
-		G33 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
-		G34 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
-		G35 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
-		G36 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
-		G37 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
-		G38 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
-		G39 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1), transformation = true),
+		G30 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
+		G31 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
+		G32 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
+		G33 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
+		G34 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
+		G35 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
+		G36 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
+		G37 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
+		G38 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
+		G39 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm1*sqrt(2)), transformation = true),
 		# Source impedances @ 345 kV
 		Zg30 = impedance(
 			z = (s::Complex) -> (0.191736 + s*0.0122063),

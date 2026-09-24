@@ -19,9 +19,9 @@ end
 The voltage base is required for consistent per-unit conversion. Define the ideal AC sources at the two converter terminals:
 
 ```julia
-g1 = ac_source(V = transmissionVoltage, P = pHVDC1, P_min = -2000, P_max = 2000, Q_max = 1000, Q_min = -1000, pins = 3, transformation = true)
+g1 = ac_source(setpoint=Setpoint(Vac = transmissionVoltage, Pac = pHVDC1), P_min = -2000, P_max = 2000, Q_max = 1000, Q_min = -1000, pins = 3, transformation = true)
 
-g4 = ac_source(V = transmissionVoltage, P = pHVDC1, P_min = -2000, P_max = 2000, Q_max = 1000, Q_min = -1000, pins = 3, transformation = true)
+g4 = ac_source(Setpoint(Vac = transmissionVoltage, Pac = pHVDC1) P_min = -2000, P_max = 2000, Q_max = 1000, Q_min = -1000, pins = 3, transformation = true)
 
 ```
 

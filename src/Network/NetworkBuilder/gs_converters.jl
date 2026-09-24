@@ -61,7 +61,7 @@ function _legacy_setpoint(kwargs)
         Pac = Float64(value(:P, 0.0)),
         Qac = Float64(value(:Q, 0.0)),
         θac = Float64(value(:θ, 0.0)),
-        Vac = Float64(value(:Vₘ, 220 * sqrt(2 / 3))),
+        Vac = Float64(value(:Vₘ, 220.0)) * sqrt(2), # Convert RMS to peak 
         Pdc = Float64(value(:P_dc, 0.0)),
         Vdc = Float64(value(:Vᵈᶜ, 0.0)),
     )

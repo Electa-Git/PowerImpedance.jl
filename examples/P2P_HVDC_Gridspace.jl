@@ -61,8 +61,8 @@ const builder_options = (;
 # fixed scalar elements explicit.
 const fixed_element_specs = (;
     g1 = ac_source(Grid;
-        V = transmission_voltage,
-        P = p_hvdc,
+        setpoint = Setpoint(Vac = transmission_voltage * sqrt(2),
+        Pac = p_hvdc),
         P_min = -2000,
         P_max = 2000,
         Q_min = -1000,
@@ -114,8 +114,8 @@ const fixed_element_specs = (;
         padeOrderDen = 5
     ),
     g4 = ac_source(Grid;
-        V = transmission_voltage,
-        P = p_hvdc,
+        setpoint = Setpoint(Vac = transmission_voltage * sqrt(2),
+        Pac = p_hvdc),
         P_min = -2000,
         P_max = 2000,
         Q_min = -1000,

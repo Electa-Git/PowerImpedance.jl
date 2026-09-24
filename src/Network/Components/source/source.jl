@@ -156,7 +156,7 @@ function _initialize_gen_entry!(data, key, ac_bus, elem, global_dict)
 	gen["pmax"] = lm.P_max / s_base
 	gen["qmin"] = lm.Q_min / s_base
 	gen["qmax"] = lm.Q_max / s_base
-	gen["vg"] = sp.Vac / v_base
+	gen["vg"] = sp.Vac / v_base/sqrt(2)
 	gen["model"] = 1
 	gen["cost"] = 0
 	gen["ncost"] = 0

@@ -51,6 +51,10 @@ source = dc_source(setpoint = Setpoint(Vdc = 320.0, Pdc = 100.0))
 function dc_source(; pins=1, setpoint=Setpoint(Vdc=240),transformation=false, connection=true, args...)
     source = Source()
 
+    if haskey(args, :V)
+        @warn "The legacy `V` field of `dc_source` is not used for power flow; pass the voltage through `setpoint=Setpoint(Vdc=...)` instead."
+    end
+
     for (key, val) in pairs(args)
         if key in propertynames(source)
             setfield!(source, key, val)

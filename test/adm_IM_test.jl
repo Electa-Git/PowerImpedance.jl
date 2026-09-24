@@ -1,6 +1,6 @@
 function inductionmachinecircuit()
     transmissionVoltage = 220 / sqrt(3)
-    g1 = ac_source(setpoint=Setpoint(Vac = transmissionVoltage, Pac = -500), pins = 3, transformation = true)
+    g1 = ac_source(setpoint=Setpoint(Vac = transmissionVoltage*sqrt(2), Pac = -500), pins = 3, transformation = true)
             
     im1 = inductionmachine(;mech=MechanicalIM(T_0=0.9,A=0.0,B=0.00,C=1.0,m=0),
                                     elec = ElectricalIM(r_s = 0.01))

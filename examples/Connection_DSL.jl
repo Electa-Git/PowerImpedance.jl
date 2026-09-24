@@ -62,7 +62,7 @@ dc_solution.powerflow
 
 ac_elements = (
     grid = ac_source(
-        setpoint = Setpoint(Vac = 220 / sqrt(3)),
+        setpoint = Setpoint(Vac = 220 * sqrt(2/3)),
         pins = 3,
         transformation = true
     ),
