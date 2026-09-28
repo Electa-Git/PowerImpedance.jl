@@ -5,6 +5,5 @@ deploydocs(;
     repo = "github.com/Electa-Git/PowerImpedance.jl.git",
     devbranch = "main",
     versions = ["stable" => "v^", "v#.#", "v#.#.#"],
-    push_preview = false,
-    deploy_config = Documenter.GitLab()
+    push_preview = false
 )

@@ -1,401 +1,363 @@
 # Release and package-registration runbook
 
-This runbook is for maintainers publishing PowerImpedance from the authoritative
-KU Leuven GitLab repository to the public GitHub repository and registering the
-published version in Julia's General registry.
-
-Follow the steps in order. GitLab is the source repository. GitHub is a public
-release mirror. Do not make release commits directly on GitHub.
+PowerImpedance is developed on the private KU Leuven GitLab repository.
+GitLab is authoritative. GitHub is the public publication repository used by
+Julia's General registry. Make release changes on GitLab, not on GitHub.
 
 ## Release flow
 
-The complete flow is:
-
-```text
-GitLab main
-    -> GitLab vX.Y.Z tag
-    -> GitLab release pipeline
-    -> GitHub main and vX.Y.Z tag
-    -> JuliaRegistrator request
-    -> General registry pull request
-    -> registered Julia package
-```
-
-The GitLab pipeline publishes the release commit and tag to GitHub. It does not
-register the package with Julia. Registration is a separate action performed on
-GitHub after publication succeeds.
-
-## Operator checklist
-
-For an ordinary stable release, the operator must complete these gates:
-
-- [ ] The release merge request updates `Project.toml`, `CHANGELOG.md`, and
-  `CITATION.cff` consistently.
-- [ ] The release commit is merged into GitLab `main`, and its `main` pipeline
-  passes.
-- [ ] An annotated `vX.Y.Z` tag is created at that exact `main` commit and
-  pushed only to GitLab.
-- [ ] The GitLab tag pipeline passes, including GitHub publication and release
-  reporting.
-- [ ] GitHub `main`, the GitHub tag, and GitHub Release CI identify the same
-  commit.
-- [ ] `@JuliaRegistrator register` is posted on that GitHub commit.
-- [ ] The General registry pull request merges.
-- [ ] A clean Julia environment installs and loads the intended version.
-- [ ] TagBot publishes the corresponding GitHub Release.
-
-## Invariants
-
-Every release must satisfy all of these conditions:
-
-- The release commit is already on GitLab's default branch, `main`.
-- `Project.toml` contains the intended version without a `v` prefix, for
-  example `version = "0.3.1"`.
-- The Git tag is exactly `v` followed by that version, for example `v0.3.1`.
-- The release tag identifies the same commit as GitLab `main` when the release
-  is made.
-- GitHub `main` is never edited independently. Normal publication only
-  fast-forwards it from GitLab.
-- A shared release tag is immutable. Never delete it, move it, or reuse its
-  version for different source code.
-
-A tag named `0.3.1` is not a release tag for this repository. It must be named
-`v0.3.1`. Tags that do not match the release pattern do not start the release
-jobs.
-
-## One-time administrator setup
-
-Ordinary release operators should not need to change this configuration. If
-publication or registration fails because configuration is absent, ask a GitLab
-or GitHub repository administrator to check it.
-
-### GitLab
-
-The GitLab project must have these protected CI/CD variables:
-
-- `GITHUB_DEPLOY_KEY`: a file-type variable containing the private half of a
-  GitHub deploy key with write access to `Electa-Git/PowerImpedance.jl`.
-- `GITHUB_KNOWN_HOSTS`: a file-type variable containing the trusted
-  `github.com` SSH host key.
-- `CODECOV_TOKEN`: the token for the public GitHub Codecov project.
-
-The `github-force-reconcile` environment must be protected so that only
-authorized maintainers can rewrite GitHub `main` in an exceptional recovery.
-
-### GitHub
-
-The GitHub repository must have:
-
-- the public half of the GitLab deploy key, with write access;
-- the `DOCUMENTER_KEY` Actions secret used by TagBot;
-- GitHub Actions enabled with permission to create releases;
-- the
-  [JuliaRegistrator GitHub App](https://github.com/JuliaRegistries/Registrator.jl)
-  installed for this repository.
-
-The tracked `.github/workflows/TagBot.yml` workflow is necessary, but it does
-not install JuliaRegistrator by itself.
-
-## 1. Prepare the release on GitLab
-
-Choose the next version according to the project's semantic-versioning policy.
-During the `0.y.z` development series, increment the minor version for a
-breaking public API change and describe the break clearly.
-
-Prepare and merge a release merge request that:
-
-1. changes `version` in `Project.toml`;
-2. moves the relevant `CHANGELOG.md` entries from `Unreleased` into a dated
-   section for the new version;
-3. changes `version` and `date-released` in `CITATION.cff`;
-4. includes every source, test, documentation, and compatibility change meant
-   to be part of the release.
-
-Do not create the release tag from the merge-request branch. Wait until the
-release commit has been merged into GitLab `main` and the ordinary `main`
-pipeline has passed.
-
-Record the release version and exact GitLab `main` commit before tagging:
-
-```bash
-git fetch origin main --tags
-release_sha="$(git rev-parse refs/remotes/origin/main)"
-release_version="$(
-    git show "${release_sha}:Project.toml" |
-        sed -n 's/^version *= *"\([^"]*\)".*/\1/p' |
-        head -n 1
-)"
-release_tag="v${release_version}"
-
-printf 'Release commit: %s\n' "$release_sha"
-printf 'Release version: %s\n' "$release_version"
-printf 'Release tag: %s\n' "$release_tag"
-git log -1 --decorate --oneline "$release_sha"
-```
-
-Stop if the version is empty, unexpected, or already registered. Inspect the
-release metadata directly from that commit:
-
-```bash
-git show "${release_sha}:Project.toml" | sed -n '1,5p'
-git show "${release_sha}:CITATION.cff" | sed -n '1,12p'
-git show "${release_sha}:CHANGELOG.md" | sed -n '1,40p'
-```
-
-Check whether the intended tag already exists locally or on GitLab:
-
-```bash
-git tag --list "$release_tag"
-git ls-remote --tags origin "refs/tags/${release_tag}"
-```
-
-Both commands should produce no tag before a new release. If either command
-finds the tag, do not overwrite it. Determine whether the version was already
-released. If source changes are needed, choose a new version.
-
-## 2. Create the GitLab release tag
-
-Create an annotated tag at the recorded `origin/main` commit:
-
-```bash
-git tag -a "$release_tag" "$release_sha" -m "PowerImpedance ${release_tag}"
-git show --no-patch --decorate "$release_tag"
-```
-
-Confirm that the displayed commit is the recorded release commit. Then push
-only that tag to GitLab:
-
-```bash
-git push origin "refs/tags/${release_tag}"
-```
-
-The same operation can be performed through the GitLab tag interface, provided
-the tag name is `vX.Y.Z` and the target is the exact release commit on `main`.
-
-Pushing the tag starts a GitLab tag pipeline. Do not push the tag directly to
-GitHub; the pipeline owns GitHub publication.
-
-## 3. Monitor the GitLab release pipeline
-
-Open **GitLab > Build > Pipelines**, select the pipeline whose ref is the new
-tag, and wait for it to finish.
-
-The pipeline performs these stages:
-
-1. `test`: core, extension, and plotting tests run for the tagged source;
-2. `docs`: documentation is built, with public GitHub links for a stable tag;
-3. `release_check`: `github_release_preflight` checks the version, tag, GitLab
-   ancestry, GitHub authentication, and fast-forward topology;
-4. `deploy`: `github_release_publish` atomically pushes the release commit to
-   GitHub `main` and the release tag to GitHub;
-5. `release_report`: coverage is uploaded and stable documentation is deployed
-   to GitHub Pages.
-
-The publication push is atomic: GitHub should receive both `main` and the tag,
-or neither of them.
-
-### Retrying jobs safely
-
-- A transient failure before GitHub publication can be retried if no source or
-  release metadata must change.
-- If source or release metadata must change, make a new commit, increment the
-  version, and create a new release tag. Never move the existing tag.
-- If `github_release_publish` succeeded but a later coverage or documentation
-  job failed, retry only the failed downstream job. Retrying the successful
-  publication job will be refused because the GitHub tag already exists.
-
-## 4. Verify GitHub publication
-
-Do not start Julia registration until all of the following are true:
-
-- GitHub `main` identifies the recorded release commit.
-- GitHub contains the `vX.Y.Z` tag at that same commit.
-- The GitHub **Release CI** workflow for the tag passed.
-- The stable documentation deployment passed for a stable release.
-
-Use the GitHub web interface, or verify the public refs without needing a
-configured GitHub remote:
-
-```bash
-git ls-remote https://github.com/Electa-Git/PowerImpedance.jl.git \
-    refs/heads/main "refs/tags/${release_tag}^{}"
-```
-
-Both reported refs must identify `release_sha`. The `^{}` suffix dereferences
-an annotated tag to the commit it identifies.
-
-At this point the public source and tag exist, but the package is not
-necessarily registered in Julia General yet.
-
-## 5. Request registration in Julia General
-
-Sign in to GitHub using an account that is a collaborator on the repository or
-a public member of the owning organization.
-
-Open the release commit on GitHub:
-
-```text
-https://github.com/Electa-Git/PowerImpedance.jl/commit/RELEASE_COMMIT_SHA
-```
-
-Add this exact comment to the commit:
+The release signal is a complete line in the message of the final commit pushed
+to GitLab's default branch, `main`:
 
 ```text
 @JuliaRegistrator register
 ```
 
-Optional release notes for the GitHub Release may follow in the same comment:
+The automation performs this sequence:
+
+```text
+GitLab main commit containing the marker
+    -> GitLab tests and public-documentation build
+    -> fast-forward GitHub main to that exact tested commit, without tags
+    -> GitHub Actions posts the real Registrator comment on that commit
+    -> General registry pull request
+    -> General accepts the version
+    -> TagBot creates vX.Y.Z and the GitHub Release
+    -> GitHub Release CI validates the tag and deploys stable documentation
+```
+
+A commit message alone does not invoke JuliaRegistrator. Our GitLab pipeline
+recognizes the marker, publishes the commit, and the tracked GitHub registration
+workflow converts that signal into a commit comment that Registrator receives.
+
+Do not create a version tag to start a release. TagBot owns version tags after
+registration. Ordinary GitLab commits without the marker stay private until a
+later marked commit publishes their history. Merge-request pipelines, scheduled
+pipelines, and GitLab tag pushes do not start automatic publication.
+
+## Operator checklist
+
+- [ ] The intended source changes are on GitLab.
+- [ ] `Project.toml`, `CHANGELOG.md`, and `CITATION.cff` describe the version.
+- [ ] For a new version, that version is not already registered in General.
+- [ ] The final commit pushed to GitLab `main` contains the standalone marker.
+- [ ] Its GitLab publication preflight and publication job pass.
+- [ ] GitHub's **Julia registration** workflow submits that exact commit.
+- [ ] The linked General registration pull request passes its checks and merges.
+- [ ] TagBot creates the version tag and GitHub Release.
+- [ ] **Release CI** passes and stable documentation is deployed.
+- [ ] A clean Julia environment installs and loads the intended version.
+
+For corrections to a pending registration, keep the same version. Only a version
+already merged into General requires a new version number.
+
+## One-time administrator setup
+
+Ordinary operators should not have to change this configuration.
+
+### GitLab
+
+The default branch must be protected. Configure these protected CI/CD variables:
+
+- `GITHUB_DEPLOY_KEY`: file-type variable containing the private SSH deploy key
+  with write access to `Electa-Git/PowerImpedance.jl`.
+- `GITHUB_KNOWN_HOSTS`: file-type variable containing the trusted GitHub SSH
+  host key.
+- `CODECOV_TOKEN`: token for the public GitHub Codecov project.
+
+Protect the `github-force-reconcile` environment and grant deployment permission
+only to maintainers authorized to rewrite GitHub `main` in exceptional recovery.
+
+Do not set `POWERIMPEDANCE_PUBLISH` manually. The pipeline derives it from the
+push source, branch, and commit-message marker.
+
+### GitHub
+
+The public repository needs:
+
+- the public half of GitLab's SSH deploy key, with write access;
+- the [JuliaRegistrator App](https://github.com/JuliaRegistries/Registrator.jl)
+  installed for this repository;
+- GitHub Actions enabled, including permission for the registration workflow's
+  `contents: write`;
+- the existing `DOCUMENTER_KEY` Actions secret: a base64-encoded private SSH
+  deploy key with write access to this repository;
+- GitHub Pages configured to serve the `gh-pages` branch at its root.
+
+No additional GitHub personal access token is required. The registration
+workflow uses its automatic `GITHUB_TOKEN` to create the commit comment.
+Registrator accepts comments from `github-actions[bot]`.
+
+TagBot uses `DOCUMENTER_KEY` to push tags so those pushes can start **Release CI**.
+Documenter uses the same secret to deploy stable documentation.
+
+## 1. Prepare a candidate on GitLab
+
+For a new registered version, prepare a merge request that:
+
+1. sets `version = "X.Y.Z"` in `Project.toml`;
+2. puts the release notes in `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD`;
+3. sets the corresponding version and date in `CITATION.cff`;
+4. includes the intended source, compatibility, tests, and documentation changes.
+
+The registration workflow reads that version's changelog section and submits it
+as release notes. Empty or missing notes cause the workflow to fail before
+posting the request.
+
+For a pending version that needs correction, fix the source or metadata on
+GitLab but keep its version number. Registrator can amend the existing General
+pull request for that version.
+
+Check the version against
+[General](https://github.com/JuliaRegistries/General/tree/master/P/PowerImpedance).
+Before initial registration that directory may not exist. After a version is
+accepted into General, its registered source is immutable.
+
+## 2. Put the signal in the final GitLab main commit
+
+The marker must be a complete line with exactly this spelling and no indentation:
+
+```text
+@JuliaRegistrator register
+```
+
+For a release merge request, edit the final merge or squash commit message to
+include it, for example:
+
+```text
+chore(release): prepare PowerImpedance 0.3.2
+
+@JuliaRegistrator register
+```
+
+A marker buried in an earlier branch commit is not sufficient if the final
+merge or squash commit has a different message. Review the actual final message
+in GitLab before merging. Do not include `[skip ci]` or push with CI skipping.
+
+If the intended source is already on GitLab `main`, an authorized maintainer can
+make an empty trigger commit from a clean, up-to-date checkout:
+
+```bash
+git switch main
+git pull --ff-only origin main
+test -z "$(git status --porcelain)" || {
+    echo 'Stop: working tree or index is not clean.'
+    exit 1
+}
+git commit --allow-empty \
+    -m 'chore(release): request Julia registration' \
+    -m '@JuliaRegistrator register'
+git push origin HEAD:main
+```
+
+The working tree and index must be clean before the commit; otherwise unrelated
+staged changes could become part of the candidate. Follow the merge-request
+route if branch protection does not permit direct pushes.
+
+Record the exact candidate after pushing:
+
+```bash
+candidate_sha="$(git rev-parse HEAD)"
+printf 'Registration candidate: %s\n' "$candidate_sha"
+git log -1 --format=full "$candidate_sha"
+```
+
+For a GitLab web merge, copy the resulting `main` commit SHA from the web
+interface instead. Do not run `git tag` or push a version tag.
+
+## 3. Check the GitLab pipeline
+
+Open **GitLab > Build > Pipelines** and select the `main` push pipeline for the
+recorded candidate. It automatically runs:
+
+1. core tests with coverage, extension tests, and plotting tests;
+2. `docs_check`, building documentation with public GitHub source links;
+3. `github_release_preflight`, checking authentication, package version, and
+   GitLab/GitHub ancestry;
+4. `github_release_publish`, fast-forwarding GitHub `main` to the tested pipeline
+   SHA; it does not push tags;
+5. `github_release_coverage`, uploading that candidate's coverage independently.
+
+The existing `pages` job continues to build private development documentation
+on GitLab. Stable public documentation waits until TagBot creates the accepted
+version's tag.
+
+Normal publication never force-pushes. It repeats the ancestry checks immediately
+before pushing. If GitLab `main` has advanced, it still publishes only the tested
+candidate, not the newer branch tip. If GitHub has already advanced beyond that
+candidate or diverged, publication stops.
+
+A transient failure before publication can be retried on the same candidate
+pipeline. Retrying publication when GitHub already has that exact commit is safe
+and does not create tags. It also does not generate another GitHub push event;
+use the recovery procedure below if registration itself needs a new attempt.
+
+If coverage alone fails after publication, retry only coverage. Coverage is not
+the registration trigger, and a coverage upload failure does not undo a request
+already submitted by GitHub automation.
+
+## 4. Verify the automatic registration request
+
+Open **GitHub > Actions > Julia registration** for the candidate. The workflow
+posts this comment on the exact SHA from the push, using that commit's changelog:
 
 ```text
 @JuliaRegistrator register
 
 Release notes:
 
-Describe the user-visible changes here.
+The notes for this version from CHANGELOG.md.
 ```
 
-An issue comment in the PowerImpedance GitHub repository can also trigger
-Registrator, but a comment on the exact release commit makes the intended source
-unambiguous. Do not post the command on a pull request or issue in the General
-registry repository.
+Check the workflow log for the comment URL and the Registrator reply for the
+General pull-request link. Do not post another manual comment just because
+Registrator has not answered yet.
 
-Registrator checks `Project.toml` and opens a pull request against
-[JuliaRegistries/General](https://github.com/JuliaRegistries/General). Follow
-the link posted by the bot to that pull request.
+To inspect public `main`:
 
-## 6. Monitor the General registry pull request
+```bash
+git ls-remote https://github.com/Electa-Git/PowerImpedance.jl.git refs/heads/main
+```
 
-Review every failed registry check. General's AutoMerge verifies registry
-metadata and attempts to install and load the package.
+Immediately after publication it should report the candidate SHA. A later
+publication can move `main` forward; the registration comment remains bound to
+its exact candidate.
 
-At the time of writing, General normally waits:
+For an unregistered version, absence of `vX.Y.Z` is expected at this stage.
 
-- three days for a new package;
-- approximately 15 minutes for a new version of an already registered package.
+## 5. Follow the General pull request
 
-The current policy is documented in the
-[General registry README](https://github.com/JuliaRegistries/General/blob/master/README.md).
+Read failed checks and maintainer feedback. General validates registry metadata,
+compatibility constraints, and installation/loading in a clean environment.
 
-Avoid unnecessary comments on the registry pull request: an ordinary comment
-can block AutoMerge. If a purely informational comment is required, follow the
-General registry's current instructions for marking it non-blocking.
+Waiting periods and AutoMerge policy are defined in the
+[General README](https://github.com/JuliaRegistries/General/blob/master/README.md).
+Passing checks do not necessarily mean the pull request has merged.
 
-If a check reveals that the package source or metadata must change:
+Avoid unnecessary comments on the General pull request: comments can block
+AutoMerge. Follow the registry's current instructions when communication is
+actually required.
 
-1. fix the problem on GitLab;
-2. increment the package version;
-3. publish a new GitLab release tag through this runbook;
-4. trigger Registrator on the new GitHub release commit.
+### A pending registration needs source or metadata fixes
 
-Do not move the old tag and do not register different source code under the old
-version. Julia registry versions are permanent and must remain reproducible.
+1. Make the fixes on GitLab.
+2. Keep the same package name, repository URL, and version number.
+3. Put the standalone marker in the final corrected `main` commit message.
+4. Let the GitLab pipeline publish and submit that new candidate.
+5. Verify that Registrator updated the existing General pull request.
 
-The first registered PowerImpedance version does not have to be the earliest
-GitHub tag. For example, General may first register `0.3.1` even if the public
-repository also contains an unregistered `v0.3.0` tag.
+Do not bump the version merely to fix a pending submission; that would create a
+different registration pull request. Do not make corrections on GitHub.
 
-## 7. Verify installation after registry merge
+### Registration automation failed before submitting the request
 
-After the General pull request merges, allow time for registry and package
-server propagation. Then verify from a temporary Julia environment:
+Correct any workflow, permissions, App installation, or changelog problem.
+Then make a new marked commit on GitLab `main`; an empty trigger commit is
+sufficient for a transient failure once configuration is corrected. The new
+push automatically starts publication and registration again.
+
+Retrying an unchanged GitLab publication job after a successful push is not
+enough to restart GitHub Actions, because Git has no new branch update to send.
+
+### The version is already merged into General
+
+Do not resubmit changed package source under that version. Prepare a new version
+on GitLab and use the same marker-driven procedure.
+
+## 6. Verify TagBot and stable documentation
+
+After General accepts the version, TagBot creates `vX.Y.Z` for the accepted
+source and publishes the GitHub Release with the submitted notes.
+
+Check **GitHub > Actions > TagBot**, **GitHub > Releases**, and **Release CI**.
+The tag must identify the registered source; it need not point to a later `main`
+tip. Release CI validates its package version and that its commit belongs to
+GitHub `main` history, then builds and deploys stable documentation from the tag.
+
+Do not create a competing version tag on GitLab or GitHub. A GitLab copy of the
+tag is not required for registration or subsequent publication.
+
+If TagBot or documentation alone fails, registration may already be complete.
+Inspect that workflow and repair the specific problem. Do not retrigger
+Registrator to repair release metadata or documentation. Administrative TagBot
+recovery can use its existing workflow-dispatch control without changing the
+registered tag.
+
+## 7. Verify installation
+
+After registry/package-server propagation, check the intended version in a
+temporary Julia environment. Substitute the actual accepted version:
 
 ```bash
 julia --startup-file=no -e '
     using Pkg
     Pkg.activate(; temp = true)
     Pkg.Registry.update()
-    Pkg.add("PowerImpedance")
+    Pkg.add(PackageSpec(name = "PowerImpedance", version = "0.3.2"))
     using PowerImpedance
     Pkg.status(["PowerImpedance"])
 '
 ```
 
-Confirm that Julia resolves the intended version and loads it without using a
-local checkout or an unregistered URL.
-
-## 8. Verify the GitHub Release
-
-After the General registry pull request merges, General notifies JuliaTagBot.
-The tracked TagBot workflow should create or backfill the GitHub Release and its
-release notes for the tag that the GitLab pipeline already published.
-
-Check **GitHub > Actions > TagBot** and **GitHub > Releases**. If the release is
-missing, run the TagBot workflow manually from the GitHub Actions interface and
-inspect its log. Do not create or move another tag to solve a missing GitHub
-Release: Julia registration and GitHub Releases are separate concepts, and the
-correct tag already exists.
+The package must resolve from General, not from a local checkout or a Git URL.
 
 ## Troubleshooting
 
-### No GitLab release pipeline started
+### The marked commit did not publish
 
-Check the tag spelling. The accepted form is `vX.Y.Z`, optionally followed by a
-SemVer prerelease suffix. A tag such as `0.3.1` does not match.
+Check the final pushed commit message, not the merge-request title or an earlier
+commit. Publication requires a push pipeline on the default branch with a
+standalone marker. A manually created or scheduled pipeline is not a release
+signal. Check that CI was not skipped and that all required tests/docs passed.
 
-### The tag does not match `Project.toml`
+### An old GitLab tag pipeline still offers publication jobs
 
-The pipeline requires an exact match. `Project.toml` version `0.3.1` requires
-tag `v0.3.1`. Do not repair a shared tag by moving it. Correct the source and
-publish a new version when necessary.
+Pipelines use the configuration from their own commit. Historical tag pipelines
+can therefore still contain the old tag-publishing job. Do not retry those jobs
+or create tags on historical commits to start a release. Use a marked commit on
+GitLab main containing the current workflow instead.
 
-### The tagged commit is not on `main`
+### GitHub main has diverged
 
-The release was tagged too early or from the wrong branch. Merge the intended
-release into GitLab `main`, increment the version, and create a new tag.
+Normal publication stops without overwriting GitHub. Review the differences.
+An authorized maintainer can run the protected `github_force_reconcile` job from
+the latest GitLab `main` pipeline. It archives the former GitHub `main` under an
+`archive/github-main-before-reconcile-*` tag before reconciliation.
 
-### GitHub `main` has diverged
+This is exceptional recovery. Once reconciliation is reviewed, use a new marked
+GitLab commit to return to the tested publication/registration sequence.
 
-Normal publication refuses to force-push GitHub. An authorized maintainer must
-run the protected `github_force_reconcile` job from the latest GitLab `main`
-pipeline. The job archives the former GitHub `main` under an
-`archive/github-main-before-reconcile-*` tag before reconciling it. Retry the
-release only after reviewing that archive and confirming the reconciliation.
+### A version tag already exists before acceptance
 
-This is exceptional recovery, not a normal release step.
+Do not repeatedly move it. Determine whether General already accepted that
+version. If registration is still pending and a premature tag is blocking it,
+an authorized administrator must remove the premature public tag, after
+checking the exact repository and target, then leave tag creation to TagBot.
+Deleting a GitLab tag does not delete a GitHub tag.
 
-### The GitHub tag already exists
+Do not delete or move a correctly registered version tag.
 
-The publication job deliberately refuses to overwrite it. Determine whether a
-previous publication already succeeded. If the existing tag points elsewhere,
-stop and ask a repository administrator to investigate. Do not force-push or
-delete the tag.
+### No Registrator response
 
-### JuliaRegistrator does not respond
-
-Check that:
-
-- the JuliaRegistrator GitHub App is installed for the repository;
-- the repository is public;
-- the commenter is an eligible collaborator or public organization member;
-- the command was posted in the PowerImpedance repository;
-- the GitHub commit contains the intended `Project.toml` version.
-
-### General AutoMerge fails to load the package
-
-Open the failing check and reproduce the reported clean-environment failure.
-Fix the package on GitLab and publish a new version. Do not add registry-only
-workarounds that hide a real load failure.
-
-### TagBot fails or no GitHub Release appears
-
-Registration in General may still be valid. Inspect the TagBot Actions log,
-check the `DOCUMENTER_KEY` secret and repository Actions permissions, and
-manually dispatch the existing TagBot workflow after correcting configuration.
-Do not retrigger Registrator merely to repair a GitHub Release.
+Check the **Julia registration** workflow log and its comment URL. Confirm that
+the App is installed for the public repository and that Actions has
+`contents: write`. If a real fix or retry is required, trigger it from GitLab
+with a new marked candidate.
 
 ## Authoritative configuration
 
-When this runbook and the automation disagree, inspect the current automation
-before acting:
+- `.gitlab-ci.yml`: marker recognition, tests, docs validation, preflight,
+  publication, coverage, and private development Pages.
+- `.gitlab/publish_github.sh`: exact-SHA, fast-forward-only publication with
+  version-tag pushing disabled.
+- `.github/workflows/register.yml`: automatic commit comment and release notes.
+- `.github/workflows/TagBot.yml`: post-registration version tag and Release.
+- `.github/workflows/release-ci.yml`: tag validation and stable documentation.
+- `docs/deploy_github.jl`: Documenter deployment configuration.
+- `.gitlab/force_reconcile_github.sh`: protected exceptional reconciliation.
 
-- `.gitlab-ci.yml`: tests, preflight, GitHub publication, coverage, and release
-  documentation;
-- `.gitlab/force_reconcile_github.sh`: exceptional GitHub reconciliation;
-- `.github/workflows/release-ci.yml`: verification of the published GitHub tag;
-- `.github/workflows/TagBot.yml`: post-registration GitHub Release creation;
-- `docs/deploy_github.jl`: stable documentation deployment.
-
-The official external references are the
-[Registrator documentation](https://github.com/JuliaRegistries/Registrator.jl),
-the [General registry policy](https://github.com/JuliaRegistries/General/blob/master/README.md),
-and the [TagBot documentation](https://github.com/JuliaRegistries/TagBot).
+Official references:
+[Registrator](https://github.com/JuliaRegistries/Registrator.jl),
+[General policy](https://github.com/JuliaRegistries/General/blob/master/README.md),
+[TagBot](https://github.com/JuliaRegistries/TagBot), and
+[Documenter hosting](https://documenter.juliadocs.org/stable/man/hosting/).

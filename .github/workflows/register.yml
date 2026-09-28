@@ -1,0 +1,54 @@
+name: Julia registration
+
+run-name: Register GitLab candidate ${{ github.sha }}
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: julia-registration
+  cancel-in-progress: false
+
+jobs:
+  register:
+    if: contains(github.event.head_commit.message, '@JuliaRegistrator register')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the published candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Submit the exact candidate to Registrator
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const message = context.payload.head_commit?.message ?? '';
+            if (!/(^|\n)@JuliaRegistrator register(\r?\n|$)/.test(message)) {
+              core.notice('No standalone registration marker; nothing submitted.');
+              return;
+            }
+
+            const fs = require('node:fs');
+            const project = fs.readFileSync('Project.toml', 'utf8');
+            const version = project.match(/^version\s*=\s*"([^"]+)"\s*$/m)?.[1];
+            if (!version) throw new Error('Project.toml has no package version.');
+
+            const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+            const entry = changelog.split(/^## /m)
+              .find(section => section.startsWith(`[${version}]`));
+            const notes = entry?.split('\n').slice(1).join('\n').trim();
+            if (!notes) throw new Error(`CHANGELOG.md needs release notes for [${version}].`);
+
+            const result = await github.rest.repos.createCommitComment({
+              ...context.repo,
+              commit_sha: context.sha,
+              body: `@JuliaRegistrator register\n\nRelease notes:\n\n${notes}`,
+            });
+            core.notice(`Submitted ${version} at ${context.sha}: ${result.data.html_url}`);

@@ -43,16 +43,63 @@ jobs:
           }
 
           tag_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
-          main_commit="$(git rev-parse refs/remotes/origin/main)"
-
           test "$tag_commit" = "$GITHUB_SHA" || {
             echo "The workflow commit does not match the published tag."
             exit 1
           }
 
-          test "$tag_commit" = "$main_commit" || {
-            echo "The published release tag does not match GitHub main."
+          # TagBot tags the registered source, which may precede today's main.
+          git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main || {
+            echo "The registered release commit is not in GitHub main history."
             exit 1
           }
 
           echo "Validated $GITHUB_REF_NAME at $tag_commit."
+
+  deploy-documentation:
+    name: Deploy registered release documentation
+    needs: validate-publication
+    if: ${{ !contains(github.ref_name, '-') && !contains(github.ref_name, '+') }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    env:
+      POWERIMPEDANCE_DOCS_TARGET: github
+      JULIA_PKG_PRECOMPILE_AUTO: "0"
+      JULIA_NUM_THREADS: "2,0"
+      JULIA_NUM_PRECOMPILE_TASKS: "2"
+    steps:
+      - name: Check out the registered tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12.6"
+
+      - uses: julia-actions/cache@v2
+
+      - name: Instantiate the documentation environment
+        run: |
+          julia --project=docs --startup-file=no -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()
+            Pkg.precompile()
+          '
+
+      - name: Refresh optional user statistics
+        continue-on-error: true
+        run: timeout 10m julia --project=docs/statistics --startup-file=no docs/statistics/make.jl
+
+      - name: Build and deploy the stable documentation
+        env:
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+        run: |
+          julia --project=docs --startup-file=no -e '
+            include("docs/make.jl")
+            include("docs/deploy_github.jl")
+          '

@@ -5,7 +5,17 @@ stages:
   - deploy
   - release_report
 
+workflow:
+  rules:
+    # The marker must be a complete line in the final default-branch commit.
+    # Merge-request, tag, scheduled, and unmarked pipelines never publish.
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_MESSAGE =~ /(^|\n)@JuliaRegistrator register(\r?\n|$)/'
+      variables:
+        POWERIMPEDANCE_PUBLISH: "true"
+    - when: always
+
 variables:
+  POWERIMPEDANCE_PUBLISH: "false"
   JULIA_DEPOT_PATH: "$CI_PROJECT_DIR/.julia"
   JULIA_PKG_PRECOMPILE_AUTO: "0"
   # Respect the Kubernetes CPU allocation without creating nested thread pools.
@@ -27,7 +37,7 @@ variables:
   POWERIMPEDANCE_TEST_LOG_LEVEL: "error"
 
   # Codecov represents the public GitHub release mirror. Coverage is uploaded
-  # only after the corresponding release commit has been published there.
+  # only after the corresponding registration candidate is published there.
   CODECOV_CLI_VERSION: "v11.3.1"
   CODECOV_SLUG: "Electa-Git/PowerImpedance.jl"
 
@@ -121,9 +131,9 @@ test:
         mkpath(dirname(coverage_file))
         rm(coverage_file; force=true)
 
-        if isempty(get(ENV, "CI_COMMIT_TAG", ""))
+        if get(ENV, "POWERIMPEDANCE_PUBLISH", "false") != "true"
           # Keep ordinary branch and merge-request pipelines at their existing
-          # runtime. The empty artifact is never consumed outside a release.
+          # runtime. The empty artifact is never consumed outside publication.
           Pkg.test()
           touch(coverage_file)
         else
@@ -141,9 +151,6 @@ test:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-    # A release tag MUST run the real test suite.
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
 
 
 extension_tests:
@@ -191,9 +198,6 @@ extension_tests:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-    # A release tag MUST run the real test suite.
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
 
 
 plotting_tests:
@@ -245,7 +249,6 @@ plotting_tests:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
 
 
 formatter:
@@ -307,15 +310,6 @@ docs_check:
         Pkg.instantiate()
         Pkg.precompile()
 
-        if occursin(r"^v\d+\.\d+\.\d+$", get(ENV, "CI_COMMIT_TAG", ""))
-          statistics = `timeout 10m $(Base.julia_cmd()) --project=docs/statistics --startup-file=no docs/statistics/make.jl`
-          try
-            success(statistics) || @warn "User-statistics map generation failed; using the committed map"
-          catch error
-            @warn "User-statistics map generation could not start; using the committed map" exception = (error, catch_backtrace())
-          end
-        end
-
         include("docs/make.jl")
       '
   artifacts:
@@ -325,13 +319,10 @@ docs_check:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
-    # Stable release documentation links to its public GitHub source snapshot.
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+    # Validate the public documentation before publishing the candidate.
+    - if: '$POWERIMPEDANCE_PUBLISH == "true"'
       variables:
         POWERIMPEDANCE_DOCS_TARGET: "github"
-
-    # Release tags must also prove that documentation still builds.
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
 
 
 # ---------------------------------------------------------------------------
@@ -342,7 +333,7 @@ docs_check:
   image: alpine:3.22
 
   variables:
-    # Release jobs need enough history to perform ancestry checks.
+    # Publication jobs need enough history to perform ancestry checks.
     GIT_DEPTH: "0"
     GIT_TERMINAL_PROMPT: "0"
 
@@ -375,10 +366,10 @@ docs_check:
 # ---------------------------------------------------------------------------
 # READ-ONLY PREFLIGHT
 #
-# On main:
+# On unmarked main:
 #   manual diagnostic only; never blocks Pages.
 #
-# On a release tag:
+# On a marked main commit:
 #   automatic gate after tests/docs.
 #
 # This performs only fetch/read operations. It cannot modify GitHub.
@@ -420,7 +411,7 @@ github_release_preflight:
       echo "GitLab candidate : $CI_COMMIT_SHA"
       echo "GitHub main      : $GITHUB_MAIN_SHA"
       echo "Project version  : $VERSION"
-      echo "Expected tag     : $EXPECTED_TAG"
+      echo "Tag after merge  : $EXPECTED_TAG"
       echo
 
       echo "Left/right commit counts (GitHub/GitLab):"
@@ -449,26 +440,18 @@ github_release_preflight:
       echo "Publication topology: $STATUS"
       echo
 
-      # Manual main-branch preflight is informational only.
-      if [ -z "${CI_COMMIT_TAG:-}" ]; then
+      # Unmarked main-branch preflight is informational only.
+      if [ "${POWERIMPEDANCE_PUBLISH:-false}" != "true" ]; then
         echo "READ-ONLY PREFLIGHT COMPLETE."
         echo "GitHub was not modified."
         exit 0
       fi
 
-      # From here down we are validating an actual release-tag pipeline.
-
-      test "$CI_COMMIT_TAG" = "$EXPECTED_TAG" || {
-        echo "FAIL:"
-        echo "tag '$CI_COMMIT_TAG' != expected '$EXPECTED_TAG'"
-        exit 1
-      }
-
       git merge-base --is-ancestor \
         "$CI_COMMIT_SHA" \
         "refs/remotes/origin/${CI_DEFAULT_BRANCH}" || {
           echo "FAIL:"
-          echo "tagged commit is not on ${CI_DEFAULT_BRANCH}"
+          echo "candidate commit is not on ${CI_DEFAULT_BRANCH}"
           exit 1
         }
 
@@ -479,14 +462,14 @@ github_release_preflight:
       fi
 
       echo "FAIL:"
-      echo "GitHub main is not an ancestor of this release."
+      echo "GitHub main is not an ancestor of this candidate."
       echo "Run the protected github_force_reconcile job from the latest default-branch pipeline."
       echo "No write operation was attempted."
       exit 1
 
   rules:
-    # Release tags run this automatically and failures block deployment.
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+    # Marked main commits run this automatically and block on failures.
+    - if: '$POWERIMPEDANCE_PUBLISH == "true"'
       when: on_success
       allow_failure: false
 
@@ -522,12 +505,12 @@ github_force_reconcile:
 
 
 # ---------------------------------------------------------------------------
-# PERMANENT RELEASE PUBLICATION
+# REGISTRATION-CANDIDATE PUBLICATION
 #
 # ABSOLUTELY NO FORCE PUSH.
 #
-# GitHub main must already be an ancestor of the tagged GitLab commit.
-# Valid release tags publish automatically after the preflight succeeds.
+# GitHub main must be an ancestor of the tested GitLab candidate.
+# Publish only main; TagBot owns version tags after General registration.
 # ---------------------------------------------------------------------------
 
 github_release_publish:
@@ -537,80 +520,10 @@ github_release_publish:
   resource_group: github-release
 
   script:
-    - |
-      set -eu
-
-      VERSION="$(
-        sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Project.toml |
-        head -n 1
-      )"
-
-      test -n "${CI_COMMIT_TAG:-}" || {
-        echo "REFUSED: not a tag pipeline"
-        exit 1
-      }
-
-      test "$CI_COMMIT_TAG" = "v${VERSION}" || {
-        echo "REFUSED:"
-        echo "tag '$CI_COMMIT_TAG' != Project.toml version 'v${VERSION}'"
-        exit 1
-      }
-
-      git fetch --no-tags origin \
-        "+refs/heads/${CI_DEFAULT_BRANCH}:refs/remotes/origin/${CI_DEFAULT_BRANCH}"
-
-      git fetch origin \
-        "+refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
-
-      git fetch --no-tags github \
-        "+refs/heads/main:refs/remotes/github/main"
-
-      # Release commit must be part of authoritative GitLab main.
-      git merge-base --is-ancestor \
-        "$CI_COMMIT_SHA" \
-        "refs/remotes/origin/${CI_DEFAULT_BRANCH}" || {
-          echo "REFUSED:"
-          echo "tagged commit is not on ${CI_DEFAULT_BRANCH}"
-          exit 1
-        }
-
-      # This is the permanent anti-bullshit guard.
-      #
-      # If somebody starts independently committing to GitHub again,
-      # publication stops instead of silently rewriting anything.
-      git merge-base --is-ancestor \
-        refs/remotes/github/main \
-        "$CI_COMMIT_SHA" || {
-          echo "REFUSED:"
-          echo "GitHub main is not an ancestor of this release."
-          echo "GitHub has diverged from authoritative GitLab history."
-          echo "Force-push is intentionally absent."
-          exit 1
-        }
-
-      # Existing release tags are immutable.
-      if git ls-remote \
-        --exit-code \
-        --tags \
-        github \
-        "refs/tags/${CI_COMMIT_TAG}" >/dev/null 2>&1
-      then
-        echo "REFUSED:"
-        echo "GitHub tag ${CI_COMMIT_TAG} already exists."
-        exit 1
-      fi
-
-      git push \
-        --atomic \
-        github \
-        "${CI_COMMIT_SHA}:refs/heads/main" \
-        "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
-
-      echo
-      echo "Published ${CI_COMMIT_TAG} to GitHub."
+    - sh .gitlab/publish_github.sh
 
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+    - if: '$POWERIMPEDANCE_PUBLISH == "true"'
       when: on_success
       allow_failure: false
 
@@ -672,52 +585,9 @@ github_release_coverage:
         --commit-sha "$CI_COMMIT_SHA" \
         --branch main \
         --file coverage/lcov.info \
-        --name "$CI_COMMIT_TAG"
+        --name "candidate-${CI_COMMIT_SHORT_SHA}"
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
-      when: on_success
-      allow_failure: false
-
-
-# GitHub Pages contains only stable tagged releases. GitLab Pages remains the
-# mutable development documentation for the default branch.
-github_release_docs:
-  image: julia:1.12.6-bookworm
-  stage: release_report
-  needs:
-    - job: docs_check
-      artifacts: true
-    - job: github_release_publish
-      artifacts: false
-  resource_group: github-release
-  cache:
-    <<: *julia_docs_cache
-    policy: pull
-  variables:
-    KUBERNETES_CPU_REQUEST: "1"
-    KUBERNETES_MEMORY_REQUEST: "2Gi"
-    JULIA_CPU_THREADS: "1"
-    JULIA_NUM_THREADS: "1"
-    JULIA_NUM_PRECOMPILE_TASKS: "1"
-  before_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends git ca-certificates coreutils
-    - rm -rf /var/lib/apt/lists/*
-  script:
-    - |
-      export DOCUMENTER_KEY="$(base64 --wrap=0 "$GITHUB_DEPLOY_KEY")"
-      julia --startup-file=no -e '
-        using Pkg
-        Pkg.activate(; temp=true)
-        Pkg.add(PackageSpec(name="Documenter", version="1.17"))
-        include("docs/deploy_github.jl")
-      '
-  environment:
-    name: github-pages
-    url: https://electa-git.github.io/PowerImpedance.jl/stable/
-    deployment_tier: production
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - if: '$POWERIMPEDANCE_PUBLISH == "true"'
       when: on_success
       allow_failure: false
 
