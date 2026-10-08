@@ -11,6 +11,13 @@
 
 ### Fixed
 
+- Classify untransformed six-pin elements as three-phase, so abc sources,
+  impedances and lines enter the power flow as AC components.
+- Use one default voltage base (`NetworkBuilder.DEFAULT_VOLTAGE_BASE`, 320 kV)
+  for NetworkBuilder power flows and their materialized networks.
+- Accept explicit overhead-line conductor positions, as documented.
+- Use the per-pole resistance `z/2` for one-terminal DC impedances in the
+  power flow, consistent with the differential frequency-domain model.
 - Correct the `:ΔY` transformer to Dyn11 with a line-to-line voltage ratio,
   the complete per-phase Y-equivalent T-model, and a 30° secondary lead in
   frequency-domain and power-flow calculations. Reject untransformed
