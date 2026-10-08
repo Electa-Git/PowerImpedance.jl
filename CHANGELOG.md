@@ -9,6 +9,12 @@
   networks to PSCAD projects (`export_pscad`, requires `using PythonCall`), and comparison
   of the simulated steady state with the power flow (`compare_operating_point`).
 
+### Changed
+
+- **Breaking:** Interpret `dc_source` `Setpoint.Vdc` and legacy `V` as
+  pole-to-pole DC voltage in kV, consistently with converters. Pass the
+  pole-to-pole voltage; callers that halved it must stop halving.
+
 ### Fixed
 
 - Classify untransformed six-pin elements as three-phase, so abc sources,

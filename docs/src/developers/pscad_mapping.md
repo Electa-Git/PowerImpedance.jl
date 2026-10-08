@@ -214,7 +214,7 @@ labels and probes; the probe manifest records bus ownership and the pole in
 | Julia quantity / choice | PSCAD realization | Unit / convention |
 |---|---|---|
 | Solved `busdc.vm * base_kV` | each `source_1.Vm` | kV pole-to-ground magnitude |
-| Unsolved `dc_source` `Setpoint.Vdc` | each `source_1.Vm` | kV pole-to-ground, following power flow |
+| Unsolved `dc_source` `Setpoint.Vdc / 2` | each `source_1.Vm` | kV pole-to-ground magnitude from the pole-to-pole setpoint |
 | P source | positive `NA` to P bus through ammeter, negative `NB` to ground | station-measured polarity |
 | N source | positive `NA` to midpoint ground, negative `NB` to N bus | gives negative N voltage |
 | Source options | `AC=0`, `Type=6`, `Cntrl=0`, `Grnd=0`, `Tc=source_ramp` | ideal internally controlled DC, ramp in seconds |
@@ -225,12 +225,13 @@ labels and probes; the probe manifest records bus ownership and the pole in
 | Bus probes | two scalar `voltmetergnd` + PGB channels `V_<bus>_P`, `V_<bus>_N` | kV |
 | Terminal probes | one series ammeter on the P path per nongrounded terminal | scalar kA, `I_<element>_<side>` |
 
-**Voltage convention:** the existing DC source power-flow conversion uses
-`gendc.vgdc = Setpoint.Vdc/V_base`, so its `Vdc` is pole-to-ground. Converter
-setpoints use pole-to-pole `Vdc`. The exporter follows these existing semantics;
-this ambiguity is documented and no source or converter physics is changed.
-Thus `dc_source(Setpoint(Vdc=320))` produces +320/-320 kV, or 640 kV pole-to-pole,
-without a solved record. With a record the solved bus voltage takes precedence.
+**Voltage convention:** DC sources and converters use pole-to-pole
+`Setpoint.Vdc` in kV. The DC source power-flow conversion uses
+`gendc.vgdc = Setpoint.Vdc / (data["dcpol"] * V_base)`. Without a solved record,
+the exporter sets each pole source to `Setpoint.Vdc / 2`, so
+`dc_source(setpoint = Setpoint(Vdc = 640))` produces +320/-320 kV.
+With a solved record, the bus's `vm_pu * base_kV` takes precedence and already
+gives the pole-to-ground magnitude in kV.
 
 The station measured positive `source_1.NA`: connecting NA to the positive label
 and NB to ground produced +V. Both exported pole sources use this measured

@@ -74,7 +74,7 @@ $(TYPEDEF)
 
 Retain an element, its physical model, connectivity, and operating setpoint.
 Setpoint powers are in MW/MVAr, angles in rad, AC voltages in phase peak kV,
-and DC source voltages in pole-to-ground kV (converter voltages are pole-to-pole).
+and DC source and converter voltages in pole-to-pole kV.
 Construction never mutates the element.
 
 $(TYPEDFIELDS)

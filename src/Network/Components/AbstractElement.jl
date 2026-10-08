@@ -37,7 +37,7 @@ Store an AC/DC steady-state operating point.
 - `θac`: AC voltage angle `\\[rad\\]`.
 - `Vac`: phase-voltage amplitude `\\[kV\\]`.
 - `Pdc`: DC active power `\\[MW\\]`.
-- `Vdc`: DC voltage `\\[kV\\]`.
+- `Vdc`: pole-to-pole DC voltage `\\[kV\\]`.
 
 Every field defaults to `missing`; the power-flow pipeline fills quantities
 that are not fixed by the component's control mode.
@@ -54,7 +54,7 @@ that are not fixed by the component's control mode.
 
 	"DC active power `\\[MW\\]`."
     Pdc::Union{Float64, Missing} = missing
-	"DC voltage `\\[kV\\]`."
+	"Pole-to-pole DC voltage `\\[kV\\]`."
     Vdc::Union{Float64, Missing} = missing
    
 end

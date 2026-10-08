@@ -116,8 +116,8 @@ function dc_network()
     elements = (;
         ac = ac_source(; pins = 3, transformation = true,
             setpoint = Setpoint(Vac = 320sqrt(2), θac = 0.0)),
-        from = dc_source(; setpoint = Setpoint(Vdc = 320.0)),
-        to = dc_source(; setpoint = Setpoint(Vdc = 318.0)),
+        from = dc_source(; setpoint = Setpoint(Vdc = 640.0)),
+        to = dc_source(; setpoint = Setpoint(Vdc = 636.0)),
         line = impedance(; z = s -> 2.0 + s * 0.05, pins = 1),
         ac_load = impedance(; z = s -> 400.0, pins = 3, transformation = true))
     rows = [(node = Symbol("AC$k"), element, side = 1, terminal = k)

@@ -396,7 +396,7 @@ function injection_initialization_dc!(data, elem2comp, comp2elem, dc_bus, elem, 
 	((data["gendc"])[key])["pmin"] = lm.P_min / S_base
 	((data["gendc"])[key])["pmax"] = lm.P_max / S_base
 
-	((data["gendc"])[key])["vgdc"] = sp.Vdc / V_base #Accesor function to treat multiple field names for DC Voltage
+	((data["gendc"])[key])["vgdc"] = sp.Vdc / (data["dcpol"] * V_base) #Accesor function to treat multiple field names for DC Voltage
 
 	# not using
 	((data["gendc"])[key])["model"] = 1

@@ -222,7 +222,7 @@ Vac_ref_ST=0.9 #pu
 		transformation = true,
 	)
 
-	G_DC=dc_source(pins = 1, setpoint=Setpoint(Vdc = Vdc_ST/2)) # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
+	G_DC=dc_source(pins = 1, setpoint = Setpoint(Vdc = Vdc_ST)) # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
 	STATCOM = tlc(Vᵈᶜ = Vdc_ST, Lᵣ = Lf_ST, Rᵣ = Rf_ST,
 		Sbase = S_ST, vDCbase = Vdc_ST, Vₘ = Vm1,

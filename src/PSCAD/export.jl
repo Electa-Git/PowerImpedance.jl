@@ -159,9 +159,9 @@ active-element setpoints and emits solver logs. These mutations are retained.
 Pass a previously solved tuple to avoid re-solving. The builder method calls
 `NetworkBuilder.solve`; linear networks skip power flow, use source setpoints,
 and retain no solved comparison data. This function never contacts PSCAD.
-DC source `Setpoint.Vdc` is interpreted as pole-to-ground kV, following its
-power-flow conversion; converter `Vdc` uses pole-to-pole kV. With a solved
-record, each pole source uses the bus's `vm_pu * base_kV` instead.
+DC source and converter `Setpoint.Vdc` use pole-to-pole kV. Without a solved
+record, each DC pole source uses `Setpoint.Vdc / 2`. With a solved record,
+each pole source uses the bus's `vm_pu * base_kV` in pole-to-ground kV.
 """
 function export_pscad(net::PowerImpedance.Network; path,
         name = splitext(basename(path))[1], powerflow = nothing,

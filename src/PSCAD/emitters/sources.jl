@@ -38,7 +38,7 @@ function dc_source!(state, e, terminal, bus, context)
     magnitude = if bus.vm_pu === nothing
         ismissing(e.setpoint.Vdc) &&
             throw(ArgumentError("element :$(e.name) is missing setpoint.Vdc"))
-        e.setpoint.Vdc
+        e.setpoint.Vdc / 2
     else
         bus.vm_pu * bus.base_kV
     end

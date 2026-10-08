@@ -272,7 +272,8 @@ control, and modulation blocks.
 - `innerVoltage`: Inner voltage-control block.
 - `innerCurrent`: Inner current-control block.
 - `mod`: Modulation and delay block.
-- `setpoint`: AC/DC steady-state operating point.
+- `setpoint`: AC/DC steady-state operating point; `Vdc` is the pole-to-pole
+  DC voltage `\\[kV\\]`.
 - `limits`: Active- and reactive-power limits in the converter base.
 - `connection`: Whether NetworkBuilder includes the converter in the system.
 
