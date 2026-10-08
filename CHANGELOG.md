@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Remote PSCAD execution of existing projects (`PSCADModel`, `PSCADRun`,
+  `RemoteConfig`, `read_pscad_output`) as work in progress of the PSCAD integration.
+
 ## [0.3.1] - 2026-09-22
 
 - Add GraphMakie network-diagram plotting with new recipes, examples, and integration coverage.

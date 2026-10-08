@@ -183,4 +183,6 @@ include("Tools/stabilitymargin.jl")
 include("ScientificStability.jl")
 include("Compute.jl")
 include("PSCAD/PSCAD.jl")
+using .PSCAD: PSCADModel, PSCADRun, PSCADResult, RemoteConfig, read_pscad_output
+export PSCADModel, PSCADRun, PSCADResult, RemoteConfig, read_pscad_output
 include("StabilityPlotRecipes.jl")

@@ -1,0 +1,20 @@
+# Caller-visible exchange directory; relative paths are resolved against this file.
+local_root = "exchange"
+# Placeholder SSH destination. Replace with your own station account and host.
+host = "user@station.example.invalid"
+# The same exchange directory as local_root, viewed from Windows.
+shared_root = 'Z:\exchange'
+# Station-local scratch directory, separate from the shared exchange directory.
+remote_root = 'C:\PSCADScratch'
+# Julia executable on the station; the copied toolkit requires Julia 1.12.
+julia_executable = 'C:\Julia\bin\julia.exe'
+# Station Python environment containing mhi-pscad 3.1.2 and mhi-common.
+python_executable = 'C:\PSCADPython\Scripts\python.exe'
+# This adapter supports PSCAD 5.1.0.
+pscad_version = "5.1.0"
+# Transport: ssh, local (Windows callers), or command (argument array below).
+transport = "command"
+# Exact {host} arguments are replaced; encoded PowerShell arguments are appended.
+command = ["ssh", "{host}"]
+# Maximum station execution time [s]; timeout_seconds is not accepted.
+timeout = 1800

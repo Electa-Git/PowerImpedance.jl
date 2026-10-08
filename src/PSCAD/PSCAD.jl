@@ -9,7 +9,10 @@ module PSCAD
 using Base64: base64encode
 using SHA: sha256
 import TOML
-using ..PowerImpedance: PowerImpedance, TYPEDEF
+using ..PowerImpedance: PowerImpedance, TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
+using ..PowerImpedance: AbstractFormulation, AbstractProblemResult, OrderedDict
+using ..PowerImpedance: _register_backend!, _require_backend
+import ..PowerImpedance: compute
 
 """
 $(TYPEDEF)
@@ -45,5 +48,12 @@ function _require_extension()
     end
     return nothing
 end
+
+include("types.jl")
+include("remote/configuration.jl")
+include("remote/files.jl")
+include("remote/remote.jl")
+include("results.jl")
+include("compute.jl")
 
 end
