@@ -186,16 +186,16 @@ end
     @test builder_netlist.operating_point.setpoints[:machine] ===
           solved.powerflow.operating_point[:machine]
     @test builder_netlist.buses[2].pf_index == 2
-    # NetworkBuilder's existing conversion/materialization defaults differ.
-    # The power flow that actually ran owns the solved voltage base.
+    # Without options.voltageBase, NetworkBuilder's power flow and materialized
+    # network share one default; the solved records own the bus bases.
     unspecified_base = NB.NetworkState(deepcopy(offset_state.elements), offset_state.topology, (;))
     @test !hasproperty(unspecified_base.options, :voltageBase)
     declared_default = pscad.netlist(unspecified_base, nothing)
-    @test declared_default.voltageBase == 220 / sqrt(3)
-    @test all(bus -> bus.base_kV == 220 / sqrt(3), declared_default.buses)
+    @test declared_default.voltageBase == NB.DEFAULT_VOLTAGE_BASE
+    @test all(bus -> bus.base_kV == NB.DEFAULT_VOLTAGE_BASE, declared_default.buses)
     default_solved = NB.solve(unspecified_base)
     @test default_solved.powerflow isa PowerFlowResult
-    @test default_solved.network.voltageBase[1] == 220 / sqrt(3)
+    @test default_solved.network.voltageBase[1] == NB.DEFAULT_VOLTAGE_BASE
     default_netlist = pscad.netlist(unspecified_base, default_solved.powerflow)
     @test default_netlist.voltageBase == 320.0
     @test default_netlist.operating_point.bases.V_kV == 320.0

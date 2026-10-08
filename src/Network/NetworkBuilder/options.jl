@@ -1,6 +1,13 @@
 #### Options are passed to the NetworkState through hierarchical NamedTuples.
 #### The following functions are used to extract the options from the NamedTuples.
 """
+Power-flow voltage base \\[kV\\] used by NetworkBuilder when `options.voltageBase`
+is absent. The PowerModels conversion and the materialized classic `Network`
+share it, so a solved result and its network use the same base.
+"""
+const DEFAULT_VOLTAGE_BASE = 320.0
+
+"""
 Retrieve the value of a specific option, returning a default value if the option is not set.
 """
 function option_value(options::NamedTuple, name::Symbol, default)

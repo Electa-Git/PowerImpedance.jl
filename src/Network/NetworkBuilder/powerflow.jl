@@ -4,7 +4,7 @@ function Base.convert(bs::NetworkState, ::Type{P.PMACDC})
 
     #PMACDC data + interface
     data = Dict{String, Any}()
-    global_dict = P.PowerModelsACDC._get_pu_bases(1000, option_value(bs.options, :voltageBase, 320)) # 3-PH MVA, LL-RMS, Original setting was 100,320
+    global_dict = P.PowerModelsACDC._get_pu_bases(1000, option_value(bs.options, :voltageBase, DEFAULT_VOLTAGE_BASE)) # 3-PH MVA, LL-RMS, Original setting was 100,320
     P.data_init!(data, global_dict)
 
     global_dict["omega"] = 2*π*50

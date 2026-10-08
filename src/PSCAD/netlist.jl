@@ -435,11 +435,12 @@ With a supplied solved power flow and input data, take each bus's voltage base
 from its PowerModels input record through `pf_index` and require all bases to
 agree. Use that common base \\[kV\\] for the netlist and operating-point record,
 even when it differs from the declared network base. Without a solved result,
-use `state.options.voltageBase` \\[kV\\], defaulting to `220/sqrt(3)` phase RMS.
+use `state.options.voltageBase` \\[kV\\], defaulting to `NetworkBuilder.DEFAULT_VOLTAGE_BASE`.
 The global network frame is 50 \\[Hz\\].
 """
 function netlist(state::PowerImpedance.NetworkBuilder.NetworkState,
         pf::Union{Nothing, PowerImpedance.PowerFlowResult})
-    voltage_base = Float64(get(state.options, :voltageBase, 220 / sqrt(3)))
+    voltage_base = Float64(get(state.options, :voltageBase,
+        PowerImpedance.NetworkBuilder.DEFAULT_VOLTAGE_BASE))
     return _netlist(state.elements, state.topology, voltage_base, 50.0, pf)
 end
