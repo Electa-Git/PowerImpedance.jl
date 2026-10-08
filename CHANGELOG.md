@@ -4,8 +4,10 @@
 
 ### Added
 
-- Remote PSCAD execution of existing projects (`PSCADModel`, `PSCADRun`,
-  `RemoteConfig`, `read_pscad_output`) as work in progress of the PSCAD integration.
+- PSCAD integration (work in progress): remote PSCAD execution of existing projects
+  (`PSCADModel`, `PSCADRun`, `RemoteConfig`, `read_pscad_output`), export of passive AC
+  networks to PSCAD projects (`export_pscad`, requires `using PythonCall`), and comparison
+  of the simulated steady state with the power flow (`compare_operating_point`).
 
 ## [0.3.1] - 2026-09-22
 

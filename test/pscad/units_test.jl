@@ -62,7 +62,16 @@ using PowerImpedance
     @test pscad.pscad_value(2) == "2"
     @test pscad.pscad_value(2.0) == "2.0"
     @test pscad.pscad_value(-0.25; unit = "Ohm") == "-0.25 [Ohm]"
-    @test pscad.pscad_value(1e-12) == "1.0e-12"
+    @test pscad.pscad_value(1e-12) == "1.0E-12"
+    @test pscad.pscad_value(1.23e-6) == "1.23E-6"
+    @test pscad.pscad_value(1.23e8) == "1.23E8"
+    @test pscad.pscad_value(1e-4) == "0.0001"
+    @test pscad.pscad_value(1e6) == "1000000.0"
+    @test pscad.pscad_value(1e7) == "1.0E7"
+    @test pscad.pscad_value(0.0) == "0.0"
+    @test pscad.pscad_value(-1e-5; unit = "H") == "-1.0E-5 [H]"
+    @test pscad.pscad_value(1e-300) == "1.0E-300"
+    @test pscad.pscad_value(1e300) == "1.0E300"
     for value in (Inf, -Inf, NaN)
         @test_throws ArgumentError pscad.pscad_value(value)
     end

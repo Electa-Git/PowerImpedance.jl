@@ -13,6 +13,13 @@ function P.remote_command(::Val{:fixture}, config::RemoteConfig, command::Abstra
     if occursin("-SharedCase", command)
         LAUNCHES[] += 1
         root = replace(only(match(r"-SharedCase '([^']+)'", command).captures), '\\' => '/')
+        channel_names = MODE[] === :array ?
+                        ["Voltage:1", "Voltage:2", "Voltage:3", "Current"] :
+                        MODE[] === :missing_array ? ["Voltage:1", "Voltage:2", "Current"] :
+                        ["Voltage", "Current"]
+        metadata = join(["PGB($index) Output Desc=\"$name\" Group=\"main\" Units=\"$(name == "Current" ? "kA" : "kV")\"\n"
+                         for (index, name) in enumerate(channel_names)])
+        row_values = join(fill("2.0D+0", length(channel_names) - 1), " ") * " 3.0d-1"
         script = """
         using TOML
         root = $(repr(root))
@@ -36,13 +43,13 @@ function P.remote_command(::Val{:fixture}, config::RemoteConfig, command::Abstra
         open(io -> TOML.print(io, identity), joinpath(output, "solver.toml"), "w")
         write(joinpath(output, "timing.txt"), "3.25")
         write(joinpath(output, "build-messages.txt"), "normal\\tBuild\\tgenerated\\tOK\\nwarning\\tBuild\\tgenerated\\tfixture warning\\n")
-        write(joinpath(output, stem * ".inf"), "PGB(1) Output Desc=\\\"Voltage\\\" Group=\\\"main\\\" Units=\\\"kV\\\"\\nPGB(2) Output Desc=\\\"Current\\\" Group=\\\"main\\\" Units=\\\"kA\\\"\\n")
+        write(joinpath(output, stem * ".inf"), $(repr(metadata)))
         rows = round(Int, settings["time_duration"] / (settings["sample_step_us"] * 1e-6)) + 1
         $(MODE[] === :incomplete) && (rows -= 1)
         open(joinpath(output, stem * "_01.out"), "w") do io
             println(io, "TIME Voltage Current")
             for index in 0:rows-1
-                println(io, index * settings["sample_step_us"] * 1e-6, " 2.0D+0 3.0d-1")
+                println(io, index * settings["sample_step_us"] * 1e-6, " ", $(repr(row_values)))
             end
         end
         haskey(settings, "snapshot_time") && write(joinpath(output, stem * ".snp"), "snapshot fixture")
@@ -210,6 +217,21 @@ end
         # Empty manifests work for arbitrary hand-built projects.
         @test length(compute(PSCADModel(project; settings), PSCADRun(); options).channels) ==
               2
+        array_model = PSCADModel(project;
+            settings,
+            probes = P.ProbeManifest(
+                [P.ProbeChannel("Voltage", :voltage, "B1", nothing, nothing, 3, "kV")], "B1"))
+        try
+            MODE[] = :array
+            array_result = compute(array_model, PSCADRun(); options)
+            @test collect(keys(array_result.channels)) ==
+                  ["Voltage:1", "Voltage:2", "Voltage:3", "Current"]
+            @test isfile(joinpath(array_result.paths.run_directory, "complete.toml"))
+            MODE[] = :missing_array
+            @test_throws ErrorException compute(array_model, PSCADRun(); options)
+        finally
+            MODE[] = :success
+        end
     end
 end
 end

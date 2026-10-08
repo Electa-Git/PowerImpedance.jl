@@ -233,7 +233,9 @@ function compute(model::PSCADModel, formulation::PSCADRun; options::NamedTuple =
                                    resolved.settings.sample_step) + 1
         length(result.time) == expected_rows || throw(ArgumentError(
             "PSCAD output has $(length(result.time)) rows; expected $expected_rows"))
-        missing = setdiff(input["probes"]["names"], keys(result.channels))
+        missing = [channel.name
+                   for channel in model.probes.channels
+                   if !_probe_present(channel, result.channels)]
         isempty(missing) ||
             throw(ArgumentError("PSCAD output is missing probe channels: $missing"))
         if resolved.settings.snapshot_time !== nothing

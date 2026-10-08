@@ -9,6 +9,10 @@ module PSCAD
 using Base64: base64encode
 using SHA: sha256
 import TOML
+using Dates: now, UTC
+using Printf: @sprintf
+using Statistics: mean
+using TypedTables: Table
 using ..PowerImpedance: PowerImpedance, TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 using ..PowerImpedance: AbstractFormulation, AbstractProblemResult, OrderedDict
 using ..PowerImpedance: _register_backend!, _require_backend
@@ -58,6 +62,11 @@ include("names.jl")
 include("netlist.jl")
 include("rlc.jl")
 include("units.jl")
+include("plan.jl")
+include("emitters/probes.jl")
+include("emitters/sources.jl")
+include("emitters/impedance.jl")
+include("export.jl")
 include("compute.jl")
 
 end

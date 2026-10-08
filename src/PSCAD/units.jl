@@ -72,12 +72,28 @@ end
 $(TYPEDSIGNATURES)
 
 Format a finite real PSCAD parameter with `sigdigits` significant digits and
-an optional ` [unit]` suffix. Integer inputs retain integer notation; floating
-inputs retain decimal or exponent notation. Reject nonfinite values.
+an optional ` [unit]` suffix. Use plain decimal for zero and
+`1e-4 <= abs(x) < 1e7`, otherwise uppercase `E` notation. Integer inputs
+in the decimal range retain integer notation. Reject nonfinite values.
 """
 function pscad_value(x::Real; unit = nothing, sigdigits::Integer = 9)
     isfinite(x) || throw(ArgumentError("PSCAD parameter must be finite"))
     sigdigits > 0 || throw(ArgumentError("sigdigits must be positive"))
-    value = x isa Integer ? string(x) : string(round(x; sigdigits))
+    rounded = round(x; sigdigits)
+    value = if iszero(rounded) || 1e-4 <= abs(rounded) < 1e7
+        if x isa Integer
+            @sprintf("%.0f", rounded)
+        else
+            places = iszero(rounded) ? 1 :
+                     max(1, sigdigits - 1 - floor(Int, log10(abs(rounded))))
+            decimal = @sprintf("%.*f", places, rounded)
+            replace(decimal, r"(?<=\d)0+$" => "") |> s -> endswith(s, ".") ? s * "0" : s
+        end
+    else
+        mantissa, exponent = split(@sprintf("%.*E", sigdigits - 1, rounded), 'E')
+        mantissa = replace(mantissa, r"(?<=\d)0+$" => "")
+        endswith(mantissa, ".") && (mantissa *= "0")
+        mantissa * "E" * string(parse(Int, exponent))
+    end
     return unit === nothing ? value : "$value [$unit]"
 end

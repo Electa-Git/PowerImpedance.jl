@@ -263,7 +263,16 @@ function _powerflow_component(pf, name)
     return pmtype, input, solution
 end
 
-function _branch_flow(pmtype, solution)
+function _branch_flow(pmtype, solution, input, pf, terminals)
+    if pmtype == "shunt"
+        # PowerModels shunts have no separate solved component entry. Their
+        # input admittance and solved bus voltage determine terminal power.
+        voltage = pf.result["solution"]["bus"][string(input["shunt_bus"])]["vm"]
+        p = Float64(input["gs"] * voltage^2 * 1000)
+        q = Float64(-input["bs"] * voltage^2 * 1000)
+        side = only(filter(t -> !t.grounded, terminals)).side
+        return side == 1 ? (pf = p, qf = q) : (pt = p, qt = q)
+    end
     solution === nothing && return nothing
     fields = pmtype == "branch" ? (:pf, :qf, :pt, :qt) :
              pmtype == "branchdc" ? (:pf, :pt) :
@@ -359,7 +368,7 @@ function _netlist(elements, topology, voltage_base, frequency, supplied_pf,
                 element.element_model, terminals, role, setpoint))
         if pf !== nothing
             setpoints[name] = setpoint
-            flow = _branch_flow(pmtype, solution)
+            flow = _branch_flow(pmtype, solution, input, pf, terminals)
             flow === nothing || (flows[name] = flow)
             if slack_bus === nothing && PowerImpedance.is_source(element)
                 ac_terminal = findfirst(terminal -> terminal.bus.domain == 1, connected)
