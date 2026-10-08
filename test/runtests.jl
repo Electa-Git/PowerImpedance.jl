@@ -52,6 +52,7 @@ end
         include("logging_test.jl")
         include("Gridspace_test.jl")
         include("stability_plot_recipes_test.jl")
+        include("pscad/runtests.jl")
 end;
 
 include("advisory_quality.jl")

@@ -1,0 +1,49 @@
+"""
+    PSCAD
+
+Provide interfaces for PSCAD project export and remote PSCAD execution.
+Loading this module performs no I/O and never contacts the PSCAD station.
+"""
+module PSCAD
+
+using Base64: base64encode
+using SHA: sha256
+import TOML
+using ..PowerImpedance: PowerImpedance, TYPEDEF
+
+"""
+$(TYPEDEF)
+
+Identify the PSCAD execution backend.
+"""
+struct PSCADBackend end
+
+const PSCAD_VERSION = "5.1.0"
+const PROJECT_FILE_VERSION = "5.0.2"
+
+"""
+    _write_project(plan, path)
+
+Write the project `plan` to `path` through `mhi-xml`. Implemented by the
+`PowerImpedancePSCADExt` extension, which loads with `PythonCall`.
+"""
+function _write_project end
+
+"""
+    read_project_summary(path)
+
+Read a summary of the PSCAD project at `path` through `mhi-xml`. Implemented by
+the `PowerImpedancePSCADExt` extension, which loads with `PythonCall`.
+"""
+function read_project_summary end
+
+function _require_extension()
+    if Base.get_extension(PowerImpedance, :PowerImpedancePSCADExt) === nothing
+        throw(ArgumentError(
+            "export_pscad requires PythonCall: run `using PythonCall` (CondaPkg installs mhi-xml)"
+        ))
+    end
+    return nothing
+end
+
+end
