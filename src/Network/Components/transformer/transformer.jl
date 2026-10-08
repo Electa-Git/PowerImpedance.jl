@@ -1,5 +1,24 @@
 export transformer
 
+"""
+$(TYPEDEF)
+
+Store a per-phase transformer T-model. For three phases, `n` is the
+primary-to-secondary line-to-line voltage ratio for both `:YY` and `:ΔY`.
+All equivalent-circuit parameters have the `:YY` Y-equivalent meaning:
+`Rₚ`, `Lₚ` and `Rₛ`, `Lₛ` are referred to their own winding sides;
+`Rₘ`, `Lₘ` form the primary excitation branch; `Cₜ`, `Cₛ` retain the same
+per-phase capacitive paths. Zero `Rₘ` or `Lₘ` omits that excitation term.
+`hasRω` and `k` retain the same winding-resistance scaling in both organizations.
+
+`:ΔY` denotes Dyn11 (delta primary, grounded-Y secondary): positive-sequence
+secondary voltage leads the primary by 30°, and negative sequence has the
+opposite shift. It applies this rotation to the complete `:YY` T-model,
+including its capacitive paths. Its internal zero-sequence block is an identity
+placeholder decoupled from both other sequences, discarded by the supported
+dq transformation. It does not represent physical zero-sequence transfer.
+Construct three-phase `:ΔY` elements with `transformation=true`.
+"""
 @with_kw mutable struct Transformer <: AbstractLinFreqDomain
 	pins::Int = 1                     # marks single or three phase
 	organization::Symbol = :YY        # three phase organization (:YY or :ΔY)
@@ -14,7 +33,7 @@ export transformer
 	V₂ᵒ::Union{Int, Float64} = 0      # open circuit secondary voltage [V]
 	V₂ˢ::Union{Int, Float64}  = 0      # short circuit secondary voltage [V]
 
-	n::Union{Int, Float64}    = 0        # turn ratio
+	n::Union{Int, Float64}    = 0        # voltage ratio (line-to-line for three phases)
 	Lₚ::Union{Int, Float64} = 0       # primary side inductance [H]
 	Rₚ::Union{Int, Float64} = 0       # primary side resistance [Ω]
 	Rₛ::Union{Int, Float64} = 0       # secondary side resistance [Ω]
@@ -37,21 +56,30 @@ Construct a one-phase or balanced three-phase transformer element.
 - `def`: Parameterization mode. `:explicit` uses the supplied equivalent-circuit
   values. `:tests` derives them from the open- and short-circuit test fields.
 - `pins`: Number of phase-domain terminals. Default: `1`.
-- `organization`: Three-phase winding organization, `:YY` or `:ΔY`.
+- `organization`: Three-phase winding organization, `:YY` or `:ΔY` (Dyn11:
+  delta primary, grounded-Y secondary, secondary positive sequence leading by 30°).
 - `ω`: Rated angular frequency `\\[rad/s\\]`.
 - `V₁ᵒ`, `V₁ˢ`, `V₂ᵒ`, `V₂ˢ`: Open- and short-circuit voltages
   `\\[V\\]` used by `def=:tests`.
 - `I₁ᵒ`, `I₁ˢ`: Open- and short-circuit primary currents `\\[A\\]`.
 - `P₁ᵒ`, `P₁ˢ`: Open- and short-circuit losses `\\[W\\]`.
-- `n`: Primary-to-secondary turns ratio `\\[dimensionless\\]`.
+- `n`: Primary-to-secondary voltage ratio (line-to-line for three phases) `\\[dimensionless\\]`.
 - `Lₚ`, `Lₛ`, `Lₘ`: Primary, secondary, and magnetizing inductances
-  `\\[H\\]`.
+  `\\[H\\]`; winding leakage is referred to its own side, excitation to the primary.
 - `Rₚ`, `Rₛ`, `Rₘ`: Primary, secondary, and magnetizing resistances
-  `\\[Ω\\]`.
+  `\\[Ω\\]`, with the same side references as the inductances.
 - `Cₜ`, `Cₛ`: Turn-to-turn and stray capacitances `\\[F\\]`.
 - `hasRω`: Whether winding resistance is frequency dependent.
 - `k`: Winding-resistance frequency exponent `\\[dimensionless\\]`.
-- `transformation`: Whether to expose transformed three-phase coordinates.
+- `transformation`: Whether to expose dq coordinates, discarding zero sequence.
+  Required for three-phase `:ΔY`; default: `false`.
+
+All T-model parameters are per-phase Y-equivalent values for both organizations.
+`:ΔY` applies the Dyn11 rotation to the complete `:YY` model, including `Cₜ` and
+`Cₛ`, without rescaling impedances or `n`. `hasRω` and `k` use the same 50 Hz
+winding-resistance reference as `:YY`. Zero `Rₘ` or `Lₘ` omits that excitation
+term. The internal identity zero-sequence block is only a decoupled placeholder
+for dq conversion; delta-to-Y zero-sequence isolation has no phase-domain ABCD.
 
 # Returns
 
@@ -59,7 +87,8 @@ Construct a one-phase or balanced three-phase transformer element.
 
 # Errors
 
-- Throws `ArgumentError` for an unknown transformer keyword. Invalid or zero
+- Throws `ArgumentError` for an unknown transformer keyword or an untransformed
+  three-phase `:ΔY` element. Invalid or zero
   test data can also make the `:tests` calculation undefined.
 
 # Examples
@@ -90,6 +119,12 @@ function transformer(def=:explicit; args...)
 			throw(ArgumentError("Transformer does not have a property $(key)."))
 		end
 	end
+
+    if t.pins == 3 && t.organization == :ΔY && !transformation
+        throw(ArgumentError(
+            "An untransformed :ΔY transformer cannot represent delta-to-Y zero-sequence isolation in phase-domain ABCD; use transformation=true for the supported Dyn11 dq model.",
+        ))
+    end
 
 	# compute equivalent circuit parameters from OC/SC tests
 	if def == :tests
@@ -151,7 +186,7 @@ function eval_abcd(t::Transformer, s::ComplexF64)
 	# base 2×2 ABCD (legacy equation(27) structure)
 	Z = Y_turn * (Zᵖ_winding * Y_iron * N_tr * Zˢ_winding) * Y_turn
 
-	# stray capacitance as a parallel path (only implemented in legacy for 1φ / YY branch)
+	# stray capacitance as a parallel path in the per-phase Y-equivalent model
 	if (t.Cₛ != 0)
 		Z_stray =
 			ComplexF64[                                                                 1  1/(s*t.Cₛ);
@@ -175,43 +210,29 @@ function eval_abcd(t::Transformer, s::ComplexF64)
 		end
 		return Z₃ₚ
 	else
-		# ΔY branch: replicate the legacy logic (including its quirks: Y_turn and Z_stray are 6×6 identities)
-		# Recompute the 2×2 "front" block used for the ΔY inner construction
-		M = Zᵖ_winding * Y_iron * N_tr
+        # Dyn11: V1 = r*V2, I1 = I2/conj(r), so
+        # V1*conj(I1) = r*V2*conj(I2)/r = V2*conj(I2).
+        # For r± = n*exp(∓jπ/6), N± = exp(∓jπ/6)*diag(n, 1/n).
+        # This scalar factor commutes through the T cascade. Apply it to
+        # the complete per-phase model so the capacitive paths share the
+        # secondary frame rotation and retain exactly their YY meaning.
+        Z_positive = cis(-π / 6) * Z
+        Z_negative = cis(π / 6) * Z
 
-		# Match legacy destructuring (Matrix iteration is column-major): (A,B,C,D) = M
-		A = M[1, 1]
-		B = M[2, 1]
-		C = M[1, 2]
-		D = M[2, 2]
+        # Sequence order: [V0, V+, V-, I0, I+, I-]. Zero sequence has
+        # no physical ABCD for delta-to-Y isolation. Identity is only an
+        # exactly decoupled placeholder removed by transformation_dq.
+        Z_sequence = zeros(ComplexF64, 6, 6)
+        Z_sequence[1, 1] = Z_sequence[4, 4] = 1
+        Z_sequence[[2, 5], [2, 5]] = Z_positive
+        Z_sequence[[3, 6], [3, 6]] = Z_negative
 
-		sqrt3 = sqrt(3.0)
-
-		current_conversion =
-			ComplexF64[
-				 1/sqrt3   0       -1/sqrt3;
-				-1/sqrt3   1/sqrt3  0;
-				 0        -1/sqrt3  1/sqrt3
-			] .* D
-
-		Z_inner = zeros(ComplexF64, 6, 6)
-		for i in 1:3
-			Z_inner[i, i]   = A * sqrt3
-			Z_inner[i, 3+i] = B / sqrt3
-			Z_inner[3+i, i] = C * sqrt3
-			for j in 1:3
-				Z_inner[3+i, 3+j] = current_conversion[i, j]
-			end
-		end
-
-		if (t.Cₛ != 0)
-			# Legacy code uses a 6×6 identity as Z_stray in ΔY branch. Keep that behavior.
-			Z_stray_6 = Matrix{ComplexF64}(I, 6, 6)
-			Z_inner = connect_parallel!(Z_inner, Z_stray_6)
-		end
-
-		# Legacy: Y_turn is 6×6 identity here, so Y_turn*Z*Y_turn = Z
-		return Z_inner
+        # Fortescue columns [zero, positive, negative]; apply the same
+        # basis to voltages and currents, with phase order [a, b, c].
+        a = cis(2π / 3)
+        T = ComplexF64[1 1 1; 1 a^2 a; 1 a a^2]
+        T_vi = LinearAlgebra.kron(Matrix{ComplexF64}(I, 2, 2), T)
+        return T_vi * Z_sequence * (adjoint(T_vi) / 3)
 	end
 end
 
@@ -234,7 +255,9 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
 	branch_ac!(data, key_branch, (bus1, bus2), global_dict)
 	branch = data["branch"][string(key_branch)]
 	branch["transformer"] = true
-	branch["shift"] = 0
+    # PowerModels uses t = tap*exp(j*shift), with V_to = V_from/t
+    # (core/data.jl:15-22, core/admittance_matrix.jl:55-59).
+    branch["shift"] = t.pins == 3 && t.organization == :ΔY ? -π / 6 : 0
 	branch["c_rating_a"] = 1
 
 	## Update voltage limits to match the transformer voltage ratings
@@ -255,7 +278,10 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
 	data["bus"][string(bus2)]["vmin"] = (Vsec/Vbase_global)*0.9
 	
 
-	abcd = eval_abcd(t, global_dict["omega"] * 1im)
+    # Dyn11 has the same balanced tap, series and shunt parameters as YY.
+    # Remove only its frame rotation before the existing YY conversion.
+    balanced_t = t.organization == :ΔY ? Transformer(t; organization = :YY) : t
+    abcd = eval_abcd(balanced_t, global_dict["omega"] * 1im)
 	n = 3
 	(a, b, c, d) = (
 		abcd[1:n, 1:n],

@@ -9,6 +9,13 @@
   networks to PSCAD projects (`export_pscad`, requires `using PythonCall`), and comparison
   of the simulated steady state with the power flow (`compare_operating_point`).
 
+### Fixed
+
+- Correct the `:ΔY` transformer to Dyn11 with a line-to-line voltage ratio,
+  the complete per-phase Y-equivalent T-model, and a 30° secondary lead in
+  frequency-domain and power-flow calculations. Reject untransformed
+  three-phase use because zero-sequence isolation has no phase-domain ABCD.
+
 ## [0.3.1] - 2026-09-22
 
 - Add GraphMakie network-diagram plotting with new recipes, examples, and integration coverage.
