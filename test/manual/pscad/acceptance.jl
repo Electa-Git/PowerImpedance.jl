@@ -58,7 +58,7 @@ for (model, classic_reference, rtol_v) in cases
     reference = isempty(model.operating_point.bus_states) ? classic_reference : model
     comparison = compare_operating_point(result, reference; rtol_v)
     if any(bus -> bus.kind == :dc, model.netlist.buses)
-        settled = steady_state(result)
+        settled = PowerImpedance.PSCAD.steady_state(result)
         for bus in filter(bus -> bus.kind == :dc, model.netlist.buses)
             poles = filter(c -> c.kind == :voltage && c.bus == bus.name, model.probes.channels)
             positive = only(filter(c -> c.side == "P", poles))
