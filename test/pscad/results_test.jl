@@ -2,7 +2,7 @@ module PSCADResultsTests
 using Test, PowerImpedance
 const P = PowerImpedance.PSCAD
 const FIXTURES = normpath(joinpath(@__DIR__, "../data/pscad"))
-using ..PSCADFixtures: small_ac_network, dc_network
+using ..PSCADFixtures: small_ac_network, dc_network, sm_network
 
 function synthetic_result(time, channels; probes = P.ProbeManifest(), frequency = 50.0)
     settings = P.SimulationSettings(frequency = frequency, sample_step = 250e-6)
@@ -254,6 +254,159 @@ end
         write(other, "fixture")
         @test_throws ArgumentError PSCADModel(other)
     end
+end
+
+@testset "PSCAD machine network-side comparison policy" begin
+    classic, _ = sm_network()
+    netlist = P.netlist(classic, power_flow(classic))
+    plan = P.build_plan(netlist)
+    model = PSCADModel("synthetic.pscx", "synthetic", netlist, plan.probes,
+        P.SimulationSettings(), netlist.operating_point, (source = :fixture,))
+    times = collect(0.0:250e-6:0.3)
+    channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
+    flow = netlist.operating_point.branch_flows[:sg1]
+    bus = only(netlist.buses)
+    voltage = bus.vm_pu * bus.base_kV
+    for channel in plan.probes.channels
+        if channel.kind == :voltage
+            add_three_phase!(channels, channel.name, times, sqrt(2) * voltage)
+        elseif channel.kind == :current
+            element_flow = netlist.operating_point.branch_flows[Symbol(channel.element)]
+            power = channel.element == "sg1" ? complex(element_flow.pf, element_flow.qf) :
+                    complex(element_flow.pg, element_flow.qg)
+            add_three_phase!(channels, channel.name, times,
+                sqrt(2) * conj(power / (3voltage)))
+        else
+            channels[channel.name] = fill(channel.kind == :machine_speed ? 1.0 : -123.0,
+                length(times))
+        end
+    end
+    comparison = compare_operating_point(synthetic_result(times, channels), model)
+    @test all(comparison.within_tolerance)
+    @test Set(comparison.quantity) == Set([:voltage_rms, :current_rms,
+        :machine_p, :machine_q, :machine_voltage, :machine_speed])
+    for quantity in (:machine_p, :machine_q, :machine_voltage)
+        @test only(filter(r -> r.quantity == quantity, comparison)).name == "I_sg1_1"
+    end
+    vt = only(filter(r -> r.quantity == :machine_voltage, comparison))
+    @test vt.pscad ≈ flow.terminal_voltage_kV rtol = 1e-8
+    @test vt.powerflow == flow.terminal_voltage_kV
+    p = only(filter(r -> r.quantity == :machine_p, comparison))
+    q = only(filter(r -> r.quantity == :machine_q, comparison))
+    @test p.pscad ≈ flow.pf
+    @test q.pscad ≈ flow.qf
+    @test p.powerflow == flow.pf != flow.pg
+    @test q.powerflow == flow.qf != flow.qg
+    diagnostics = filter(
+        c -> c.kind in (:machine_p, :machine_q,
+            :machine_voltage, :machine_diagnostic),
+        plan.probes.channels)
+    @test isempty(intersect(Set(comparison.name), Set(c.name for c in diagnostics)))
+    settled = P.steady_state(synthetic_result(times, channels))
+    for channel in diagnostics
+        @test settled[channel.name].mean == -123.0
+    end
+    missing_diagnostics = copy(channels)
+    for channel in diagnostics
+        delete!(missing_diagnostics, channel.name)
+    end
+    @test compare_operating_point(synthetic_result(times, missing_diagnostics), model) ==
+          comparison
+    wrong_diagnostic_dimension = copy(channels)
+    delete!(wrong_diagnostic_dimension, "sg1_Vt")
+    add_three_phase!(wrong_diagnostic_dimension, "sg1_Vt", times, 9.0)
+    @test compare_operating_point(synthetic_result(times, wrong_diagnostic_dimension), model) ==
+          comparison
+
+    # Independently specified balanced sinusoids: 2 kA RMS at 0.8 power factor,
+    # including leading current and reversal of both active and reactive power.
+    angle = 0.37
+    lag = atan(0.6, 0.8)
+    for (current, expected) in (
+        (2sqrt(2) * cis(angle - lag), complex(3voltage * 2 * 0.8, 3voltage * 2 * 0.6)),
+        (2sqrt(2) * cis(angle + lag), complex(3voltage * 2 * 0.8, -3voltage * 2 * 0.6)),
+        (-2sqrt(2) * cis(angle - lag), -complex(3voltage * 2 * 0.8, 3voltage * 2 * 0.6)))
+        measured = deepcopy(channels)
+        add_three_phase!(measured, "V_Bus2", times, sqrt(2) * voltage * cis(angle))
+        add_three_phase!(measured, "I_sg1_1", times, current)
+        table = compare_operating_point(synthetic_result(times, measured), model)
+        @test only(filter(r -> r.quantity == :machine_p, table)).pscad ≈ real(expected)
+        @test only(filter(r -> r.quantity == :machine_q, table)).pscad ≈ imag(expected)
+    end
+
+    # The 1000 MVA rating governs both power errors, even for zero reference Q.
+    flows = copy(model.operating_point.branch_flows)
+    flows[:sg1] = merge(flow, (pf = 600.0, qf = 0.0))
+    point = P.OperatingPointRecord(model.operating_point.bus_states, flows,
+        model.operating_point.setpoints, model.operating_point.slack_bus,
+        model.operating_point.bases)
+    reference = PSCADModel(model.project_path, model.project_name, netlist,
+        plan.probes, model.settings, point, model.provenance)
+    for (power, error, accepted) in ((609.0 + 9im, 0.009, true),
+        (591.0 - 9im, 0.009, true), (611.0 + 11im, 0.011, false))
+        measured = deepcopy(channels)
+        add_three_phase!(measured, "I_sg1_1", times, sqrt(2) * conj(power / (3voltage)))
+        table = compare_operating_point(synthetic_result(times, measured), reference)
+        for quantity in (:machine_p, :machine_q)
+            row = only(filter(r -> r.quantity == quantity, table))
+            @test row.error ≈ error
+            @test row.within_tolerance == accepted
+        end
+    end
+    index = findfirst(e -> e.name == :sg1, netlist.elements)
+    e = netlist.elements[index]
+    rated = deepcopy(e.element)
+    rated.element_model = SynchronousMachine(
+        ElectricalSM(Vᵃᶜ_base = 380.0, S_base = 2000.0),
+        e.model.mech, e.model.avr, e.model.gov)
+    elements = copy(netlist.elements)
+    elements[index] = P.NetlistElement(e.name, e.pscad, rated, rated.element_model,
+        e.terminals, e.role, e.setpoint)
+    rated_netlist = P.Netlist(
+        netlist.buses, elements, point, netlist.voltageBase, netlist.frequency)
+    rated_model = PSCADModel(model.project_path, model.project_name, rated_netlist,
+        plan.probes, model.settings, point, model.provenance)
+    measured = deepcopy(channels)
+    add_three_phase!(measured, "I_sg1_1", times, sqrt(2) * conj((609.0 + 9im) / (3voltage)))
+    rated_table = compare_operating_point(synthetic_result(times, measured), rated_model)
+    for quantity in (:machine_p, :machine_q)
+        @test only(filter(r -> r.quantity == quantity, rated_table)).error ≈ 0.0045
+    end
+
+    # Known exported R = 0.37544 ohm and L = 0.0298765659 H. The measured
+    # bus current is in kA, so their drop reconstructs phase RMS terminal kV.
+    measured = deepcopy(channels)
+    add_three_phase!(measured, "I_sg1_1", times, sqrt(2) * (2.0 - 1im))
+    expected_terminal = abs(voltage + (0.37544 + 2π * 50 * 0.0298765659im) * (2.0 - 1im))
+    table = compare_operating_point(synthetic_result(times, measured), model)
+    @test only(filter(r -> r.quantity == :machine_voltage, table)).pscad ≈ expected_terminal rtol = 1e-12
+    flows[:sg1] = merge(flow, (terminal_voltage_kV = expected_terminal / 1.005,))
+    for (rtol_v, accepted) in ((0.004, false), (0.006, true))
+        row = only(filter(r -> r.quantity == :machine_voltage,
+            compare_operating_point(synthetic_result(times, measured), reference; rtol_v)))
+        @test row.error ≈ 0.005
+        @test row.within_tolerance == accepted
+    end
+
+    for (speed, expected) in ((1.0009, true), (0.9991, true), (1.0011, false), (
+        0.9989, false))
+        changed = deepcopy(channels)
+        changed["sg1_speed"] .= speed
+        row = only(filter(r -> r.quantity == :machine_speed,
+            compare_operating_point(synthetic_result(times, changed), model)))
+        @test row.within_tolerance == expected
+        @test row.error ≈ abs(speed - 1)
+    end
+    for name in ("sg1_speed", "V_Bus2:2", "I_sg1_1:3")
+        missing = copy(channels)
+        delete!(missing, name)
+        @test_throws ArgumentError compare_operating_point(synthetic_result(times, missing), model)
+    end
+    manifest = P.ProbeManifest(filter(c -> c.name != "V_Bus2", plan.probes.channels),
+        plan.probes.reference_bus)
+    incomplete = PSCADModel(model.project_path, model.project_name, netlist,
+        manifest, model.settings, model.operating_point, model.provenance)
+    @test_throws ArgumentError compare_operating_point(synthetic_result(times, channels), incomplete)
 end
 
 @testset "PSCAD INF and legacy output parser" begin

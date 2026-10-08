@@ -108,7 +108,7 @@ $(TYPEDFIELDS)
 struct OperatingPointRecord
     "Bus voltage states `(vm_pu, va_rad)` in pu and rad, keyed by BusKey."
     bus_states::Dict{BusKey, NamedTuple}
-    "Solved component powers \\[MW, MVAr\\], keyed by element designator."
+    "Solved component powers \\[MW, MVAr\\] and machine terminal voltage/angle \\[kV, rad\\], keyed by designator."
     branch_flows::Dict{Symbol, NamedTuple}
     "Effective element Setpoints \\[MW, MVAr, rad, kV\\], keyed by designator."
     setpoints::Dict{Symbol, PowerImpedance.Setpoint}
@@ -371,6 +371,20 @@ function _netlist(elements, topology, voltage_base, frequency, supplied_pf,
         if pf !== nothing
             setpoints[name] = setpoint
             flow = _branch_flow(pmtype, solution, input, pf, terminals)
+            if element.element_model isa PowerImpedance.SynchronousMachine &&
+               flow !== nothing
+                # The generator is attached to an intermediate terminal bus;
+                # the element's public bus is beyond its rt/lt branch.
+                terminal_index = string(input["gen_bus"])
+                terminal_bus = pf.result["solution"]["bus"][terminal_index]
+                terminal_base = Float64(pf.data["bus"][terminal_index]["base_kv"])
+                branch = pf.result["solution"]["branch"][string(input["index"])]
+                flow = merge(flow,
+                    (pf = -Float64(branch["pt"]) * 1000,
+                        qf = -Float64(branch["qt"]) * 1000,
+                        terminal_voltage_kV = Float64(terminal_bus["vm"]) * terminal_base,
+                        terminal_angle_rad = Float64(terminal_bus["va"])))
+            end
             flow === nothing || (flows[name] = flow)
             if slack_bus === nothing && PowerImpedance.is_source(element)
                 ac_terminal = findfirst(terminal -> terminal.bus.domain == 1, connected)

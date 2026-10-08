@@ -1,3 +1,5 @@
+abstract type AbstractComponentPlan end
+
 """
 $(TYPEDEF)
 
@@ -5,10 +7,30 @@ Describe one master-library instance in pixel coordinates.
 
 $(TYPEDFIELDS)
 """
-struct ComponentPlan
+struct ComponentPlan <: AbstractComponentPlan
     "Qualified library definition."
     defn::String
     "String-valued master parameters in emission order."
+    params::Vector{Pair{String, String}}
+    "Horizontal location in pixels."
+    x::Int
+    "Vertical location in pixels."
+    y::Int
+    "PSCAD orientation code."
+    orient::Int
+end
+
+"""
+$(TYPEDEF)
+
+Place an instance of a project-owned module in pixel coordinates.
+
+$(TYPEDFIELDS)
+"""
+struct ModuleInstancePlan <: AbstractComponentPlan
+    "Qualified project definition."
+    defn::String
+    "Instance parameter values in emission order."
     params::Vector{Pair{String, String}}
     "Horizontal location in pixels."
     x::Int
@@ -50,11 +72,81 @@ $(TYPEDFIELDS)
 """
 struct CanvasPlan
     "Instances in emission order."
-    components::Vector{ComponentPlan}
+    components::Vector{AbstractComponentPlan}
     "Wire segments in emission order."
     wires::Vector{WirePlan}
 end
-CanvasPlan() = CanvasPlan(ComponentPlan[], WirePlan[])
+CanvasPlan() = CanvasPlan(AbstractComponentPlan[], WirePlan[])
+
+"""
+$(TYPEDEF)
+
+Describe a module parameter with a real, integer or text default.
+
+$(TYPEDFIELDS)
+"""
+struct ModuleParameterPlan{T <: Union{Float64, Int, String}}
+    "Parameter identifier."
+    name::String
+    "Default value in the declared unit."
+    default::T
+    "PSCAD unit, or an empty string for dimensionless values and text."
+    unit::String
+end
+
+"""
+$(TYPEDEF)
+
+Describe a module boundary port on the 18-pixel grid.
+
+$(TYPEDFIELDS)
+"""
+struct ModulePortPlan
+    "Boundary signal or electrical node identifier."
+    name::String
+    "Port kind: `:input`, `:output`, or `:electrical`."
+    kind::Symbol
+    "Horizontal offset from the instance origin in pixels."
+    x::Int
+    "Vertical offset from the instance origin in pixels."
+    y::Int
+    "Signal or conductor count."
+    dim::Int
+    "PSCAD signal type: 3 for real, 2 for integer, 0 for electrical."
+    datatype::Int
+    function ModulePortPlan(name, kind, x, y, dim = 1, datatype = 3)
+        kind in (:input, :output, :electrical) ||
+            throw(ArgumentError("invalid module port kind: $kind"))
+        x % 18 == y % 18 == 0 && dim > 0 ||
+            throw(ArgumentError("module ports require grid coordinates and positive dimension"))
+        return new(name, kind, x, y, dim, kind == :electrical ? 0 : datatype)
+    end
+end
+
+"""
+$(TYPEDEF)
+
+Retain a project-owned module's typed form, graphics ports and schematic.
+Copy the supplied canvas and lower its parameter imports so each declared
+input parameter has a schematic binding. Existing signal imports are reused.
+
+$(TYPEDFIELDS)
+"""
+struct ModuleDefinitionPlan
+    "Unqualified definition identifier."
+    name::String
+    "Typed parameters in form order."
+    parameters::Vector{ModuleParameterPlan}
+    "Boundary ports in graphics order."
+    ports::Vector{ModulePortPlan}
+    "Control schematic."
+    canvas::CanvasPlan
+    function ModuleDefinitionPlan(name, parameters, ports, canvas)
+        schematic = CanvasPlan(copy(canvas.components), copy(canvas.wires))
+        lower!(schematic, parameters)
+        return new(name, parameters, ports, schematic)
+    end
+end
 
 """
 $(TYPEDEF)
@@ -178,6 +270,8 @@ struct ProjectPlan
     lines::Vector{AbstractLineDefinitionPlan}
     "Transmission-line wrappers on Main in emission order."
     wrappers::Vector{AbstractLineWrapperPlan}
+    "Project-owned control module definitions in emission order."
+    modules::Vector{ModuleDefinitionPlan}
     "Emitted output channels and reference bus."
     probes::ProbeManifest
 end
@@ -200,6 +294,8 @@ struct ProjectSummary
     row_definitions::Dict{String, Dict{String, Int}}
     "Main wrapper counts keyed by qualified row-definition name."
     wrappers_per_defn::Dict{String, Int}
+    "Boundary ports keyed by unqualified module definition name."
+    modules_and_ports::Dict{String, Vector{ModulePortPlan}}
     "Project setting strings."
     settings::Dict{String, String}
     "Project file schema version."
@@ -210,7 +306,7 @@ end
 $(TYPEDEF)
 
 Allocate 288-by-216-pixel cells, six per row, starting at grid coordinate
-`(4, 4)`. Each cell holds one network element or one bus probe.
+`(4, 4)`. Each cell holds a group of element instances or probes.
 
 $(TYPEDFIELDS)
 """
@@ -236,6 +332,7 @@ struct PlanState
     main::CanvasPlan
     lines::Vector{AbstractLineDefinitionPlan}
     wrappers::Vector{AbstractLineWrapperPlan}
+    modules::Vector{ModuleDefinitionPlan}
     layout::GridLayout
     channels::Vector{ProbeChannel}
     used::Set{String}

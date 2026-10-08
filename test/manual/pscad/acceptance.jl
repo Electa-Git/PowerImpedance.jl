@@ -6,7 +6,7 @@ include("../../pscad/fixtures.jl")
 
 remote = RemoteConfig()
 exports = mktempdir(mkpath(joinpath(remote.local_root, "exports"));
-    prefix = "m2-", cleanup = false)
+    prefix = "m3-", cleanup = false)
 classic, state = PSCADFixtures.small_ac_network()
 classic_model = export_pscad(classic; path = joinpath(exports, "small_ac_classic.pscx"))
 builder_model = export_pscad(state; path = joinpath(exports, "small_ac_builder.pscx"))
@@ -27,13 +27,23 @@ cable_classic, cable_state = PSCADFixtures.dc_cable_network()
 cable_classic_model = export_pscad(cable_classic; path = joinpath(exports, "dc_cable_classic.pscx"))
 cable_builder_model = export_pscad(cable_state; path = joinpath(exports, "dc_cable_builder.pscx"))
 
+sm_classic, sm_state = PSCADFixtures.sm_network()
+sm_settings = SimulationSettings(simulation_time = 15.0,
+    time_step = 10e-6, sample_step = 1e-3)
+sm_classic_model = export_pscad(sm_classic;
+    path = joinpath(exports, "sm_classic.pscx"), settings = sm_settings)
+sm_builder_model = export_pscad(sm_state;
+    path = joinpath(exports, "sm_builder.pscx"), settings = sm_settings)
+
 cases = [(classic_model, classic_model, 0.01), (builder_model, classic_model, 0.01),
     (ohl_classic_model, ohl_classic_model, 0.02), (
         ohl_builder_model, ohl_classic_model, 0.02),
     (yy_classic_model, yy_classic_model, 0.01), (yy_builder_model, yy_classic_model, 0.01),
     (dc_classic_model, dc_classic_model, 0.01), (dc_builder_model, dc_classic_model, 0.01),
     (cable_classic_model, cable_classic_model, 0.01),
-    (cable_builder_model, cable_classic_model, 0.01)]
+    (cable_builder_model, cable_classic_model, 0.01),
+    (sm_classic_model, sm_classic_model, 0.02),
+    (sm_builder_model, sm_classic_model, 0.02)]
 
 # Detect the merged model by its positive-sequence transfer, without relying
 # on a commit hash. Compare against YY to remove the fixture's no-load loss angle.
@@ -58,13 +68,15 @@ for (model, classic_reference, rtol_v) in cases
         element.model isa PowerImpedance.Cable &&
             all(t -> t.bus !== nothing && t.bus.domain == 2, element.terminals)
     end
-    simulation_time = dc_cable ? 3.0 :
+    machine = any(e -> e.model isa PowerImpedance.SynchronousMachine, model.netlist.elements)
+    simulation_time = machine ? 15.0 :
+                      dc_cable ? 3.0 :
                       any(bus -> bus.kind == :dc, model.netlist.buses) ? 1.0 : 0.3
     result = compute(model,
         PSCADRun();
         options = (;
-            remote, simulation_time, time_step = 50e-6,
-            sample_step = 250e-6, verbosity = 1))
+            remote, simulation_time, time_step = machine ? 10e-6 : 50e-6,
+            sample_step = machine ? 1e-3 : 250e-6, verbosity = 1))
     # NB.solve skips power flow for this linear fixture. Both representations
     # therefore compare against the equivalent classic circuit's solved record.
     reference = isempty(model.operating_point.bus_states) ? classic_reference : model
@@ -85,6 +97,15 @@ for (model, classic_reference, rtol_v) in cases
     println(model.project_name)
     show(stdout, MIME("text/plain"), comparison)
     println()
+    if machine
+        settled = PowerImpedance.PSCAD.steady_state(result)
+        for channel in model.probes.channels
+            channel.kind in
+            (:machine_p, :machine_q, :machine_voltage, :machine_diagnostic) || continue
+            println(channel.name, " settled mean [", channel.unit, "]: ",
+                settled[channel.name].mean)
+        end
+    end
     # Retain all measured errors, including the OHL case's 2% voltage check.
     open(joinpath(exports, model.project_name * "_comparison.tsv"), "w") do io
         println(io, "quantity\tname\tpscad\tpowerflow\terror\twithin_tolerance")
@@ -108,4 +129,3 @@ stress = compute(stress_model, PSCADRun();
 println("transformer_yy_stress (diagnostic, not asserted)")
 show(stdout, MIME("text/plain"), compare_operating_point(stress, stress_model))
 println()
-

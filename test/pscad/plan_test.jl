@@ -207,7 +207,7 @@ end
         e.element_model, P.Terminal[], :transformer, e.setpoint)
     state = P.PlanState(
         P.CanvasPlan(), P.AbstractLineDefinitionPlan[], P.AbstractLineWrapperPlan[],
-        P.GridLayout(), P.ProbeChannel[], Set{String}())
+        P.ModuleDefinitionPlan[], P.GridLayout(), P.ProbeChannel[], Set{String}())
     caught = try
         invoke(P.emit!, Tuple{P.PlanState, P.NetlistElement, Any}, state, unsupported, (;))
     catch e

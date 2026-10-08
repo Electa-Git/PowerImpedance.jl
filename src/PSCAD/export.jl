@@ -16,7 +16,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Build a pure Julia plan for passive AC/DC export. Emit sources, branches, shunts,
+Build a pure Julia plan for AC/DC export, including synchronous machines.
+Emit sources, branches, shunts,
 DC references, then bus probes into separate layout cells, using node labels to join buses.
 No files are written and no power flow is solved.
 
@@ -50,8 +51,8 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
     for bus in netlist.buses if bus.kind == :dc)
     state = PlanState(
         CanvasPlan(), AbstractLineDefinitionPlan[], AbstractLineWrapperPlan[],
-        GridLayout(), ProbeChannel[], used)
-    context = (; netlist, settings, line_options = overrides, dc_labels,
+        ModuleDefinitionPlan[], GridLayout(), ProbeChannel[], used)
+    context = (; netlist, settings, name, line_options = overrides, dc_labels,
         buses = Dict(bus.key => bus for bus in netlist.buses))
     elements = sort(netlist.elements;
         by = e -> e.role == :source ? 1 :
@@ -90,7 +91,7 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
     manifest = ProbeManifest(state.channels, reference)
     return ProjectPlan(String(name), String(description),
         _project_settings(settings, String(description)), state.main,
-        state.lines, state.wrappers, manifest)
+        state.lines, state.wrappers, state.modules, manifest)
 end
 
 function _export_keywords(path, name, line_options, dc_reference)
@@ -126,7 +127,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Export a passive AC/DC network to a portable, single-subsystem `.pscx` project.
+Export an AC/DC network to a portable, single-subsystem `.pscx` project.
 Load `PythonCall` to enable the mhi-xml writer. Validate keywords and require
 the extension before solving power flow or writing the project.
 

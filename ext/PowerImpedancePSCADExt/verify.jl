@@ -29,11 +29,30 @@ function PSCAD.read_project_summary(path::AbstractString)::PSCAD.ProjectSummary
         defn = PythonCall.pyconvert(String, wrapper.get("defn"))
         wrappers[defn] = get(wrappers, defn, 0) + 1
     end
+    modules = Dict{String, Vector{PSCAD.ModulePortPlan}}()
+    for definition in root.xpath("./definitions/Definition[@classid='UserCmpDefn'][@name!='Main']")
+        name = PythonCall.pyconvert(String, definition.get("name"))
+        ports = PSCAD.ModulePortPlan[]
+        for port in definition.xpath("./svg/port")
+            kind = Symbol(lowercase(PythonCall.pyconvert(String, port.get("mode"))))
+            datatype = kind == :electrical ? 0 :
+                       parse(Int,
+                PythonCall.pyconvert(String,
+                    PythonCall.pygetattr(_mhi_xml().SignalType,
+                        uppercase(PythonCall.pyconvert(String, port.get("type")))).value))
+            push!(ports,
+                PSCAD.ModulePortPlan(PythonCall.pyconvert(String, port.get("name")), kind,
+                    parse(Int, PythonCall.pyconvert(String, port.get("x"))),
+                    parse(Int, PythonCall.pyconvert(String, port.get("y"))),
+                    parse(Int, PythonCall.pyconvert(String, port.get("dim"))), datatype))
+        end
+        modules[name] = ports
+    end
     settings = Dict{String, String}()
     for parameter in root.xpath("./paramlist[@name='Settings']/param")
         key = PythonCall.pyconvert(String, parameter.get("name"))
         settings[key] = PythonCall.pyconvert(String, parameter.get("value"))
     end
-    return PSCAD.ProjectSummary(counts, labels, pgbs, rows, wrappers, settings,
+    return PSCAD.ProjectSummary(counts, labels, pgbs, rows, wrappers, modules, settings,
         PythonCall.pyconvert(String, root.get("version")))
 end

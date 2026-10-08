@@ -132,7 +132,8 @@ acceptance of this exported fixture remains a separate station run.
 | R8 | Licence and EMTDC build | Closed. Headless licence works; builds require a desktop session (see the execution model above). |
 | R13 | `run()` blocking and output latency | Closed. Blocking; outputs complete on return. |
 | R16 | mhi-xml through CondaPkg on Linux | Closed. CondaPkg (Pixi backend) resolves `mhi-xml==1.3.0` and `lxml`. |
-| R6, R9-R12, R14, R15, R17, R18 | | Open; resolved at their milestones. |
+| R9 | AVR field-voltage base | Closed. Unity conversion follows the open-circuit air-gap normalization and is confirmed by settled Ef=Ef0 and the AVR equation. |
+| R6, R10-R12, R14, R15, R17, R18 | | Open; resolved at their milestones. |
 
 ## Acceptance record
 
@@ -386,3 +387,261 @@ Open station checks:
 XML round trips and local tests establish export structure only. The native
 cable build is verified; M2 scientific acceptance with the revised default
 and duration remains for the station run.
+
+## M3 synchronous machines and control modules
+
+`sm_network()` copies `test/adm_SM_test.jl` in classic and NetworkBuilder form:
+`sg1` injects 900 MW at the 380 kV slack bus, with the default machine,
+AVR, governor and steam turbine. Both exports retain solved power-flow data.
+The generator's intermediate terminal bus supplies `VT` and `Pheta`; it is
+separate from the external network bus beyond `rt + j*lt`. `P0` and `Q0`
+come from the solved generator powers. The external current probe uses the
+receiving-end power of that internal branch. No package physics is changed.
+
+The equivalent circuit uses `sm_equivalent_circuit` without converting its
+per-unit reactances to henries. The separate step-up branch uses
+`Zbase = Vᵃᶜ_base^2/S_base`, `R = rt*Zbase` in ohms and
+`L = lt*Zbase/ωn` in henries. This is the native Y-equivalent series branch;
+there is no additional voltage-ratio transformer in the Julia machine.
+
+### Field-name provenance
+
+The following are every additional master field written for M3. Line numbers
+refer to the read-only `local/SG/SG_Project.pscx` validation project. The
+plan's master-library and emitter tables refer to PSCAD 5.1.0; the validation
+file predates the explicit line-to-line voltage choice.
+
+| Definition | Fields written | Source |
+|---|---|---|
+| `sync_machine` | `Rs1`, `XS1`, `XMD0`, `R2D`, `X2D`, `R3D`, `X3D`, `X230`, `XMQ`, `R2Q`, `X2Q`, `R3Q`, `X3Q`, `X231` | Plan equivalent-circuit table; validation lines 1071–1084 |
+| `sync_machine` | `Name`, `Cnfg`, `Nqaxw`, `IorMVA`, `MVA` | Plan emitter table; validation lines 1123–1127 |
+| `sync_machine` | `VolTyp`, `VbaseLL` | Plan 5.1.0 basic-data table; validation instead has `Vbase` at line 1093 |
+| `sync_machine` | `View`, `Neut`, `MM`, `MSat`, `icTyp` | Plan single-line/internal-neutral choice; validation lines 1116–1122 |
+| `sync_machine` | `OMO`, `H`, `D` | Plan basic-data table; validation lines 1089–1091 |
+| `sync_machine` | `Ri` | Validation line 1086 has 300 pu; the measured iron-loss correction uses 1e6 pu because Julia has no core-loss branch |
+| `sync_machine` | `VT`, `Pheta`, `P0`, `Q0`, `Trmpv`, `Sysfl`, `Ptcon` | Plan initial-condition table; validation lines 1028–1034 |
+| `sync_machine` | `machsw`, `Enab`, `Igov`, `Iexc`, `Ospd`, `Term`, `Ts` | Plan controller interface; validation lines 1103–1109 |
+| `sync_machine` | `InGov`, `InExc`, `PQscl`, `POut`, `QOut` | Validation lines 1012–1014, 1021–1022; output P/Q are machine-base pu |
+| `sync_machine` | `Icsp`, `Icmp` | Validation lines 1112–1113; both set to 0 to retain the solved source phase without automatic power correction |
+| `realpole` | `G`, `T`, `YO`, `Limit`, `Reset`, `Dim` | Plan primitive table; validation lines 1867, 1869–1872, 1875 |
+| `leadlag` | `G`, `T1`, `T2`, `YO`, `Limit`, `Reset`, `Dim` | Validation lines 2012, 2014–2018, 2021 |
+| `gain` | `G`, `Dim`, `DPath` | Plan primitive table; validation lines 1961, 1963, 1965 |
+| `sumjct` | `A`, `B`, `C`, `D`, `E`, `F`, `G`, `Dim`, `DPath` | Plan primitive table; validation lines 1486–1493, 1495 |
+| `const` | `Value`, `Dim` | Plan primitive table; validation lines 1134–1135 |
+| `hardlimit` | `UL`, `LL`, `Dim` | Plan primitive table; validation lines 2041–2044 (disabled example); supported by the IR, unused by the unlimited Julia AVR/governor |
+| `compare` | `X`, `OL`, `OH`, `INTR`, `Dim`, `conv` | Validation lines 1150–1155 and 1167–1172 |
+| `time-sig` | No parameters | Validation lines 1159–1164 |
+| `import`, `export` | `Name` | Plan module-boundary rule; validation import line 1140; export from the plan's master-library table |
+| `datalabel` | `Name` | Plan signal-wiring rule; validation lines 1178, 1187 |
+| `resistor`, `inductor`, `nodelabel`, `ammeter`, `pgb` | `Name`, `R`, `L`; PGB also `Group`, `Units`, `UseSignalName`, `enab` | Existing M1 passive/probe emitters and plan master-library table |
+
+Generated form parameters are project-owned names, rather than master fields.
+`AVR_<e>` declares real parameters `vref`, `T_R`, `T_B`, `T_C`, `T_A`, `K_A`,
+`Vt0`, `Verror0`, `Vreg0`, `Ef_scale`, with input `Vt` and output `Ef`.
+`GOV_<e>` declares real parameters `T_w`, `T_G`, `R`, `inv_R`, `T_CH`, `T_RH`, `T_CO`, `F_HP`, `F_IP`, `F_LP`,
+`Tm0`, with input `speed` and output `Tm`. Time constants have form unit `s`;
+other control values are dimensionless. Instances supply numeric values from
+the Julia objects and solved operating point; primitive parameters refer to
+those form fields by plain name. Derived values are computed in Julia.
+Module ports are scalar real signals at
+`(-54,0)` and `(54,0)` pixels. The writer also supports integer/text form
+parameters and electrical ports, covered by a separate XML fixture.
+
+### Controls, start-up and deliberate differences
+
+The AVR is `1/(1+s*T_R)` on terminal voltage, `vref-v_f`,
+`(1+s*T_C)/(1+s*T_B)`, then `K_A/(1+s*T_A)` and the Ef conversion gain.
+The governor is `1-speed`, `1/(1+s*T_w)`, `1/R`, `+Tm0`,
+`1/(1+s*T_G)`, then the cascaded chest/reheater/crossover poles. Weighted
+HP/IP/LP torques sum to `Tm`. `Tm0 = setpoint.Pac/S_base` matches Julia's
+input conversion; flow and turbine pole initial outputs equal `Tm0`.
+There are no control limits because the Julia controllers have none.
+
+`BlockGraph` lowers in its stored order, four rows per column, with columns
+six grid units apart and rows four apart. Every pin has a 36-pixel vertical
+wire stub and a canvas-local datalabel. The two/three-input sums use D/F/B,
+with all other inputs disabled. This step implements only scalar M3 blocks.
+The definitions and their instances are passive plans; Python resources
+remain confined to the extension writer. `definition.module = true` is required
+by mhi-xml 1.3.0 to create a module schematic before adding its blocks.
+
+Start-up uses one `time-sig` and two `compare` blocks with `OL=0`, `OH=1`,
+`INTR=0`, `conv=1`, thresholds 0.5 s (S2M) and 1.0 s (L2N). The saved validation
+project has parameterized comparators, but its SG instance currently passes
+zero for both times (lines 400–401); M3 deliberately uses the milestone's
+0.5 s / 1.0 s sequence. Exact threshold equality follows the master block.
+The validation's `Pheta=1.5708 rad` at line 1033 supports the same sine
+reference as the source experiment: emit the solved terminal angle plus π/2.
+
+Two control-interface choices differ from the plan table or saved validation:
+
+- Use `Term=1`, matching validation line 1109, for scalar terminal voltage.
+  The plan's `Term=3` gives a three-element Vt/It array and would need an
+  additional tap. The scalar AVR needs only Vt. The
+  [PSCAD machine interface documentation](https://www.pscad.com/webhelp-pscad-v5.1.0-ol/Master_Library_Models/Machines/Synchronous_Machine/Synchronous_Machine.htm)
+  describes these dimensions and the speed-output choice.
+- Use `Ts=0 s` and the explicit Julia `T_R` pole. The validation has `Ts=0.05 s`
+  with its explicit measurement pole disabled (lines 2049–2062). Retaining
+  both poles would add a filter absent from Julia. The exported zero setting
+  builds and runs on the station.
+
+R9 is closed with `SM_AVR_FIELD_VOLTAGE_SCALE=1.0`, retained as the named
+conversion constant. Julia's AVR produces `v_df = K_A*y*Rf_d/La_d`; at open
+circuit, terminal voltage is `La_d*v_df/Rf_d`. PSCAD's air-gap Ef normalization
+therefore gives `Ef = K_A*y` with saturation disabled. The station confirms
+that settled Ef equals the machine's Ef0 and satisfies `Ef = K_A*(vref-Vt)`
+using the internal Vt mean. The validation AVR also feeds its gain-200 output
+directly into `efldn` (lines 2025–2038).
+
+### Probes, comparisons and pending station measurements
+
+In addition to `V_<bus>` and `I_<e>_<side>`, the manifest records `<e>_P` in MW,
+`<e>_Q` in MVAR, `<e>_Vt` in machine pu and `<e>_speed` in pu. P/Q come from
+`POut`/`QOut` and gains of `S_base`; speed and terminal voltage come from the
+machine ports. `<e>_Ef0`, `<e>_Ef` and `<e>_Tm_init` retain scalar diagnostic
+channels for the initialization/base checks. Names undergo the existing
+identifier sanitization and collision reservation.
+
+`compare_operating_point` adds `:machine_p`, `:machine_q`, `:machine_voltage`
+and `:machine_speed` rows. Machine P/Q use three-phase fundamental phasors of
+`V_<bus>` and `I_<e>_<side>` at the public bus, with positive current toward the
+bus. They compare against `pf/qf = -branch.pt/-branch.qt`, the receiving-end
+powers of the internal rt/lt branch, rather than generator-terminal `pg/qg`.
+Power errors are `abs(measured-reference)/elec.S_base`, with tolerance 0.01.
+Terminal voltage uses `Vt = V_bus + (R_export+j*2π*f*L_export)*I`, including
+the emitter's parameter rounding, comparing phase RMS magnitude with the solved terminal bus using
+`rtol_v`. All three rows use the current probe's name. Speed retains
+`abs(speed-1) <= 1e-3 pu`; ordinary bus/current checks retain their contracts.
+The internal P, Q, Vt, Ef, Ef0 and Tm_init channels remain in the export and
+`steady_state` as diagnostics, without comparison rows.
+
+### Station measurements and acceptance settings
+
+The classic fixture builds with zero errors and runs. Settling takes about
+10 s: at 50 µs, Ef was 1.838 at 5 s and 1.896 at 15 s. Final speed is 1 pu.
+Both acceptance representations now use 15 s, a 10 µs simulation step and
+1 ms sampling; library defaults are unchanged. Diagnostic settled means print
+after the comparison table. The station's 10 µs × 15 s run takes about 11 s.
+
+Last-ten-cycle measurements at 15 s, with terminal quantities reconstructed
+from the network probes on the 1000 MVA, 380 kV base:
+
+| Step | Internal Q [MVAr] | Network terminal Q [MVAr] | Q gap [MVAr] | Network terminal P [MW] | Terminal \|Vt\| [pu] | Ef [pu] |
+|---|---|---|---|---|---|---|
+| 50 µs | -14.52 | -6.31 | -8.21 | 894.24 | 1.000223 | 1.8963 |
+| 25 µs | -10.63 | -6.59 | -4.04 | 895.14 | 1.000204 | 1.8999 |
+| 10 µs | -8.34 | -6.75 | -1.59 | 895.40 | 1.000193 | 1.9021 |
+| Power flow | — | -6.90215 | — | 900 | 1.000178 | — |
+
+Internal machine P/Q/Vt have an interface error proportional to step size;
+the Q discrepancy is about 0.16 MVAr/µs. The sampled internal Vt has 5–11%
+peak-to-peak ripple at 300 Hz while network current is clean to 1e-6. These
+observations motivate the network-side phasor comparisons. Internal P is
+895.45 MW at all tested steps. At the public bus the solved reference is
+897.894627 − j59.536473 MVA; the station measured 892.16 − j58.27 at 50 µs
+and 893.31 − j58.85 at 10 µs. The selected end and injection sign agree.
+
+The Julia state-space equilibrium at solved public-bus voltage with
+`Tm0=0.9` gives terminal P=898.789379 MW, Q=-2.549114 MVAr,
+|Vt|=1.000463367 pu, Te=0.9 pu and Ef=1.907326674 pu in PSCAD normalization.
+Its armature loss is 1.210621 MW. The station confirmed that the inherited
+`Ri=300 pu` behaves like the saved setting (line 1086),
+[a terminal iron-loss shunt](https://www.pscad.com/webhelp-pscad-v5.1.0-ol/Master_Library_Models/Machines/Synchronous_Machine/Synchronous_Machine.htm).
+At 10 µs and 15 s, changing Ri to 1e6 pu raised internal P from 895.45 to
+898.778 MW, confirming the full 3.33 MW iron-loss gap. Julia has no core-loss
+branch, so every exported machine now sets `Ri=1e6 pu` explicitly, leaving
+0.001 MW loss at 1 pu on 1000 MVA. The existing formatter writes
+`1000000.0 [pu]`. The measured public-bus P/Q were 896.629 MW/-59.1792 MVAr
+and reconstructed terminal voltage was 219.435 kV; all approved rows passed.
+
+The remaining public-bus P residual is 1.266 MW (0.13% of rating), consistent
+with Julia's convention: power flow places Pac at the generator terminal,
+while the dynamic model uses `Tm0=Pac/S_base` as mechanical torque and loses
+`Ra*I^2` before the terminal. This convention remains unchanged. Builder
+acceptance remains a station check; local XML checks establish structure.
+
+### M3 correction after the first station build
+
+Both initial exports failed to compile on PSCAD 5.1 with 22 errors and three
+warnings. The module forms lacked input intent, while `YO` and `G` fields
+contained unresolved expressions. An XML round trip did not detect these
+native compilation requirements.
+
+The parameter structure follows `local/SG/SG_Project.pscx` lines 949–967:
+scalar `intent="Input"`, `dim="1"`, finite `min`/`max`, `helpmode="Append"`,
+and `cond`, `help`, `vis` children. The writer uses the supported mhi-xml
+1.3.0 `add_real`/`add_integer`/`add_text` keywords for intent, bounds and
+children. `Parameter.help_mode` writes `helpmode`; the creation keyword
+`help_mode` would write an attribute with the wrong spelling. The category
+already has its `cond` child. There is no parameter dimension option, so
+the writer sets `dim` on the lxml node. Real bounds are ±1e308; integer bounds
+are signed 32-bit; text length bounds are 0/0, as in the saved text forms.
+
+The graphics API emits only `graphics/Port/paramlist`; there is no SVG API
+in mhi-xml 1.3.0. The writer replaces the new module's graphics node with
+`svg viewBox="-200 -200 200 200" size="4"`, following SG lines 969–978.
+Electrical ports use `model="Natural"`, `mode="Electrical"`,
+`type="NonRemovable"`. Signal ports use `model="Transfer"`, `mode="Input"`
+or `"Output"`, and their signal type, following
+`local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx` lines 1218–1221.
+Ports retain name, pixel coordinates and dimension, have `internal="false"`,
+and contain `true` CDATA. A condition, rectangle and text label complete the
+module symbol. Main instances and schematic wiring retain the same ports.
+The XML regression fixture copies these saved parameter and port fragments;
+tests do not require the local validation projects.
+
+The additional AVR form values are `Verror0 = vref-Vt0` and
+`Vreg0 = K_A*(vref-Vt0)`; the governor adds `inv_R = 1/R`. Julia computes
+them before planning the block parameters. `Tm0` remains the already computed
+`Pac/S_base`. Every block parameter is a literal number or plain form name;
+lowering rejects expression strings. R9 and the field-voltage scale are
+unchanged by this correction.
+
+Three throwaway `sm_classic` exports isolate the changes for station review:
+
+| Variant | Parameter metadata | Graphics | Derived values |
+|---|---|---|---|
+| `v1_params_only.pscx` | PSCAD 5 input form | Original graphics | Computed in Julia |
+| `v2_graphics_only.pscx` | Original form | PSCAD 5 SVG | Computed in Julia |
+| `v3_full.pscx` | PSCAD 5 input form | PSCAD 5 SVG | Computed in Julia |
+
+The variants are written outside the repository, with no diagnostic switches
+in production code. All three variants and the regular export failed with the
+same missing-parameter errors. Adding an instance `name` attribute did not
+change the result. The parameter form and SVG corrections remain because they
+match saved PSCAD 5 modules; the comparisons show no harmful effect from them.
+
+### M3 parameter-import binding confirmed by station bisection
+
+The station built the saved `Untitled_6` module copied from
+`local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx` without module errors. Removing
+only its parameter-import components reproduced the missing-parameter errors.
+Adding parameter imports to the generated AVR removed those errors, leaving
+only the `const` block's unresolved `Value="vref"`. Restoring the schematic
+`classid` had no effect. The isolated saved-module harness had a floating
+`pgb` input; that error was outside the module under test.
+
+The saved parameter imports at lines 8659–8668 are `master:import` instances
+with `orient="0"` and only `Name="Kd"` or `Name="wf"` in their parameter lists.
+They need no output wire when used to bind block coefficients. The shared
+module-plan construction now copies the supplied canvas and lowers one import
+per declared input parameter, reusing existing connected imports. All declared
+parameters are bound, including the governor's retained `R` form value. The
+remaining imports follow the successful diagnostic probe layout: four rows per
+column, 108 pixels between columns and 72 between rows, beginning at
+`(540,72)` or beyond a wider graph. This binding is in the module IR/lowering;
+the extension writes these ordinary component plans without a special patch.
+
+The AVR reference comes from the `vref` import's output and the governor's
+torque reference from the `Tm0` import's output, each with the usual 36-pixel
+stub and local datalabel. The AVR contains no `const` blocks; the governor
+retains only the literal `1.0` speed reference. `Const` accepts numeric values
+only. Derived initial outputs and inverse droop are still computed in Julia
+and referenced by plain parameter names. The PSCAD 5 form, SVG graphics and
+R9 field-voltage scale are unchanged.
+
+Plan and XML tests require a unique import for every parameter, literal-only
+constants and connected `vref`/`Tm0` reference signals. XML tests also compare
+import definition, orientation and parameter fields against saved fragments.
+The corrected classic export subsequently built with zero errors. R9 is closed;
+both representations use the 15-second acceptance checks above.

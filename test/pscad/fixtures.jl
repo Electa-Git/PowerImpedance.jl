@@ -40,6 +40,43 @@ function small_ac_network()
 end
 
 """
+    sm_network()
+
+Return classic and builder representations of `test/adm_SM_test.jl`:
+a 900 MW synchronous machine at the shared 380 kV slack bus, with its
+native rt/lt branch and default AVR, governor and steam turbine.
+The machine's requested voltage is `1.000177992` pu before power flow.
+"""
+function sm_network()
+    voltage = 380 / sqrt(3)
+    elements = (;
+        sg1 = synchronousmachine(;
+            setpoint = Setpoint(Vac = 1.000177992 * voltage * sqrt(2), Pac = 900),
+            elec = ElectricalSM(Vᵃᶜ_base = 380.0)),
+        g2 = ac_source(; pins = 3, transformation = true,
+            setpoint = Setpoint(Vac = voltage * sqrt(2))))
+    rows = [(node = Symbol("Bus2" * suffix), element, side = 1, terminal)
+            for element in (:sg1, :g2)
+            for (terminal, suffix) in enumerate(("d", "q"))]
+    state = NetworkBuilder.define(deepcopy(elements), rows;
+        options = (; voltageBase = voltage))
+    classic = Network()
+    classic.voltageBase[1] = voltage
+    for (name, element) in pairs(elements)
+        add!(classic, name, element)
+    end
+    for row in rows
+        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
+    end
+    for name in (:sg1, :g2), (terminal, suffix) in enumerate(("d", "q"))
+
+        connect!(classic, (name, Symbol("2.$terminal")), Symbol("gnd" * suffix))
+    end
+    connect!(classic)
+    return (; classic, state)
+end
+
+"""
     passive_ohl_network()
 
 Return `(classic, state)` representations of the small AC fixture with the

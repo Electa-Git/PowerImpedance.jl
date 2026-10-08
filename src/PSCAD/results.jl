@@ -157,13 +157,13 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Compare settled AC/DC bus voltages and branch-terminal currents with a retained
+Compare settled AC/DC bus voltages, branch-terminal currents and machine operating points with a retained
 power flow. Compare only the channels in `model.probes`; require solved data
 and complete three-phase AC or scalar DC measurements for those channels.
 
 # Arguments
 
-- `result`: PSCAD time-domain output in kV and kA.
+- `result`: PSCAD time-domain output in manifest units.
 - `model`: Exported model retaining netlist and operating-point evidence.
 - `rtol_v`: Relative phase RMS voltage tolerance, default `0.01`.
 - `atol_angle_deg`: Absolute relative-bus angle tolerance \\[deg\\], default `1.0`.
@@ -172,8 +172,10 @@ and complete three-phase AC or scalar DC measurements for those channels.
 # Returns
 
 - A `TypedTables.Table` with `quantity`, probe `name`, `pscad`, `powerflow`,
-  nonnegative `error`, and `within_tolerance` columns. Magnitudes use kV/kA and
-  relative errors; angles use degrees and absolute wrapped errors. Omit the
+  nonnegative `error`, and `within_tolerance` columns. Magnitudes use kV/kA,
+  powers MW/MVAr, and relative errors. Machine power errors are normalized
+  by machine rating \\[MVA\\]. Speed uses pu and absolute error;
+  angles use degrees and absolute wrapped errors. Omit the
   reference bus's own angle row. A zero magnitude reference uses zero error
   for a zero measurement and infinite error otherwise.
 
@@ -187,6 +189,17 @@ DC bus voltage is the window mean of V_P - V_N, compared with twice the
 pole-to-ground bus voltage. DC current magnitudes use the P-pole window mean
 and the reference |P|/V_pp. Omit a DC current row when no solved terminal power
 exists (for example a source without a gendc solution record).
+Machine P/Q use the three-phase fundamental power at the public bus,
+``S = \\sum_k V_k I_k^*/2``, with peak phasors in kV/kA and current directed
+from the machine to the bus. Compare with the retained `pf/qf` at that same
+end of the rt/lt branch, using `abs(measured-reference)/elec.S_base <= 0.01`.
+Reconstruct machine terminal phase RMS voltage from ``V_t = V_{bus} + ZI``,
+where ``Z = R_{export} + \\mathrm{j}2\\pi f L_{export}`` \\[Ω\\] uses the
+same formatted resistance and inductance as the emitter, and compare
+its positive-sequence magnitude with the solved terminal voltage using
+`rtol_v`. These rows use the current probe's name. Internal machine P/Q/Vt
+and initialization/field channels remain diagnostics. Speed uses the scalar
+mean and an absolute tolerance of `1e-3` pu around 1.
 """
 function compare_operating_point(result::PSCADResult, model::PSCADModel;
         rtol_v = 0.01, atol_angle_deg = 1.0, rtol_i = 0.02)
@@ -200,10 +213,13 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
     settled = steady_state(result)
     quantities, names = Symbol[], String[]
     measured, expected, errors, passed = Float64[], Float64[], Float64[], Bool[]
-    function add_row(quantity, name, actual, reference, tolerance; angular = false)
+    function add_row(
+            quantity, name, actual, reference, tolerance, base = reference; angular = false,
+            absolute = false)
         error = angular ? abs(rem2pi(deg2rad(actual - reference), RoundNearest)) * 180 / π :
-                iszero(reference) ? (iszero(actual) ? 0.0 : Inf) :
-                abs(actual - reference) / abs(reference)
+                absolute ? abs(actual - reference) :
+                iszero(base) ? (iszero(actual) ? 0.0 : Inf) :
+                abs(actual - reference) / abs(base)
         push!(quantities, quantity)
         push!(names, name)
         push!(measured, actual)
@@ -212,6 +228,20 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
         push!(passed, error <= tolerance)
     end
     for channel in model.probes.channels
+        if channel.kind == :machine_speed
+            channel.dim == 1 && _probe_present(channel, result.channels) ||
+                throw(ArgumentError("missing PSCAD scalar machine probe $(channel.name)"))
+            element_index = findfirst(e -> string(e.name) == channel.element, model.netlist.elements)
+            element_index === nothing &&
+                throw(ArgumentError("missing power-flow machine $(channel.element)"))
+            e = model.netlist.elements[element_index]
+            flow = get(model.operating_point.branch_flows, e.name, nothing)
+            flow !== nothing && haskey(flow, :terminal_voltage_kV) ||
+                throw(ArgumentError("missing solved machine terminal data for :$(e.name)"))
+            actual = settled[channel.name].mean
+            add_row(:machine_speed, channel.name, actual, 1.0, 1e-3; absolute = true)
+            continue
+        end
         channel.kind in (:voltage, :current) || continue
         _probe_present(channel, result.channels) ||
             throw(ArgumentError("missing PSCAD probe $(channel.name)"))
@@ -284,6 +314,30 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 throw(ArgumentError("current comparison requires positive bus voltage"))
             current = hypot(flow[fields[1]], flow[fields[2]]) / (3 * voltage)
             add_row(:current_rms, channel.name, value.rms, current, rtol_i)
+            if e.model isa PowerImpedance.SynchronousMachine
+                haskey(flow, :terminal_voltage_kV) ||
+                    throw(ArgumentError("missing solved machine terminal data for :$(e.name)"))
+                index = findfirst(c -> c.kind == :voltage && c.bus == bus.name,
+                    model.probes.channels)
+                index === nothing &&
+                    throw(ArgumentError("missing PSCAD voltage probe at $(bus.name)"))
+                probe = model.probes.channels[index]
+                probe.dim == 3 && _probe_present(probe, result.channels) ||
+                    throw(ArgumentError("machine comparison requires three-phase voltage probe $(probe.name)"))
+                v = settled[probe.name].phasors
+                i = value.phasors
+                power = sum(v .* conj.(i)) / 2
+                elec = e.model.elec
+                add_row(:machine_p, channel.name, real(power), flow.pf, 0.01, elec.S_base)
+                add_row(:machine_q, channel.name, imag(power), flow.qf, 0.01, elec.S_base)
+                zbase = elec.Vᵃᶜ_base^2 / elec.S_base
+                r = _pscad_number(pscad_value(elec.rt * zbase))
+                l = _pscad_number(pscad_value(elec.lt * zbase / elec.ωn))
+                z = complex(r, 2π * result.settings.frequency * l)
+                terminal_voltage = abs(_sequence_phasor(v .+ z .* i)) / sqrt(2)
+                add_row(:machine_voltage, channel.name, terminal_voltage,
+                    flow.terminal_voltage_kV, rtol_v)
+            end
         end
     end
     return Table(quantity = quantities, name = names, pscad = measured,
