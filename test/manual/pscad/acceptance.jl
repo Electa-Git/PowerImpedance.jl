@@ -28,7 +28,7 @@ cable_classic_model = export_pscad(cable_classic; path = joinpath(exports, "dc_c
 cable_builder_model = export_pscad(cable_state; path = joinpath(exports, "dc_cable_builder.pscx"))
 
 sm_classic, sm_state = PSCADFixtures.sm_network()
-sm_settings = SimulationSettings(simulation_time = 15.0,
+sm_settings = PowerImpedance.PSCAD.SimulationSettings(simulation_time = 15.0,
     time_step = 10e-6, sample_step = 1e-3)
 sm_classic_model = export_pscad(sm_classic;
     path = joinpath(exports, "sm_classic.pscx"), settings = sm_settings)
