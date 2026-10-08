@@ -26,20 +26,25 @@ No files are written and no power flow is solved.
 - `settings`: Simulation settings; frequency must match the netlist \\[Hz\\].
 - `name`: ASCII project identifier.
 - `description`: Project description, defaulting to `name`.
+- `line_options`: Overrides keyed by PSCAD ground or frequency/phase field name.
 
 # Returns
 
 - A `ProjectPlan` containing the Main schematic, file settings and probes.
 """
 function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationSettings(),
-        name::AbstractString = "network", description::AbstractString = name)
+        name::AbstractString = "network", description::AbstractString = name,
+        line_options = (;))
+    overrides = _line_options(line_options)
     settings.frequency == netlist.frequency ||
         throw(ArgumentError("PSCAD settings frequency must match the network's $(netlist.frequency) Hz frame"))
     name == pscad_name(name) ||
         throw(ArgumentError("name must be an ASCII PSCAD identifier of at most 30 characters"))
     used = Set(vcat([bus.name for bus in netlist.buses], [e.pscad for e in netlist.elements]))
-    state = PlanState(CanvasPlan(), GridLayout(), ProbeChannel[], used)
-    context = (; netlist, settings, buses = Dict(bus.key => bus for bus in netlist.buses))
+    state = PlanState(CanvasPlan(), LineDefinitionPlan[], TLineWrapperPlan[],
+        GridLayout(), ProbeChannel[], used)
+    context = (; netlist, settings, line_options = overrides,
+        buses = Dict(bus.key => bus for bus in netlist.buses))
     elements = sort(netlist.elements;
         by = e -> e.role == :source ? 1 :
                   e.role in (:shunt, :load) ? 3 : 2,
@@ -66,13 +71,14 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
     reference = reference_key === nothing ? nothing : context.buses[reference_key].name
     manifest = ProbeManifest(state.channels, reference)
     return ProjectPlan(String(name), String(description),
-        _project_settings(settings, String(description)), state.main, manifest)
+        _project_settings(settings, String(description)), state.main,
+        state.lines, state.wrappers, manifest)
 end
 
 function _export_keywords(path, name, line_options, dc_reference)
     dc_reference in (:midpoint_resistors, :none) ||
         throw(ArgumentError("dc_reference must be :midpoint_resistors or :none"))
-    line_options isa NamedTuple || throw(ArgumentError("line_options must be a NamedTuple"))
+    _line_options(line_options)
     path isa AbstractString && endswith(path, ".pscx") ||
         throw(ArgumentError("PSCAD export path must end in .pscx"))
     isdir(dirname(abspath(path))) ||
@@ -86,8 +92,9 @@ function _export_keywords(path, name, line_options, dc_reference)
     return nothing
 end
 
-function _export_project(netlist, path, name, settings, resolved_powerflow)
-    plan = build_plan(netlist; settings, name, description = "PowerImpedance.jl: $name")
+function _export_project(netlist, path, name, settings, resolved_powerflow, line_options)
+    plan = build_plan(netlist; settings, name, line_options,
+        description = "PowerImpedance.jl: $name")
     written = _write_project(plan, abspath(path))
     provenance = (source = :export,
         powerimpedance_version = string(Base.pkgversion(PowerImpedance)),
@@ -112,7 +119,10 @@ the extension before solving power flow or writing the project.
 - `powerflow`: Optional classic four-tuple from `power_flow(net)`. A builder
   state uses `NetworkBuilder.solve` and accepts only `nothing` here.
 - `settings`: Detached-run settings, default `SimulationSettings()`.
-- `line_options`: Named tuple reserved for the line-export step.
+- `line_options`: Named tuple of PSCAD ground and frequency/phase field
+  overrides, for example `(; FS = 0.5, FE = 1e6, Numf = 200, CPASS = 0)`.
+  Numeric values use each field's PSCAD units; strings retain explicit units.
+  Unknown field names throw `ArgumentError` before solving power flow.
 - `dc_reference`: `:midpoint_resistors` (default) or `:none`, reserved for DC export.
 
 # Returns
@@ -136,7 +146,8 @@ function export_pscad(net::PowerImpedance.Network; path,
     _export_keywords(path, name, line_options, dc_reference)
     _require_extension()
     pf = powerflow === nothing ? PowerImpedance.power_flow(net) : powerflow
-    return _export_project(netlist(net, pf), path, name, settings, powerflow === nothing)
+    return _export_project(netlist(net, pf), path, name, settings,
+        powerflow === nothing, line_options)
 end
 
 function export_pscad(state::PowerImpedance.NetworkBuilder.NetworkState; path,
@@ -149,5 +160,5 @@ function export_pscad(state::PowerImpedance.NetworkBuilder.NetworkState; path,
         throw(ArgumentError("builder export obtains power flow from NetworkBuilder.solve; powerflow must be nothing"))
     solved = PowerImpedance.NetworkBuilder.solve(state)
     return _export_project(netlist(state, solved.powerflow), path, name, settings,
-        solved.powerflow !== nothing)
+        solved.powerflow !== nothing, line_options)
 end

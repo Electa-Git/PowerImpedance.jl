@@ -66,6 +66,7 @@ include("plan.jl")
 include("emitters/probes.jl")
 include("emitters/sources.jl")
 include("emitters/impedance.jl")
+include("emitters/lines.jl")
 include("export.jl")
 include("compute.jl")
 

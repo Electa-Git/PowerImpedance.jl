@@ -34,15 +34,17 @@ else
     println("CondaPkg resolution wall_seconds=", (time_ns() - started) * 1e-9)
     using PythonCall
     etree = pyimport("lxml.etree")
-    pyimport("mhi.xml.pscad")
+    mhixml = pyimport("mhi.xml.pscad")
     include("fixtures.jl")
     P = PowerImpedance.PSCAD
     classic, state = PSCADFixtures.small_ac_network()
+    ohl_classic, ohl_state = PSCADFixtures.passive_ohl_network()
     settings = P.SimulationSettings(simulation_time = 0.3, time_step = 50e-6,
         sample_step = 250e-6, snapshot_time = 0.2)
     @testset "PSCAD mhi-xml export round trip" begin
         models = PSCADModel[]
-        for (name, input) in (("small_ac_classic", classic), ("small_ac_builder", state))
+        for (name, input) in (("small_ac_classic", classic), ("small_ac_builder", state),
+            ("passive_ohl_classic", ohl_classic), ("passive_ohl_builder", ohl_state))
             path = joinpath(only(ARGS), name * ".pscx")
             model = export_pscad(input; path, settings)
             push!(models, model)
@@ -54,6 +56,13 @@ else
             end
             @test summary.version == "5.0.2"
             @test summary.components_per_defn == counts
+            expected_rows = Dict(l.name => Dict("master:Line_Tower_Universal" => 1,
+                                     "master:Line_Ground" => 1, "master:Line_FrePhase_Options" =>
+                                         1,
+                                     "master:Line_Out_Disp" => 1) for l in plan.lines)
+            @test summary.row_definitions == expected_rows
+            @test summary.wrappers_per_defn ==
+                  Dict(name * ":" * w.row => 1 for w in plan.wrappers)
             @test all(>=(2), values(summary.nodelabels))
             @test summary.nodelabels == Dict("B1" => 3, "B2" => 3)
             @test Set(summary.pgbs) == Set(c.name for c in plan.probes.channels)
@@ -66,6 +75,9 @@ else
             @test model.provenance.mhi_xml_version == "1.3.0"
             @test model.provenance.resolved_powerflow == (input isa Network)
             root = etree.parse(path).getroot()
+            reread = mhixml.ProjectFile(path)
+            @test pylen(reread.canvas("Main").xpath("./User")) ==
+                  length(plan.main.components)
             @test pyconvert(String, root.get("version")) == "5.0.2"
             @test pyconvert(Int, root.xpath("count(./definitions/Definition[@name='Main'])")) ==
                   1
@@ -101,7 +113,7 @@ else
                           value
                 end
             end
-            wires = root.xpath("./definitions/Definition[@name='Main']/schematic/Wire")
+            wires = root.xpath("./definitions/Definition[@name='Main']/schematic/Wire[@classid='WireOrthogonal']")
             @test pylen(wires) == length(plan.main.wires)
             for (wire, node) in zip(plan.main.wires, wires)
                 vertices = node.xpath("./vertex")
@@ -114,10 +126,81 @@ else
                           for v in vertices]
                 @test Set(actual) == Set(wire.vertices)
             end
+            @test pyconvert(Int, root.xpath("count(./definitions/Definition[@classid='RowDefn'])")) ==
+                  length(plan.lines)
+            for line in plan.lines
+                rows = root.xpath("./definitions/Definition[@classid='RowDefn'][@name='$(line.name)']")
+                @test pylen(rows) == 1
+                row = only(rows)
+                @test pyconvert(String, row.xpath("string(./paramlist/param[@name='type']/@value)")) ==
+                      "TLine"
+                # Access the row through mhi-xml too; counts alone would not
+                # establish that its typed RowDefn can be read again.
+                @test pyconvert(String, reread.definition[line.name].type) == "TLine"
+                for (defn, params) in (("Line_Tower_Universal", line.tower),
+                    ("Line_Ground", line.ground), ("Line_FrePhase_Options", line.frephase),
+                    ("Line_Out_Disp", line.outdisp))
+                    nodes = row.xpath("./schematic/User[@defn='master:$defn']")
+                    @test pylen(nodes) == 1
+                    node = only(nodes)
+                    for (key, value) in params
+                        @test pyconvert(String, node.xpath("string(./paramlist/param[@name='$key']/@value)")) ==
+                              value
+                    end
+                end
+                tower = only(row.xpath("./schematic/User[@defn='master:Line_Tower_Universal']"))
+                @test pyconvert(String, tower.xpath("string(./paramlist/param[@name='Nc']/@value)")) ==
+                      "3"
+                @test pyconvert(String, tower.xpath("string(./paramlist/param[@name='NG']/@value)")) ==
+                      "2"
+                @test pyconvert(String, tower.xpath("string(./paramlist/param[@name='X']/@value)")) ==
+                      "0.0 [m]"
+                for (prefix, coords) in (("C", line.conductors), ("G", line.ground_wires))
+                    for (i, (x, y)) in enumerate(coords),
+                        (axis, value) in (("X", x), ("Y", y))
+
+                        key = axis * prefix * string(i)
+                        @test pyconvert(String,
+                            tower.xpath("string(./paramlist/param[@name='$key']/@value)")) ==
+                              P.pscad_value(value; unit = "m")
+                    end
+                end
+            end
+            for wrapper in plan.wrappers
+                qualified = name * ":" * wrapper.row
+                nodes = root.xpath("./definitions/Definition[@name='Main']/schematic/Wire[@classid='TLine']")
+                @test pylen(nodes) == 1
+                node = only(nodes)
+                for (key, value) in (("defn", qualified), ("name", qualified),
+                    ("x", string(wrapper.x)), ("y", string(wrapper.y)), ("w", "121"), (
+                    "h", "68"),
+                    ("orient", "0"), ("disable", "false"), ("recv", "-1"), ("send", "-1"),
+                    ("back", "-1"), ("crc", "0"))
+                    @test pyconvert(String, node.get(key)) == value
+                end
+                vertices = [(parse(Int, pyconvert(String, v.get("x"))),
+                                parse(Int, pyconvert(String, v.get("y"))))
+                            for v in node.xpath("./vertex")]
+                @test vertices == [(-54, 18), (-54, 36), (54, 54), (54, 72)]
+                user = only(node.xpath("./User"))
+                @test pyconvert(String, user.get("defn")) == qualified
+                @test pyconvert(String, user.get("classid")) == "UserCmp"
+                @test pyconvert(String, user.xpath("string(./paramlist/@crc)")) == "0"
+                for (key, value) in wrapper.params
+                    @test pyconvert(String, user.xpath("string(./paramlist/param[@name='$key']/@value)")) ==
+                          value
+                end
+                for item in (node, user)
+                    @test 100_000_000 <= parse(Int, pyconvert(String, item.get("id"))) <
+                          1_000_000_000
+                end
+            end
             println("Exported ", path)
         end
         @test !isempty(models[1].operating_point.bus_states)
         @test isempty(models[2].operating_point.bus_states)
+        @test !isempty(models[3].operating_point.bus_states)
+        @test isempty(models[4].operating_point.bus_states)
         # Supplied classic evidence avoids setpoint mutation and records R17.
         supplied = power_flow(classic)
         original = classic.elements[:source].setpoint
@@ -125,6 +208,27 @@ else
             model = export_pscad(classic; path = joinpath(temporary, "supplied.pscx"), powerflow = supplied)
             @test !model.provenance.resolved_powerflow
             @test classic.elements[:source].setpoint === original
+        end
+        # Exercise typed choice decoding and option units through the actual
+        # writer, rather than establishing override behaviour only in the IR.
+        mktempdir() do temporary
+            path = joinpath(temporary, "ohl_options.pscx")
+            export_pscad(ohl_classic; path,
+                line_options = (; Numf = 200, CPASS = 1, EarthForm2 = 2,
+                    FS = 2.0, FE = "2.0E5 [Hz]", GRRES = 250.0, GPERM = 1.2, W2 = 1000.0))
+            root = etree.parse(path).getroot()
+            for (defn, params) in (
+                ("Line_Ground",
+                ["EarthForm2" => "2", "GRRES" => "250.0 [ohm*m]", "GPERM" => "1.2"]),
+                ("Line_FrePhase_Options",
+                ["Numf" => "200", "CPASS" => "1",
+                    "FS" => "2.0 [Hz]", "FE" => "2.0E5 [Hz]", "W2" => "1000.0"]))
+                node = only(root.xpath(".//User[@defn='master:$defn']"))
+                for (key, value) in params
+                    @test pyconvert(String, node.xpath("string(./paramlist/param[@name='$key']/@value)")) ==
+                          value
+                end
+            end
         end
     end
 end

@@ -15,6 +15,12 @@ function PSCAD._write_project(plan::PSCAD.ProjectPlan,
         a, b = wire.vertices
         main.add_wire(PythonCall.pytuple(a), PythonCall.pytuple(b))
     end
+    for line in plan.lines
+        write_row_definition!(project, line)
+    end
+    for wrapper in plan.wrappers
+        write_tline_wrapper!(main, plan.name, wrapper)
+    end
     project.save()
     return (path = abspath(path), mhi_xml_version = _mhi_xml_version())
 end

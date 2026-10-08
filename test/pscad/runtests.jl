@@ -1,4 +1,5 @@
 include("fixtures.jl")
+include("ohl_geometry_test.jl")
 include("skeleton_test.jl")
 include("remote_config_test.jl")
 include("results_test.jl")

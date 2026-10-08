@@ -14,11 +14,26 @@ function PSCAD.read_project_summary(path::AbstractString)::PSCAD.ProjectSummary
             push!(pgbs, name)
         end
     end
+    rows = Dict{String, Dict{String, Int}}()
+    for row in root.xpath("./definitions/Definition[@classid='RowDefn']")
+        name = PythonCall.pyconvert(String, row.get("name"))
+        row_counts = Dict{String, Int}()
+        for component in row.xpath("./schematic/User")
+            defn = PythonCall.pyconvert(String, component.get("defn"))
+            row_counts[defn] = get(row_counts, defn, 0) + 1
+        end
+        rows[name] = row_counts
+    end
+    wrappers = Dict{String, Int}()
+    for wrapper in root.xpath("./definitions/Definition[@name='Main']/schematic/Wire[@classid='TLine']")
+        defn = PythonCall.pyconvert(String, wrapper.get("defn"))
+        wrappers[defn] = get(wrappers, defn, 0) + 1
+    end
     settings = Dict{String, String}()
     for parameter in root.xpath("./paramlist[@name='Settings']/param")
         key = PythonCall.pyconvert(String, parameter.get("name"))
         settings[key] = PythonCall.pyconvert(String, parameter.get("value"))
     end
-    return PSCAD.ProjectSummary(counts, labels, pgbs, settings,
+    return PSCAD.ProjectSummary(counts, labels, pgbs, rows, wrappers, settings,
         PythonCall.pyconvert(String, root.get("version")))
 end

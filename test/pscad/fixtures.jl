@@ -38,4 +38,40 @@ function small_ac_network()
     connect!(classic)
     return (; classic, state)
 end
+
+"""
+    passive_ohl_network()
+
+Return `(classic, state)` representations of the small AC fixture with the
+25 km `tl1` overhead line from `examples/P2P_HVDC_ALT.jl` replacing the series
+impedance. Both declare `voltageBase = 380/sqrt(3)` kV phase RMS.
+"""
+function passive_ohl_network()
+    classic, state = small_ac_network()
+    tl1 = overhead_line(length = 25e3,
+        conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1,
+            Rᵈᶜ = 0.063,
+            rᶜ = 0.015, yᵇᶜ = 30,
+            Δyᵇᶜ = 0, Δxᵇᶜ = 10, Δ̃xᵇᶜ = 0, dˢᵇ = 0, dˢᵃᵍ = 10),
+        groundwires = Groundwires(
+            nᵍ = 2,
+            Rᵍᵈᶜ = 0.92,
+            rᵍ = 0.0062,
+            Δxᵍ = 6.5,
+            Δyᵍ = 7.5,
+            dᵍˢᵃᵍ = 10
+        ),
+        earth_parameters = (1, 1, 100), transformation = true)
+    # Retain the fixture's designator and connectivity in both representations.
+    # Each representation owns its element; solving classic may mutate setpoints.
+    tl1.symbol = :line
+    tl1.pins = copy(classic.elements[:line].pins)
+    classic.elements[:line] = tl1
+    elements = merge(state.elements, (; line = deepcopy(tl1)))
+    rows = [(; row.node, row.element, row.side, row.terminal)
+            for row in state.topology.connections]
+    builder = NetworkBuilder.define(elements, rows;
+        options = (; voltageBase = 380 / sqrt(3)))
+    return (; classic, state = builder)
+end
 end

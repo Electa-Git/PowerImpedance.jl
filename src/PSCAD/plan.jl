@@ -71,6 +71,52 @@ end
 """
 $(TYPEDEF)
 
+Retain one transmission-line row definition with tower coordinates before
+sag correction. Parameter values use PSCAD field names and unit strings.
+
+$(TYPEDFIELDS)
+"""
+struct LineDefinitionPlan
+    "Unqualified row-definition identifier."
+    name::String
+    "Row kind; `:tline` for an overhead line."
+    kind::Symbol
+    "Universal-tower keyword parameters."
+    tower::Vector{Pair{String, String}}
+    "Phase bundle-centre tower coordinates \\[m\\], in physical order."
+    conductors::Vector{NTuple{2, Float64}}
+    "Ground-wire tower coordinates \\[m\\], in physical order."
+    ground_wires::Vector{NTuple{2, Float64}}
+    "Earth-return parameters."
+    ground::Vector{Pair{String, String}}
+    "Frequency/phase model and fitting parameters."
+    frephase::Vector{Pair{String, String}}
+    "Additional display parameters."
+    outdisp::Vector{Pair{String, String}}
+end
+
+"""
+$(TYPEDEF)
+
+Place one direct-connection transmission-line wrapper on Main. Its sending
+and receiving terminals are at offsets `(-54, 18)` and `(54, 72)` pixels.
+
+$(TYPEDFIELDS)
+"""
+struct TLineWrapperPlan
+    "Unqualified row-definition identifier."
+    row::String
+    "Horizontal origin in pixels."
+    x::Int
+    "Vertical origin in pixels."
+    y::Int
+    "Wrapper instance parameters."
+    params::Vector{Pair{String, String}}
+end
+
+"""
+$(TYPEDEF)
+
 Describe a passive, single-subsystem PSCAD project without Python resources.
 
 $(TYPEDFIELDS)
@@ -84,6 +130,10 @@ struct ProjectPlan
     settings::SettingsPlan
     "Main schematic."
     main::CanvasPlan
+    "Transmission-line row definitions in emission order."
+    lines::Vector{LineDefinitionPlan}
+    "Transmission-line wrappers on Main in emission order."
+    wrappers::Vector{TLineWrapperPlan}
     "Emitted output channels and reference bus."
     probes::ProbeManifest
 end
@@ -102,6 +152,10 @@ struct ProjectSummary
     nodelabels::Dict{String, Int}
     "PGB names in schematic order."
     pgbs::Vector{String}
+    "Component counts per unqualified row-definition name."
+    row_definitions::Dict{String, Dict{String, Int}}
+    "Main wrapper counts keyed by qualified row-definition name."
+    wrappers_per_defn::Dict{String, Int}
     "Project setting strings."
     settings::Dict{String, String}
     "Project file schema version."
@@ -136,6 +190,8 @@ end
 # Only the builder owns these mutable arrays and identifier reservations.
 struct PlanState
     main::CanvasPlan
+    lines::Vector{LineDefinitionPlan}
+    wrappers::Vector{TLineWrapperPlan}
     layout::GridLayout
     channels::Vector{ProbeChannel}
     used::Set{String}

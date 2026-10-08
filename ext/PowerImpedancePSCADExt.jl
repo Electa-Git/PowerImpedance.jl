@@ -25,6 +25,7 @@ function _mhi_xml_version()::String
     return PythonCall.pyconvert(String, metadata.version("mhi-xml"))
 end
 
+include("PowerImpedancePSCADExt/rowdefn.jl")
 include("PowerImpedancePSCADExt/writer.jl")
 include("PowerImpedancePSCADExt/verify.jl")
 
