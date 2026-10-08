@@ -60,7 +60,8 @@ Reject frequency-dependent winding resistance and nonpositive turns ratios.
 function transformer_si(t::PowerImpedance.Transformer)
     t.hasRω &&
         throw(ArgumentError("frequency-dependent transformer winding resistance is not exportable"))
-    t.n > 0 || throw(ArgumentError("transformer turns ratio n must be positive"))
+    isfinite(t.n) && t.n > 0 ||
+        throw(ArgumentError("transformer turns ratio n must be positive"))
     return (L_p = Float64(t.Lₚ), R_p = Float64(t.Rₚ),
         L_s = Float64(t.Lₛ), R_s = Float64(t.Rₛ),
         L_m = Float64(t.Lₘ), R_m = Float64(t.Rₘ),

@@ -1,9 +1,10 @@
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Source}, context)
     connected = filter(t -> !t.grounded, e.terminals)
     length(connected) == 1 ||
-        throw(ArgumentError("element :$(e.name) must have one connected AC source terminal"))
+        throw(ArgumentError("element :$(e.name) must have one connected source terminal"))
     terminal = only(connected)
-    bus = _ac_bus(e, terminal, context)
+    bus = _terminal_bus(e, terminal, context)
+    bus.kind == :dc && return dc_source!(state, e, terminal, bus, context)
     # A solved bus owns the source voltage; linear NB networks retain setpoints.
     magnitude, angle = if bus.vm_pu === nothing
         ismissing(e.setpoint.Vac) &&
@@ -29,5 +30,43 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Source}, con
     name = current_probe!(state, e, terminal, context)
     ammeter_stub!(state.main, (x + 108, y + 54), bus.name, name)
     output_probe!(state.main, name, "branch", "kA", (x + 144, y + 126))
+    return nothing
+end
+
+# PSCAD 5.1 station measurement: orient-0 NA (-36, 0) is positive.
+function dc_source!(state, e, terminal, bus, context)
+    magnitude = if bus.vm_pu === nothing
+        ismissing(e.setpoint.Vdc) &&
+            throw(ArgumentError("element :$(e.name) is missing setpoint.Vdc"))
+        e.setpoint.Vdc
+    else
+        bus.vm_pu * bus.base_kV
+    end
+    isfinite(magnitude) && magnitude > 0 ||
+        throw(ArgumentError("element :$(e.name) requires positive pole-to-ground Vdc"))
+    x, y = allocate_cell!(state.layout)
+    labels = context.dc_labels[bus.key]
+    probe = current_probe!(state, e, terminal, context)
+    for (index, pole) in enumerate(("P", "N"))
+        row = y + 54 + 72 * (index - 1)
+        name = pscad_name(e.pscad * "_" * pole; used = state.used)
+        component!(state.main,
+            "source_1",
+            (x + 126, row),
+            [
+                "Name" => name, "AC" => "0", "Type" => "6", "Cntrl" => "0",
+                "Grnd" => "0", "Vm" => pscad_value(magnitude; unit = "kV"),
+                "Tc" => pscad_value(context.settings.source_ramp; unit = "s"),
+                "Ph" => "0.0 [deg]", "f" =>
+                    pscad_value(context.settings.frequency; unit = "Hz")])
+        if pole == "P"
+            ammeter_stub!(state.main, (x + 90, row), labels[1], probe; direction = -1)
+            stub!(state.main, (x + 162, row), nothing)
+        else
+            stub!(state.main, (x + 90, row), nothing; direction = -1)
+            stub!(state.main, (x + 162, row), labels[2])
+        end
+    end
+    output_probe!(state.main, probe, "branch", "kA", (x + 144, y + 180))
     return nothing
 end

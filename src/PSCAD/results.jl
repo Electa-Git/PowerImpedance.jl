@@ -118,10 +118,9 @@ function _comparison_bus(model, name)
     index = findfirst(bus -> bus.name == name, model.netlist.buses)
     index === nothing && throw(ArgumentError("missing power-flow bus for $name"))
     bus = model.netlist.buses[index]
-    bus.kind in (:ac3_dq, :ac3_abc) ||
-        throw(ArgumentError("comparison of DC bus $name is not implemented yet"))
     point = get(model.operating_point.bus_states, bus.key, nothing)
-    point !== nothing && point.vm_pu !== nothing && point.va_rad !== nothing ||
+    point !== nothing && point.vm_pu !== nothing &&
+    (bus.kind == :dc || point.va_rad !== nothing) ||
         throw(ArgumentError("missing power-flow voltage for bus $name"))
     return bus, point
 end
@@ -129,9 +128,9 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Compare settled AC bus voltages and branch-terminal currents with a retained
+Compare settled AC/DC bus voltages and branch-terminal currents with a retained
 power flow. Compare only the channels in `model.probes`; require solved data
-and complete three-phase measurements for those channels.
+and complete three-phase AC or scalar DC measurements for those channels.
 
 # Arguments
 
@@ -154,8 +153,11 @@ and complete three-phase measurements for those channels.
 The terminal-current reference is ``|S|/(3V_{LN})`` with power in MW/MVAr and
 phase RMS voltage in kV. Series sides use `(pf, qf)` and `(pt, qt)` respectively;
 sources use `(pg, qg)`. Shunt powers are retained from the solved bus voltage
-and the power-flow input admittance. Angles are relative to the manifest's
-reference bus in each domain.
+and the power-flow input admittance. AC angles are relative to the manifest's reference bus.
+DC bus voltage is the window mean of V_P - V_N, compared with twice the
+pole-to-ground bus voltage. DC current magnitudes use the P-pole window mean
+and the reference |P|/V_pp. Omit a DC current row when no solved terminal power
+exists (for example a source without a gendc solution record).
 """
 function compare_operating_point(result::PSCADResult, model::PSCADModel;
         rtol_v = 0.01, atol_angle_deg = 1.0, rtol_i = 0.02)
@@ -184,12 +186,30 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
         channel.kind in (:voltage, :current) || continue
         _probe_present(channel, result.channels) ||
             throw(ArgumentError("missing PSCAD probe $(channel.name)"))
-        channel.dim == 3 ||
-            throw(ArgumentError("AC comparison requires three-phase probe $(channel.name)"))
         value = settled[channel.name]
         bus, point = _comparison_bus(model, channel.bus)
         voltage = point.vm_pu * bus.base_kV
+        dc = bus.kind == :dc
+        channel.dim == (dc ? 1 : 3) ||
+            throw(ArgumentError("$(dc ? "DC comparison requires scalar" : "AC comparison requires three-phase") probe $(channel.name)"))
         if channel.kind == :voltage
+            if dc
+                channel.side in ("P", "N") ||
+                    throw(ArgumentError("DC voltage probe $(channel.name) must identify its pole"))
+                partner = findfirst(
+                    c -> c.kind == :voltage && c.bus == bus.name &&
+                         c.side == (channel.side == "P" ? "N" : "P"),
+                    model.probes.channels)
+                partner === nothing &&
+                    throw(ArgumentError("missing opposite-pole voltage probe at $(bus.name)"))
+                other = model.probes.channels[partner]
+                other.dim == 1 && _probe_present(other, result.channels) ||
+                    throw(ArgumentError("missing PSCAD scalar probe $(other.name)"))
+                channel.side == "N" && continue
+                actual = value.mean - settled[other.name].mean
+                add_row(:voltage_dc, voltage_probe_name(bus.name), actual, 2voltage, rtol_v)
+                continue
+            end
             add_row(:voltage_rms, channel.name, value.rms, voltage, rtol_v)
             reference_name = model.probes.reference_bus
             reference_name === nothing &&
@@ -212,12 +232,19 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
             element_index === nothing &&
                 throw(ArgumentError("missing power-flow element $(channel.element)"))
             e = model.netlist.elements[element_index]
-            terminal_index = findfirst(
-                t -> string(t.side) == channel.side &&
-                     t.bus == bus.key, e.terminals)
-            terminal_index === nothing &&
+            any(t -> string(t.side) == channel.side && t.bus == bus.key, e.terminals) ||
                 throw(ArgumentError("missing terminal $(channel.element) side $(channel.side) at $(bus.name)"))
             flow = get(model.operating_point.branch_flows, e.name, nothing)
+            if dc
+                field = e.model isa PowerImpedance.Source ? :pgdc :
+                        channel.side == "1" ? :pf : :pt
+                (flow === nothing || !haskey(flow, field)) && continue
+                voltage > 0 ||
+                    throw(ArgumentError("current comparison requires positive bus voltage"))
+                add_row(:current_dc, channel.name, abs(value.mean),
+                    abs(flow[field]) / (2voltage), rtol_i)
+                continue
+            end
             flow === nothing &&
                 throw(ArgumentError("missing power-flow current data for :$(e.name) side $(channel.side)"))
             fields = e.model isa PowerImpedance.Source ? (:pg, :qg) :

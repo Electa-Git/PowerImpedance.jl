@@ -1,6 +1,7 @@
 module PSCADPlanTests
 using Test, PowerImpedance, LinearAlgebra
-using ..PSCADFixtures: small_ac_network, passive_ohl_network
+using ..PSCADFixtures: small_ac_network, passive_ohl_network, transformer_network,
+                       dc_network
 const P = PowerImpedance.PSCAD
 
 function plan_shape(plan)
@@ -58,6 +59,10 @@ function check_layout(plan, number_of_cells)
         if c.defn == "master:source_3"
             push!(ports, (c.x + 36, c.y))
             @test Dict(c.params)["Grnd"] == "1"
+        elseif c.defn == "master:source_1"
+            append!(ports, [(c.x - 36, c.y), (c.x + 36, c.y)])
+        elseif c.defn == "master:xfmr-3p2w"
+            append!(ports, [(c.x - 54, c.y), (c.x + 36, c.y)])
         elseif c.defn in
                ("master:resistor", "master:inductor", "master:capacitor", "master:ammeter")
             append!(ports, [(c.x, c.y), (c.x + 36, c.y)])
@@ -182,9 +187,9 @@ end
     @test occursin(":line", sprint(showerror, caught))
     @test occursin("distinct per-conductor", sprint(showerror, caught))
     # A supported netlist model with no emitter fails at the dispatch fallback.
-    e = transformer(; pins = 3)
-    e.symbol = :future_transformer
-    unsupported = P.NetlistElement(:future_transformer, "future_transformer", e,
+    e = PowerImpedance.Element(; element_model = PowerImpedance.Cable(), input_pins = 2, output_pins = 2)
+    e.symbol = :future_cable
+    unsupported = P.NetlistElement(:future_cable, "future_cable", e,
         e.element_model, P.Terminal[], :transformer, e.setpoint)
     state = P.PlanState(P.CanvasPlan(), P.LineDefinitionPlan[], P.TLineWrapperPlan[],
         P.GridLayout(), P.ProbeChannel[], Set{String}())
@@ -194,7 +199,7 @@ end
         e
     end
     @test caught isa ArgumentError
-    @test occursin("PSCAD export of :future_transformer", sprint(showerror, caught))
+    @test occursin("PSCAD export of :future_cable", sprint(showerror, caught))
     @test occursin("is not implemented yet", sprint(showerror, caught))
 end
 
@@ -304,6 +309,207 @@ end
     end
     @test caught isa ArgumentError
     @test occursin("not implemented yet", sprint(showerror, caught))
+end
+
+# Resolve labels, wires and touching component ports without treating a
+# two-terminal device as a wire. Used to check the actual emitted circuit.
+function electrical_nodes(plan)
+    parent = Dict{Tuple{Int, Int}, Tuple{Int, Int}}()
+    function root(p)
+        get!(parent, p, p)
+        parent[p] == p ? p : (parent[p] = root(parent[p]))
+    end
+    function join(a, b)
+        parent[root(a)] = root(b)
+    end
+    for w in plan.main.wires
+        join(w.vertices...)
+    end
+    labels = Dict{String, Tuple{Int, Int}}()
+    for c in plan.main.components
+        if c.defn == "master:nodelabel"
+            name = Dict(c.params)["Name"]
+            point = (c.x, c.y)
+            haskey(labels, name) ? join(labels[name], point) : (labels[name] = point)
+        elseif c.defn == "master:ground"
+            point = (c.x, c.y)
+            haskey(labels, "ground") ? join(labels["ground"], point) :
+            (labels["ground"] = point)
+        end
+    end
+    return (; root, labels)
+end
+
+@testset "PSCAD transformer plans" begin
+    for organization in (:YY, :ΔY)
+        classic, state = transformer_network(; organization)
+        plan = P.build_plan(P.netlist(classic, nothing); name = "transformer")
+        @test plan_shape(plan) ==
+              plan_shape(P.build_plan(P.netlist(state, nothing); name = "transformer"))
+        @test counts(plan)["master:xfmr-3p2w"] == 1
+        @test counts(plan)["master:resistor"] == 4
+        @test counts(plan)["master:inductor"] == 3
+        @test counts(plan)["master:ammeter"] == 4
+        @test counts(plan)["master:ground"] == 3
+        check_layout(plan, 11)
+        winding = only(filter(c -> c.defn == "master:xfmr-3p2w", plan.main.components))
+        @test Dict(winding.params) == Dict("Name" => "line", "Tmva" => "1000 [MVA]",
+            "f" => "50.0 [Hz]", "YD1" => organization == :ΔY ? "1" : "0",
+            "YD2" => "0", "Lead" => "1", "Ideal" => organization == :YY ? "0" : "1",
+            "Xl" => P.pscad_value(P.YY_LEAKAGE_PU; unit = "pu"),
+            "Im1" => P.pscad_value(P.YY_MAGNETIZING_CURRENT_PERCENT; unit = "%"),
+            "NLL" => "0.0 [pu]", "CuL" => "0.0 [pu]", "Tap" => "0", "View" => "1",
+            "Dtls" => "0", "V1" => "380.0 [kV]", "V2" => "150.0 [kV]", "Enab" => "0")
+        for (name, field, value) in (("line_primary_R", "R", "10.0 [ohm]"),
+            ("line_primary_L", "L", "0.1 [H]"), ("line_secondary_R", "R", "1.0 [ohm]"),
+            ("line_secondary_L", "L", "0.05 [H]"),
+            ("line_magnetizing_R", "R", "1000000.0 [ohm]"), (
+            "line_magnetizing_L", "L", "1000.0 [H]"))
+            part = only(filter(c -> get(Dict(c.params), "Name", "") == name, plan.main.components))
+            @test Dict(part.params)[field] == value
+        end
+        @test [c.name for c in plan.probes.channels] ==
+              ["I_source_1", "I_line_1", "I_line_2", "I_load_1", "V_B1", "V_B2"]
+        circuit = electrical_nodes(plan)
+        for parameter in ("R", "L")
+            part = only(filter(
+                c -> get(Dict(c.params), "Name", "") == "line_magnetizing_$parameter",
+                plan.main.components))
+            @test circuit.root((part.x, part.y)) ==
+                  circuit.root((winding.x - 54, winding.y))
+            @test circuit.root((part.x + 36, part.y)) ==
+                  circuit.root(circuit.labels["ground"])
+        end
+        # Turn and stray capacitances lie behind the terminal current meters.
+        t = classic.elements[:line].element_model
+        t.Cₜ = 1e-8
+        t.Cₛ = 2e-8
+        capacitive = P.build_plan(P.netlist(classic, nothing))
+        check_layout(capacitive, 14)
+        circuit = electrical_nodes(capacitive)
+        for (name, left, right, value) in (
+            ("line_turn_1_C", "line_terminal_1", "ground", "0.01 [uF]"),
+            ("line_turn_2_C", "line_terminal_2", "ground", "0.01 [uF]"),
+            ("line_stray_C", "line_terminal_1", "line_terminal_2", "0.02 [uF]"))
+            part = only(filter(c -> get(Dict(c.params), "Name", "") == name, capacitive.main.components))
+            @test Dict(part.params)["C"] == value
+            @test circuit.root((part.x, part.y)) == circuit.root(circuit.labels[left])
+            @test circuit.root((part.x + 36, part.y)) == circuit.root(circuit.labels[right])
+        end
+        for field in (:Rₚ, :Lₚ, :Rₛ, :Lₛ, :Lₘ, :Rₘ, :Cₜ, :Cₛ)
+            setproperty!(t, field, 0.0)
+        end
+        empty = P.build_plan(P.netlist(classic, nothing))
+        check_layout(empty, 9)
+        @test counts(empty)["master:resistor"] == 1 # load only
+        @test !haskey(counts(empty), "master:inductor")
+        t.Rₘ = t.Lₘ = Inf
+        @test plan_shape(empty) == plan_shape(P.build_plan(P.netlist(classic, nothing)))
+        t.hasRω = true
+        @test_throws ArgumentError P.build_plan(P.netlist(classic, nothing))
+        t.hasRω = false
+        for (field, value) in ((:Rₚ, -1.0), (:Cₜ, NaN), (:n, Inf), (
+            :organization, :unsupported))
+            previous = getproperty(t, field)
+            setproperty!(t, field, value)
+            @test_throws ArgumentError P.build_plan(P.netlist(classic, nothing))
+            setproperty!(t, field, previous)
+        end
+    end
+end
+
+@testset "PSCAD DC sources, paths and references" begin
+    classic, state = dc_network()
+    plan = P.build_plan(P.netlist(classic, nothing); name = "dc")
+    @test plan_shape(plan) ==
+          plan_shape(P.build_plan(P.netlist(state, nothing); name = "dc"))
+    check_layout(plan, 9)
+    @test counts(plan)["master:source_1"] == 4
+    @test counts(plan)["master:resistor"] == 3
+    @test counts(plan)["master:inductor"] == 2
+    @test counts(plan)["master:ground"] == 5
+    @test counts(plan)["master:ammeter"] == 6
+    @test [c.name for c in plan.probes.channels] ==
+          ["I_ac_1", "I_from_1", "I_to_1", "I_line_1", "I_line_2",
+        "I_ac_load_1", "V_BUS1", "V_D1_P", "V_D1_N", "V_D2_P", "V_D2_N"]
+    @test all(c -> c.dim == 1, filter(c -> c.bus != "BUS1", plan.probes.channels))
+    @test plan_shape(plan) ==
+          plan_shape(P.build_plan(P.netlist(classic, nothing); name = "dc", dc_reference = :none))
+    circuit = electrical_nodes(plan)
+    for (name, bus, magnitude) in (("from", "D1", "320.0 [kV]"), ("to", "D2", "318.0 [kV]")),
+        pole in ("P", "N")
+
+        source = only(filter(
+            c -> c.defn == "master:source_1" && Dict(c.params)["Name"] == name * "_" * pole,
+            plan.main.components))
+        @test Dict(source.params) == Dict("Name" => name * "_" * pole,
+            "AC" => "0", "Type" => "6", "Grnd" => "0", "Cntrl" => "0",
+            "Vm" => magnitude, "Tc" => "0.05 [s]", "Ph" => "0.0 [deg]", "f" => "50.0 [Hz]")
+        # Positive NA of the P source faces its series meter; the N source's
+        # positive NA is grounded, its negative NB faces the negative bus.
+        if pole == "P"
+            meter = only(filter(
+                c -> c.defn == "master:ammeter" && Dict(c.params)["Name"] == "I_$(name)_1",
+                plan.main.components))
+            @test circuit.root((source.x - 36, source.y)) ==
+                  circuit.root((meter.x + 36, meter.y))
+            @test circuit.root((meter.x, meter.y)) ==
+                  circuit.root(circuit.labels[bus * "_P"])
+            @test circuit.root((source.x + 36, source.y)) ==
+                  circuit.root(circuit.labels["ground"])
+        else
+            @test circuit.root((source.x - 36, source.y)) ==
+                  circuit.root(circuit.labels["ground"])
+            @test circuit.root((source.x + 36, source.y)) ==
+                  circuit.root(circuit.labels[bus * "_N"])
+        end
+    end
+    @test count(c -> c.defn == "master:resistor" && Dict(c.params)["R"] == "1.0 [ohm]", plan.main.components) ==
+          2
+    @test all(c -> Dict(c.params)["L"] == "0.025 [H]",
+        filter(c -> c.defn == "master:inductor", plan.main.components))
+    # Solved voltages override source setpoints without changing the input.
+    solved = power_flow(deepcopy(classic))
+    shifted = deepcopy(solved)
+    shifted[1]["solution"]["busdc"]["1"]["vm"] = 1.02
+    shifted_plan = P.build_plan(P.netlist(classic, shifted))
+    @test all(c -> Dict(c.params)["Vm"] == "326.4 [kV]",
+        filter(
+            c -> c.defn == "master:source_1" && startswith(Dict(c.params)["Name"], "from"),
+            shifted_plan.main.components))
+    # Remove the receiving source: the receiving bus gets two local references.
+    elements = (; ac = state.elements.ac, from = state.elements.from,
+        line = state.elements.line, ac_load = state.elements.ac_load)
+    rows = [(; r.node, r.element, r.side, r.terminal)
+            for r in state.topology.connections if r.element != :to]
+    floating = NetworkBuilder.define(elements, rows; options = state.options)
+    reference = P.build_plan(P.netlist(floating, nothing))
+    no_reference = P.build_plan(P.netlist(floating, nothing); dc_reference = :none)
+    check_layout(reference, 10)
+    @test counts(reference)["master:resistor"] ==
+          counts(no_reference)["master:resistor"] + 2
+    resistors = filter(
+        c -> c.defn == "master:resistor" && occursin("reference", Dict(c.params)["Name"]),
+        reference.main.components)
+    @test length(resistors) == 2
+    @test all(c -> Dict(c.params)["R"] == "1.0E7 [ohm]", resistors)
+    @test_throws ArgumentError P.build_plan(P.netlist(floating, nothing); dc_reference = :invalid)
+    # Add a grounded parallel RC shunt. It suppresses local references and
+    # doubles C / halves R in both poles without invoking unsupported PF.
+    load = impedance(; z = s -> inv(inv(400.0) + s * 1e-6), pins = 1)
+    shunt_elements = merge(elements, (; load))
+    shunt_rows = vcat(rows,
+        [(node = :D2, element = :load, side = 1, terminal = 1),
+            (node = :gnd_dc, element = :load, side = 2, terminal = 1)])
+    shunt = NetworkBuilder.define(shunt_elements, shunt_rows; options = state.options)
+    shunt_plan = P.build_plan(P.netlist(shunt, nothing))
+    check_layout(shunt_plan, 10)
+    @test !any(c -> occursin("reference", get(Dict(c.params), "Name", "")), shunt_plan.main.components)
+    @test count(c -> c.defn == "master:resistor" && Dict(c.params)["R"] == "200.0 [ohm]",
+        shunt_plan.main.components) == 2
+    @test count(c -> c.defn == "master:capacitor" && Dict(c.params)["C"] == "2.0 [uF]",
+        shunt_plan.main.components) == 2
+    @test only(filter(c -> c.element == "load", shunt_plan.probes.channels)).dim == 1
 end
 
 @testset "PSCAD export requires extension before power flow" begin

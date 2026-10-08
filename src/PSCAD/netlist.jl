@@ -74,7 +74,8 @@ $(TYPEDEF)
 
 Retain an element, its physical model, connectivity, and operating setpoint.
 Setpoint powers are in MW/MVAr, angles in rad, AC voltages in phase peak kV,
-and DC voltages in pole-to-pole kV. Construction never mutates the element.
+and DC source voltages in pole-to-ground kV (converter voltages are pole-to-pole).
+Construction never mutates the element.
 
 $(TYPEDFIELDS)
 """
@@ -277,7 +278,8 @@ function _branch_flow(pmtype, solution, input, pf, terminals)
     fields = pmtype == "branch" ? (:pf, :qf, :pt, :qt) :
              pmtype == "branchdc" ? (:pf, :pt) :
              pmtype == "convdc" ? (:pgrid, :qgrid, :pdc) :
-             pmtype == "gen" ? (:pg, :qg) : ()
+             pmtype == "gen" ? (:pg, :qg) :
+             pmtype == "gendc" ? (:pgdc,) : ()
     isempty(fields) && return nothing
     return NamedTuple{fields}(Tuple(Float64(solution[string(field)]) * 1000.0
     for field in fields))

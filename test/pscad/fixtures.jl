@@ -74,4 +74,74 @@ function passive_ohl_network()
         options = (; voltageBase = 380 / sqrt(3)))
     return (; classic, state = builder)
 end
+
+"""
+    transformer_network(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
+
+Return classic and builder circuits with a 380/150 kV LL transformer and a
+400 Ω per-phase secondary load. Use the winding values from Transformer_test:
+Rₚ = 10 Ω, Lₚ = 0.1 H, Rₛ = 1 Ω, Lₛ = 0.05 H. The default magnetizing branch
+draws about 1 % of the load current; `Rₘ = 1e4, Lₘ = 10.0` reproduces the
+Transformer_test stress values, whose large magnetizing current exposes the
+power-flow pi-model approximation of the T-model.
+Both representations declare 380/sqrt(3) kV phase RMS as the common base.
+"""
+function transformer_network(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
+    classic, state = small_ac_network()
+    winding = transformer(; pins = 3, transformation = true, organization,
+        n = 380 / 150, Rₚ = 10.0, Lₚ = 0.1, Rₛ = 1.0, Lₛ = 0.05,
+        Rₘ, Lₘ, Cₜ = 0.0, Cₛ = 0.0)
+    winding.symbol = :line
+    winding.pins = copy(classic.elements[:line].pins)
+    classic.elements[:line] = winding
+    elements = merge(state.elements, (; line = deepcopy(winding)))
+    rows = [(; row.node, row.element, row.side, row.terminal)
+            for row in state.topology.connections]
+    builder = NetworkBuilder.define(elements, rows;
+        options = (; voltageBase = 380 / sqrt(3)))
+    return (; classic, state = builder)
+end
+
+"""
+    dc_network()
+
+Return classic and builder representations of two DC voltage sources at 320
+and 318 kV pole-to-ground, joined by the differential series impedance
+2 + s*0.05 Ω. The common base is 320 kV. An independent AC slack island
+supports the classic power-flow solve; a 400 Ω AC shunt also makes that island
+materializable by NetworkBuilder. Grounded DC shunts currently become
+ordinary nonzero-voltage buses in that solver, so this fixture omits them.
+"""
+function dc_network()
+    elements = (;
+        ac = ac_source(; pins = 3, transformation = true,
+            setpoint = Setpoint(Vac = 320sqrt(2), θac = 0.0)),
+        from = dc_source(; setpoint = Setpoint(Vdc = 320.0)),
+        to = dc_source(; setpoint = Setpoint(Vdc = 318.0)),
+        line = impedance(; z = s -> 2.0 + s * 0.05, pins = 1),
+        ac_load = impedance(; z = s -> 400.0, pins = 3, transformation = true))
+    rows = [(node = Symbol("AC$k"), element, side = 1, terminal = k)
+            for element in (:ac, :ac_load) for k in 1:2]
+    append!(rows, [(node = :gnd, element = :ac_load, side = 2, terminal = k) for k in 1:2])
+    for (element, side, node) in ((:from, 1, :D1), (:to, 1, :D2),
+        (:line, 1, :D1), (:line, 2, :D2))
+        push!(rows, (; node, element, side, terminal = 1))
+    end
+    state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
+        voltageBase = 320.0))
+    classic = Network()
+    classic.voltageBase[1] = 320.0
+    for (name, element) in pairs(elements)
+        add!(classic, name, element)
+    end
+    for row in rows
+        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
+    end
+    for (name, count) in ((:ac, 2), (:from, 1), (:to, 1)), k in 1:count
+
+        connect!(classic, (name, Symbol("2.$k")), :gnd)
+    end
+    connect!(classic)
+    return (; classic, state)
+end
 end

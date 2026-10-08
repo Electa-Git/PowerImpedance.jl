@@ -16,8 +16,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Build a pure Julia plan for passive AC export. Emit sources, branches, shunts,
-then bus probes into separate layout cells, using node labels to join buses.
+Build a pure Julia plan for passive AC/DC export. Emit sources, branches, shunts,
+DC references, then bus probes into separate layout cells, using node labels to join buses.
 No files are written and no power flow is solved.
 
 # Arguments
@@ -27,6 +27,8 @@ No files are written and no power flow is solved.
 - `name`: ASCII project identifier.
 - `description`: Project description, defaulting to `name`.
 - `line_options`: Overrides keyed by PSCAD ground or frequency/phase field name.
+- `dc_reference`: `:midpoint_resistors` adds two grounding resistors at each DC
+  bus without a local source midpoint or grounded shunt; `:none` omits them.
 
 # Returns
 
@@ -34,16 +36,21 @@ No files are written and no power flow is solved.
 """
 function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationSettings(),
         name::AbstractString = "network", description::AbstractString = name,
-        line_options = (;))
+        line_options = (;), dc_reference = :midpoint_resistors)
+    dc_reference in (:midpoint_resistors, :none) ||
+        throw(ArgumentError("dc_reference must be :midpoint_resistors or :none"))
     overrides = _line_options(line_options)
     settings.frequency == netlist.frequency ||
         throw(ArgumentError("PSCAD settings frequency must match the network's $(netlist.frequency) Hz frame"))
     name == pscad_name(name) ||
         throw(ArgumentError("name must be an ASCII PSCAD identifier of at most 30 characters"))
     used = Set(vcat([bus.name for bus in netlist.buses], [e.pscad for e in netlist.elements]))
+    dc_labels = Dict(bus.key => (pscad_name(bus.name * "_P"; used),
+                         pscad_name(bus.name * "_N"; used))
+    for bus in netlist.buses if bus.kind == :dc)
     state = PlanState(CanvasPlan(), LineDefinitionPlan[], TLineWrapperPlan[],
         GridLayout(), ProbeChannel[], used)
-    context = (; netlist, settings, line_options = overrides,
+    context = (; netlist, settings, line_options = overrides, dc_labels,
         buses = Dict(bus.key => bus for bus in netlist.buses))
     elements = sort(netlist.elements;
         by = e -> e.role == :source ? 1 :
@@ -53,7 +60,17 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
         emit!(state, e, context)
     end
     for bus in netlist.buses
-        voltage_probe!(state, bus)
+        labels = bus.kind == :dc ? dc_labels[bus.key] : (bus.name,)
+        if bus.kind == :dc && dc_reference == :midpoint_resistors
+            grounded = any(netlist.elements) do e
+                any(t -> t.bus == bus.key, e.terminals) &&
+                    (e.model isa PowerImpedance.Source ||
+                     (e.model isa PowerImpedance.Impedance &&
+                      any(t -> t.grounded, e.terminals)))
+            end
+            grounded || dc_reference!(state, bus, labels)
+        end
+        voltage_probe!(state, bus, labels)
     end
     reference_key = netlist.operating_point.slack_bus
     if reference_key === nothing
@@ -92,8 +109,9 @@ function _export_keywords(path, name, line_options, dc_reference)
     return nothing
 end
 
-function _export_project(netlist, path, name, settings, resolved_powerflow, line_options)
-    plan = build_plan(netlist; settings, name, line_options,
+function _export_project(
+        netlist, path, name, settings, resolved_powerflow, line_options, dc_reference)
+    plan = build_plan(netlist; settings, name, line_options, dc_reference,
         description = "PowerImpedance.jl: $name")
     written = _write_project(plan, abspath(path))
     provenance = (source = :export,
@@ -107,7 +125,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Export a passive AC network to a portable, single-subsystem `.pscx` project.
+Export a passive AC/DC network to a portable, single-subsystem `.pscx` project.
 Load `PythonCall` to enable the mhi-xml writer. Validate keywords and require
 the extension before solving power flow or writing the project.
 
@@ -123,7 +141,9 @@ the extension before solving power flow or writing the project.
   overrides, for example `(; FS = 0.5, FE = 1e6, Numf = 200, CPASS = 0)`.
   Numeric values use each field's PSCAD units; strings retain explicit units.
   Unknown field names throw `ArgumentError` before solving power flow.
-- `dc_reference`: `:midpoint_resistors` (default) or `:none`, reserved for DC export.
+- `dc_reference`: `:midpoint_resistors` (default) adds two `1e7` Ω resistors
+  to ground per DC bus without a local source midpoint or grounded shunt.
+  `:none` omits these additional references.
 
 # Returns
 
@@ -138,6 +158,9 @@ active-element setpoints and emits solver logs. These mutations are retained.
 Pass a previously solved tuple to avoid re-solving. The builder method calls
 `NetworkBuilder.solve`; linear networks skip power flow, use source setpoints,
 and retain no solved comparison data. This function never contacts PSCAD.
+DC source `Setpoint.Vdc` is interpreted as pole-to-ground kV, following its
+power-flow conversion; converter `Vdc` uses pole-to-pole kV. With a solved
+record, each pole source uses the bus's `vm_pu * base_kV` instead.
 """
 function export_pscad(net::PowerImpedance.Network; path,
         name = splitext(basename(path))[1], powerflow = nothing,
@@ -147,7 +170,7 @@ function export_pscad(net::PowerImpedance.Network; path,
     _require_extension()
     pf = powerflow === nothing ? PowerImpedance.power_flow(net) : powerflow
     return _export_project(netlist(net, pf), path, name, settings,
-        powerflow === nothing, line_options)
+        powerflow === nothing, line_options, dc_reference)
 end
 
 function export_pscad(state::PowerImpedance.NetworkBuilder.NetworkState; path,
@@ -160,5 +183,5 @@ function export_pscad(state::PowerImpedance.NetworkBuilder.NetworkState; path,
         throw(ArgumentError("builder export obtains power flow from NetworkBuilder.solve; powerflow must be nothing"))
     solved = PowerImpedance.NetworkBuilder.solve(state)
     return _export_project(netlist(state, solved.powerflow), path, name, settings,
-        solved.powerflow !== nothing, line_options)
+        solved.powerflow !== nothing, line_options, dc_reference)
 end

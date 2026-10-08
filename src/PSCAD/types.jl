@@ -73,7 +73,7 @@ struct ProbeChannel
     bus::Union{Nothing, String}
     "Element name, when applicable."
     element::Union{Nothing, String}
-    "Element side, when applicable."
+    "Element side for current, or P/N pole for DC voltage, when applicable."
     side::Union{Nothing, String}
     "Number of measured components."
     dim::Int

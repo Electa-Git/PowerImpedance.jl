@@ -39,14 +39,24 @@ else
     P = PowerImpedance.PSCAD
     classic, state = PSCADFixtures.small_ac_network()
     ohl_classic, ohl_state = PSCADFixtures.passive_ohl_network()
+    yy_classic, yy_state = PSCADFixtures.transformer_network()
+    dy_classic, dy_state = PSCADFixtures.transformer_network(; organization = :ΔY)
+    dc_classic, dc_state = PSCADFixtures.dc_network()
     settings = P.SimulationSettings(simulation_time = 0.3, time_step = 50e-6,
         sample_step = 250e-6, snapshot_time = 0.2)
     @testset "PSCAD mhi-xml export round trip" begin
         models = PSCADModel[]
         for (name, input) in (("small_ac_classic", classic), ("small_ac_builder", state),
-            ("passive_ohl_classic", ohl_classic), ("passive_ohl_builder", ohl_state))
+            ("passive_ohl_classic", ohl_classic), ("passive_ohl_builder", ohl_state),
+            ("transformer_yy_classic", yy_classic), ("transformer_yy_builder", yy_state),
+            ("transformer_dy_classic", dy_classic), ("transformer_dy_builder", dy_state),
+            ("dc_classic", dc_classic), ("dc_builder", dc_state))
             path = joinpath(only(ARGS), name * ".pscx")
-            model = export_pscad(input; path, settings)
+            # ΔY XML checks exercise the selected station realization with no
+            # legacy power-flow evidence; native comparison waits for dy-fix.
+            model = startswith(name, "transformer_dy") ?
+                    P._export_project(P.netlist(input, nothing), path, name, settings,
+                false, (;), :midpoint_resistors) : export_pscad(input; path, settings)
             push!(models, model)
             plan = P.build_plan(model.netlist; settings, name, description = "PowerImpedance.jl: $name")
             summary = P.read_project_summary(path)
@@ -64,7 +74,16 @@ else
             @test summary.wrappers_per_defn ==
                   Dict(name * ":" * w.row => 1 for w in plan.wrappers)
             @test all(>=(2), values(summary.nodelabels))
-            @test summary.nodelabels == Dict("B1" => 3, "B2" => 3)
+            expected_labels = Dict{String, Int}()
+            for component in plan.main.components
+                component.defn == "master:nodelabel" || continue
+                label = Dict(component.params)["Name"]
+                expected_labels[label] = get(expected_labels, label, 0) + 1
+            end
+            @test summary.nodelabels == expected_labels
+            if startswith(name, "small_ac") || startswith(name, "passive_ohl")
+                @test summary.nodelabels == Dict("B1" => 3, "B2" => 3)
+            end
             @test Set(summary.pgbs) == Set(c.name for c in plan.probes.channels)
             @test all(summary.settings[k] == v for (k, v) in plan.settings.params)
             @test model.project_path == path
@@ -73,7 +92,8 @@ else
             @test model.provenance.powerimpedance_version ==
                   string(Base.pkgversion(PowerImpedance))
             @test model.provenance.mhi_xml_version == "1.3.0"
-            @test model.provenance.resolved_powerflow == (input isa Network)
+            @test model.provenance.resolved_powerflow ==
+                  (input isa Network && !startswith(name, "transformer_dy"))
             root = etree.parse(path).getroot()
             reread = mhixml.ProjectFile(path)
             @test pylen(reread.canvas("Main").xpath("./User")) ==
@@ -90,10 +110,10 @@ else
                     root.xpath("count(./definitions/Definition[@name='Main']/schematic/User[@defn='$defn'])")) ==
                       count
             end
-            for bus in model.netlist.buses
+            for (label, count) in expected_labels
                 @test pyconvert(Int,
-                    root.xpath("count(.//User[@defn='master:nodelabel']/paramlist/param[@name='Name'][@value='$(bus.name)'])")) >=
-                      2
+                    root.xpath("count(.//User[@defn='master:nodelabel']/paramlist/param[@name='Name'][@value='$label'])")) ==
+                      count
             end
             for channel in model.probes.channels
                 @test pyconvert(Int,
@@ -201,6 +221,36 @@ else
         @test isempty(models[2].operating_point.bus_states)
         @test !isempty(models[3].operating_point.bus_states)
         @test isempty(models[4].operating_point.bus_states)
+        @test !isempty(models[5].operating_point.bus_states)
+        @test isempty(models[6].operating_point.bus_states)
+        @test isempty(models[7].operating_point.bus_states)
+        @test isempty(models[8].operating_point.bus_states)
+        @test !isempty(models[9].operating_point.bus_states)
+        @test isempty(models[10].operating_point.bus_states)
+        # Exercise dc_reference through the public exporter, including no extra
+        # references at the source bus and no power flow for the linear builder.
+        elements = (; ac = dc_state.elements.ac, from = dc_state.elements.from,
+            line = dc_state.elements.line, ac_load = dc_state.elements.ac_load)
+        rows = [(; r.node, r.element, r.side, r.terminal)
+                for r in dc_state.topology.connections if r.element != :to]
+        # A second branch gives the receiving bus two owned terminals, as
+        # required by NetworkBuilder's classic-network materialization.
+        elements = merge(elements, (; parallel = impedance(; z = s -> 400.0, pins = 1)))
+        append!(rows,
+            [(node = :D1, element = :parallel, side = 1, terminal = 1),
+                (node = :D2, element = :parallel, side = 2, terminal = 1)])
+        floating = NetworkBuilder.define(elements, rows; options = dc_state.options)
+        mktempdir() do temporary
+            for reference in (:midpoint_resistors, :none)
+                path = joinpath(temporary, string(reference) * ".pscx")
+                model = export_pscad(floating; path, settings, dc_reference = reference)
+                root = etree.parse(path).getroot()
+                @test pyconvert(Int,
+                    root.xpath("count(.//User[@defn='master:resistor']/paramlist/param[@name='R'][@value='1.0E7 [ohm]'])")) ==
+                      (reference == :midpoint_resistors ? 2 : 0)
+                @test !model.provenance.resolved_powerflow
+            end
+        end
         # Supplied classic evidence avoids setpoint mutation and records R17.
         supplied = power_flow(classic)
         original = classic.elements[:source].setpoint

@@ -2,7 +2,7 @@ module PSCADResultsTests
 using Test, PowerImpedance
 const P = PowerImpedance.PSCAD
 const FIXTURES = normpath(joinpath(@__DIR__, "../data/pscad"))
-using ..PSCADFixtures: small_ac_network
+using ..PSCADFixtures: small_ac_network, dc_network
 
 function synthetic_result(time, channels; probes = P.ProbeManifest(), frequency = 50.0)
     settings = P.SimulationSettings(frequency = frequency, sample_step = 250e-6)
@@ -132,6 +132,57 @@ end
     delete!(flows, :line)
     @test_throws ArgumentError compare_operating_point(result, sides_model)
     @test_throws ArgumentError compare_operating_point(result, model; rtol_v = -1)
+end
+
+@testset "PSCAD DC operating-point comparison" begin
+    classic, _ = dc_network()
+    list = P.netlist(classic, power_flow(classic))
+    plan = P.build_plan(list)
+    model = PSCADModel("dc.pscx", "dc", list, plan.probes,
+        P.SimulationSettings(), list.operating_point, (; source = :fixture))
+    times = collect(0.0:250e-6:0.3)
+    channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
+    add_three_phase!(channels, "V_BUS1", times, 320sqrt(2) * cis(0.23))
+    add_three_phase!(channels, "I_ac_1", times, 0.8sqrt(2) * cis(0.23))
+    add_three_phase!(channels, "I_ac_load_1", times, 0.8sqrt(2) * cis(0.23))
+    for (bus, voltage) in (("D1", 320.0), ("D2", 318.0))
+        # Common-mode offset cancels in the differential voltage. Integer-cycle
+        # ripple averages to zero, exercising the actual scalar window means.
+        channels["V_$(bus)_P"] = voltage .+ 1.7 .+ 0.4 .* cos.(2π * 50 .* times)
+        channels["V_$(bus)_N"] = -voltage .+ 1.7 .+ 0.3 .* sin.(2π * 50 .* times)
+    end
+    for name in ("I_from_1", "I_to_1", "I_line_1", "I_line_2")
+        channels[name] = -2.0 .+ 0.2 .* cos.(2π * 50 .* times)
+    end
+    result = synthetic_result(times, channels; probes = plan.probes)
+    comparison = compare_operating_point(result, model)
+    @test all(comparison.within_tolerance)
+    @test count(==(:voltage_dc), comparison.quantity) == 2
+    @test count(==(:current_dc), comparison.quantity) == 4
+    @test comparison.powerflow[comparison.quantity .== :voltage_dc] ≈ [640.0, 636.0]
+    @test comparison.powerflow[comparison.quantity .== :current_dc] ≈ fill(2.0, 4)
+    @test maximum(comparison.error) < 1e-8
+    perturbed = deepcopy(channels)
+    perturbed["V_D2_P"] .+= 20.0
+    perturbed["I_line_2"] .*= 1.1
+    failed = compare_operating_point(synthetic_result(times, perturbed), model)
+    @test Set(failed.name[.!failed.within_tolerance]) == Set(["V_D2", "I_line_2"])
+    missing = copy(channels)
+    delete!(missing, "V_D1_N")
+    @test_throws ArgumentError compare_operating_point(synthetic_result(times, missing), model)
+    manifest = P.ProbeManifest(filter(c -> c.name != "V_D1_N", plan.probes.channels), plan.probes.reference_bus)
+    incomplete_model = PSCADModel(model.project_path, model.project_name, list,
+        manifest, model.settings, model.operating_point, model.provenance)
+    @test_throws ArgumentError compare_operating_point(result, incomplete_model)
+    # No solved DC source power: omit its current row, keep voltage and branch
+    # evidence. AC missing-data behavior remains unchanged.
+    flows = copy(list.operating_point.branch_flows)
+    delete!(flows, :from)
+    point = P.OperatingPointRecord(list.operating_point.bus_states, flows,
+        list.operating_point.setpoints, list.operating_point.slack_bus, list.operating_point.bases)
+    partial = PSCADModel(model.project_path, model.project_name, list, plan.probes,
+        model.settings, point, model.provenance)
+    @test count(==(:current_dc), compare_operating_point(result, partial).quantity) == 3
 end
 
 @testset "PSCAD settings and existing-project types" begin
