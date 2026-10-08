@@ -29,6 +29,24 @@ end
         @test config.remote_root == fields["remote_root"]
         @test config.transport === :ssh
         @test config.timeout == 1800
+        @test config.pscad_port === nothing
+        for port in (1024, 50000, 65535)
+            fields["pscad_port"] = port
+            save()
+            @test RemoteConfig(filename).pscad_port == port
+            @test RemoteConfig("fixture", "shared", "scratch", "julia", "python";
+                local_root = directory, pscad_port = port).pscad_port == port
+        end
+        for port in (true, false, 0, 1023, 65536, -1, 50000.0, "50000")
+            fields["pscad_port"] = port
+            save()
+            @test_throws ArgumentError RemoteConfig(filename)
+            @test_throws ArgumentError RemoteConfig(
+                "fixture", "shared", "scratch", "julia", "python";
+                local_root = directory, pscad_port = port)
+        end
+        delete!(fields, "pscad_port")
+        save()
         @test isempty(config.command)
         withenv("POWERIMPEDANCE_PSCAD_CONFIG" => filename) do
             @test RemoteConfig().local_root == config.local_root
@@ -80,15 +98,40 @@ end
             config, raw"Z:\case's", raw"C:\scratch", "generated";
             output_stem = "pi", verbosity = 2)
         for text in ("-SharedCase 'Z:\\case''s'", "-ProjectName 'generated'", "-OutputStem 'pi'",
-            "-PSCADVersion '5.1.0'", "-Verbosity '2'", "-TimeoutSeconds '1800'")
+            "-PSCADVersion '5.1.0'", "-PSCADPort 0", "-RemoteRoot 'C:\\scratch space'",
+            "-Verbosity '2'", "-TimeoutSeconds '1800'")
             @test occursin(text, supervisor)
         end
         @test !occursin("-Formulation", supervisor)
         @test !occursin("-Frequency", supervisor)
-        cancel = P._cancel_command(raw"C:\scratch\case")
-        for text in ("owner.txt", "Get-CimInstance", "taskkill.exe /PID", "/T /F", "StartsWith", "CommandLine")
+        fields["pscad_port"] = 50000
+        save()
+        @test occursin("-PSCADPort 50000",
+            P._supervisor_command(
+                RemoteConfig(filename), "shared", "scratch", "generated"; output_stem = "pi"))
+        cancel = P._cancel_command(raw"Z:\case's\toolkit", raw"C:\scratch\case's")
+        @test cancel ==
+              ". 'Z:\\case''s\\toolkit\\lifecycle.ps1'; Stop-PSCADCase -LocalCase 'C:\\scratch\\case''s'"
+        for text in ("lifecycle.ps1", "Stop-PSCADCase", "-LocalCase")
             @test occursin(text, cancel)
         end
+        lifecycle = P.PSCAD_REMOTE_SOURCES["lifecycle.ps1"]
+        for text in ("owner.txt", "pscad-owner.txt", "EMTDC", "ExecutablePath", "CreationDate",
+            "Get-CimInstance", "taskkill.exe /PID", "/T /F", "StartsWith", "CommandLine")
+            @test occursin(text, lifecycle)
+        end
+        @test !occursin("exit 0", lifecycle)
+        @test occursin(". (Join-Path \$PSScriptRoot \"lifecycle.ps1\")",
+            P.PSCAD_REMOTE_SOURCES["supervisor.ps1"])
+        for name in ("Stop-OwnedRunner", "Stop-EMTDC", "Stop-OwnedPSCAD", "Stop-PSCADCase")
+            @test occursin("function $name {", lifecycle)
+            @test !occursin("function $name {", P.PSCAD_REMOTE_SOURCES["supervisor.ps1"])
+        end
+        long_case = "C:\\scratch\\" * repeat("x", 189)
+        @test length(long_case) == 200
+        @test length(join(
+            P._powershell_argv(P._cancel_command(
+                P._remote_path(long_case, "toolkit"), long_case)), ' ')) < 2000
         @test_throws ArgumentError P.validate(Dict("version" => 5), config)
     end
     mktempdir() do root

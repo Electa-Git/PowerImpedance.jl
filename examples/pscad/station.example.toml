@@ -12,6 +12,9 @@ julia_executable = 'C:\Julia\bin\julia.exe'
 python_executable = 'C:\PSCADPython\Scripts\python.exe'
 # This adapter supports PSCAD 5.1.0.
 pscad_version = "5.1.0"
+# Attach to this station-local automation port, or start PSCAD in the account's
+# logged-on desktop session if it is not listening. Omit for a private launch.
+# pscad_port = 50000
 # Transport: ssh, local (Windows callers), or command (argument array below).
 transport = "command"
 # Exact {host} arguments are replaced; encoded PowerShell arguments are appended.

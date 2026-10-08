@@ -119,6 +119,7 @@ end
         @test input["settings"]["plot_type"] == "OUT"
         @test !haskey(input["settings"], "snapshot_time")
         @test Set(keys(input["toolkit"])) == Set(keys(P.PSCAD_REMOTE_SOURCES))
+        @test !haskey(input, "pscad_port")
         complete = TOML.parsefile(joinpath(source, "complete.toml"))
         @test complete["schema_version"] == 1
         @test complete["observed_solver"] == IDENTITY
@@ -137,6 +138,12 @@ end
         @test reused.channels["Voltage"] !== first_result.channels["Voltage"]
         @test LAUNCHES[] == 1
         @test IDENTIFICATIONS[] == 1
+        with_port = RemoteConfig("fixture", root, "unused", "julia", "python";
+            local_root = root, transport = :fixture, pscad_port = 50000)
+        @test compute(model, PSCADRun();
+            options = merge(options,
+                (remote = with_port, resume_run_directory = source))).diagnostics.reused
+        @test LAUNCHES[] == 1
         @test original ==
               Dict(path => (bytes2hex(open(sha256, path)), mtime(path)) for path in files)
         @test compute(model,

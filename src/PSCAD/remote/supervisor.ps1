@@ -4,6 +4,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $LocalCase,
     [Parameter(Mandatory = $true)]
+    [string] $RemoteRoot,
+    [Parameter(Mandatory = $true)]
     [string] $Julia,
     [Parameter(Mandatory = $true)]
     [string] $Python,
@@ -13,6 +15,8 @@ param(
     [string] $OutputStem,
     [Parameter(Mandatory = $true)]
     [string] $PSCADVersion,
+    [ValidateScript({ $_ -eq 0 -or ($_ -ge 1024 -and $_ -le 65535) })]
+    [int] $PSCADPort = 0,
     [Parameter(Mandatory = $true)]
     [ValidateRange(0, 2)]
     [int] $Verbosity,
@@ -24,51 +28,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-function Stop-OwnedRunner {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $OwnerPath,
-        [Parameter(Mandatory = $true)]
-        [string] $OwnedRoot
-    )
-
-    if (-not (Test-Path -LiteralPath $OwnerPath -PathType Leaf)) {
-        return
-    }
-
-    $owner = @(Get-Content -LiteralPath $OwnerPath)
-    if ($owner.Count -ne 2) {
-        throw "Invalid PSCAD runner owner file: $OwnerPath"
-    }
-
-    $processId = 0
-    if (-not [int]::TryParse($owner[0], [ref] $processId)) {
-        throw "Invalid PSCAD runner PID in $OwnerPath"
-    }
-
-    $runner = [IO.Path]::GetFullPath($owner[1])
-    $root = [IO.Path]::GetFullPath($OwnedRoot).TrimEnd('\') + '\'
-    if (-not $runner.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to stop a process outside the PSCAD case directory: $runner"
-    }
-
-    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId"
-    if ($null -eq $process) {
-        Remove-Item -LiteralPath $OwnerPath -Force
-        return
-    }
-
-    if ($null -eq $process.CommandLine -or
-        $process.CommandLine.IndexOf($runner, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
-        throw "PID $processId no longer belongs to the recorded PSCAD runner"
-    }
-
-    & taskkill.exe /PID $processId /T /F | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not stop PSCAD runner process tree $processId"
-    }
-    Remove-Item -LiteralPath $OwnerPath -Force -ErrorAction SilentlyContinue
-}
+. (Join-Path $PSScriptRoot "lifecycle.ps1")
 
 function Remove-DirectoryWithRetry {
     param(
@@ -154,7 +114,8 @@ if ($sharedFull.StartsWith($localFull, [StringComparison]::OrdinalIgnoreCase) -o
     throw "PSCAD exchange and scratch directories must not overlap"
 }
 $ownerPath = Join-Path $LocalCase "owner.txt"
-Stop-OwnedRunner -OwnerPath $ownerPath -OwnedRoot $LocalCase
+$pscadOwnerPath = Join-Path $LocalCase "pscad-owner.txt"
+Stop-PSCADCase -LocalCase $LocalCase
 if (Test-Path -LiteralPath $LocalCase) {
     Remove-DirectoryWithRetry -Path $LocalCase
 }
@@ -191,6 +152,7 @@ $commandValues = @(
     $result,
     $ProjectName,
     $OutputStem,
+    $RemoteRoot,
     $stdoutPath,
     $stderrPath,
     $exitPath
@@ -200,34 +162,107 @@ foreach ($value in $commandValues) {
         throw "PSCAD runner command value contains an unsupported character: $value"
     }
 }
-$runnerArguments = @(
-    "`"--project=$toolkit`"",
-    "--startup-file=no",
-    "`"$runner`"",
-    "`"$projectFile`"",
-    "`"$result`"",
-    "`"$ProjectName`"",
-    "`"$OutputStem`"",
-    "`"$PSCADVersion`"",
-    "`"$Verbosity`""
-)
-$invokeLines = @(
-    "@echo off",
-    "setlocal",
-    "set `"JULIA_PYTHONCALL_EXE=$Python`"",
-    "`"$Julia`" $($runnerArguments -join ' ') 1>`"$stdoutPath`" 2>`"$stderrPath`"",
-    "set `"PSCAD_EXIT=%ERRORLEVEL%`"",
-    ">`"$exitPath`" echo %PSCAD_EXIT%",
-    "exit /b %PSCAD_EXIT%"
-)
-[IO.File]::WriteAllLines($invokePath, $invokeLines, [Text.Encoding]::ASCII)
-
+$pscadOwned = $false
+$pscadProcessId = 0
 $process = $null
 $exitCode = 1
 $timedOut = $false
 $stdoutCount = 0
 $stderrCount = 0
 try {
+    if ($PSCADPort -ne 0) {
+        $listeners = @(Get-NetTCPConnection -LocalPort $PSCADPort -State Listen -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty OwningProcess -Unique)
+        if ($listeners.Count -eq 0) {
+            $exe = & $Python -c "from mhi.common import process; print(process.find_exe('PSCAD', version='$PSCADVersion', x64=True))"
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+                throw "Could not resolve the PSCAD $PSCADVersion executable with mhi.common"
+            }
+            $exe = [IO.Path]::GetFullPath($exe.Trim())
+            $runId = Split-Path (Split-Path $LocalCase -Parent) -Leaf
+            $taskName = "PowerImpedance-PSCAD-$runId"
+            $startedAt = [DateTime]::UtcNow
+            try {
+                $action = New-ScheduledTaskAction -Execute $exe -Argument "/startup:au /port:$PSCADPort /silence:true /splash:false"
+                $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+                $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+                Register-ScheduledTask -TaskName $taskName -TaskPath '\' -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+                Start-ScheduledTask -TaskName $taskName -TaskPath '\'
+                $deadline = [DateTime]::UtcNow.AddSeconds(90)
+                do {
+                    $listeners = @(Get-NetTCPConnection -LocalPort $PSCADPort -State Listen -ErrorAction SilentlyContinue |
+                        Select-Object -ExpandProperty OwningProcess -Unique)
+                    if ($listeners.Count -gt 0) { break }
+                    Start-Sleep -Milliseconds 500
+                } while ([DateTime]::UtcNow -lt $deadline)
+                if ($listeners.Count -eq 0) {
+                    # PSCAD may have started without opening its automation port.
+                    # Retain ownership so the outer finally can still close it.
+                    $applications = @(Get-CimInstance Win32_Process -Filter "Name = 'Pscad.exe'" |
+                        Where-Object {
+                            $_.ExecutablePath -ieq $exe -and
+                            $_.CreationDate.ToUniversalTime() -ge $startedAt -and
+                            $null -ne $_.CommandLine -and
+                            $_.CommandLine -match "/port:$PSCADPort(\s|$)"
+                        })
+                    if ($applications.Count -eq 1) {
+                        $application = $applications[0]
+                        $pscadProcessId = $application.ProcessId
+                        Set-Content -LiteralPath $pscadOwnerPath -Value @($pscadProcessId, $exe, $PSCADPort, $application.CreationDate.ToUniversalTime().ToString('o'))
+                        $pscadOwned = $true
+                    }
+                    throw "PSCAD did not listen on port $PSCADPort within 90 seconds. A logged-on desktop session is required for the station account (a disconnected RDP session is fine), or start PSCAD with /port:$PSCADPort."
+                }
+                if ($listeners.Count -ne 1) {
+                    throw "Multiple processes are listening on PSCAD port $PSCADPort"
+                }
+                $pscadProcessId = $listeners[0]
+                $application = Get-CimInstance Win32_Process -Filter "ProcessId = $pscadProcessId"
+                if ($null -eq $application -or $application.ExecutablePath -ine $exe -or
+                    $application.CreationDate.ToUniversalTime() -lt $startedAt -or
+                    $null -eq $application.CommandLine -or
+                    $application.CommandLine -notmatch "/port:$PSCADPort(\s|$)") {
+                    throw "Listener on port $PSCADPort does not belong to the PSCAD desktop start"
+                }
+                Set-Content -LiteralPath $pscadOwnerPath -Value @($pscadProcessId, $exe, $PSCADPort, $application.CreationDate.ToUniversalTime().ToString('o'))
+                $pscadOwned = $true
+            } finally {
+                Unregister-ScheduledTask -TaskName $taskName -TaskPath '\' -Confirm:$false -ErrorAction SilentlyContinue
+            }
+        } else {
+            if ($listeners.Count -ne 1) {
+                throw "Multiple processes are listening on PSCAD port $PSCADPort"
+            }
+            $pscadProcessId = $listeners[0]
+        }
+        [Console]::Out.WriteLine("PSCAD port=$PSCADPort PID=$pscadProcessId owned=$pscadOwned")
+    }
+    $runnerOwned = ($PSCADPort -eq 0 -or $pscadOwned).ToString().ToLowerInvariant()
+    $runnerArguments = @(
+        "`"--project=$toolkit`"",
+        "--startup-file=no",
+        "`"$runner`"",
+        "`"$projectFile`"",
+        "`"$result`"",
+        "`"$ProjectName`"",
+        "`"$OutputStem`"",
+        "`"$PSCADVersion`"",
+        "`"$Verbosity`"",
+        "`"$PSCADPort`"",
+        "`"$runnerOwned`"",
+        "`"$RemoteRoot`""
+    )
+    $invokeLines = @(
+        "@echo off",
+        "setlocal",
+        "set `"JULIA_PYTHONCALL_EXE=$Python`"",
+        "`"$Julia`" $($runnerArguments -join ' ') 1>`"$stdoutPath`" 2>`"$stderrPath`"",
+        "set `"PSCAD_EXIT=%ERRORLEVEL%`"",
+        ">`"$exitPath`" echo %PSCAD_EXIT%",
+        "exit /b %PSCAD_EXIT%"
+    )
+    [IO.File]::WriteAllLines($invokePath, $invokeLines, [Text.Encoding]::ASCII)
+
     $process = Start-Process `
         -FilePath $env:ComSpec `
         -ArgumentList @("/d", "/s", "/c", "`"$invokePath`"") `
@@ -257,6 +292,7 @@ try {
             "PSCAD runner exceeded the configured timeout of $TimeoutSeconds seconds"
         )
         Stop-OwnedRunner -OwnerPath $ownerPath -OwnedRoot $LocalCase
+        Stop-EMTDC -CaseDirectory $LocalCase
         $exitCode = 124
     } else {
         $process.WaitForExit()
@@ -290,8 +326,18 @@ try {
     }
     $exitCode = 1
 } finally {
-    Copy-Result -Source $result -Destination $sharedOutput
-    Remove-Item -LiteralPath $ownerPath -Force -ErrorAction SilentlyContinue
+    try {
+        Stop-EMTDC -CaseDirectory $LocalCase
+    } finally {
+        try {
+            if ($pscadOwned) {
+                Stop-OwnedPSCAD -OwnerPath $pscadOwnerPath -GraceSeconds 10
+            }
+        } finally {
+            Copy-Result -Source $result -Destination $sharedOutput
+            Remove-Item -LiteralPath $ownerPath -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 if ($exitCode -eq 0) {

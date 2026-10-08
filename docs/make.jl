@@ -283,7 +283,8 @@ function build_pages()
         "Docstrings" => "developers/docstrings.md",
         "Conventions" => "developers/conventions.md",
         "Calculation parity" => "developers/calculation_parity.md",
-        "Network-model performance" => "developers/network_model_performance.md"
+        "Network-model performance" => "developers/network_model_performance.md",
+        "PSCAD mapping and station notes" => "developers/pscad_mapping.md"
     ]
 
     todo_page = copy_todo!()

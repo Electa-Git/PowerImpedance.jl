@@ -24,23 +24,11 @@ def identify(version, app=None):
                                    splash=False, silence=True, timeout=60)
         if str(app.version) != version:
             raise ValueError("PSCAD launched an unexpected application version")
-        # Version-bound workaround: mhi.pscad 3.1.2 settings() initializes its
-        # Fortran codec even for a read, raising "Unable to retrieve detected
-        # software" on this 5.1 station. This is its own underlying read-only
-        # settings call; bypass only that unrelated decoder, not solver settings.
-        # Revisit when the required automation version fixes that reader.
         fortran_version = "unknown"
         try:
-            settings = app._settings({})
-            for key in ("fortran_version", "fortran", "compiler", "fortran_compiler"):
-                if key in settings:
-                    fortran_version = str(settings[key])
-                    break
-            else:
-                for key, value in settings.items():
-                    if "fortran" in str(key).lower():
-                        fortran_version = str(value)
-                        break
+            # Use the saved raw selection so identity is independent of whether
+            # this Windows session can decode the detected compiler software.
+            fortran_version = str(app._settings({})["fortran_version"])
         except Exception:
             pass
         files = {

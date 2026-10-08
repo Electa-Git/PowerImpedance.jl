@@ -94,10 +94,14 @@ function _build_messages(project, path)
 end
 
 function main(arguments)
-    length(arguments) == 6 || throw(ArgumentError(
-        "runner expects project, output, project name, output stem, PSCAD version, and verbosity"))
+    length(arguments) == 9 || throw(ArgumentError(
+        "runner expects project, output, project name, output stem, PSCAD version, verbosity, port, ownership, and scratch root"))
     project_path, output, project_name, output_stem, pscad_version,
-    verbosity_text = arguments
+    verbosity_text, port_text, owned_text, remote_root = arguments
+    port = parse(Int, port_text)
+    (port == 0 || port in 1024:65535) || throw(ArgumentError("invalid PSCAD port"))
+    owned = parse(Bool, owned_text)
+    port == 0 && !owned && throw(ArgumentError("a private PSCAD launch must be owned"))
     verbosity = parse(Int, verbosity_text)
     verbosity in 0:2 || throw(ArgumentError("verbosity must be 0, 1, or 2"))
     pscad_version == "5.1.0" || throw(ArgumentError("PSCAD 5.1.0 is required"))
@@ -105,7 +109,9 @@ function main(arguments)
         throw(ArgumentError("invalid PSCAD output stem $output_stem"))
     mkpath(output)
     app = nothing
+    previous_silence = nothing
     project = nothing
+    load_attempted = false
     phase = "initialization"
     console = open(joinpath(output, "pscad-console.txt"), "w")
     build_path = joinpath(output, "build-messages.txt")
@@ -125,22 +131,54 @@ function main(arguments)
             "mhi.pscad $MHI_PSCAD_VERSION is required; found $observed"))
         identify = pyimport("runpy").run_path(joinpath(@__DIR__, "identity.py"))["identify"]
         pscad = pyimport("mhi.pscad")
-        phase = "PSCAD launch"
-        _report(console, verbosity, 1, "Launching PSCAD 5.1.0")
-        app = cd(abspath(output)) do
-            pscad.launch(; version = pscad_version, x64 = true, minimize = true,
-                splash = false, silence = true, timeout = 60)
+        phase = "PSCAD acquisition"
+        if port == 0
+            _report(console, verbosity, 1, "Launching PSCAD 5.1.0")
+            app = cd(abspath(output)) do
+                pscad.launch(; version = pscad_version, x64 = true, minimize = true,
+                    splash = false, silence = true, timeout = 60)
+            end
+        else
+            _report(console, verbosity, 1, "Connecting to PSCAD on port $port (owned=$owned)")
+            app = pscad.connect(; host = "127.0.0.1", port, timeout = 30)
         end
+        phase = "PSCAD dialog suppression"
+        previous_silence = pyconvert(Bool, app.silence)
+        app.silence = true
+        _report(console, verbosity, 1, "silence: previous=$previous_silence, now=true")
+        phase = "compiler detection"
+        application_settings = try
+            app.settings()
+        catch capability_error
+            occursin("Unable to retrieve detected software", sprint(showerror, capability_error)) ||
+                rethrow()
+            error("PSCAD cannot detect compilers in this Windows session (non-interactive, e.g. SSH session 0); set pscad_port in the station configuration so runs use a PSCAD in the logged-on desktop session")
+        end
+        _report(console, verbosity, 1, "fortran_version=$(_string(application_settings["fortran_version"]))")
+        phase = "PSCAD licence and identity"
         pyconvert(Bool, app.licensed()) || error("PSCAD refused the configured license")
         _string(app.version) == pscad_version ||
-            error("PSCAD launched an unexpected version")
+            error("PSCAD acquired an unexpected version")
         initial_identity = pyconvert(Dict{String, String}, identify(pscad_version, app))
         open(io -> TOML.print(io, initial_identity; sorted = true), joinpath(output, "solver.toml"), "w")
         expected_identity = get(input, "expected_solver", nothing)
         expected_identity === nothing || initial_identity == expected_identity ||
             error("PSCAD installation does not match the expected solver identity")
         phase = "project load"
+        # Even a fresh desktop start restores the user's saved workspace.
+        for entry in _components(app.projects())
+            _string(entry["name"]) == project_name || continue
+            existing = app.project(project_name)
+            filename = _string(existing.filename)
+            root = lowercase(replace(normpath(abspath(remote_root)), '\\' => '/'))
+            path = lowercase(replace(normpath(abspath(filename)), '\\' => '/'))
+            startswith(path, rstrip(root, '/') * "/") ||
+                error("Refusing to replace loaded PSCAD project $project_name from $filename; it is outside the station scratch root $remote_root")
+            existing.unload()
+            _report(console, verbosity, 1, "Unloaded stale PSCAD project $project_name from $filename")
+        end
         _report(console, verbosity, 1, "Loading staged project $project_name")
+        load_attempted = true
         app.load(abspath(project_path))
         project = try
             app.project(project_name)
@@ -201,16 +239,35 @@ function main(arguments)
         flush(console)
         throw(ErrorException(message))
     finally
+        # A failed load can still leave the staged project in the workspace.
+        if project === nothing && load_attempted
+            try
+                loaded = app.project(project_name)
+                normpath(abspath(_string(loaded.filename))) ==
+                normpath(abspath(project_path)) &&
+                    (project = loaded)
+            catch error
+                println(console, "PSCAD project lookup during cleanup failed: ", sprint(showerror, error))
+            end
+        end
         project === nothing || try
             project.unload()
         catch error
             println(console, "PSCAD project unload failed: ", sprint(showerror, error))
         end
-        app === nothing || try
-            app.quit()
-        catch error
-            println(console, "PSCAD application close failed: ", sprint(showerror, error))
+        if app !== nothing && !owned && previous_silence !== nothing
+            try
+                app.silence = previous_silence
+            catch error
+                println(console, "PSCAD silence restore failed: ", sprint(showerror, error))
+            end
         end
+        app === nothing || !owned ||
+            try
+                app.quit()
+            catch error
+                println(console, "PSCAD application close failed: ", sprint(showerror, error))
+            end
         flush(console)
         close(console)
     end

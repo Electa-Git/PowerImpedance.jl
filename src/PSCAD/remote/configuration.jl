@@ -17,6 +17,8 @@ struct RemoteConfig
     julia_executable::String
     python_executable::String
     pscad_version::String
+    "Station-local automation port (1024–65535); `nothing` launches a private application."
+    pscad_port::Union{Nothing, Int}
     transport::Symbol
     "Remote execution timeout \\[s\\]."
     timeout::Int
@@ -32,6 +34,7 @@ function RemoteConfig(
         python_executable::AbstractString;
         local_root::AbstractString,
         pscad_version::AbstractString = "5.1.0",
+        pscad_port = nothing,
         transport::Symbol = :ssh,
         verbosity = nothing,
         timeout::Integer = 1800,
@@ -59,6 +62,9 @@ function RemoteConfig(
     timeout > 0 || throw(ArgumentError(
         "PSCAD timeout must be positive",
     ))
+    pscad_port === nothing ||
+        (pscad_port isa Integer && !(pscad_port isa Bool) && 1024 <= pscad_port <= 65535) ||
+        throw(ArgumentError("PSCAD port must be an integer in 1024:65535 or nothing"))
     if transport === :command
         isempty(command) &&
             throw(ArgumentError("PSCAD command transport requires an argument array"))
@@ -76,6 +82,7 @@ function RemoteConfig(
         String(julia_executable),
         String(python_executable),
         String(pscad_version),
+        pscad_port === nothing ? nothing : Int(pscad_port),
         transport,
         Int(timeout),
         String.(command)
@@ -91,7 +98,7 @@ Read a user-selected TOML file into a station configuration.
 
 - `path`: TOML filename. Required fields are `host`, `local_root`, `shared_root`,
   `remote_root`, `julia_executable`, and `python_executable`. Optional fields are
-  `pscad_version`, `transport`, `timeout`, and `command`.
+  `pscad_version`, `pscad_port`, `transport`, `timeout`, and `command`.
 
 # Returns
 
@@ -103,12 +110,15 @@ Read a user-selected TOML file into a station configuration.
 `transport` is a string identifying a transport method. For `"command"`, `command`
 is an argument array, with exact `{host}` arguments replaced by `host`.
 Encoded PowerShell arguments are appended without shell evaluation.
+`pscad_port` selects a station-local automation listener. If absent, execution
+launches a private PSCAD. If set, execution attaches to that listener or starts
+PSCAD in the station account's logged-on desktop session.
 """
 function RemoteConfig(path::AbstractString)
     values = TOML.parsefile(path)
     required = ("host", "local_root", "shared_root", "remote_root",
         "julia_executable", "python_executable")
-    optional = ("pscad_version", "transport", "timeout", "command")
+    optional = ("pscad_version", "pscad_port", "transport", "timeout", "command")
     unknown = setdiff(keys(values), (required..., optional...))
     isempty(unknown) ||
         throw(ArgumentError("unknown PSCAD configuration fields: $(sort!(collect(unknown)))"))
@@ -134,6 +144,7 @@ function RemoteConfig(path::AbstractString)
         local_root = isabspath(local_root) ? local_root :
                      joinpath(dirname(abspath(path)), local_root),
         pscad_version = get(values, "pscad_version", "5.1.0"),
+        pscad_port = get(values, "pscad_port", nothing),
         transport = Symbol(get(values, "transport", "ssh")),
         timeout = timeout, command = String[value for value in command])
 end
