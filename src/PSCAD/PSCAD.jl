@@ -54,6 +54,10 @@ include("remote/configuration.jl")
 include("remote/files.jl")
 include("remote/remote.jl")
 include("results.jl")
+include("names.jl")
+include("netlist.jl")
+include("rlc.jl")
+include("units.jl")
 include("compute.jl")
 
 end
