@@ -403,6 +403,6 @@ function is_load(element :: Element)
 end
 
 function is_three_phase(element :: Element)
-    (np(element) == 6) || (np(element) == 4 && (element.transformation) && !is_converter(element)) && return true
-    return false
+    return np(element) == 6 ||
+           (np(element) == 4 && element.transformation && !is_converter(element))
 end

@@ -49,6 +49,7 @@ end
         include("convert_pmacdc_test.jl")
         include("make_y_node_test.jl")
         include("Transformer_test.jl")
+        include("regressions_test.jl")
         include("logging_test.jl")
         include("Gridspace_test.jl")
         include("stability_plot_recipes_test.jl")

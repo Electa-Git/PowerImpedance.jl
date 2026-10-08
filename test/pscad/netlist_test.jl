@@ -212,9 +212,7 @@ end
         @test isapprox(left.va_rad, right.va_rad; atol = 1e-9, rtol = 0)
     end
 
-    # Existing is_three_phase returns false for untransformed six-pin models.
-    # An abc transformer has an explicit AC port domain, so exercise the abc
-    # bus representation without changing that existing classification.
+    # An abc transformer has an explicit AC port domain.
     abc_elements = (; transformer = transformer(; pins = 3, n = 2.0))
     abc_rows = [(node = Symbol("B$side$suffix"), element = :transformer,
                     side = side, terminal = terminal)
@@ -225,9 +223,12 @@ end
     @test [bus.name for bus in abc.buses] == ["B1", "B2"]
     @test all(bus -> bus.kind == :ac3_abc, abc.buses)
     @test pscad_netlist_shape(abc) == pscad_netlist_shape(pscad.netlist(abc_state, nothing))
+    # Untransformed six-pin sources and branches are three-phase AC elements.
     untransformed_classic, untransformed_state = pscad_ac_fixture(; abc = true)
-    @test_throws ArgumentError pscad.netlist(untransformed_classic, nothing)
-    @test_throws ArgumentError pscad.netlist(untransformed_state, nothing)
+    untransformed = pscad.netlist(untransformed_classic, nothing)
+    @test all(bus -> bus.kind == :ac3_abc, untransformed.buses)
+    @test pscad_netlist_shape(untransformed) ==
+          pscad_netlist_shape(pscad.netlist(untransformed_state, nothing))
 
     dc_elements = (; source = dc_source(), branch = impedance(z = 3, pins = 1))
     dc_rows = (
