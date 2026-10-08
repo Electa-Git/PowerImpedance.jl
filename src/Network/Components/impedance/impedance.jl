@@ -213,6 +213,9 @@ function convert!(data, elem::Element{<:Impedance}, ::Type{PMACDC}, key, buses, 
 	branchdc = data["branchdc"][string(key)]
 	abcd = eval_abcd(imp, 1e-6 * 1im)
 	z = abcd[1, 2] * global_dict["S"] / global_dict["V"]^2
-	branchdc["r"] = real(z)
+	# A one-terminal DC impedance is the pole-to-pole loop impedance of the
+	# differential model (`transformation_dc`), so each pole carries z/2.
+	# PowerModelsACDC's branchdc resistance is per pole (dcpol = 2).
+	branchdc["r"] = real(z) / 2
 	return nothing
 end
