@@ -11,6 +11,29 @@ function _pscad_number(text::AbstractString)
     return parsed
 end
 
+"Relative change threshold between the two halves of a steady-state window."
+const STEADY_STATE_SETTLING_RTOL = 1e-3
+
+function _warn_unsettled_channel(name, first_half, second_half)
+    if any(abs.(first_half .- second_half) .>
+           STEADY_STATE_SETTLING_RTOL .* max.(abs.(first_half), abs.(second_half)))
+        @warn "channel not settled within the steady-state window; lengthen simulation_time" channel = name first_half second_half
+    end
+    return nothing
+end
+
+function _window_phasors(result, group, dim, window)
+    weights = cis.(-2π * result.settings.frequency .* result.time[window])
+    return [2 / length(window) * sum(result.channels[group[index]][window] .* weights)
+            for index in 1:dim]
+end
+
+function _sequence_phasor(phasors)
+    length(phasors) == 3 || return phasors
+    a = cis(2π / 3)
+    return (phasors[1] + a * phasors[2] + a^2 * phasors[3]) / 3
+end
+
 function _probe_present(channel::ProbeChannel, channels)
     return channel.dim == 1 ? haskey(channels, channel.name) :
            all(index -> haskey(channels, "$(channel.name):$index"), 1:channel.dim)
@@ -64,6 +87,9 @@ X_+ = \\frac{X_a + aX_b + a^2X_c}{3},\\quad a=e^{\\mathrm{j}2\\pi/3}.
 ```
 
 RMS magnitude is peak magnitude divided by ``\\sqrt{2}``.
+Compare scalar means or array phasor RMS magnitudes over the two halves of
+the window. Warn once per channel when the change exceeds
+`STEADY_STATE_SETTLING_RTOL = 1e-3` relative to the larger magnitude.
 
 # Errors
 
@@ -84,12 +110,15 @@ function steady_state(result::PSCADResult; window_cycles = 10)
         group[index] = name
     end
     settled = OrderedDict{String, NamedTuple}()
-    weights = cis.(-2π * result.settings.frequency .* result.time[window])
+    midpoint = first(window) + length(window) ÷ 2
+    halves = (first(window):(midpoint - 1), midpoint:last(window))
     for (name, group) in groups
         if haskey(group, 0)
             length(group) == 1 ||
                 throw(ArgumentError("PSCAD channel $name mixes scalar and array entries"))
             settled[name] = (dim = 1, mean = mean(result.channels[group[0]][window]))
+            values = map(half -> mean(result.channels[group[0]][half]), halves)
+            _warn_unsettled_channel(name, values...)
             continue
         end
         dim = length(group)
@@ -97,17 +126,17 @@ function steady_state(result::PSCADResult; window_cycles = 10)
             throw(ArgumentError("PSCAD array channel $name has incomplete component indices"))
         if dim == 1
             settled[name] = (dim = 1, mean = mean(result.channels[group[1]][window]))
+            values = map(half -> mean(result.channels[group[1]][half]), halves)
+            _warn_unsettled_channel(name, values...)
             continue
         end
-        phasors = [2 / length(window) *
-                   sum(result.channels[group[index]][window] .* weights)
-                   for index in 1:dim]
-        phasor = if dim == 3
-            a = cis(2π / 3)
-            (phasors[1] + a * phasors[2] + a^2 * phasors[3]) / 3
-        else
-            phasors
-        end
+        phasors = _window_phasors(result, group, dim, window)
+        phasor = _sequence_phasor(phasors)
+        values = map(
+            half -> abs.(_sequence_phasor(_window_phasors(result, group, dim, half))) ./
+                    sqrt(2),
+            halves)
+        _warn_unsettled_channel(name, values...)
         settled[name] = (dim = dim, phasors = phasors, peak = abs.(phasor),
             rms = abs.(phasor) ./ sqrt(2), angle = angle.(phasor))
     end

@@ -9,7 +9,10 @@ function plan_shape(plan)
         name = plan.name, description = plan.description, settings = plan.settings.params,
         components = [(c.defn, c.params, c.x, c.y, c.orient) for c in plan.main.components],
         wires = [w.vertices for w in plan.main.wires],
-        lines = [(l.name, l.kind, l.tower, l.conductors, l.ground_wires,
+        lines = [l isa P.CableDefinitionPlan ?
+                 (l.name, [(c.defn, c.params, c.x, c.y, c.orient) for c in l.cables],
+                     l.ground, l.frephase, l.outdisp) :
+                 (l.name, l.kind, l.tower, l.conductors, l.ground_wires,
                      l.ground, l.frephase, l.outdisp) for l in plan.lines],
         wrappers = [(w.row, w.x, w.y, w.params) for w in plan.wrappers],
         channels = [(c.name, c.kind, c.bus, c.element, c.side, c.dim, c.unit)
@@ -46,13 +49,15 @@ function check_layout(plan, number_of_cells)
         push!(anchors, (component.x, component.y))
         push!(owners, cell)
     end
-    @test length(owners) == number_of_cells
     # Known electrical ports must meet another component port or a wire.
     ports = Tuple{Int, Int}[]
     for wrapper in plan.wrappers
         @test wrapper.x % 18 == wrapper.y % 18 == 0
-        append!(ports, [(wrapper.x - 54, wrapper.y + 18),
-            (wrapper.x + 54, wrapper.y + 72)])
+        push!(owners, ((wrapper.x - 72) ÷ 288, (wrapper.y - 72) ÷ 216))
+        if wrapper isa P.TLineWrapperPlan
+            append!(ports, [(wrapper.x - 54, wrapper.y + 18),
+                (wrapper.x + 54, wrapper.y + 72)])
+        end
     end
     for c in plan.main.components
         c.defn in ("master:datalabel", "master:pgb") && continue
@@ -61,6 +66,14 @@ function check_layout(plan, number_of_cells)
             @test Dict(c.params)["Grnd"] == "1"
         elseif c.defn == "master:source_1"
             append!(ports, [(c.x - 36, c.y), (c.x + 36, c.y)])
+        elseif c.defn == "master:cable_interface"
+            direction = c.orient == 0 ? -1 : 1
+            append!(ports,
+                [(c.x + 18direction, c.y + 54 * (i - 1))
+                 for i in 1:parse(Int, Dict(c.params)["NCAB"])])
+        elseif c.defn == "master:breakout"
+            append!(ports, [(c.x, c.y), (c.x + 36, c.y - 36),
+                (c.x + 36, c.y), (c.x + 36, c.y + 36)])
         elseif c.defn == "master:xfmr-3p2w"
             append!(ports, [(c.x - 54, c.y), (c.x + 36, c.y)])
         elseif c.defn in
@@ -70,6 +83,7 @@ function check_layout(plan, number_of_cells)
             push!(ports, (c.x, c.y))
         end
     end
+    @test length(owners) == number_of_cells
     endpoints = Set(v for w in plan.main.wires for v in w.vertices)
     for port in ports
         @test count(==(port), ports) > 1 || port in endpoints
@@ -186,15 +200,16 @@ end
     @test caught isa ArgumentError
     @test occursin(":line", sprint(showerror, caught))
     @test occursin("distinct per-conductor", sprint(showerror, caught))
-    # A supported netlist model with no emitter fails at the dispatch fallback.
+    # Exercise the fallback directly, independently of owned emitter methods.
     e = PowerImpedance.Element(; element_model = PowerImpedance.Cable(), input_pins = 2, output_pins = 2)
     e.symbol = :future_cable
     unsupported = P.NetlistElement(:future_cable, "future_cable", e,
         e.element_model, P.Terminal[], :transformer, e.setpoint)
-    state = P.PlanState(P.CanvasPlan(), P.LineDefinitionPlan[], P.TLineWrapperPlan[],
+    state = P.PlanState(
+        P.CanvasPlan(), P.AbstractLineDefinitionPlan[], P.AbstractLineWrapperPlan[],
         P.GridLayout(), P.ProbeChannel[], Set{String}())
     caught = try
-        P.emit!(state, unsupported, (;))
+        invoke(P.emit!, Tuple{P.PlanState, P.NetlistElement, Any}, state, unsupported, (;))
     catch e
         e
     end

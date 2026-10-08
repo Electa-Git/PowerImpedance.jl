@@ -23,11 +23,17 @@ dc_classic, dc_state = PSCADFixtures.dc_network()
 dc_classic_model = export_pscad(dc_classic; path = joinpath(exports, "dc_classic.pscx"))
 dc_builder_model = export_pscad(dc_state; path = joinpath(exports, "dc_builder.pscx"))
 
+cable_classic, cable_state = PSCADFixtures.dc_cable_network()
+cable_classic_model = export_pscad(cable_classic; path = joinpath(exports, "dc_cable_classic.pscx"))
+cable_builder_model = export_pscad(cable_state; path = joinpath(exports, "dc_cable_builder.pscx"))
+
 cases = [(classic_model, classic_model, 0.01), (builder_model, classic_model, 0.01),
     (ohl_classic_model, ohl_classic_model, 0.02), (
         ohl_builder_model, ohl_classic_model, 0.02),
     (yy_classic_model, yy_classic_model, 0.01), (yy_builder_model, yy_classic_model, 0.01),
-    (dc_classic_model, dc_classic_model, 0.01), (dc_builder_model, dc_classic_model, 0.01)]
+    (dc_classic_model, dc_classic_model, 0.01), (dc_builder_model, dc_classic_model, 0.01),
+    (cable_classic_model, cable_classic_model, 0.01),
+    (cable_builder_model, cable_classic_model, 0.01)]
 
 # Detect the merged model by its positive-sequence transfer, without relying
 # on a commit hash. Compare against YY to remove the fixture's no-load loss angle.
@@ -48,10 +54,16 @@ else
 end
 
 for (model, classic_reference, rtol_v) in cases
+    dc_cable = any(model.netlist.elements) do element
+        element.model isa PowerImpedance.Cable &&
+            all(t -> t.bus !== nothing && t.bus.domain == 2, element.terminals)
+    end
+    simulation_time = dc_cable ? 3.0 :
+                      any(bus -> bus.kind == :dc, model.netlist.buses) ? 1.0 : 0.3
     result = compute(model,
         PSCADRun();
         options = (;
-            remote, simulation_time = 0.3, time_step = 50e-6,
+            remote, simulation_time, time_step = 50e-6,
             sample_step = 250e-6, verbosity = 1))
     # NB.solve skips power flow for this linear fixture. Both representations
     # therefore compare against the equivalent classic circuit's solved record.

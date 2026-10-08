@@ -42,6 +42,7 @@ else
     yy_classic, yy_state = PSCADFixtures.transformer_network()
     dy_classic, dy_state = PSCADFixtures.transformer_network(; organization = :ΔY)
     dc_classic, dc_state = PSCADFixtures.dc_network()
+    cable_classic, cable_state = PSCADFixtures.dc_cable_network()
     settings = P.SimulationSettings(simulation_time = 0.3, time_step = 50e-6,
         sample_step = 250e-6, snapshot_time = 0.2)
     @testset "PSCAD mhi-xml export round trip" begin
@@ -50,7 +51,8 @@ else
             ("passive_ohl_classic", ohl_classic), ("passive_ohl_builder", ohl_state),
             ("transformer_yy_classic", yy_classic), ("transformer_yy_builder", yy_state),
             ("transformer_dy_classic", dy_classic), ("transformer_dy_builder", dy_state),
-            ("dc_classic", dc_classic), ("dc_builder", dc_state))
+            ("dc_classic", dc_classic), ("dc_builder", dc_state),
+            ("dc_cable_classic", cable_classic), ("dc_cable_builder", cable_state))
             path = joinpath(only(ARGS), name * ".pscx")
             # ΔY XML checks exercise the selected station realization with no
             # legacy power-flow evidence; native comparison waits for dy-fix.
@@ -66,10 +68,14 @@ else
             end
             @test summary.version == "5.0.2"
             @test summary.components_per_defn == counts
-            expected_rows = Dict(l.name => Dict("master:Line_Tower_Universal" => 1,
-                                     "master:Line_Ground" => 1, "master:Line_FrePhase_Options" =>
-                                         1,
-                                     "master:Line_Out_Disp" => 1) for l in plan.lines)
+            expected_rows = Dict(l.name => merge(
+                                     Dict("master:Line_Ground" => 1,
+                                         "master:Line_FrePhase_Options" => 1,
+                                         "master:Line_Out_Disp" => 1),
+                                     l isa P.CableDefinitionPlan ?
+                                     Dict("master:Cable_Coax" => length(l.cables)) :
+                                     Dict("master:Line_Tower_Universal" => 1))
+            for l in plan.lines)
             @test summary.row_definitions == expected_rows
             @test summary.wrappers_per_defn ==
                   Dict(name * ":" * w.row => 1 for w in plan.wrappers)
@@ -153,13 +159,18 @@ else
                 @test pylen(rows) == 1
                 row = only(rows)
                 @test pyconvert(String, row.xpath("string(./paramlist/param[@name='type']/@value)")) ==
-                      "TLine"
+                      (line isa P.CableDefinitionPlan ? "Cable" : "TLine")
                 # Access the row through mhi-xml too; counts alone would not
                 # establish that its typed RowDefn can be read again.
-                @test pyconvert(String, reread.definition[line.name].type) == "TLine"
-                for (defn, params) in (("Line_Tower_Universal", line.tower),
+                @test pyconvert(String, reread.definition[line.name].type) ==
+                      (line isa P.CableDefinitionPlan ? "Cable" : "TLine")
+                row_components = [
                     ("Line_Ground", line.ground), ("Line_FrePhase_Options", line.frephase),
-                    ("Line_Out_Disp", line.outdisp))
+                    ("Line_Out_Disp", line.outdisp)]
+                if line isa P.LineDefinitionPlan
+                    pushfirst!(row_components, ("Line_Tower_Universal", line.tower))
+                end
+                for (defn, params) in row_components
                     nodes = row.xpath("./schematic/User[@defn='master:$defn']")
                     @test pylen(nodes) == 1
                     node = only(nodes)
@@ -167,6 +178,20 @@ else
                         @test pyconvert(String, node.xpath("string(./paramlist/param[@name='$key']/@value)")) ==
                               value
                     end
+                end
+                if line isa P.CableDefinitionPlan
+                    cables = row.xpath("./schematic/User[@defn='master:Cable_Coax']")
+                    @test pylen(cables) == length(line.cables)
+                    for (component, node) in zip(line.cables, cables)
+                        @test parse(Int, pyconvert(String, node.get("x"))) == component.x
+                        @test parse(Int, pyconvert(String, node.get("y"))) == component.y
+                        for (key, value) in component.params
+                            @test pyconvert(String,
+                                node.xpath("string(./paramlist/param[@name='$key']/@value)")) ==
+                                  value
+                        end
+                    end
+                    continue
                 end
                 tower = only(row.xpath("./schematic/User[@defn='master:Line_Tower_Universal']"))
                 @test pyconvert(String, tower.xpath("string(./paramlist/param[@name='Nc']/@value)")) ==
@@ -188,12 +213,16 @@ else
             end
             for wrapper in plan.wrappers
                 qualified = name * ":" * wrapper.row
-                nodes = root.xpath("./definitions/Definition[@name='Main']/schematic/Wire[@classid='TLine']")
+                cable = wrapper isa P.CableWrapperPlan
+                classid = cable ? "Cable" : "TLine"
+                nodes = root.xpath("./definitions/Definition[@name='Main']/schematic/Wire[@classid='$classid'][@defn='$qualified']")
                 @test pylen(nodes) == 1
                 node = only(nodes)
                 for (key, value) in (("defn", qualified), ("name", qualified),
-                    ("x", string(wrapper.x)), ("y", string(wrapper.y)), ("w", "121"), (
-                    "h", "68"),
+                    ("x", string(wrapper.x)), ("y", string(wrapper.y)), (
+                    "w", cable ? "107" : "121"),
+                    (
+                    "h", cable ? "120" : "68"),
                     ("orient", "0"), ("disable", "false"), ("recv", "-1"), ("send", "-1"),
                     ("back", "-1"), ("crc", "0"))
                     @test pyconvert(String, node.get(key)) == value
@@ -201,7 +230,8 @@ else
                 vertices = [(parse(Int, pyconvert(String, v.get("x"))),
                                 parse(Int, pyconvert(String, v.get("y"))))
                             for v in node.xpath("./vertex")]
-                @test vertices == [(-54, 18), (-54, 36), (54, 54), (54, 72)]
+                @test vertices == (cable ? [(0, 0), (-36, 0), (-54, -54), (-54, -72)] :
+                       [(-54, 18), (-54, 36), (54, 54), (54, 72)])
                 user = only(node.xpath("./User"))
                 @test pyconvert(String, user.get("defn")) == qualified
                 @test pyconvert(String, user.get("classid")) == "UserCmp"
@@ -227,6 +257,8 @@ else
         @test isempty(models[8].operating_point.bus_states)
         @test !isempty(models[9].operating_point.bus_states)
         @test isempty(models[10].operating_point.bus_states)
+        @test !isempty(models[11].operating_point.bus_states)
+        @test isempty(models[12].operating_point.bus_states)
         # Exercise dc_reference through the public exporter, including no extra
         # references at the source bus and no power flow for the linear builder.
         elements = (; ac = dc_state.elements.ac, from = dc_state.elements.from,

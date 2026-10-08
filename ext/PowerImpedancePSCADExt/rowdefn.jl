@@ -18,6 +18,22 @@ function write_row_definition!(project, line::PSCAD.LineDefinitionPlan)
     row.tower_universal(0.0,
         PythonCall.pylist(PythonCall.pytuple.(line.conductors)),
         PythonCall.pylist(PythonCall.pytuple.(line.ground_wires)); kwargs...)
+    write_row_parameters!(row, line)
+    return nothing
+end
+
+function write_row_definition!(project, line::PSCAD.CableDefinitionPlan)
+    row = project.definition.create_cable(line.name)
+    for component in line.cables
+        kwargs = (Symbol(key) => value for (key, value) in component.params)
+        instance = row.schematic.create(component.defn; kwargs...)
+        row.schematic.add(instance, component.x, component.y, component.orient)
+    end
+    write_row_parameters!(row, line)
+    return nothing
+end
+
+function write_row_parameters!(row, line)
     # These are component properties, not component-creation methods.
     for (component, params) in ((row.ground, line.ground),
         (row.freq_phase_options, line.frephase), (row.additional_options, line.outdisp))
@@ -31,17 +47,26 @@ function write_row_definition!(project, line::PSCAD.LineDefinitionPlan)
     return nothing
 end
 
-function write_tline_wrapper!(main, namespace, wrapper::PSCAD.TLineWrapperPlan)
+function wrapper_geometry(::PSCAD.TLineWrapperPlan)
+    (classid = "TLine", w = "121", h = "68",
+        vertices = ((-54, 18), (-54, 36), (54, 54), (54, 72)))
+end
+function wrapper_geometry(::PSCAD.CableWrapperPlan)
+    (classid = "Cable", w = "107", h = "120",
+        vertices = ((0, 0), (-36, 0), (-54, -54), (-54, -72)))
+end
+
+function write_line_wrapper!(main, namespace, wrapper::PSCAD.AbstractLineWrapperPlan)
     etree = PythonCall.pyimport("lxml.etree")
     random = PythonCall.pyimport("random")
     qualified = namespace * ":" * wrapper.row
-    # Match the direct-connection wrapper verified by station spike B.
-    wire = etree.Element("Wire"; classid = "TLine",
+    geometry = wrapper_geometry(wrapper)
+    wire = etree.Element("Wire"; classid = geometry.classid,
         id = string(PythonCall.pyconvert(Int, random.randrange(100_000_000, 1_000_000_000))),
         name = qualified, x = string(wrapper.x), y = string(wrapper.y),
-        w = "121", h = "68", orient = "0", disable = "false", defn = qualified,
+        w = geometry.w, h = geometry.h, orient = "0", disable = "false", defn = qualified,
         recv = "-1", send = "-1", back = "-1", crc = "0")
-    for (x, y) in ((-54, 18), (-54, 36), (54, 54), (54, 72))
+    for (x, y) in geometry.vertices
         etree.SubElement(wire, "vertex"; x = string(x), y = string(y))
     end
     user = etree.SubElement(wire, "User"; classid = "UserCmp",

@@ -38,6 +38,35 @@ function _override_line_parameters(defaults, overrides)
     return params
 end
 
+function _line_ground_parameters(line, overrides)
+    μᵣ, ϵᵣ, ρ = line.earth_parameters
+    defaults = ["EarthForm2" => "0", "EarthForm" => "2", "EarthForm3" => "2",
+        "GrRho" => "0", "GRRES" => pscad_value(ρ; unit = "ohm*m"),
+        "GPERM" => pscad_value(μᵣ), "GRP" => pscad_value(ϵᵣ)]
+    return _override_line_parameters(defaults, overrides)
+end
+
+"""
+DC line frequency/phase fit start frequency \\[Hz\\]. Cable station measurements
+recorded in `docs/src/developers/pscad_mapping.md` (Cables) found a window mean
+25% below power flow at 3 s with FS = 0.5 Hz, versus 0.67% above at 5 s with
+FS = 0.001 Hz. AC lines retain the validation start frequency of 0.5 Hz.
+"""
+const DC_LINE_FIT_START_FREQUENCY = 0.001
+
+function _line_frephase_parameters(overrides, buses)
+    start_frequency = all(bus -> bus.kind == :dc, buses) ?
+                      DC_LINE_FIT_START_FREQUENCY : 0.5
+    defaults = ["Interp1" => "1", "Output" => "0", "Inflen" => "0",
+        "FS" => pscad_value(start_frequency; unit = "Hz"), "FE" =>
+            pscad_value(1e6; unit = "Hz"),
+        "Numf" => "100", "YMaxP" => "20", "YMaxE" => pscad_value(0.2; unit = "%"),
+        "AMaxP" => "20", "AMaxE" => pscad_value(0.2; unit = "%"),
+        "MaxRPtol" => pscad_value(2e6), "CPASS" => "0", "DCenab" => "0",
+        "DCCOR" => "1", "enablf" => "1"]
+    return _override_line_parameters(defaults, overrides)
+end
+
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_line}, context)
     tl = e.model
     c, g = tl.conductors, tl.groundwires
@@ -57,7 +86,6 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
     length(x) == length(y) == c.nᵇ ||
         throw(ArgumentError("overhead line :$(e.name) requires one tower coordinate per phase"))
     xg, yg = PowerImpedance._ohl_groundwire_coordinates(tl)
-    μᵣ, ϵᵣ, ρ = tl.earth_parameters
     row = pscad_name(e.pscad * "_row"; used = state.used)
     tower = [
         "TName" => row, "Transp" => pscad_value(0),
@@ -71,20 +99,11 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
         "ElimGW" => pscad_value(1), "RadiusG" => pscad_value(g.rᵍ; unit = "m"),
         "DCResG" => pscad_value(g.Rᵍᵈᶜ; unit = "ohm/km"),
         "PERMG" => pscad_value(g.μᵣᵍ), "SAGG" => pscad_value(g.dᵍˢᵃᵍ; unit = "m")]
-    ground = ["EarthForm2" => "0", "EarthForm" => "2", "EarthForm3" => "2",
-        "GrRho" => "0", "GRRES" => pscad_value(ρ; unit = "ohm*m"),
-        "GPERM" => pscad_value(μᵣ), "GRP" => pscad_value(ϵᵣ)]
-    frephase = ["Interp1" => "1", "Output" => "0", "Inflen" => "0",
-        "FS" => pscad_value(0.5; unit = "Hz"), "FE" => pscad_value(1e6; unit = "Hz"),
-        "Numf" => "100", "YMaxP" => "20", "YMaxE" => pscad_value(0.2; unit = "%"),
-        "AMaxP" => "20", "AMaxE" => pscad_value(0.2; unit = "%"),
-        "MaxRPtol" => pscad_value(2e6), "CPASS" => "0", "DCenab" => "0",
-        "DCCOR" => "1", "enablf" => "1"]
     push!(state.lines,
         LineDefinitionPlan(row, :tline, tower,
             collect(zip(Float64.(x), Float64.(y))), collect(zip(xg, yg)),
-            _override_line_parameters(ground, context.line_options.ground),
-            _override_line_parameters(frephase, context.line_options.frephase),
+            _line_ground_parameters(tl, context.line_options.ground),
+            _line_frephase_parameters(context.line_options.frephase, (left_bus, right_bus)),
             ["DataF" => pscad_value(context.settings.frequency; unit = "Hz")]))
     xcell, ycell = allocate_cell!(state.layout)
     wx, wy = xcell + 144, ycell + 36

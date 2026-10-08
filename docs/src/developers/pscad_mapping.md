@@ -264,3 +264,124 @@ compared. Missing scalar channels or opposite-pole voltage probes are errors.
 Manual acceptance keeps the 1 % DC voltage check and separately checks positive
 P, negative N and `V_P ≈ -V_N` within 1 %. Whole-network grounding behavior and
 1e7 ohm reference sensitivity (R14) still require a station experiment.
+
+## Cables
+
+Coaxial `Cable` elements with `eliminate=true` export a Cable `RowDefn`, one
+`master:Cable_Coax` per physical position, `Line_Ground`,
+`Line_FrePhase_Options` and `Line_Out_Disp`. Ground and fitting defaults and
+`line_options` overrides are shared with overhead lines; the fitting start
+frequency depends on the terminal buses as described below. Retained sheaths or
+armours (`eliminate=false`) raise an element-named `ArgumentError`; exposed
+internal-conductor interfaces are outside this step.
+
+The layer mapping is ported from LineCableModels
+`src/pscad/importexport/project.jl:246–413`. Radii and resistivity have explicit
+`[m]` and `[ohm*m]` units; relative material properties and loss tangents are
+dimensionless. The Julia model has no dielectric-loss input, so all `LT` values
+are zero. Layer pairs must be ordered `C1/I1` through at most `C4/I4`.
+
+| Julia quantity / choice | PSCAD field | Convention |
+|---|---|---|
+| Position index | `CABNUM` | 1-based physical position order |
+| Element identifier | `Name` | same sanitized name as wrapper and both interfaces |
+| `positions[k][1]` | `X` | m |
+| `type=:underground`, positive depth | `OHC=0`, `Y=positions[k][2]`, `Y2=0` | m; Julia uses positive underground depth, unlike the donor's signed vertical coordinates |
+| `type=:aerial`, positive height | `OHC=1`, `Y=0`, `Y2=positions[k][2]` | m |
+| `C1.rᵢ`, `C1.rₒ`, `I1.rₒ` | `R1`, `R2`, `R3` | m |
+| `C2.rₒ`, `I2.rₒ` | `R4`, `R5` | m; donor triplet `(R4,R4,R5)` |
+| `C3.rₒ`, `I3.rₒ` | `R6`, `R7` | m; donor triplet `(R6,R6,R7)` |
+| `C4.rₒ`, `I4.rₒ` | `R8`, `R9` | m; donor triplet `(R8,R8,R9)` |
+| `C1..4.ρ` | `RHOC`, `RHOS`, `RHOA`, `RHOO` | ohm*m |
+| `C1..4.μᵣ` | `PERMC`, `PERMS`, `PERMA`, `PERMO` | relative permeability |
+| `I1..4.ϵᵣ`, `I1..4.μᵣ` | `EPS1..4`, `PERM1..4` | relative permittivity and permeability |
+| Ordered conductor keys | `CONNAM1..4` | `C1` through `C4`; absent pairs named `none` with zero material/radius values |
+| Lossless dielectrics | `LT1..4=0`, `FLT=settings.frequency` | loss frequency in Hz |
+| `eliminate=true` | `elim1..3=1` for present C2..4, otherwise 0 | core retained, grounded internal conductors eliminated |
+| Number of conducting/insulating pairs | `LL=2*n_layers-1`, `RorT=0`, `SHRad=1` | last-layer index, radii entry |
+| Frequency-dependent phase model | `LC=2`, `CROSSBOND=0` | follows the plan and validation project; donor uses `LC=3` |
+| Already converted effective Julia insulation | `SemiCL=0`, `SL1=SL2=0` | no second semiconducting-screen correction |
+| Negligible aerial shunt | `ShuntA=1e-38` | mho/m, as in donor |
+| `earth_parameters=(μᵣ,ϵᵣ,ρ)` | `GPERM`, `GRP`, `GRRES` | relative properties and ohm*m |
+
+The remote-ends wrapper has `Dim=0`, `Mode=0`, `CoupleEnab=0`,
+`CoupleName=row`, `CoupleOffset=0 m`, `CoupleRef=0`, `gen_cnst=1`,
+`const_path=""`, `Date=0`, empty `R/X/B`, `tname=tandem_segment`, `sfault=0`,
+`linc=10 km`, `steps=3`. `Length` is km. `Freq=0 Hz` for DC and the network
+frequency for AC; `FLT` remains the network frequency in both cases.
+Vertices relative to the wrapper origin are `(0,0)`, `(-36,0)`, `(-54,-54)`,
+`(-54,-72)`. No electrical wires join these graphical vertices.
+A separate grid cell holds each wrapper and interface. Row cable instances
+are separated by 396 pixels (22 grid steps), snapping the plan's approximate
+400-pixel spacing to the 18-pixel grid.
+
+Both `cable_interface` instances share the wrapper `Name`, with `NCAB` equal
+to the position count and `C1T..C12T=1`. Other fields copy the validation
+project: `pipe=dim_s=dim_r=0`, `GroundS=GroundA=GroundOC=0`,
+`ResS=ResA=ResOC=0.001 ohm`, `send_recv=recv_default_type=recv_default=0`.
+The sending interface uses orientation 0; receiving uses orientation 4.
+Sending core ports are `(-18,54*(k-1))`; receiving ports are assumed mirrored
+at `(18,54*(k-1))`.
+
+DC cables have two positions: core 1 joins `<bus>_P`, core 2 joins `<bus>_N`
+at both ends. P has a series scalar ammeter; N has a wire stub. Three-position
+AC cables use per-phase labels in A/B/C position order, joined through a
+`master:breakout` to the existing three-phase bus. A bus-side array ammeter
+retains one three-phase current channel per end. The breakout ports follow
+the plan: `N(0,0)` and `N1(36,-36)`, `N2(36,0)`, `N3(36,36)`.
+All Main electrical ports and wire endpoints lie on the 18-pixel grid.
+No additional PSCAD parameter names beyond the donor, validation project and
+plan are required.
+
+`dc_cable_network()` copies the example `ugc` material data verbatim with
+`rho=100 ohm*m` and length 50 km into classic and NetworkBuilder fixtures.
+Manual acceptance checks DC bus voltage within 1% and pole symmetry within
+1%, using `simulation_time=1.0` for the impedance DC cases and `3.0` for the
+DC cable cases.
+`steady_state` warns once per channel if means (scalar) or phasor RMS
+magnitudes (arrays, positive sequence for three phases) differ between window
+halves by more than `STEADY_STATE_SETTLING_RTOL=1e-3` relative to the larger
+magnitude. The returned values and comparison table retain their contracts.
+
+The exported cable fixtures built on the PSCAD 5.1.0 station with zero errors
+and zero warnings. The impedance DC acceptance at 1 s is now exact. The DC
+cable case initially failed with current 2.3% low. Station experiments through
+the public `line_options` showed that a frequency-dependent cable fit starting
+at 0.5 Hz leaves its DC behaviour unconstrained:
+
+| `Line_FrePhase_Options` | `I_line_1` at 1 s / 3 s / 5 s [kA] | Window mean versus power flow, 3.6699 kA |
+|---|---|---|
+| `FS=0.5` (previous default) | 3.562 / 2.708 / – (falling) | 25% low at 3 s |
+| `FS=0.01` | 3.698 / 3.654 / – | 0.26% low at 3 s |
+| `FS=0.001` | 3.693 / 3.703 / 3.695 | 0.67% high at 5 s |
+| `DCenab=1`, `FS=0.5` | Line constants fail | "Error in INVCJD. Singularity occurs" in the Yc fit |
+
+Line elements whose terminal buses are all DC use
+`DC_LINE_FIT_START_FREQUENCY=0.001 Hz` as their default `FS`. This shared
+selection applies to DC cables and will apply to DC overhead lines when their
+emitter is supported. AC lines retain `FS=0.5 Hz`; other validation defaults
+are retained. `line_options` overrides the selected defaults, including `FS`.
+`DCenab` remains zero because enabling DC correction causes the Yc fit
+singularity for this cable. An explicit `DCenab` override is still accepted;
+the station failure above records why it is unsuitable for this fixture.
+These are measured results for this cable, not a general accuracy guarantee
+for other cable fits.
+
+Open station checks:
+
+- Inspect the station-generated constants to confirm `LC=2` phase-model selection,
+  absent-layer zeros, eliminated-core terminal count, and computed constants.
+- Confirm interface core port spacing and orientation-4 mirroring, including
+  three-position AC phase order and breakout wiring.
+- Confirm that the validation project's `send_recv=0` at both ends pairs the
+  orientation-0 sender and orientation-4 receiver with the wrapper `Name`.
+- Confirm `elim1..3=1` reproduces Julia's grounded-conductor Kron reduction;
+  interface grounding fields remain zero because those conductors are absent.
+- Confirm empty `const_path` and `Date=0` allow portable regenerated constants,
+  and check the DC zero-frequency wrapper against the 50 Hz fitting frequency.
+- Run both DC cable representations with the new default at 3.0 s, inspect settling warnings and
+  verify the unchanged voltage/current comparison plus pole symmetry.
+
+XML round trips and local tests establish export structure only. The native
+cable build is verified; M2 scientific acceptance with the revised default
+and duration remains for the station run.

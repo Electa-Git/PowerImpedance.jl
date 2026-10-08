@@ -48,7 +48,8 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
     dc_labels = Dict(bus.key => (pscad_name(bus.name * "_P"; used),
                          pscad_name(bus.name * "_N"; used))
     for bus in netlist.buses if bus.kind == :dc)
-    state = PlanState(CanvasPlan(), LineDefinitionPlan[], TLineWrapperPlan[],
+    state = PlanState(
+        CanvasPlan(), AbstractLineDefinitionPlan[], AbstractLineWrapperPlan[],
         GridLayout(), ProbeChannel[], used)
     context = (; netlist, settings, line_options = overrides, dc_labels,
         buses = Dict(bus.key => bus for bus in netlist.buses))

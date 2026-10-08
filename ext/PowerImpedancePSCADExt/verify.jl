@@ -25,7 +25,7 @@ function PSCAD.read_project_summary(path::AbstractString)::PSCAD.ProjectSummary
         rows[name] = row_counts
     end
     wrappers = Dict{String, Int}()
-    for wrapper in root.xpath("./definitions/Definition[@name='Main']/schematic/Wire[@classid='TLine']")
+    for wrapper in root.xpath("./definitions/Definition[@name='Main']/schematic/Wire[@classid='TLine' or @classid='Cable']")
         defn = PythonCall.pyconvert(String, wrapper.get("defn"))
         wrappers[defn] = get(wrappers, defn, 0) + 1
     end

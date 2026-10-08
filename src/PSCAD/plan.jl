@@ -68,6 +68,8 @@ struct SettingsPlan
     params::Vector{Pair{String, String}}
 end
 
+abstract type AbstractLineDefinitionPlan end
+
 """
 $(TYPEDEF)
 
@@ -76,7 +78,7 @@ sag correction. Parameter values use PSCAD field names and unit strings.
 
 $(TYPEDFIELDS)
 """
-struct LineDefinitionPlan
+struct LineDefinitionPlan <: AbstractLineDefinitionPlan
     "Unqualified row-definition identifier."
     name::String
     "Row kind; `:tline` for an overhead line."
@@ -98,12 +100,54 @@ end
 """
 $(TYPEDEF)
 
+Retain one cable row with a coaxial component per physical position and
+shared earth-return and frequency/phase parameters.
+
+$(TYPEDFIELDS)
+"""
+struct CableDefinitionPlan <: AbstractLineDefinitionPlan
+    "Unqualified row-definition identifier."
+    name::String
+    "Coaxial cable instances in physical position order."
+    cables::Vector{ComponentPlan}
+    "Earth-return parameters."
+    ground::Vector{Pair{String, String}}
+    "Frequency/phase model and fitting parameters."
+    frephase::Vector{Pair{String, String}}
+    "Additional display parameters."
+    outdisp::Vector{Pair{String, String}}
+end
+
+abstract type AbstractLineWrapperPlan end
+
+"""
+$(TYPEDEF)
+
 Place one direct-connection transmission-line wrapper on Main. Its sending
 and receiving terminals are at offsets `(-54, 18)` and `(54, 72)` pixels.
 
 $(TYPEDFIELDS)
 """
-struct TLineWrapperPlan
+struct TLineWrapperPlan <: AbstractLineWrapperPlan
+    "Unqualified row-definition identifier."
+    row::String
+    "Horizontal origin in pixels."
+    x::Int
+    "Vertical origin in pixels."
+    y::Int
+    "Wrapper instance parameters."
+    params::Vector{Pair{String, String}}
+end
+
+"""
+$(TYPEDEF)
+
+Place one cable wrapper on Main in remote-ends mode. Electrical terminals
+belong to the paired cable interfaces; wrapper vertices are graphical.
+
+$(TYPEDFIELDS)
+"""
+struct CableWrapperPlan <: AbstractLineWrapperPlan
     "Unqualified row-definition identifier."
     row::String
     "Horizontal origin in pixels."
@@ -131,9 +175,9 @@ struct ProjectPlan
     "Main schematic."
     main::CanvasPlan
     "Transmission-line row definitions in emission order."
-    lines::Vector{LineDefinitionPlan}
+    lines::Vector{AbstractLineDefinitionPlan}
     "Transmission-line wrappers on Main in emission order."
-    wrappers::Vector{TLineWrapperPlan}
+    wrappers::Vector{AbstractLineWrapperPlan}
     "Emitted output channels and reference bus."
     probes::ProbeManifest
 end
@@ -190,8 +234,8 @@ end
 # Only the builder owns these mutable arrays and identifier reservations.
 struct PlanState
     main::CanvasPlan
-    lines::Vector{LineDefinitionPlan}
-    wrappers::Vector{TLineWrapperPlan}
+    lines::Vector{AbstractLineDefinitionPlan}
+    wrappers::Vector{AbstractLineWrapperPlan}
     layout::GridLayout
     channels::Vector{ProbeChannel}
     used::Set{String}

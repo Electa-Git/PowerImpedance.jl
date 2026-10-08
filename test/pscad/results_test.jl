@@ -65,6 +65,35 @@ end
             "scalar", :voltage, "B1", nothing, nothing, 1, "kV"), channels)
 end
 
+@testset "PSCAD steady-state settling diagnostic" begin
+    times = collect(0.0:250e-6:0.3)
+    channels = PowerImpedance.OrderedDict("I_settling" => 2 .* (1 .- exp.(-times ./ 0.08)))
+    result = synthetic_result(times, channels)
+    @test_logs (:warn,
+        "channel not settled within the steady-state window; lengthen simulation_time") P.steady_state(result)
+    channels["I_settling"] = fill(2.0, length(times))
+    @test_logs P.steady_state(result)
+    @test P.steady_state(result)["I_settling"] == (dim = 1, mean = 2.0)
+    empty!(channels)
+    add_three_phase!(channels, "V_settling", times, 100cis(0.2))
+    for samples in values(channels)
+        samples .*= 1 .- exp.(-times ./ 0.08)
+    end
+    @test_logs (:warn,
+        "channel not settled within the steady-state window; lengthen simulation_time") P.steady_state(result)
+    empty!(channels)
+    add_three_phase!(channels, "V_settling", times, 100cis(0.2))
+    @test_logs P.steady_state(result)
+    # A single indexed scalar retains the same mean and warning contract.
+    empty!(channels)
+    channels["I_settling:1"] = 2 .* (1 .- exp.(-times ./ 0.08))
+    @test_logs (:warn,
+        "channel not settled within the steady-state window; lengthen simulation_time") P.steady_state(result)
+    channels["I_settling:1"] = fill(2.0, length(times))
+    @test_logs P.steady_state(result)
+    @test P.STEADY_STATE_SETTLING_RTOL == 1e-3
+end
+
 @testset "PSCAD operating-point comparison" begin
     classic, state = small_ac_network()
     netlist = P.netlist(classic, power_flow(classic))

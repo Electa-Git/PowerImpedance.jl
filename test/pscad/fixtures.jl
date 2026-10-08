@@ -144,4 +144,37 @@ function dc_network()
     connect!(classic)
     return (; classic, state)
 end
+
+"""
+    dc_cable_network()
+
+Return the M2 DC circuit with the two-position `ugc` cable from
+`examples/P2P_HVDC_ALT.jl` as its 50 km DC branch. Layer and earth parameters
+are copied from the example (rho = 100 Ω·m); both ends retain the transformed
+differential terminal and grounded internal-conductor elimination.
+"""
+function dc_cable_network()
+    classic, state = dc_network()
+    ugc = cable(
+        length = 50e3,
+        positions = [(-0.5, 1), (0.5, 1)],
+        C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
+        I1 = Insulator(rᵢ = 0.02622, rₒ = 0.06006, ϵᵣ = 2.67, μᵣ = 1.469),
+        C2 = Conductor(rᵢ = 0.06006, rₒ = 0.06336, ρ = 2.14e-7, μᵣ = 1.0),
+        I2 = Insulator(rᵢ = 0.06336, rₒ = 0.06636, ϵᵣ = 2.3, μᵣ = 1.0),
+        C3 = Conductor(rᵢ = 0.06636, rₒ = 0.06651, ρ = 2.826e-8, μᵣ = 1.0),
+        I3 = Insulator(rᵢ = 0.06651, rₒ = 0.07256, ϵᵣ = 2.3, μᵣ = 1.0),
+        earth_parameters = (1, 1, 100.0),
+        transformation = true
+    )
+    ugc.symbol = :line
+    ugc.pins = copy(classic.elements[:line].pins)
+    classic.elements[:line] = ugc
+    elements = merge(state.elements, (; line = deepcopy(ugc)))
+    rows = [(; row.node, row.element, row.side, row.terminal)
+            for row in state.topology.connections]
+    builder = NetworkBuilder.define(elements, rows; options = state.options)
+    return (; classic, state = builder)
+end
+
 end
