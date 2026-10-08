@@ -279,7 +279,7 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
 	
 
     # Dyn11 has the same balanced tap, series and shunt parameters as YY.
-    # Remove only its frame rotation before the existing YY conversion.
+    # Remove only its frame rotation before the exact YY conversion.
     balanced_t = t.organization == :ΔY ? Transformer(t; organization = :YY) : t
     abcd = eval_abcd(balanced_t, global_dict["omega"] * 1im)
 	n = 3
@@ -291,16 +291,19 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
 	)
 	y = [d * inv(b) c - d * inv(b) * a; -inv(b) inv(b) * a] * global_dict["Z"]
 
-	tap = sqrt(real(y[n+1, n+1] / y[1, 1]))
-	ys = -y[1, n+1] * tap
-	yc = y[n+1, n+1] - ys
+    # Exact pi equivalent of the unshifted two-port. PowerModels scales the
+    # primary shunt by tap^2 (core/admittance_matrix.jl:55-59).
+    tap = t.n
+    ys = -y[1, n + 1] * tap
+    yfr = y[1, 1] * tap^2 - ys
+    yto = y[n + 1, n + 1] - ys
 
-	branch["tap"] = tap
-	branch["br_r"] = real(1 / ys)
-	branch["br_x"] = imag(1 / ys)
-	branch["g_fr"] = real(yc) / 2
-	branch["b_fr"] = imag(yc) / 2
-	branch["g_to"] = real(yc) / 2
-	branch["b_to"] = imag(yc) / 2
+    branch["tap"] = tap
+    branch["br_r"] = real(1 / ys)
+    branch["br_x"] = imag(1 / ys)
+    branch["g_fr"] = real(yfr)
+    branch["b_fr"] = imag(yfr)
+    branch["g_to"] = real(yto)
+    branch["b_to"] = imag(yto)
 	return nothing
 end

@@ -168,23 +168,13 @@ using LinearAlgebra
             connect!(net)
             return net
         end
-        # Captured by running the saved before-fix YY conversion definitions.
-        reference_branch = (
-            (; tap = 2.5332597217069175, br_r = 0.0012322335064503466,
-                br_x = 0.007742339827324561, g_fr = 0.0023201884068715373,
-                b_fr = -0.01474657529274026, g_to = 0.0023201884068715373,
-                b_to = -0.01474657529274026),
-            (; tap = 2.533310323243148, br_r = 0.001232211085960381,
-                br_x = 0.007742191892313735, g_fr = 0.002119953992924195,
-                b_fr = -0.013069600279727922, g_to = 0.002119953992924195,
-                b_to = -0.013069600279727922))
         # Classic power_flow fixes tol=1e2 and constr_viol_tol=1e-3.
         # Exercise that public path, then solve its returned model at tighter
         # test-only tolerances to measure the requested 1e-6 angle agreement.
         precise_optimizer = PowerImpedance.JuMP.optimizer_with_attributes(
             PowerImpedance.Ipopt.Optimizer,
             "tol" => 1e-10, "constr_viol_tol" => 1e-10, "print_level" => 0)
-        for (case, extra) in enumerate(((;), capacitive))
+        for extra in ((;), capacitive)
             yy_result, yy_data, _, yy_components = power_flow(network(:YY; extra...))
             dy_result, dy_data, _, dy_components = power_flow(network(:ΔY; extra...))
             @test yy_result["termination_status"] == PowerImpedance.MOI.LOCALLY_SOLVED
@@ -196,8 +186,26 @@ using LinearAlgebra
             @test yy_branch["shift"] === 0
             @test dy_branch["shift"] == -π / 6
             for key in ("tap", "br_r", "br_x", "g_fr", "b_fr", "g_to", "b_to")
-                @test isequal(yy_branch[key], getproperty(reference_branch[case], Symbol(key)))
                 @test isequal(dy_branch[key], yy_branch[key])
+            end
+            # Reconstruct the branch stamp, including tap and frame rotation,
+            # and compare it with the T-model's positive-sequence two-port at 50 Hz.
+            base_z = PowerImpedance.PowerModelsACDC._get_pu_bases(1000, 380 / sqrt(3))["Z"]
+            for (organization, branch) in ((:YY, yy_branch), (:ΔY, dy_branch))
+                model = transformer(; parameters..., extra..., pins = 3,
+                    organization, transformation = true).element_model
+                phase_abcd = PowerImpedance.eval_abcd(model, s50)
+                sequence_abcd = (basis \ phase_abcd) * basis
+                A, B, C, D = sequence_abcd[2, 2], sequence_abcd[2, 5],
+                sequence_abcd[5, 2], sequence_abcd[5, 5]
+                t_y = ComplexF64[D / B C - D * A / B; -1 / B A / B] * base_z
+                series = inv(branch["br_r"] + im * branch["br_x"])
+                tap = branch["tap"] * cis(branch["shift"])
+                from_shunt = branch["g_fr"] + im * branch["b_fr"]
+                to_shunt = branch["g_to"] + im * branch["b_to"]
+                branch_y = ComplexF64[(series + from_shunt) / abs2(tap) -series / conj(tap);
+                                      -series / tap series + to_shunt]
+                @test branch_y ≈ t_y rtol = 1e-12
             end
             yy_result = PowerImpedance.solve_acdcpf(
                 yy_data, PowerImpedance._PM.ACPPowerModel, precise_optimizer)

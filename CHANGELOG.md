@@ -28,6 +28,8 @@
   the complete per-phase Y-equivalent T-model, and a 30° secondary lead in
   frequency-domain and power-flow calculations. Reject untransformed
   three-phase use because zero-sequence isolation has no phase-domain ABCD.
+- Use the exact pi conversion of the transformer T-model in the power flow,
+  with the magnetizing branch placed on the primary side as modelled.
 
 ## [0.3.1] - 2026-09-22
 
