@@ -27,6 +27,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+# Bounds remote initialization as well as the TCP connection, independently of the run timeout.
+$PSCADProbeTimeoutSeconds = 60
 
 . (Join-Path $PSScriptRoot "lifecycle.ps1")
 
@@ -126,16 +128,19 @@ Get-ChildItem -LiteralPath $SharedCase -Force |
 
 $toolkit = Join-Path $LocalCase "toolkit"
 $runner = Join-Path $toolkit "runner.jl"
+$probe = Join-Path $toolkit "probe.py"
 $project = Join-Path $toolkit "Project.toml"
 $projectFile = Join-Path $LocalCase "generated.pscx"
 $result = Join-Path $LocalCase "result"
 $sharedOutput = Join-Path $SharedCase "outputs"
 $stdoutPath = Join-Path $result "stdout.txt"
 $stderrPath = Join-Path $result "stderr.txt"
+$probePath = Join-Path $result "pscad-probe.txt"
+$probeErrorPath = Join-Path $result "pscad-probe-stderr.txt"
 $exitPath = Join-Path $result "exit-code.txt"
 $invokePath = Join-Path $LocalCase "invoke-runner.cmd"
 
-foreach ($required in @($runner, $project, $projectFile)) {
+foreach ($required in @($runner, $probe, $project, $projectFile)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Staged PSCAD input is missing: $required"
     }
@@ -169,13 +174,17 @@ $exitCode = 1
 $timedOut = $false
 $stdoutCount = 0
 $stderrCount = 0
+$cleanupFailures = [Collections.Generic.List[string]]::new()
 try {
     if ($PSCADPort -ne 0) {
         $listeners = @(Get-NetTCPConnection -LocalPort $PSCADPort -State Listen -ErrorAction SilentlyContinue |
             Select-Object -ExpandProperty OwningProcess -Unique)
         if ($listeners.Count -eq 0) {
-            $exe = & $Python -c "from mhi.common import process; print(process.find_exe('PSCAD', version='$PSCADVersion', x64=True))"
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            $findExeOutput = Join-Path $result "pscad-find-exe-stdout.txt"
+            $findExeError = Join-Path $result "pscad-find-exe-stderr.txt"
+            $findExeCode = Invoke-PSCADNative -Executable $Python -Arguments @("-c", "from mhi.common import process; print(process.find_exe('PSCAD', version='$PSCADVersion', x64=True))") -StdoutPath $findExeOutput -StderrPath $findExeError
+            $exe = ([string] (Get-Content -LiteralPath $findExeOutput -Raw)).Trim()
+            if ($findExeCode -ne 0 -or [string]::IsNullOrWhiteSpace($exe) -or -not (Test-Path -LiteralPath $exe -PathType Leaf)) {
                 throw "Could not resolve the PSCAD $PSCADVersion executable with mhi.common"
             }
             $exe = [IO.Path]::GetFullPath($exe.Trim())
@@ -227,7 +236,11 @@ try {
                 Set-Content -LiteralPath $pscadOwnerPath -Value @($pscadProcessId, $exe, $PSCADPort, $application.CreationDate.ToUniversalTime().ToString('o'))
                 $pscadOwned = $true
             } finally {
-                Unregister-ScheduledTask -TaskName $taskName -TaskPath '\' -Confirm:$false -ErrorAction SilentlyContinue
+                try {
+                    Unregister-ScheduledTask -TaskName $taskName -TaskPath '\' -Confirm:$false -ErrorAction Stop
+                } catch {
+                    $cleanupFailures.Add("Unregister scheduled task: $($_.Exception.Message)")
+                }
             }
         } else {
             if ($listeners.Count -ne 1) {
@@ -236,6 +249,10 @@ try {
             $pscadProcessId = $listeners[0]
         }
         [Console]::Out.WriteLine("PSCAD port=$PSCADPort PID=$pscadProcessId owned=$pscadOwned")
+        $probeExitCode = Invoke-PSCADNative -Executable $Python -Arguments @("-u", $probe, "127.0.0.1", $PSCADPort, $PSCADProbeTimeoutSeconds) -StdoutPath $probePath -StderrPath $probeErrorPath
+        if ($probeExitCode -ne 0) {
+            throw "PSCAD on port $PSCADPort is not answering remote calls within $PSCADProbeTimeoutSeconds s (busy, blocked by a dialog, or its desktop session is not active); check the instance or use a port without a listener so the run starts its own PSCAD."
+        }
     }
     $runnerOwned = ($PSCADPort -eq 0 -or $pscadOwned).ToString().ToLowerInvariant()
     $runnerArguments = @(
@@ -291,8 +308,6 @@ try {
         [Console]::Error.WriteLine(
             "PSCAD runner exceeded the configured timeout of $TimeoutSeconds seconds"
         )
-        Stop-OwnedRunner -OwnerPath $ownerPath -OwnedRoot $LocalCase
-        Stop-EMTDC -CaseDirectory $LocalCase
         $exitCode = 124
     } else {
         $process.WaitForExit()
@@ -320,24 +335,33 @@ try {
         Write-NewLines -Path $stderrPath -Count ([ref] $stderrCount) -ErrorStream $true
     }
 } catch {
+    # Report the primary error before any cleanup can fail.
     [Console]::Error.WriteLine($_.Exception.ToString())
-    if ($null -ne $process -and -not $process.HasExited) {
-        Stop-OwnedRunner -OwnerPath $ownerPath -OwnedRoot $LocalCase
-    }
     $exitCode = 1
 } finally {
     try {
-        Stop-EMTDC -CaseDirectory $LocalCase
-    } finally {
-        try {
-            if ($pscadOwned) {
-                Stop-OwnedPSCAD -OwnerPath $pscadOwnerPath -GraceSeconds 10
-            }
-        } finally {
-            Copy-Result -Source $result -Destination $sharedOutput
-            Remove-Item -LiteralPath $ownerPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $process -and -not $process.HasExited) {
+            Stop-OwnedRunner -OwnerPath $ownerPath -OwnedRoot $LocalCase
         }
+    } catch { $cleanupFailures.Add("Stop runner: $($_.Exception.Message)") }
+    try {
+        Stop-EMTDC -CaseDirectory $LocalCase
+    } catch { $cleanupFailures.Add("Stop EMTDC: $($_.Exception.Message)") }
+    try {
+        if ($pscadOwned) {
+            Stop-OwnedPSCAD -OwnerPath $pscadOwnerPath -GraceSeconds 10
+        }
+    } catch { $cleanupFailures.Add("Stop owned PSCAD: $($_.Exception.Message)") }
+    try {
+        Copy-Result -Source $result -Destination $sharedOutput
+    } catch { $cleanupFailures.Add("Copy outputs: $($_.Exception.Message)") }
+    try {
+        Remove-Item -LiteralPath $ownerPath -Force -ErrorAction SilentlyContinue
+    } catch { $cleanupFailures.Add("Remove runner owner: $($_.Exception.Message)") }
+    foreach ($failure in $cleanupFailures) {
+        [Console]::Error.WriteLine("Cleanup failure: $failure")
     }
+    if ($cleanupFailures.Count -gt 0 -and $exitCode -eq 0) { $exitCode = 1 }
 }
 
 if ($exitCode -eq 0) {

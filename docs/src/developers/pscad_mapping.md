@@ -25,6 +25,17 @@ cannot detect compilers (`app.settings()` raises "Unable to retrieve detected so
 | set, a PSCAD listens on it | The runner attaches with `mhi.pscad.connect(host = "127.0.0.1", port)`, never quits that application, and restores its `silence` flag afterwards. |
 | set, nothing listens | The supervisor starts `Pscad.exe /startup:au /port:<P> /silence:true /splash:false` in the desktop session through a transient interactive-only scheduled task (deleted immediately after start), the runner attaches, and the supervisor stops that PSCAD after the run. |
 
+Before the runner attaches to either an existing listener or a PSCAD just started by the
+supervisor, `probe.py` connects and reads `app.is_busy()` and `app.version` under a hard
+60 s watchdog. This limit is a supervisor constant, independent of `RemoteConfig.timeout`,
+because the automation connection's TCP timeout does not bound initialization or idle polling.
+The probe changes no application settings and loads no project; its console output is retained
+in `outputs/pscad-probe.txt`. It flushes diagnostics and exits directly, bypassing automation
+threads and interpreter shutdown. Failure stops the run with a diagnostic asking the user to check
+the instance, dialogs and desktop session, or select a port without a listener. Cleanup stops
+an instance started by the supervisor. After a successful probe, the runner records its own
+connection time in `outputs/pscad-console.txt`.
+
 Every acquired application is silenced (`app.silence = true`) before any settings, load, build or
 run call. An unsilenced instance blocks automation on any modal dialog; for example, loading the
 staged `generated.pscx` raises "project namespace ... modified to 'generated'".
@@ -33,6 +44,19 @@ Ownership is explicit. `owner.txt` records the runner process and `pscad-owner.t
 started by the supervisor (PID, executable, port, creation time). `lifecycle.ps1` is the single
 implementation of stopping the runner, EMTDC executables under the case directory, and an owned
 PSCAD. The supervisor's timeout path and caller-side cancellation (Ctrl-C) both use it.
+Cleanup polls terminating processes with incomplete identity metadata through the grace period
+and never kills them. A confirmed executable or creation-time mismatch warns and removes the
+stale owner file without failing a completed run; pre-run cleanup and cancellation apply the
+same rule, leaving the different process untouched. Malformed owner records and failures to
+stop a positively identified owned process still raise errors.
+Native calls to Python and `taskkill` capture stdout and stderr in output files and decide success
+by exit code, so native stderr does not interrupt the supervisor in Windows PowerShell 5.1.
+A failed stop records its output and exit code, then polls the same identity for another grace
+period (10 s in supervisor cleanup and cancellation); a gone or terminating process counts as
+stopped. Cleanup attempts every step, reports the primary error first and appends cleanup failures
+without replacing it. When the runner console has no failure message or cleanup also failed, the
+Julia exception includes the supervisor's stderr error text, decoding CLIXML error records.
+Probe stderr is retained separately in `outputs/pscad-probe-stderr.txt`.
 
 ## Measured station facts (PSCAD 5.1.0, EDU certificate, GFortran 8.1 x64)
 

@@ -1,6 +1,28 @@
 module PSCADConfigTests
 using Test, PowerImpedance, TOML, Base64, Logging
 const P = PowerImpedance.PSCAD
+const SUPERVISOR_ERROR_CASE = Ref((console = :missing, stderr = ""))
+
+function P.remote_command(::Val{:supervisor_error_fixture}, config::RemoteConfig,
+        command::AbstractString)
+    script = if occursin("-SharedCase", command)
+        fixture = SUPERVISOR_ERROR_CASE[]
+        """
+        output = joinpath($(repr(config.local_root)), "case", "outputs")
+        mode = $(repr(fixture.console))
+        console = joinpath(output, "pscad-console.txt")
+        mode === :missing || write(console, mode === :empty ? "" :
+            mode === :failure ? "PSCAD runner failed during build: synthetic runner failure\\n" :
+            "PSCAD run returned normally\\n")
+        text = $(repr(fixture.stderr))
+        isempty(text) || println(stderr, text)
+        exit(9)
+        """
+    else
+        "nothing"
+    end
+    return `$(Base.julia_cmd()) --startup-file=no --project=@stdlib -e $script`
+end
 
 function P.remote_command(::Val{:fetch_fixture}, config::RemoteConfig, command::AbstractString)
     destination = only(match(r"\$destination='([^']+)'", command).captures)
@@ -117,12 +139,46 @@ end
         end
         lifecycle = P.PSCAD_REMOTE_SOURCES["lifecycle.ps1"]
         for text in ("owner.txt", "pscad-owner.txt", "EMTDC", "ExecutablePath", "CreationDate",
-            "Get-CimInstance", "taskkill.exe /PID", "/T /F", "StartsWith", "CommandLine")
+            "Get-CimInstance", "taskkill.exe", "\"/PID\"", "\"/T\", \"/F\"", "StartsWith", "CommandLine")
+            @test occursin(text, lifecycle)
+        end
+        for text in ("function Invoke-PSCADNative", "\$ErrorActionPreference = \"Continue\"",
+            "& \$Executable @Arguments 1> \$StdoutPath 2> \$StderrPath",
+            "taskkill PID=\$ProcessId exit code=\$code",
+            "\$deadline = [DateTime]::UtcNow.AddSeconds(\$GraceSeconds)")
             @test occursin(text, lifecycle)
         end
         @test !occursin("exit 0", lifecycle)
+        for text in ("\$application.ExecutionState -eq 7",
+            "[string]::IsNullOrWhiteSpace(\$application.ExecutablePath)",
+            "[string]::IsNullOrWhiteSpace(\$application.CommandLine)",
+            "[string]::IsNullOrWhiteSpace([string] \$application.CreationDate)",
+            "if (-not \$exiting)", "if (\$exiting)",
+            "[Console]::Error.WriteLine(\"Warning: PID \$processId no longer belongs to the recorded owned PSCAD;")
+            @test occursin(text, lifecycle)
+        end
+        @test !occursin(
+            "throw \"PID \$processId no longer belongs to the recorded owned PSCAD\"",
+            lifecycle)
         @test occursin(". (Join-Path \$PSScriptRoot \"lifecycle.ps1\")",
             P.PSCAD_REMOTE_SOURCES["supervisor.ps1"])
+        supervisor_source = P.PSCAD_REMOTE_SOURCES["supervisor.ps1"]
+        @test haskey(P.PSCAD_REMOTE_SOURCES, "probe.py")
+        for text in ("\$PSCADProbeTimeoutSeconds = 60",
+            "\$probe = Join-Path \$toolkit \"probe.py\"",
+            "\$probePath = Join-Path \$result \"pscad-probe.txt\"",
+            "-Arguments @(\"-u\", \$probe, \"127.0.0.1\", \$PSCADPort, \$PSCADProbeTimeoutSeconds) -StdoutPath \$probePath -StderrPath \$probeErrorPath",
+            "if (\$probeExitCode -ne 0)",
+            "PSCAD on port \$PSCADPort is not answering remote calls within \$PSCADProbeTimeoutSeconds s (busy, blocked by a dialog, or its desktop session is not active); check the instance or use a port without a listener so the run starts its own PSCAD.")
+            @test occursin(text, supervisor_source)
+        end
+        @test occursin("Cleanup failure: \$failure", supervisor_source)
+        @test occursin("-Arguments @(\"-c\", \"from mhi.common", supervisor_source)
+        probe_call = findfirst("-Arguments @(\"-u\", \$probe", supervisor_source)
+        @test first(findfirst("\$pscadOwned = \$true", supervisor_source)) <
+              first(probe_call)
+        @test first(probe_call) < first(findfirst("\$runnerArguments =", supervisor_source))
+        @test occursin("if (\$pscadOwned) {\n            Stop-OwnedPSCAD", supervisor_source)
         for name in ("Stop-OwnedRunner", "Stop-EMTDC", "Stop-OwnedPSCAD", "Stop-PSCADCase")
             @test occursin("function $name {", lifecycle)
             @test !occursin("function $name {", P.PSCAD_REMOTE_SOURCES["supervisor.ps1"])
@@ -153,6 +209,56 @@ end
                 @test_throws ArgumentError P.fetch_station_file(
                     config, "source", joinpath(root, "escape", "case.pscx"))
             end
+        end
+    end
+end
+
+@testset "PSCAD supervisor errors reach the Julia exception" begin
+    failure = "PSCAD on port 54330 is not answering remote calls within 60 s (busy, blocked by a dialog, or its desktop session is not active); check the instance or use a port without a listener so the run starts its own PSCAD."
+    decoded = failure * "\nCheck <desktop> & \"session\" for 'account'."
+    clixml = "#< CLIXML\n" *
+             "<Objs xmlns=\"http://schemas.microsoft.com/powershell/2004/04\">" *
+             "<S S=\"Information\">ignored progress</S>" *
+             "<S S=\"Error\">$(failure)_x000D__x000A_</S>" *
+             "<S S=\"Error\">Check &lt;desktop&gt; &amp; &quot;session&quot; for &apos;account&apos;._x000D__x000A_</S></Objs>"
+    for (console, stderr, expected) in ((:missing, clixml, decoded),
+        (:empty, clixml, decoded), (:normal, clixml, decoded),
+        (:failure, clixml, ""),
+        (:failure, "synthetic runner failure\nCleanup failure: synthetic cleanup failure",
+        "synthetic runner failure\nCleanup failure: synthetic cleanup failure"),
+        (:missing, failure * "\nCleanup failure: synthetic cleanup failure",
+        failure * "\nCleanup failure: synthetic cleanup failure"), (
+        :missing, "plain supervisor error", "plain supervisor error"),
+        (:missing, "#< CLIXML\n<Objs><S S=\"Progress\">ignored</S></Objs>", ""),
+        (:missing, "", ""))
+        mktempdir() do root
+            case = mkpath(joinpath(root, "case"))
+            project = joinpath(case, "generated.pscx")
+            write(project, "fixture")
+            output = joinpath(case, "outputs")
+            config = RemoteConfig("fixture", root, "scratch", "julia", "python";
+                local_root = root, transport = :supervisor_error_fixture, pscad_port = 54330)
+            SUPERVISOR_ERROR_CASE[] = (; console, stderr)
+            caught = try
+                P.run_remote_pscad(config, project, output; output_stem = "pi")
+            catch error
+                error
+            end
+            @test caught isa ErrorException
+            message = sprint(showerror, caught)
+            @test occursin("remote PSCAD command failed with exit code 9", message)
+            @test occursin("Supervisor error:", message) == !isempty(expected)
+            isempty(expected) || @test occursin(expected, message)
+            if occursin("Cleanup failure:", expected)
+                primary = console === :failure ? "PSCAD runner failed during" : failure
+                @test first(findfirst(primary, message)) <
+                      first(findfirst("Cleanup failure:", message))
+            end
+            @test !occursin("_x000D__x000A_", message)
+            @test !occursin("<Objs", message)
+            @test occursin("synthetic runner failure", message) == (console === :failure)
+            @test strip(read(joinpath(output, "transport-stderr.txt"), String)) == stderr
+            @test isfile(joinpath(output, "pscad-console.txt"))
         end
     end
 end

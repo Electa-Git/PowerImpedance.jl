@@ -211,7 +211,7 @@ const PSCAD_REMOTE_SOURCES = Dict(name => let
                                       read(path, String)
                                   end
 for name in ("Project.toml", "Manifest.toml", "files.jl",
-    "runner.jl", "supervisor.ps1", "lifecycle.ps1", "identity.py"))
+    "runner.jl", "supervisor.ps1", "lifecycle.ps1", "identity.py", "probe.py"))
 
 """
 $(TYPEDSIGNATURES)
@@ -292,6 +292,21 @@ function _diagnostic_tail(path::AbstractString; count::Integer = 12)
     return join(last(lines, min(count, length(lines))), '\n')
 end
 
+function _supervisor_errors(path::AbstractString)
+    isfile(path) || return ""
+    text = read(path, String)
+    # Windows PowerShell serializes stderr strings as CLIXML stream records.
+    records = [record[1]
+               for record in eachmatch(r"<S\b[^>]*\bS=\"Error\"[^>]*>(.*?)</S>"s, text)]
+    isempty(records) && return occursin("#< CLIXML", text) ? "" : strip(text)
+    return strip(join(
+        (rstrip(replace(record,
+             "_x000D__x000A_" => "\n", "_x000D_" => "\n", "_x000A_" => "\n",
+             "&lt;" => "<", "&gt;" => ">", "&quot;" => "\"", "&apos;" => "'", "&amp;" => "&"))
+        for record in records),
+        '\n'))
+end
+
 function run_remote_pscad(
         config::RemoteConfig,
         local_project::AbstractString,
@@ -356,8 +371,17 @@ function run_remote_pscad(
             )
         end
         summary=first(split(sprint(showerror, execution_error), '\n'))
+        diagnostics = _diagnostic_tail(console_path)
+        supervisor_errors = _supervisor_errors(transport_stderr)
+        if !isempty(supervisor_errors)
+            if !occursin("PSCAD runner failed during", diagnostics)
+                summary *= "\nSupervisor error:\n$supervisor_errors"
+            elseif occursin("Cleanup failure:", supervisor_errors)
+                diagnostics *= "\nSupervisor error:\n$supervisor_errors"
+            end
+        end
         throw(ErrorException(
-            "$summary\nLast PSCAD diagnostics:\n$(_diagnostic_tail(console_path))" *
+            "$summary\nLast PSCAD diagnostics:\n$diagnostics" *
             "\nFull PSCAD diagnostics: $console_path" *
             "\nTransport stdout: $transport_stdout" *
             "\nTransport stderr: $transport_stderr" *

@@ -140,7 +140,11 @@ function main(arguments)
             end
         else
             _report(console, verbosity, 1, "Connecting to PSCAD on port $port (owned=$owned)")
+            connect_started = time_ns()
             app = pscad.connect(; host = "127.0.0.1", port, timeout = 30)
+            connect_seconds = (time_ns() - connect_started) / 1e9
+            _report(console, verbosity, 1,
+                "PSCAD connect took $(round(connect_seconds; digits = 3)) s")
         end
         phase = "PSCAD dialog suppression"
         previous_silence = pyconvert(Bool, app.silence)
