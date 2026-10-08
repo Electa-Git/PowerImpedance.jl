@@ -44,3 +44,24 @@ end
     @test explicit_network.voltageBase[1] == 220 / sqrt(3)
     @test all(bus -> bus["base_kv"] ≈ 220 / sqrt(3), values(explicit_data["bus"]))
 end
+
+@testset "Overhead lines accept explicit conductor positions" begin
+    # Explicit coordinates reproduce the equivalent named organization exactly.
+    flat = Conductors(organization = :flat, nᵇ = 3, yᵇᶜ = 30, Δxᵇᶜ = 10, dˢᵃᵍ = 10,
+        rᶜ = 0.015, Rᵈᶜ = 0.063)
+    # Ground-wire heights are measured from yᵇᶜ, so it is set with explicit positions too.
+    placed = Conductors(nᵇ = 3, positions = ([-10, 0, 10], [30, 30, 30]), yᵇᶜ = 30,
+        dˢᵃᵍ = 10, rᶜ = 0.015, Rᵈᶜ = 0.063)
+    ground = Groundwires(nᵍ = 2, Δxᵍ = 6.5, Δyᵍ = 7.5, dᵍˢᵃᵍ = 10, rᵍ = 0.0062,
+        Rᵍᵈᶜ = 0.92)
+    for s in (2π * 50im, 2π * 1e3im)
+        @test PI.eval_parameters(
+            Overhead_line(conductors = placed, groundwires = ground,
+                earth_parameters = (1, 1, 100)), s) ==
+              PI.eval_parameters(
+            Overhead_line(conductors = flat, groundwires = ground,
+                earth_parameters = (1, 1, 100)), s)
+    end
+    @test_throws ArgumentError PI.eval_parameters(Overhead_line(conductors = Conductors(nᵇ = 3)),
+        100π * im)
+end

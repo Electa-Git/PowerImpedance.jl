@@ -326,11 +326,7 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 	ρ_array = Float64[]   # stored as (Rdc per length) [Ω/m] in your original code (via *1e-3)
 	μ_array = Float64[]
 
-	# conductors
-	# Preserve the evaluator's previous explicit-position rejection in this refactor.
-	if !(hasproperty(_OHL_ORGANIZATIONS, tl.conductors.organization) || isempty(tl.conductors.positions))
-		throw(ArgumentError("Conductor positions are not defined."))
-	end
+	# conductors (named organization or explicit positions; validated by the helper)
 	(x, y) = _ohl_conductor_coordinates(tl.conductors)
 	(xˢᵇ, yˢᵇ) = _ohl_bundle_position(tl.conductors.nˢᵇ, tl.conductors.dˢᵇ)
 

@@ -36,10 +36,6 @@ const PI = PowerImpedance
     @test_throws ArgumentError PI._ohl_conductor_coordinates(Conductors())
     explicit = Conductors(nᵇ = 3, positions = ([-11, 1, 9], [28, 35, 31]), dˢᵃᵍ = 10)
     @test PI._ohl_conductor_coordinates(explicit) == ([-11.0, 1.0, 9.0], [28.0, 35.0, 31.0])
-    # Explicit coordinates are available to export planning; changing the
-    # pre-existing evaluator rejection is outside this pure refactor.
-    @test_throws ArgumentError PI.eval_parameters(Overhead_line(conductors = explicit), 100π *
-                                                                                        im)
     @test_throws ArgumentError PI._ohl_conductor_coordinates(
         Conductors(nᵇ = 3, positions = ([1, 2], [30, 30, 30])))
     for (n, x) in ((0, Float64[]), (1, [0.0]), (2, [-3.25, 3.25]))
