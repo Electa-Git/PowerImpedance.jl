@@ -154,11 +154,53 @@ function _comparison_bus(model, name)
     return bus, point
 end
 
+function _dc_converter_current_bases(netlist)
+    # DC connectivity excludes AC terminals and the shared ground. Each
+    # element joins only its nongrounded DC buses, including cable ends.
+    parents = Dict(bus.key => bus.key for bus in netlist.buses if bus.key.domain == 2)
+    function root(key)
+        parent = parents[key]
+        if parent != key
+            parents[key] = root(parent)
+        end
+        return parents[key]
+    end
+    for element in netlist.elements
+        buses = [terminal.bus
+                 for terminal in element.terminals
+                 if !terminal.grounded && terminal.bus !== nothing &&
+                        terminal.bus.domain == 2]
+        isempty(buses) && continue
+        first_root = root(first(buses))
+        for bus in buses[2:end]
+            parents[root(bus)] = first_root
+        end
+    end
+    bases = Dict{BusKey, Float64}()
+    for element in netlist.elements
+        element.model isa PowerImpedance.TLC || continue
+        for terminal in element.terminals
+            terminal.grounded && continue
+            bus = terminal.bus
+            (bus === nothing || bus.domain != 2) && continue
+            key = root(bus)
+            base = element.model.elec.iDCbase # Sbase [MVA] / vDCbase [pole-to-pole kV].
+            if haskey(bases, key) && bases[key] != base
+                throw(ArgumentError("DC current comparison for :$(element.name) is not yet supported in a DC network with different converter current bases"))
+            end
+            bases[key] = base
+        end
+    end
+    return Dict(bus => bases[root(bus)]
+    for bus in keys(parents) if haskey(bases, root(bus)))
+end
+
 """
 $(TYPEDSIGNATURES)
 
-Compare settled AC/DC bus voltages, branch-terminal currents and machine operating points with a retained
-power flow. Compare only the channels in `model.probes`; require solved data
+Compare settled AC/DC bus voltages, branch-terminal currents and
+machine/converter operating points with a retained power flow.
+Compare only the channels in `model.probes`; require solved data
 and complete three-phase AC or scalar DC measurements for those channels.
 
 # Arguments
@@ -167,17 +209,20 @@ and complete three-phase AC or scalar DC measurements for those channels.
 - `model`: Exported model retaining netlist and operating-point evidence.
 - `rtol_v`: Relative phase RMS voltage tolerance, default `0.01`.
 - `atol_angle_deg`: Absolute relative-bus angle tolerance \\[deg\\], default `1.0`.
-- `rtol_i`: Relative current RMS tolerance, default `0.02`.
+- `rtol_i`: Current magnitude tolerance, default `0.02`. AC currents and
+  converter-free DC networks use relative error; converter-connected DC
+  networks use the larger of the reference and converter DC current base.
 
 # Returns
 
 - A `TypedTables.Table` with `quantity`, probe `name`, `pscad`, `powerflow`,
   nonnegative `error`, and `within_tolerance` columns. Magnitudes use kV/kA,
-  powers MW/MVAr, and relative errors. Machine power errors are normalized
-  by machine rating \\[MVA\\]. Speed uses pu and absolute error;
-  angles use degrees and absolute wrapped errors. Omit the
-  reference bus's own angle row. A zero magnitude reference uses zero error
-  for a zero measurement and infinite error otherwise.
+  powers MW/MVAr (filtered converter powers in pu), and relative magnitude errors.
+  All machine/converter power errors are normalized by the device rating \\[MVA\\],
+  so filtered converter power errors are absolute pu differences.
+  Speed uses pu and absolute error; angles use degrees and absolute wrapped errors. Omit the
+  reference bus's own angle row. A zero magnitude reference without a converter
+  DC current base uses zero error for a zero measurement and infinite error otherwise.
 
 # Notes
 
@@ -189,6 +234,15 @@ DC bus voltage is the window mean of V_P - V_N, compared with twice the
 pole-to-ground bus voltage. DC current magnitudes use the P-pole window mean
 and the reference |P|/V_pp. Omit a DC current row when no solved terminal power
 exists (for example a source without a gendc solution record).
+For a DC network containing a TLC, current error is
+`abs(measured-reference)/max(abs(reference), elec.Sbase/elec.vDCbase)` in kA,
+using the converter's pole-to-pole DC voltage base. A DC network is the
+connected component of nongrounded DC buses joined by an element's DC
+terminals; AC terminals and shared ground do not join networks. This base
+applies to converter terminals, DC branches and DC sources throughout that
+component. Converter-free components retain relative error. Multiple
+converters with the same current base are supported; differing bases require
+a normalization decision and raise an error.
 Machine P/Q use the three-phase fundamental power at the public bus,
 ``S = \\sum_k V_k I_k^*/2``, with peak phasors in kV/kA and current directed
 from the machine to the bus. Compare with the retained `pf/qf` at that same
@@ -200,6 +254,15 @@ its positive-sequence magnitude with the solved terminal voltage using
 `rtol_v`. These rows use the current probe's name. Internal machine P/Q/Vt
 and initialization/field channels remain diagnostics. Speed uses the scalar
 mean and an absolute tolerance of `1e-3` pu around 1.
+TLC terminal P/Q follow the same fundamental-phasor calculation, with current
+from the converter to its AC bus and references `-pgrid/-qgrid` at side 2.
+Their errors use `elec.Sbase` and tolerance `0.01`. Internal `P_ac_f/Q_ac_f`
+means are pu on `elec.Sbase`, compared to those solved terminal powers divided
+by `Sbase` with `abs(measured_pu-reference_pu) <= 0.01`, equivalently
+`abs(diff_MW)/Sbase <= 0.01` (MVAr for Q). Julia's Q measurement uses a sine q basis:
+`Q_ac = -v_q*i_d + v_d*i_q`, equal to standard injected reactive power.
+Consequently its reference is `-setpoint.Qac/Sbase`, also `-qgrid/Sbase`.
+Converter DC voltage, frequency and angle channels remain diagnostics.
 """
 function compare_operating_point(result::PSCADResult, model::PSCADModel;
         rtol_v = 0.01, atol_angle_deg = 1.0, rtol_i = 0.02)
@@ -211,6 +274,7 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
     !isempty(model.operating_point.bus_states) ||
         throw(ArgumentError("model has no solved power-flow data for comparison"))
     settled = steady_state(result)
+    dc_current_bases = _dc_converter_current_bases(model.netlist)
     quantities, names = Symbol[], String[]
     measured, expected, errors, passed = Float64[], Float64[], Float64[], Bool[]
     function add_row(
@@ -228,6 +292,25 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
         push!(passed, error <= tolerance)
     end
     for channel in model.probes.channels
+        if channel.kind in (:converter_p, :converter_q)
+            channel.dim == 1 && _probe_present(channel, result.channels) ||
+                throw(ArgumentError("missing PSCAD scalar converter probe $(channel.name)"))
+            index = findfirst(e -> string(e.name) == channel.element, model.netlist.elements)
+            index === nothing &&
+                throw(ArgumentError("missing power-flow converter $(channel.element)"))
+            e = model.netlist.elements[index]
+            flow = get(model.operating_point.branch_flows, e.name, nothing)
+            field = channel.kind == :converter_p ? :pt : :qt
+            flow !== nothing && haskey(flow, field) ||
+                throw(ArgumentError("missing solved converter terminal data for :$(e.name)"))
+            # Filtered powers use the native AC-injection Q convention and pu.
+            # Both references are solved terminal flows divided by the rating.
+            reference = flow[field] / e.model.elec.Sbase
+            add_row(
+                channel.kind, channel.name, settled[channel.name].mean, reference, 0.01;
+                absolute = true)
+            continue
+        end
         if channel.kind == :machine_speed
             channel.dim == 1 && _probe_present(channel, result.channels) ||
                 throw(ArgumentError("missing PSCAD scalar machine probe $(channel.name)"))
@@ -300,8 +383,9 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 (flow === nothing || !haskey(flow, field)) && continue
                 voltage > 0 ||
                     throw(ArgumentError("current comparison requires positive bus voltage"))
-                add_row(:current_dc, channel.name, abs(value.mean),
-                    abs(flow[field]) / (2voltage), rtol_i)
+                reference = abs(flow[field]) / (2voltage)
+                base = max(reference, get(dc_current_bases, bus.key, 0.0))
+                add_row(:current_dc, channel.name, abs(value.mean), reference, rtol_i, base)
                 continue
             end
             flow === nothing &&
@@ -314,8 +398,9 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 throw(ArgumentError("current comparison requires positive bus voltage"))
             current = hypot(flow[fields[1]], flow[fields[2]]) / (3 * voltage)
             add_row(:current_rms, channel.name, value.rms, current, rtol_i)
-            if e.model isa PowerImpedance.SynchronousMachine
-                haskey(flow, :terminal_voltage_kV) ||
+            if e.model isa Union{PowerImpedance.SynchronousMachine, PowerImpedance.TLC}
+                machine = e.model isa PowerImpedance.SynchronousMachine
+                machine && !haskey(flow, :terminal_voltage_kV) &&
                     throw(ArgumentError("missing solved machine terminal data for :$(e.name)"))
                 index = findfirst(c -> c.kind == :voltage && c.bus == bus.name,
                     model.probes.channels)
@@ -323,13 +408,17 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                     throw(ArgumentError("missing PSCAD voltage probe at $(bus.name)"))
                 probe = model.probes.channels[index]
                 probe.dim == 3 && _probe_present(probe, result.channels) ||
-                    throw(ArgumentError("machine comparison requires three-phase voltage probe $(probe.name)"))
+                    throw(ArgumentError("terminal power comparison requires three-phase voltage probe $(probe.name)"))
                 v = settled[probe.name].phasors
                 i = value.phasors
                 power = sum(v .* conj.(i)) / 2
                 elec = e.model.elec
-                add_row(:machine_p, channel.name, real(power), flow.pf, 0.01, elec.S_base)
-                add_row(:machine_q, channel.name, imag(power), flow.qf, 0.01, elec.S_base)
+                rating = machine ? elec.S_base : elec.Sbase
+                add_row(machine ? :machine_p : :converter_p, channel.name, real(power),
+                    flow[fields[1]], 0.01, rating)
+                add_row(machine ? :machine_q : :converter_q, channel.name, imag(power),
+                    flow[fields[2]], 0.01, rating)
+                machine || continue
                 zbase = elec.Vᵃᶜ_base^2 / elec.S_base
                 r = _pscad_number(pscad_value(elec.rt * zbase))
                 l = _pscad_number(pscad_value(elec.lt * zbase / elec.ωn))

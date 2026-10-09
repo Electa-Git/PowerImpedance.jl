@@ -291,7 +291,7 @@ end
     @test only(conv.elements).role == :converter
     @test only(conv.elements).setpoint === solved_setpoint
     @test conv.operating_point.branch_flows[:converter] ==
-          (pgrid = -320.0, qgrid = 80.0, pdc = 300.0)
+          (pgrid = -320.0, qgrid = 80.0, pdc = 300.0, pf = 300.0, pt = 320.0, qt = -80.0)
     @test only(conv.elements).terminals[1].bus == pscad.BusKey(2, 1)
     @test only(conv.elements).terminals[2].bus == pscad.BusKey(1, 1)
     @test conv.buses[1].vm_pu == 0.99

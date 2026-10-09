@@ -213,5 +213,91 @@ function dc_cable_network()
     builder = NetworkBuilder.define(elements, rows; options = state.options)
     return (; classic, state = builder)
 end
+"""
+    tlc_case1_network()
+
+Return classic and builder representations with the case-1 Vdc/Q controls
+from `test/adm_TLC_test.jl`, 100 MVA / 220 kV AC / 640 kV pole-to-pole DC,
+and the test's 10 km DC cable. Include the 0.5 s voltage-support lag.
+"""
+tlc_case1_network() = tlc_network(true)
+
+"""
+    tlc_case2_network()
+
+Return the case-2 P/Q controllers with the 0.5 s frequency-support lag.
+Use the same electrical data and 10 km DC cable as case 1, as required by
+M4; the original case-2 admittance grid connects its DC source directly.
+"""
+tlc_case2_network() = tlc_network(false)
+
+function tlc_network(vdc_control)
+    zbase = 220.0^2 / 100.0
+    elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08zbase / (2π * 50), Rᵣ = 0.0008zbase,
+        Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = 640.0)
+    active = vdc_control ?
+             PowerImpedance.OuterActiveVdcControl(pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0)) :
+             PowerImpedance.OuterActivePowerControl(
+        pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
+        support = PowerImpedance.FrequencySupportLag(Kω = 5.0, ωc = 2.0))
+    support = vdc_control ? PowerImpedance.VoltageSupportLag(K = 5.0, ωc = 2.0) :
+              PowerImpedance.NoVoltageSupport()
+    elements = (;
+        DUT = tlc(elec = elec,
+            meas = PowerImpedance.Measurement(
+                v_ac = PowerImpedance.Butterworth(order = 2, ωc = 5000.0),
+                i_ac = PowerImpedance.Butterworth(order = 2, ωc = 5000.0)),
+            sync = PowerImpedance.PLLSynchronization(
+                pi_ctrl = PowerImpedance.PIControl(Kp = 0.397887357729738,
+                    Ki = 7.957747154594767),
+                filter = PowerImpedance.Butterworth(order = 2, ωc = 2π * 80)),
+            outerActive = active,
+            outerReactive = PowerImpedance.OuterReactiveQControl(
+                pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
+                support = support),
+            innerVoltage = PowerImpedance.NoInnerVoltageControl(),
+            innerCurrent = PowerImpedance.InnerCurrentPIControl(pi_ctrl = PowerImpedance.PIControl(
+                Kp = 0.254647908947033, Ki = 0.8)),
+            mod = PowerImpedance.PadeModulation(timeDelay = 200e-6, padeOrderNum = 3, padeOrderDen = 3),
+            setpoint = Setpoint(
+                Pac = 70.0, Qac = 20.0, Vac = 220sqrt(2 / 3), Pdc = 70.0, Vdc = 640.0),
+            limits = vdc_control ?
+                     PowerImpedance.Limits(P_min = -100.0, P_max = 100.0, Q_min = -50.0, Q_max = 50.0) :
+                     PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0, Q_min = -1000.0, Q_max = 1000.0)),
+        G3 = ac_source(pins = 3, transformation = true, setpoint = Setpoint(Vac = 220sqrt(2 /
+                                                                                          3))),
+        G_DC = dc_source(setpoint = Setpoint(Vdc = 640.0)),
+        CableDC12 = cable(length = 10e3, positions = [(-0.5, 1.0), (0.5, 1.0)],
+            C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8),
+            I1 = Insulator(rᵢ = 24.25e-3, rₒ = 41.75e-3, ϵᵣ = 2.3),
+            C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8),
+            I2 = Insulator(rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
+            C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10.0),
+            I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3), transformation = true))
+    rows = [(node = Symbol("AC" * axis), element, side, terminal)
+            for (element, side) in ((:DUT, 2), (:G3, 1))
+            for (terminal, axis) in enumerate(("d", "q"))]
+    append!(rows,
+        [(node = :DC1, element = :DUT, side = 1, terminal = 1),
+            (node = :DC1, element = :CableDC12, side = 1, terminal = 1),
+            (node = :DC2, element = :CableDC12, side = 2, terminal = 1),
+            (node = :DC2, element = :G_DC, side = 1, terminal = 1)])
+    state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
+        voltageBase = 220 / sqrt(3)))
+    classic = Network()
+    classic.voltageBase[1] = 220 / sqrt(3)
+    for (name, element) in pairs(elements)
+        add!(classic, name, element)
+    end
+    for row in rows
+        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
+    end
+    for (element, count) in ((:G3, 2), (:G_DC, 1)), terminal in 1:count
+
+        connect!(classic, (element, Symbol("2.$terminal")), :gnd)
+    end
+    connect!(classic)
+    return (; classic, state)
+end
 
 end

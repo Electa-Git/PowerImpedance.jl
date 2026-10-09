@@ -86,7 +86,9 @@ function write_module_definition!(project, plan::PSCAD.ModuleDefinitionPlan)
         write_port!(svg, port, Val(port.kind))
     end
     PythonCall.pysetattr(etree.SubElement(svg, "cond"), "text", etree.CDATA("true"))
-    etree.SubElement(svg, "rect"; x = "-54", y = "-36", width = "108", height = "72",
+    height = max(72, maximum(p -> p.y, plan.ports; init = 0) + 72)
+    etree.SubElement(
+        svg, "rect"; x = "-54", y = "-36", width = "108", height = string(height),
         stroke = "Black", (Symbol("stroke-width") => "0.2",
             Symbol("stroke-dasharray") => "none", Symbol("fill-style") => "Hollow",
             Symbol("fill-fg") => "Black", Symbol("fill-bg") => "")...)
@@ -94,12 +96,23 @@ function write_module_definition!(project, plan::PSCAD.ModuleDefinitionPlan)
         (Symbol("font-size") => "small", Symbol("text-anchor") => "Middle")...)
     PythonCall.pysetattr(label, "text", etree.CDATA(plan.name))
     definition.replace(definition.find("graphics"), svg)
+    # Retain explicit saved canvas settings instead of relying on load defaults:
+    # local/TLC/Simple_2L_VSC_RL.pscx:2069–2083 (dq2abc), and
+    # local/SG/SG_Project.pscx:978–992 (the machine module).
+    settings = definition.schematic.find("paramlist")
+    for (key, value) in (("show_grid", "1"), ("size", "0"), ("orient", "1"),
+        ("show_border", "0"), ("monitor_bus_voltage", "0"), ("show_signal", "0"),
+        ("show_virtual", "0"), ("show_sequence", "0"), ("auto_sequence", "1"),
+        ("show_terminals", "0"), ("virtual_filter", ""), ("animation_freq", "500"))
+        etree.SubElement(settings, "param"; name = key, value)
+    end
     write_canvas!(project, definition.schematic, plan.canvas)
     return nothing
 end
 
 function PSCAD._write_project(plan::PSCAD.ProjectPlan,
         path::AbstractString)::NamedTuple{(:path, :mhi_xml_version), Tuple{String, String}}
+    PSCAD.check_connectivity(plan)
     project = _mhi_xml().ProjectFile.create(String(path))
     main = project.canvas("Main")
     parameters = project.parameters

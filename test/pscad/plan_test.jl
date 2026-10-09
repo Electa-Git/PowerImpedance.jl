@@ -28,71 +28,61 @@ function counts(plan)
     return result
 end
 
-function check_layout(plan, number_of_cells)
+function check_layout(plan, number_of_cells; empty_cells = ())
+    @test P.check_connectivity(plan) === nothing
+    # Named meter stubs extend 18 pixels above the allocation origin. The
+    # ownership tiles remain 432 × 216, shifted up 18 pixels without overlap.
+    cell(point) = (fld(point[1] - 72, 432), fld(point[2] - 54, 216))
+    owners = Set{Tuple{Int, Int}}()
+    anchors = Set{Tuple{Int, Int}}()
+    function check_location(component)
+        point = (component.x, component.y)
+        @test all(v -> v % 18 == 0, point)
+        owner = cell(point)
+        @test 0 <= owner[1] < 6 && owner[2] >= 0
+        index = owner[1] + 6 * owner[2]
+        @test index < number_of_cells && index ∉ empty_cells
+        x, y = 72 + 432 * owner[1], 72 + 216 * owner[2]
+        @test x < component.x < x + 432 && y - 18 <= component.y < y + 198
+        @test point ∉ anchors
+        push!(anchors, point)
+        push!(owners, owner)
+    end
+    endpoints = Set(v for w in plan.main.wires for v in w.vertices)
     for wire in plan.main.wires
         @test length(wire.vertices) == 2
         a, b = wire.vertices
         @test a != b && (a[1] == b[1] || a[2] == b[2])
         @test all(point -> all(v -> v % 18 == 0, point), wire.vertices)
+        @test cell(a) == cell(b)
     end
-    owners = Set{Tuple{Int, Int}}()
-    anchors = Set{Tuple{Int, Int}}()
+    modules = Dict(m.name => m for m in plan.modules)
     for component in plan.main.components
-        @test component.x % 18 == component.y % 18 == 0
-        cell = ((component.x - 72) ÷ 288, (component.y - 72) ÷ 216)
-        @test 0 <= cell[1] < 6 && cell[2] >= 0
-        index = cell[1] + 6 * cell[2]
-        @test index < number_of_cells
-        x, y = 72 + 288 * cell[1], 72 + 216 * cell[2]
-        @test x < component.x < x + 288 && y < component.y < y + 216
-        @test (component.x, component.y) ∉ anchors
-        push!(anchors, (component.x, component.y))
-        push!(owners, cell)
+        check_location(component)
+        if component.defn == "master:source_3"
+            @test Dict(component.params)["Grnd"] == "1"
+        end
+        for (port, _) in P.component_ports(component, modules)
+            @test port in endpoints
+            @test count(w -> port in w.vertices, plan.main.wires) == 1
+        end
+        if component.defn in ("master:nodelabel", "master:datalabel", "master:ground")
+            @test (component.x, component.y) in endpoints
+        end
     end
-    # Known electrical ports must meet another component port or a wire.
-    ports = Tuple{Int, Int}[]
     for wrapper in plan.wrappers
-        @test wrapper.x % 18 == wrapper.y % 18 == 0
-        push!(owners, ((wrapper.x - 72) ÷ 288, (wrapper.y - 72) ÷ 216))
+        check_location(wrapper)
         if wrapper isa P.TLineWrapperPlan
-            append!(ports, [(wrapper.x - 54, wrapper.y + 18),
-                (wrapper.x + 54, wrapper.y + 72)])
+            for port in ((wrapper.x - 54, wrapper.y + 18),
+                (wrapper.x + 54, wrapper.y + 72))
+                @test port in endpoints
+                @test count(w -> port in w.vertices, plan.main.wires) == 1
+            end
         end
     end
-    for c in plan.main.components
-        c.defn in ("master:datalabel", "master:pgb") && continue
-        if c.defn == "master:source_3"
-            push!(ports, (c.x + 36, c.y))
-            @test Dict(c.params)["Grnd"] == "1"
-        elseif c.defn == "master:source_1"
-            append!(ports, [(c.x - 36, c.y), (c.x + 36, c.y)])
-        elseif c.defn == "master:cable_interface"
-            direction = c.orient == 0 ? -1 : 1
-            append!(ports,
-                [(c.x + 18direction, c.y + 54 * (i - 1))
-                 for i in 1:parse(Int, Dict(c.params)["NCAB"])])
-        elseif c.defn == "master:breakout"
-            append!(ports, [(c.x, c.y), (c.x + 36, c.y - 36),
-                (c.x + 36, c.y), (c.x + 36, c.y + 36)])
-        elseif c.defn == "master:xfmr-3p2w"
-            append!(ports, [(c.x - 54, c.y), (c.x + 36, c.y)])
-        elseif c.defn in
-               ("master:resistor", "master:inductor", "master:capacitor", "master:ammeter")
-            append!(ports, [(c.x, c.y), (c.x + 36, c.y)])
-        else
-            push!(ports, (c.x, c.y))
-        end
-    end
-    @test length(owners) == number_of_cells
-    endpoints = Set(v for w in plan.main.wires for v in w.vertices)
-    for port in ports
-        @test count(==(port), ports) > 1 || port in endpoints
-    end
-    for wire in plan.main.wires
-        a, b = wire.vertices
-        @test ((a[1] - 72) ÷ 288, (a[2] - 72) ÷ 216) ==
-              ((b[1] - 72) ÷ 288, (b[2] - 72) ÷ 216)
-    end
+    @test length(owners) + length(empty_cells) == number_of_cells
+    @test Set(x + 6y for (x, y) in owners) ==
+          setdiff(Set(0:(number_of_cells - 1)), empty_cells)
 end
 
 @testset "PSCAD passive AC plan" begin
@@ -105,7 +95,7 @@ end
     @test plan_shape(classic_plan) == plan_shape(builder_plan)
     @test counts(classic_plan) == Dict("master:source_3" => 1,
         "master:resistor" => 2, "master:inductor" => 1, "master:ground" => 1,
-        "master:ammeter" => 4, "master:voltmetergnd" => 2, "master:nodelabel" => 6,
+        "master:ammeter" => 4, "master:voltmetergnd" => 2, "master:nodelabel" => 16,
         "master:datalabel" => 6, "master:pgb" => 6)
     source = only(filter(c -> c.defn == "master:source_3", classic_plan.main.components))
     params = Dict(source.params)
@@ -148,7 +138,7 @@ end
     @test_throws ArgumentError P.build_plan(builder_list; settings = P.SimulationSettings(frequency = 60))
     layout = P.GridLayout()
     @test [P.allocate_cell!(layout) for _ in 1:7] ==
-          [(72, 72), (360, 72), (648, 72), (936, 72), (1224, 72), (1512, 72), (72, 288)]
+          [(72, 72), (504, 72), (936, 72), (1368, 72), (1800, 72), (2232, 72), (72, 288)]
     for vertices in ([(0, 0)], [(0, 0), (18, 18)], [(0, 0), (0, 0)], [(0, 0), (1, 0)])
         @test_throws ArgumentError P.WirePlan(vertices)
     end
@@ -179,6 +169,26 @@ end
     check_layout(plan, 5)
     @test counts(plan)["master:ground"] == 1
     @test counts(plan)["master:ammeter"] == 4
+    # Both parallel rows share the return node before the total-current meter;
+    # only its output is grounded, so its arrow retains bus-to-element polarity.
+    shunt_parts = filter(c -> get(Dict(c.params), "Name", "") in ("load_R", "load_C"),
+        plan.main.components)
+    @test length(shunt_parts) == 2
+    grounds = Set((c.x, c.y) for c in plan.main.components if c.defn == "master:ground")
+    meter = only(filter(
+        c -> c.defn == "master:ammeter" &&
+             Dict(c.params)["Name"] == "I_load_1",
+        plan.main.components))
+    labels = Dict((c.x, c.y) => Dict(c.params)["Name"]
+    for c in plan.main.components if c.defn == "master:nodelabel")
+    for part in shunt_parts
+        port = (part.x + 36, part.y)
+        wire = only(filter(w -> port in w.vertices, plan.main.wires))
+        @test labels[only(filter(!=(port), wire.vertices))] == "load_parallel_2"
+    end
+    @test any(
+        w -> (meter.x + 36, meter.y) in w.vertices &&
+             any(p -> p in grounds, w.vertices), plan.main.wires)
     _, builder = small_ac_network()
     reversed_rows = [merge((; row.node, row.element, row.side, row.terminal),
                          (; side = row.element == :load ? 3 - row.side : row.side))
@@ -207,7 +217,7 @@ end
         e.element_model, P.Terminal[], :transformer, e.setpoint)
     state = P.PlanState(
         P.CanvasPlan(), P.AbstractLineDefinitionPlan[], P.AbstractLineWrapperPlan[],
-        P.ModuleDefinitionPlan[], P.GridLayout(), P.ProbeChannel[], Set{String}())
+        P.ModuleDefinitionPlan[], P.GridLayout(), P.ProbeChannel[], P._NameReservations())
     caught = try
         invoke(P.emit!, Tuple{P.PlanState, P.NetlistElement, Any}, state, unsupported, (;))
     catch e
@@ -256,8 +266,8 @@ end
     check_layout(plan, 5)
     @test [c.name for c in plan.probes.channels] ==
           ["I_source_1", "I_line_1", "I_line_2", "I_load_1", "V_B1", "V_B2"]
-    # Both wrapper endpoints meet the inner port of a series ammeter. The
-    # outer ports have 36-pixel wire stubs to the correct bus labels.
+    # Wrapper and meter inner ports have distinct stubs to one internal node.
+    # Outer meter ports have separate stubs to the bus labels.
     for (port, direction, bus, probe) in (
         ((wrapper.x - 54, wrapper.y + 18), -1, "B1", "I_line_1"),
         ((wrapper.x + 54, wrapper.y + 72), 1, "B2", "I_line_2"))
@@ -265,8 +275,8 @@ end
             c -> c.defn == "master:ammeter" &&
                  Dict(c.params)["Name"] == probe,
             plan.main.components))
-        @test (meter.x, meter.y) == (port[1] + (direction == -1 ? -36 : 0), port[2])
-        outer = (port[1] + direction * 36, port[2])
+        @test (meter.x, meter.y) == (port[1] + (direction == -1 ? -36 : 0), port[2] - 36)
+        outer = (port[1] + direction * 36, port[2] - 36)
         endpoint = (outer[1] + direction * 36, outer[2])
         @test any(w -> Set(w.vertices) == Set([outer, endpoint]), plan.main.wires)
         @test any(
@@ -415,7 +425,7 @@ end
             setproperty!(t, field, 0.0)
         end
         empty = P.build_plan(P.netlist(classic, nothing))
-        check_layout(empty, 9)
+        check_layout(empty, 9; empty_cells = (2, 4))
         @test counts(empty)["master:resistor"] == 1 # load only
         @test !haskey(counts(empty), "master:inductor")
         t.Rₘ = t.Lₘ = Inf

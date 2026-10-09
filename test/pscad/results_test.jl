@@ -2,7 +2,8 @@ module PSCADResultsTests
 using Test, PowerImpedance
 const P = PowerImpedance.PSCAD
 const FIXTURES = normpath(joinpath(@__DIR__, "../data/pscad"))
-using ..PSCADFixtures: small_ac_network, dc_network, sm_network
+using ..PSCADFixtures: small_ac_network, dc_network, sm_network, tlc_case1_network,
+                       tlc_case2_network
 
 function synthetic_result(time, channels; probes = P.ProbeManifest(), frequency = 50.0)
     settings = P.SimulationSettings(frequency = frequency, sample_step = 250e-6)
@@ -212,6 +213,131 @@ end
     partial = PSCADModel(model.project_path, model.project_name, list, plan.probes,
         model.settings, point, model.provenance)
     @test count(==(:current_dc), compare_operating_point(result, partial).quantity) == 3
+end
+
+@testset "PSCAD converter-connected DC current comparison" begin
+    times = collect(0.0:250e-6:0.3)
+    station_currents = Dict(
+        "I_G_DC_1" => (7.837e-5, 2.66e-13),
+        "I_DUT_1" => (-9.956e-5, 1.83e-14),
+        "I_CableDC12_1" => (9.956e-5, 1.83e-14),
+        "I_CableDC12_2" => (7.837e-5, 2.66e-13))
+    for network in tlc_case1_network()
+        solved = network isa Network ? power_flow(network) :
+                 NetworkBuilder.solve(network).powerflow
+        list = P.netlist(network, solved)
+        plan = P.build_plan(list)
+        dc_buses = Set(b.name for b in list.buses if b.kind == :dc)
+        probes = P.ProbeManifest(
+            filter(c -> c.kind == :current && c.bus in dc_buses, plan.probes.channels), nothing)
+        model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
+            P.SimulationSettings(), list.operating_point, (; source = :fixture))
+        converter = only(filter(e -> e.model isa PowerImpedance.TLC, list.elements))
+        base = converter.model.elec.Sbase / converter.model.elec.vDCbase
+        @test base == 0.15625
+        @test Set(c.name for c in probes.channels) == Set(keys(station_currents))
+        @test P._dc_converter_current_bases(list) ==
+              Dict(b.key => base for b in list.buses if b.kind == :dc)
+        channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
+        function set_reference!(probe, reference)
+            bus = only(filter(b -> b.name == probe.bus, list.buses))
+            e = only(filter(e -> string(e.name) == probe.element, list.elements))
+            field = e.model isa PowerImpedance.Source ? :pgdc :
+                    probe.side == "1" ? :pf : :pt
+            flow = list.operating_point.branch_flows[e.name]
+            list.operating_point.branch_flows[e.name] = merge(flow,
+                NamedTuple{(field,)}((-reference * 2bus.base_kV * bus.vm_pu,)))
+        end
+        for probe in probes.channels
+            measured, reference = station_currents[probe.name]
+            channels[probe.name] = fill(measured, length(times))
+            set_reference!(probe, reference)
+        end
+        rows = compare_operating_point(synthetic_result(times, channels), model)
+        @test length(rows) == 4
+        for row in rows
+            measured, reference = station_currents[row.name]
+            @test row.quantity == :current_dc
+            @test row.pscad ≈ abs(measured)
+            @test row.powerflow ≈ reference
+            @test row.error ≈ abs(abs(measured) - reference) / base
+            @test row.within_tolerance
+        end
+        # Exact zero and either sign of near-zero mean use the same base;
+        # references above the base recover the existing relative rule.
+        for reference in (0.0, 1e-13, 0.5), deviation in (0.019, 0.021), sign in (-1, 1)
+            denominator = max(reference, base)
+            for probe in probes.channels
+                set_reference!(probe, reference)
+                channels[probe.name] .= sign * (reference + deviation * denominator)
+            end
+            for row in compare_operating_point(synthetic_result(times, channels), model)
+                @test row.error ≈ deviation
+                @test row.within_tolerance == (deviation < 0.02)
+            end
+        end
+        for probe in probes.channels
+            set_reference!(probe, 0.0)
+            channels[probe.name] .= 0.0
+        end
+        @test all(iszero, compare_operating_point(synthetic_result(times, channels), model).error)
+
+        # Removing the cable separates the source DC bus from the converter.
+        # Their grounded terminals do not join DC-domain components.
+        disconnected = P.Netlist(list.buses,
+            filter(e -> e.name != :CableDC12, list.elements), list.operating_point,
+            list.voltageBase, list.frequency)
+        terminal = only(filter(t -> t.bus !== nothing && t.bus.domain == 2, converter.terminals))
+        @test P._dc_converter_current_bases(disconnected) == Dict(terminal.bus => base)
+
+        remote_bus = only(filter(b -> b.kind == :dc && b.key != terminal.bus, list.buses))
+        second_terminals = [P.Terminal(:DUT2, t.side, t.terminals, t.nets,
+                                t.bus == terminal.bus ? remote_bus.key : t.bus, t.grounded)
+                            for t in converter.terminals]
+        same_base = P.NetlistElement(:DUT2, "DUT2", converter.element, converter.model,
+            second_terminals, converter.role, converter.setpoint)
+        shared = P.Netlist(list.buses, [list.elements; same_base], list.operating_point,
+            list.voltageBase, list.frequency)
+        @test P._dc_converter_current_bases(shared) ==
+              Dict(b.key => base for b in list.buses if b.kind == :dc)
+        different_element = tlc(elec = PowerImpedance.ElectricalTLC(Sbase = 200.0,
+            vDCbase = 640.0))
+        different_base = P.NetlistElement(:DUT2, "DUT2", different_element,
+            different_element.element_model, second_terminals, converter.role, converter.setpoint)
+        mixed = P.Netlist(
+            list.buses, [list.elements; different_base], list.operating_point,
+            list.voltageBase, list.frequency)
+        @test_throws ArgumentError P._dc_converter_current_bases(mixed)
+        # The two converters share their AC bus, but removing the cable
+        # leaves independent DC components with independent current bases.
+        separate = P.Netlist(list.buses, [disconnected.elements; different_base],
+            list.operating_point, list.voltageBase, list.frequency)
+        @test P._dc_converter_current_bases(separate) ==
+              Dict(terminal.bus => base, remote_bus.key => 0.3125)
+    end
+
+    # Converter-free DC components keep the previous relative/zero rule.
+    classic, _ = dc_network()
+    list = P.netlist(classic, power_flow(classic))
+    @test isempty(P._dc_converter_current_bases(list))
+    plan = P.build_plan(list)
+    probes = P.ProbeManifest(filter(c -> c.name == "I_line_1", plan.probes.channels), nothing)
+    model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
+        P.SimulationSettings(), list.operating_point, (; source = :fixture))
+    probe = only(probes.channels)
+    bus = only(filter(b -> b.name == probe.bus, list.buses))
+    flow = list.operating_point.branch_flows[:line]
+    for reference in (2.0, 1e-13, 0.0), measured in (0.0, 7.837e-5, 2.02)
+
+        list.operating_point.branch_flows[:line] = merge(flow,
+            (; pf = reference * 2bus.base_kV * bus.vm_pu))
+        channels = PowerImpedance.OrderedDict(probe.name => fill(measured, length(times)))
+        row = only(compare_operating_point(synthetic_result(times, channels), model))
+        expected = iszero(reference) ? (iszero(measured) ? 0.0 : Inf) :
+                   abs(measured - reference) / reference
+        @test row.error ≈ expected
+        @test row.within_tolerance == (expected <= 0.02)
+    end
 end
 
 @testset "PSCAD settings and existing-project types" begin
@@ -458,4 +584,147 @@ end
         @test occursin("[3]", sprint(showerror, caught))
     end
 end
+
+@testset "PSCAD TLC power signs, units and rating normalization" begin
+    classic, _ = tlc_case2_network()
+    netlist = P.netlist(classic, power_flow(classic))
+    settings = P.SimulationSettings(source_ramp = 0.05)
+    plan = P.build_plan(netlist; settings)
+    model = PSCADModel("synthetic.pscx", "synthetic", netlist, plan.probes,
+        settings, netlist.operating_point, (source = :fixture,))
+    times = collect(0.0:250e-6:0.3)
+    channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
+    converter = only(filter(e -> e.model isa PowerImpedance.TLC, netlist.elements))
+    flow = netlist.operating_point.branch_flows[:DUT]
+    @test flow.pt == -flow.pgrid
+    @test flow.qt == -flow.qgrid
+    @test flow.pt ≈ converter.setpoint.Pac
+    @test flow.qt ≈ -converter.setpoint.Qac
+    for channel in plan.probes.channels
+        bus = only(filter(b -> b.name == channel.bus, netlist.buses))
+        voltage = bus.base_kV * bus.vm_pu
+        if channel.kind == :voltage
+            if bus.kind == :dc
+                channels[channel.name] = fill(channel.side == "P" ? voltage : -voltage, length(times))
+            else
+                add_three_phase!(channels, channel.name, times, sqrt(2) * voltage *
+                                                                cis(bus.va_rad))
+            end
+        elseif channel.kind == :current
+            e = only(filter(e -> string(e.name) == channel.element, netlist.elements))
+            f = netlist.operating_point.branch_flows[e.name]
+            if bus.kind == :dc
+                key = e.model isa PowerImpedance.Source ? :pgdc :
+                      channel.side == "1" ? :pf : :pt
+                channels[channel.name] = fill(haskey(f, key) ? f[key] / (2voltage) : 0.0, length(times))
+            else
+                keys = e.model isa PowerImpedance.Source ? (:pg, :qg) :
+                       channel.side == "1" ? (:pf, :qf) : (:pt, :qt)
+                current = sqrt(2) * conj(complex(f[keys[1]], f[keys[2]]) /
+                               (3voltage * cis(bus.va_rad)))
+                add_three_phase!(channels, channel.name, times, current)
+            end
+        else
+            reference = channel.kind == :converter_p ?
+                        flow.pt / converter.model.elec.Sbase :
+                        channel.kind == :converter_q ?
+                        flow.qt / converter.model.elec.Sbase : -123.0
+            channels[channel.name] = fill(reference, length(times))
+        end
+    end
+    table = compare_operating_point(synthetic_result(times, channels), model)
+    @test all(table.within_tolerance)
+    @test count(r -> r.name == "I_DUT_2" && r.quantity in (:converter_p, :converter_q), table) ==
+          2
+    for quantity in (:converter_p, :converter_q)
+        row = only(filter(r -> r.quantity == quantity && r.name == "I_DUT_2", table))
+        @test row.powerflow == (quantity == :converter_p ? flow.pt : flow.qt)
+        internal = only(filter(r -> r.quantity == quantity && r.name != "I_DUT_2", table))
+        @test internal.powerflow == row.powerflow / 100.0
+        @test internal.pscad ≈ internal.powerflow
+    end
+    ac_bus = only(filter(b -> b.kind != :dc, netlist.buses))
+    solved_voltage = ac_bus.vm_pu * ac_bus.base_kV * cis(ac_bus.va_rad)
+    for deviation in (0.009, 0.011)
+        measured = deepcopy(channels)
+        add_three_phase!(measured, "I_DUT_2", times,
+            sqrt(2) * conj(complex(flow.pt + 100deviation, flow.qt - 100deviation) /
+                 (3solved_voltage)))
+        changed = compare_operating_point(synthetic_result(times, measured), model)
+        for quantity in (:converter_p, :converter_q)
+            row = only(filter(r -> r.quantity == quantity && r.name == "I_DUT_2", changed))
+            @test row.error ≈ deviation
+            @test row.within_tolerance == (deviation < 0.01)
+        end
+    end
+    for (probe, quantity) in (("DUT_P_ac_f", :converter_p), ("DUT_Q_ac_f", :converter_q)),
+        deviation in (0.009, 0.011)
+
+        measured = deepcopy(channels)
+        measured[probe] .+= deviation
+        row = only(filter(r -> r.name == probe,
+            compare_operating_point(synthetic_result(times, measured), model)))
+        @test row.error ≈ deviation
+        @test row.within_tolerance == (deviation < 0.01)
+        @test row.quantity == quantity
+    end
+    wrong_sign = deepcopy(channels)
+    wrong_sign["DUT_Q_ac_f"] .*= -1
+    row = only(filter(r -> r.name == "DUT_Q_ac_f",
+        compare_operating_point(synthetic_result(times, wrong_sign), model)))
+    @test row.error ≈ 2abs(flow.qt) / converter.model.elec.Sbase
+    @test !row.within_tolerance
+    wrong_units = deepcopy(channels)
+    wrong_units["DUT_P_ac_f"] .*= 100
+    @test !only(filter(r -> r.name == "DUT_P_ac_f",
+        compare_operating_point(synthetic_result(times, wrong_units), model))).within_tolerance
+    @test isempty(intersect(Set(table.name), Set((
+        "DUT_v_dc_f", "DUT_omega_c", "DUT_theta_c"))))
+    missing = deepcopy(channels)
+    delete!(missing, "DUT_Q_ac_f")
+    @test_throws ArgumentError compare_operating_point(synthetic_result(times, missing), model)
+
+    # Both 640 kV DC ends put case 1 near zero P. A 117 W discrepancy must
+    # use the 100 MVA rating rather than the approximately 3.2 kW reference.
+    case1, _ = tlc_case1_network()
+    list1 = P.netlist(case1, power_flow(case1))
+    flow1 = list1.operating_point.branch_flows[:DUT]
+    rating = only(filter(e -> e.name == :DUT, list1.elements)).model.elec.Sbase
+    internal_probes = P.ProbeManifest(
+        filter(c -> c.kind in (:converter_p, :converter_q),
+            plan.probes.channels), nothing)
+    internal_model = PSCADModel("synthetic.pscx", "synthetic", list1, internal_probes,
+        settings, list1.operating_point, (source = :fixture,))
+    internal_channels = PowerImpedance.OrderedDict(
+        "DUT_P_ac_f" => fill(-3.083e-5, length(times)),
+        "DUT_Q_ac_f" => fill(flow1.qt / rating, length(times)))
+    internal_table = compare_operating_point(
+        synthetic_result(times, internal_channels), internal_model)
+    active = only(filter(r -> r.quantity == :converter_p, internal_table))
+    @test rating == 100.0
+    @test round(active.powerflow; sigdigits = 6) == -3.2e-5
+    @test active.powerflow == flow1.pt / rating
+    @test active.error ≈ abs(active.pscad * rating - flow1.pt) / rating
+    @test round(active.error * rating * 1e6) == 117.0
+    @test active.within_tolerance
+    @test all(internal_table.within_tolerance)
+
+    # Zero and negative solved powers have the same rating-based threshold.
+    for reference in (0.0, -0.5), deviation in (0.009, 0.011)
+
+        list1.operating_point.branch_flows[:DUT] = merge(
+            flow1, (; pt = reference * rating, qt = reference * rating))
+        for probe in ("DUT_P_ac_f", "DUT_Q_ac_f")
+            internal_channels[probe] .= reference - deviation
+        end
+        changed = compare_operating_point(
+            synthetic_result(times, internal_channels), internal_model)
+        for row in changed
+            @test row.powerflow == reference
+            @test row.error ≈ deviation
+            @test row.within_tolerance == (deviation < 0.01)
+        end
+    end
+end
+
 end

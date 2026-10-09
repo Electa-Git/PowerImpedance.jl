@@ -71,6 +71,8 @@ include("emitters/transformer.jl")
 include("emitters/lines.jl")
 include("emitters/cables.jl")
 include("emitters/machine.jl")
+include("emitters/converter_common.jl")
+include("emitters/tlc.jl")
 include("export.jl")
 include("compute.jl")
 

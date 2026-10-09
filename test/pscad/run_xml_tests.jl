@@ -36,7 +36,71 @@ else
     etree = pyimport("lxml.etree")
     mhixml = pyimport("mhi.xml.pscad")
     include("fixtures.jl")
+    include("topology.jl")
+    using TOML
     P = PowerImpedance.PSCAD
+    # Compare actual pin connectivity against the independent saved fragments,
+    # including their original abutments, multi-segment wires and T-junctions.
+    function pin_partition(schematic)
+        nodes = schematic.xpath("./User")
+        components = P.AbstractComponentPlan[]
+        labels = Tuple{Tuple{Int, Int}, String}[]
+        for node in nodes
+            defn = pyconvert(String, node.get("defn"))
+            x, y = parse.(Int, pyconvert.(String, (node.get("x"), node.get("y"))))
+            params = [pyconvert(String, p.get("name")) => pyconvert(String, p.get("value"))
+                      for p in node.xpath("./paramlist/param")]
+            if defn == "master:datalabel"
+                push!(labels, ((x, y), lowercase(Dict(params)["Name"])))
+            else
+                push!(components,
+                    P.ComponentPlan(defn, params, x, y,
+                        parse(Int, pyconvert(String, node.get("orient")))))
+            end
+        end
+        ports = [P.component_ports(c, Dict()) for c in components]
+        parent = Dict{Tuple{Int, Int}, Tuple{Int, Int}}()
+        root(p) = get!(parent, p, p) == p ? p : (parent[p] = root(parent[p]))
+        join(a, b) = (parent[root(a)] = root(b))
+        points = Set(p for pins in ports for (p, _) in pins)
+        union!(points, first.(labels))
+        segments = Tuple{Tuple{Int, Int}, Tuple{Int, Int}}[]
+        for w in schematic.xpath("./Wire[@classid='WireOrthogonal']")
+            x = parse(Int, pyconvert(String, w.get("x")))
+            y = parse(Int, pyconvert(String, w.get("y")))
+            vertices = [(x + parse(Int, pyconvert(String, v.get("x"))),
+                            y + parse(Int, pyconvert(String, v.get("y"))))
+                        for v in w.xpath("./vertex")]
+            union!(points, vertices)
+            append!(segments, zip(vertices[1:(end - 1)], vertices[2:end]))
+        end
+        for (a, b) in segments, p in points
+
+            (a[1] == b[1] == p[1] && min(a[2], b[2]) <= p[2] <= max(a[2], b[2])) ||
+                (a[2] == b[2] == p[2] && min(a[1], b[1]) <= p[1] <= max(a[1], b[1])) ||
+                continue
+            join(a, p)
+        end
+        named = Dict{String, Tuple{Int, Int}}()
+        for (p, name) in labels
+            haskey(named, name) ? join(p, named[name]) : (named[name] = p)
+        end
+        groups = Dict{Tuple{Int, Int}, Set{Tuple{Int, Int}}}()
+        for (i, pins) in enumerate(ports), (j, (p, _)) in enumerate(pins)
+
+            push!(get!(Set{Tuple{Int, Int}}, groups, root(p)), (i, j))
+        end
+        return Set(values(groups))
+    end
+    shunt_moves = TOML.parsefile(joinpath(@__DIR__, "fixtures/shunt_meter_moves.toml"))
+    native_phasors = TOML.parsefile(joinpath(@__DIR__, "fixtures/yy_load_return_phasors.toml"))
+    probe_names = Dict{String, Set{String}}()
+    for line in readlines(joinpath(@__DIR__, "fixtures/export_probe_names.tsv"))
+        startswith(line, "#") && continue
+        line == "fixture\tprobe" && continue
+        fixture, probe = split(line, '\t')
+        push!(get!(Set{String}, probe_names, fixture), probe)
+    end
     classic, state = PSCADFixtures.small_ac_network()
     ohl_classic, ohl_state = PSCADFixtures.passive_ohl_network()
     yy_classic, yy_state = PSCADFixtures.transformer_network()
@@ -44,6 +108,8 @@ else
     dc_classic, dc_state = PSCADFixtures.dc_network()
     cable_classic, cable_state = PSCADFixtures.dc_cable_network()
     sm_classic, sm_state = PSCADFixtures.sm_network()
+    tlc1_classic, tlc1_state = PSCADFixtures.tlc_case1_network()
+    tlc2_classic, tlc2_state = PSCADFixtures.tlc_case2_network()
     reference_root = etree.parse(joinpath(@__DIR__,
         "fixtures/user_module_pscad5.xml")).getroot()
     reference_parameter = only(reference_root.xpath(
@@ -51,6 +117,14 @@ else
     reference_svg = only(reference_root.xpath("./definitions/Definition[@name='SG']/svg"))
     reference_import = first(reference_root.xpath(
         "./definitions/Definition[@name='Untitled_6']/schematic/User[@defn='master:import']"))
+    tlc_reference = etree.parse(joinpath(@__DIR__, "fixtures/tlc_saved_fragments.xml")).getroot()
+    saved_fields = Dict{String, Set{String}}()
+    for component in tlc_reference.xpath(".//User")
+        defn = pyconvert(String, component.get("defn"))
+        fields = get!(Set{String}, saved_fields, defn)
+        union!(fields, [pyconvert(String, p.get("name"))
+                        for p in component.xpath("./paramlist/param")])
+    end
     settings = P.SimulationSettings(simulation_time = 0.3, time_step = 50e-6,
         sample_step = 250e-6, snapshot_time = 0.2)
     @testset "PSCAD mhi-xml export round trip" begin
@@ -61,19 +135,26 @@ else
             ("transformer_dy_classic", dy_classic), ("transformer_dy_builder", dy_state),
             ("dc_classic", dc_classic), ("dc_builder", dc_state),
             ("dc_cable_classic", cable_classic), ("dc_cable_builder", cable_state),
-            ("sm_classic", sm_classic), ("sm_builder", sm_state))
+            ("sm_classic", sm_classic), ("sm_builder", sm_state),
+            ("tlc_case1_classic", tlc1_classic), ("tlc_case1_builder", tlc1_state),
+            ("tlc_case2_classic", tlc2_classic), ("tlc_case2_builder", tlc2_state))
             path = joinpath(only(ARGS), name * ".pscx")
             case_settings = startswith(name, "sm_") ?
-                            P.SimulationSettings(simulation_time = 5.0) : settings
+                            P.SimulationSettings(simulation_time = 5.0) :
+                            startswith(name, "tlc_") ?
+                            P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
+                sample_step = 40e-6, source_ramp = 0.05) : settings
+            dc_reference = startswith(name, "tlc_") ? :none : :midpoint_resistors
             # ΔY XML checks exercise the selected station realization with no
             # legacy power-flow evidence; native comparison waits for dy-fix.
             model = startswith(name, "transformer_dy") ?
                     P._export_project(P.netlist(input, nothing), path, name, settings,
                 false, (;), :midpoint_resistors) :
-                    export_pscad(input; path, settings = case_settings)
+                    export_pscad(input; path, settings = case_settings, dc_reference)
             push!(models, model)
             plan = P.build_plan(model.netlist; settings = case_settings, name,
-                description = "PowerImpedance.jl: $name")
+                description = "PowerImpedance.jl: $name", dc_reference)
+            @test P.check_connectivity(plan) === nothing
             summary = P.read_project_summary(path)
             counts = Dict{String, Int}()
             for component in plan.main.components
@@ -101,9 +182,11 @@ else
             end
             @test summary.nodelabels == expected_labels
             if startswith(name, "small_ac") || startswith(name, "passive_ohl")
-                @test summary.nodelabels == Dict("B1" => 3, "B2" => 3)
+                @test summary.nodelabels["B1"] == summary.nodelabels["B2"] == 3
             end
             @test Set(summary.pgbs) == Set(c.name for c in plan.probes.channels)
+            @test Set(summary.pgbs) == probe_names[name]
+            @test Set(c.name for c in model.probes.channels) == probe_names[name]
             @test all(summary.settings[k] == v for (k, v) in plan.settings.params)
             @test model.project_path == path
             @test model.project_name == name
@@ -113,8 +196,84 @@ else
             @test model.provenance.mhi_xml_version == "1.3.0"
             @test model.provenance.resolved_powerflow ==
                   ((input isa Network && !startswith(name, "transformer_dy")) ||
-                   name == "sm_builder")
+                   (name == "sm_builder" || startswith(name, "tlc_")))
             root = etree.parse(path).getroot()
+            @testset "Electrical topology: $name" begin
+                graphs = PSCADTopology.xml_graphs(root, x -> pyconvert(String, x); check_named = true)
+                for (canvas, graph) in graphs
+                    @test PSCADTopology.check_degrees(graph, "$name/$canvas") === nothing
+                end
+                if !startswith(name, "tlc_")
+                    reference = TOML.parsefile(joinpath(@__DIR__,
+                        "fixtures/topology_8be21ee", name * ".toml"))["canvases"]
+                    @test Set(keys(graphs)) == Set(keys(reference))
+                    for (canvas, graph) in graphs
+                        expected = canvas == "Main" ?
+                                   PSCADTopology.shunt_meter_returns(reference[canvas], shunt_moves[name]) :
+                                   reference[canvas]
+                        @test PSCADTopology.equivalent(expected, graph)
+                        if canvas == "Main" && !isempty(shunt_moves[name])
+                            println("Approved topology difference: ",
+                                name, " ", shunt_moves[name],
+                                " bus -> element -> meter -> ground; ordered current pins preserved")
+                            @test !PSCADTopology.equivalent(reference[canvas], graph)
+                        end
+                    end
+                end
+                if name == "transformer_yy_classic"
+                    # The exact station failure must fail the production check,
+                    # even though its raw graph matches the old abutted export.
+                    saved_broken = etree.parse(joinpath(@__DIR__, "fixtures/yy_named_broken.pscx")).getroot()
+                    failure = try
+                        PSCADTopology.xml_graphs(saved_broken, x -> pyconvert(String, x); check_named = true)
+                        nothing
+                    catch e
+                        e
+                    end
+                    @test failure isa ArgumentError
+                    @test occursin("isolated part", sprint(showerror, failure))
+                    @test occursin("I_load_1", sprint(showerror, failure))
+                    @test occursin("I_line_2", sprint(showerror, failure))
+                    println("Rejected saved m4-bz1oQX YY: ", sprint(showerror, failure))
+                    direction = PSCADTopology.shunt_meter_direction(graphs["Main"], "I_load_1", "load_R")
+                    @test direction == 1
+                    measured = direction .* complex.(
+                        native_phasors["yy_named_load_return"]["peak_real_kA"],
+                        native_phasors["yy_named_load_return"]["peak_imag_kA"])
+                    expected = complex.(native_phasors["yy_ref"]["peak_real_kA"],
+                        native_phasors["yy_ref"]["peak_imag_kA"])
+                    for (value, reference_value) in zip(measured, expected)
+                        @test isapprox(value, reference_value; rtol = 0.02)
+                        @test abs(rad2deg(angle(value / reference_value))) <= 1.0
+                    end
+                    # Junction and ground loss are independent topology defects.
+                    for defect in (:junction, :ground)
+                        changed = pyimport("copy").deepcopy(root)
+                        schematic = only(changed.xpath("./definitions/Definition[@name='Main']/schematic"))
+                        if defect == :junction
+                            label = first(schematic.xpath("./User[@defn='master:nodelabel']/paramlist/param[@name='Name'][@value='line_primary_junction_1']"))
+                            label.set("value", "disconnected_junction")
+                        else
+                            ground = first(schematic.xpath("./User[@defn='master:ground']"))
+                            ground.set("defn", "master:nodelabel")
+                            etree.SubElement(only(ground.xpath("./paramlist")), "param";
+                                name = "Name", value = "disconnected_ground")
+                        end
+                        broken = PSCADTopology.xml_graphs(changed, x -> pyconvert(String, x))["Main"]
+                        @test !PSCADTopology.equivalent(graphs["Main"], broken)
+                        @test_throws ArgumentError PSCADTopology.check_degrees(broken, "Main")
+                    end
+                    # Arbitrary renaming of all internal labels changes neither
+                    # circuit parameters nor the electrical net partition.
+                    renamed = pyimport("copy").deepcopy(root)
+                    for label in renamed.xpath(".//User[@defn='master:nodelabel']/paramlist/param[@name='Name']")
+                        label.set("value", "renamed_" *
+                                           pyconvert(String, label.get("value")))
+                    end
+                    renamed_graph = PSCADTopology.xml_graphs(renamed, x -> pyconvert(String, x))["Main"]
+                    @test PSCADTopology.equivalent(graphs["Main"], renamed_graph)
+                end
+            end
             reread = mhixml.ProjectFile(path)
             @test pylen(reread.canvas("Main").xpath("./User")) ==
                   length(plan.main.components)
@@ -172,6 +331,60 @@ else
                           for v in vertices]
                 @test Set(actual) == Set(wire.vertices)
             end
+            if startswith(name, "tlc_")
+                saved_guard = only(tlc_reference.xpath("./User[@defn='master:compare']"))
+                parent = only(filter(m -> startswith(m.name, "VSC_"), plan.modules))
+                guarded = only(root.xpath("./definitions/Definition[@name='$(parent.name)']/schematic/User[@defn='master:compare']"))
+                @test pyconvert(String, guarded.get("orient")) ==
+                      pyconvert(String, saved_guard.get("orient"))
+                for field in ("X", "OH", "INTR", "Dim", "conv")
+                    @test pyconvert(String,
+                        guarded.xpath("string(./paramlist/param[@name='$field']/@value)")) ==
+                          pyconvert(String,
+                        saved_guard.xpath("string(./paramlist/param[@name='$field']/@value)"))
+                end
+                converter = only(filter(e -> e.model isa PowerImpedance.TLC, model.netlist.elements))
+                @test parse(Float64,
+                    pyconvert(String, guarded.xpath("string(./paramlist/param[@name='OL']/@value)"))) ==
+                      converter.model.elec.vDCbase
+                @test pylen(root.xpath("./definitions/Definition[@name='$(parent.name)']/schematic/User[@defn='master:voltmeter'][paramlist/param[@name='Name'][@value='v_dc_m']]")) ==
+                      1
+                for label in root.xpath(".//User[@defn='master:datalabel']/paramlist/param[@name='Name']")
+                    @test !(lowercase(pyconvert(String, label.get("value"))) in
+                            P._EMTDC_RESERVED_SIGNALS)
+                end
+                # Every emitted master field must have a saved-project witness;
+                # the fixture comments retain the exact source file and line.
+                for definition in plan.modules, component in definition.canvas.components
+
+                    component isa P.ComponentPlan || continue
+                    @test haskey(saved_fields, component.defn)
+                    @test Set(first.(component.params)) ⊆ saved_fields[component.defn]
+                end
+                for (saved_name, generated_name) in (("abc2dq_1", "ABC_DQ"), (
+                    "dq2abc", "DQ_ABC"))
+                    original = only(tlc_reference.xpath("./Definition[@name='$saved_name']"))
+                    actual = only(root.xpath("./definitions/Definition[@name='$generated_name']"))
+                    saved = original.xpath("./schematic/User[@defn!='master:datalabel']")
+                    emitted = actual.xpath("./schematic/User[@defn!='master:datalabel']")
+                    @test pylen(saved) == pylen(emitted)
+                    for (a, b) in zip(saved, emitted)
+                        for key in ("defn", "orient")
+                            @test pyconvert(String, a.get(key)) ==
+                                  pyconvert(String, b.get(key))
+                        end
+                        parameters_a = Dict(pyconvert(String, p.get("name")) =>
+                                                pyconvert(String, p.get("value"))
+                        for p in a.xpath("./paramlist/param"))
+                        parameters_b = Dict(pyconvert(String, p.get("name")) =>
+                                                pyconvert(String, p.get("value"))
+                        for p in b.xpath("./paramlist/param"))
+                        @test parameters_a == parameters_b
+                    end
+                    @test pin_partition(only(original.xpath("./schematic"))) ==
+                          pin_partition(only(actual.xpath("./schematic")))
+                end
+            end
             @test Set(keys(summary.modules_and_ports)) == Set(m.name for m in plan.modules)
             for definition in plan.modules
                 ports = summary.modules_and_ports[definition.name]
@@ -180,6 +393,17 @@ else
                        for p in definition.ports]
                 reread_defn = reread.definition[definition.name]
                 @test pyconvert(Bool, reread_defn.module)
+                # Module canvas settings are explicit, with the independent
+                # saved dq2abc witness at local/TLC/Simple_2L_VSC_RL.pscx:2069–2083.
+                @test pylen(root.xpath("./definitions/Definition[@name='$(definition.name)']/schematic/paramlist")) ==
+                      1
+                canvas_settings = Dict(pyconvert(String, p.get("name")) =>
+                                           pyconvert(String, p.get("value"))
+                for p in root.xpath("./definitions/Definition[@name='$(definition.name)']/schematic/paramlist/param"))
+                saved_settings = Dict(pyconvert(String, p.get("name")) =>
+                                          pyconvert(String, p.get("value"))
+                for p in tlc_reference.xpath("./Definition[@name='dq2abc']/schematic/paramlist/param"))
+                @test canvas_settings == saved_settings
                 xml = only(root.xpath("./definitions/Definition[@name='$(definition.name)']"))
                 @test pylen(xml.xpath("./graphics")) == 0
                 svg = only(xml.xpath("./svg"))
@@ -189,7 +413,8 @@ else
                       pyconvert(String, reference_svg.get("size"))
                 @test pylen(svg.xpath("./port")) == length(definition.ports)
                 for (port, node) in zip(definition.ports, svg.xpath("./port"))
-                    mode = port.kind == :input ? "Input" : "Output"
+                    mode = port.kind == :electrical ? "Electrical" :
+                           port.kind == :input ? "Input" : "Output"
                     reference = first(reference_root.xpath(".//svg/port[@mode='$mode']"))
                     for key in ("model", "mode", "type", "internal")
                         @test pyconvert(String, node.get(key)) ==
@@ -222,16 +447,24 @@ else
                 for parameter in definition.parameters
                     node = only(xml.xpath(
                         "./schematic/User[@defn='master:import'][paramlist/param[@name='Name'][@value='$(parameter.name)']]"))
+                    saved_import = if definition.name in ("ABC_DQ", "DQ_ABC")
+                        source = definition.name == "ABC_DQ" ? "abc2dq_1" : "dq2abc"
+                        only(tlc_reference.xpath("./Definition[@name='$source']/schematic/User[@defn='master:import'][paramlist/param[@name='Name'][@value='$(parameter.name)']]"))
+                    else
+                        reference_import
+                    end
                     for key in ("defn", "classid", "orient")
                         @test pyconvert(String, node.get(key)) ==
-                              pyconvert(String, reference_import.get(key))
+                              pyconvert(String, saved_import.get(key))
                     end
                     @test pylen(node.xpath("./paramlist/param")) ==
                           pylen(reference_import.xpath("./paramlist/param")) == 1
                     @test pyconvert(String,
                         only(node.xpath("./paramlist/param")).get("name")) == "Name"
                 end
-                @test pylen(import_nodes) == length(definition.parameters) + 1
+                @test pylen(import_nodes) ==
+                      length(definition.parameters) +
+                      count(p -> p.kind == :input, definition.ports)
                 for node in xml.xpath("./schematic/User[@defn='master:const']")
                     value = pyconvert(String,
                         node.xpath("string(./paramlist/param[@name='Value']/@value)"))
@@ -369,6 +602,7 @@ else
         @test isempty(models[12].operating_point.bus_states)
         @test !isempty(models[13].operating_point.bus_states)
         @test !isempty(models[14].operating_point.bus_states)
+        @test all(m -> !isempty(m.operating_point.bus_states), models[15:18])
         # The module writer also preserves integer/text parameters and
         # electrical ports, independently of the all-real M3 controller forms.
         mktempdir() do temporary
@@ -384,6 +618,10 @@ else
             push!(main.components,
                 P.ModuleInstancePlan(name * ":Typed",
                     ["Gain" => "4.0", "Count" => "5", "Caption" => "instance"], 180, 216, 0))
+            P.lower!(main, P.Const(P.Signal("typed_input"), 1.0), (108, 108))
+            P.signal_stub!(main, (126, 216), P.Signal("typed_input"))
+            P.signal_stub!(main, (234, 216), P.Signal("typed_output"))
+            P.stub!(main, (180, 270), nothing)
             plan = P.ProjectPlan(name, name, P._project_settings(settings, name), main,
                 P.AbstractLineDefinitionPlan[], P.AbstractLineWrapperPlan[],
                 [definition], P.ProbeManifest())
@@ -421,7 +659,8 @@ else
                 @test pyconvert(String, port.get(key)) ==
                       pyconvert(String, reference.get(key))
             end
-            @test summary.components_per_defn == Dict("typed_module:Typed" => 1)
+            @test summary.components_per_defn == Dict("typed_module:Typed" => 1,
+                "master:const" => 1, "master:datalabel" => 3, "master:ground" => 1)
             @test pyconvert(String, root.xpath("string(.//Definition[@name='Main']/schematic/User/@x)")) ==
                   "180"
             @test pyconvert(String, root.xpath("string(.//Definition[@name='Main']/schematic/User/@y)")) ==

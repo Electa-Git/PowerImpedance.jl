@@ -81,11 +81,13 @@ function unresolved_globals(expression, namespace)
                 inner = definitions!(bind!(copy(bound), parameters), body)
                 annotations(parameters, inner)
                 visit(body, inner)
-            elseif head == :for
-                bindings, body = arguments
+            elseif head in (:for, :generator)
+                bindings, body = head == :for ? arguments :
+                                 (arguments[2:end], first(arguments))
                 inner = copy(bound)
-                iterations = bindings isa Expr && bindings.head == :block ?
-                             bindings.args : [bindings]
+                iterations = bindings isa Vector ? bindings :
+                             bindings isa Expr && bindings.head == :block ? bindings.args :
+                             [bindings]
                 for binding in iterations
                     binding isa LineNumberNode && continue
                     visit(last(binding.args), inner)
@@ -177,6 +179,10 @@ end
             text = raw"field"
             """)
         @test isempty(unresolved_globals(valid, namespace))
+        for source in ("[(n, side) for n in 1:2 for side in 1:n]",
+            "Dict(n => side for n in 1:2, side in 1:n)")
+            @test isempty(unresolved_globals(Meta.parseall(source), namespace))
+        end
         for (source, names) in (
             ("@missing_macro abs(unknown)", [Symbol("@missing_macro"), :unknown]),
             ("abs(1; keyword_label = unknown)", [:unknown]),
@@ -184,7 +190,9 @@ end
             ("unknown.field_name", [:unknown]),
             ("f(x) = missing_function(x)", [:missing_function]),
             ("function f(x); x; end; x", [:x]),
-            ("for x in 1:2; y = x; end; y", [:y]))
+            ("for x in 1:2; y = x; end; y", [:y]),
+            ("[n + unknown for n in 1:2]", [:unknown]),
+            ("[n for n in 1:2]; n", [:n]))
             @test unresolved_globals(Meta.parseall(source), namespace) == names
         end
     end

@@ -1,0 +1,274 @@
+# Electrical graphs derived once from the unmodified 8be21ee export.
+commit = "8be21eecabb85d29d2896bc51562f61344338604"
+source_sha256 = "2056ae67dfe109e9489cfaf181226fe9d7747dc7fb5b0af5d90e618778b981c8"
+
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "source"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "380.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_source_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_line_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_line_2"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "load_R"
+    R = "400.0 [ohm]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_load_1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_B1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_B2"
+[[canvases.Main.components]]
+definition = "passive_ohl_builder:line_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "25.0 [km]"
+    Mode = "1"
+    Name = "line"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+
+[[canvases.Main.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[2, 2], [3, 1], [7, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[3, 2], [9, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[4, 1], [9, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[4, 2], [6, 1], [8, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[5, 1], [6, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = true
+ports = [[5, 2]]
+probe = false
+
+[canvases.line_row]
+nets = []
+
+    [[canvases.line_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.line_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "line_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.line_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.line_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.line_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.line_row.components.parameters]
+        AMaxE = "0.2 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.2 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.line_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.line_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"

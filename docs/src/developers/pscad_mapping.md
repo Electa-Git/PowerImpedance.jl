@@ -157,7 +157,9 @@ acceptance of this exported fixture remains a separate station run.
 | R13 | `run()` blocking and output latency | Closed. Blocking; outputs complete on return. |
 | R16 | mhi-xml through CondaPkg on Linux | Closed. CondaPkg (Pixi backend) resolves `mhi-xml==1.3.0` and `lxml`. |
 | R9 | AVR field-voltage base | Closed. Unity conversion follows the open-circuit air-gap normalization and is confirmed by settled Ef=Ef0 and the AVR equation. |
-| R6, R10-R12, R14, R15, R17, R18 | | Open; resolved at their milestones. |
+| R10 | TLC dq orientation | Closed. Native primitive experiment gives d = cos(0.37), q = -sin(0.37), matching Julia. |
+| R11 | TLC reactive-power sign | Closed. Station round 3 confirms solved injected Q at the AC terminal with outward converter current; internal filtered Q uses the same sign. |
+| R6, R12, R14, R15, R17, R18 | | Open; resolved at their milestones. |
 
 ## Acceptance record
 
@@ -287,6 +289,8 @@ window mean of `V_P - V_N` with `2 * vm * base_kV`. It adds `:current_dc` rows
 from absolute P-pole window means versus `abs(pf)/V_pp`, `abs(pt)/V_pp`, or
 `abs(pgdc)/V_pp` at sources when those solved powers exist. No DC angle is
 compared. Missing scalar channels or opposite-pole voltage probes are errors.
+Converter-free DC networks retain relative current errors. Converter-connected
+DC networks use the reference/base denominator documented in M4 below.
 Manual acceptance keeps the 1 % DC voltage check and separately checks positive
 P, negative N and `V_P ≈ -V_N` within 1 %. Whole-network grounding behavior and
 1e7 ohm reference sensitivity (R14) still require a station experiment.
@@ -669,3 +673,565 @@ constants and connected `vref`/`Tm0` reference signals. XML tests also compare
 import definition, orientation and parameter fields against saved fragments.
 The corrected classic export subsequently built with zero errors. R9 is closed;
 both representations use the 15-second acceptance checks above.
+
+## Named-node connectivity on exported canvases
+
+Main and every module canvas connect components through named nodes. Each
+connecting wire is a separate, straight, two-vertex stub from one known port
+to one `nodelabel`, `datalabel` or ground. Component ports cannot coincide;
+stubs cannot share endpoints or pass through another port or label. `build_plan`
+and the XML writer also require a stub on every signal input and electrical
+port, a stub on every label, and exactly one same-canvas writer for every read
+signal name (case-insensitively). Imports and module outputs are writers;
+exports, pgbs and module inputs are readers. Meter `Name` outputs and machine
+`POut`/`QOut` outputs are counted without a graphic signal pin. Coefficient-only
+form imports may remain unwired, as in the saved M3 canvases. The checks include
+the sending/receiving ports
+of a transmission-line wrapper. A wrapper's `Wire` XML element describes the
+line component itself; its four geometry vertices are not connecting wires.
+Cable wrappers have no electrical terminals; their `cable_interface` components
+carry the terminals. Row definitions contain geometry and material records,
+with no connecting wires or electrical pins (`local/OHL/DUT_2.pscx:17213–17301`
+and `local/Cable/DUT_2.pscx:17227–17443`).
+
+Orient-0 pin offsets below are pixels relative to the component anchor. The
+saved mirrored/rotated transform instances retain their original orientation.
+
+| Component | Orient-0 ports | Saved evidence under `local/` |
+|---|---|---|
+| R, L, C, ammeter | electrical `(0,0)`, `(36,0)` | `TLC/Simple_2L_VSC_RL.pscx:939–950`; `OHL/DUT_2.pscx:1767–1779`; `TLC/Simple_2L_VSC_RL.pscx:4317–4337` (ammeter and incident wires) |
+| `source_1` | positive `(-36,0)`, negative `(36,0)` when ungrounded; external control `(0,36)` | `TLC/Simple_2L_VSC_RL.pscx:3452–3529`, orientation 4 with a grounded negative pole; M2 source polarity station check |
+| `source_3` | electrical `(36,0)` with `Grnd=1` | `OHL/DUT_2.pscx:1594–1688`, orientation 3 |
+| `src_ccin_1` | electrical `(0,0)`, `(36,0)`; control `(0,36)` | `TLC/Simple_2L_VSC_RL.pscx:5589–5613`, orientation 1 |
+| breakout | common `(0,0)`, phases `(36,-36)`, `(36,0)`, `(36,36)` | `TLC/Simple_2L_VSC_RL.pscx:3383–3529`, orientation 4; `Cable/DUT_2.pscx:13590` |
+| voltmeter, ground-referenced voltmeter | `(0,0)` and `(0,36)`; ground-referenced version only `(0,0)` | `TLC/Simple_2L_VSC_RL.pscx:5618–5630`; `SG/SG_Project.pscx:2425–2435` |
+| `xnode` | electrical `(0,0)` | `TLC/Simple_2L_VSC_RL.pscx:3377–3382,5604–5613` and the incident wires |
+| transformer | electrical `(-54,0)`, `(36,0)` | `OHL/DUT_2.pscx:1689–1766` |
+| cable interface | `(-18,54*(i-1))`, in cable order | `Cable/DUT_2.pscx:1644–1703`, orientations 0 and 4 |
+| synchronous machine | electrical `(36,0)`; Ef `(-36,-72)`, Tm `(0,72)`, speed `(-36,72)`, Vt `(36,-72)`, Ef0 `(-72,-72)`, Tm_init `(36,72)` | `SG/SG_Project.pscx:998–1198`, orientation 4; existing M3 lowering |
+| import/export, constants, time signal | `(36,0)` | `TLC/Simple_2L_VSC_RL.pscx:2084–2106,5923–5929`; `P2P HVDC/PowerModelsACDC_ACdroop.pscx:13112–13118` (`const`) |
+| unary control blocks | input `(-36,0)`, output `(36,0)` | primitive citations in M4 below; `SG/SG_Project.pscx:1865–1944,1959–1976,2010–2024` (M3 pole, gain, lead-lag) |
+| mult/div/dot product | left `(-36,0)`, lower `(0,36)`, output `(36,0)` | saved abc/dq canvases, `TLC/Simple_2L_VSC_RL.pscx:1851–3234` |
+| sum junction | enabled D `(-36,0)`, F `(0,36)`, B `(0,-36)`; output `(36,0)` | same saved abc/dq canvases; `SG/SG_Project.pscx:1945–1958` (three-input sum) |
+| merge, tap | saved orientation-4 merge inputs `(-18,18*(i-5))`, output `(0,18*(N-3))`; orientation-0 tap input `(0,-18)`, output `(0,0)` | `TLC/Simple_2L_VSC_RL.pscx:2164–2185,2214–2235,4498–4517` |
+| pgb | signal `(0,0)` | `TLC/Simple_2L_VSC_RL.pscx:1009` and incident wire; M1–M3 output stubs |
+
+The saved VSC2L boundary uses **explicit physical connections** to its `xnode`
+anchors. The exporter keeps these connections: each xnode has a stub to an
+internal electrical label shared with the plant ports. The internal label is
+distinct from the xnode's boundary name. No implicit connection between an
+xnode and a nodelabel with the same name is assumed or used. That alternative
+has no saved witness and remains untested.
+
+Internal junctions use case-insensitive name reservations. Main's reservations
+also contain the network and probe identifiers; module reservations are local
+to each canvas. Empty series paths identify their electrical labels without
+adding a circuit element. The saved abc/dq blocks keep every parameter and
+orientation; only their coordinates and wires change. Tests compare their pin
+net partitions against the original saved fragments. M1–M3 native acceptance
+passes after the shunt-meter correction; M4 acceptance progress is recorded below.
+
+## M4: two-level converter export
+
+The modular `TLC` exporter emits shared copies of the validated abc/dq canvases,
+per-element MEAS, PLL, PCTRL or VDCCTRL, QCTRL, OCC and MOD definitions, and a
+parent `VSC_<element>` with electrical `AC` (dimension 3), `DC_P` and `DC_N`
+ports. Its five scalar output ports are `P_ac_f`, `Q_ac_f`, `v_dc_f`, `omega_c`
+and `theta_c`; only their `<element>_<signal>` PGBs are added on Main. Electrical
+terminal current and bus voltage probes retain the existing naming scheme.
+
+### Saved component evidence and control equations
+
+All source locations below refer to PSCAD-saved files under `local/`.
+`test/pscad/fixtures/tlc_saved_fragments.xml` preserves complete saved instances,
+with source file and line comments. XML tests check the new emitted master field
+names against these witnesses and compare the copied transform instances,
+parameters and orientations with the saved canvases; named-node rewiring and
+layout changes preserve their original pin-net partitions.
+
+| IR / circuit operation | PSCAD mapping | Saved source |
+|---|---|---|
+| Integrator | `integral`: `T`, `Yo`, `YLo`, `YHi`, `Extrn=0`, `Reset=0`, `Mthd=0`; explicit input gain for Ki | `TLC/Simple_2L_VSC_RL.pscx:3530–3545` |
+| Multiplication / division | `mult` / `div`: `Dim=1`, `DPath=1`; left input and lower input | same file, `3001–3007` / `2100–2106` |
+| Sine / cosine | `trig`: `Type=1/2`, `Mode=0`, `Dim=1` | same file, `2113–2122`, `2190–2198`; copied transform wiring |
+| Square / square root | `square` / `sqrt`: `Dim=1`, `DPath=1` | same file, `1210–1217` / `1223–1230` |
+| First-order filter / support lag | Existing `realpole` lowering with `G`, `T`, `YO`, `Limit=0`, `Reset=2`, `Dim=1` | same file, `3798–3816`; existing M3 lowering |
+| Second-order filter section | Two `integral` blocks: `y'' = W2*(u-y) - D*y'`, with precomputed `W2=ωc²/b`, `D=a*ωc/b` | integral above, gain/sum fields inherited from M3; coefficient authority `converter/common/kernels/filter.jl` |
+| Exact delay | `tdelay`: `T`, `N=ceil(T/time_step)+1`, `Intp=0`, `Dim=1`, `Init=1`, `X0` | same file, `5037–5050`; initial history confirmed in station round 2 |
+| Ordered scalar merge | `datamerge`, orientation 4: `N=2/3`, `Type=2`, `Disp=1`, `View=0`, `Dim1…DimN=1` | same file, `2164–2185`, `2214–2235` |
+| Array entry | `datatap`, orientation 0: `Index`, `Dim=1`, `Type=2`, `Style=0`, `Disp=1` | same file, `4498–4517` |
+| abc/dq and inverse | Copies of `abc2dq_1` / `dq2abc`, `Xb=1`, `qaxis=1`; their original import/export, trig, dot-product, merge and wire structure | same file, definitions starting at `2457` / `1851` |
+| Three phase voltages | `source_1`, orientation 4, `Type=6`, `Grnd=1`, `Spec=0`, `Cntrl=1`, `AC=0`, `Tc=0`; separate per-phase R/L | same file, `3452–3529`; resistor/inductor fields `939–950`, breakout `3383–3388` |
+| DC current balance | `src_ccin_1`, orientation 1, `Cntrl=1`, `Tc=0`; phase voltage/current products summed and divided by measured pole-to-pole voltage | same file, `5589–5630`; `xnode` binds electrical module ports |
+| DC start-up handover | `time-sig` → `compare`: `X=0.2`, `OL=nominal pole-to-pole kV`, `OH=v_dc_m`, `INTR=0`, `Dim=1`, `conv=0`; output `v_dc` | same file, `5885–5888`, `5912–5929`; guarded voltage supplies all DC divisions and modulation scaling |
+
+Butterworth filters use the existing `BUTTERWORTH_TABLE` without another
+coefficient table. A section `(a,0)` becomes `1/(1+s*a/ωc)`; `(a,b)` becomes
+`(ωc²/b)/(s²+(a*ωc/b)*s+ωc²/b)`. The explicit second-order realization allows
+both output and output derivative to be initialized. Unsupported filter families
+and control variants fail with an element name and concrete control type.
+
+The MEAS block filters controller-frame voltage/current before multiplying them.
+It implements the current Julia equation `Q_ac = -v_q*i_d + v_d*i_q`, including
+its sign. PLL uses `dξ_pll/dt=-Ki*v_pll`, `Δω=-Kp*v_pll+ξ_pll` and
+`dΔθ_pll/dt=ωbase*Δω`. The EMT transform angle is `ωbase*t+Δθ_pll`.
+Frequency support is `ξ_f' = ωc*(-Kω*(omega_c-1)-ξ_f)`; voltage support is
+`ξ_v' = ωc*(K*(Vacref-hypot(v_d_f,v_q_f))-ξ_v)`. VDCCTRL negates its PI
+output. QCTRL and PCTRL use the native PI signs. OCC retains voltage feed-forward
+and cross terms `+Lpu*omega_c*i_q_f` / `-Lpu*omega_c*i_d_f`, or the configured
+constant frequency factor. TLC's current `input_signals` supplies zero `i_dc`
+to MEAS; the exporter retains that signal and the resulting Pdc measurement.
+The electrical DC current source independently implements physical power balance.
+
+MOD first converts voltage references to modulation in the controller frame,
+rotates back to the global synchronous frame, delays the two scalar dq commands,
+and applies the core `phase_compensated_dq` rotation by `+ωbase*Td`. It then
+uses the nominal EMT angle for dq/abc conversion. After the start-up handover,
+physical phase commands are
+`vM_abc = m_abc * Vdc_measured * vACbase/(2*vDCbase)` in kV. The AC peak base
+factor is necessary: Julia's modulation command is not an SI duty ratio.
+After that handover the DC absorption current is
+`sum(vM_phase*i_phase)/Vdc_measured` in kA.
+The source command is its negative: `src_ccin_1` orientation 1 injects positive
+current out of upper terminal A, whereas Julia's electrical `i_dc` is positive
+for absorbed DC power. This direction is established by the PSCAD 5.1.0
+station experiment below.
+The saved stage's two auxiliary 100 μF capacitors are disabled in the reference
+(`5870–5884`) and are absent from `ElectricalTLC`; the exporter omits them.
+Grounded ideal phase sources retain the saved
+common reference; external DC sources/reference resistors set pole symmetry.
+
+### Converged-state initialization
+
+`update(::Element{<:AbstractStateSpace}, setpoint)` computes and then discards
+its nonlinear equilibrium vector after linearization. The exporter repeats that
+same owned equilibrium problem, input conversion and initial guess, with the
+same `maxiters=20`, `abstol=reltol=1e-6` and successful-return check. It applies
+the same below-`1e-15` zeroing and evaluates the existing state-space blocks at
+the solution. Initial guesses are only solver seeds. Every generated dynamic
+control block uses the converged vector or its evaluated outputs.
+
+| Julia solved state(s) | PSCAD initial value |
+|---|---|
+| `vG_d_f_x*`, `vG_q_f_x*`, `i_d_f_x*`, `i_q_f_x*` | Each corresponding MEAS section output `Y0=C*x+D*u`; second-order derivative `DY0=C*(A*x+B*u)` |
+| States of optional `v_dc`, `i_dc`, `θ`, P/Q/Pdc measurement filters | Same output/derivative projection, using their own solved state slices and raw input |
+| `v_q_pll_f_x*` | PLL filter section output and derivative from the solved realization |
+| `ξ_pll` | PLL PI `pllI0` → `integral.Yo` |
+| `Δθ_pll` | `theta0` → EMT angle `integral.Yo`; nominal ramp subtraction gives the relative controller angle |
+| `ξ_P_ac` / `ξ_v_dc` | PCTRL `pI0` / VDCCTRL `vdcI0` → `integral.Yo` |
+| `ξ_Q_ac` | QCTRL `qI0` → `integral.Yo` |
+| `ξ_f_supp` / `ξ_vac_supp` | Support-lag `support0` → `realpole.YO` |
+| `vG_d_occ_f_x*`, `vG_q_occ_f_x*` when present | OCC feed-forward section output and derivative from the solved realization |
+| `ξ_id`, `ξ_iq` | OCC `dI0`, `qI0` → `integral.Yo` |
+| `m_delay_x1…x6` plus solved undelayed dq commands | Padé output `C*x+D*u` → exact-delay `dDelay0`, `qDelay0` → `tdelay.X0` |
+
+At an equilibrium every unity-DC-gain Butterworth cascade section has the same
+output; the coordinate translation uses that solved output, rather than copying
+realization coordinates into a different state basis. `NoFilter` has no dynamic
+state or initial-value field. All coefficient products, divisions and initial
+values are precomputed form values; block fields contain only literals or plain
+parameter names. Each form parameter has exactly one schematic import.
+
+### Power comparisons and pending station checks
+
+The AC current probe points from TLC toward the bus. The shared machine/TLC
+comparison calculates three-phase fundamental power `sum(V_k*conj(I_k))/2`
+using peak phasors in kV/kA, and compares TLC side 2 with the solved
+`-pgrid/-qgrid` in MW/MVAr. The error is `abs(diff)/elec.Sbase`, with the binding
+`0.01` tolerance; both rows use `I_<element>_2`. Existing bus voltage, relative
+angle, terminal current and DC rows are retained.
+
+Internal P/Q are pu settled means on the converter's `elec.Sbase`. Their
+references are the solved terminal flows divided by that rating. Their errors
+are `abs(measured_pu-reference_pu)`, equivalently `abs(diff_MW)/Sbase` for P
+and `abs(diff_MVAr)/Sbase` for Q, with tolerance `0.01`. This uses the same
+rating normalization as the network-side rows. The power-flow adapter
+sets `Pac=-pgrid` and `Qac=qgrid`; native `q_ref=-Qac/Sbase` therefore equals
+injected `-qgrid/Sbase`. With the inherited cosine d / sine q orientation,
+`-v_q*i_d+v_d*i_q` is standard injected Q. These signs and conversions are
+checked in Julia equations, synthetic output tests and station round 3, which
+closes R11. `v_dc_f`, `omega_c` and `theta_c` are diagnostics. The absolute
+EMT angle increases at nominal speed; its generic settling warning is expected
+and does not establish converter non-settling.
+
+The two classic/builder fixture pairs use the test's 100 MVA, 220 kV AC,
+640 kV pole-to-pole DC data, Butterworth measurement/PLL filters, OCC and
+200 μs Padé(3,3) specification. Both contain the requested 10 km DC cable.
+The original case-2 admittance test connects directly to its DC source; this
+fixture deliberately adds the case-1 cable. Case 1 holds both cable ends at
+640 kV and consequently solves near zero P (approximately -0.0032 MW), rather
+than its original requested 70 MW. The station measured approximately
+`-3.083e-5` pu against `-3.2e-5` pu: a `1.17e-6` pu difference, or 117 W on
+100 MVA. Rating normalization accepts that difference; dividing by the
+near-zero reference would report approximately 3.7 %. The solved reference
+is retained exactly. Amauri selected rating normalization for both internal
+powers, replacing the previous 1 % relative rule.
+
+Proposed native acceptance settings are **10 s, 10 μs integration, 40 μs
+sampling**, and the supported **0.05 s source ramp**. The integration/sampling
+match `TLC/Simple_2L_VSC_RL.pscx:4–6`; 10 s covers twenty 0.5 s support-lag time
+constants. These acceptance/experiment exports select the existing
+`dc_reference=:none`: the DC source midpoint grounds the connected cable.
+Additional reference resistors would change case 1's near-zero P balance.
+Both fixtures retain the existing frequency-dependent cable fit and
+DC fitting corrections. Inspect its build diagnostics and P/Q/current settling
+warnings before accepting the final ten-cycle window; elapsed duration alone
+is insufficient (R15).
+
+R18 replaces Padé(3,3) with exact delay in the same dq coordinates, retaining the
+phase rotation. Both have unity DC gain, so steady state is unaffected. Their
+transient and high-frequency responses differ; this export does not certify
+admittance equivalence. Station round 2 closes R10, integrator gain/limits,
+first/second-order initial values, delay initial history and array dimensions/pins.
+The divider's zero-denominator behavior is measured. Station round 3 confirms
+the corrected start-up sequence and full-converter equilibrium and closes R11.
+After the shunt-meter correction, full native M1–M3 acceptance passed again:
+small AC `9e-9`, OHL `3.6e-5`, YY `3.2e-4`, DC `8e-10`, DC cable `0.97 %`
+and machine `1.4e-3`. Named-node TLC case 1 classic passed every AC, converter
+power and voltage row. Acceptance stopped on its near-zero-reference DC
+current rows; case 1 builder and both case 2 variants await that acceptance
+continuation. The approved DC current normalization below addresses those rows.
+No native numerical acceptance is inferred from Julia/XML tests. The
+experiment exports and their decisive channels are described in
+`/tmp/pscad-m4-experiments/README.md`.
+
+The station generator is `test/manual/pscad/write_m4_experiments.jl`, alongside
+the acceptance tooling. Run it in the PythonCall-enabled XML environment to
+write the seven projects; it imports the offline fixtures from
+`test/pscad/fixtures.jl`. The manual-script identifier guard checks it, including
+the local bindings in its comprehensions.
+
+### Converter-connected DC current comparisons
+
+Amauri selected the following error for DC current magnitudes in a DC network
+containing a converter, with the existing `rtol_i` tolerance (default `0.02`):
+
+`abs(measured_kA-reference_kA) / max(abs(reference_kA), Sbase/vDCbase)`.
+
+`Sbase` is the converter rating in MVA and `vDCbase` its pole-to-pole kV base;
+the owned electrical model's `iDCbase` supplies this kA base. It is independent
+of the solved DC bus voltage used to obtain the reference `abs(P)/V_pp`.
+Connectivity means the transitive connected component of nongrounded DC buses
+joined by each element's DC terminals. Thus a DC cable joins its two ends and
+propagates the base to the remote DC source. AC terminals and common ground
+do not join DC components. Converter terminals, DC branch ends and DC sources
+in that component all use the base. Components without a converter retain
+the previous relative rule, including its zero-reference behavior.
+Several converters with identical current bases can share a component.
+Different bases currently raise an explicit comparison error pending selection
+of a shared base; no aggregation rule is inferred. Both M4 fixtures have one
+converter.
+
+For 100 MVA and 640 kV, the base is `0.15625 kA`. The reported case-1 means
+`7.837e-5 kA` and `9.956e-5 kA`, against references `2.66e-13 kA` and
+`1.83e-14 kA`, produce errors approximately `0.000501568` and `0.000637184`.
+All four current rows pass `rtol_i`. This changes comparison normalization
+only; channel names, power-flow references and exported equations are unchanged.
+
+### Case-1 residual DC power and cable current
+
+The native final ten-cycle window (`9.8 < t <= 10 s`) in
+`local/pscad-exchange/run-uAk5Oe/outputs/` gives signed converter current
+`-9.9562135e-5 kA` and source current `+7.8371025e-5 kA`, with approximately
+640 kV pole-to-pole voltage. Positive terminal current means absorption into
+the element. The converter therefore injects approximately **63.72 kW** into
+the DC cable, and the source absorbs approximately **50.16 kW**. Magnitude
+comparison does not retain this directional information.
+
+Julia's simultaneous dq power balance is
+`i_dc=(vMd*i_d+vMq*i_q)/v_dc`
+(`src/Network/Components/converter/TLC/electrical.jl:116–120`). Its case-1 DC
+power is approximately zero: the solved AC absorption supplies reactor loss.
+The exported instantaneous balance multiplies each phase voltage command by
+the measured electrical current, sums the products and divides by measured
+Vdc (`src/PSCAD/emitters/tlc.jl:109–112,166–171`). These are signals on the
+control/electrical time-step interface.
+
+Network-side fundamental phasors from the native output give
+`S_ac=-0.003082707845+j20.000000298403 MVA`. Adding the exported reactor's
+`Z*sum(abs2(I_peak))/2`, with `Z=0.3872+j38.72 ohm`, gives voltage-source
+power `S_M=0.000117292326+j20.320000315554 MVA`. For
+`δ=2π*50*10e-6`, `real(S_M*exp(jδ))=-0.063719766957 MW`; the signed measured
+DC power is `-0.063719767907 MW`. They differ by **0.00095 W**. This is strong
+evidence of a one-step voltage/current alignment in the instantaneous power
+calculation: `P_M*cos(δ)-Q_M*sin(δ)`, whose reactive cross term is approximately
+63.84 kW. It explains the converter discrepancy much better than cable leakage
+alone. The exact native internal scheduling has not been inspected; this is
+a quantitative inference from network phasors and signed DC means. No timing
+compensation or physics change is made. Repeating at 5 μs and 2.5 μs, with the
+same channels, should reduce that cross term to about 31.92 kW and 15.96 kW if
+this explanation holds. It does not establish transient equivalence.
+
+The cable-end difference is **21.191 mA**, equivalent to approximately
+13.56 kW at 640 kV. Julia's cable shunt admittance is `Y=s*inv(P)`
+(`src/Network/Components/transmission_line/cable.jl:364`) and has no DC shunt
+conductance. The export's explicit `ShuntA=1e-38 mho/m` over 10 km is far too
+small to explain the difference; the case export records it at
+`local/pscad-exchange/exports/m4-EzT7OH/tlc_case1_classic.pscx:9227,9283`.
+Its frequency-dependent fit starts at `0.001 Hz` (line 9350), with DC correction
+disabled (line 9369) following the documented failed DC-correction fit.
+PSCAD documents that finite low-frequency fitting can introduce an effective
+shunt conductance substantially above the explicit value and lose DC current
+between ends: [Curve Fitting Starting and End Frequencies](https://www.pscad.com/webhelp-pscad-v5.1.0-ol/Master_Library_Models/Transmission_Lines_Cables/Distributed_Line_Models/Curve_Fitting_Starting_and_End_Frequencies.htm).
+It also describes DC fit errors and the role of
+[DC Correction](https://www.pscad.com/webhelp-pscad-v5.1.0-ol/EMTDC/Transmission_Lines/DC_Correction.htm).
+The source current mean changes by about 0.329 mA between the last two-second
+window and the final ten cycles, so slowly settling fit states may contribute
+as well. A longer run and native fit diagnostics can distinguish a remaining
+tail from a persistent effective DC shunt. The inferred 21 mA is not assigned
+to a physical leakage parameter, and no cable settings are changed.
+
+
+### M4 station correction: intrinsic names and DC source direction
+
+The first PSCAD 5.1.0 build reported reserved-name errors for the bare signal
+`time` in all four TLC cases, the primitive project and the divider project.
+PLL and MOD now use `pll_clock_s` and `mod_clock_s`; isolated experiments use
+`experiment_clock_s`. M3 machine signal names retain their element prefix.
+`Signal` rejects the 120 intrinsic identifiers documented in PSCAD's
+[Include Files](https://www.pscad.com/webhelp-pscad-v5.1.0-ol/EMTDC/Custom_Model_Design/include_files.htm)
+tables, with case-insensitive comparison. This includes `TIME`, `DELT`, the
+other `s1.h` variables, storage arrays/pointers, network variables, constants,
+file variables and warning identifiers. The source comment cites that list.
+
+Generated name reservations also compare case-insensitively. Each netlist or
+project builder owns a dictionary from lowercase identifiers to their retained
+spelling; each candidate uses a hash lookup, including numeric suffixes. Seeded
+names are folded once when that dictionary is constructed. Before applying
+this change, all 18 classic/builder exports for small AC, OHL, YY, Dyn11, DC,
+DC cable, machine and the two TLC cases were compared: no node label, signal,
+module/definition or probe/PGB identifier changed. The 176 fixture probe names
+are retained as an independent XML regression fixture. The six failed naming
+assertions concerned synthetic `Bus`/`bus`, `Probe`/`probe`/`PROBE`, aggregate
+uniqueness, and truncated stems/suffixes; they were not fixture collisions.
+
+The DC injection project built and ran at 10 μs integration and 40 μs sampling.
+A +0.01 kA command into 10000 Ω produced +100.0 kV at the upper A pole from
+the first sample to the end, with zero peak-to-peak variation; the grounded
+lower pole measured zero. Therefore `Cntrl=1` accepts a DC instantaneous command,
+and a positive command injects current out of A into the external circuit.
+The TLC stage retains its saved orientation and pole wiring, and negates the
+calculated absorption current before the source input. Julia's
+`ElectricalTLC.state_space!` calculates positive absorption as
+`i_dc=(vMd*i_d+vMq*i_q)/v_dc`. Tests compare the emitted command with that
+owned output in SI units for both current directions and check power balance.
+No core equation or internal measurement sign is changed.
+
+This closes the isolated source-direction/control-mode question. At that round,
+the six reserved-name failures supplied no native dq, Q, delay-history or
+divider-startup results. The next round supplies the results below.
+
+### M4 station round 2: primitives and start-up handover
+
+PSCAD 5.1.0 built all seven experiments without errors. At 10 μs integration
+and 40 μs sampling, every primitive gave its expected value. The integrator
+started at 0.5, gave 0.50008 at the first 40 μs sample and reached its 1.0 limit
+at 0.25 s. Product/division gave 6/1.5, sine/cosine 0.5/0.8660254, square/root
+9/3, and the array entries 2/3. The first-order pole started at 0.4, gave
+0.40239521 at 40 μs and settled to 1. The second-order filter started at 0.4,
+gave 0.40001348 at 40 μs and settled to 1. Delay history was 0.7, followed by
+the input delayed 200 μs (0.2498 at 0.25 s).
+
+**R10 is closed.** Independent balanced phase inputs at 0.37 rad produced
+`Frame_P_ac_f=0.93232735=cos(0.37)` and
+`Frame_Q_ac_f=-0.36161543=-sin(0.37)`. The inverse phase-A value was also
+cos(0.37). This matches Julia's `vG_d=v*cos(theta)` and
+`vG_q=-v*sin(theta)`; no q-axis correction is needed. At this round, R11 still
+required settled network-side P/Q evidence from the full cases; round 3
+subsequently supplied it.
+
+The isolated divider silently returned `1e99` at a zero denominator, then
+6250 at 40 μs and 1.0 at 0.25 s for `0.25/t`. All four full TLC cases built
+cleanly but became non-finite during start-up. In case 2, measured `v_dc_f`
+started at zero despite its approximately 0.99997 pu equilibrium reference;
+the voltage divisions produced values of order `1e99` at 240 μs and NaNs at
+280 μs. A completed EMTDC run therefore did not establish a finite solution.
+
+The saved start-up constructions were inspected before changing the export:
+
+| Saved project under `local/` | Start-up evidence, with line ranges |
+|---|---|
+| `TLC/Simple_2L_VSC_RL.pscx` | Active AC source `1291–1332` and two DC sources `1733–1792` use `Tc=0.05 s`. Controlled phase voltages use `Tc=0` (`3452–3529`). The active DC-current source has `Cntrl=1`, `Tc=0.05 s` (`5589–5598`). |
+| Same TLC project | The active time comparator (`5912–5929`) substitutes 640 kV until 0.2 s, then `v_dc_m`. Its `v_dc` output (`5885–5888`) feeds the DC-current denominator (`5775–5806`), normalized voltage/modulation denominator (`5825–5859`, `5562–5568`) and phase-voltage scaling (`5784–5795`). The two 100 μF capacitors are disabled (`5870–5884`). All six control integrators use `Reset=0` (`3530–3545`, `3620–3635`, `4041–4056`, `4109–4124`, `4155–4170`, `4229–4244`). |
+| Same TLC project | `select` blocks (`4717–4768`) choose frequency/voltage support according to imported `f_sup`/`v_sup`; they are configuration selectors. The `emtconst` blocks at `4542–4555`, `4769–4775` supply literal constants, rather than a timed converter enable. |
+| `GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx` and `Q-V_Droop/GFL_MMC_Validation.pscx` | Both AC/DC voltage sources use `Tc=0` (`686–727`, `799–824`). `PICtrl_1` has `Reset=1` (`3356–3370`, `3413–3427`) driven by a time comparator (`3169–3181`). Its `t_rst` is passed through the parent (`9284–9309`) and is zero in the saved Main instance (`621–644`). Arm-voltage initialization is the averaged capacitor state's `integral.Yo=640` (`7699–7714`), rather than an added TLC capacitor. |
+| `GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx` | Voltage-source `Tc=0` (`715–756`, `828–853`), PI comparator `3198–3210`, `Reset=1` (`3385–3399`, `3442–3456`), saved `t_rst=0` (`650–673`), arm-state `Yo=640` (`7728–7743`). |
+| `GFL-MMC/DC voltage droop/PSCAD model/GFL_MMC_Validation.pscx` | Voltage-source `Tc=0` (`689–730`, `771–796`), PI comparator `3143–3155`, `Reset=1` (`3330–3344`, `3387–3401`), saved `t_rst=0` (`621–644`), arm-state `Yo=640` (`7673–7688`). |
+| `GFL-MMC/DVC-Mode/GFL_MMC_Validation.pscx` | AC source `Tc=0` (`2088–2129`), internally controlled DC current `Cntrl=0`, `f=0`, `Tc=0.05 s` (`2565–2574`), PI comparator `4611–4623`, `Reset=1` (`4798–4812`, `4855–4869`), saved `t_rst=0` (`2020–2043`), arm-state `Yo=640` (`9141–9156`). |
+
+The current-source [Signal Parameters documentation](https://www.pscad.com/webhelp-pscad-v5.1.0-ol/Master_Library_Models/Sources/Current_Source/c_source.htm)
+states that its ramp-up time is used only with internal control. Consequently
+the TLC's external instantaneous current command is not ramped by `Tc`;
+copying that field alone would not fix the zero-voltage division.
+
+The exporter copies the TLC's existing time comparator with its 0.2 s threshold
+and real output (`conv=0`). Its low output is the element's nominal
+pole-to-pole voltage in kV (640 for these fixtures); the high output is the raw
+meter signal `v_dc_m`. Guarded `v_dc` supplies MEAS, MOD's physical scaling and
+the electrical DC-current denominator. This reproduces the saved connections,
+including the nominal-voltage phase scaling during start-up. It introduces
+neither a persistent voltage floor nor a current limiter. The unchanged phase
+and current source modes retain their validated polarity.
+
+All control integrator/filter initial values still come from the converged
+Julia state vector, as listed above. No controller reset, hold or new delay is
+introduced. After the timed release, `v_dc` is exactly the measured voltage;
+the original controller equations, modulation scaling and power balance are
+recovered. The solved equilibrium is therefore unchanged. Tests exercise a
+plant at rest, prove both voltage divisions finite during the guard, and check
+identity with measured voltage after release, including zero/negative inputs
+to rule out an undocumented persistent clamp. Station round 3 subsequently
+confirmed stable handover and the converged equilibrium, as recorded below.
+
+The four case projects are regenerated at **10 s / 10 μs / 40 μs**, retaining
+the **0.05 s source ramp**. Before 0.2 s, `DUT_v_dc_f` reports nominal voltage
+after the configured measurement filter, not the uncharged cable voltage;
+use the existing `V_DC1_P - V_DC1_N` probes to inspect the actual converter-side
+voltage. At approximately 0.2 s the raw measurement takes over; the 200 μs
+modulation delay then clears its pre-release history. This is a finite start-up
+sequence to test, not steady-state acceptance. The proposed steady-state window
+is the final ten 50 Hz cycles, **9.8–10.0 s**, only after checking settling and
+the frequency-dependent cable's diagnostics (R15). No window before release
+is valid, and elapsed time alone is insufficient.
+
+### M4 station round 3: start-up and equilibrium
+
+PSCAD 5.1.0, at 10 μs integration and 40 μs sampling, settled all four
+classic/builder TLC cases using the timed start-up construction. Case 2's
+internal P/Q relative errors were `8e-9` / `2e-9`. Its network-side power was
+`70.0015 + j20.0004` MVA, matching the solved reference; P/Q errors normalized
+by 100 MVA were `6e-9` / `4e-10`. Case 1's Q error was `2e-8`, `v_dc_f` was
+within `3e-8` of the reference, and drift was below `2e-6` over the final
+2 s. Classic and builder results agreed. These are the reported station
+metrics; the current internal P/Q acceptance rule uses absolute pu differences
+on the rating, rather than those relative errors.
+
+**R11 is closed.** Fundamental Q at the converter's AC terminal equals solved
+injected Q with the same sign when measured with outward converter current.
+The internal Q reference is the solved terminal Q divided by `elec.Sbase`,
+consistent with the verified `-Qac/Sbase` conversion above.
+
+This station round tested the start-up construction before the named-node
+connectivity change. It confirms that construction and its equilibrium;
+native regression of the subsequent Main/module/row rewiring remains pending.
+
+### M4 station round 4: transform floating inputs
+
+The station reported six distinct floating-input messages in the named-node
+abc/dq canvases. The DC injection experiment still ran at +100 kV. The
+following reconstruction uses pins witnessed by wires and abutments in
+`local/TLC/Simple_2L_VSC_RL.pscx`; offsets are not inferred from the messages.
+
+| Reported component | Read pin in emitted canvas | Signal and emitted driver pin | Saved pin witness |
+|---|---|---|---|
+| ABC_DQ N=2 merge A2 at `(108,756)`, orient 4 | `(90,702)` | `transform_node_10`, dot product `(1224,108)` | Merge at `(504,324)`, A2 `(486,270)`, wired to dot output `(486,306)`: `2937–2961`; dot `2727–2732` |
+| ABC_DQ trig input at `(756,756)` | `(720,756)` | `transform_node_16`, sum `(1224,324)` | Trig `(324,216)` input `(288,216)` abuts mirrored sum `(252,216)` output: `2797–2810,2980–2988` |
+| DQ_ABC N=2 merge A1 at `(324,540)`, orient 4 | `(306,468)` | `transform_node_16`, trig `(1224,324)` | Merge `(612,162)` A1 `(594,90)` wired to trig `(468,54)` output `(504,54)`: `2185–2202,2214–2234` |
+| DQ_ABC trig input at `(324,756)` | `(288,756)` | `transform_node_24`, sum `(1224,540)` | Trig `(468,324)` input `(432,324)` abuts sum `(396,324)` output: `2292–2305,2319–2327` |
+| DQ_ABC gain input at `(540,972)` | `(504,972)` | `transform_node_9`, trig `(1224,108)` | Gain `(540,252)` input `(504,252)` abuts trig `(468,252)` output: `2113–2121,2437–2444` |
+| DQ_ABC label `transform_node_15` at `(1260,756)` | Reader is N=3 merge A2 `(954,270)` | Dot product `(1224,756)` | Middle dot `(648,288)` output `(684,288)` abuts N=3 merge `(702,342)` A2: `2164–2184,2385–2398` |
+
+In the written XML, all six read pins already have stubs and each named net has
+one writer. All six writers are in the last transform column, at x=1224,
+with output labels at x=1260. This common geometry is evidence to investigate;
+it does not establish a native clipping or rotation rule. The original offsets
+and net partitions remain unchanged.
+
+A separate verified mismatch was missing module schematic settings. The XML
+writer now writes the saved settings explicitly, including `size=0`, `orient=1`
+and `auto_sequence=1`, from `2069–2083` (dq2abc) and `2675–2689` (abc2dq_1).
+The station coordinate diagnostics subsequently built all three variants:
+standard spacing with explicit saved settings at x=1260, compact spacing with
+settings, and compact spacing without settings. All returned the exact frame
+values. This closes the reported transform floating inputs: module canvases
+need the explicit saved settings, or labels beyond the default extent are lost.
+
+Tests independently assert the saved orient-4 N=2/N=3 merge and unary input
+coordinates, then disconnect the input stub, remove the writer stub, and add a
+second writer for each of the six reported nets. Each variant must fail with
+the canvas and read-pin coordinates. These tests close the missing completeness
+and driver checks; they do not reproduce a native loader losing a connection
+whose two endpoints are still present in XML.
+
+### Named-node M1–M3 topology regression guard
+
+`test/pscad/topology.jl` reconstructs electrical nets from the serialized XML,
+using the saved-project port table, original wire segments and abutments,
+case-insensitive node label names, ground and module xnodes. The comparison
+preserves every component parameter and ordered electrical port; it ignores
+coordinates, component ids and internal node label names. Cable interface
+records with identical parameters are matched by graph isomorphism. Line row
+material/fitting fields and wrapper parameters are retained as well. Nets with
+fewer than two attached ports fail unless grounded or carrying a voltage probe;
+the fixture buses all carry voltage probes. Unattached labels remain visible.
+
+The 14 classic/builder M1–M3 reference graphs in
+`test/pscad/fixtures/topology_8be21ee/` came from exports generated once from
+unmodified `8be21eecabb85d29d2896bc51562f61344338604`; each records the source
+XML SHA-256. XML round trips compare every M1–M3 canvas against these references
+and check degrees on all four TLC exports. Tests also disconnect junctions and
+grounds, reverse ammeter ports, change physical parameters and reorder records.
+
+The station's failing `m4-bz1oQX/transformer_yy_classic.pscx` has the same 15
+electrical component records, full parameters and 11 nets as the reference.
+It passes both equivalence and net-degree checks. No lost R/L junction or
+magnetizing ground is present in that written XML. The native compiled files subsequently established a different ideal-meter
+construction, described below. Raw net equivalence alone did not capture how
+PSCAD selected a branch current when components abutted. The original reference
+graphs remain unchanged; an explicit shunt-meter policy now describes the only
+approved connectivity difference. No electrical parameter or tolerance changed.
+
+
+### Named-node shunt-meter ground return
+
+The station's `yy_named_load_return` diagnostic built and ran without errors.
+Its secondary voltage and terminal currents agreed with the passing d40f623
+reference to seven reported digits. Separate R/L junction nodes were harmless.
+The failing construction put B2 between `I_line_2` and `I_load_1`, two separate
+ideal A branches on an isolated YY secondary whose star points are ungrounded.
+The passing small-AC circuit had a source-grounded galvanic island instead.
+
+The compiled named branch records are in
+`local/pscad-exchange/diag/yy_named-report/Main.dta:22–27`; node 23 is
+`line_terminal_2(3)` in `yy_named.map:92–95`, adjoining its inductor and meter.
+The reference reused the load resistor's current, whereas the named construction
+instantiated a separate load-meter branch. The station's passing change moved
+only the load meter to the ground return. Its saved circuit and fields are in
+`local/pscad-exchange/diag/yy_named_load_return.pscx:346–373` (resistor,
+node labels, orient-0 ammeter and ground). EMTDC's internal pivot trace is not
+available; the diagnostic isolates the triggering construction without changing
+resistance, inductance or transformer parameters.
+
+Every probed shunt emitted through `impedance_path!` now uses
+`bus -> element -> meter -> ground`. Parallel shunts share one return meter
+measuring their total current. Unprobed shunts, winding passives and series
+branch meters retain their construction. Probe names, manifest sides and the
+positive bus-to-element current direction stay unchanged. No limiter, numerical
+resistance or physics fallback is added.
+
+Independent native outputs in
+`local/pscad-exchange/diag/yy_ref-report/pi_02.out` and
+`yy_named_load_return-report/pi_02.out` give load phase RMS currents
+`0.21482524` kA. Using `2/N sum(x exp(-j 2 pi 50 t))` over
+`1.8 < t <= 2.0` s, the return-meter phase angles are
+`[-2.93004909, -122.93004826, 117.06995128]` degrees; the reference angles are
+`[-2.93004845, -122.93004878, 117.06995116]` degrees. Load and outward
+secondary-line phasors have the same sign. The independent phasor fixture
+records source hashes and the extraction window. Plan/XML tests verify ordered
+meter pins, RMS and phase using existing 2% current/1-degree tolerances.
+
+The production structural check excludes voltage probes from conducting
+connections and keeps transformer windings as separate galvanic islands.
+It follows named stubs through module xnodes, line terminals and paired cable
+interfaces. It rejects a source-free isolated part whose remaining grounding
+connection contains consecutive ideal meters with only two meter branches at
+an intermediate node. A source on the island or an alternate direct grounding
+path removes this trigger. The saved failing `m4-bz1oQX` YY XML must fail the
+check, naming `I_line_2`, `I_load_1`, its canvas and coordinates.
+
+The 8be21ee reference graphs are preserved. A reviewed per-fixture list permits
+only the specified shunt meter to move from the bus end to the ground return,
+preserving full parameters and ordered current pins. XML verification reports
+every accepted move explicitly; unlisted moves, other net changes and meter
+reversals fail. All TLC canvas graphs still undergo net-degree and named-stub
+checks. Full M1–M4 native acceptance of the production exports remains pending.

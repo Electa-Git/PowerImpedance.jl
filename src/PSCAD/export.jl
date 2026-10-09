@@ -45,15 +45,26 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
         throw(ArgumentError("PSCAD settings frequency must match the network's $(netlist.frequency) Hz frame"))
     name == pscad_name(name) ||
         throw(ArgumentError("name must be an ASCII PSCAD identifier of at most 30 characters"))
-    used = Set(vcat([bus.name for bus in netlist.buses], [e.pscad for e in netlist.elements]))
+    used = _NameReservations(vcat([bus.name for bus in netlist.buses], [e.pscad
+                                                                        for e in netlist.elements]))
     dc_labels = Dict(bus.key => (pscad_name(bus.name * "_P"; used),
                          pscad_name(bus.name * "_N"; used))
     for bus in netlist.buses if bus.kind == :dc)
     state = PlanState(
-        CanvasPlan(), AbstractLineDefinitionPlan[], AbstractLineWrapperPlan[],
+        CanvasPlan(AbstractComponentPlan[], WirePlan[], used,
+            Dict{String, Union{Nothing, String}}()), AbstractLineDefinitionPlan[], AbstractLineWrapperPlan[],
         ModuleDefinitionPlan[], GridLayout(), ProbeChannel[], used)
     context = (; netlist, settings, name, line_options = overrides, dc_labels,
         buses = Dict(bus.key => bus for bus in netlist.buses))
+    if any(e -> e.model isa PowerImpedance.TLC, netlist.elements)
+        abc = abc_to_dq_module(pscad_name("ABC_DQ"; used))
+        dq = dq_to_abc_module(pscad_name("DQ_ABC"; used))
+        append!(state.modules, [abc, dq])
+        context = merge(context,
+            (;
+                converter_transforms =
+            (; abc = name * ":" * abc.name, dq = name * ":" * dq.name)))
+    end
     elements = sort(netlist.elements;
         by = e -> e.role == :source ? 1 :
                   e.role in (:shunt, :load) ? 3 : 2,
@@ -89,9 +100,11 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
     end
     reference = reference_key === nothing ? nothing : context.buses[reference_key].name
     manifest = ProbeManifest(state.channels, reference)
-    return ProjectPlan(String(name), String(description),
+    plan = ProjectPlan(String(name), String(description),
         _project_settings(settings, String(description)), state.main,
         state.lines, state.wrappers, state.modules, manifest)
+    check_connectivity(plan)
+    return plan
 end
 
 function _export_keywords(path, name, line_options, dc_reference)

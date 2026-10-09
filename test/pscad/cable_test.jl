@@ -76,7 +76,8 @@ const P = PowerImpedance.PSCAD
         direction = side == 1 ? -1 : 1
         for (i, pole) in enumerate(("P", "N"))
             port = (interface.x + 18direction, interface.y + 54 * (i - 1))
-            endpoint = (port[1] + direction * (i == 1 ? 72 : 36), port[2])
+            endpoint = (
+                port[1] + direction * (i == 1 ? 72 : 36), port[2] - (i == 1 ? 36 : 0))
             label = only(filter(
                 c -> c.defn == "master:nodelabel" && (c.x, c.y) == endpoint,
                 plan.main.components))
@@ -86,7 +87,8 @@ const P = PowerImpedance.PSCAD
                     c -> c.defn == "master:ammeter" &&
                          Dict(c.params)["Name"] == "I_line_$side",
                     plan.main.components))
-                @test (meter.x, meter.y) == (port[1] + (direction == -1 ? -36 : 0), port[2])
+                @test (meter.x, meter.y) ==
+                      (port[1] + (direction == -1 ? -36 : 0), port[2] - 36)
             end
         end
     end

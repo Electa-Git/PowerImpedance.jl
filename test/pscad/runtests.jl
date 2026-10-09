@@ -12,3 +12,7 @@ include("machine_test.jl")
 include("cable_test.jl")
 include("dc_equivalence_test.jl")
 include("manual_scripts_test.jl")
+
+include("tlc_test.jl")
+include("connectivity_test.jl")
+include("topology_test.jl")

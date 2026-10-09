@@ -86,7 +86,7 @@ using PowerImpedance
     @test pscad.pscad_name(Symbol("汉字")) == "X"
     @test pscad.pscad_name(Symbol("A汉B")) == "AB"
     @test pscad.pscad_name(Symbol("source with.dot")) == "source_with_dot"
-    used = Set{String}()
+    used = pscad._NameReservations()
     @test pscad.pscad_name(:x; used) == "x"
     @test pscad.pscad_name(:x; used) == "x_2"
     @test pscad.pscad_name(:x; used) == "x_3"
@@ -98,6 +98,23 @@ using PowerImpedance
     end
     @test length(used) == 17
     @test all(name -> occursin(r"^[A-Za-z][A-Za-z0-9_]{0,29}$", name), used)
+    # Reservations retain their spelling but compare as Fortran identifiers.
+    case_used = pscad._NameReservations(["Bus", "BUS_2", "Probe"])
+    @test pscad.pscad_name("bus"; used = case_used) == "bus_3"
+    @test pscad.pscad_name("probe"; used = case_used) == "probe_2"
+    @test pscad.pscad_name("PROBE"; used = case_used) == "PROBE_3"
+    @test Set(["Bus", "BUS_2", "Probe"]) ⊆ case_used
+    @test length(unique(lowercase.(collect(case_used)))) == length(case_used)
+    long_used = pscad._NameReservations(["A"^30])
+    @test pscad.pscad_name("a"^35; used = long_used) == "a"^28 * "_2"
+    @test pscad.pscad_name("A"^35; used = long_used) == "A"^28 * "_3"
+    seeded = pscad._NameReservations(["Seed", "SEED"])
+    @test "seed" in seeded
+    @test length(seeded) == 1
+    @test only(seeded) == "Seed"
+    push!(seeded, "sEeD")
+    @test only(seeded) == "Seed"
+    @test pscad.pscad_name("SEED"; used = seeded) == "SEED_2"
     @test pscad.bus_name([:B3d, :B3q]) == "B3"
     @test pscad.bus_name([:B1c, :B1a, :B1b]) == "B1"
     @test pscad.bus_name([:DC₁]) == "DC1"

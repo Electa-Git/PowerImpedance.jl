@@ -1,0 +1,100 @@
+# Electrical graphs derived once from the unmodified 8be21ee export.
+commit = "8be21eecabb85d29d2896bc51562f61344338604"
+source_sha256 = "724bfeda6e2254be5a84797fdaeba366b7792e5e6eeca02f7a5e4192dc750f72"
+
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "source"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "380.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_source_1"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "line_R"
+    R = "0.19 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "0.0122 [H]"
+    Name = "line_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_line_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_line_2"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "load_R"
+    R = "400.0 [ohm]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_load_1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_B1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_B2"
+
+[[canvases.Main.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[2, 2], [5, 1], [9, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[3, 1], [5, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[4, 2], [6, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[6, 2], [8, 1], [10, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[7, 1], [8, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = true
+ports = [[7, 2]]
+probe = false

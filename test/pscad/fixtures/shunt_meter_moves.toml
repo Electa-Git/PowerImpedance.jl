@@ -1,0 +1,16 @@
+# Approved meter relocation only; the original 8be21ee graphs stay unchanged.
+# Each pair is [probe name, passive branch name], preserving ordered pins.
+small_ac_classic = [["I_load_1", "load_R"]]
+small_ac_builder = [["I_load_1", "load_R"]]
+passive_ohl_classic = [["I_load_1", "load_R"]]
+passive_ohl_builder = [["I_load_1", "load_R"]]
+transformer_yy_classic = [["I_load_1", "load_R"]]
+transformer_yy_builder = [["I_load_1", "load_R"]]
+transformer_dy_classic = [["I_load_1", "load_R"]]
+transformer_dy_builder = [["I_load_1", "load_R"]]
+dc_classic = [["I_ac_load_1", "ac_load_R"]]
+dc_builder = [["I_ac_load_1", "ac_load_R"]]
+dc_cable_classic = [["I_ac_load_1", "ac_load_R"]]
+dc_cable_builder = [["I_ac_load_1", "ac_load_R"]]
+sm_classic = []
+sm_builder = []

@@ -155,7 +155,6 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     # rt/lt is a Y-equivalent branch at the same voltage level, as in Julia.
     x, y = allocate_cell!(state.layout)
     start = (x + 90, y + 72)
-    stub!(state.main, start, inner; direction = -1)
     zbase = elec.Vᵃᶜ_base^2 / elec.S_base
     parts = Tuple{String, String, Float64, String}[]
     for (defn, parameter, value, unit) in (("resistor", "R", elec.rt * zbase, "ohm"),
@@ -165,7 +164,14 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     end
     endpoint = component_chain!(state.main, parts, start, e.pscad * "_stepup", state.used)
     current = current_probe!(state, e, terminal, context)
-    ammeter_stub!(state.main, endpoint, bus.name, current)
+    if isempty(parts)
+        component!(state.main, "ammeter", start, ["Name" => current])
+        stub!(state.main, start, inner; direction = -1)
+        stub!(state.main, (start[1] + 36, start[2]), bus.name)
+    else
+        stub!(state.main, start, inner; direction = -1)
+        ammeter_stub!(state.main, endpoint, bus.name, current)
+    end
     output_probe!(state.main, current, "branch", "kA", (x + 144, y + 144))
 
     x, y = allocate_cell!(state.layout)

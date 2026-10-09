@@ -1,0 +1,22 @@
+# Independent PSCAD 5.1.0 station outputs, 10 us step / 100 us sampling.
+# Positive bus-to-load current; peak phasors = 2/N sum(x * exp(-j*2*pi*50*t)).
+# Window: 1.8 < t <= 2.0 s, 2000 samples. PGB13..15 = I_load_1 phases.
+frequency = 50.0
+window = [1.8, 2.0]
+sample_count = 2000
+
+[yy_ref]
+source = "local/pscad-exchange/diag/yy_ref-report/pi_02.out"
+source_sha256 = "4498165d5a3ffd95181e1f9fd985e58ab431d5fad3fdf317f34f4f7b2a67c3b7"
+peak_real_kA = [0.3034115908213899, -0.16515491513675737, -0.13825667568463382]
+peak_imag_kA = [-0.015529703227189133, -0.25499729407335864, 0.27052699730054536]
+line_peak_real_kA = [0.30341159082138985, -0.16515491513675734, -0.13825667568463382]
+line_peak_imag_kA = [-0.015529703227189147, -0.25499729407335864, 0.2705269973005454]
+
+[yy_named_load_return]
+source = "local/pscad-exchange/diag/yy_named_load_return-report/pi_02.out"
+source_sha256 = "48e19c2f48536b66f39b5a3e63b0c85728269f1c5cdbbddbbbf5da8192b2b671"
+peak_real_kA = [0.3034115897954186, -0.16515491176286703, -0.1382566780325478]
+peak_imag_kA = [-0.015529706575623001, -0.25499729394622067, 0.2705270005218423]
+line_peak_real_kA = [0.3034115897954186, -0.16515491176286703, -0.1382566780325478]
+line_peak_imag_kA = [-0.015529706575622988, -0.25499729394622067, 0.27052700052184236]

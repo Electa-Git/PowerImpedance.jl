@@ -49,19 +49,46 @@ end
 function impedance_path!(state, parts, topology, left_name, right_name, stem;
         first_probe = nothing, second_probe = nothing)
     x, y = allocate_cell!(state.layout)
+    # The station-validated ground-return meter avoids ideal-meter chains on
+    # isolated windings: local/pscad-exchange/diag/yy_named_load_return.pscx:346–373.
+    # Its orient-0 arrow still measures positive current from bus to ground.
+    shunt_probe = right_name === nothing ? first_probe : nothing
     if topology == :series
+        if isempty(parts)
+            # A zero series impedance is node identity. A requested ammeter
+            # supplies the ideal branch; otherwise alias the internal labels.
+            probes = filter(!isnothing, [first_probe, second_probe])
+            if isempty(probes)
+                join_node_labels!(state.main, left_name, right_name)
+            else
+                middle = length(probes) == 2 ?
+                         pscad_name(stem * "_junction"; used = state.used) : nothing
+                for (i, probe) in enumerate(probes)
+                    first = i == 1 ? left_name : middle
+                    second = i == length(probes) ? right_name : middle
+                    component!(state.main, "ammeter", (x + 126, y + 54 + 72 * (i - 1)),
+                        ["Name" => probe])
+                    stub!(state.main, (x + 126, y + 54 + 72 * (i - 1)), first;
+                        direction = -1)
+                    stub!(state.main, (x + 162, y + 54 + 72 * (i - 1)), second)
+                end
+            end
+            first_probe === nothing || output_probe!(state.main, first_probe,
+                "branch", "kA", (x + 234, y + 126))
+            second_probe === nothing || output_probe!(state.main, second_probe,
+                "branch", "kA", (x + 234, y + 162))
+            return nothing
+        end
         start = (x + 90, y + 54)
         finish = component_chain!(state.main, parts, start, stem, state.used)
-        if isempty(parts)
-            finish = (start[1] + 36, start[2])
-            wire!(state.main, start, finish)
-        end
-        if first_probe === nothing
+        if first_probe === nothing || shunt_probe !== nothing
             stub!(state.main, start, left_name; direction = -1)
         else
             ammeter_stub!(state.main, start, left_name, first_probe; direction = -1)
         end
-        if second_probe === nothing
+        if shunt_probe !== nothing
+            ammeter_stub!(state.main, finish, nothing, shunt_probe)
+        elseif second_probe === nothing
             stub!(state.main, finish, right_name)
         else
             ammeter_stub!(state.main, finish, right_name, second_probe)
@@ -75,19 +102,23 @@ function impedance_path!(state, parts, topology, left_name, right_name, stem;
         # per terminal. These labels have no network-bus ownership.
         inner_left = pscad_name(stem * "_parallel_1"; used = state.used)
         inner_right = pscad_name(stem * "_parallel_2"; used = state.used)
-        if first_probe === nothing
-            stub!(state.main, (x + 90, y + 36), left_name; direction = -1)
+        if first_probe === nothing || shunt_probe !== nothing
+            join_node_labels!(state.main, left_name, inner_left)
         else
-            ammeter_stub!(
-                state.main, (x + 90, y + 36), left_name, first_probe; direction = -1)
+            component!(state.main, "ammeter", (x + 54, y + 36), ["Name" => first_probe])
+            stub!(state.main, (x + 54, y + 36), left_name; direction = -1)
+            stub!(state.main, (x + 90, y + 36), inner_left)
         end
-        stub!(state.main, (x + 90, y + 36), inner_left)
-        label!(state.main, inner_right, (x + 162, y + 36))
-        if second_probe === nothing
-            stub!(state.main, (x + 162, y + 36), right_name)
+        if shunt_probe !== nothing
+            component!(state.main, "ammeter", (x + 234, y + 36), ["Name" => shunt_probe])
+            stub!(state.main, (x + 234, y + 36), inner_right; direction = -1)
+            stub!(state.main, (x + 270, y + 36), nothing)
+        elseif second_probe === nothing
+            join_node_labels!(state.main, right_name, inner_right)
         else
-            ammeter_stub!(state.main, (x + 198, y + 36), right_name, second_probe)
-            wire!(state.main, (x + 162, y + 36), (x + 198, y + 36))
+            component!(state.main, "ammeter", (x + 234, y + 36), ["Name" => second_probe])
+            stub!(state.main, (x + 234, y + 36), inner_right; direction = -1)
+            stub!(state.main, (x + 270, y + 36), right_name)
         end
         for (index, part) in enumerate(parts)
             start = (x + 126, y + 36 + 36 * index)

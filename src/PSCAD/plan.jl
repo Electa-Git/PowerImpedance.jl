@@ -75,6 +75,17 @@ struct CanvasPlan
     components::Vector{AbstractComponentPlan}
     "Wire segments in emission order."
     wires::Vector{WirePlan}
+    "Canvas-owned internal name reservations."
+    used::_NameReservations
+    "Electrical node aliases for an empty series path."
+    aliases::Dict{String, Union{Nothing, String}}
+end
+function CanvasPlan(components, wires)
+    names = [value for c in components
+             for (key, value) in c.params
+             if key == "Name" && !isempty(value)]
+    return CanvasPlan(components, wires, _NameReservations(names),
+        Dict{String, Union{Nothing, String}}())
 end
 CanvasPlan() = CanvasPlan(AbstractComponentPlan[], WirePlan[])
 
@@ -305,7 +316,7 @@ end
 """
 $(TYPEDEF)
 
-Allocate 288-by-216-pixel cells, six per row, starting at grid coordinate
+Allocate 432-by-216-pixel cells, six per row, starting at grid coordinate
 `(4, 4)`. Each cell holds a group of element instances or probes.
 
 $(TYPEDFIELDS)
@@ -324,7 +335,7 @@ Reserve the next cell and return its upper-left pixel coordinates.
 function allocate_cell!(layout::GridLayout)
     index = layout.next
     layout.next += 1
-    return (72 + 288 * (index % 6), 72 + 216 * (index ÷ 6))
+    return (72 + 432 * (index % 6), 72 + 216 * (index ÷ 6))
 end
 
 # Only the builder owns these mutable arrays and identifier reservations.
@@ -335,16 +346,43 @@ struct PlanState
     modules::Vector{ModuleDefinitionPlan}
     layout::GridLayout
     channels::Vector{ProbeChannel}
-    used::Set{String}
+    used::_NameReservations
 end
 
 function component!(canvas::CanvasPlan, defn, point, params = Pair{String, String}[])
+    for (key, value) in params
+        key == "Name" && !isempty(value) && push!(canvas.used, value)
+    end
     push!(canvas.components, ComponentPlan("master:" * defn, params, point..., 0))
     return nothing
 end
 wire!(canvas::CanvasPlan, a, b) = push!(canvas.wires, WirePlan([a, b]))
 function label!(canvas::CanvasPlan, name, point)
+    name = get(canvas.aliases, lowercase(name), name)
+    name === nothing ? component!(canvas, "ground", point) :
     component!(canvas, "nodelabel", point, ["Name" => name])
+end
+
+# An empty series path identifies nodes; it introduces no electrical device.
+function join_node_labels!(canvas, left, right)
+    left = left === nothing ? nothing : get(canvas.aliases, lowercase(left), left)
+    right = right === nothing ? nothing : get(canvas.aliases, lowercase(right), right)
+    left == right && return nothing
+    keep, remove = left === nothing ? (left, right) :
+                   right === nothing ? (right, left) : (left, right)
+    for (key, value) in canvas.aliases
+        value == remove && (canvas.aliases[key] = keep)
+    end
+    canvas.aliases[lowercase(remove)] = keep
+    for (i, c) in enumerate(canvas.components)
+        c.defn == "master:nodelabel" || continue
+        lowercase(Dict(c.params)["Name"]) == lowercase(remove) || continue
+        canvas.components[i] = keep === nothing ?
+                               ComponentPlan(
+            "master:ground", Pair{String, String}[], c.x, c.y, 0) :
+                               ComponentPlan(c.defn, ["Name" => keep], c.x, c.y, c.orient)
+    end
+    return nothing
 end
 
 # Known orient-0 ports only: every label/ground stub is 36 pixels long.
@@ -357,22 +395,464 @@ function stub!(canvas::CanvasPlan, port, name; direction = 1)
 end
 
 function ammeter_stub!(canvas::CanvasPlan, port, bus, name; direction = 1)
-    location = (port[1] + (direction == 1 ? 0 : -36), port[2])
+    junction = pscad_name(name * "_node"; used = canvas.used)
+    stub!(canvas, port, junction; direction)
+    location = (port[1] + (direction == 1 ? 0 : -36), port[2] - 36)
     component!(canvas, "ammeter", location, ["Name" => name])
-    outer = (port[1] + 36 * direction, port[2])
+    inner = (port[1], location[2])
+    endpoint = (inner[1], inner[2] - 36)
+    wire!(canvas, inner, endpoint)
+    label!(canvas, junction, endpoint)
+    outer = (port[1] + 36 * direction, location[2])
     return stub!(canvas, outer, bus; direction)
 end
 
 function component_chain!(canvas::CanvasPlan, parts, start, stem, used)
     point = start
-    for (defn, parameter, value, unit) in parts
+    for (i, (defn, parameter, value, unit)) in enumerate(parts)
         name = pscad_name(stem * "_" * parameter; used)
         component!(canvas, defn, point,
             ["Name" => name, parameter => pscad_value(value; unit)])
-        # Consecutive orient-0 passive ports meet directly.
-        point = (point[1] + 36, point[2])
+        if i < length(parts)
+            junction = pscad_name(stem * "_junction_$i"; used)
+            for pin in ((point[1] + 36, point[2]), (point[1] + 72, point[2]))
+                endpoint = (pin[1], pin[2] + 36)
+                wire!(canvas, pin, endpoint)
+                label!(canvas, junction, endpoint)
+            end
+            point = (point[1] + 72, point[2])
+        else
+            point = (point[1] + 36, point[2])
+        end
     end
     return point
+end
+
+# Offsets are the pins used by the saved canvases and the primitive lowering.
+# Electrical witnesses: local/OHL/DUT_2.pscx:1689–1779 (transformer/passives),
+# local/TLC/Simple_2L_VSC_RL.pscx:3377–3529,5589–5630 (breakout, source, xnode,
+# meters). Control witnesses: the complete saved abc/dq canvases at 1851–3234;
+# local/SG/SG_Project.pscx supplies the M3 primitives and machine pins (see doc).
+function component_ports(c::ComponentPlan, modules)
+    p = Dict(c.params)
+    d = c.defn
+    electrical = true
+    directions = Symbol[]
+    offsets = if d in ("master:nodelabel", "master:datalabel", "master:ground")
+        NTuple{2, Int}[]
+    elseif d in ("master:resistor", "master:inductor", "master:capacitor", "master:ammeter")
+        [(0, 0), (36, 0)]
+    elseif d in ("master:voltmetergnd", "master:xnode")
+        [(0, 0)]
+    elseif d == "master:voltmeter"
+        [(0, 0), (0, 36)]
+    elseif d == "master:source_3"
+        get(p, "Grnd", "1") == "1" || throw(ArgumentError("unsupported source_3 ports"))
+        [(36, 0)]
+    elseif d == "master:source_1"
+        pins = get(p, "Grnd", "0") == "1" ? [(-36, 0)] : [(-36, 0), (36, 0)]
+        get(p, "Cntrl", "0") == "1" && push!(pins, (0, 36))
+        return _placed_ports(c, pins,
+            [fill(:electrical, length(pins) - (get(p, "Cntrl", "0") == "1"));
+             get(p, "Cntrl", "0") == "1" ? [:signal] : Symbol[]],
+            [fill(:electrical, length(pins) - (get(p, "Cntrl", "0") == "1"));
+             get(p, "Cntrl", "0") == "1" ? [:input] : Symbol[]])
+    elseif d == "master:src_ccin_1"
+        return _placed_ports(c, [(0, 0), (36, 0), (0, 36)],
+            [:electrical, :electrical, :signal], [:electrical, :electrical, :input])
+    elseif d == "master:breakout"
+        [(0, 0), (36, -36), (36, 0), (36, 36)]
+    elseif d == "master:cable_interface"
+        [(-18, 54 * (i - 1)) for i in 1:parse(Int, p["NCAB"])]
+    elseif d == "master:xfmr-3p2w"
+        [(-54, 0), (36, 0)]
+    elseif d == "master:sync_machine"
+        return _placed_ports(c,
+            [(36, 0), (-36, -72), (0, 72), (-36, 72), (36, -72), (-72, -72), (36, 72)],
+            [:electrical; fill(:signal, 6)],
+            [:electrical, :input, :input, :output, :output, :output, :output])
+    else
+        electrical = false
+        if d in ("master:import", "master:export", "master:const",
+            "master:emtconst", "master:time-sig")
+            directions = [d == "master:export" ? :input : :output]
+            [(36, 0)]
+        elseif d == "master:pgb"
+            directions = [:input]
+            [(0, 0)]
+        elseif d == "master:sumjct"
+            any(k -> get(p, k, "0") != "0", ("A", "C", "E", "G")) &&
+                throw(ArgumentError("unsupported sumjct ports"))
+            pins = [point
+                    for (key, point) in (("D", (-36, 0)), ("F", (0, 36)), ("B", (0, -36)))
+                    if get(p, key, "0") != "0"]
+            [pins; [(36, 0)]]
+        elseif d in ("master:mult", "master:div", "master:dot_product")
+            [(-36, 0), (0, 36), (36, 0)]
+        elseif d == "master:datamerge" && c.orient == 4
+            n = parse(Int, p["N"])
+            # Saved orient-4 pins are already in canvas coordinates:
+            # local/TLC/Simple_2L_VSC_RL.pscx:2214–2238,2857–2891,2937–2961.
+            # For N=2 the inputs are (-18,-72), (-18,-54), output (0,-18).
+            return [[((c.x - 18, c.y + 18 * (i - 5)), :signal, :input) for i in 1:n];
+                    [((c.x, c.y + 18 * (n - 3)), :signal, :output)]]
+        elseif d == "master:datatap" && c.orient == 0
+            [(0, -18), (0, 0)]
+        elseif d in ("master:gain", "master:integral", "master:trig", "master:sqrt",
+            "master:square", "master:realpole", "master:tdelay", "master:trans_filt",
+            "master:pi_ctl", "master:hardlimit", "master:compare", "master:leadlag")
+            [(-36, 0), (36, 0)]
+        else
+            throw(ArgumentError("unknown ports for $(c.defn) at ($(c.x), $(c.y))"))
+        end
+    end
+    if isempty(directions)
+        directions = electrical ? fill(:electrical, length(offsets)) :
+                     [fill(:input, length(offsets) - 1); :output]
+    end
+    return _placed_ports(
+        c, offsets, fill(electrical ? :electrical : :signal, length(offsets)),
+        directions)
+end
+
+function _placed_ports(c, offsets, kinds, directions)
+    transform = if c.orient == 0
+        (x, y) -> (x, y)
+    elseif c.orient == 1
+        (x, y) -> (-y, x)
+    elseif c.orient == 3
+        (x, y) -> (y, -x)
+    elseif c.orient == 4
+        (x, y) -> (-x, y)
+    elseif c.orient == 6
+        (x, y) -> (x, -y)
+    else
+        throw(ArgumentError("unknown orientation $(c.orient) for $(c.defn)"))
+    end
+    return [((c.x + dx, c.y + dy), kind, direction)
+            for ((x, y), kind, direction) in zip(offsets, kinds, directions)
+            for (dx, dy) in (transform(x, y),)]
+end
+
+function component_ports(c::ModuleInstancePlan, modules)
+    c.orient == 0 || throw(ArgumentError("unknown module orientation $(c.orient)"))
+    name = last(split(c.defn, ':'))
+    haskey(modules, name) || throw(ArgumentError("unknown module ports for $(c.defn)"))
+    return [((c.x + p.x, c.y + p.y), p.kind == :electrical ? :electrical : :signal, p.kind)
+            for p in modules[name].ports]
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Reject port abutment and every connection except a separate straight stub
+between a known component port and a label or ground. Require every input and
+electrical port to have a stub, and every signal input to have exactly one
+driver on the same canvas. Reject isolated ideal-meter grounding chains.
+Coordinates are pixels.
+"""
+function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
+    fail(point, reason) = throw(ArgumentError("PSCAD canvas $name at $point: $reason"))
+    ports = Dict{NTuple{2, Int}, Symbol}()
+    directions = Dict{NTuple{2, Int}, Symbol}()
+    labels = Dict{NTuple{2, Int}, Symbol}()
+    signal_names = Dict{NTuple{2, Int}, String}()
+    drivers = Dict{String, Vector{NTuple{2, Int}}}()
+    for c in canvas.components
+        if c.defn in ("master:nodelabel", "master:datalabel", "master:ground")
+            point = (c.x, c.y)
+            haskey(labels, point) && fail(point, "coincident labels")
+            labels[point] = c.defn == "master:datalabel" ? :signal : :electrical
+            c.defn == "master:datalabel" &&
+                (signal_names[point] = lowercase(Dict(c.params)["Name"]))
+        else
+            known_ports = try
+                component_ports(c, modules)
+            catch err
+                err isa ArgumentError || rethrow()
+                fail((c.x, c.y), sprint(showerror, err))
+            end
+            for (point, kind, direction) in known_ports
+                haskey(ports, point) && fail(point, "coincident component ports")
+                ports[point] = kind
+                directions[point] = direction
+            end
+            # Meter names and machine P/Q are implicit signal outputs, as saved
+            # in local/TLC/Simple_2L_VSC_RL.pscx:4317–4337,5618–5630 and
+            # local/SG/SG_Project.pscx:998–1198 (POut/QOut).
+            implicit_keys = c.defn in
+                            ("master:ammeter", "master:voltmeter", "master:voltmetergnd") ?
+                            ("Name",) :
+                            c.defn == "master:sync_machine" ? ("POut", "QOut") : ()
+            for key in implicit_keys
+                value = get(Dict(c.params), key, "")
+                isempty(value) || push!(get!(drivers, lowercase(value), NTuple{2, Int}[]),
+                    (c.x, c.y))
+            end
+        end
+    end
+    for point in keys(labels)
+        haskey(ports, point) && fail(point, "label abuts a component port")
+    end
+    ends = Set{NTuple{2, Int}}()
+    points = union(Set(keys(ports)), Set(keys(labels)))
+    connected_labels = Dict{NTuple{2, Int}, NTuple{2, Int}}()
+    for w in canvas.wires
+        length(w.vertices) == 2 || fail(first(w.vertices), "multi-segment wire")
+        a, b = w.vertices
+        a != b && (a[1] == b[1] || a[2] == b[2]) || fail(a, "wire is not straight")
+        valid = (haskey(ports, a) && haskey(labels, b)) ||
+                (haskey(labels, a) && haskey(ports, b))
+        valid || fail(a, "wire $a → $b must join one component port and one label")
+        port, label = haskey(ports, a) ? (a, b) : (b, a)
+        ports[port] == labels[label] || fail(port, "electrical/control label mismatch")
+        connected_labels[port] = label
+        if directions[port] == :output
+            push!(get!(drivers, signal_names[label], NTuple{2, Int}[]), port)
+        end
+        for point in (a, b)
+            point in ends && fail(point, "shared wire endpoint")
+            push!(ends, point)
+            push!(points, point)
+        end
+    end
+    # Sorted coordinate indices avoid scanning every canvas point per stub.
+    rows, columns = Dict{Int, Vector{Int}}(), Dict{Int, Vector{Int}}()
+    for (x, y) in points
+        push!(get!(rows, y, Int[]), x)
+        push!(get!(columns, x, Int[]), y)
+    end
+    foreach(sort!, values(rows))
+    foreach(sort!, values(columns))
+    for w in canvas.wires
+        a, b = w.vertices
+        horizontal = a[2] == b[2]
+        positions = horizontal ? rows[a[2]] : columns[a[1]]
+        lo, hi = minmax(horizontal ? a[1] : a[2], horizontal ? b[1] : b[2])
+        i = searchsortedlast(positions, lo) + 1
+        if i <= length(positions) && positions[i] < hi
+            point = horizontal ? (positions[i], a[2]) : (a[1], positions[i])
+            fail(point, "wire passes through another port or label (junction)")
+        end
+    end
+    occupied = Set{NTuple{2, Int}}()
+    for w in canvas.wires
+        a, b = w.vertices
+        horizontal = a[2] == b[2]
+        lo, hi = minmax(horizontal ? a[1] : a[2], horizontal ? b[1] : b[2])
+        for position in lo:18:hi
+            point = horizontal ? (position, a[2]) : (a[1], position)
+            point in occupied && fail(point, "intersecting wires (junction)")
+            push!(occupied, point)
+        end
+    end
+    for c in canvas.components, (point, _, direction) in component_ports(c, modules)
+
+        direction in (:input, :electrical) || continue
+        haskey(connected_labels, point) ||
+            fail(point, "$(c.defn) $direction port has no label stub")
+        direction == :input || continue
+        signal = signal_names[connected_labels[point]]
+        writers = get(drivers, signal, NTuple{2, Int}[])
+        length(writers) == 1 ||
+            fail(point, "$(c.defn) input signal $signal has $(length(writers)) drivers; expected exactly one")
+    end
+    for point in keys(labels)
+        point in ends || fail(point, "label has no component port stub")
+    end
+    _check_meter_grounding(canvas, name, modules)
+    return nothing
+end
+
+# Native evidence: local/pscad-exchange/diag/yy_named-report/Main.dta:22–27
+# contains two separate ideal A branches around B2; the load-return variant
+# runs with the same passive parameters. Source-grounded chains remain valid.
+function _check_meter_grounding(canvas, name, modules)
+    parent = Dict{String, String}()
+    root(n) = get!(parent, n, n) == n ? n : (parent[n] = root(parent[n]))
+    join(a, b) = (parent[root(a)] = root(b))
+    attachments = Dict{String, Vector{Int}}()
+    anchors = Set(["\0ground"])
+    sources = Set{String}()
+    meters = Tuple{String, String, String, String, NTuple{2, Int}}[]
+    cables = Dict{Tuple{String, Int}, String}()
+    function collect_canvas(current, scope, bindings)
+        labels = Dict((c.x, c.y) => (c.defn == "master:ground" ? "\0ground" :
+                       scope * ":" * lowercase(Dict(c.params)["Name"]))
+        for c in current.components if c.defn in ("master:nodelabel", "master:ground"))
+        stubs = Dict{NTuple{2, Int}, String}()
+        for w in current.wires
+            a, b = w.vertices
+            haskey(labels, a) && (stubs[b] = labels[a])
+            haskey(labels, b) && (stubs[a] = labels[b])
+        end
+        for c in current.components
+            c.defn == "master:xnode" || continue
+            internal = stubs[(c.x, c.y)]
+            port = Dict(c.params)["Name"]
+            haskey(bindings, port) ? join(internal, bindings[port]) :
+            push!(anchors, internal)
+        end
+        for c in current.components
+            pins = [point
+                    for (point, kind) in component_ports(c, modules)
+                    if kind == :electrical]
+            isempty(pins) && continue
+            nets = [stubs[p] for p in pins]
+            if c isa ModuleInstancePlan
+                definition = modules[last(split(c.defn, ':'))]
+                if isempty(definition.canvas.components)
+                    # Transmission-line wrappers have known sending/receiving
+                    # terminals (local/OHL/DUT_2.pscx:1798–1839).
+                    join(first(nets), last(nets))
+                    for n in nets
+                        push!(get!(attachments, n, Int[]), 0)
+                    end
+                else
+                    ports = filter(p -> p.kind == :electrical, definition.ports)
+                    collect_canvas(definition.canvas, scope * "/$(c.x),$(c.y)",
+                        Dict(p.name => n for (p, n) in zip(ports, nets)))
+                end
+                continue
+            end
+            c.defn in ("master:voltmeter", "master:voltmetergnd", "master:xnode") &&
+                continue
+            if c.defn == "master:ammeter"
+                push!(meters, (nets[1], nets[2], Dict(c.params)["Name"], scope, pins[1]))
+                for n in nets
+                    push!(get!(attachments, n, Int[]), length(meters))
+                end
+            else
+                for n in nets
+                    push!(get!(attachments, n, Int[]), 0)
+                end
+                if c.defn in ("master:resistor", "master:inductor",
+                    "master:capacitor", "master:breakout")
+                    for n in nets[2:end]
+                        if "\0ground" in (first(nets), n)
+                            push!(anchors, first(nets) == "\0ground" ? n : first(nets))
+                        else
+                            join(first(nets), n)
+                        end
+                    end
+                elseif c.defn in ("master:source_1", "master:source_3",
+                    "master:src_ccin_1", "master:sync_machine")
+                    union!(anchors, nets)
+                    union!(sources, nets)
+                elseif c.defn == "master:cable_interface"
+                    for (i, n) in enumerate(nets)
+                        key = (scope * ":" * lowercase(Dict(c.params)["Name"]), i)
+                        haskey(cables, key) ? join(n, cables[key]) : (cables[key] = n)
+                    end
+                end
+                # Transformer ports are distinct galvanic islands; do not
+                # connect the two windings (local/OHL/DUT_2.pscx:1707–1741).
+            end
+        end
+        return nothing
+    end
+    collect_canvas(canvas, String(name), Dict{String, String}())
+    # Canonicalize xnode bindings and ordinary branches before counting meter
+    # junctions, including chains crossing an electrical module boundary.
+    grouped = Dict{String, Vector{Int}}()
+    for (n, branches) in attachments
+        append!(get!(grouped, root(n), Int[]), branches)
+    end
+    attachments = grouped
+    meters = [(root(a), root(b), signal, scope, point)
+              for (a, b, signal, scope, point) in meters]
+    anchors, sources = Set(root.(collect(anchors))), Set(root.(collect(sources)))
+    bare(n) = n ∉ anchors && length(get(attachments, n, Int[])) == 2 &&
+              all(!=(0), attachments[n])
+    # A source anywhere in a galvanic island anchors that island, including
+    # source-side meter chains. Ground is a boundary, not a route for joining
+    # otherwise isolated islands through their separate shunts.
+    adjacent = Dict{String, Vector{String}}()
+    for (a, b, _, _, _) in meters
+        a, b = root(a), root(b)
+        root("\0ground") in (a, b) && continue
+        push!(get!(adjacent, a, String[]), b)
+        push!(get!(adjacent, b, String[]), a)
+    end
+    source_islands = Set(root.(collect(sources)))
+    pending = collect(source_islands)
+    while !isempty(pending)
+        for n in get(adjacent, pop!(pending), String[])
+            n in source_islands && continue
+            push!(source_islands, n)
+            push!(pending, n)
+        end
+    end
+    visited = Set{Int}()
+    blocked = Tuple{String, String, Vector{Int}}[]
+    for (i, meter) in enumerate(meters)
+        i in visited && continue
+        a, b = meter[1:2]
+        bare(a) && bare(b) && continue
+        bare(a) && ((a, b) = (b, a))
+        chain = [i]
+        push!(visited, i)
+        while bare(b)
+            j = only(filter(!=(last(chain)), attachments[b]))
+            j in visited && break
+            push!(chain, j)
+            push!(visited, j)
+            m = meters[j]
+            b = m[1] == b ? m[2] : m[1]
+        end
+        if length(chain) == 1
+            join(a, b)
+        else
+            push!(blocked, (a, b, chain))
+        end
+    end
+    anchored = union(Set(root.(collect(anchors))), Set(root.(collect(source_islands))))
+    for (a, b, chain) in blocked
+        # An alternate direct/source path anchors both endpoints and makes
+        # this harmless, as on the passing small-AC/source-side constructions.
+        root(a) in anchored && root(b) in anchored && continue
+        root(a) == root(b) && continue
+        root(a) in anchored || root(b) in anchored || continue
+        m = meters[first(chain)]
+        names = Base.join([meters[i][3] for i in chain], ", ")
+        throw(ArgumentError("PSCAD canvas $(m[4]) at $(m[5]): isolated part reaches ground/source only through series ideal meters $names; intermediate nodes have no other conducting branch"))
+    end
+    return nothing
+end
+
+function check_connectivity(plan::ProjectPlan)
+    modules = Dict(m.name => m for m in plan.modules)
+    # A transmission-line wrapper is a component whose first/last vertices
+    # are terminals, not an ordinary connecting wire. See OHL mapping doc.
+    main = CanvasPlan(copy(plan.main.components), copy(plan.main.wires))
+    for w in plan.wrappers
+        w isa TLineWrapperPlan || continue # Cable wrappers have no electrical terminals.
+        ports = [ModulePortPlan("sending", :electrical, -54, 18),
+            ModulePortPlan("receiving", :electrical, 54, 72)]
+        modules[w.row] = ModuleDefinitionPlan(w.row, ModuleParameterPlan[], ports, CanvasPlan())
+        push!(main.components, ModuleInstancePlan(plan.name * ":" * w.row,
+            Pair{String, String}[], w.x, w.y, 0))
+    end
+    check_connectivity(main, "Main", modules)
+    for m in plan.modules
+        check_connectivity(m.canvas, m.name, modules)
+    end
+    # Row definitions carry material/geometry records only, with no electrical
+    # ports or connecting wires: local/Cable/DUT_2.pscx and local/OHL/DUT_2.pscx.
+    for row in plan.lines
+        if row isa CableDefinitionPlan
+            seen = Set{NTuple{2, Int}}()
+            for c in row.cables
+                point = (c.x, c.y)
+                c.defn == "master:Cable_Coax" && c.orient == 0 ||
+                    throw(ArgumentError("PSCAD canvas $(row.name) at $point: unknown row record ports for $(c.defn)"))
+                point in seen &&
+                    throw(ArgumentError("PSCAD canvas $(row.name) at $point: coincident row records"))
+                push!(seen, point)
+            end
+        end
+    end
+    return nothing
 end
 
 function emit!(state::PlanState, e::NetlistElement, context)

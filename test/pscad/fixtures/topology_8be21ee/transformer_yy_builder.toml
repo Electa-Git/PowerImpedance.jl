@@ -1,0 +1,157 @@
+# Electrical graphs derived once from the unmodified 8be21ee export.
+commit = "8be21eecabb85d29d2896bc51562f61344338604"
+source_sha256 = "a448c9f3b0ac7b6454da6c8ecafda4e159be602e8ad8d1d8f178567b2dee471d"
+
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "source"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "380.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_source_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_line_1"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "line_primary_R"
+    R = "10.0 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "0.1 [H]"
+    Name = "line_primary_L"
+[[canvases.Main.components]]
+definition = "master:xfmr-3p2w"
+
+    [canvases.Main.components.parameters]
+    CuL = "0.0 [pu]"
+    Dtls = "0"
+    Enab = "0"
+    Ideal = "0"
+    Im1 = "0.001 [%]"
+    Lead = "1"
+    NLL = "0.0 [pu]"
+    Name = "line"
+    Tap = "0"
+    Tmva = "1000 [MVA]"
+    V1 = "380.0 [kV]"
+    V2 = "150.0 [kV]"
+    View = "1"
+    Xl = "0.0001 [pu]"
+    YD1 = "0"
+    YD2 = "0"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "line_secondary_R"
+    R = "1.0 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "0.05 [H]"
+    Name = "line_secondary_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_line_2"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "1000.0 [H]"
+    Name = "line_magnetizing_L"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "line_magnetizing_R"
+    R = "1000000.0 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "load_R"
+    R = "400.0 [ohm]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_load_1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_B1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_B2"
+
+[[canvases.Main.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = true
+ports = [[10, 2], [11, 2], [12, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[12, 1], [13, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[2, 2], [3, 1], [14, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[4, 2], [5, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[5, 2], [6, 1], [10, 1], [11, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[6, 2], [7, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[7, 2], [8, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[8, 2], [9, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[9, 2], [13, 1], [15, 1]]
+probe = true

@@ -302,7 +302,7 @@ function _netlist(elements, topology, voltage_base, frequency, supplied_pf,
         row.node in bus_nets[key] || push!(bus_nets[key], row.node)
     end
 
-    used = Set{String}()
+    used = _NameReservations()
     buses = Bus[]
     bus_states = Dict{BusKey, NamedTuple}()
     for (index, key) in enumerate(bus_order)
@@ -384,6 +384,11 @@ function _netlist(elements, topology, voltage_base, frequency, supplied_pf,
                         qf = -Float64(branch["qt"]) * 1000,
                         terminal_voltage_kV = Float64(terminal_bus["vm"]) * terminal_base,
                         terminal_angle_rad = Float64(terminal_bus["va"])))
+            end
+            if element.element_model isa PowerImpedance.TLC && flow !== nothing
+                # convdc pgrid/qgrid are absorbed from the AC bus; TLC's
+                # external ammeter points toward the bus. DC side 1 absorbs pdc.
+                flow = merge(flow, (; pf = flow.pdc, pt = -flow.pgrid, qt = -flow.qgrid))
             end
             flow === nothing || (flows[name] = flow)
             if slack_bus === nothing && PowerImpedance.is_source(element)

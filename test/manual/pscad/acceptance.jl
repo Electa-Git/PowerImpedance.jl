@@ -6,7 +6,7 @@ include("../../pscad/fixtures.jl")
 
 remote = RemoteConfig()
 exports = mktempdir(mkpath(joinpath(remote.local_root, "exports"));
-    prefix = "m3-", cleanup = false)
+    prefix = "m4-", cleanup = false)
 classic, state = PSCADFixtures.small_ac_network()
 classic_model = export_pscad(classic; path = joinpath(exports, "small_ac_classic.pscx"))
 builder_model = export_pscad(state; path = joinpath(exports, "small_ac_builder.pscx"))
@@ -35,6 +35,23 @@ sm_classic_model = export_pscad(sm_classic;
 sm_builder_model = export_pscad(sm_state;
     path = joinpath(exports, "sm_builder.pscx"), settings = sm_settings)
 
+# Ten seconds covers twenty 0.5 s support-lag time constants. The 10 us
+# integration step and 40 us sampling match the validated TLC project.
+# Retain the supported 0.05 s source ramp. Native divider behavior during
+# startup must be checked on the station before accepting these cases.
+tlc_settings = PowerImpedance.PSCAD.SimulationSettings(simulation_time = 10.0,
+    time_step = 10e-6, sample_step = 40e-6, source_ramp = 0.05)
+tlc1_classic, tlc1_state = PSCADFixtures.tlc_case1_network()
+tlc2_classic, tlc2_state = PSCADFixtures.tlc_case2_network()
+tlc1_classic_model = export_pscad(tlc1_classic;
+    path = joinpath(exports, "tlc_case1_classic.pscx"), settings = tlc_settings, dc_reference = :none)
+tlc1_builder_model = export_pscad(tlc1_state;
+    path = joinpath(exports, "tlc_case1_builder.pscx"), settings = tlc_settings, dc_reference = :none)
+tlc2_classic_model = export_pscad(tlc2_classic;
+    path = joinpath(exports, "tlc_case2_classic.pscx"), settings = tlc_settings, dc_reference = :none)
+tlc2_builder_model = export_pscad(tlc2_state;
+    path = joinpath(exports, "tlc_case2_builder.pscx"), settings = tlc_settings, dc_reference = :none)
+
 cases = [(classic_model, classic_model, 0.01), (builder_model, classic_model, 0.01),
     (ohl_classic_model, ohl_classic_model, 0.02), (
         ohl_builder_model, ohl_classic_model, 0.02),
@@ -43,7 +60,11 @@ cases = [(classic_model, classic_model, 0.01), (builder_model, classic_model, 0.
     (cable_classic_model, cable_classic_model, 0.01),
     (cable_builder_model, cable_classic_model, 0.01),
     (sm_classic_model, sm_classic_model, 0.02),
-    (sm_builder_model, sm_classic_model, 0.02)]
+    (sm_builder_model, sm_classic_model, 0.02),
+    (tlc1_classic_model, tlc1_classic_model, 0.01), (
+        tlc1_builder_model, tlc1_classic_model, 0.01),
+    (tlc2_classic_model, tlc2_classic_model, 0.01), (
+        tlc2_builder_model, tlc2_classic_model, 0.01)]
 
 # Detect the merged model by its positive-sequence transfer, without relying
 # on a commit hash. Compare against YY to remove the fixture's no-load loss angle.
@@ -69,14 +90,16 @@ for (model, classic_reference, rtol_v) in cases
             all(t -> t.bus !== nothing && t.bus.domain == 2, element.terminals)
     end
     machine = any(e -> e.model isa PowerImpedance.SynchronousMachine, model.netlist.elements)
-    simulation_time = machine ? 15.0 :
+    converter = any(e -> e.model isa PowerImpedance.TLC, model.netlist.elements)
+    simulation_time = converter ? 10.0 :
+                      machine ? 15.0 :
                       dc_cable ? 3.0 :
                       any(bus -> bus.kind == :dc, model.netlist.buses) ? 1.0 : 0.3
     result = compute(model,
         PSCADRun();
         options = (;
-            remote, simulation_time, time_step = machine ? 10e-6 : 50e-6,
-            sample_step = machine ? 1e-3 : 250e-6, verbosity = 1))
+            remote, simulation_time, time_step = (machine || converter) ? 10e-6 : 50e-6,
+            sample_step = converter ? 40e-6 : machine ? 1e-3 : 250e-6, verbosity = 1))
     # NB.solve skips power flow for this linear fixture. Both representations
     # therefore compare against the equivalent classic circuit's solved record.
     reference = isempty(model.operating_point.bus_states) ? classic_reference : model
@@ -106,6 +129,16 @@ for (model, classic_reference, rtol_v) in cases
                 settled[channel.name].mean)
         end
     end
+    if converter
+        settled = PowerImpedance.PSCAD.steady_state(result)
+        for channel in model.probes.channels
+            channel.kind == :converter_diagnostic || continue
+            println(channel.name, " settled mean [", channel.unit,
+                "]: ", settled[channel.name].mean)
+        end
+    end
+    # A frequency-dependent cable fit and remaining lag transients can affect
+    # the final window; inspect settling warnings before accepting the table.
     # Retain all measured errors, including the OHL case's 2% voltage check.
     open(joinpath(exports, model.project_name * "_comparison.tsv"), "w") do io
         println(io, "quantity\tname\tpscad\tpowerflow\terror\twithin_tolerance")
