@@ -86,8 +86,8 @@ function initialvalues(c::TLC; inputs, setpoint_pu=SetpointPU())
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
         v_dc = inputs.v_dc,
-        i_d = elec_init.iΔ_d,
-        i_q = elec_init.iΔ_q,
+        i_d = elec_init.i_d,
+        i_q = elec_init.i_q,
         i_dc = 0.0,             #TODO improve this initialization?
         θ   = setpoint_pu.θ_ac
     )

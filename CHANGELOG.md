@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- Preserve TLC electrical current seeds and accept zero-voltage initialization.
 - Classify untransformed six-pin elements as three-phase, so abc sources,
   impedances and lines enter the power flow as AC components.
 - Use one default voltage base (`NetworkBuilder.DEFAULT_VOLTAGE_BASE`, 320 kV)
