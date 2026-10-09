@@ -110,6 +110,7 @@ else
     sm_classic, sm_state = PSCADFixtures.sm_network()
     tlc1_classic, tlc1_state = PSCADFixtures.tlc_case1_network()
     tlc2_classic, tlc2_state = PSCADFixtures.tlc_case2_network()
+    mmc_classic, mmc_state = PSCADFixtures.mmc_pq_network()
     reference_root = etree.parse(joinpath(@__DIR__,
         "fixtures/user_module_pscad5.xml")).getroot()
     reference_parameter = only(reference_root.xpath(
@@ -125,6 +126,12 @@ else
         union!(fields, [pyconvert(String, p.get("name"))
                         for p in component.xpath("./paramlist/param")])
     end
+    mmc_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_saved_fragments.xml")).getroot()
+    for component in mmc_reference.xpath(".//User")
+        defn = pyconvert(String, component.get("defn"))
+        union!(get!(Set{String}, saved_fields, defn),
+            [pyconvert(String, p.get("name")) for p in component.xpath("./paramlist/param")])
+    end
     settings = P.SimulationSettings(simulation_time = 0.3, time_step = 50e-6,
         sample_step = 250e-6, snapshot_time = 0.2)
     @testset "PSCAD mhi-xml export round trip" begin
@@ -137,14 +144,19 @@ else
             ("dc_cable_classic", cable_classic), ("dc_cable_builder", cable_state),
             ("sm_classic", sm_classic), ("sm_builder", sm_state),
             ("tlc_case1_classic", tlc1_classic), ("tlc_case1_builder", tlc1_state),
-            ("tlc_case2_classic", tlc2_classic), ("tlc_case2_builder", tlc2_state))
+            ("tlc_case2_classic", tlc2_classic), ("tlc_case2_builder", tlc2_state),
+            ("mmc_pq_classic", mmc_classic), ("mmc_pq_builder", mmc_state))
             path = joinpath(only(ARGS), name * ".pscx")
             case_settings = startswith(name, "sm_") ?
                             P.SimulationSettings(simulation_time = 5.0) :
                             startswith(name, "tlc_") ?
                             P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
-                sample_step = 40e-6, source_ramp = 0.05) : settings
-            dc_reference = startswith(name, "tlc_") ? :none : :midpoint_resistors
+                sample_step = 40e-6, source_ramp = 0.05) :
+                            startswith(name, "mmc_") ?
+                            P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
+                sample_step = 250e-6, source_ramp = 0.0) : settings
+            dc_reference = startswith(name, "tlc_") || startswith(name, "mmc_") ? :none :
+                           :midpoint_resistors
             # ΔY XML checks exercise the selected station realization with no
             # legacy power-flow evidence; native comparison waits for dy-fix.
             model = startswith(name, "transformer_dy") ?
@@ -196,14 +208,24 @@ else
             @test model.provenance.mhi_xml_version == "1.3.0"
             @test model.provenance.resolved_powerflow ==
                   ((input isa Network && !startswith(name, "transformer_dy")) ||
-                   (name == "sm_builder" || startswith(name, "tlc_")))
+                   (name == "sm_builder" || startswith(name, "tlc_") ||
+                    startswith(name, "mmc_")))
             root = etree.parse(path).getroot()
             @testset "Electrical topology: $name" begin
                 graphs = PSCADTopology.xml_graphs(root, x -> pyconvert(String, x); check_named = true)
                 for (canvas, graph) in graphs
                     @test PSCADTopology.check_degrees(graph, "$name/$canvas") === nothing
                 end
-                if !startswith(name, "tlc_")
+                if startswith(name, "mmc_")
+                    modules = Dict(m.name => m for m in plan.modules)
+                    canvases = Dict("Main" => plan.main, [m.name => m.canvas
+                                                          for m in plan.modules]...)
+                    @test Set(keys(graphs)) == Set(keys(canvases))
+                    for (canvas, graph) in graphs
+                        @test PSCADTopology.equivalent(graph,
+                            PSCADTopology.electrical_graph(canvases[canvas], modules))
+                    end
+                elseif !startswith(name, "tlc_")
                     reference = TOML.parsefile(joinpath(@__DIR__,
                         "fixtures/topology_8be21ee", name * ".toml"))["canvases"]
                     @test Set(keys(graphs)) == Set(keys(reference))
@@ -384,6 +406,66 @@ else
                     @test pin_partition(only(original.xpath("./schematic"))) ==
                           pin_partition(only(actual.xpath("./schematic")))
                 end
+            end
+            if startswith(name, "mmc_")
+                saved_guard = only(tlc_reference.xpath("./User[@defn='master:compare']"))
+                for (module_name, count) in (("MEAS_DUT", 10), ("SIGMA_DUT", 4))
+                    guards = root.xpath("./definitions/Definition[@name='$module_name']/schematic/User[@defn='master:compare']")
+                    @test pylen(guards) == count
+                    for guard in guards
+                        @test pyconvert(String, guard.get("orient")) ==
+                              pyconvert(String, saved_guard.get("orient"))
+                        for field in ("X", "INTR", "Dim", "conv")
+                            @test pyconvert(String,
+                                guard.xpath("string(./paramlist/param[@name='$field']/@value)")) ==
+                                  pyconvert(String,
+                                saved_guard.xpath("string(./paramlist/param[@name='$field']/@value)"))
+                        end
+                        @test isfinite(P._pscad_number(pyconvert(String,
+                            guard.xpath("string(./paramlist/param[@name='OL']/@value)"))))
+                    end
+                end
+                for definition in plan.modules, component in definition.canvas.components
+
+                    component isa P.ComponentPlan || continue
+                    @test haskey(saved_fields, component.defn)
+                    @test Set(first.(component.params)) ⊆ saved_fields[component.defn]
+                end
+                arm = only(root.xpath("./definitions/Definition[@name='ARM_DUT']"))
+                for (defn, fields) in ((
+                    "master:source_1", ("Type", "Grnd", "Spec", "Cntrl", "AC")),
+                    ("master:integral", ("Extrn", "Reset", "Mthd")))
+                    saved = only(mmc_reference.xpath("./User[@defn='$defn']"))
+                    emitted = only(arm.xpath("./schematic/User[@defn='$defn']"))
+                    for field in fields
+                        @test pyconvert(String,
+                            emitted.xpath("string(./paramlist/param[@name='$field']/@value)")) ==
+                              pyconvert(String, saved.xpath("string(./paramlist/param[@name='$field']/@value)"))
+                    end
+                end
+                for (defn, field, unit) in (("master:inductor", "L", "H"),
+                    ("master:resistor", "R", "ohm"))
+                    saved = only(mmc_reference.xpath("./User[@defn='$defn']"))
+                    emitted = only(arm.xpath("./schematic/User[@defn='$defn']"))
+                    values = [pyconvert(String,
+                                  c.xpath("string(./paramlist/param[@name='$field']/@value)"))
+                              for c in (saved, emitted)]
+                    @test all(endswith(value, " [$unit]") for value in values)
+                    @test P._pscad_number(replace(values[1], " [$unit]" => "")) ==
+                          P._pscad_number(replace(values[2], " [$unit]" => ""))
+                end
+                source = only(mmc_reference.xpath("./User[@defn='master:source_1']"))
+                params = [pyconvert(String, p.get("name")) =>
+                              pyconvert(String, p.get("value"))
+                          for p in source.xpath("./paramlist/param")]
+                ports = P.component_ports(
+                    P.ComponentPlan(
+                        "master:source_1", params, 828, 450, 1), Dict())
+                @test first.(ports) == [(828, 414), (828, 486), (792, 450)]
+                @test pylen(root.xpath("./definitions/Definition[@name='MMC_DUT']/schematic/User[@defn='$name:ARM_DUT']")) ==
+                      6
+                @test pylen(root.xpath("./definitions/Definition[@name='ARM_DUT']/schematic/User[@defn='master:integral']")) ==
+                      1
             end
             @test Set(keys(summary.modules_and_ports)) == Set(m.name for m in plan.modules)
             for definition in plan.modules

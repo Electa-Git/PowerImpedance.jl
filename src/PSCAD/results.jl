@@ -178,13 +178,15 @@ function _dc_converter_current_bases(netlist)
     end
     bases = Dict{BusKey, Float64}()
     for element in netlist.elements
-        element.model isa PowerImpedance.TLC || continue
+        element.model isa Union{PowerImpedance.TLC, PowerImpedance.MMC} || continue
         for terminal in element.terminals
             terminal.grounded && continue
             bus = terminal.bus
             (bus === nothing || bus.domain != 2) && continue
             key = root(bus)
-            base = element.model.elec.iDCbase # Sbase [MVA] / vDCbase [pole-to-pole kV].
+            base = element.model isa PowerImpedance.MMC ?
+                   element.model.elec.Sbase / element.model.elec.vDC_base :
+                   element.model.elec.iDCbase
             if haskey(bases, key) && bases[key] != base
                 throw(ArgumentError("DC current comparison for :$(element.name) is not yet supported in a DC network with different converter current bases"))
             end
@@ -207,7 +209,11 @@ and complete three-phase AC or scalar DC measurements for those channels.
 
 - `result`: PSCAD time-domain output in manifest units.
 - `model`: Exported model retaining netlist and operating-point evidence.
-- `rtol_v`: Relative phase RMS voltage tolerance, default `0.01`.
+
+# Keywords
+
+- `rtol_v`: Relative voltage tolerance, including MMC arm capacitor cycle
+  means, default `0.01`.
 - `atol_angle_deg`: Absolute relative-bus angle tolerance \\[deg\\], default `1.0`.
 - `rtol_i`: Current magnitude tolerance, default `0.02`. AC currents and
   converter-free DC networks use relative error; converter-connected DC
@@ -223,6 +229,11 @@ and complete three-phase AC or scalar DC measurements for those channels.
   Speed uses pu and absolute error; angles use degrees and absolute wrapped errors. Omit the
   reference bus's own angle row. A zero magnitude reference without a converter
   DC current base uses zero error for a zero measurement and infinite error otherwise.
+  MMC `:converter_arm_voltage` rows contain capacitor cycle means and solved
+  pole-to-pole DC voltage in kV. `:converter_dc_current_identity` rows contain
+  signed DC terminal current and `3*mean(iS_z)*Sbase/vDC_base` in kA; their
+  `powerflow` column holds that measured identity reference, rather than a
+  power-flow current. Both use their MMC signal probe names.
 
 # Notes
 
@@ -234,9 +245,10 @@ DC bus voltage is the window mean of V_P - V_N, compared with twice the
 pole-to-ground bus voltage. DC current magnitudes use the P-pole window mean
 and the reference |P|/V_pp. Omit a DC current row when no solved terminal power
 exists (for example a source without a gendc solution record).
-For a DC network containing a TLC, current error is
+For a DC network containing a TLC or MMC, current error is
 `abs(measured-reference)/max(abs(reference), elec.Sbase/elec.vDCbase)` in kA,
-using the converter's pole-to-pole DC voltage base. A DC network is the
+using the converter's pole-to-pole DC voltage base (`elec.vDC_base` for MMC).
+A DC network is the
 connected component of nongrounded DC buses joined by an element's DC
 terminals; AC terminals and shared ground do not join networks. This base
 applies to converter terminals, DC branches and DC sources throughout that
@@ -254,7 +266,7 @@ its positive-sequence magnitude with the solved terminal voltage using
 `rtol_v`. These rows use the current probe's name. Internal machine P/Q/Vt
 and initialization/field channels remain diagnostics. Speed uses the scalar
 mean and an absolute tolerance of `1e-3` pu around 1.
-TLC terminal P/Q follow the same fundamental-phasor calculation, with current
+TLC/MMC terminal P/Q follow the same fundamental-phasor calculation, with current
 from the converter to its AC bus and references `-pgrid/-qgrid` at side 2.
 Their errors use `elec.Sbase` and tolerance `0.01`. Internal `P_ac_f/Q_ac_f`
 means are pu on `elec.Sbase`, compared to those solved terminal powers divided
@@ -263,6 +275,12 @@ by `Sbase` with `abs(measured_pu-reference_pu) <= 0.01`, equivalently
 `Q_ac = -v_q*i_d + v_d*i_q`, equal to standard injected reactive power.
 Consequently its reference is `-setpoint.Qac/Sbase`, also `-qgrid/Sbase`.
 Converter DC voltage, frequency and angle channels remain diagnostics.
+For each MMC arm capacitor probe, compare its settled cycle mean with the
+solved DC bus pole-to-pole voltage using `abs(mean-reference)/abs(reference)`
+and `rtol_v`. For each MMC `iS_z` probe (pu of `Sbase/vDC_base`), compare the
+signed DC side-1 current mean with `3*mean(iS_z)*Sbase/vDC_base` in kA, using
+`abs(diff)/max(abs(reference), Sbase/vDC_base)` and `rtol_i`. The `iS_z` mean
+itself is diagnostic and is not asserted against its solved equilibrium value.
 """
 function compare_operating_point(result::PSCADResult, model::PSCADModel;
         rtol_v = 0.01, atol_angle_deg = 1.0, rtol_i = 0.02)
@@ -292,6 +310,40 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
         push!(passed, error <= tolerance)
     end
     for channel in model.probes.channels
+        if channel.kind in (:converter_arm_voltage, :converter_sum_current)
+            channel.dim == 1 && _probe_present(channel, result.channels) ||
+                throw(ArgumentError("missing PSCAD scalar MMC probe $(channel.name)"))
+            e = only(filter(e -> string(e.name) == channel.element, model.netlist.elements))
+            e.model isa PowerImpedance.MMC ||
+                throw(ArgumentError("MMC probe $(channel.name) belongs to another model"))
+            dc = only(filter(t -> t.side == 1 && !t.grounded, e.terminals))
+            if channel.kind == :converter_arm_voltage
+                bus = only(filter(b -> b.key == dc.bus, model.netlist.buses))
+                _, point = _comparison_bus(model, bus.name)
+                channel.unit == "kV" ||
+                    throw(ArgumentError("MMC arm voltage probe $(channel.name) must use kV"))
+                reference = 2point.vm_pu * bus.base_kV
+                add_row(:converter_arm_voltage, channel.name, settled[channel.name].mean,
+                    reference, rtol_v)
+            else
+                channel.unit == "pu" ||
+                    throw(ArgumentError("MMC circulating current probe $(channel.name) must use pu"))
+                current = only(filter(
+                    c -> c.kind == :current && c.element == channel.element &&
+                         c.side == "1",
+                    model.probes.channels))
+                current.dim == 1 && _probe_present(current, result.channels) ||
+                    throw(ArgumentError("missing PSCAD MMC DC current probe $(current.name)"))
+                current.unit == "kA" ||
+                    throw(ArgumentError("MMC DC current probe $(current.name) must use kA"))
+                base = e.model.elec.Sbase / e.model.elec.vDC_base
+                reference = 3settled[channel.name].mean * base
+                add_row(:converter_dc_current_identity,
+                    channel.name, settled[current.name].mean,
+                    reference, rtol_i, max(abs(reference), base))
+            end
+            continue
+        end
         if channel.kind in (:converter_p, :converter_q)
             channel.dim == 1 && _probe_present(channel, result.channels) ||
                 throw(ArgumentError("missing PSCAD scalar converter probe $(channel.name)"))
@@ -398,7 +450,8 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 throw(ArgumentError("current comparison requires positive bus voltage"))
             current = hypot(flow[fields[1]], flow[fields[2]]) / (3 * voltage)
             add_row(:current_rms, channel.name, value.rms, current, rtol_i)
-            if e.model isa Union{PowerImpedance.SynchronousMachine, PowerImpedance.TLC}
+            if e.model isa Union{
+                PowerImpedance.SynchronousMachine, PowerImpedance.TLC, PowerImpedance.MMC}
                 machine = e.model isa PowerImpedance.SynchronousMachine
                 machine && !haskey(flow, :terminal_voltage_kV) &&
                     throw(ArgumentError("missing solved machine terminal data for :$(e.name)"))

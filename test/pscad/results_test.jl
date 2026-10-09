@@ -349,7 +349,11 @@ end
     @test settings.output_stem == "pi"
     @test settings.frequency == 50.0
     @test settings.source_ramp == 0.05
-    for field in (:simulation_time, :time_step, :sample_step, :frequency, :source_ramp),
+    @test P.SimulationSettings(source_ramp = 0).source_ramp == 0.0
+    for value in (-1, Inf, NaN, true)
+        @test_throws ArgumentError P.SimulationSettings(source_ramp = value)
+    end
+    for field in (:simulation_time, :time_step, :sample_step, :frequency),
         value in (0, -1, Inf, NaN, true)
 
         @test_throws ArgumentError P.SimulationSettings(; (field => value,)...)

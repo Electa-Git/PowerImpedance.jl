@@ -52,6 +52,17 @@ tlc2_classic_model = export_pscad(tlc2_classic;
 tlc2_builder_model = export_pscad(tlc2_state;
     path = joinpath(exports, "tlc_case2_builder.pscx"), settings = tlc_settings, dc_reference = :none)
 
+# Saved PQ settings: 10 s, 10 us integration, 250 us sampling, Tc=0.
+# The approved source_ramp=0 and 0.2 s solved-measurement hold passed station
+# round 3. Inspect R15 settling before comparing the final ten cycles.
+mmc_settings = PowerImpedance.PSCAD.SimulationSettings(simulation_time = 10.0,
+    time_step = 10e-6, sample_step = 250e-6, source_ramp = 0.0)
+mmc_classic, mmc_state = PSCADFixtures.mmc_pq_network()
+mmc_classic_model = export_pscad(mmc_classic;
+    path = joinpath(exports, "mmc_pq_classic.pscx"), settings = mmc_settings, dc_reference = :none)
+mmc_builder_model = export_pscad(mmc_state;
+    path = joinpath(exports, "mmc_pq_builder.pscx"), settings = mmc_settings, dc_reference = :none)
+
 cases = [(classic_model, classic_model, 0.01), (builder_model, classic_model, 0.01),
     (ohl_classic_model, ohl_classic_model, 0.02), (
         ohl_builder_model, ohl_classic_model, 0.02),
@@ -64,7 +75,9 @@ cases = [(classic_model, classic_model, 0.01), (builder_model, classic_model, 0.
     (tlc1_classic_model, tlc1_classic_model, 0.01), (
         tlc1_builder_model, tlc1_classic_model, 0.01),
     (tlc2_classic_model, tlc2_classic_model, 0.01), (
-        tlc2_builder_model, tlc2_classic_model, 0.01)]
+        tlc2_builder_model, tlc2_classic_model, 0.01),
+    (mmc_classic_model, mmc_classic_model, 0.01), (
+        mmc_builder_model, mmc_classic_model, 0.01)]
 
 # Detect the merged model by its positive-sequence transfer, without relying
 # on a commit hash. Compare against YY to remove the fixture's no-load loss angle.
@@ -90,7 +103,8 @@ for (model, classic_reference, rtol_v) in cases
             all(t -> t.bus !== nothing && t.bus.domain == 2, element.terminals)
     end
     machine = any(e -> e.model isa PowerImpedance.SynchronousMachine, model.netlist.elements)
-    converter = any(e -> e.model isa PowerImpedance.TLC, model.netlist.elements)
+    converter = any(e -> e.model isa Union{PowerImpedance.TLC, PowerImpedance.MMC}, model.netlist.elements)
+    mmc = any(e -> e.model isa PowerImpedance.MMC, model.netlist.elements)
     simulation_time = converter ? 10.0 :
                       machine ? 15.0 :
                       dc_cable ? 3.0 :
@@ -99,7 +113,7 @@ for (model, classic_reference, rtol_v) in cases
         PSCADRun();
         options = (;
             remote, simulation_time, time_step = (machine || converter) ? 10e-6 : 50e-6,
-            sample_step = converter ? 40e-6 : machine ? 1e-3 : 250e-6, verbosity = 1))
+            sample_step = mmc ? 250e-6 : converter ? 40e-6 : machine ? 1e-3 : 250e-6, verbosity = 1))
     # NB.solve skips power flow for this linear fixture. Both representations
     # therefore compare against the equivalent classic circuit's solved record.
     reference = isempty(model.operating_point.bus_states) ? classic_reference : model
@@ -132,7 +146,19 @@ for (model, classic_reference, rtol_v) in cases
     if converter
         settled = PowerImpedance.PSCAD.steady_state(result)
         for channel in model.probes.channels
-            channel.kind == :converter_diagnostic || continue
+            channel.kind in
+            (:converter_diagnostic, :converter_arm_voltage, :converter_sum_current) ||
+                continue
+            if channel.kind == :converter_sum_current
+                element = only(filter(e -> string(e.name) == channel.element,
+                    model.netlist.elements))
+                equilibrium = PowerImpedance.PSCAD.converter_equilibrium(element)
+                reference_current = equilibrium.states.iΣ_z
+                println(channel.name, " settled mean [pu]: ", settled[channel.name].mean,
+                    "; solved equilibrium [pu]: ", reference_current,
+                    "; difference [pu]: ", settled[channel.name].mean - reference_current)
+                continue
+            end
             println(channel.name, " settled mean [", channel.unit,
                 "]: ", settled[channel.name].mean)
         end

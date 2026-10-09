@@ -820,6 +820,26 @@ function _check_meter_grounding(canvas, name, modules)
     return nothing
 end
 
+function _check_module_electrical_parameters(m, modules)
+    # Literal electrical values: local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:
+    # 11345–11359. Symbolic arm L/R failed station compilation (M5 round 1).
+    for c in m.canvas.components
+        c isa ComponentPlan || continue
+        any(p -> p[2] == :electrical, component_ports(c, modules)) || continue
+        for (field, value) in c.params
+            field == "Name" && continue # Component/probe identifiers are metadata.
+            literal = match(
+                r"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*(?:\[[^\[\]\r\n]+\])?\s*$",
+                value)
+            number = isnothing(literal) ? nothing : tryparse(Float64, literal[1])
+            if isnothing(number) || !isfinite(number)
+                throw(ArgumentError("PSCAD module $(m.name) at ($(c.x), $(c.y)): $(c.defn) electrical parameter $field=$value requires a finite numeric literal; symbolic electrical parameters require saved station evidence"))
+            end
+        end
+    end
+    return nothing
+end
+
 function check_connectivity(plan::ProjectPlan)
     modules = Dict(m.name => m for m in plan.modules)
     # A transmission-line wrapper is a component whose first/last vertices
@@ -835,6 +855,7 @@ function check_connectivity(plan::ProjectPlan)
     end
     check_connectivity(main, "Main", modules)
     for m in plan.modules
+        _check_module_electrical_parameters(m, modules)
         check_connectivity(m.canvas, m.name, modules)
     end
     # Row definitions carry material/geometry records only, with no electrical

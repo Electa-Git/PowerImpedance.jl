@@ -1,5 +1,23 @@
-# Converter equations belong to converter/common and TLC. This file only
+# Converter equations belong to converter/common, TLC and MMC. This file only
 # assembles their supported control objects as PSCAD block diagrams.
+const _CONVERTER_STARTUP_RELEASE = 0.2
+
+# Saved time-based real selector: local/TLC/Simple_2L_VSC_RL.pscx:5912–5929.
+# Keep one construction for the accepted TLC and MMC measurement handovers.
+struct _ConverterStartupHold <: ControlBlock
+    clock::Signal
+    measured::Signal
+    output::Signal
+    initial::Float64
+end
+
+function lower!(canvas::CanvasPlan, node::_ConverterStartupHold, point)
+    unary_block!(canvas, "compare", point,
+        ["X" => block_value(_CONVERTER_STARTUP_RELEASE),
+            "OL" => block_value(node.initial), "OH" => node.measured.name,
+            "INTR" => "0", "Dim" => "1", "conv" => "0"], node.clock, node.output)
+end
+
 function converter_equilibrium(e)
     m = e.model
     inputs, setpoint_pu = PowerImpedance.pftoinputs(m, e.setpoint)
@@ -18,6 +36,9 @@ function converter_equilibrium(e)
     states = NamedTuple{PowerImpedance.statenames(m)}(Tuple(vector))
     outputs = PowerImpedance.state_space!(
         zeros(length(vector)), states, inputs, setpoint_pu, m)
+    if m isa PowerImpedance.MMC
+        outputs = mmc_equilibrium_outputs(m, states, inputs, setpoint_pu)
+    end
     return (; states, inputs, setpoint_pu, outputs)
 end
 
@@ -94,15 +115,32 @@ function converter_filter!(graph, parameters, input, output, filter, names, stat
     not_exportable(e, filter)
 end
 
-function converter_measurements(name, e, equilibrium, transforms)
+function converter_measurement_filter!(
+        graph, parameters, input, output, filter, names, states, u, e)
+    if e.model isa PowerImpedance.MMC
+        # Hold the input so solved dynamic filter states remain at equilibrium;
+        # masking only the output would let zero meter inputs discharge them.
+        held = Signal(output.name * "_startup")
+        push!(graph.nodes, _ConverterStartupHold(
+            Signal("meas_start_clock_s"), input, held, Float64(u)))
+        input = held
+    end
+    converter_filter!(graph, parameters, input, output, filter, names, states, u, e)
+end
+
+function converter_measurements(name, e, equilibrium, transforms,
+        bases = (; v = e.model.elec.vACbase, i = e.model.elec.iACbase,
+            dc = e.model.elec.vDCbase))
     m = e.model
     parameters = ModuleParameterPlan[]
     graph = BlockGraph()
     for n in ("v_abc", "i_abc", "v_dc", "theta_c", "theta_rel")
         push!(graph.nodes, Import(n, Signal(n)))
     end
-    for (stem, base, definition) in (("v", m.elec.vACbase, transforms.abc),
-        ("i", m.elec.iACbase, transforms.abc))
+    m isa PowerImpedance.MMC &&
+        push!(graph.nodes, TimeStep(Signal("meas_start_clock_s")))
+    for (stem, base, definition) in (("v", bases.v, transforms.abc),
+        ("i", bases.i, transforms.abc))
         abc, dq = Signal.([stem * "_abc", stem * "_dq"])
         push!(graph.nodes, AbcToDq(abc, Signal("theta_c"), dq, definition))
         invbase = converter_parameter!(parameters, stem * "_invbase", 1 / base)
@@ -112,16 +150,25 @@ function converter_measurements(name, e, equilibrium, transforms)
             append!(graph.nodes, ControlBlock[ArraySplit(dq, raw, i), Gain(raw, output, invbase)])
         end
     end
-    invdc = converter_parameter!(parameters, "invDCbase", 1 / m.elec.vDCbase)
-    append!(graph.nodes,
-        ControlBlock[Gain(Signal("v_dc"), Signal("v_dc_pu"), invdc),
-            Const(Signal("i_dc"), 0.0)])
+    invdc = converter_parameter!(parameters, "invDCbase", 1 / bases.dc)
+    push!(graph.nodes, Gain(Signal("v_dc"), Signal("v_dc_pu"), invdc))
+    inputs = [("v_abc", 3), ("i_abc", 3), ("v_dc", 1), ("theta_c", 1), ("theta_rel", 1)]
+    if m isa PowerImpedance.MMC
+        invcurrent = converter_parameter!(parameters, "invDCcurrent", bases.dc /
+                                                                      m.elec.Sbase)
+        append!(graph.nodes,
+            ControlBlock[Import("i_dc_si", Signal("i_dc_si")),
+                Gain(Signal("i_dc_si"), Signal("i_dc"), invcurrent)])
+        push!(inputs, ("i_dc_si", 1))
+    else
+        push!(graph.nodes, Const(Signal("i_dc"), 0.0))
+    end
     raw = equilibrium.outputs.sig_in
     for field in (:vG_d, :vG_q, :v_dc, :i_d, :i_q, :i_dc, :θ)
         measurement = getproperty(m.meas, field)
         signal = field == :θ ? "theta_rel" : field == :v_dc ? "v_dc_pu" : string(field)
         filtered = field == :θ ? "theta_f" : string(field) * "_f"
-        converter_filter!(
+        converter_measurement_filter!(
             graph, parameters, Signal(signal), Signal(filtered), measurement.filter,
             PowerImpedance.statenames(measurement), equilibrium.states, getproperty(raw, field), e)
     end
@@ -138,15 +185,14 @@ function converter_measurements(name, e, equilibrium, transforms)
         (:Q_ac, -measured.vG_q_f * measured.i_d_f + measured.vG_d_f * measured.i_q_f),
         (:P_dc, measured.v_dc_f * measured.i_dc_f))
         measurement = getproperty(m.meas, field)
-        converter_filter!(
+        converter_measurement_filter!(
             graph, parameters, Signal(string(field)), Signal(string(field) * "_f"),
             measurement.filter, PowerImpedance.statenames(measurement), equilibrium.states, u, e)
     end
     outputs = [(n, 1)
                for n in ("vG_d_f", "vG_q_f", "i_d_f", "i_q_f", "v_dc_f", "P_ac_f", "Q_ac_f")]
     append!(graph.nodes, [Export(n, Signal(n)) for (n, _) in outputs])
-    return converter_definition(name, parameters, graph,
-        [("v_abc", 3), ("i_abc", 3), ("v_dc", 1), ("theta_c", 1), ("theta_rel", 1)], outputs)
+    return converter_definition(name, parameters, graph, inputs, outputs)
 end
 
 function converter_pll(name, e, equilibrium)
@@ -248,8 +294,7 @@ function converter_voltage_support!(graph, parameters, block, equilibrium, e)
     not_exportable(e, block)
 end
 
-function converter_reactive(name, e, equilibrium)
-    block = e.model.outerReactive
+function converter_reactive(name, e, equilibrium, block = e.model.outerReactive)
     block isa PowerImpedance.OuterReactiveQControl || not_exportable(e, block)
     parameters = ModuleParameterPlan[]
     graph = BlockGraph(ControlBlock[Import(n, Signal(n))
@@ -266,16 +311,17 @@ function converter_reactive(name, e, equilibrium)
         [("Q_ac_f", 1), ("vG_d_f", 1), ("vG_q_f", 1)], [("i_q_ref", 1)])
 end
 
-function converter_occ(name, e, equilibrium)
-    block = e.model.innerCurrent
+function converter_occ(name, e, equilibrium, block = e.model.innerCurrent)
     block isa PowerImpedance.InnerCurrentPIControl || not_exportable(e, block)
-    e.model.innerVoltage isa PowerImpedance.NoInnerVoltageControl ||
-        not_exportable(e, e.model.innerVoltage)
+    if e.model isa PowerImpedance.TLC
+        e.model.innerVoltage isa PowerImpedance.NoInnerVoltageControl ||
+            not_exportable(e, e.model.innerVoltage)
+    end
     parameters = ModuleParameterPlan[]
     inputs = [(n, 1)
               for n in ("i_d_ref", "i_q_ref", "i_d_f", "i_q_f", "vG_d_f", "vG_q_f", "omega_c")]
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
-    l = converter_parameter!(parameters, "Lpu", e.model.elec.Lᵣ)
+    l = converter_parameter!(parameters, "Lpu", PowerImpedance.elec_inductance(e.model.elec))
     for (axis, other, sign, initial) in (("d", "q", 1, equilibrium.states.ξ_id), (
         "q", "d", -1, equilibrium.states.ξ_iq))
         error, pi, feed, cross, term, output = Signal.([axis * s

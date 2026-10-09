@@ -385,8 +385,9 @@ function _netlist(elements, topology, voltage_base, frequency, supplied_pf,
                         terminal_voltage_kV = Float64(terminal_bus["vm"]) * terminal_base,
                         terminal_angle_rad = Float64(terminal_bus["va"])))
             end
-            if element.element_model isa PowerImpedance.TLC && flow !== nothing
-                # convdc pgrid/qgrid are absorbed from the AC bus; TLC's
+            if element.element_model isa Union{PowerImpedance.TLC, PowerImpedance.MMC} &&
+               flow !== nothing
+                # convdc pgrid/qgrid are absorbed from the AC bus; the converter's
                 # external ammeter points toward the bus. DC side 1 absorbs pdc.
                 flow = merge(flow, (; pf = flow.pdc, pt = -flow.pgrid, qt = -flow.qgrid))
             end

@@ -158,9 +158,9 @@ function tlc_electrical_canvas(e)
     # controller reset is added; all equations recover measured Vdc on release.
     clock = Signal("dc_start_clock_s")
     lower!(canvas, TimeStep(clock), (756, 360))
-    unary_block!(canvas, "compare", (936, 324),
-        ["X" => "0.2", "OL" => block_value(si.vDC_base), "OH" => "v_dc_m",
-            "INTR" => "0", "Dim" => "1", "conv" => "0"], clock, Signal("v_dc"))
+    lower!(
+        canvas, _ConverterStartupHold(
+            clock, Signal("v_dc_m"), Signal("v_dc"), si.vDC_base), (936, 324))
     module_signal_stub!(canvas, (1224, 180), "i_dc_cmd", -1)
     append!(graph.nodes,
         ControlBlock[Sum(Signal.(["p1", "p2", "p3"]), [1, 1, 1], Signal("p_dc")),

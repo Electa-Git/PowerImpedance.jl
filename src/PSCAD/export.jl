@@ -56,7 +56,7 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
         ModuleDefinitionPlan[], GridLayout(), ProbeChannel[], used)
     context = (; netlist, settings, name, line_options = overrides, dc_labels,
         buses = Dict(bus.key => bus for bus in netlist.buses))
-    if any(e -> e.model isa PowerImpedance.TLC, netlist.elements)
+    if any(e -> e.model isa Union{PowerImpedance.TLC, PowerImpedance.MMC}, netlist.elements)
         abc = abc_to_dq_module(pscad_name("ABC_DQ"; used))
         dq = dq_to_abc_module(pscad_name("DQ_ABC"; used))
         append!(state.modules, [abc, dq])

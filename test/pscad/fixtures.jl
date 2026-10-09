@@ -300,4 +300,59 @@ function tlc_network(vdc_control)
     return (; classic, state)
 end
 
+# Electrical and Δ/CCSC gains: local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:621–644.
+# TEC gains: test/adm_MMC_test.jl:108–110; no saved PQ counterpart exists.
+# ZSCC uses the saved CCSC gains. 31_10.jl supplies no optional filter or delay.
+# Its ideal AC source and PQ control omit the saved source R and voltage droop.
+function mmc_pq_network()
+    PI = PowerImpedance
+    voltage = 380 / sqrt(3)
+    zbase = 333.0^2 / 1000.0
+    elements = (;
+        DUT = mmc(
+            elec = PI.ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07,
+                Cₐᵣₘ = 10e-3, N = 400, turnsRatio = 333 / 380,
+                Lᵣ = 0.1305zbase / (100π), Rᵣ = 0.0037zbase,
+                vACbase_LL_RMS = 333.0, Sbase = 1000.0, vDC_base = 800.0),
+            meas = PI.Measurement(),
+            sync = PI.PLLSynchronization(pi_ctrl = PI.PIControl(Kp = 0.28, Ki = 12.5664),
+                filter = PI.NoFilter()),
+            delta_control = PI.ΔdqControlGFL(
+                outer_active = PI.OuterActivePowerControl(pi_ctrl = PI.PIControl(Kp = 0.1, Ki = 31.4159)),
+                outer_reactive = PI.OuterReactiveQControl(pi_ctrl = PI.PIControl(Kp = 0.1, Ki = 31.4159)),
+                occ = PI.InnerCurrentPIControl(pi_ctrl = PI.PIControl(Kp = 0.7691, Ki = 522.7654))),
+            sigma_control = PI.ΣdqzControlTEC(
+                tec = PI.TotalEnergyControl(pi_control = PI.PIControl(Kp = 1.386, Ki = 29.70)),
+                zscc = PI.ZeroSequenceCurrentControl(PI.PIControl(Kp = 0.1048, Ki = 48.1914)),
+                ccsc = PI.CirculatingCurrentSuppressionControl(PI.PIControl(Kp = 0.1048, Ki = 48.1914))),
+            modulation = PI.UncompensatedModulation(),
+            setpoint = Setpoint(Pac = 600.0, Qac = 200.0, Vac = 380sqrt(2 / 3),
+                Vdc = 800.0, Pdc = 600.0),
+            limits = PI.Limits(P_min = -1500.0, P_max = 1500.0, Q_min = -1000.0, Q_max = 1000.0)),
+        G_AC = ac_source(pins = 3, transformation = true, setpoint = Setpoint(Vac = 380sqrt(2 /
+                                                                                            3))),
+        G_DC = dc_source(setpoint = Setpoint(Vdc = 800.0)))
+    rows = [(node = Symbol("AC" * axis), element, side, terminal)
+            for (element, side) in ((:DUT, 2), (:G_AC, 1))
+            for (terminal, axis) in enumerate(("d", "q"))]
+    append!(rows, [(node = :DC, element, side = 1, terminal = 1)
+                   for element in (:DUT, :G_DC)])
+    state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
+        voltageBase = voltage))
+    classic = Network()
+    classic.voltageBase[1] = voltage
+    for (name, element) in pairs(elements)
+        add!(classic, name, element)
+    end
+    for row in rows
+        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
+    end
+    for (element, count) in ((:G_AC, 2), (:G_DC, 1)), terminal in 1:count
+
+        connect!(classic, (element, Symbol("2.$terminal")), :gnd)
+    end
+    connect!(classic)
+    return (; classic, state)
+end
+
 end

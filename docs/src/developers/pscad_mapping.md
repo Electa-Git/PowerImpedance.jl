@@ -159,7 +159,8 @@ acceptance of this exported fixture remains a separate station run.
 | R9 | AVR field-voltage base | Closed. Unity conversion follows the open-circuit air-gap normalization and is confirmed by settled Ef=Ef0 and the AVR equation. |
 | R10 | TLC dq orientation | Closed. Native primitive experiment gives d = cos(0.37), q = -sin(0.37), matching Julia. |
 | R11 | TLC reactive-power sign | Closed. Station round 3 confirms solved injected Q at the AC terminal with outward converter current; internal filtered Q uses the same sign. |
-| R6, R12, R14, R15, R17, R18 | | Open; resolved at their milestones. |
+| R12 | MMC Σ/Δ arm-voltage assembly sign | Closed. M5 station round 1 confirms upper = Σ − Δ and lower = Σ + Δ; all six indices deviate by at most 4.3570402e-9 over 0.1 s. |
+| R6, R14, R15, R17, R18 | | Open; resolved at their milestones. |
 
 ## Acceptance record
 
@@ -1235,3 +1236,447 @@ preserving full parameters and ordered current pins. XML verification reports
 every accepted move explicitly; unlisted moves, other net changes and meter
 reversals fail. All TLC canvas graphs still undergo net-degree and named-stub
 checks. Full M1–M4 native acceptance of the production exports remains pending.
+
+## M5a — grid-following MMC, PQ mode
+
+`emitters/mmc.jl` exports the current modular `mmc(...)` model with
+`ΔdqControlGFL`, `ΣdqzControlTEC` containing `TotalEnergyControl`,
+`ZeroSequenceCurrentControl` and `CirculatingCurrentSuppressionControl`, and
+`UncompensatedModulation`. The supported operating mode is P/Q without
+frequency or voltage support. Other Δ/Σ/modulation structures and outer-control
+variants fail with `not yet exportable`. No core model is changed.
+
+The shared M4 MEAS, PLL, PCTRL/VDCCTRL, QCTRL and OCC generators remain the
+control authority. MMC supplies its Δ control objects to those generators;
+OCC reads the owned `elec_inductance` generic, which gives
+`Lₑ = (L_arm/2 + Lr)/L_AC_base` for MMC. MEAS receives converter-side phase
+voltage/current and the measured DC current. MMC voltage/current/DC bases are
+`vAC_base`, `2*Sbase/(3*vAC_base)` and `vDC_base`; measurements follow
+`MMC/MMC.jl:185–202`. The transformer ratio belongs to the physical transformer,
+so MEAS does not multiply its already transformed phase voltage by the ratio.
+The current core MMC returns no diagnostic tuple from `state_space!`; the
+exporter evaluates its existing constituent blocks to retain their outputs
+alongside the converged state vector.
+
+The saved PQ witnesses are
+`local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx`:
+
+| Construction | Saved lines | Export mapping |
+|---|---|---|
+| Arm capacitor dynamics and voltage multiplication | 6401–7499 (`ArmVoltage_1`), especially 6635–6673, 7119–7198 | Six integrators: `dv_Ctot/dt=(N/C_SM)*m_arm*i_arm`; controlled voltage `m_arm*v_Ctot`. Currents in kA and voltages in kV require no additional factor of 1000. |
+| Averaged arm source and current direction | 7624–7741 (`ArmAvg_1`) | Positive source pole precedes the meter, with positive current charging the capacitor. `Type=6`, `Grnd=0`, `Spec=0`, `Cntrl=1`, `AC=0`, `Tc=0`. The saved orient-1 electrical pins are `(828,414)` and `(828,486)`, control `(792,450)`. The generated orient-0 pins use the already validated source geometry. |
+| Arm L/R | 11345–11442 | Each arm has `L_arm` and `R_arm` in series; the common arm definition includes the source, L, R and current meter. Electrical L/R fields are formatted SI literals, following `L="50e-3 [H]"` and `R="1.07 [ohm]"` at 11345–11359. Six instances supply separate capacitor initial values. |
+| Converter transformer | 11813–11889 | Converter-side reactor Lr/Rr are recovered separately with `mmc_si`. A transformer is emitted only when `turnsRatio != 1`, with rated converter-side voltage and network-side voltage divided by the ratio. The accepted YY realization uses `Ideal=0`, `Xl=1e-4 pu`, `Im1=1e-3 %`, zero no-load and copper losses. |
+| Σ frame and zero-sequence component | 10335–10342, 10441–10494, 10738–10743 | Sum upper/lower currents and divide by two; transform the resulting three-phase circulating current at `-2*theta_c`. Its mean over three phases, on the DC-current base, is `iS_z`. |
+| Project timing | 4–6 | 10 s duration, 10 us integration, 250 us sampling. |
+| AC-source start-up | 687–700 | `Tc=0`, 380 kV LL RMS, 50 Hz. The saved DC source also has `Tc=0` (see the M4 five-variant start-up inventory). |
+
+All generated master fields have saved witnesses in the above project or the
+M4 primitive/transform canvases. `fixtures/mmc_saved_fragments.xml` retains
+individual saved instances with source-line comments. The XML tests check field
+coverage, source/integrator modes, module parameters and ports, and complete
+canvas connectivity/topology after writing and rereading the project. There is
+no guessed component field or additional primitive.
+
+Every electrical and signal port has its own straight stub to a named label or
+ground. The transformer side retains its electrical reference through the six
+arms and the source-referenced DC network. Controls compute DC current from the
+existing arm meters; adding another ideal DC meter in series with Main's
+terminal meter would recreate the isolated-meter grounding failure. There is
+one converter-side AC meter and the ordinary outward network-side terminal
+meter; they lie on opposite sides of the transformer. `check_connectivity`
+recursively checks the complete hierarchy. Each generated module retains the
+saved canvas settings from M4.
+
+### Σ, Δ and modulation equations
+
+TEC uses six-arm energy `sum(v_Ctot.^2)/(6*vDC_base^2)`. Its cycle mean is the
+current harmonic model's
+`(vCΔ_d²+vCΔ_q²+vCΔ_Zd²+vCΔ_Zq²+vCΣ_d²+vCΣ_q²+2vCΣ_z²)/2`
+(`MMC/energy.jl:19–28`). The physical arm plant retains a 6ω energy ripple from
+the triplen pair. No filter is added to conceal that difference. TEC's PI output
+plus `P_ac_f`, divided by `3*v_dc_f`, sets the zero-sequence current reference.
+ZSCC subtracts its PI output from `v_dc_f/2`.
+
+CCSC transforms the circulating-current pair with the `-2θ` rotation and emits
+`vMS_d_ref = -PI(-iS_d)+2*Larm*iS_q` and
+`vMS_q_ref = -PI(-iS_q)-2*Larm*iS_d`, where Larm and currents use the DC bases.
+These are the current equations in `MMC/inner_current.jl:31–49`, with ZSCC at
+53–61. The Δ loops are the shared current-API outer P/Q and inner PI loops;
+`MMC/MMC.jl:141–153` supplies their composition.
+
+Uncompensated modulation maps Δ references back to the grid frame at
+`theta_rel` and Σ references at `-2*theta_rel`. Its grid-coordinate commands are
+`mΔ=-2*baseConv1*vMΔ_ref/v_dc_f`, `mΣ=2*vMΣ_ref/v_dc_f` and
+`mΣz=2*vMS_z_ref/v_dc_f` (`MMC/modulation.jl:43–71`). Therefore physical arm
+insertion indices are upper `(mΣ_abc+mΣz+mΔ_abc)/2` and lower
+`(mΣ_abc+mΣz-mΔ_abc)/2`. Julia's negative Δ normalization produces the specified
+physical voltage assembly `vMu=vMS-vMD`, `vMl=vMS+vMD`.
+
+For nonzero Padé delays, five scalar exact `tdelay` blocks replace the two Δ,
+two Σ and one zero-sequence delay channels. Their histories come from the
+converged realization. The existing `phase_compensated_dq` rotations are kept:
+`+ωbase*Td` for Δ, `-2*ωbase*Td` for Σ, none for zero sequence. This preserves
+the steady rotating-frame convention; exact delay and Padé frequency responses
+are different away from DC (R18). There is no claim of full frequency-response
+equivalence. R12 and the nonzero-delay construction have separate station
+experiments with prescribed inputs.
+
+Initial arm capacitor voltages reconstruct the solved harmonic coordinates at
+nominal grid angle zero: Σ is `vCΣ_z + vCΣ_d*cos(-2θ) + vCΣ_q*sin(-2θ)`, Δ is
+`vCΔ_d*cos(θ)+vCΔ_q*sin(θ)+vCΔ_Zd*cos(3θ)+vCΔ_Zq*sin(3θ)`. Upper/lower totals
+are `(Σ±Δ)*vDC_base`. Control PI/filter/delay initial values come from
+`converter_equilibrium`, not from the initialization guesses. No unwitnessed
+inductor initialization field is introduced. The approved 0.2 s measurement
+hold below replaces zero meter outputs during start-up; its full native
+handover and settling passed station round 3 for both PQ representations.
+
+### PQ fixture and parameter provenance
+
+`PSCADFixtures.mmc_pq_network()` returns classic and NetworkBuilder versions of
+one current-API MMC between AC and DC sources. Electrical data and Δ/CCSC gains
+come from the saved module instance at 621–644: 1000 MVA, 333 kV converter-side
+LL RMS, 800 kV pole-to-pole DC, 400 submodules per arm, 50 mH, 1.07 Ω and
+10 mF per submodule. Transformer ratio is `333/380`; Lr/Rr use the saved
+0.1305/0.0037 pu on `333²/1000` Ω and 50 Hz. The P/Q PI gains are
+0.1/31.4159, OCC 0.7691/522.7654, CCSC 0.1048/48.1914, PLL 0.28/12.5664.
+
+`local/GFL-MMC/PQ-Mode/31_10.jl:20–30,97–105` supplies the 600 MW / 200 MVAr
+setpoints, 380 kV source and conversion of the transformer data. Its network
+contains two converters and a cable; the fixture retains the PQ converter and
+replaces the remote DC system with the requested ideal DC source. The script
+specifies no optional measurement/PLL/OCC filtering or modulation delay;
+the fixture uses `NoFilter` and zero delay. Its legacy API is not invoked.
+
+The saved project and script differ in two further respects. The saved AC
+source has `R=0.5 ohm` (687–710), while the script uses an ideal AC source and
+comments out its 0.5-ohm grid impedance (114–116); the fixture follows the
+script. The saved voltage-droop module has `Kd=20`, `wf=100` (11992–11998),
+with the `Vacref`/`Vac` to `Qref` lag construction at 8460–8742. The script's
+PQ controller supplies neither voltage support nor those parameters; the
+fixture retains `NoVoltageSupport`. The saved voltage gain is rounded to
+0.8763 (11894–11902); the fixture uses the script's exact `333/380` ratio.
+These saved-project parameters have no one-to-one counterpart in the fixture.
+The saved DC source also includes `R=0.05 ohm` (799–813); the reduced fixture
+uses an ideal DC source. Saved arm-capacitor integrator guesses are 640 kV
+(6644, 7128–7192, 7708), replaced by the required converged-state reconstruction.
+
+Two control parameters have no one-to-one PQ reference: the full TEC gains
+1.386/29.70 are the current modular validation values from
+`test/adm_MMC_test.jl:108–110`; ZSCC uses the saved CCSC gains
+0.1048/48.1914. The saved PQ project contains no TEC or ZSCC gain pair. These
+choices exercise the requested full Σ structure and are explicit additions to
+the legacy PQ configuration tested in station round 3. The near-ideal YY
+leakage and exciting current are the already accepted exporter construction,
+not extra terms from the Julia plant. The reactor retains the full Julia Lr/Rr.
+
+The saved MMC voltage sources use `Tc=0`; this does not initialize their meter
+outputs. The approved start-up now holds solved control measurements until
+0.2 s, using the TLC's saved selector construction. `SimulationSettings.source_ramp` accepts
+zero; MMC export requires zero and rejects an unsupported ramped start. This
+setting was accepted by Amauri after station round 3 and adds no public name
+or keyword. Native checks must inspect the first samples:
+PSCAD `div` returns 1e99 at a zero denominator. No persistent clamp, protection
+reset, or physics fallback is inserted.
+
+### Probes, comparison and station checks
+
+The approved exact exported names for the fixture are:
+
+- `DUT_P_ac_f`, `DUT_Q_ac_f`, `DUT_v_dc_f`, `DUT_omega_c`, `DUT_theta_c`.
+- `DUT_v_Ctot_u_a`, `DUT_v_Ctot_u_b`, `DUT_v_Ctot_u_c` (upper arms, kV).
+- `DUT_v_Ctot_l_a`, `DUT_v_Ctot_l_b`, `DUT_v_Ctot_l_c` (lower arms, kV).
+- `DUT_iS_z` (circulating zero-sequence current, pu of `Sbase/vDC_base`).
+
+All use `<elem>_<signal>`. The standard network terminal current probes retain
+the accepted `I_DUT_1` / `I_DUT_2` names. Network-side and internal P/Q reuse
+the existing converter rows and 0.01 pu absolute-error rule on Sbase. MMCs now
+participate in the existing converter-connected DC current normalization.
+The only extra rows are six capacitor cycle means against solved pole-to-pole
+Vdc, and the signed identity `I_DUT_1 = 3*DUT_iS_z*Sbase/vDC_base`.
+
+No additional tolerance is defined. Approved M5 station acceptance reuses the
+existing `rtol_v=0.01` for capacitor means and `rtol_i=0.02` for the current
+identity, with denominator `max(abs(3*iS_z*Sbase/vDC_base),Sbase/vDC_base)`.
+Callers retain the existing tolerance keywords. `iS_z` itself is reported
+against its solved equilibrium value by the acceptance script, without an
+assertion. `omega_c` and `theta_c` remain diagnostics; `theta_c` grows at
+nominal angular speed and is not a settled
+scalar. Arm instantaneous voltages retain ripple and are not compared sample
+by sample with constant Vdc.
+
+`test/manual/pscad/acceptance.jl` includes both PQ representations with 10 s,
+10 us, 250 us and zero source ramp, matching saved timing. Converged control
+states and the longer duration address R15; P/Q, Vdc, iS_z and capacitor
+settling passed station round 3 over the final ten cycles, `[9.8,10.0] s`.
+Inspect settling again when changing the network or settings. The local fixture has a grounded
+DC source midpoint and uses `dc_reference=:none`; it adds no resistive DC
+reference (R14).
+
+`test/manual/pscad/write_m5_experiments.jl` writes the following into
+`/tmp/pscad-m5-experiments/`, with README run instructions and reference TSVs:
+`mmc_r12`, `mmc_delay`, `mmc_sigma`, `mmc_arm`, `mmc_pq_classic` and
+`mmc_pq_builder`. The PQ TSVs include solved terminal/bus values, internal pu
+references, all six initial arm voltages and the complete converged state
+vector. Namespace and output settings are preserved exactly as written by the
+exporter. Local plan, equation and XML checks establish structural/numerical
+mapping and do not establish station acceptance by themselves.
+
+### Station round 1
+
+PSCAD 5.1.0 built and ran `mmc_r12`, `mmc_delay` and `mmc_sigma` for
+0.1 s with 10 us step/sampling. The supplied CSVs in
+`/tmp/pscad-m5-results/` each contain 10001 samples. Evaluation covers the
+entire run against the original analytic predictions and reference TSVs.
+
+| Experiment/channel | Outcome | Maximum absolute deviation |
+|---|---|---|
+| R12, all six indices | PASS; R12 closed: upper = Σ − Δ, lower = Σ + Δ | 4.3570402e-9 |
+| Delay, all six indices | PASS; delayed step arrives at 0.0202 s; both frame compensations confirmed | 4.3552753e-9 |
+| Σ zero-sequence current | PASS | 2.4999999e-10 pu |
+| Σ z voltage reference | PASS | 1.1839700e-8 pu |
+| Σ d voltage reference | PASS | 7.4962259e-12 pu |
+| Σ q voltage reference | PASS | 7.7104817e-10 pu |
+
+The delay's phase-A upper/lower indices are equal at 0.02019 s and become
+0.4199999999907/0.6200000000093 at 0.0202 s. All six traces follow the
+predicted delayed fundamental and second-harmonic rotations. Fitting the Σ
+voltage-reference polynomials at 0, 0.05 and 0.1 s gives maximum initial-value deviation
+1.4496993e-10 pu, maximum slope deviation 6.8758301e-8 pu/s and z quadratic
+coefficient deviation 4.8188999e-7 pu/s². The TEC error inferred from that
+quadratic coefficient is −0.0201000020201 versus the predicted −0.0201
+(deviation 2.0201e-9). These residuals do not define new acceptance tolerances.
+The original predictions are retained.
+
+The largest Σ residual is explained by the exporter's decimal gain rendering:
+`1/6` is written as `0.166666667`, `1/3` as `0.333333333`, and `invIzero` as
+`0.266666667`. Re-evaluating the z polynomial with the serialized values gives
+initial value 0.5009731939049684, slope 0.4683691994383955 and quadratic
+coefficient 4.794803824889667. This reproduces the native trace to
+9.44e-15 pu over the entire run. The gain formatting and original reference
+TSVs are unchanged.
+
+`mmc_arm` failed station compilation because the inductor's `L="armL"`
+and resistor's `R="armR"` did not resolve to finite numbers. Those fields
+now contain literal SI values; unused armL/armR module parameters are removed.
+`check_connectivity(plan)` rejects nonnumeric or non-finite parameters of
+electrical components inside every generated module, except `Name` identifier
+metadata. Control-module parameters remain supported. There is no admitted
+symbolic electrical construction without saved station evidence. The saved
+literal witnesses are the arm inductor/resistor at
+`local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:11345–11359`.
+
+At the end of round 1 the regenerated `mmc_arm` and both full PQ cases awaited
+station build and run. Round 1 closes the assembly-sign risk R12 and verifies
+the isolated delay/Σ modules; it does not establish full electrical-stage,
+start-up or R15 settling acceptance.
+
+### Station round 2: arm polarity passed, PQ start-up blocked
+
+PSCAD 5.1.0 built and ran `mmc_arm`. The station reports `Arm_i_arm=+0.01 kA`
+from the second sample and `Arm_v_Ctot=800 kV` at zero, `800.001 kV` at
+10 us and `809.999 kV` at 0.05 s, with a 20 kV rise over 0.1 s. The
+200 kV/s slope and positive-current charging direction pass the isolated arm
+check. The two reported nonzero-time values are 0.001 kV below `800+200*t`;
+no complete arm output was supplied to calculate a whole-run maximum error.
+
+Both full PQ cases built without errors or ITRIANG, but failed start-up. The
+classic `pi.inf` and three `.out` files in
+`/tmp/pscad-m5-results/pq_round2/` contain 40001 samples from 0 to 10 s.
+Twenty-one of 25 channels are non-finite at every sample from 250 us onward;
+only the three AC bus voltages and negative DC-pole voltage remain finite.
+The builder failure is reported by the station; its raw outputs were not
+supplied for a separate numerical audit.
+
+| Classic channel | Initial native value | Solved reference | Initial deviation |
+|---|---|---|---|
+| `DUT_P_ac_f` | 0 | 0.6 pu | −0.6 pu |
+| `DUT_Q_ac_f` | 0 | 0.2 pu | −0.2 pu |
+| `DUT_v_dc_f` | 0 | 1 pu | −1 pu |
+| `DUT_iS_z` | 0 | 0.20127207609887254 pu | −0.20127207609887254 pu |
+
+The initial `omega_c=1` and `theta_c=0` agree with the reference. All six
+initial capacitor voltages agree with the original TSV to within
+3.5632854e-7 kV, consistent with their serialized initial values. The physical
+DC terminals are already at ±400 kV while the modulation's measured denominator
+is zero. Full Σ control also divides by zero in
+`iS_z_ref=(energy_pi+P_ac_f)/(3*v_dc_f)`. Guarding only the modulation would
+leave this second division unprotected. R15 settling cannot be assessed from
+these failed runs.
+
+The five saved GFL-MMC projects were traced through the actual module pins,
+wires and named labels. They all use measured DC voltage, rather than a
+nominal-voltage replacement. The detailed PQ witness is
+`local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx`:
+
+| Saved construction | Lines | Finding |
+|---|---|---|
+| Measured DC voltage | 10956–10960, 10052–10056, 9338–9347 | `V_dc_2` from the voltmeter enters `PerUnit_2`. |
+| Per-unit DC voltage | 4770–4780, 5055–5063 | Measured voltage is divided by imported `Vbase_dc`. |
+| Δ/CCSC normalization | 9783–9787, 9865–9869, 2954–2969, 3276–3291 | Both `PICtrl_1` inputs use `V_dc_pu_2`; their d/q commands are divided by half this measured value. |
+| PI reset/enable | 3172–3182, 3356–3371, 3413–3428, 621–644 | `Reset=1`, `Yo=YRst=0`; the time comparator uses `t_rst`, which is zero in Main. There is no positive enable delay. |
+| Σ zero-sequence insertion | 10738–10745 | Fixed `Value=1`; the saved model does not contain the current full TEC/ZSCC structure. |
+
+No applicable nominal-Vdc selector, initialized DC measurement output or
+positive delayed enable was found in these MMC canvases. The saved zero-state
+PI reset and fixed Σ insertion differ materially from the required converged
+control initialization and full TEC/ZSCC equations. Saved XML alone does not
+explain the legacy model's first-step execution order or establish a safe
+construction for this exporter. The TLC's 0.2 s nominal-voltage selector is
+separate evidence (`local/TLC/Simple_2L_VSC_RL.pscx:5885–5888,5912–5929`);
+transferring it to MMC would select new start-up behavior.
+
+All five saved workspaces also contain perturbation-task start overrides.
+The PQ witness is
+`local/GFL-MMC/PQ-Mode/GFL_MMC_Validation_workSpace.pswx:26–27,42–43`:
+`start_method=1`, `startup_inputfile=Snapshot.snp`, with both override flags
+true. The project itself has `StartType=0` at line 9. Its
+`freq_sweep_ACDC_full.py:38–46` explicitly prepares a cold-start snapshot via
+`frequency_sweep`; the imported helper is absent from the supplied local
+bundle. These files do not establish which first-step initialization sequence
+was used for the validated perturbation runs. No workspace enum meaning or
+snapshot start is inferred for the exporter's fresh-run contract.
+
+Every one of the fixture's ten measurement filters is `NoFilter`, with zero
+states. The emitted unit gain matches the current Julia pass-through equation
+(`converter/common/loops/measurement.jl:95–104`), so its output is zero when
+the raw meter input is zero; there is no solved filter-output state to set.
+`iS_z` is also a stateless sum of arm-meter outputs, not a separately initialized
+filter. A static audit of Butterworth orders 1–6 for all ten measurement
+quantities confirms that the existing emitter seeds dynamic outputs from their
+solved realization: 60 initial-output comparisons with the owned filter equation
+have maximum deviation zero. Those filters are not used by the PQ fixture.
+Adding them to fix start-up would change its Julia model.
+
+At the end of round 2 implementation stopped under the required start-up
+decision rule. Options
+for review are a finite hold of solved measurement outputs, including Vdc,
+P/Q, dq measurements and `iS_z`, followed by the existing measured equations,
+or a station experiment establishing native meter/inductor initialization and
+control execution order before choosing initialization-only seeding. Any hold
+duration needs an explicit decision; the TLC's 0.2 s is precedent, not an MMC
+selection. A permanent nominal-Vdc denominator would change the current
+`UncompensatedModulation` and DC response and is not an equivalent correction.
+No start-up policy, filter, component field or numerical tolerance was selected
+in that round. The PQ projects and reference TSVs were retained without regeneration.
+
+Audit artifacts in `/tmp/pscad-m5-results/` are
+`round2_pq_channel_audit.tsv`, `round2_saved_startup_audit.tsv`,
+`round2_measurement_initialization.tsv` and
+`round2_butterworth_initialization.tsv`. The experiment README records the
+passed arm check, failed unheld PQ runs and revised projects awaiting station
+acceptance at the end of round 2. Station round 3 results are recorded below.
+No Julia core defect was found.
+
+### Approved MMC measurement hold
+
+Amauri selected a 0.2 s hold of solved control measurements after station
+round 2. The exporter uses the existing saved TLC construction,
+`local/TLC/Simple_2L_VSC_RL.pscx:5912–5929`: `time-sig` feeds a real-valued
+`compare` with `X=0.2`, `OL=solved value`, `OH=measured signal`, `INTR=0`,
+`Dim=1`, `conv=0`. `_CONVERTER_STARTUP_RELEASE` is the single private release
+constant shared by TLC and MMC. The TLC's canvas coordinates, fields and
+nominal-voltage handover are unchanged. All connections retain separate
+straight stubs to named labels, including the selector's named `OH` dependency.
+
+| Consumed measurement | Hold placement | Solved value and reason |
+|---|---|---|
+| `vG_d`, `vG_q`, `v_dc`, `i_d`, `i_q`, `i_dc`, relative `θ` | After SI/pu conversion and dq transformation, before each MEAS filter | `converter_equilibrium.outputs.sig_in`; these are the filter inputs at the solved state. The resulting `v_dc_f` supplies every Σ and modulation division. |
+| `P_ac`, `Q_ac`, `P_dc` | Before their MEAS filters | Products of the solved filtered voltage/current outputs, as in the owned measurement equations. This covers the P/Q outer loops and TEC power input. |
+| PLL voltage input and OCC voltage feedforward | Their upstream MEAS inputs are held; their existing local filters remain active | MEAS `vG_q_f` and `vG_d_f` stay at equilibrium, so the already initialized PLL/OCC filter states also remain consistent. |
+| `iS_d`, `iS_q` | After the circulating-current transform at `-2*theta_c` and pu conversion | Solved `iΣ_d/iΣ_q` rotated by `-2*Δθ_pll`, exactly as `MMC/inner_current.jl:31–49`; holding a fixed phase-current array would create rotating dq errors. |
+| `iS_z` | After the arm-current mean and pu conversion | Solved `iΣ_z`; supplies ZSCC and the existing diagnostic probe. |
+| TEC total energy | After six-arm squared-voltage aggregation | Solved harmonic `wΣz` from `MMC/energy.jl:19–25`. Individual capacitor initial values contain harmonic ripple; their energy at one phase is not the solved cycle-mean energy. |
+
+There are ten selectors in MEAS and four in Σ, with one clock in each canvas.
+Every exported control measurement is protected even when its filter is
+`NoFilter`. A hold before a dynamic filter is necessary: holding only its
+output would hide the filter states drifting under zero or unsettled meter
+inputs, then expose that drift at release. The existing solved output and
+derivative initial values are retained. Holding the solved input leaves those
+states at equilibrium until 0.2 s. At release, dynamic filter states are
+continuous and respond to measured inputs; `NoFilter` outputs immediately
+follow the measured values. PLL and OCC receive the same constant solved MEAS
+outputs during the hold, so their internal filter initialization remains valid.
+
+Controller integrators keep their solved initial values, without resets or
+freezing their derivatives. The PLL's angle continues to advance and its
+frequency remains a controller output, not a zero-initialized meter signal.
+Physical arm currents and capacitor integrators remain active throughout:
+`m_arm*i_arm` still uses the actual electrical current, and controlled arm
+voltages still use the actual capacitor state. The hold affects the energy
+measurement seen by TEC, not the arm plant or capacitor probes. No clamp,
+additional filter, reset, voltage threshold or other guard is introduced.
+
+For `t<0.2 s`, the PQ diagnostic measurements report solved P/Q/Vdc/iS_z;
+these held values do not establish physical terminal-power or current-identity
+agreement. The saved selector releases to its measured branch at 0.2 s, with
+equality following the saved `INTR=0` construction. Every held branch becomes
+a direct measurement dependency after release. Existing measurement filters,
+controller equations, arm dynamics and modulation divisions are unchanged,
+so the post-release steady state and transfer functions are unchanged by the
+selector. The already documented harmonic-model versus six-arm energy ripple
+remains; this start-up policy does not add a steady-state physics approximation.
+
+The regenerated classic/builder PQ projects retain 10 s duration, 10 us step,
+250 us sampling, `Tc=0`, their own namespaces and `pi.out` settings. Inspect
+the first samples, the samples around 0.2 s and the release transient for finite
+signals. Use the final ten 50 Hz cycles, `[9.8,10.0] s`, for comparison after
+checking R15 settling. No sample in the hold is a steady-state validation sample.
+The README distinguishes the passed earlier isolated experiments and failed
+unheld PQ runs from the successful station round 3 of these revised projects.
+
+Tests cover zero meter inputs through MEAS/PLL/P/Q/OCC/Σ/modulation, all ten
+measurement quantities with `NoFilter` and Butterworth orders 1–6, filter-state
+consistency and continuity at release, changed measurements after release,
+and a later zero voltage passing through without a clamp. XML round trips
+compare every new selector's fields/orientation with the cited saved TLC
+fragment and check the complete canvases' connectivity and topology. The
+isolated Σ experiment's held references match its prescribed inputs; its
+original TEC-error, initial-value and slope predictions are retained.
+
+### Station round 3 and approved MMC comparison rows
+
+Station-reported PSCAD 5.1.0 results for `mmc_pq_classic` and `mmc_pq_builder`
+are identical. Both ran for 10 s with 10 us integration, 250 us sampling,
+`source_ramp=0` and the 0.2 s solved-measurement hold. The handover was clean,
+with no ITRIANG. The final ten 50 Hz cycles, `[9.8,10.0] s`, settled and passed
+the approved comparisons:
+
+| Measurement | Settled result | Reference / reported deviation |
+|---|---|---|
+| `DUT_P_ac_f` | 0.5999999 pu | 0.6 pu; absolute difference 1e-7 pu |
+| `DUT_Q_ac_f` | 0.2000000 pu | 0.2 pu |
+| `DUT_v_dc_f` | 1.0 pu | 1.0 pu |
+| `DUT_omega_c` | 1.000000001 pu | 1.0 pu; diagnostic |
+| Network-side converter AC-terminal power | 600.0 + j199.95 MVA | 600 + j200 MVA; P/Q errors 2.6e-9 / 5e-5 pu on 1000 MVA |
+| Six arm capacitor cycle means | 799.46–799.54 kV | Solved pole-to-pole Vdc 800 kV; approximately −0.06 % |
+| Arm capacitor ripple | 83 kV peak to peak | Reported ripple; no sample-by-sample Vdc assertion |
+| `DUT_iS_z` | 0.200977 pu | Solved 0.201272 pu; −0.15 %, diagnostic only |
+| `I_DUT_1` | 0.753663 kA | `3*DUT_iS_z*1.25 kA`, agreeing to 1e-6 kA |
+| DC terminal current against power flow | 0.753663 kA | 603.41 MW / 800 kV; −0.08 % |
+
+Amauri approved `DUT_v_Ctot_{u,l}_{a,b,c}` and `DUT_iS_z`, capacitor cycle
+means versus solved pole-to-pole Vdc with `rtol_v`, and the signed DC-current
+identity with `rtol_i`. `compare_operating_point` emits these rows for the
+corresponding probes of every exported MMC:
+
+| `quantity` | Row `name` | `pscad` / `powerflow` columns | Error and tolerance |
+|---|---|---|---|
+| `:converter_arm_voltage` | Each `<elem>_v_Ctot_{u,l}_{a,b,c}` | Settled capacitor cycle mean / solved DC bus pole-to-pole voltage, both kV | `abs(mean-Vdc)/abs(Vdc) <= rtol_v` |
+| `:converter_dc_current_identity` | `<elem>_iS_z` | Signed DC side-1 terminal current mean / `3*mean(iS_z)*Sbase/vDC_base`, both kA | `abs(diff)/max(abs(reference),Sbase/vDC_base) <= rtol_i` |
+
+The identity's `powerflow` column retains the table's existing field name but
+contains its reference calculated from measured `iS_z`, rather than a solved
+power-flow current. The ordinary DC-current row separately compares the
+terminal current with power flow. `Sbase` in MVA divided by `vDC_base` in kV
+gives kA directly; no factor 1000 is applied. The capacitor reference uses the
+solved DC bus voltage, which can differ from the converter's rated DC base.
+The existing `rtol_v=0.01` and `rtol_i=0.02` defaults are retained. No separate
+comparison of `iS_z` with its equilibrium value is asserted.
+
+Synthetic tests cover both network representations, capacitor ripple and
+exclusion of start-up samples, changed solved Vdc, pass/fail cases for every
+arm, signed and zero current, the low-load current-base denominator, alternate
+MMC bases, incorrect units and missing probes. These checks exercise comparison
+arithmetic independently of the station-reported round 3 results.

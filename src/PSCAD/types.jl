@@ -3,7 +3,8 @@ $(TYPEDEF)
 
 Specify simulation duration, integration and output sampling, and optional
 snapshot saving for one fresh PSCAD run. Construct with keyword arguments;
-all physical values must be positive and finite, `sample_step >= time_step`,
+Duration, steps and frequency must be positive and finite; the source ramp may
+be zero for the saved MMC start-up construction. Require `sample_step >= time_step`,
 and a snapshot must satisfy `0 < snapshot_time <= simulation_time`.
 
 $(TYPEDFIELDS)
@@ -21,22 +22,26 @@ struct SimulationSettings
     output_stem::String
     "Nominal network frequency \\[Hz\\]."
     frequency::Float64
-    "Source ramp duration \\[s\\]."
+    "Nonnegative source ramp duration \\[s\\]; zero starts at the specified voltage."
     source_ramp::Float64
 
     function SimulationSettings(; simulation_time = 2.0, time_step = 10e-6,
             sample_step = 100e-6, snapshot_time = nothing, output_stem = "pi",
             frequency = 50.0, source_ramp = 0.05)
-        values = (simulation_time, time_step, sample_step, frequency, source_ramp)
+        values = (simulation_time, time_step, sample_step, frequency)
         for (name, value) in zip(
             (:simulation_time, :time_step, :sample_step,
-                :frequency, :source_ramp), values)
+                :frequency), values)
             value isa Real && !(value isa Bool) && isfinite(value) && value > 0 ||
                 throw(ArgumentError("$name must be positive and finite"))
         end
-        duration, step, sample, freq, ramp = Float64.(values)
+        source_ramp isa Real && !(source_ramp isa Bool) && isfinite(source_ramp) &&
+        source_ramp >= 0 ||
+            throw(ArgumentError("source_ramp must be nonnegative and finite"))
+        duration, step, sample, freq = Float64.(values)
+        ramp = Float64(source_ramp)
         all(isfinite, (duration, step, sample, freq, ramp)) &&
-        all(>(0), (duration, step, sample, freq, ramp)) ||
+        all(>(0), (duration, step, sample, freq)) ||
             throw(ArgumentError("simulation settings must be representable as positive finite Float64 values"))
         sample >= step || throw(ArgumentError("sample_step must be at least time_step"))
         snapshot = if snapshot_time === nothing
