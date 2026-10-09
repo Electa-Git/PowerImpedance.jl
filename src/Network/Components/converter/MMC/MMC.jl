@@ -278,25 +278,26 @@ function mmc(;
 end
 
 ##################### SI Scaling ######################################
-function SI_scale(elem::Element{<:MMC})
-    elec = elem.element_model.elec
-
-    
-
-    scale = ones(3,3)
-
+function _mmc_si_scale!(Y, elec::ElectricalMMC)
     iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
     iDCbase = elec.Sbase / elec.vDC_base
 
-    # row scaling = output current bases
-    scale[1, :]   .*= iDCbase
-    scale[2:3, :] .*= iACbase
+    Y[1:1, 1:1] .*= iDCbase
+    Y[1:1, 1:1] ./= elec.vDC_base
+    Y[1:1, 2:3] .*= iDCbase
+    Y[1:1, 2:3] ./= elec.vAC_base
+    Y[2:3, 1:1] .*= iACbase * elec.turnsRatio
+    Y[2:3, 1:1] ./= elec.vDC_base
 
-    # column scaling = input voltage bases
-    scale[:, 1]   ./= elec.vDC_base
-    scale[:, 2:3] ./= (elec.vAC_base / elec.turnsRatio)
+    # Equivalent AC-current/AC-voltage scaling retains the previous rounding
+    # of the AC-AC block. The physical cross terms use the winding current base.
+    Y[2:3, 2:3] .*= iACbase
+    Y[2:3, 2:3] ./= elec.vAC_base / elec.turnsRatio
+    return Y
+end
 
-    return scale
+function SI_scale(elem::Element{<:MMC})
+    return _mmc_si_scale!(ones(3, 3), elem.element_model.elec)
 end
 
 

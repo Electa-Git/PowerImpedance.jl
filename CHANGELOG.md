@@ -17,6 +17,8 @@
 
 ### Fixed
 
+- Correct terminal scaling in both network paths, changing cross-admittances
+  of modular MMCs with a converter transformer.
 - Preserve TLC electrical current seeds and accept zero-voltage initialization.
 - Classify untransformed six-pin elements as three-phase, so abc sources,
   impedances and lines enter the power flow as AC components.

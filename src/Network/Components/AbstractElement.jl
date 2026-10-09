@@ -262,22 +262,7 @@ function eval_y(elem::Element{<:AbstractStateSpace}, s::Complex; SI_units::Bool=
     end
 
     if isa(model, MMC)
-        elec = model.elec
-
-        
-        
-
-        iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
-        iDCbase = elec.Sbase / elec.vDC_base
-
-        # row scaling = output current bases
-        Y[1, :]   .*= iDCbase
-        Y[2:3, :] .*= iACbase
-
-        # column scaling = input voltage bases
-        Y[:, 1]   ./= elec.vDC_base
-        Y[:, 2:3] ./= (elec.vAC_base / elec.turnsRatio)
-
+        _mmc_si_scale!(Y, model.elec)
     end
 
     return Y
