@@ -20,6 +20,14 @@ end
 
 function converter_equilibrium(e)
     m = e.model
+    reactive = m isa PowerImpedance.MMC ? m.delta_control.outer_reactive : m.outerReactive
+    reactive isa PowerImpedance.OuterReactiveVacControl &&
+        !(reactive.filter isa PowerImpedance.NoFilter) && not_exportable(e, reactive)
+    active = m isa PowerImpedance.MMC ?
+        (m.delta_control isa PowerImpedance.ΔdqControlGFL ? m.delta_control.outer_active : nothing) :
+        m.outerActive
+    active isa PowerImpedance.OuterActiveVdcControl &&
+        !(active.filter isa PowerImpedance.NoFilter) && not_exportable(e, active)
     inputs, setpoint_pu = PowerImpedance.pftoinputs(m, e.setpoint)
     seed = PowerImpedance.orderedinitialvalues(m; inputs, setpoint_pu)
     p = (; inputs = collect(values(inputs)), m, setpoint_pu)
@@ -256,6 +264,7 @@ function converter_active(name, e, equilibrium, block::PowerImpedance.OuterActiv
         name, parameters, graph, [("P_ac_f", 1), ("omega_c", 1)], [("i_d_ref", 1)])
 end
 function converter_active(name, e, equilibrium, block::PowerImpedance.OuterActiveVdcControl)
+    block.filter isa PowerImpedance.NoFilter || not_exportable(e, block)
     parameters = ModuleParameterPlan[]
     converter_parameter!(parameters, "reference", equilibrium.setpoint_pu.v_dc)
     graph = BlockGraph(ControlBlock[
@@ -316,6 +325,7 @@ function converter_reactive(name, e, equilibrium, block::PowerImpedance.OuterRea
 end
 
 function converter_reactive(name, e, equilibrium, block::PowerImpedance.OuterReactiveVacControl)
+    block.filter isa PowerImpedance.NoFilter || not_exportable(e, block)
     parameters = ModuleParameterPlan[]
     converter_parameter!(parameters, "vac_reference",
         equilibrium.setpoint_pu.v_ac * PowerImpedance.voltage_filter_ratio(e.model))

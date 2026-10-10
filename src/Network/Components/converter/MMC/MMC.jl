@@ -45,7 +45,7 @@ $(TYPEDFIELDS)
 end
 
 statenames(c::MMC) = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
-initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
+initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control; setpoint_pu)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
 inputnames(::MMC)                           = (:v_dc, :vG_d, :vG_q)
 outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q) 
 
@@ -57,7 +57,7 @@ outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q)
 end
 statenames(c::ΔdqControlGFL) = (statenames(c.outer_active)..., statenames(c.outer_reactive)..., statenames(c.occ)...)
 initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_active; setpoint_pu)...,
-                                                                initialvalues(c.outer_reactive; setpoint_pu)...,
+                                                                initialvalues(c.outer_reactive; setpoint_pu, conv)...,
                                                                 initialvalues(c.occ; inputs, conv)...) 
 
 @with_kw struct ΔdqControlGFM{R<:AbstractOuterReactiveControl, V<:AbstractVirtualImpedance, I<:AbstractInnerCurrentControl, } <: AbstractΔdqControl 
@@ -66,7 +66,7 @@ initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.vi)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; setpoint_pu)...,
+initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; setpoint_pu, conv)...,
                                                                 initialvalues(c.vi; inputs, conv)...,
                                                                 initialvalues(c.occ; inputs, conv)...) 
 
@@ -76,7 +76,7 @@ initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c
     ccsc::I2 = NoCirculatingCurrentSuppressionControl() # Circulating Current Suppression Control
 end
 statenames(c::ΣdqzControlTEC) = (statenames(c.tec)..., statenames(c.zscc)..., statenames(c.ccsc)...)
-initialvalues(c::ΣdqzControlTEC) = (; initialvalues(c.tec)..., initialvalues(c.zscc)..., initialvalues(c.ccsc)...) 
+initialvalues(c::ΣdqzControlTEC; setpoint_pu=SetpointPU()) = (; initialvalues(c.tec; setpoint_pu)..., initialvalues(c.zscc)..., initialvalues(c.ccsc)...)
 
 @with_kw struct ΣdqzControlLEC{E1<:AbstractEnergyControl, E2<:AbstractEnergyControl, I<:AbstractInnerCurrentControl} <: AbstractΣdqzControl
     wsigma::E1      # Sum Energy Control
@@ -84,7 +84,7 @@ initialvalues(c::ΣdqzControlTEC) = (; initialvalues(c.tec)..., initialvalues(c.
     ccc::I          # Circulating Current Control
 end
 statenames(c::ΣdqzControlLEC) = (statenames(c.wsigma)..., statenames(c.wdelta)..., statenames(c.ccc)...)
-initialvalues(c::ΣdqzControlLEC) = (; initialvalues(c.wsigma)..., initialvalues(c.wdelta)..., initialvalues(c.ccc)...) 
+initialvalues(c::ΣdqzControlLEC; setpoint_pu=SetpointPU()) = (; initialvalues(c.wsigma)..., initialvalues(c.wdelta)..., initialvalues(c.ccc)...)
 
 
 ################## State-space equations #####################

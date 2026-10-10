@@ -8,19 +8,51 @@ function state_space!(F, x, meas, b::NoTotalEnergyControl, conv::AbstractMMC)
     return (iΣ_z_ref = 0,)
 end
 
-@with_kw struct TotalEnergyControl <: AbstractEnergyControl
+"""
+$(TYPEDEF)
+
+Regulate total arm energy and provide the zero-sequence current reference
+``i_{Σz}^{ref} = (K_p(W^{ref}-W)+ξ_W+P_f)/(3V_{dc,f})``.
+The default `ref=1` is in pu. With `power_filter=NoFilter()`, feedforward uses
+the existing filtered AC-power measurement without adding states.
+A nontrivial `power_filter` independently filters power calculated from the
+measured AC voltages and currents, rather than cascading the power measurement
+filter.
+
+$(TYPEDFIELDS)
+"""
+struct TotalEnergyControl{F<:AbstractMeasurementFilter} <: AbstractEnergyControl
+    "Energy PI gains in the converter per-unit system."
     pi_control::PIControl
-    ref::Float64 = 1
+    "Total arm-energy reference \\[pu\\]."
+    ref::Float64
+    "Independent active-power feedforward filter; cutoff in \\[rad/s\\]."
+    power_filter::F
+    # Legacy feedforward is independent even when its filter has no states.
+    _independent_power::Bool
 end
-statenames(::TotalEnergyControl) = (:ξ_Wtot,)
+
+function TotalEnergyControl(; pi_control::PIControl, ref::Real = 1,
+        power_filter::AbstractMeasurementFilter = NoFilter())
+    filter = measurement_filter_ss(power_filter)
+    return TotalEnergyControl{typeof(filter)}(pi_control, Float64(ref), filter,
+        !(filter isa NoFilter))
+end
+TotalEnergyControl(pi_control::PIControl, ref::Real) = TotalEnergyControl(; pi_control, ref)
+statenames(b::TotalEnergyControl) = (filter_statenames(:P_energy_f, b.power_filter)..., :ξ_Wtot)
+initialvalues(b::TotalEnergyControl; setpoint_pu=SetpointPU()) =
+    filter_initialvalues(b.power_filter, filter_statenames(:P_energy_f, b.power_filter), setpoint_pu.p_ac)
 
 function state_space!(F, x, meas, b::TotalEnergyControl, conv::AbstractMMC)
     (; ξ_Wtot, vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x
     (; v_dc_f, P_ac_f) = meas
+    power = b._independent_power ? meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f : P_ac_f
+    P_ac_f, idx = filter_step!(F, 1, x, b.power_filter,
+        filter_statenames(:P_energy_f, b.power_filter), power)
     # wΣz = (vCΔ_d^2 + vCΔ_q^2 + vCΔ_Zd^2 + vCΔ_Zq^2 + vCΣ_d^2 + vCΣ_q^2 + 2*vCΣ_z^2)/(2)
     wΣz = (vCΔ_d^2 + vCΔ_q^2 + vCΔ_Zd^2 + vCΔ_Zq^2 + vCΣ_d^2 + vCΣ_q^2 + 2*vCΣ_z^2)/2;
     
-    F[1] = b.pi_control.Ki * (b.ref - wΣz)
+    F[idx] = b.pi_control.Ki * (b.ref - wΣz)
     #iΣ_z_ref = (Kp_wΣ * (wΣz_ref - wΣz) + Ki_wΣ * xwΣz + Pac_f) / 3 / Vdc,
     return ( iΣ_z_ref = ( (b.pi_control.Kp * (b.ref - wΣz) + ξ_Wtot + P_ac_f) / 3 / v_dc_f ),)
 end

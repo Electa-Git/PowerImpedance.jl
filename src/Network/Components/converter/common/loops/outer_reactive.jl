@@ -137,7 +137,7 @@ function statenames(block::OuterReactiveQControl)
     return (statenames(block.support)..., :ξ_Q_ac)
 end
 
-function initialvalues(block::OuterReactiveQControl)
+function initialvalues(block::OuterReactiveQControl; setpoint_pu=SetpointPU(), conv=nothing)
     return (; initialvalues(block.support)...)
 end
 
@@ -160,6 +160,8 @@ end
 
 """
 AC-voltage outer-loop controller that produces a q-axis current reference.
+The measured voltage magnitude is passed through `filter` before the PI error
+is formed. `NoFilter()` retains the zero-state magnitude measurement.
 
 $(TYPEDEF)
 
@@ -167,16 +169,32 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-@with_kw struct OuterReactiveVacControl <: AbstractOuterReactiveControl
-    pi_ctrl::PIControl = PIControl()
+struct OuterReactiveVacControl{F<:AbstractMeasurementFilter} <: AbstractOuterReactiveControl
+    "Voltage PI gains in the converter per-unit system."
+    pi_ctrl::PIControl
+    "Measured voltage-magnitude filter; cutoff in \\[rad/s\\]."
+    filter::F
 end
+function OuterReactiveVacControl(; pi_ctrl::PIControl = PIControl(),
+        filter::AbstractMeasurementFilter = NoFilter())
+    realized = measurement_filter_ss(filter)
+    return OuterReactiveVacControl{typeof(realized)}(pi_ctrl, realized)
+end
+OuterReactiveVacControl(pi_ctrl::PIControl) = OuterReactiveVacControl(; pi_ctrl)
 
 """
 Return AC-voltage controller state names.
 
 $(SIGNATURES)
 """
-statenames(::OuterReactiveVacControl) = (:ξ_v_ac,)
+statenames(block::OuterReactiveVacControl) =
+    (filter_statenames(:vac_mag_f, block.filter)..., :ξ_v_ac)
+
+function initialvalues(block::OuterReactiveVacControl; setpoint_pu=SetpointPU(), conv=nothing)
+    block.filter isa NoFilter && return (;)
+    return filter_initialvalues(block.filter, filter_statenames(:vac_mag_f, block.filter),
+        setpoint_pu.v_ac * voltage_filter_ratio(conv))
+end
 
 """
 Evaluate AC-voltage PI control.
@@ -186,9 +204,11 @@ $(SIGNATURES)
 function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterReactiveVacControl, conv::AbstractConverter)
     (; meas) = inputs
     v_ac = sqrt(meas.vG_d_f^2 + meas.vG_q_f^2)
+    v_ac, idx = filter_step!(F, 1, x, block.filter,
+        filter_statenames(:vac_mag_f, block.filter), v_ac)
     v_ac_ref = setpoint_pu.v_ac * voltage_filter_ratio(conv)
 
-    F[1] = block.pi_ctrl.Ki * (v_ac_ref - v_ac)
+    F[idx] = block.pi_ctrl.Ki * (v_ac_ref - v_ac)
     controller_output = block.pi_ctrl.Kp * (v_ac_ref - v_ac) + x.ξ_v_ac
     return (; q_ctrl_ref = controller_output)
 end

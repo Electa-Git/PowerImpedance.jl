@@ -1719,7 +1719,8 @@ equilibrium paths added only the DC-voltage constraint (legacy
 `src/Network/Components/converter/MMC_legacy.jl:1742–1751`). During equilibrium
 recovery, MMC and TLC now dispatch through both their active and reactive
 outer controls. `OuterReactiveVacControl` replaces the `ξ_v_ac` residual with
-`setpoint_pu.q_ac - y.meas.Q_ac_f`. The reference is `-Setpoint.Qac/Sbase`,
+`setpoint_pu.q_ac - y.meas.Q_ac_f`. After the stored-setpoint sign correction,
+the live modular reference is `Setpoint.Qac/Sbase`,
 matching the existing Q controller and the measurement convention
 `Q_ac = vG_d_f*i_q_f - vG_q_f*i_d_f`. Reusing the measurement result preserves
 its frame, transformer scaling and filtering conventions. The normal dynamic
@@ -1739,18 +1740,21 @@ point-consistency checks pass in the focused 82-test suite. Converter
 validation passes 5,938 assertions, and Aqua passes all 11 checks. The final
 Julia 1.10.11 `Pkg.test()` run passes all 112,292 suite assertions.
 
-Four deferred issues remain outside this correction:
+Developer known gaps, updated after the legacy converter adapter correction:
 
 - The modular active-control API has `NoOuterActiveControl`,
   `OuterActivePowerControl` and `OuterActiveVdcControl`, but no DC-voltage
   droop control type (`src/Network/Components/converter/common/loops/outer_active.jl`).
   The legacy `:vdc_droop` control is not a modular API. The planned Vdc-droop
   export is deferred until the Julia model provides that control type.
-- `_legacy_mmc` in `src/Network/NetworkBuilder/gs_converters.jl:187–263` drops
-  legacy energy/zcc/ccc controls. Its default Σ block at lines 243–247 uses
-  `NoTotalEnergyControl`, `NoZeroSequenceCurrentControl` and
-  `NoCirculatingCurrentSuppressionControl`. This is a confirmed adapter
-  defect; the adapter is unchanged by the voltage-control correction.
+- The legacy energy/zcc/ccc adapter defect is corrected. The complete keyword
+  audit, supported mappings, historical comparison limits and remaining
+  proposals are recorded in [Legacy converter adapters](legacy_converter_adapters.md).
+  Static and higher-order MMC voltage support, old GFM/virtual-impedance paths
+  and TLC arm-parameter ownership remain separate design decisions. Legacy DC
+  filters are local to the DC PI. The TLC PLL retains the validated modular
+  filtered-measurement convention, an intended historical difference recorded
+  with numerical evidence in the adapter audit.
 - The unmodified converter-uncertainty example
   (`examples/P2P_HVDC_Gridspace.jl`, master seed 2028) fails at trial 94,
   derived seed `1756036741226661978`, with `MaxIters` and equilibrium infinity
@@ -1760,13 +1764,22 @@ Four deferred issues remain outside this correction:
   same recorded exclusion applies to the complete after baseline. No
   solver tolerance or iteration limit is changed. A causal connection with
   the dropped Σ controls has not been established.
-- Two pre-existing builder-to-classic TLC VAC re-solves are excluded from
-  idempotence acceptance: the archived
-  `test/converter_voltage_test.jl:183:solved.network:1` reaches the unqualified
-  `ACPPowerModel` fallback in `src/Network/power_flow.jl:160`, and `:2` reports
-  violated power-flow constraints. The fallback is also present at `5d25c7b`.
-  These are cross-formulation diagnostics, not repeated calls to the builder
-  API, which preserves its input definition. Neither solver path is changed.
+- The unqualified Classic fallback is fixed in `8af4577`. Archived
+  `test/converter_voltage_test.jl:183:solved.network:2` is an accepted
+  cross-formulation initialization limitation, not a package code defect or
+  evidence of infeasibility. Its extreme shared-bus case places about
+  −125,000 MW at the converter; the upstream default current-magnitude seed
+  is negative (about −125 pu) despite a nonnegative bound. Restoration fails
+  with constraint violation about `1.56e4`. The archived feasible point seeds
+  the unchanged strict solve successfully, with maximum violation
+  `5.066394805908203e-7` (`/tmp/package-fixes-step1/archived-repro-after.log`).
+  Current fixtures with an explicit grid reactor converge. No solver setting
+  or additional production workaround is changed.
+- Nontrivial `OuterReactiveVacControl.filter` and `OuterActiveVdcControl.filter`
+  are supported by the Julia model but fail fast as “not yet exportable” in
+  PSCAD. The generator currently implements only `NoFilter`. Nontrivial total-energy feedforward filters and
+  nonzero CCC references also require a separate Σ-generator review; see the
+  adapter audit.
 
 ## M5b: remaining grid-following MMC outer controls
 

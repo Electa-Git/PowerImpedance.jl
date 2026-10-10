@@ -17,6 +17,11 @@
 
 ### Fixed
 
+- Restore legacy MMC Σ controls and MMC/TLC reference fallback, local VAC/DC
+  and power filters, and supported droop equations, changing legacy-keyword
+  equilibria and admittances (and power-flow inputs when a previously ignored
+  reference supplies a missing setpoint); existing modular constructions retain
+  their numerical results.
 - Qualify the Classic power-flow fallback model, replacing an undefined-name
   error with the relaxed solve while preserving converged results.
 - Store solved modular MMC and TLC reactive-power setpoints in the input

@@ -156,6 +156,9 @@ end
 
 """
 DC-voltage outer-loop controller that produces a d-axis current reference.
+The measured DC voltage passes through `filter` only for this controller;
+shared measurement, modulation and energy feedforward signals are unchanged.
+`NoFilter()` retains the zero-state measurement and existing PI equations.
 
 $(TYPEDEF)
 
@@ -163,25 +166,63 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-@with_kw struct OuterActiveVdcControl <: AbstractOuterActiveControl
-    pi_ctrl::PIControl = PIControl()
+struct OuterActiveVdcControl{F<:AbstractMeasurementFilter} <: AbstractOuterActiveControl
+    "Voltage PI gains in the converter per-unit system."
+    pi_ctrl::PIControl
+    "Local measured DC-voltage filter; cutoff in \\[rad/s\\]."
+    filter::F
 end
+
+"""
+Construct a DC-voltage PI controller with an optional local measurement filter.
+
+$(SIGNATURES)
+"""
+function OuterActiveVdcControl(; pi_ctrl::PIControl = PIControl(),
+        filter::AbstractMeasurementFilter = NoFilter())
+    realized = measurement_filter_ss(filter)
+    return OuterActiveVdcControl{typeof(realized)}(pi_ctrl, realized)
+end
+OuterActiveVdcControl(pi_ctrl::PIControl) = OuterActiveVdcControl(; pi_ctrl)
 
 """
 Return DC-voltage controller state names.
 
 $(SIGNATURES)
 """
-statenames(::OuterActiveVdcControl) = (:ξ_v_dc,)
+statenames(block::OuterActiveVdcControl) =
+    (filter_statenames(:v_dc_ctrl_f, block.filter)..., :ξ_v_dc)
+
+"""
+Initialize local DC-voltage filter states at the solved reference \\[pu\\].
+
+$(SIGNATURES)
+"""
+function initialvalues(block::OuterActiveVdcControl; setpoint_pu=SetpointPU())
+    return filter_initialvalues(block.filter,
+        filter_statenames(:v_dc_ctrl_f, block.filter), setpoint_pu.v_dc)
+end
 
 """
 Evaluate DC-voltage PI control.
 
 $(SIGNATURES)
+
+# Notes
+
+```math
+\\dot{\\xi}_{vdc}=K_i(v_{dc,ref}-v_f),\\qquad
+i_{d,ref}=-[K_p(v_{dc,ref}-v_f)+\\xi_{vdc}],
+```
+
+where ``v_f`` is the locally filtered measured DC voltage and ``v_{dc,ref}``
+is the solved reference in pu.
 """
 function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActiveVdcControl, conv::AbstractConverter)
     (; meas) = inputs
-    F[1] = block.pi_ctrl.Ki * (setpoint_pu.v_dc - meas.v_dc_f)
+    v_dc, idx = filter_step!(F, 1, x, block.filter,
+        filter_statenames(:v_dc_ctrl_f, block.filter), meas.v_dc_f)
+    F[idx] = block.pi_ctrl.Ki * (setpoint_pu.v_dc - v_dc)
 
-    return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (setpoint_pu.v_dc - meas.v_dc_f) + x.ξ_v_dc), )
+    return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (setpoint_pu.v_dc - v_dc) + x.ξ_v_dc), )
 end

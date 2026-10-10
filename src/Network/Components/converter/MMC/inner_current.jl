@@ -18,9 +18,26 @@ struct ZeroSequenceCurrentControl <: AbstractInnerCurrentControl
 end
 statenames(::ZeroSequenceCurrentControl) = (:ξ_iΣ_z,)
 
+"""
+$(TYPEDEF)
+
+Suppress circulating currents in the converter's negative-double-frequency
+frame. The PI errors are `ref[1] - iΣ_d_c` and `ref[2] - iΣ_q_c`;
+the voltage references retain the arm-inductance decoupling terms.
+The default `ref=(0.0, 0.0)` suppresses both currents to zero and adds no states.
+
+$(TYPEDFIELDS)
+"""
 struct CirculatingCurrentSuppressionControl <: AbstractInnerCurrentControl
+    "Current PI gains in the converter per-unit system."
     pi_control::PIControl
+    "Converter-frame d/q circulating-current references \\[pu\\]."
+    ref::Tuple{Float64,Float64}
 end
+CirculatingCurrentSuppressionControl(pi_control::PIControl; ref = (0.0, 0.0)) =
+    CirculatingCurrentSuppressionControl(pi_control, Tuple(Float64.(ref)))
+CirculatingCurrentSuppressionControl(; pi_control::PIControl, ref = (0.0, 0.0)) =
+    CirculatingCurrentSuppressionControl(pi_control; ref)
 statenames(::CirculatingCurrentSuppressionControl) = (:ξ_iΣ_d, :ξ_iΣ_q)
 
 ### Lower level structures ###
@@ -28,7 +45,7 @@ statenames(::CirculatingCurrentSuppressionControl) = (:ξ_iΣ_d, :ξ_iΣ_q)
 function state_space!(F, x, meas, b::CirculatingCurrentSuppressionControl, conv::AbstractMMC) 
     (; ξ_iΣ_d, ξ_iΣ_q, iΣ_d, iΣ_q) = x
     Δθ_c = syncangle(conv.sync, x)
-    iΣ_d_ref, iΣ_q_ref = 0, 0 # TODO add this as inputs/parameters if needed
+    iΣ_d_ref, iΣ_q_ref = b.ref
 
     T_2θ = [cos(-2Δθ_c) -sin(-2Δθ_c); sin(-2Δθ_c) cos(-2Δθ_c)];
     iΣ_d_c, iΣ_q_c = T_2θ * [iΣ_d, iΣ_q]
