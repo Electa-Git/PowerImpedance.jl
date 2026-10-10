@@ -32,12 +32,12 @@ end
 
 function powerflow_optimizer(options::NamedTuple)
 	attributes = Dict{String, Any}(
-		"tol" => 1e2,
+		"tol" => 1e-6,
 		"dual_inf_tol" => 1e-1,
-		"constr_viol_tol" => 1e-3,
+		"constr_viol_tol" => 1e-5,
 		"compl_inf_tol" => 1e3,
 		"print_level" => P.Logging.min_enabled_level(P.current_logger()) <= P.Logging.Debug ? 5 : 0,
-		"max_iter" => 100,
+		"max_iter" => 300,
 		"grad_f_constant" => "yes",
 		"recalc_y" => "yes",
 		"bound_relax_factor" => 1e-8,

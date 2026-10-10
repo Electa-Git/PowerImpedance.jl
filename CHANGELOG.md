@@ -18,6 +18,12 @@
 
 ### Changed
 
+- Tighten default Classic and NetworkBuilder power-flow settings to `tol=1e-6`,
+  `constr_viol_tol=1e-5` and `max_iter=300`; accept returned points within the
+  configured primal feasibility tolerance with a warning regardless of solver
+  status, without relaxation. Comparable power-flow raw bus magnitudes/angles
+  change by up to 8.72589e-05 pu/1080 degrees and converter/generator P/Q by up
+  to 0.437079 MW/1.329107 MVAr, excluding the artificial extreme diagnostic.
 - **Breaking:** Interpret `dc_source` `Setpoint.Vdc` and legacy `V` as
   pole-to-pole DC voltage in kV, consistently with converters. Pass the
   pole-to-pole voltage; callers that halved it must stop halving.

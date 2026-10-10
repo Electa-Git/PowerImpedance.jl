@@ -137,12 +137,12 @@ function power_flow(net::Network)
 
     ipopt = JuMP.optimizer_with_attributes(
         Ipopt.Optimizer,
-        "tol" => 1e2,
+        "tol" => 1e-6,
         "dual_inf_tol" => 1e-1,
-        "constr_viol_tol" => 1e-3,
+        "constr_viol_tol" => 1e-5,
         "compl_inf_tol" => 1e3,
         "print_level" => Logging.min_enabled_level(current_logger()) <= Logging.Debug ? 5 : 0,
-        "max_iter" => 100,
+        "max_iter" => 300,
         "grad_f_constant" => "yes",
         "recalc_y" => "yes",
         "bound_relax_factor" => 1e-8,
@@ -152,13 +152,13 @@ function power_flow(net::Network)
     result = solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting = s)
     
     # Rerun power flow with relaxed constraints if no convergence
-    if result["termination_status"] == MOI.LOCALLY_SOLVED
+    if result["termination_status"] == MOI.LOCALLY_SOLVED || get(result, "primal_feasible", false)
         @info "Power flow converged succesfully."
     else
         @warn "No convergence (try again with relaxation): $(result["termination_status"])"
 
         result = solve_acdcpf_relax(data, _PM.ACPPowerModel, ipopt; setting = s)
-        if result["termination_status"] == MOI.LOCALLY_SOLVED
+        if result["termination_status"] == MOI.LOCALLY_SOLVED || get(result, "primal_feasible", false)
             @info "Power flow solution found with relaxation"
         else
             error("Second iteration not succesful. Check your formulation")
@@ -736,6 +736,19 @@ function build_acdcpf(pm::_PM.AbstractPowerModel)
 end
 
 
+function accept_feasible_power_flow!(result, model)
+    result["termination_status"] == MOI.LOCALLY_SOLVED && return true
+    JuMP.has_values(model) || return false
+    residual = maximum(values(primal_feasibility_report(model; atol = 0.0)); init = 0.0)
+    tolerance = JuMP.get_optimizer_attribute(model, "constr_viol_tol")
+    if isfinite(residual) && residual <= tolerance
+        result["primal_feasible"] = true
+        @warn "Accepting power-flow point with termination status $(result["termination_status"]) and maximum primal constraint violation $residual (constr_viol_tol = $tolerance)."
+        return true
+    end
+    return false
+end
+
 function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs...)
     #PowerModels function that generates PowerModel
     ref_ext = [
@@ -759,7 +772,7 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
     JuMP.optimize!(pm.model)
     result = _IM.build_result(pm, JuMP.solve_time(pm.model))
     @info result["termination_status"]
-    if result["termination_status"] == MOI.LOCALLY_SOLVED
+    if accept_feasible_power_flow!(result, pm.model)
         @info "Power flow converged succesfully."
     else
         converged_feasible = false
@@ -778,7 +791,7 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
                 JuMP.set_optimizer(pm.model, solver)
                 JuMP.optimize!(pm.model)
                 result = _IM.build_result(pm, JuMP.solve_time(pm.model))
-                if result["termination_status"] == MOI.LOCALLY_SOLVED
+                if accept_feasible_power_flow!(result, pm.model)
                     @info "Power flow converged succesfully after $r increment change."
                     converged_feasible = true
                     break

@@ -194,7 +194,7 @@ function solve_acdcpf(
     P.JuMP.optimize!(pm.model)
     result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
     @info result["termination_status"]
-    if result["termination_status"] == P.JuMP.MOI.LOCALLY_SOLVED
+    if P.accept_feasible_power_flow!(result, pm.model)
         @info "Power flow converged succesfully."
     else
         converged_feasible = false
@@ -213,7 +213,7 @@ function solve_acdcpf(
                 P.JuMP.set_optimizer(pm.model, optimizer)
                 P.JuMP.optimize!(pm.model)
                 result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
-                if result["termination_status"] == P.JuMP.MOI.LOCALLY_SOLVED
+                if P.accept_feasible_power_flow!(result, pm.model)
                     @info "Power flow converged succesfully after $r increment change."
                     converged_feasible = true
                     break

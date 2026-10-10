@@ -633,8 +633,8 @@ The PSCAD emitter consumes those core inputs rather than implementing a
 separate correction. M3's generator P0/Q0/VT/angle, electrical model, external
 branch, scalar control graphs, gains/time constants, field-voltage scale and
 iron-loss resistance remain unchanged. Tm0, vref, Verror0 and Vreg0 change.
-The reviewed station agreement with the previous Julia equilibrium (P within
-1e-5) does not establish agreement with the new references; M3 must be rerun.
+The step-6 station rerun with these references passes in both representations;
+its remaining voltage-measurement artefact is recorded below.
 
 Fresh Julia 1.10.11 checks give the same corrected equilibrium for Classic
 and Builder M3 fixtures:
@@ -665,6 +665,22 @@ Both exported M3 fixtures use these updated form defaults and instance values:
 | vref | 1.01 | 1.00970472 |
 | Verror0 | 0.009822008 | 0.00952672767 |
 | Vreg0 | 1.9644016 | 1.90534553 |
+
+### M3 station rerun with the power-flow-derived references
+
+The step-6 station rerun reported on 2026-10-10 passes in both Classic and
+Builder representations. The bus active-power error is `6.8e-5` of machine
+rating, compared with `1.3e-3` before the reference correction; machine
+terminal P is 899.98 MW. Bus Q is -63.71 MVAr against the -59.54 MVAr
+power-flow reference, an error of `4.2e-3` of rating (previously `3.6e-4`).
+
+The station's internal machine Vt output reads approximately `5e-4` pu high
+because of the M3 control/electrical time-step interface artefact. The exported
+AVR regulates on that output, explaining the increased Q error. Measuring
+terminal voltage on the network side for the exported AVR is a separate PSCAD
+follow-up; the tightened power-flow tolerances leave that measurement and the
+machine control graph unchanged. These are reported native station
+results, separate from the local Julia and XML checks.
 
 ### M3 correction after the first station build
 
@@ -1835,6 +1851,10 @@ equilibrium solve is removed by the internal retained-state accessor in step 4.
 
 Developer known gaps:
 
+- M3 passes the station rerun with the step-6 references, but its internal
+  machine Vt output reads approximately `5e-4` pu high and the exported AVR
+  regulates on it. A network-side terminal-voltage measurement is a separate
+  PSCAD follow-up; see the station results above.
 - Step 5 adds modular `DCVoltageSupportLag` and maps legacy `:vdc_droop` for
   MMC and TLC. PSCAD generation remains deferred: the exporter rejects this
   support as “not yet exportable” before recovering its equilibrium. The
