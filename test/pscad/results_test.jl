@@ -603,7 +603,7 @@ end
     @test flow.pt == -flow.pgrid
     @test flow.qt == -flow.qgrid
     @test flow.pt ≈ converter.setpoint.Pac
-    @test flow.qt ≈ -converter.setpoint.Qac
+    @test flow.qt ≈ converter.setpoint.Qac
     for channel in plan.probes.channels
         bus = only(filter(b -> b.name == channel.bus, netlist.buses))
         voltage = bus.base_kV * bus.vm_pu

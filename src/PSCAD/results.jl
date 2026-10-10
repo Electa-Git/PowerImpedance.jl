@@ -273,7 +273,7 @@ means are pu on `elec.Sbase`, compared to those solved terminal powers divided
 by `Sbase` with `abs(measured_pu-reference_pu) <= 0.01`, equivalently
 `abs(diff_MW)/Sbase <= 0.01` (MVAr for Q). Julia's Q measurement uses a sine q basis:
 `Q_ac = -v_q*i_d + v_d*i_q`, equal to standard injected reactive power.
-Consequently its reference is `-setpoint.Qac/Sbase`, also `-qgrid/Sbase`.
+Consequently its reference is `setpoint.Qac/Sbase`, also `-qgrid/Sbase`.
 Converter DC voltage, frequency and angle channels remain diagnostics.
 For each MMC arm capacitor probe, compare its settled cycle mean with the
 solved DC bus pole-to-pole voltage using `abs(mean-reference)/abs(reference)`

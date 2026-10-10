@@ -137,7 +137,7 @@ function pftoinputs(c::TLC, setpoint::Setpoint)
     v_dc = setpoint.Vdc / c.elec.vDCbase
 
     p_ac = setpoint.Pac / c.elec.Sbase
-    q_ac = - setpoint.Qac / c.elec.Sbase  
+    q_ac = setpoint.Qac / c.elec.Sbase
     p_dc = setpoint.Pdc / c.elec.Sbase
     
     return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),

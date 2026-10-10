@@ -170,7 +170,7 @@ function pftoinputs(c::MMC, setpoint::Setpoint)
     v_ac  = setpoint.Vac / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
     v_dc = setpoint.Vdc / c.elec.vDC_base
     p_ac = setpoint.Pac / c.elec.Sbase
-    q_ac = - setpoint.Qac / c.elec.Sbase   # TODO check if this minus sign is really needed/relevant
+    q_ac = setpoint.Qac / c.elec.Sbase
     p_dc = setpoint.Pdc / c.elec.Sbase
     
     vG_d = v_ac * cos(setpoint.θac)   # d component of the grid voltage in the grid frame  

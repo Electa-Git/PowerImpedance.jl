@@ -189,14 +189,14 @@ function power_flow(net::Network)
             Pdc = elem_dict["pdc"] * global_dict["S"] / 1e6
             Vdc = result["solution"]["busdc"][string(dc_bus)]["vm"] * (data["dcpol"] * global_dict["V"] / 1e3) # Convert the pole-ground voltage coming from PF to pole-pole voltage
             Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
-            Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6 # Think about this!
+            Qac = -elem_dict["qgrid"] * global_dict["S"] / 1e6
 
             setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
             if element.element_model isa AbstractStateSpace
                 update!(element, setpoint)
             else
-                update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
+                update!(element.element_model, Vm, θ, Pac, -Qac, Vdc, Pdc)
             end
             
             @info begin 

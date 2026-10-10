@@ -40,6 +40,7 @@ end
         include("adm_DC_cable_test.jl")
         include("adm_TLC_test.jl")
         include("converter_voltage_test.jl")
+    include("power_flow_idempotence_test.jl")
         include("tlc_initialization_test.jl")
         include("adm_SM_test.jl")
         include("adm_IM_test.jl")

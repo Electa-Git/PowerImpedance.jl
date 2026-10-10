@@ -17,6 +17,9 @@
 
 ### Fixed
 
+- Store solved modular MMC and TLC reactive-power setpoints in the input
+  convention, correcting the Q sign read by subsequent power-flow solves while
+  preserving first-solve converter states, linearizations and admittances.
 - Constrain modular MMC and TLC AC-voltage-control equilibria to the solved
   reactive power, changing VAC steady states and dependent admittances.
 - Scale modular MMC VAC and Q-V control references onto the measured side of

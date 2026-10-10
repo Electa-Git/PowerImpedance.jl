@@ -38,6 +38,23 @@ function equilibrium(element)
     f!(F, sol.u, p)
     return sol, F, inputs, sp
 end
+
+function vac_grid(state, converter)
+    # Keep the original plant and give VAC a separate converter bus. This is
+    # the 0.1 H grid reactor used by PSCADFixtures.tlc_vac_network.
+    grid = impedance(z = s -> 0.1s, pins = 3, transformation = true)
+    rows = [(; node = r.element == :G3 ? Symbol("Grid" * string(r.terminal)) : r.node,
+                r.element, r.side, r.terminal) for r in state.topology.connections]
+    append!(rows, [(node = Symbol("Grid" * string(t)),
+                       element = :Grid, side = 1, terminal = t)
+                   for t in 1:2])
+    append!(rows,
+        [(node = Symbol("AC" * axis), element = :Grid, side = 2, terminal = t)
+         for (t, axis) in enumerate(("d", "q"))])
+    return NB.define(merge(state.elements, (; DUT = converter, Grid = grid)), rows;
+        options = state.options)
+end
+
 bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
 @testset "Converter AC voltage base and power flow" begin
     for reactive in (OuterReactiveVacControl(pi_ctrl = PIControl(Kp = 0.0, Ki = 100.0)),
@@ -125,14 +142,17 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
                 mod = m.mod, setpoint = e.setpoint, limits = e.limits)
             rows=[(; r.node, r.element, r.side, r.terminal)
                   for r in state.topology.connections]
-            state=NB.define(merge(state.elements, (; DUT = e)), rows; options = state.options)
+            state=reactive isa OuterReactiveVacControl ? vac_grid(state, e) :
+                  NB.define(merge(state.elements, (; DUT = e)), rows; options = state.options)
             data, bases, mapping=convert(state, PI.PMACDC)
             c=data["convdc"][string(mapping[:DUT].compkey)]
             controlled=reactive isa OuterReactiveVacControl ||
                        (reactive isa OuterReactiveQControl &&
                         reactive.support isa VoltageSupportLag)
             @test c["type_ac"]==(controlled ? 2 : 1)
-            @test data["bus"][string(c["busac_i"])]["bus_type"]==3
+            @test data["bus"][string(c["busac_i"])]["bus_type"]==(reactive isa
+                                                                  OuterReactiveVacControl ?
+                                                                  2 : 3)
             @test c["Vtar"]==(e.setpoint.Vac/sqrt(2))/(bases["V"]/1e3)
             @test c["acq_droop"]==(reactive isa OuterReactiveQControl &&
                                    reactive.support isa VoltageSupportLag ? 1 : 0)
@@ -177,9 +197,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
                 outerReactive = OuterReactiveVacControl(pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0)),
                 innerVoltage = m.innerVoltage, innerCurrent = m.innerCurrent,
                 mod = m.mod, setpoint = original.setpoint, limits = original.limits)
-            rows = [(; r.node, r.element, r.side, r.terminal)
-                    for r in state.topology.connections]
-            state = NB.define(merge(state.elements, (; DUT = element)), rows; options = state.options)
+            state = vac_grid(state, element)
             solved = NB.solve(state)
             element = solved.network.elements[:DUT]
             sol, F, inputs, sp = equilibrium(element)
@@ -189,7 +207,16 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             x = NamedTuple{PI.statenames(m)}(Tuple(sol.u[1:PI.n_states(m)]))
             signals = PI.input_signals(m, x, inputs)
             measured = PI.state_space!(zeros(PI.n_states(m.meas)), x, signals, m.meas, m)
-            @test abs(measured.P_ac_f - sp.p_ac) <= 1e-6
+            # Vdc control constrains DC current, so AC power agrees only to the
+            # PF accuracy, not the nonlinear equilibrium residual tolerance.
+            # constr_viol_tol=0.001 on 1000 MVA means 1 MW; convert to model pu.
+            tolerance = only(p.second
+            for p in NB.powerflow_optimizer(state.options).params
+            if p.first == PI.JuMP.MOI.RawOptimizerAttribute("constr_viol_tol"))
+            power_tolerance = vdc_control ?
+                              tolerance * solved.powerflow.data["baseMVA"] / m.elec.Sbase :
+                              1e-6
+            @test abs(measured.P_ac_f - sp.p_ac) <= power_tolerance
             @test abs(measured.Q_ac_f - sp.q_ac) <= 1e-6
         end
     end
