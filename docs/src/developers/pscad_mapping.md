@@ -1757,11 +1757,12 @@ equilibrium solve is removed by the internal retained-state accessor in step 4.
 
 Developer known gaps:
 
-- The modular active-control API has `NoOuterActiveControl`,
-  `OuterActivePowerControl` and `OuterActiveVdcControl`, but no DC-voltage
-  droop control type (`src/Network/Components/converter/common/loops/outer_active.jl`).
-  The legacy `:vdc_droop` control is not a modular API. The planned Vdc-droop
-  export is deferred until the Julia model provides that control type.
+- Step 5 adds modular `DCVoltageSupportLag` and maps legacy `:vdc_droop` for
+  MMC and TLC. PSCAD generation remains deferred: the exporter rejects this
+  support as “not yet exportable” before recovering its equilibrium. The
+  declared-base power-flow mapping deliberately corrects the historical
+  off-nominal voltage mismatch; see the 672 kV example in
+  [Legacy converter adapters](legacy_converter_adapters.md#DC-voltage-support-and-power-flow-bases).
 - The complete legacy keyword audit, supported mappings, historical comparison
   limits and remaining proposals are recorded in
   [Legacy converter adapters](legacy_converter_adapters.md). Static and
@@ -1863,8 +1864,9 @@ ratio 0.8763 becomes exact 333/380, saved 640 kV capacitor guesses become
 converged values, and the accepted near-ideal YY realization adds its existing
 leakage/exciting current. Saved `t_rst=0` does not introduce a control reset;
 all integrators use solved states and the existing fresh-run/hold construction.
-The legacy adapter dropping Σ controls is bypassed, not repaired. Modular
-DC-voltage droop remains deferred as documented above.
+During this campaign the legacy adapter dropping Σ controls was bypassed.
+Step 2 subsequently restored those controls; step 5 adds modular DC-voltage
+droop, with its PSCAD generation still deferred as documented above.
 
 The acceptance script retains every M1–M5a case and adds all new classic/builder
 fixtures and both ramp cases in one pass (32 projects). MMC cases use saved 10 s / 10 us / 250 us settings and

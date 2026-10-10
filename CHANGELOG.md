@@ -4,6 +4,13 @@
 
 ### Added
 
+- Add `DCVoltageSupportLag` for MMC/TLC active-power control and map legacy
+  `vdc_droop`, changing results for those formerly ignored legacy controls;
+  existing constructions retain their results. Power-flow reference and slope
+  use `vDCbase`, intentionally differing from the historical mapper away from
+  nominal voltage: at 672 kV with a 640 kV base, gain 5, 500 MVA and reference
+  1.05 pu, the reference is 672 rather than 705.6 kV and the slope is 3.90625
+  rather than 3.720238095 MW/kV. PSCAD export is not yet supported.
 - PSCAD integration (work in progress): remote PSCAD execution of existing projects
   (`PSCADModel`, `PSCADRun`, `RemoteConfig`, `read_pscad_output`), export of passive AC
   networks to PSCAD projects (`export_pscad`, requires `using PythonCall`), and comparison

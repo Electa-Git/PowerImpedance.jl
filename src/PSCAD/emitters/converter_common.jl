@@ -28,6 +28,8 @@ function converter_equilibrium(e)
         m.outerActive
     active isa PowerImpedance.OuterActiveVdcControl &&
         !(active.filter isa PowerImpedance.NoFilter) && not_exportable(e, active)
+    active isa PowerImpedance.OuterActivePowerControl &&
+        active.support isa PowerImpedance.DCVoltageSupportLag && not_exportable(e, active.support)
     inputs, setpoint_pu = PowerImpedance.pftoinputs(m, e.setpoint)
     vector = PowerImpedance._steady_state(e.element, e.setpoint)
     states = NamedTuple{PowerImpedance.statenames(m)}(Tuple(vector))

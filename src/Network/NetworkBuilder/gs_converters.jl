@@ -30,7 +30,7 @@ const _MMC_LEGACY_KEYS = Set((
     :Lₐᵣₘ, :Rₐᵣₘ, :Cₐᵣₘ, :N, :Lᵣ, :Rᵣ, :gfm, :controls, :equilibrium,
     :A, :B, :C, :D, :timeDelay, :padeOrderNum, :padeOrderDen,
     :vACbase_LL_RMS, :Sbase, :vDCbase, :turnsRatio, :occ, :ccc, :pll, :p, :q, :dc,
-    :energy, :zcc, :vac, :vac_supp, :f_supp, :v_meas_filt, :i_meas_filt,
+    :energy, :zcc, :vac, :vac_supp, :f_supp, :vdc_droop, :v_meas_filt, :i_meas_filt,
 ))
 
 const _TLC_MODULAR_KEYS = Set((
@@ -42,7 +42,7 @@ const _TLC_LEGACY_KEYS = Set((
     :Lᵣ, :Rᵣ, :Lₐᵣₘ, :Rₐᵣₘ, :pll, :v_meas_filt, :i_meas_filt, :p, :q,
     :dc, :occ, :vac, :vac_supp, :controls, :equilibrium, :A, :B, :C, :D,
     :timeDelay, :padeOrderNum, :padeOrderDen, :vACbase_LL_RMS, :Sbase, :vDCbase,
-    :iDCbase, :vACbase, :iACbase, :debug, :f_supp,
+    :iDCbase, :vACbase, :iACbase, :debug, :f_supp, :vdc_droop,
 ))
 
 function _check_converter_keywords(kind::AbstractString, names, modular, legacy)
@@ -71,7 +71,8 @@ function _legacy_setpoint(kwargs, controls, kind::Symbol, elec, name::Symbol)
     dcbase = kind === :mmc ? elec.vDC_base : elec.vDCbase
     power_scale = kind === :mmc ? 1.0 : elec.Sbase
     for (control, field, scale) in ((:p, :Pac, power_scale), (:q, :Qac, power_scale),
-            (:dc, :Vdc, dcbase), (:vac, :Vac, 1.0), (:vac_supp, :Vac, 1.0))
+            (:dc, :Vdc, dcbase), (:vac, :Vac, 1.0), (:vac_supp, :Vac, 1.0),
+            (:vdc_droop, :Vdc, dcbase))
         ref = _legacy_reference(get(controls, control, nothing))
         ref === nothing && continue
         reference = ref * scale
@@ -103,7 +104,14 @@ function _legacy_reference(controller)
     return iszero(value) ? nothing : Float64(value)
 end
 
-function _legacy_frequency_support(controls)
+function _legacy_active_support(controls)
+    if haskey(controls, :vdc_droop)
+        haskey(controls, :f_supp) && throw(ArgumentError(
+            "legacy :vdc_droop and :f_supp require simultaneous active-power supports, which are not supported"))
+        controller = controls[:vdc_droop]
+        return P.DCVoltageSupportLag(K = _legacy_pi(controller).Kp,
+            ωc = Float64(_legacy_field(controller, :ω_f, 0.0)))
+    end
     controller = get(controls, :f_supp, nothing)
     return controller === nothing ? P.NoFrequencySupport() : P.FrequencySupportLag(
         Kω = _legacy_pi(controller).Kp,
@@ -143,9 +151,11 @@ function _legacy_controls(kwargs)
             controls[name] = value
         end
     end
-    for name in (:pll, :v_meas_filt, :i_meas_filt, :p, :q, :dc, :occ, :vac, :vac_supp, :energy, :zcc, :ccc, :f_supp, :vse, :vi)
+    for name in (:pll, :v_meas_filt, :i_meas_filt, :p, :q, :dc, :occ, :vac, :vac_supp, :energy, :zcc, :ccc, :f_supp, :vdc_droop, :vse, :vi)
         haskey(kwargs, name) && (controls[name] = kwargs[name])
     end
+    haskey(controls, :vdc_droop) && !haskey(controls, :p) && throw(ArgumentError(
+        "legacy :vdc_droop requires the :p active-power PI control"))
     return controls
 end
 
@@ -163,7 +173,7 @@ function _legacy_tlc(kwargs, name::Symbol = :tlc)
     end)
     outer_active = value(:outerActive, begin
         if haskey(controls, :p)
-            P.OuterActivePowerControl(pi_ctrl = _legacy_pi(controls[:p]), support = _legacy_frequency_support(controls))
+            P.OuterActivePowerControl(pi_ctrl = _legacy_pi(controls[:p]), support = _legacy_active_support(controls))
         elseif haskey(controls, :dc)
             P.OuterActiveVdcControl(pi_ctrl = _legacy_pi(controls[:dc]), filter = _legacy_filter(controls[:dc]))
         else
@@ -261,7 +271,7 @@ function _legacy_mmc(kwargs, name::Symbol = :mmc)
         end
     end)
     outer_active = if haskey(controls, :p)
-        P.OuterActivePowerControl(pi_ctrl = _legacy_pi(controls[:p]), support = _legacy_frequency_support(controls))
+        P.OuterActivePowerControl(pi_ctrl = _legacy_pi(controls[:p]), support = _legacy_active_support(controls))
     elseif haskey(controls, :dc)
         P.OuterActiveVdcControl(pi_ctrl = _legacy_pi(controls[:dc]), filter = _legacy_filter(controls[:dc]))
     else

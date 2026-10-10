@@ -367,6 +367,7 @@ $(SIGNATURES)
 """
 pf_type_dc(::NoOuterActiveControl) = 1
 pf_type_dc(::OuterActivePowerControl) = 1
+pf_type_dc(::OuterActivePowerControl{DCVoltageSupportLag}) = 4
 pf_type_dc(::OuterActiveVdcControl) = 2
 
 """
@@ -454,7 +455,7 @@ function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global
     convdc["acq_droop"] = droop.enabled
     convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
 
-    convdc["droop"] = 0.0
+    convdc["droop"] = pf_dc_droop(conv.outerActive, conv.elec.vDCbase, conv.elec.Sbase, global_dict, data)
     convdc["Vdcset"] = pf_vdcset_pu(conv, elem, global_dict, data)
     convdc["Pacset"] = -pf_pacset_mw(conv, elem)
     convdc["Pdcset"] = pf_pdcset_mw(conv, elem)

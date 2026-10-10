@@ -4,7 +4,7 @@
 Shared active-power outer-loop blocks.
 
 These blocks compute the d-axis current reference used by downstream voltage or
-current loops. Optional frequency support is represented as a nested state-space
+current loops. Optional active-power support is represented as a nested state-space
 block so the outer loop remains composable.
 =#
 
@@ -14,6 +14,7 @@ export AbstractOuterActiveControl,
        NoFrequencySupport,
        OuterActivePowerControl,
        FrequencySupportLag,
+       DCVoltageSupportLag,
        OuterActiveVdcControl
 
 """
@@ -97,7 +98,49 @@ function state_space!(F, x, sync, block::FrequencySupportLag)
 end
 
 """
-Active-power PI controller with optional frequency support.
+Lagged DC-voltage support, subtracted from the active-power reference.
+The reference is the solved DC-voltage setpoint, normalized by the converter's
+declared DC-voltage base, as is the measured voltage.
+
+$(TYPEDEF)
+
+```math
+\\dot{\\xi}_{vdc,supp}=\\omega_c[K(v_{dc,ref}-v_{dc,f})-\\xi_{vdc,supp}],
+\\qquad p_{ref,eff}=p_{ref}-\\xi_{vdc,supp}.
+```
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
+@with_kw struct DCVoltageSupportLag <: AbstractFrequencySupport
+    "Droop gain in pu active power per pu DC voltage."
+    K::Float64 = 0.0
+    "First-order low-pass cutoff in \\[rad/s\\]."
+    ωc::Float64 = 0.0
+end
+
+statenames(::DCVoltageSupportLag) = (:ξ_vdc_supp,)
+initialvalues(::DCVoltageSupportLag; kwargs...) = (; ξ_vdc_supp = 0.0)
+
+function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::DCVoltageSupportLag)
+    F[1] = block.ωc * (block.K * (setpoint_pu.v_dc - inputs.meas.v_dc_f) - x.ξ_vdc_supp)
+    return (; P_ac_support = -x.ξ_vdc_supp)
+end
+
+state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::AbstractFrequencySupport) =
+    state_space!(F, x, inputs.sync, block)
+
+"""
+Return the inverse DC-voltage droop slope on the power-flow system base.
+Voltage references and slopes both use the declared converter DC-voltage base.
+
+$(SIGNATURES)
+"""
+pf_dc_droop(::AbstractOuterActiveControl, dcbase, powerbase, global_dict, data) = 0.0
+
+"""
+Active-power PI controller with optional frequency or DC-voltage support.
 
 $(TYPEDEF)
 
@@ -122,6 +165,11 @@ function OuterActivePowerControl(;
     return OuterActivePowerControl{typeof(support)}(pi_ctrl, support)
 end
 
+function pf_dc_droop(block::OuterActivePowerControl{DCVoltageSupportLag}, dcbase, powerbase, global_dict, data)
+    return (1 / block.support.K) * (dcbase / (data["dcpol"] * global_dict["V"] / 1e3)) /
+        (powerbase / (global_dict["S"] * 1e-6))
+end
+
 """
 Return active-power controller state names.
 
@@ -142,9 +190,9 @@ Evaluate active-power control and its support dynamics.
 $(SIGNATURES)
 """
 function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActivePowerControl, conv::AbstractConverter)
-    (; meas, sync) = inputs
+    (; meas) = inputs
     ns = n_states(block.support)
-    support = state_space!(@view(F[1:ns]), x, sync, block.support)
+    support = state_space!(@view(F[1:ns]), x, inputs, setpoint_pu, block.support)
     P_ac_f = meas.P_ac_f
 
     Peff_ref = setpoint_pu.p_ac + support.P_ac_support

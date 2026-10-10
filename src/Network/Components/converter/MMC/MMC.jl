@@ -337,6 +337,10 @@ pf_type_dc(::PLLSynchronization) = 1
 pf_type_dc(block::ΔdqControlGFL, sync::AbstractSynchronization) = pf_type_dc(block.outer_active)
 pf_type_dc(::ΔdqControlGFM, sync::AbstractSynchronization) = pf_type_dc(sync)
 
+pf_dc_droop(block::ΔdqControlGFL, dcbase, powerbase, global_dict, data) =
+    pf_dc_droop(block.outer_active, dcbase, powerbase, global_dict, data)
+pf_dc_droop(::ΔdqControlGFM, dcbase, powerbase, global_dict, data) = 0.0
+
 
 """
 Wrapper method for legacy power flow construction from Network type
@@ -381,7 +385,7 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
     droop = pf_acq_droop(conv.delta_control.outer_reactive)
     convdc["acq_droop"] = droop.enabled
     convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
-    convdc["droop"] = 0.0
+    convdc["droop"] = pf_dc_droop(conv.delta_control, conv.elec.vDC_base, conv.elec.Sbase, global_dict, data)
     convdc["Vdcset"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
     convdc["Pacset"] = -elem.setpoint.Pac
     convdc["Pdcset"] = (!ismissing(elem.setpoint.Pdc) && !iszero(elem.setpoint.Pdc)) ? elem.setpoint.Pdc : elem.setpoint.Pac

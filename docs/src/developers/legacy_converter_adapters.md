@@ -31,7 +31,7 @@ setpoint; they gain no independent reference keyword.
 | Keywords | Before | Result and units |
 |---|---|---|
 | `P`, `Q` | Mapped, different defaults | Explicit network values remain MW/MVAr; missing values can come from control references. MMC `p`/`q` references are MW/MVAr; TLC references are pu and multiplied by `Sbase`. Both legacy `q` references use the dynamic convention, which is also the live modular `Setpoint.Qac` convention. |
-| `P_dc`, `Vᵈᶜ` | Mapped, different defaults | Explicit MW/kV retained; a `dc` reference is pu and supplies missing `Vdc` after multiplication by the DC-voltage base. |
+| `P_dc`, `Vᵈᶜ` | Mapped, different defaults | Explicit MW/kV retained; a `dc` or `vdc_droop` reference is pu and supplies missing `Vdc` after multiplication by the DC-voltage base. |
 | `θ` | Mapped | Angle in radians. |
 | `Vₘ` | Different | Existing Gridspace RMS phase-voltage convention retained: `Vac=√2 Vₘ`. Explicit `vac`/`vac_supp` references supply peak phase voltage in kV. The historical MMC field describes amplitude; the separate TLC compatibility shim uses amplitude directly. |
 | `P_min`, `P_max`, `Q_min`, `Q_max` | Mapped, different defaults | Explicit values retained in `Limits`; default compatibility is a remaining proposal. |
@@ -78,7 +78,7 @@ are not given invented dynamics.
 | MMC `ccc` | Dropped | `CirculatingCurrentSuppressionControl`: gains and both pu current references (`[0]`→`(0,0)`), in the −2ω converter frame. `n_f`/`ω_f` unused. |
 | TLC `v_meas_filt`, `i_meas_filt` | Mapped | `n_f`/`ω_f` on AC voltage/current components; PI gains and references unused. |
 | MMC `v_meas_filt`, `i_meas_filt` | Dropped | Mapped to the existing shared measurement filters; the historical MMC file has no equations for these keywords. |
-| MMC/TLC `vdc_droop` | Dropped | Deferred to the separate `DCVoltageSupportLag` change. |
+| MMC/TLC `vdc_droop` | Dropped | Step 5 maps `Kₚ` and `ω_f` to `DCVoltageSupportLag(K=Kₚ,ωc=ω_f)`, subtracted from the `p` reference. The pu voltage reference follows the setpoint policy above. `Kᵢ` and `n_f` are unused by the historical first-order lag. MMC has independent historical equations; TLC uses the same approved shared equations and has no historical `vdc_droop` branch. |
 
 `TotalEnergyControl(power_filter=NoFilter())` retains the existing modular
 filtered-power feedforward exactly. A nontrivial filter independently filters
@@ -91,6 +91,54 @@ results and state counts. Energy filter states precede `ξ_Wtot` and initialize
 at the solved active power. VAC filter states initialize at the solved measured
 voltage magnitude. DC-controller filter states precede `ξ_v_dc` and initialize
 at the solved DC voltage in pu.
+
+## DC-voltage support and power-flow bases
+
+`DCVoltageSupportLag` implements the historical MMC dynamic equations:
+
+```math
+\dot{\Delta p}=\omega_c[K(v_{dc,ref}-v_{dc,f})-\Delta p],\qquad
+p_{ref,eff}=p_{ref}-\Delta p.
+```
+
+Both voltages use the declared converter DC-voltage base. The lag state
+`ξ_vdc_supp` precedes `ξ_P_ac` and initializes at zero. Like the other modular
+outer controls, it reads the solved power-flow reference; at the solved point
+the voltage error and support contribution are zero. The default gain and
+cutoff are both zero, mirroring `FrequencySupportLag`. A zero gain gives
+zero power-flow slope; a zero cutoff leaves the lag state constant.
+
+PowerModelsACDC uses type 4 (AC-side power droop). With converter bases
+`Sc` in MVA and `Vc` in pole-to-pole kV, system bases `Sg` and `Vg` in the
+same units, and physical setpoints `Pac` and `Vdc`, the mapper uses
+`droop=(1/K)*(Vc/Vg)/(Sc/Sg)`, `Vdcset=Vdc/Vg`, and `Pacset=-Pac`.
+For zero gain, the inverse slope is infinite and the type-4 constraint reduces
+to constant active power. The declared base controls both the reference
+conversion and the slope, so power flow and dynamics use one operating point.
+No separate control reference keyword is introduced.
+
+This deliberately differs from the historical mapper away from nominal
+voltage. That mapper substitutes the operating voltage for `Vc`, although
+the historical dynamics divide by `vDCbase`. For `K=5`, `Sc=500 MVA`,
+`Vc=640 kV` and a legacy reference of `1.05 pu`:
+
+| Operating voltage | Historical PF reference | Historical PF slope | Step-5 PF and dynamic reference | Step-5 PF and dynamic slope |
+|---|---:|---:|---:|---:|
+| 640 kV | 672 kV | 3.90625 MW/kV | 672 kV | 3.90625 MW/kV |
+| 672 kV | 705.6 kV | 3.720238095 MW/kV | 672 kV | 3.90625 MW/kV |
+
+Tests compare MMC physical equilibria and terminal admittances against the
+independent historical dynamic reference at 672 kV, including distinct
+second-order power filters. TLC has no historical DC-droop reference model;
+tests compare the approved shared lag/PI equations directly. Both converter
+types and network representations also retain the unmodified dynamic
+equations at an off-nominal solved power-flow point, within the existing
+equilibrium accuracy.
+
+The adapter requires `p` for `vdc_droop`. Simultaneous `f_supp` and
+`vdc_droop` are rejected explicitly because `OuterActivePowerControl` has
+one support slot. A future simultaneous-support contract would need a
+separate design decision; neither control is silently dropped.
 
 ## Remaining proposals and comparison limits
 
@@ -149,7 +197,7 @@ TLC comparisons use both independent stored validation datasets, including
 P-frequency and DC/Q-voltage support, measurement/PLL filters and modulation
 delay; their existing acceptance limits are retained.
 
-PSCAD rejects any non-`NoFilter` VAC or DC-voltage outer-control filter as
+PSCAD rejects `DCVoltageSupportLag` and any non-`NoFilter` VAC or DC-voltage outer-control filter as
 “not yet exportable” before recovering its equilibrium. Its Σ generator also
 needs a separate review for nontrivial energy `power_filter` and nonzero CCC references: the current
 canonical generator assumes the default equations. No new Σ exporter support
