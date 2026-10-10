@@ -87,6 +87,7 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     
     
     m = elem.element_model
+    elem._equilibrium = nothing
 
     # Power flow to inputs of state_space function
     inputs, setpoint_pu = pftoinputs(m, setpoint)
@@ -134,7 +135,50 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     C = jac[nb_states+1:end, 1:nb_states]
     D = jac[nb_states+1:end, nb_states+1:end-nb_addit_inputs]
 
+    elem._equilibrium = (m, setpoint, copy(equilibrium))
     return A,B,C,D 
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Return a copy of the converged state vector retained by the core linearization.
+
+# Arguments
+
+- `elem`: state-space element owning the solved state.
+- `setpoint`: optional operating point. If supplied and no matching state is
+  retained, solve and linearize through `update(elem, setpoint)` first.
+
+# Returns
+
+- State vector in `statenames(elem.element_model)` order and the model's state
+  coordinates, with the same small-value zeroing used for linearization.
+
+# Notes
+
+This accessor is internal. Normal core updates always solve afresh, invalidate
+the previous retained state, and retain the new vector only after successful
+linearization. Mutating the returned copy does not change the retained state.
+
+# Errors
+
+- Throws `ArgumentError` without a setpoint if no state is retained for the
+  current model. With a setpoint, propagates any core solve or linearization error.
+"""
+function _steady_state(elem::Element{<:AbstractStateSpace})
+    saved = elem._equilibrium
+    saved !== nothing && saved[1] === elem.element_model ||
+        throw(ArgumentError("element :$(elem.symbol) has no retained converged state"))
+    return copy(saved[3])
+end
+
+function _steady_state(elem::Element{<:AbstractStateSpace}, setpoint::Setpoint)
+    saved = elem._equilibrium
+    if saved === nothing || saved[1] !== elem.element_model || !isequal(saved[2], setpoint)
+        update(elem, setpoint)
+    end
+    return _steady_state(elem)
 end
 
 function update!(elem::Element, setpoint::Setpoint)

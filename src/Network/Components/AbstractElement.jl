@@ -121,6 +121,8 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
     setpoint::Setpoint
     "Power-flow operating limits."
     limits::Limits
+    "Internal model, setpoint and converged state vector retained after linearization."
+    _equilibrium::Union{Nothing, Tuple{T, Setpoint, Vector}}
     @doc """
         Element(; element_model=nothing, element_value=nothing, kwargs...)
 
@@ -168,6 +170,7 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
         elem.connection = true
         elem.setpoint = Setpoint()
         elem.limits = Limits()
+        elem._equilibrium = nothing
         elem.A, elem.B, elem.C, elem.D = fill(Array{ComplexF64}(undef, 0, 0), 4)
 
         for (key, val) in pairs(args)

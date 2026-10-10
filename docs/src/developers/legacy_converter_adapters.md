@@ -106,7 +106,7 @@ at the solved DC voltage in pu.
 | `PI_control.bandwidth`, `ζ` | No automatic tuning restored. The old TLC zero-gain `occ` tuning refers to undefined `Lₑ`/`Rₑ`; choose reactor/base semantics or require explicit gains. |
 | `occ.ref` | Historical current-state initial guess, overwritten in TLC; outer loops own the dynamic current reference. No new reference API or alternate initialization policy introduced. |
 | `PI_control.Kₚ`, `Kᵢ`, `ref`, `n_f`, `ω_f` | Mapped where consumed above; other fields remain unused exactly where their old equations ignore them. |
-| TLC `debug` | Dropped solved-state storage; use the separately planned internal steady-state accessor rather than mutable compatibility output fields. |
+| TLC `debug` | Legacy output-storage option dropped; use the internal `_steady_state` accessor on the solved element rather than mutable compatibility output fields. |
 | Arbitrary `Controller`-valued keywords | Historically stored even without an equation. Propose explicit unsupported-input diagnostics, rather than inventing behavior. |
 | Defaults, derived-base overrides, non-50-Hz normalization | Retain current adapter contract; make each compatibility/physics choice separately. |
 

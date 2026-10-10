@@ -450,8 +450,10 @@ $(TYPEDSIGNATURES)
 
 Construct an internal PSCAD netlist directly from a NetworkBuilder topology.
 Use the supplied PowerFlowResult's operating setpoints, since `NB.solve`
-updates its returned classic network rather than `state.elements`. Preserve
-the state and result. With no solved result, retain the declared setpoints.
+updates its returned classic network rather than `state.elements`. The internal
+`elements` argument can supply those solved elements in the declared order,
+including their retained states. Preserve the state and result. With no solved
+result, retain the declared setpoints.
 Implicit ground terminals of one-port devices use `:gnd`, as in `build_network`.
 With a supplied solved power flow and input data, take each bus's voltage base
 from its PowerModels input record through `pf_index` and require all bases to
@@ -461,8 +463,8 @@ use `state.options.voltageBase` \\[kV\\], defaulting to `NetworkBuilder.DEFAULT_
 The global network frame is 50 \\[Hz\\].
 """
 function netlist(state::PowerImpedance.NetworkBuilder.NetworkState,
-        pf::Union{Nothing, PowerImpedance.PowerFlowResult})
+        pf::Union{Nothing, PowerImpedance.PowerFlowResult}, elements = state.elements)
     voltage_base = Float64(get(state.options, :voltageBase,
         PowerImpedance.NetworkBuilder.DEFAULT_VOLTAGE_BASE))
-    return _netlist(state.elements, state.topology, voltage_base, 50.0, pf)
+    return _netlist(elements, state.topology, voltage_base, 50.0, pf)
 end

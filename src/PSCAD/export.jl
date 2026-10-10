@@ -197,6 +197,8 @@ function export_pscad(state::PowerImpedance.NetworkBuilder.NetworkState; path,
     powerflow === nothing ||
         throw(ArgumentError("builder export obtains power flow from NetworkBuilder.solve; powerflow must be nothing"))
     solved = PowerImpedance.NetworkBuilder.solve(state)
-    return _export_project(netlist(state, solved.powerflow), path, name, settings,
+    elements = NamedTuple{keys(state.elements)}(
+        Tuple(solved.network.elements[name] for name in keys(state.elements)))
+    return _export_project(netlist(state, solved.powerflow, elements), path, name, settings,
         solved.powerflow !== nothing, line_options, dc_reference)
 end

@@ -804,13 +804,18 @@ common reference; external DC sources/reference resistors set pole symmetry.
 
 ### Converged-state initialization
 
-`update(::Element{<:AbstractStateSpace}, setpoint)` computes and then discards
-its nonlinear equilibrium vector after linearization. The exporter repeats that
-same owned equilibrium problem, input conversion and initial guess, with the
-same `maxiters=20`, `abstol=reltol=1e-6` and successful-return check. It applies
-the same below-`1e-15` zeroing and evaluates the existing state-space blocks at
-the solution. Initial guesses are only solver seeds. Every generated dynamic
-control block uses the converged vector or its evaluated outputs.
+`update(::Element{<:AbstractStateSpace}, setpoint)` retains its converged state
+vector after successful linearization, together with the model and setpoint.
+The internal, unexported `_steady_state` accessor returns a copy in the model's
+state order, including the same below-`1e-15` zeroing used for linearization.
+The exporter reads that vector and evaluates the existing state-space blocks;
+it no longer constructs or solves a second nonlinear problem. Builder export
+passes the solved network's elements in the declared order, preserving the
+builder definition. For a direct netlist whose elements have not been solved
+at its effective setpoint, the accessor calls the core `update` once and then
+reuses its retained vector. The core's initial guesses, `maxiters=20`,
+`abstol=reltol=1e-6` and successful-return check are unchanged. Every generated
+dynamic control block uses the converged vector or its evaluated outputs.
 
 | Julia solved state(s) | PSCAD initial value |
 |---|---|
@@ -1740,32 +1745,32 @@ point-consistency checks pass in the focused 82-test suite. Converter
 validation passes 5,938 assertions, and Aqua passes all 11 checks. The final
 Julia 1.10.11 `Pkg.test()` run passes all 112,292 suite assertions.
 
-Developer known gaps, updated after the legacy converter adapter correction:
+The legacy Σ adapter defect was corrected in
+[step 2](legacy_converter_adapters.md) (`f6392c2`). Restoring those controls also
+resolved converter-uncertainty trial 94 in `examples/P2P_HVDC_Gridspace.jl`
+(master seed 2028, derived seed `1756036741226661978`). Step 3 verified both
+converter equilibria return `Success`, with infinity residual
+`4.656612873077393e-10`, and all 100 trials complete without an exclusion.
+Solver tolerances and iteration limits were unchanged. The Classic fallback's
+undefined name was fixed in step 1 (`8af4577`), and the repeated converter
+equilibrium solve is removed by the internal retained-state accessor in step 4.
+
+Developer known gaps:
 
 - The modular active-control API has `NoOuterActiveControl`,
   `OuterActivePowerControl` and `OuterActiveVdcControl`, but no DC-voltage
   droop control type (`src/Network/Components/converter/common/loops/outer_active.jl`).
   The legacy `:vdc_droop` control is not a modular API. The planned Vdc-droop
   export is deferred until the Julia model provides that control type.
-- The legacy energy/zcc/ccc adapter defect is corrected. The complete keyword
-  audit, supported mappings, historical comparison limits and remaining
-  proposals are recorded in [Legacy converter adapters](legacy_converter_adapters.md).
-  Static and higher-order MMC voltage support, old GFM/virtual-impedance paths
+- The complete legacy keyword audit, supported mappings, historical comparison
+  limits and remaining proposals are recorded in
+  [Legacy converter adapters](legacy_converter_adapters.md). Static and
+  higher-order MMC voltage support, old GFM/virtual-impedance paths
   and TLC arm-parameter ownership remain separate design decisions. Legacy DC
   filters are local to the DC PI. The TLC PLL retains the validated modular
   filtered-measurement convention, an intended historical difference recorded
   with numerical evidence in the adapter audit.
-- The unmodified converter-uncertainty example
-  (`examples/P2P_HVDC_Gridspace.jl`, master seed 2028) fails at trial 94,
-  derived seed `1756036741226661978`, with `MaxIters` and equilibrium infinity
-  residual `2.406338496994981e-5`. The complete before baseline explicitly
-  excludes that trial's comparison records, retains its original failed
-  state and error as a known failure, and includes every other trial. The
-  same recorded exclusion applies to the complete after baseline. No
-  solver tolerance or iteration limit is changed. A causal connection with
-  the dropped Σ controls has not been established.
-- The unqualified Classic fallback is fixed in `8af4577`. Archived
-  `test/converter_voltage_test.jl:183:solved.network:2` is an accepted
+- Archived `test/converter_voltage_test.jl:183:solved.network:2` is an accepted
   cross-formulation initialization limitation, not a package code defect or
   evidence of infeasibility. Its extreme shared-bus case places about
   −125,000 MW at the converter; the upstream default current-magnitude seed

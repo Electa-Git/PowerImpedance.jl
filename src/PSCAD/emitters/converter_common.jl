@@ -29,18 +29,7 @@ function converter_equilibrium(e)
     active isa PowerImpedance.OuterActiveVdcControl &&
         !(active.filter isa PowerImpedance.NoFilter) && not_exportable(e, active)
     inputs, setpoint_pu = PowerImpedance.pftoinputs(m, e.setpoint)
-    seed = PowerImpedance.orderedinitialvalues(m; inputs, setpoint_pu)
-    p = (; inputs = collect(values(inputs)), m, setpoint_pu)
-    f!(du, u, p) = PowerImpedance._state_space!(
-        du, u, p.inputs, p.setpoint_pu, p.m, PowerImpedance.Equil())
-    # Same problem and settings as AbstractStateSpace.jl:98–118. The package
-    # discards sol.u after linearization; recover it without changing core code.
-    problem = PowerImpedance.NonlinearProblem(f!, collect(promote(values(seed)...)), p)
-    solution = PowerImpedance.solve(problem; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
-    PowerImpedance.SciMLBase.successful_retcode(solution) ||
-        throw(ArgumentError("converter :$(e.name) steady-state solution not found"))
-    vector = copy(solution.u[1:PowerImpedance.n_states(m)])
-    vector[abs.(vector) .< 1e-15] .= 0
+    vector = PowerImpedance._steady_state(e.element, e.setpoint)
     states = NamedTuple{PowerImpedance.statenames(m)}(Tuple(vector))
     outputs = PowerImpedance.state_space!(
         zeros(length(vector)), states, inputs, setpoint_pu, m)
