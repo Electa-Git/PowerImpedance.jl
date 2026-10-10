@@ -111,6 +111,18 @@ else
     tlc1_classic, tlc1_state = PSCADFixtures.tlc_case1_network()
     tlc2_classic, tlc2_state = PSCADFixtures.tlc_case2_network()
     mmc_classic, mmc_state = PSCADFixtures.mmc_pq_network()
+    modes = []
+    for (stem, factory) in (("mmc_vdc", PSCADFixtures.mmc_vdc_network),
+        ("mmc_pf", PSCADFixtures.mmc_pf_network), ("mmc_qv", PSCADFixtures.mmc_qv_network),
+        ("mmc_vac", PSCADFixtures.mmc_vac_network), (
+        "tlc_vac", PSCADFixtures.tlc_vac_network))
+        fixture = factory()
+        append!(modes, [
+            (stem * "_classic", fixture.classic), (stem * "_builder", fixture.state)])
+    end
+    append!(modes, [("mmc_pq_default_ramp", mmc_classic),
+        ("tlc_case2_zero_ramp", tlc2_classic)])
+    modes_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_modes_saved_fragments.xml")).getroot()
     reference_root = etree.parse(joinpath(@__DIR__,
         "fixtures/user_module_pscad5.xml")).getroot()
     reference_parameter = only(reference_root.xpath(
@@ -145,7 +157,7 @@ else
             ("sm_classic", sm_classic), ("sm_builder", sm_state),
             ("tlc_case1_classic", tlc1_classic), ("tlc_case1_builder", tlc1_state),
             ("tlc_case2_classic", tlc2_classic), ("tlc_case2_builder", tlc2_state),
-            ("mmc_pq_classic", mmc_classic), ("mmc_pq_builder", mmc_state))
+            ("mmc_pq_classic", mmc_classic), ("mmc_pq_builder", mmc_state), modes...)
             path = joinpath(only(ARGS), name * ".pscx")
             case_settings = startswith(name, "sm_") ?
                             P.SimulationSettings(simulation_time = 5.0) :
@@ -155,7 +167,15 @@ else
                             startswith(name, "mmc_") ?
                             P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
                 sample_step = 250e-6, source_ramp = 0.0) : settings
-            dc_reference = startswith(name, "tlc_") || startswith(name, "mmc_") ? :none :
+            if name == "mmc_pq_default_ramp"
+                case_settings = P.SimulationSettings(simulation_time = 10.0,
+                    time_step = 10e-6, sample_step = 250e-6)
+            elseif name == "tlc_case2_zero_ramp"
+                case_settings = P.SimulationSettings(simulation_time = 10.0,
+                    time_step = 10e-6, sample_step = 40e-6, source_ramp = 0.0)
+            end
+            dc_reference = startswith(name, "mmc_vdc") ? :midpoint_resistors :
+                           startswith(name, "tlc_") || startswith(name, "mmc_") ? :none :
                            :midpoint_resistors
             # ΔY XML checks exercise the selected station realization with no
             # legacy power-flow evidence; native comparison waits for dy-fix.
@@ -216,14 +236,48 @@ else
                 for (canvas, graph) in graphs
                     @test PSCADTopology.check_degrees(graph, "$name/$canvas") === nothing
                 end
-                if startswith(name, "mmc_")
+                if startswith(name, "mmc_") || startswith(name, "tlc_vac_")
                     modules = Dict(m.name => m for m in plan.modules)
                     canvases = Dict("Main" => plan.main, [m.name => m.canvas
                                                           for m in plan.modules]...)
-                    @test Set(keys(graphs)) == Set(keys(canvases))
-                    for (canvas, graph) in graphs
-                        @test PSCADTopology.equivalent(graph,
-                            PSCADTopology.electrical_graph(canvases[canvas], modules))
+                    @test Set(keys(graphs)) == union(Set(keys(canvases)),
+                        Set(line.name for line in plan.lines))
+                    for (canvas, schematic) in canvases
+                        expected = PSCADTopology.electrical_graph(schematic, modules)
+                        if canvas == "Main"
+                            # Cable interfaces own the terminals. The graphical
+                            # wrapper retains its physical length and row fields.
+                            for wrapper in plan.wrappers
+                                @test wrapper isa P.CableWrapperPlan
+                                push!(expected["components"],
+                                    Dict(
+                                        "definition" => name * ":" * wrapper.row,
+                                        "parameters" => Dict(wrapper.params)))
+                            end
+                        end
+                        @test PSCADTopology.equivalent(graphs[canvas], expected)
+                    end
+                    for line in plan.lines
+                        @test line isa P.CableDefinitionPlan
+                        row = graphs[line.name]
+                        @test isempty(row["nets"])
+                        expected = [(c.defn, Dict(c.params)) for c in line.cables]
+                        append!(expected,
+                            [("master:Line_Ground", Dict(line.ground)),
+                                ("master:Line_FrePhase_Options", Dict(line.frephase)),
+                                ("master:Line_Out_Disp", Dict(line.outdisp))])
+                        @test length(row["components"]) == length(expected)
+                        for (definition, parameters) in expected
+                            actual = only(filter(
+                                c -> c["definition"] == definition &&
+                                     (definition != "master:Cable_Coax" ||
+                                      c["parameters"]["CABNUM"] == parameters["CABNUM"]),
+                                row["components"]))
+                            # MHI also serializes its defaults; every physical
+                            # value supplied by the plan must survive unchanged.
+                            @test all(get(actual["parameters"], k, nothing) == v
+                            for (k, v) in parameters)
+                        end
                     end
                 elseif !startswith(name, "tlc_")
                     reference = TOML.parsefile(joinpath(@__DIR__,
@@ -466,6 +520,47 @@ else
                       6
                 @test pylen(root.xpath("./definitions/Definition[@name='ARM_DUT']/schematic/User[@defn='master:integral']")) ==
                       1
+            end
+            if startswith(name, "mmc_vdc") || startswith(name, "mmc_qv")
+                vdc = startswith(name, "mmc_vdc")
+                control = only(filter(m -> m.name == (vdc ? "VDCCTRL_DUT" : "QCTRL_DUT"), plan.modules))
+                params = Dict(p.name => p.default for p in control.parameters)
+                witness = only(modes_reference.xpath(vdc ?
+                                                     "./Mode[@name='DVC-Mode']/User[@id='99546287']" :
+                                                     "./Mode[@name='Q-V_Droop']/User[@id='961326560']"))
+                for (generated, saved) in (vdc ? (("vdcKp", "Kpv"), ("vdcKi", "KiV")) :
+                                           (("supportK", "Kd"), ("supportT", "wf")))
+                    value = parse(Float64,
+                        pyconvert(String,
+                            witness.xpath("string(./paramlist/param[@name='$saved']/@value)")))
+                    @test params[generated] == (saved == "wf" ? 1/value : value)
+                end
+            end
+            if startswith(name, "mmc_vac") || startswith(name, "tlc_vac")
+                control = only(filter(m -> m.name == "QCTRL_DUT", plan.modules))
+                params = Dict(p.name => p.default for p in control.parameters)
+                saved = only(modes_reference.xpath("./Mode[@name='VAC_Control']/User[@id='436923558']"))
+                @test params["vacKp"] == parse(Float64,
+                    pyconvert(String,
+                        saved.xpath("string(./paramlist/param[@name='KpAC']/@value)")))
+                @test params["vacKi"] == parse(Float64,
+                    pyconvert(String,
+                        saved.xpath("string(./paramlist/param[@name='KiAC']/@value)")))
+                converter = only(filter(e -> e.name == :DUT, model.netlist.elements))
+                equilibrium = P.converter_equilibrium(converter)
+                @test params["vacI0"] == equilibrium.states.ξ_v_ac
+                @test params["vac_reference"] ==
+                      equilibrium.setpoint_pu.v_ac *
+                      PowerImpedance.voltage_filter_ratio(converter.model)
+                integrator = only(root.xpath("./definitions/Definition[@name='QCTRL_DUT']/schematic/User[@defn='master:integral']"))
+                witness = only(modes_reference.xpath("./Mode[@name='VAC_Control']/User[@id='1112328997']"))
+                for field in ("Extrn", "Reset", "Mthd")
+                    @test pyconvert(String,
+                        integrator.xpath("string(./paramlist/param[@name='$field']/@value)")) ==
+                          pyconvert(String, witness.xpath("string(./paramlist/param[@name='$field']/@value)"))
+                end
+                @test pyconvert(String, integrator.xpath("string(./paramlist/param[@name='Yo']/@value)")) ==
+                      "vacI0"
             end
             @test Set(keys(summary.modules_and_ports)) == Set(m.name for m in plan.modules)
             for definition in plan.modules

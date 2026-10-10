@@ -1372,10 +1372,12 @@ not extra terms from the Julia plant. The reactor retains the full Julia Lr/Rr.
 
 The saved MMC voltage sources use `Tc=0`; this does not initialize their meter
 outputs. The approved start-up now holds solved control measurements until
-0.2 s, using the TLC's saved selector construction. `SimulationSettings.source_ramp` accepts
-zero; MMC export requires zero and rejects an unsupported ramped start. This
-setting was accepted by Amauri after station round 3 and adds no public name
-or keyword. Native checks must inspect the first samples:
+0.2 s, using the TLC's saved selector construction. M5a station round 3 used
+zero source ramp. After both M5b ramp experiments passed, Amauri approved
+any finite, nonnegative `SimulationSettings.source_ramp` for every supported
+converter. The library default remains 0.05 s, the MMC fixtures retain zero,
+and TLC fixtures retain the default. No public name or keyword is added.
+Native checks must inspect the first samples:
 PSCAD `div` returns 1e99 at a zero denominator. No persistent clamp, protection
 reset, or physics fallback is inserted.
 
@@ -1724,7 +1726,7 @@ its frame, transformer scaling and filtering conventions. The normal dynamic
 VAC PI equation remains intact; Q-V droop already determines Q and receives
 no extra equilibrium condition. The focused tests check the solved P/Q and
 full equilibrium residual for both MMC representations and for TLC VAC with
-P and Vdc control. M5b PSCAD modes and station acceptance remain pending.
+P and Vdc control. M5b station round-1 results are recorded below.
 
 The complete before/after Julia regression archives in
 `/tmp/mmc-vac-baseline/` contain 1,393 networks, 2,756 converter records and
@@ -1737,7 +1739,7 @@ point-consistency checks pass in the focused 82-test suite. Converter
 validation passes 5,938 assertions, and Aqua passes all 11 checks. The final
 Julia 1.10.11 `Pkg.test()` run passes all 112,292 suite assertions.
 
-Three deferred issues remain outside this correction:
+Four deferred issues remain outside this correction:
 
 - The modular active-control API has `NoOuterActiveControl`,
   `OuterActivePowerControl` and `OuterActiveVdcControl`, but no DC-voltage
@@ -1758,3 +1760,230 @@ Three deferred issues remain outside this correction:
   same recorded exclusion applies to the complete after baseline. No
   solver tolerance or iteration limit is changed. A causal connection with
   the dropped Σ controls has not been established.
+- Two pre-existing builder-to-classic TLC VAC re-solves are excluded from
+  idempotence acceptance: the archived
+  `test/converter_voltage_test.jl:183:solved.network:1` reaches the unqualified
+  `ACPPowerModel` fallback in `src/Network/power_flow.jl:160`, and `:2` reports
+  violated power-flow constraints. The fallback is also present at `5d25c7b`.
+  These are cross-formulation diagnostics, not repeated calls to the builder
+  API, which preserves its input definition. Neither solver path is changed.
+
+## M5b: remaining grid-following MMC outer controls
+
+M5b enables `OuterActiveVdcControl`, P-f support through
+`OuterActivePowerControl`/`FrequencySupportLag`, Q-V support through
+`OuterReactiveQControl`/`VoltageSupportLag`, and `OuterReactiveVacControl`.
+The MMC uses the M4 shared active/reactive generators rather than separate
+MMC implementations. VAC is a new shared reactive generator, also exercised
+with a TLC. Unsupported concrete blocks still fail by dispatch. The existing
+Σ, electrical, modulation, module-canvas and named-node constructions remain
+in force. No core code or public API is changed.
+
+| Control | Generated equation / initialization | Saved evidence |
+|---|---|---|
+| Vdc | `e=vdc_ref-v_dc_f`, `i_d_ref=-(Kp*e+ξ_v_dc)`, `ξ'=Ki*e`; VDCCTRL integral starts at converged `ξ_v_dc` | `local/GFL-MMC/DVC-Mode/GFL_MMC_Validation.pscx:2020–2045` (5/15 gains, 800 kV); existing M4 split PI and negation |
+| P-f | `ξ_f'=ωc*(-Kω*(omega_c-1)-ξ_f)`, `P_eff=p_ac_ref+ξ_f`; lag starts at converged `ξ_f_supp` and P PI at `ξ_P_ac` | `local/TLC/Simple_2L_VSC_RL.pscx:876–877`: `kp_f=5`, `tau_f=0.5 s`; current API `Kω=5`, `ωc=2 rad/s` |
+| Q-V | `ξ_v'=ωc*(K*(v_ac_ref-hypot(vG_d_f,vG_q_f))-ξ_v)`, `Q_eff=q_ac_ref+ξ_v`; lag starts at `ξ_vac_supp`, Q PI at `ξ_Q_ac` | `local/GFL-MMC/Q-V_Droop/GFL_MMC_Validation.pscx:11992–11998`: `Kd=20`, `wf=100`; M4 `realpole` fields and pins |
+| VAC | `e=v_ac_ref-hypot(vG_d_f,vG_q_f)`, `i_q_ref=Kp*e+ξ_v_ac`, `ξ'=Ki*e`; PI starts at converged `ξ_v_ac` | `local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:8025–8215` (split PI), `11936–11941` (0/100 gains); M4 square/sqrt primitives |
+
+Both Q-V and VAC references are `SetpointPU.v_ac*voltage_filter_ratio(model)`:
+MMC references and measurements use the converter side of the transformer;
+TLC has ratio 1. The normal VAC PI remains a dynamic equation. Initialization
+uses the committed equilibrium constraint, including solved reactive power,
+instead of the original requested Q or an initial guess. Every new mode
+recovers the same converged Julia problem and uses its states, filter outputs
+and derivatives, PI integrals, support lags, arm capacitors and delay histories.
+The approved MMC 0.2 s solved-measurement hold is retained, including solved
+Q for VAC; release restores the original measured equations.
+
+`test/pscad/fixtures.jl` supplies classic and builder versions of each mode.
+All MMCs retain the M5a 1000 MVA / 333 kV / 800 kV plant, exact 333/380 ratio,
+OCC/PLL/CCSC gains, full Σ additions, NoFilter and zero modulation delay.
+Their additional provenance and non-one-to-one parameters are:
+
+- Vdc uses the saved 5/15 PI and 800 kV target. Its DC side has no stiff DC
+  source: the remote PQ MMC and 60 km bipolar cable are rebuilt directly from
+  `local/GFL-MMC/DVC-Mode/DC_Voltage_Control.jl:62–104,126–133`, including
+  the -608.3578 MW/-200 MVAr sending request, its 800*1.00009 kV seed and
+  cable layers/positions. The saved PSCAD current source at `:2565–2573`
+  (`0.7527 kA`, 0 Hz, zero phase, 0.05 s ramp) is replaced by that script's
+  remote plant. Its current/ramp parameters have no one-to-one counterpart.
+  The script's ideal AC sources are retained rather than the saved source's
+  0.5 Ω R field. The saved 1 Ω feed resistor (`:2538–2545`) is omitted with that source.
+  The existing exporter supplies 1e7 Ω pole references at both DC buses;
+  their placement differs from the saved single ground return (`:2548–2553`).
+  No artificial DC-voltage target is introduced.
+- P-f reuses the entire PQ plant and 600 MW/200 MVAr request. Its frequency
+  support parameters come from the validated TLC, not a saved MMC P-f case;
+  only the support lag is added, using the MMC's own P PI and power base.
+- Q-V retains the saved `Kd=20`, `wf=100` and the Main 600/-200 power constants
+  (`Q-V_Droop/GFL_MMC_Validation.pscx:785–797`). Its source R field is
+  0.01 Ω (`:687–710`), represented as an explicit series resistor. Other
+  saved source impedance fields are not used to infer an additional circuit.
+  The remote DC system is reduced to M5a's ideal DC source; the saved
+  0.05 Ω DC-source resistance is omitted.
+- VAC retains the saved 0/100 PI and the explicit 0.1 H AC grid reactor in
+  `VAC_Control/VAC_Control.jl:104–116,133–138`. This gives VAC a controlled
+  bus separate from the source. The saved source's Type=4/R/L/C fields are
+  not interpreted as another impedance; the fixture follows the script.
+  The remote DC converter/cable is reduced to M5a's ideal DC source, omitting
+  saved DC source R=0.05 Ω. The 200 MVAr request is a seed: solved Q supplies
+  the operating-point reference and VAC integral.
+- The TLC VAC test/experiment uses the M4 TLC plant and the same shared VAC
+  block, with the validated 0.1 H reactor separating its controlled AC bus
+  from the source. TLC cases without VAC keep their original fixtures.
+
+References are rebuilt from the solved Julia setpoints, as in M4/M5a.
+Consequently Q-V uses the solved terminal voltage and Q (rather than the saved
+fixed 1 pu/200 MVAr requests) when recovering its support/PI equilibrium;
+VAC uses solved Q to select its integral. Each representation has its own
+reference TSV, including its power-flow differences.
+
+The M5a differences also apply to every new MMC: TEC gains 1.386/29.70 and
+ZSCC gains 0.1048/48.1914 are explicit full-Σ additions, rounded saved voltage
+ratio 0.8763 becomes exact 333/380, saved 640 kV capacitor guesses become
+converged values, and the accepted near-ideal YY realization adds its existing
+leakage/exciting current. Saved `t_rst=0` does not introduce a control reset;
+all integrators use solved states and the existing fresh-run/hold construction.
+The legacy adapter dropping Σ controls is bypassed, not repaired. Modular
+DC-voltage droop remains deferred as documented above.
+
+The acceptance script retains every M1–M5a case and adds all new classic/builder
+fixtures and both ramp cases in one pass (32 projects). MMC cases use saved 10 s / 10 us / 250 us settings and
+zero source ramp; 10 s covers twenty P-f lag time constants. TLC VAC retains
+M4's 10 s / 10 us / 40 us and 0.05 s ramp. The existing comparison rows and
+limits apply: internal/terminal P/Q on the converter base, capacitor cycle
+means against solved Vdc, signed DC currents and `idc=3*iS_z`. No tolerance
+or probe template is added. `test/manual/pscad/write_m5b_experiments.jl` writes
+`/tmp/pscad-m5b-experiments/` with README and reference TSVs containing solved
+terminal/bus values, internal pu references and complete converged vectors.
+
+Both source-ramp experiments passed station round 1: PQ MMC with the default
+0.05 s ramp, and TLC case 2 with zero ramp. The original PQ diagnostic project
+changed only Main source `Tc` fields after building the zero-ramp plan; all
+module sources, namespace, canvas and output settings were retained. It ran
+10 s with finite output, as did the zero-ramp TLC, whose settled result was
+unchanged from its ramped case. Amauri approved lifting the MMC-only rejection:
+every supported converter now accepts any finite, nonnegative source ramp.
+The library default remains 0.05 s; normal MMC fixtures retain zero and normal
+TLC fixtures retain the default. The experiment writer now exports default-ramp
+PQ directly, and the acceptance script includes both cases. Tests cover default
+and nondefault ramps for every new mode, verify Main source `Tc`, and preserve
+all module initial states, control components and wiring.
+
+Plan tests check named-node connectivity and electrical topology on every new
+canvas, solved startup including VAC Q, and PI/lag values and derivatives
+against the Julia equations at displaced inputs. Synthetic comparison rows
+use each mode's solved terminal references. XML round trips cover all new
+exports and retain complete cited witnesses in
+`test/pscad/fixtures/mmc_modes_saved_fragments.xml`; existing M4/M5a witnesses
+still cover every primitive field, port and orientation. These are local
+structural/equation checks. Native station evidence follows.
+
+
+### M5b station round 1
+
+All twelve projects built and ran 10 s with finite channels and no build/runtime
+errors. MMC sampling was 250 us and TLC sampling was 40 us. The archived inputs
+are `/tmp/pscad-m5b-results/<project>.csv` and each project's own
+`/tmp/pscad-m5b-experiments/<project>_reference.tsv`. The manual
+`test/manual/pscad/compare_m5b_results.jl` reconstructs probe ownership but takes
+all numeric bus/terminal comparison references from those TSVs, rather than
+rebasing them to a new solve. Detailed rows and the summary are in
+`/tmp/pscad-m5b-comparison/`. Every one of 252 rows passes the existing policy:
+1% voltage/capacitor means, 2% current with the approved DC bases, 1 degree
+relative AC angle, and 0.01 pu of rating for terminal/internal P/Q. Signed
+`i_dc=3*mean(iS_z)*Sbase/vDC_base` identities also pass. DC voltages use the
+physical pole difference; internal Vdc/frequency/rotating angle remain the
+existing diagnostics. The rotating `theta_c` settling warning is expected
+for its continuously increasing nominal-frequency angle, not an operating-point
+comparison failure.
+
+The worst row per project, selected by error divided by its approved limit, is:
+
+| Project | Rows | Result | Worst row | Error | Limit |
+|---|---:|---|---|---:|---:|
+| mmc_vdc_classic | 35 | pass | SEND_2_v_Ctot_u_b | 0.173734% | 1% |
+| mmc_vdc_builder | 35 | pass | SEND_2_v_Ctot_u_b | 0.173734% | 1% |
+| mmc_pf_classic | 17 | pass | DUT_v_Ctot_l_b | 0.069215% | 1% |
+| mmc_pf_builder | 17 | pass | DUT_v_Ctot_l_b | 0.069215% | 1% |
+| mmc_qv_classic | 21 | pass | DUT_v_Ctot_l_b | 0.069053% | 1% |
+| mmc_qv_builder | 21 | pass | DUT_v_Ctot_l_b | 0.069048% | 1% |
+| mmc_vac_classic | 21 | pass | DUT_v_Ctot_u_a | 0.056697% | 1% |
+| mmc_vac_builder | 21 | pass | DUT_v_Ctot_u_a | 0.056723% | 1% |
+| tlc_vac_classic | 17 | pass | I_DUT_1 | 0.017938% | 2% |
+| tlc_vac_builder | 17 | pass | I_DUT_1 | 0.018201% | 2% |
+| mmc_pq_default_ramp | 17 | pass | DUT_v_Ctot_l_b | 0.069215% | 1% |
+| tlc_case2_zero_ramp | 13 | pass | I_CableDC12_1 | 0.082770% | 2% |
+
+Capacitor errors are relative to solved Vdc. TLC current errors use the
+approved converter DC current base, rather than relative error at a small
+reference current. Full CSV comparison checks every channel for finite data
+and includes each converter's network-side fundamental P/Q, its filtered
+internal P/Q, DC voltages/currents and all six MMC capacitor means.
+
+Q-V and MMC VAC differences between representations primarily reflect their
+distinct solved points and exported references, not a changed control topology:
+
+| Mode / representation | Solved Q [MVAr] | Native terminal Q [MVAr] | Native internal Q [MVAr] |
+|---|---:|---:|---:|
+| Q-V classic | 199.216172 | 198.768574 | 198.818523 |
+| Q-V builder | 199.169011 | 198.721613 | 198.771560 |
+| VAC classic | 39.329910 | 39.311339 | 39.357494 |
+| VAC builder | 38.679827 | 38.676647 | 38.722803 |
+
+Q-V's solved Q difference is 0.047161 MVAr and its native internal difference
+is 0.046963 MVAr. VAC's corresponding differences are 0.650083 and 0.634690
+MVAr; the difference between their own-point residuals is only 0.015393 MVAr.
+The actual projects retain those targets: Q-V source line RMS voltages are
+379.999109/380.0 kV and measured-side references are
+1.000039196865/1.000041549425 pu; VAC source voltages are
+380.000342/380.019669 kV and references are 1.000000963924/0.999912741066 pu
+(classic/builder). VAC also retains each solved integral. The small voltage
+differences matter for voltage regulation through the 0.1 H reactor. Internal
+Q and network-side Q are separate measurements across the accepted near-ideal
+YY realization; both are tested against each representation's solved Q.
+No implementation change or tolerance relaxation is needed for these results.
+
+The reference writer also corrects the reactive-power unit labels for `qgrid`
+and `qg` to MVAr. Twenty-eight archived labels were corrected with every numeric
+reference and state unchanged; the metadata changes are listed in
+`/tmp/pscad-m5b-comparison/reference_unit_corrections.tsv`.
+
+### Stop condition: repeated classic power flow reverses fixed Q
+
+The supplied station projects still pass all 252 rows. A subsequent cross-check
+of the newly exported ramp cases against those station projects exposed a
+separate core defect: calling `power_flow` twice on the same classic modular
+converter network reverses the fixed reactive-power request. A standalone
+reproduction, without PSCAD export, is recorded in
+`/tmp/pscad-m5b-comparison/repeat_q_powerflow.jl` and its TSV/log:
+
+| Converter | Solve | Qac before [MVAr] | Solved qgrid [pu on 1000 MVA] | AC injection [MVAr] | Qac after [MVAr] |
+|---|---:|---:|---:|---:|---:|
+| MMC | 1 | 200 | -0.2 | 200 | -200 |
+| MMC | 2 | -200 | 0.2 | -200 | 200 |
+| TLC | 1 | 20 | -0.020000428 | 20.000428 | -20.000428 |
+| TLC | 2 | -20.000428 | 0.020000428 | -20.000428 | 20.000428 |
+
+Current `src/Network/power_flow.jl:192–197` stores the solved `qgrid` directly
+in `Setpoint.Qac`. The next conversion reads that setpoint directly into `Q_g`
+(`converter/MMC/MMC.jl:407`, `converter/TLC/TLC.jl:481`), so the request changes
+sign. The legacy MMC applies `Qac *= -1` before storing `converter.Q`
+(`src/Network/Components/converter/MMC_legacy.jl:173–179`). Thus the current
+request/solved-point sign handling differs from the legacy path. Core files
+are unchanged in this work; no correction or workaround is implemented.
+The new acceptance/XML ramp entries currently re-solve networks already used
+by the regular PQ/TLC exports and therefore trigger this defect. Their new
+exports must not be treated as reproductions of the accepted station cases.
+The experiment writer and CSV comparator use fresh fixture instances for those
+cases; the original station project files and numeric references are retained.
+
+Work stopped under the core-defect rule. The approved ramp rejection removal
+is present, and the new mode/ramp tests pass 526/526. The PSCAD suite reports
+15,204 passed and two failed obsolete zero-ramp rejection assertions at
+`test/pscad/mmc_test.jl:212`; these remain to be updated. XML round trips pass
+260,870/260,870 across 32 exports, which checks serialization rather than this
+cross-export operating-point invariance. Aqua passes 11/11, changed-code
+formatting and `git diff --check` pass, and the final full `Pkg.test()` was not
+started after the stop condition was confirmed. M5b follow-up is incomplete.

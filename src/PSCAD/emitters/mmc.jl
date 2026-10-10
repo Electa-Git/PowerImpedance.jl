@@ -361,14 +361,6 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
     m.sigma_control isa PowerImpedance.ΣdqzControlTEC || not_exportable(e, m.sigma_control)
     m.modulation isa PowerImpedance.UncompensatedModulation ||
         not_exportable(e, m.modulation)
-    m.delta_control.outer_active isa PowerImpedance.OuterActivePowerControl ||
-        not_exportable(e, m.delta_control.outer_active)
-    m.delta_control.outer_reactive isa PowerImpedance.OuterReactiveQControl ||
-        not_exportable(e, m.delta_control.outer_reactive)
-    m.delta_control.outer_active.support isa PowerImpedance.NoFrequencySupport ||
-        not_exportable(e, m.delta_control.outer_active.support)
-    m.delta_control.outer_reactive.support isa PowerImpedance.NoVoltageSupport ||
-        not_exportable(e, m.delta_control.outer_reactive.support)
     m.delta_control.occ isa PowerImpedance.InnerCurrentPIControl ||
         not_exportable(e, m.delta_control.occ)
     for (block, supported) in ((m.sigma_control.tec, PowerImpedance.TotalEnergyControl),
@@ -376,8 +368,6 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
         (m.sigma_control.ccsc, PowerImpedance.CirculatingCurrentSuppressionControl))
         block isa supported || not_exportable(e, block)
     end
-    iszero(context.settings.source_ramp) ||
-        throw(ArgumentError("converter :$(e.name) requires source_ramp = 0 for the saved MMC start-up construction"))
     isapprox(m.elec.ωbase, 2π * context.settings.frequency; rtol = 1e-12) ||
         throw(ArgumentError("converter :$(e.name) frequency differs from the network frame"))
     haskey(context.netlist.operating_point.branch_flows, e.name) ||

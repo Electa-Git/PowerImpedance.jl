@@ -3,8 +3,8 @@ $(TYPEDEF)
 
 Specify simulation duration, integration and output sampling, and optional
 snapshot saving for one fresh PSCAD run. Construct with keyword arguments;
-Duration, steps and frequency must be positive and finite; the source ramp may
-be zero for the saved MMC start-up construction. Require `sample_step >= time_step`,
+Duration, steps and frequency must be positive and finite; the source ramp must
+be nonnegative and finite for every converter. Require `sample_step >= time_step`,
 and a snapshot must satisfy `0 < snapshot_time <= simulation_time`.
 
 $(TYPEDFIELDS)

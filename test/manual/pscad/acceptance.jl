@@ -79,6 +79,44 @@ cases = [(classic_model, classic_model, 0.01), (builder_model, classic_model, 0.
     (mmc_classic_model, mmc_classic_model, 0.01), (
         mmc_builder_model, mmc_classic_model, 0.01)]
 
+# M5b uses the accepted MMC hold and zero ramp. Saved modes use the same
+# 10 s / 10 us / 250 us settings; P-f's 0.5 s lag gets twenty time constants.
+for (stem, fixture, reference) in (
+    ("mmc_vdc", PSCADFixtures.mmc_vdc_network(), :midpoint_resistors),
+    ("mmc_pf", PSCADFixtures.mmc_pf_network(), :none),
+    ("mmc_qv", PSCADFixtures.mmc_qv_network(), :none),
+    ("mmc_vac", PSCADFixtures.mmc_vac_network(), :none))
+    classic_mode = export_pscad(fixture.classic;
+        path = joinpath(exports, stem * "_classic.pscx"), settings = mmc_settings,
+        dc_reference = reference)
+    builder_mode = export_pscad(fixture.state;
+        path = joinpath(exports, stem * "_builder.pscx"), settings = mmc_settings,
+        dc_reference = reference)
+    append!(cases, [(classic_mode, classic_mode, 0.01), (builder_mode, classic_mode, 0.01)])
+end
+
+# TLC VAC shares the same generator, with the accepted M4 timing and ramp.
+tlc_vac = PSCADFixtures.tlc_vac_network()
+tlc_vac_classic = export_pscad(tlc_vac.classic;
+    path = joinpath(exports, "tlc_vac_classic.pscx"), settings = tlc_settings, dc_reference = :none)
+tlc_vac_builder = export_pscad(tlc_vac.state;
+    path = joinpath(exports, "tlc_vac_builder.pscx"), settings = tlc_settings, dc_reference = :none)
+append!(cases, [
+    (tlc_vac_classic, tlc_vac_classic, 0.01), (tlc_vac_builder, tlc_vac_classic, 0.01)])
+
+# M5b round 1 also accepted both source-ramp experiments. Keep them in the
+# same station pass without changing the regular MMC/TLC fixture settings.
+mmc_default_ramp = export_pscad(mmc_classic;
+    path = joinpath(exports, "mmc_pq_default_ramp.pscx"),
+    settings = PowerImpedance.PSCAD.SimulationSettings(simulation_time = 10.0,
+        time_step = 10e-6, sample_step = 250e-6), dc_reference = :none)
+tlc_zero_ramp = export_pscad(tlc2_classic;
+    path = joinpath(exports, "tlc_case2_zero_ramp.pscx"),
+    settings = PowerImpedance.PSCAD.SimulationSettings(simulation_time = 10.0,
+        time_step = 10e-6, sample_step = 40e-6, source_ramp = 0.0), dc_reference = :none)
+append!(cases, [
+    (mmc_default_ramp, mmc_default_ramp, 0.01), (tlc_zero_ramp, tlc_zero_ramp, 0.01)])
+
 # Detect the merged model by its positive-sequence transfer, without relying
 # on a commit hash. Compare against YY to remove the fixture's no-load loss angle.
 dy_classic, dy_state = PSCADFixtures.transformer_network(; organization = :ΔY)

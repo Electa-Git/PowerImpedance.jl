@@ -277,7 +277,8 @@ end
 function converter_voltage_support!(
         graph, parameters, block::PowerImpedance.VoltageSupportLag, equilibrium, e)
     block.ωc > 0 || not_exportable(e, block)
-    converter_parameter!(parameters, "vac_reference", equilibrium.setpoint_pu.v_ac)
+    converter_parameter!(parameters, "vac_reference",
+        equilibrium.setpoint_pu.v_ac * PowerImpedance.voltage_filter_ratio(e.model))
     k = converter_parameter!(parameters, "supportK", block.K)
     t = converter_parameter!(parameters, "supportT", 1 / block.ωc, "s")
     y0 = converter_parameter!(parameters, "support0", equilibrium.states.ξ_vac_supp)
@@ -294,8 +295,11 @@ function converter_voltage_support!(graph, parameters, block, equilibrium, e)
     not_exportable(e, block)
 end
 
-function converter_reactive(name, e, equilibrium, block = e.model.outerReactive)
-    block isa PowerImpedance.OuterReactiveQControl || not_exportable(e, block)
+function converter_reactive(name, e, equilibrium)
+    converter_reactive(name, e, equilibrium, e.model.outerReactive)
+end
+
+function converter_reactive(name, e, equilibrium, block::PowerImpedance.OuterReactiveQControl)
     parameters = ModuleParameterPlan[]
     graph = BlockGraph(ControlBlock[Import(n, Signal(n))
                                     for n in ("Q_ac_f", "vG_d_f", "vG_q_f")])
@@ -310,6 +314,27 @@ function converter_reactive(name, e, equilibrium, block = e.model.outerReactive)
     return converter_definition(name, parameters, graph,
         [("Q_ac_f", 1), ("vG_d_f", 1), ("vG_q_f", 1)], [("i_q_ref", 1)])
 end
+
+function converter_reactive(name, e, equilibrium, block::PowerImpedance.OuterReactiveVacControl)
+    parameters = ModuleParameterPlan[]
+    converter_parameter!(parameters, "vac_reference",
+        equilibrium.setpoint_pu.v_ac * PowerImpedance.voltage_filter_ratio(e.model))
+    # VacControl: local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:8025–8215.
+    # Use the already witnessed square/sqrt voltage magnitude and split PI.
+    graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for n in ("vG_d_f", "vG_q_f")])
+    append!(graph.nodes,
+        ControlBlock[Square(Signal("vG_d_f"), Signal("vd2")),
+            Square(Signal("vG_q_f"), Signal("vq2")),
+            Sum([Signal("vd2"), Signal("vq2")], [1, 1], Signal("v2")),
+            Sqrt(Signal("v2"), Signal("vac")), Import("vac_reference", Signal("vac_reference")),
+            Sum([Signal("vac_reference"), Signal("vac")], [1, -1], Signal("error"))])
+    converter_pi!(graph, parameters, Signal("error"), Signal("i_q_ref"), block.pi_ctrl,
+        equilibrium.states.ξ_v_ac, "vac")
+    push!(graph.nodes, Export("i_q_ref", Signal("i_q_ref")))
+    return converter_definition(name, parameters, graph,
+        [("vG_d_f", 1), ("vG_q_f", 1)], [("i_q_ref", 1)])
+end
+converter_reactive(name, e, equilibrium, block) = not_exportable(e, block)
 
 function converter_occ(name, e, equilibrium, block = e.model.innerCurrent)
     block isa PowerImpedance.InnerCurrentPIControl || not_exportable(e, block)

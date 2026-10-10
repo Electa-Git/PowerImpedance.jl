@@ -231,7 +231,12 @@ M4; the original case-2 admittance grid connects its DC source directly.
 """
 tlc_case2_network() = tlc_network(false)
 
-function tlc_network(vdc_control)
+function tlc_vac_network()
+    tlc_network(false,
+        PowerImpedance.OuterReactiveVacControl(pi_ctrl = PowerImpedance.PIControl(Kp = 0.0, Ki = 100.0)))
+end
+
+function tlc_network(vdc_control, reactive = nothing)
     zbase = 220.0^2 / 100.0
     elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08zbase / (2π * 50), Rᵣ = 0.0008zbase,
         Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = 640.0)
@@ -252,9 +257,10 @@ function tlc_network(vdc_control)
                     Ki = 7.957747154594767),
                 filter = PowerImpedance.Butterworth(order = 2, ωc = 2π * 80)),
             outerActive = active,
-            outerReactive = PowerImpedance.OuterReactiveQControl(
+            outerReactive = isnothing(reactive) ?
+                            PowerImpedance.OuterReactiveQControl(
                 pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
-                support = support),
+                support = support) : reactive,
             innerVoltage = PowerImpedance.NoInnerVoltageControl(),
             innerCurrent = PowerImpedance.InnerCurrentPIControl(pi_ctrl = PowerImpedance.PIControl(
                 Kp = 0.254647908947033, Ki = 0.8)),
@@ -274,9 +280,24 @@ function tlc_network(vdc_control)
             I2 = Insulator(rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
             C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10.0),
             I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3), transformation = true))
+    if reactive isa PowerImpedance.OuterReactiveVacControl
+        # Give VAC its own voltage-controlled bus, as in the MMC VAC script.
+        elements = merge(elements, (;
+            Grid = impedance(z = s -> 0.1s, pins = 3, transformation = true)))
+    end
     rows = [(node = Symbol("AC" * axis), element, side, terminal)
             for (element, side) in ((:DUT, 2), (:G3, 1))
             for (terminal, axis) in enumerate(("d", "q"))]
+    if reactive isa PowerImpedance.OuterReactiveVacControl
+        rows = [(; node = r.element == :G3 ? Symbol("Grid" * string(r.terminal)) : r.node,
+                    r.element, r.side, r.terminal) for r in rows]
+        append!(rows,
+            [(node = Symbol("Grid" * string(t)), element = :Grid, side = 1, terminal = t)
+             for t in 1:2])
+        append!(rows,
+            [(node = Symbol("AC" * axis), element = :Grid, side = 2, terminal = t)
+             for (t, axis) in enumerate(("d", "q"))])
+    end
     append!(rows,
         [(node = :DC1, element = :DUT, side = 1, terminal = 1),
             (node = :DC1, element = :CableDC12, side = 1, terminal = 1),
@@ -304,10 +325,26 @@ end
 # TEC gains: test/adm_MMC_test.jl:108–110; no saved PQ counterpart exists.
 # ZSCC uses the saved CCSC gains. 31_10.jl supplies no optional filter or delay.
 # Its ideal AC source and PQ control omit the saved source R and voltage droop.
-function mmc_pq_network()
+mmc_pq_network() = mmc_network(:pq)
+mmc_vdc_network() = mmc_network(:vdc)
+mmc_pf_network() = mmc_network(:pf)
+mmc_qv_network() = mmc_network(:qv)
+mmc_vac_network() = mmc_network(:vac)
+
+function mmc_network(mode)
     PI = PowerImpedance
     voltage = 380 / sqrt(3)
     zbase = 333.0^2 / 1000.0
+    active = mode == :vdc ?
+             PI.OuterActiveVdcControl(pi_ctrl = PI.PIControl(Kp = 5.0, Ki = 15.0)) :
+             PI.OuterActivePowerControl(pi_ctrl = PI.PIControl(Kp = 0.1, Ki = 31.4159),
+        support = mode == :pf ? PI.FrequencySupportLag(Kω = 5.0, ωc = 2.0) :
+                  PI.NoFrequencySupport())
+    reactive = mode == :vac ?
+               PI.OuterReactiveVacControl(pi_ctrl = PI.PIControl(Kp = 0.0, Ki = 100.0)) :
+               PI.OuterReactiveQControl(pi_ctrl = PI.PIControl(Kp = 0.1, Ki = 31.4159),
+        support = mode == :qv ? PI.VoltageSupportLag(K = 20.0, ωc = 100.0) :
+                  PI.NoVoltageSupport())
     elements = (;
         DUT = mmc(
             elec = PI.ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07,
@@ -318,8 +355,8 @@ function mmc_pq_network()
             sync = PI.PLLSynchronization(pi_ctrl = PI.PIControl(Kp = 0.28, Ki = 12.5664),
                 filter = PI.NoFilter()),
             delta_control = PI.ΔdqControlGFL(
-                outer_active = PI.OuterActivePowerControl(pi_ctrl = PI.PIControl(Kp = 0.1, Ki = 31.4159)),
-                outer_reactive = PI.OuterReactiveQControl(pi_ctrl = PI.PIControl(Kp = 0.1, Ki = 31.4159)),
+                outer_active = active,
+                outer_reactive = reactive,
                 occ = PI.InnerCurrentPIControl(pi_ctrl = PI.PIControl(Kp = 0.7691, Ki = 522.7654))),
             sigma_control = PI.ΣdqzControlTEC(
                 tec = PI.TotalEnergyControl(pi_control = PI.PIControl(Kp = 1.386, Ki = 29.70)),
@@ -332,11 +369,58 @@ function mmc_pq_network()
         G_AC = ac_source(pins = 3, transformation = true, setpoint = Setpoint(Vac = 380sqrt(2 /
                                                                                             3))),
         G_DC = dc_source(setpoint = Setpoint(Vdc = 800.0)))
+    if mode in (:qv, :vac)
+        # Q-V saved source R: Q-V_Droop/GFL_MMC_Validation.pscx:687–710.
+        # VAC script's explicit grid reactor: VAC_Control/VAC_Control.jl:116.
+        grid = mode == :qv ? impedance(z = s -> 0.01, pins = 3, transformation = true) :
+               impedance(z = s -> 0.1s, pins = 3, transformation = true)
+        elements = merge(elements, (; Grid = grid))
+    elseif mode == :vdc
+        # DVC saved project supplies current, not a stiff voltage (2565–2573).
+        # Its Julia validation supplies that DC side with a remote PQ MMC and
+        # 60 km cable: DC_Voltage_Control.jl:62–104,126–133.
+        remote = deepcopy(mmc_pq_network().state.elements.DUT)
+        remote.setpoint = Setpoint(Pac = -608.3578, Qac = -200.0,
+            Vac = 380sqrt(2 / 3), Vdc = 800 * 1.00009, Pdc = -608.3578)
+        dc_cable = cable(length = 60e3, positions = [(-0.5, 1.0), (0.5, 1.0)],
+            C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8),
+            I1 = Insulator(rᵢ = 24.25e-3, rₒ = 41.75e-3, ϵᵣ = 2.3),
+            C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8),
+            I2 = Insulator(rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
+            C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10.0),
+            I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3), transformation = true)
+        elements = (; elements.DUT, elements.G_AC, SEND = remote,
+            G_SEND = deepcopy(elements.G_AC), CableDC = dc_cable)
+    end
     rows = [(node = Symbol("AC" * axis), element, side, terminal)
             for (element, side) in ((:DUT, 2), (:G_AC, 1))
             for (terminal, axis) in enumerate(("d", "q"))]
-    append!(rows, [(node = :DC, element, side = 1, terminal = 1)
-                   for element in (:DUT, :G_DC)])
+    if mode in (:qv, :vac)
+        rows = [(;
+                    node = r.element == :G_AC ? Symbol("Grid" * string(r.terminal)) :
+                           r.node,
+                    r.element, r.side, r.terminal) for r in rows]
+        append!(rows,
+            [(node = Symbol("Grid" * string(t)), element = :Grid, side = 1, terminal = t)
+             for t in 1:2])
+        append!(rows,
+            [(node = Symbol("AC" * axis), element = :Grid, side = 2, terminal = t)
+             for (t, axis) in enumerate(("d", "q"))])
+    end
+    if mode == :vdc
+        append!(rows,
+            [(node = Symbol("Send" * axis), element, side, terminal)
+             for (element, side) in ((:SEND, 2), (:G_SEND, 1))
+             for (terminal, axis) in enumerate(("d", "q"))])
+        append!(rows,
+            [(node = :DC, element = :DUT, side = 1, terminal = 1),
+                (node = :DC, element = :CableDC, side = 2, terminal = 1),
+                (node = :DC_SEND, element = :SEND, side = 1, terminal = 1),
+                (node = :DC_SEND, element = :CableDC, side = 1, terminal = 1)])
+    else
+        append!(rows, [(node = :DC, element, side = 1, terminal = 1)
+                       for element in (:DUT, :G_DC)])
+    end
     state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
         voltageBase = voltage))
     classic = Network()
@@ -347,7 +431,8 @@ function mmc_pq_network()
     for row in rows
         connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
     end
-    for (element, count) in ((:G_AC, 2), (:G_DC, 1)), terminal in 1:count
+    sources = mode == :vdc ? ((:G_AC, 2), (:G_SEND, 2)) : ((:G_AC, 2), (:G_DC, 1))
+    for (element, count) in sources, terminal in 1:count
 
         connect!(classic, (element, Symbol("2.$terminal")), :gnd)
     end

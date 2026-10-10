@@ -209,7 +209,10 @@ end
         @test all(Dict(c.params)["Tc"] == "0.0 [s]"
         for c in plan.main.components
         if c.defn in ("master:source_1", "master:source_3"))
-        @test_throws ArgumentError P.build_plan(list)
+        default_plan = P.build_plan(list)
+        @test all(Dict(c.params)["Tc"] == "0.05 [s]"
+        for c in default_plan.main.components
+        if c.defn in ("master:source_1", "master:source_3"))
         for m in (with_modulation(e.model, PI.CompensatedModulation()),
             PI.MMC(; e.model.meas, e.model.sync, e.model.delta_control,
             sigma_control = PI.ΣdqzControlTEC(), e.model.modulation, e.model.elec),
