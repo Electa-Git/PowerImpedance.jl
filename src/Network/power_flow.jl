@@ -157,7 +157,7 @@ function power_flow(net::Network)
     else
         @warn "No convergence (try again with relaxation): $(result["termination_status"])"
 
-        result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
+        result = solve_acdcpf_relax(data, _PM.ACPPowerModel, ipopt; setting = s)
         if result["termination_status"] == MOI.LOCALLY_SOLVED
             @info "Power flow solution found with relaxation"
         else

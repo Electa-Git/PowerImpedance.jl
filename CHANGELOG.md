@@ -17,6 +17,8 @@
 
 ### Fixed
 
+- Qualify the Classic power-flow fallback model, replacing an undefined-name
+  error with the relaxed solve while preserving converged results.
 - Store solved modular MMC and TLC reactive-power setpoints in the input
   convention, correcting the Q sign read by subsequent power-flow solves while
   preserving first-solve converter states, linearizations and admittances.
