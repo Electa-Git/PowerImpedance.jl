@@ -62,7 +62,10 @@ Return zero reactive-power support.
 
 $(SIGNATURES)
 """
-state_space!(F, x, meas, setpoint_pu::SetpointPU, ::NoVoltageSupport) = (; Q_ac_support = 0.0)
+function state_space!(F, x, meas, setpoint_pu::SetpointPU, ::NoVoltageSupport,
+        conv::Union{AbstractConverter, Nothing} = nothing)
+    (; Q_ac_support = 0.0)
+end
 
 """
 Lagged AC-voltage support contribution to reactive-power reference.
@@ -90,9 +93,11 @@ Evaluate the voltage-support lag equation.
 
 $(SIGNATURES)
 """
-function state_space!(F, x, meas, setpoint_pu::SetpointPU, block::VoltageSupportLag)
+function state_space!(F, x, meas, setpoint_pu::SetpointPU, block::VoltageSupportLag,
+        conv::Union{AbstractConverter, Nothing} = nothing)
     v_ac = sqrt(meas.vG_d_f^2 + meas.vG_q_f^2)
-    Δq_unf = block.K * (setpoint_pu.v_ac - v_ac)
+    v_ac_ref = setpoint_pu.v_ac * voltage_filter_ratio(conv)
+    Δq_unf = block.K * (v_ac_ref - v_ac)
     F[1] = block.ωc * (Δq_unf - x.ξ_vac_supp)
     return (; Q_ac_support = x.ξ_vac_supp)
 end
@@ -144,7 +149,7 @@ $(SIGNATURES)
 function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterReactiveQControl, conv::AbstractConverter)
     (; meas) = inputs
     ns = n_states(block.support)
-    support = state_space!(@view(F[1:ns]), x, meas, setpoint_pu, block.support)
+    support = state_space!(@view(F[1:ns]), x, meas, setpoint_pu, block.support, conv)
     Q_ac_f = meas.Q_ac_f
 
     Q_ac_ref_eff = setpoint_pu.q_ac + support.Q_ac_support
@@ -181,8 +186,17 @@ $(SIGNATURES)
 function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterReactiveVacControl, conv::AbstractConverter)
     (; meas) = inputs
     v_ac = sqrt(meas.vG_d_f^2 + meas.vG_q_f^2)
+    v_ac_ref = setpoint_pu.v_ac * voltage_filter_ratio(conv)
 
-    F[1] = block.pi_ctrl.Ki * (setpoint_pu.v_ac - v_ac)
-    controller_output = block.pi_ctrl.Kp * (setpoint_pu.v_ac - v_ac) + x.ξ_v_ac 
+    F[1] = block.pi_ctrl.Ki * (v_ac_ref - v_ac)
+    controller_output = block.pi_ctrl.Kp * (v_ac_ref - v_ac) + x.ξ_v_ac
     return (; q_ctrl_ref = controller_output)
+end
+
+function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y,
+        conv::AbstractConverter, ::OuterReactiveVacControl)
+    idx_ξvac = findfirst(==(:ξ_v_ac), statenames(conv))
+    @assert !isnothing(idx_ξvac)
+    F[idx_ξvac] = setpoint_pu.q_ac - y.meas.Q_ac_f
+    return y
 end

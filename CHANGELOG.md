@@ -17,6 +17,14 @@
 
 ### Fixed
 
+- Constrain modular MMC and TLC AC-voltage-control equilibria to the solved
+  reactive power, changing VAC steady states and dependent admittances.
+- Scale modular MMC VAC and Q-V control references onto the measured side of
+  the converter transformer, changing their control equations and admittances
+  for non-unit turns ratios.
+- Use AC voltage control and Q-V droop in the power flow for grid-following
+  MMCs, changing their solved voltages, reactive powers and dependent
+  linearizations. The TLC power-flow mapping remains unchanged.
 - Correct terminal scaling in both network paths, changing cross-admittances
   of modular MMCs with a converter transformer.
 - Preserve TLC electrical current seeds and accept zero-voltage initialization.

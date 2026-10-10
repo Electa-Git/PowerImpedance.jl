@@ -1680,3 +1680,81 @@ exclusion of start-up samples, changed solved Vdc, pass/fail cases for every
 arm, signed and zero current, the low-load current-base denominator, alternate
 MMC bases, incorrect units and missing probes. These checks exercise comparison
 arithmetic independently of the station-reported round 3 results.
+
+## M5b prerequisites: modular voltage control and deferred defects
+
+The modular MMC uses converter-side AC-voltage measurements. Its shared
+`OuterReactiveVacControl` and `VoltageSupportLag` references therefore multiply
+`SetpointPU.v_ac` by the existing `voltage_filter_ratio(conv)`, which is
+`turnsRatio` for an MMC and 1 for a TLC. Terminal inputs and setpoint
+normalization retain their existing definitions. This restores the legacy
+choice in `src/Network/Components/converter/MMC_legacy.jl:539` (Q-V support)
+and `:600` (AC-voltage control): divide the physical reference by
+`vAC_base/turnsRatio`. TLC reference arithmetic remains unchanged.
+
+Grid-following MMCs now use the reactive outer block's existing `pf_type_ac`
+and `pf_acq_droop` rules, already used by the TLC. VAC and Q-V support select
+`type_ac=2`; VAC has `acq_droop=0`, whereas Q-V support has `acq_droop=1` and
+`kq_droop=K*Sbase/(global_dict["S"]*1e-6)`. The AC bus becomes voltage controlled
+unless it already has a higher-priority slack source. `Vtar` and bus `vm` use
+the setpoint's phase peak AC voltage divided by `sqrt(2)` and the system
+phase RMS voltage base. These match the legacy mapping in
+`src/Network/Components/converter/common/conv_power_flow.jl:78–108`.
+
+PowerModelsACDC 0.10.1 reads `Vtar`, `Q_g` and `kq_droop` in
+`src/core/constraint_template.jl:169–173`. Its `src/formconv/acp.jl:154–159`
+constraint is `qgrid = -Q_g - kq_droop*(Vtar-vm)`; `Q_g` is converted from Mvar
+to system pu by `src/core/data.jl:668–685`, while `Vtar` and `kq_droop` are
+already pu and are not rescaled there. `src/prob/acdcpf.jl:194–201` selects
+this constraint for type 2 with droop enabled and the bus-voltage target for
+type 2 without droop. The focused Julia tests check these fields, an alternate
+power base, and solved VAC/Q-V equilibria at `turnsRatio=333/380` in both
+network representations.
+
+With terminal voltage prescribed, the VAC PI equation is identically satisfied
+and does not determine reactive current. The old modular and legacy MMC
+equilibrium paths added only the DC-voltage constraint (legacy
+`src/Network/Components/converter/MMC_legacy.jl:1742–1751`). During equilibrium
+recovery, MMC and TLC now dispatch through both their active and reactive
+outer controls. `OuterReactiveVacControl` replaces the `ξ_v_ac` residual with
+`setpoint_pu.q_ac - y.meas.Q_ac_f`. The reference is `-Setpoint.Qac/Sbase`,
+matching the existing Q controller and the measurement convention
+`Q_ac = vG_d_f*i_q_f - vG_q_f*i_d_f`. Reusing the measurement result preserves
+its frame, transformer scaling and filtering conventions. The normal dynamic
+VAC PI equation remains intact; Q-V droop already determines Q and receives
+no extra equilibrium condition. The focused tests check the solved P/Q and
+full equilibrium residual for both MMC representations and for TLC VAC with
+P and Vdc control. M5b PSCAD modes and station acceptance remain pending.
+
+The complete before/after Julia regression archives in
+`/tmp/mmc-vac-baseline/` contain 1,393 networks, 2,756 converter records and
+2,703 numerical calculation outputs per phase. The per-network table
+`regression.tsv` reports 1,389 bit-identical networks; only the four MMC
+VAC/Q-V diagnostics change their power-flow points, steady states and
+dependent admittances. All original calculation outputs and all 29 TLC
+records without VAC are bit-identical. Both previously failing VAC
+point-consistency checks pass in the focused 82-test suite. Converter
+validation passes 5,938 assertions, and Aqua passes all 11 checks. The final
+Julia 1.10.11 `Pkg.test()` run passes all 112,292 suite assertions.
+
+Three deferred issues remain outside this correction:
+
+- The modular active-control API has `NoOuterActiveControl`,
+  `OuterActivePowerControl` and `OuterActiveVdcControl`, but no DC-voltage
+  droop control type (`src/Network/Components/converter/common/loops/outer_active.jl`).
+  The legacy `:vdc_droop` control is not a modular API. The planned Vdc-droop
+  export is deferred until the Julia model provides that control type.
+- `_legacy_mmc` in `src/Network/NetworkBuilder/gs_converters.jl:187–263` drops
+  legacy energy/zcc/ccc controls. Its default Σ block at lines 243–247 uses
+  `NoTotalEnergyControl`, `NoZeroSequenceCurrentControl` and
+  `NoCirculatingCurrentSuppressionControl`. This is a confirmed adapter
+  defect; the adapter is unchanged by the voltage-control correction.
+- The unmodified converter-uncertainty example
+  (`examples/P2P_HVDC_Gridspace.jl`, master seed 2028) fails at trial 94,
+  derived seed `1756036741226661978`, with `MaxIters` and equilibrium infinity
+  residual `2.406338496994981e-5`. The complete before baseline explicitly
+  excludes that trial's comparison records, retains its original failed
+  state and error as a known failure, and includes every other trial. The
+  same recorded exclusion applies to the complete after baseline. No
+  solver tolerance or iteration limit is changed. A causal connection with
+  the dropped Σ controls has not been established.

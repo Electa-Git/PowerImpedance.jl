@@ -189,8 +189,11 @@ Evaluate TLC equilibrium equations.
 
 $(SIGNATURES)
 """
-equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC) =
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerActive)
+function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC)
+    result = equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerActive)
+    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerReactive)
+    return result
+end
 
 """
 Evaluate TLC equilibrium equations for DC-voltage control.

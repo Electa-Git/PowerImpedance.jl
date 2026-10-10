@@ -107,7 +107,7 @@ function state_space!(F, x, inputs, setpoint_pu::SetpointPU, c::MMC)
     # -- Electrical model -------------------------------------------------------------------------
     state_space_block!(F, x, (; out_modulation, sig_in, inputs), setpoint_pu, c.elec, c, i)
 
-    return nothing
+    return (; meas)
 end
 
 
@@ -308,8 +308,17 @@ end
 equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC) =
     equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.delta_control)
 
-equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFL) =
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_active)
+function equilibriumequations!(
+        F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFL)
+    result = equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_active)
+    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_reactive)
+    return result
+end
+
+function equilibriumequations!(
+        F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFM)
+    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_reactive)
+end
 
 function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, ::OuterActiveVdcControl)
     idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
@@ -319,7 +328,7 @@ function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC,
     return y
 end
 
-pf_type_ac(::ΔdqControlGFL) = 1
+pf_type_ac(block::ΔdqControlGFL) = pf_type_ac(block.outer_reactive)
 pf_type_ac(block::ΔdqControlGFM) = pf_type_ac(block.outer_reactive)
 
 pf_type_dc(::VSEWithDamping) = 1
@@ -369,8 +378,9 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
     end
     convdc["type_dc"] = pf_type_dc(conv.delta_control, conv.sync)
-    convdc["acq_droop"] = 0
-    convdc["kq_droop"] = 0.0
+    droop = pf_acq_droop(conv.delta_control.outer_reactive)
+    convdc["acq_droop"] = droop.enabled
+    convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
     convdc["droop"] = 0.0
     convdc["Vdcset"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
     convdc["Pacset"] = -elem.setpoint.Pac
