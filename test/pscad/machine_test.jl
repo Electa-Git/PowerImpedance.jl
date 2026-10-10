@@ -170,7 +170,11 @@ end
              for n in (classic_netlist, builder_netlist)]
     @test !isempty(builder_netlist.operating_point.bus_states)
     @test_throws ArgumentError P.build_plan(P.netlist(state, nothing))
-    for plan in plans
+    for (plan, net) in zip(plans, (classic, solved.network))
+        element = net.elements[:sg1]
+        effective, _ = PowerImpedance.pftoinputs(element.element_model, element.setpoint)
+        equilibrium = NamedTuple{PowerImpedance.statenames(element.element_model)}(
+            PowerImpedance._steady_state(element))
         machine = parameters(plan.main, "sync_machine")
         @test machine["Name"] == "sg1"
         @test machine["Cnfg"] == "1"
@@ -242,7 +246,7 @@ end
         avr = only(filter(m -> m.name == "AVR_sg1", plan.modules))
         gov = only(filter(m -> m.name == "GOV_sg1", plan.modules))
         @test [(p.name, p.default, p.unit) for p in avr.parameters][1:6] ==
-              [("vref", 1.01, ""), ("T_R", 0.05, "s"), ("T_B", 1.0, "s"),
+              [("vref", effective.vref_SG, ""), ("T_R", 0.05, "s"), ("T_B", 1.0, "s"),
             ("T_C", 0.1, "s"), ("T_A", 0.02, "s"), ("K_A", 200.0, "")]
         @test parameters(avr.canvas, "leadlag")["T1"] == "T_C"
         @test parameters(avr.canvas, "leadlag")["T2"] == "T_B"
@@ -254,7 +258,15 @@ end
               ["0.0", "Tm0", "Tm0", "Tm0", "Tm0"]
         @test [Dict(c.params)["G"] for c in components(gov.canvas, "gain")] ==
               ["inv_R", "F_HP", "F_IP", "F_LP"]
-        @test only(filter(p -> p.name == "Tm0", gov.parameters)).default ≈ 0.9
+        @test only(filter(p -> p.name == "Tm0", gov.parameters)).default == effective.Tm0
+        defaults = Dict(p.name => p.default for p in avr.parameters)
+        @test defaults["vref"] ≈ equilibrium.v_f +
+              element.element_model.elec.La_d*equilibrium.v_df /
+              (element.element_model.elec.Rf_d*element.element_model.avr.K_A)
+        @test defaults["Verror0"] == effective.vref_SG-defaults["Vt0"]
+        @test defaults["Vreg0"] == element.element_model.avr.K_A*defaults["Verror0"]
+        @test effective.Tm0 ≈ element.setpoint.Pac/element.element_model.elec.S_base +
+              element.element_model.elec.Ra*(equilibrium.i_d^2+equilibrium.i_q^2)
         @test isempty(components(avr.canvas, "const"))
         @test parameters(gov.canvas, "const")["Value"] == "1.0"
         for definition in plan.modules

@@ -15,18 +15,18 @@ raised internal terminal P from 895.45 MW to 898.778 MW, confirming the loss.
 """
 const SM_IRON_LOSS_RESISTANCE_PU = 1.0e6
 
-function machine_avr(name, machine, voltage_pu)
+function machine_avr(name, machine, voltage_pu, vref=machine.avr.vref_SG)
     a = machine.avr
     parameters = ModuleParameterPlan[
-        ModuleParameterPlan("vref", a.vref_SG, ""),
+        ModuleParameterPlan("vref", vref, ""),
         ModuleParameterPlan("T_R", a.T_R, "s"),
         ModuleParameterPlan("T_B", a.T_B, "s"),
         ModuleParameterPlan("T_C", a.T_C, "s"),
         ModuleParameterPlan("T_A", a.T_A, "s"),
         ModuleParameterPlan("K_A", a.K_A, ""),
         ModuleParameterPlan("Vt0", voltage_pu, ""),
-        ModuleParameterPlan("Verror0", a.vref_SG - voltage_pu, ""),
-        ModuleParameterPlan("Vreg0", a.K_A * (a.vref_SG - voltage_pu), ""),
+        ModuleParameterPlan("Verror0", vref - voltage_pu, ""),
+        ModuleParameterPlan("Vreg0", a.K_A * (vref - voltage_pu), ""),
         ModuleParameterPlan("Ef_scale", SM_AVR_FIELD_VOLTAGE_SCALE, "")]
     vt, vf, ref, error, lead, regulator, ef = Signal.([
         "Vt", "v_f", "vref_signal", "voltage_error", "lead_output", "regulator", "Ef"])
@@ -107,7 +107,8 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     flow !== nothing && haskey(flow, :terminal_voltage_kV) ||
         throw(ArgumentError("machine :$(e.name) requires solved terminal operating-point data"))
     voltage_pu = flow.terminal_voltage_kV * sqrt(3) / elec.Vᵃᶜ_base
-    torque_pu = e.setpoint.Pac / elec.S_base
+    inputs, _ = PowerImpedance.pftoinputs(machine, e.setpoint)
+    torque_pu = inputs.Tm0
     s2m, l2n, time = Signal.([pscad_name(e.pscad * suffix; used = state.used)
                               for suffix in ("_S2M", "_L2N", "_time")])
     speed = machine_probe!(state, e, bus, :machine_speed, "speed", "pu")
@@ -181,7 +182,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
         origin = (x + 126, y + 54))
     avr_name = pscad_name("AVR_" * e.pscad; used = state.used)
     gov_name = pscad_name("GOV_" * e.pscad; used = state.used)
-    machine_module!(state, machine_avr(avr_name, machine, voltage_pu), context, vt, ef)
+    machine_module!(state, machine_avr(avr_name, machine, voltage_pu, inputs.vref_SG), context, vt, ef)
     machine_module!(
         state, machine_governor(gov_name, machine, torque_pu), context, speed, tm)
 

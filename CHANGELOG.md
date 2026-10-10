@@ -24,6 +24,10 @@
 
 ### Fixed
 
+- Derive synchronous-machine torque and effective AVR references from the power
+  flow and initialize states from its phasors, changing machine equilibria,
+  linearizations, admittances and PSCAD machine control parameters to reproduce
+  terminal P/Q/voltage; power-flow and other component results retain their values.
 - Restore legacy MMC Σ controls and MMC/TLC reference fallback, local VAC/DC
   and power filters, and supported droop equations, changing legacy-keyword
   equilibria and admittances (and power-flow inputs when a previously ignored

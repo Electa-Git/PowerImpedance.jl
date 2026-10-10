@@ -88,13 +88,34 @@ initialvalues(::GovernorSM;inputs) =  NamedTuple{(:flow, :TchHP, :TreIP, :TcrLP)
 
 ########################### AVR #############################
 
+"""
+    AVRSM(; vref_SG=1.01, T_R=0.05, T_B=1.0, T_C=0.1, T_A=0.02, K_A=200)
+
+Proportional automatic voltage regulator with a terminal-voltage measurement
+filter, lead-lag compensator and exciter lag. At equilibrium its open-circuit
+field voltage is ``E_f = K_A(v_{ref} - |V_t|)``.
+
+When a synchronous machine receives a complete power-flow operating point,
+its fixed effective reference replaces `vref_SG` in the equations:
+``v_{ref} = |V_{t,pf}| + E_{f,pf}/K_A``. The configured `vref_SG` field is
+unchanged. This conversion requires a nonzero `K_A`.
+Without that operating point, the standalone AVR and machine use
+`vref_SG`; no reference conversion or phasor initialization is performed.
+
+$(TYPEDFIELDS)
+"""
 @with_kw struct AVRSM <: AbstractStateSpace
-    # eq::EquationInfo=avrsmeq()
+    "Configured terminal-voltage reference \\[pu\\], superseded by the effective reference at a power-flow operating point."
     vref_SG :: Float64   = 1.01 # Terminal voltage magnitude reference [pu]
+    "Terminal-voltage measurement-filter time constant [s]."
     T_R :: Float64       = 0.05     # Terminal voltage filter time constant [s]
+    "Lead-lag denominator time constant [s]."
     T_B :: Float64       = 1.0       # Lag time constant [s]
+    "Lead-lag numerator time constant [s]."
     T_C :: Float64       = 0.1        # Lead time constant [s]
+    "Exciter-lag time constant [s]."
     T_A :: Float64       = 0.02    # Regulator (lag) time constant [s]
+    "Regulator gain \\[pu/pu\\]."
     K_A :: Float64       = 200      # Regulator gain [pu]
 end
 
@@ -105,11 +126,37 @@ initialvalues(::AVRSM) =  (;)
 
 ################### SYNCHRONOUS MACHINE ######################
 """
-    A synchronous machine model. Validated against PSCAD. The model is based on the modified Kundur's example, with a steam turbine and governor. The model is implemented in the dq reference frame, and the electrical equations are based on the Park's transformation. The mechanical equations are based on the swing equation, and the governor is based on a simple first-order model. The AVR is based on a simple first-order model with a lead-lag compensator.
-    **Disclaimer**: Validation is slightly below 1% error, mostly at lowest frequencies. 
-    Possible reasons:
-    - Highly sensitive to operation point. Terminal voltage for power flow should be calculated based on AVR & exciter if no integral control
-    - Smaller timestep PSCAD (current validation with 1us)
+    SynchronousMachine(elec, mech, avr, gov)
+
+Synchronous machine in the dq frame, with modified Kundur electrical equations,
+a steam turbine, governor and proportional AVR. Electrical quantities use the
+machine's three-phase `S_base` and line-to-line RMS `Vᵃᶜ_base` bases.
+
+For a complete power-flow operating point (`Pac`, `Qac`, `Vac`, `θac`), `Pac`
+and `Qac` are generator-terminal powers while `Vac` and `θac` describe the
+receiving bus after the external `rt`/`lt` branch. The machine derives fixed
+references at synchronous speed:
+
+```math
+T_{m0} = p_{pf} + R_a |I_{pf}|^2, \\qquad
+v_{ref} = |V_{t,pf}| + E_{f,pf}/K_A.
+```
+
+The effective AVR reference replaces `avr.vref_SG` in the equations without
+changing that configured field. States are initialized from the same power-flow
+phasors, using the high-voltage solution of the external branch. The turbine
+fractions must sum to one for `Tm0` to equal the total turbine torque.
+References remain fixed during linearization.
+
+Without a complete operating point, `avr.vref_SG` remains the AVR reference and
+`Tm0 = Pac/S_base` retains the uncorrected torque convention. Initial values
+retain the synchronous-speed and governor seeds without phasor initialization.
+Constructing a machine alone does not solve a power flow or alter its references.
+A complete setpoint supplied directly to `pftoinputs` is treated as an operating
+point in the same way as a solver-provided setpoint.
+
+The stored PSCAD admittance validation has an aggregate error below 1%; its
+largest differences occur at low frequencies.
 """
 struct SynchronousMachine <: AbstractStateSpace
     elec::ElectricalSM
@@ -119,18 +166,60 @@ struct SynchronousMachine <: AbstractStateSpace
 end
 
 statenames(m::SynchronousMachine) = (statenames(m.elec)..., statenames(m.mech)...,statenames(m.gov)...,statenames(m.avr)...)
-initialvalues(m::SynchronousMachine;inputs, kwargs...) =  merge(initialvalues(m.elec), initialvalues(m.mech),initialvalues(m.gov;inputs),initialvalues(m.avr))
-inputnames(m::SynchronousMachine) = (:vd, :vq, :Tm0)
+function initialvalues(m::SynchronousMachine; inputs, setpoint_pu=nothing, kwargs...)
+    setpoint_pu === nothing && return merge(initialvalues(m.elec),
+        initialvalues(m.mech), initialvalues(m.gov; inputs), initialvalues(m.avr))
+    return _machine_powerflow_state(m, setpoint_pu).state
+end
+inputnames(m::SynchronousMachine) = (:vd, :vq, :Tm0, :vref_SG)
 outputnames(m::SynchronousMachine) = (:id, :iq)
 elecinputnames(m::SynchronousMachine) = (:vd, :vq)
 
-function pftoinputs(m::SynchronousMachine, setpoint::Setpoint)
-    
-    v_bus_d = setpoint.Vac * cos(setpoint.θac) /  (m.elec.Vᵃᶜ_base * sqrt(2/3))
-    v_bus_q = -setpoint.Vac * sin(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
-    Tm0 = setpoint.Pac / m.elec.S_base # You use setpoint power as mechanical torque (cst torque and ω is 1pu  ), TODO: Provide power of generator and should be fine    
+# Reconstruct the terminal operating point from receiving-bus voltage and
+# terminal power. The larger |Vt|² root is the normal high-voltage branch.
+function _machine_powerflow_state(m::SynchronousMachine, sp::SetpointPU)
+    e = m.elec
+    Vbus = sp.v_ac * cis(sp.θ_ac)
+    Sterminal = complex(sp.p_ac, sp.q_ac)
+    z = complex(e.rt, e.lt)
+    a = abs2(Vbus) + 2real(conj(z) * Sterminal)
+    vt2 = (a + sqrt(a^2 - 4abs2(z) * abs2(Sterminal))) / 2
+    i2 = abs2(Sterminal) / vt2
+    I = conj((Sterminal - z * i2) / Vbus)
+    Vterminal = Vbus + z * I
 
-    return NamedTuple{inputnames(m)}((v_bus_d, v_bus_q, Tm0)), nothing
+    # The machine dq frame conjugates the physical phasors.
+    internal_voltage = conj(Vbus + complex(e.Ra + e.rt,
+        e.La_q + e.Ll + e.lt) * I)
+    θ_sg = -π / 2 - angle(internal_voltage)
+    i_rotor = cis(θ_sg) * conj(I)
+    v_rotor = cis(θ_sg) * conj(Vbus)
+    i_d, i_q = real(i_rotor), imag(i_rotor)
+    i_df = (-imag(v_rotor) - (e.Ra + e.rt) * i_q +
+        (e.La_d + e.Ll + e.lt) * i_d) / e.La_d
+    Ef = e.La_d * i_df
+    Tm0 = sp.p_ac + e.Ra * i2
+    v_f = abs(Vterminal)
+    ξ_AVR = Ef / m.avr.K_A
+    state = (; i_d, i_df, i_d1=0.0, i_q, i_q1=0.0, i_q2=0.0,
+        ω_pu=1.0, θ_sg, δω_filt=0.0, flow=Tm0, TchHP=Tm0,
+        TreIP=Tm0, TcrLP=Tm0, v_f, ξ_AVR, v_df=e.Rf_d * i_df)
+    return (; state, Tm0, vref_SG=v_f + ξ_AVR)
+end
+
+function pftoinputs(m::SynchronousMachine, setpoint::Setpoint)
+    v_bus_d = setpoint.Vac * cos(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
+    v_bus_q = -setpoint.Vac * sin(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
+    p_ac = setpoint.Pac / m.elec.S_base
+    if ismissing(setpoint.Qac)
+        return (; vd=v_bus_d, vq=v_bus_q, Tm0=p_ac,
+            vref_SG=m.avr.vref_SG), nothing
+    end
+    sp = SetpointPU(p_ac=p_ac, q_ac=setpoint.Qac / m.elec.S_base,
+        θ_ac=setpoint.θac, v_ac=setpoint.Vac / (m.elec.Vᵃᶜ_base * sqrt(2/3)))
+    point = _machine_powerflow_state(m, sp)
+    return (; vd=v_bus_d, vq=v_bus_q, Tm0=point.Tm0,
+        vref_SG=point.vref_SG), sp
 end
 
 
@@ -238,7 +327,7 @@ function state_space!(F, x, Tm, block::GovernorSM; gen::SynchronousMachine)
     # return z
 end
 
-function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;gen::SynchronousMachine)
+function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;gen::SynchronousMachine, vref=block.vref_SG)
     
     v_d = v_dq[1]
     v_q = v_dq[2]
@@ -256,7 +345,7 @@ function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;gen::SynchronousM
     v_tq = v_q +gen.elec.rt*i_q - w_pu*gen.elec.lt*i_d + gen.elec.lt/gen.elec.ωn*diq_dt # Machine terminal voltage
 
     F[1] = 1/block.T_R*(sqrt(v_td^2+v_tq^2)- v_f)        # Voltage magnitude measurement (LPF)
-    dv = block.vref_SG - v_f                             # Error TODO: The voltage reference can be made an input to the state-space model.
+    dv = vref - v_f                                     # Fixed effective reference
     F[2] = 1/block.T_B*(dv - x_AVR)                 # Lead-lag state
     y_AVR = block.T_C/block.T_B*dv + (1 - block.T_C/block.T_B)*x_AVR       # Lead-lag output 
     F[3] = 1/block.T_A*( block.K_A*y_AVR*gen.elec.Rf_d/gen.elec.La_d - v_df) # Considering putting this in electrical part
@@ -301,7 +390,7 @@ function state_space!(F, x, inputs, gen::SynchronousMachine)
 
     ### AVR
     index_end = index + n_states(gen.avr)-1 #Nb of equatinos
-    state_space!(@view(F[index:index_end]), x, v_dq, didq_dt, gen.avr;gen)
+    state_space!(@view(F[index:index_end]), x, v_dq, didq_dt, gen.avr;gen, vref=get(inputs, :vref_SG, gen.avr.vref_SG))
     index = index_end+1
 
     

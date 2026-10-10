@@ -482,8 +482,9 @@ The AVR is `1/(1+s*T_R)` on terminal voltage, `vref-v_f`,
 `(1+s*T_C)/(1+s*T_B)`, then `K_A/(1+s*T_A)` and the Ef conversion gain.
 The governor is `1-speed`, `1/(1+s*T_w)`, `1/R`, `+Tm0`,
 `1/(1+s*T_G)`, then the cascaded chest/reheater/crossover poles. Weighted
-HP/IP/LP torques sum to `Tm`. `Tm0 = setpoint.Pac/S_base` matches Julia's
-input conversion; flow and turbine pole initial outputs equal `Tm0`.
+HP/IP/LP torques sum to `Tm`. `Tm0` uses Julia's effective input,
+`Pac/S_base + Ra*abs2(I_pf)`; flow and turbine pole initial outputs equal
+that corrected `Tm0`.
 There are no control limits because the Julia controllers have none.
 
 `BlockGraph` lowers in its stored order, four rows per column, with columns
@@ -570,8 +571,9 @@ observations motivate the network-side phasor comparisons. Internal P is
 897.894627 − j59.536473 MVA; the station measured 892.16 − j58.27 at 50 µs
 and 893.31 − j58.85 at 10 µs. The selected end and injection sign agree.
 
-The Julia state-space equilibrium at solved public-bus voltage with
-`Tm0=0.9` gives terminal P=898.789379 MW, Q=-2.549114 MVAr,
+Before the power-flow reference correction described below, the Julia
+state-space equilibrium at solved public-bus voltage with `Tm0=0.9` gave
+terminal P=898.789379 MW, Q=-2.549114 MVAr,
 |Vt|=1.000463367 pu, Te=0.9 pu and Ef=1.907326674 pu in PSCAD normalization.
 Its armature loss is 1.210621 MW. The station confirmed that the inherited
 `Ri=300 pu` behaves like the saved setting (line 1086),
@@ -586,8 +588,83 @@ and reconstructed terminal voltage was 219.435 kV; all approved rows passed.
 The remaining public-bus P residual is 1.266 MW (0.13% of rating), consistent
 with Julia's convention: power flow places Pac at the generator terminal,
 while the dynamic model uses `Tm0=Pac/S_base` as mechanical torque and loses
-`Ra*I^2` before the terminal. This convention remains unchanged. Builder
-acceptance remains a station check; local XML checks establish structure.
+`Ra*I^2` before the terminal. That mismatch is corrected by the
+power-flow-derived references below.
+The station evidence in this section used the previous references; builder
+acceptance and renewed M3 acceptance remain station checks. Local XML checks
+establish structure.
+
+### Machine references derived from the power flow
+
+The machine core now anchors its dynamic equilibrium to the solved generator
+terminal P/Q and voltage. Current is positive generation and all quantities
+below use the machine's three-phase MVA and line-to-line RMS voltage bases:
+
+```math
+V_t = V_{bus} + (r_t + j l_t) I, \qquad
+S_t = V_t I^* = p_{pf} + j q_{pf},
+```
+
+```math
+T_{m0} = p_{pf} + R_a |I_{pf}|^2, \qquad
+v_{ref} = |V_{t,pf}| + E_{f,pf}/K_A, \qquad
+E_{f,pf} = L_{ad} i_{df} = L_{ad} v_{df}/R_{fd}.
+```
+
+Only the armature loss is added to terminal power; the external `rt` loss is
+already between the generator terminal and the public bus. The turbine
+fractions are assumed to sum to one. `Setpoint.Pac`/`Qac` contain terminal
+power, whereas solved `Vac`/`θac` contain the receiving-bus voltage. The core
+reconstructs terminal phasors using the high-voltage solution of that branch,
+then seeds rotor angle, stator/field currents, speed, governor/turbine states
+and AVR states from the same point. Damper currents and speed error start at
+zero. The nonlinear solver's existing iteration limit and tolerances are unchanged.
+
+The two effective references are fixed inputs during linearization: armature
+loss and field voltage are not recomputed from perturbations. A complete
+operating-point setpoint supplied directly to `pftoinputs` receives the same
+conversion as a power-flow result. Without one (notably when Q is missing),
+`Tm0=Pac/S_base` and the configured `AVRSM.vref_SG` remain in use, with the
+previous synchronous-speed/governor seeds. Machine construction alone is passive.
+The configured `vref_SG` field stays unchanged; a complete power-flow point
+replaces its value only in the effective input to the AVR equations.
+
+The PSCAD emitter consumes those core inputs rather than implementing a
+separate correction. M3's generator P0/Q0/VT/angle, electrical model, external
+branch, scalar control graphs, gains/time constants, field-voltage scale and
+iron-loss resistance remain unchanged. Tm0, vref, Verror0 and Vreg0 change.
+The reviewed station agreement with the previous Julia equilibrium (P within
+1e-5) does not establish agreement with the new references; M3 must be rerun.
+
+Fresh Julia 1.10.11 checks give the same corrected equilibrium for Classic
+and Builder M3 fixtures:
+
+| Generator-terminal quantity | Previous dynamics | Corrected dynamics | Power flow |
+|---|---:|---:|---:|
+| P [MW] | 898.789378917 | 900.000000000 | 900.000000000 |
+| Q [MVAr] | -2.549114543 | -6.902147328 | -6.902147328 |
+| Voltage magnitude [pu] | 1.000463366624 | 1.000177990961 | 1.000177992000 |
+
+The reconstructed voltage differs from the raw power-flow terminal voltage
+by 1.04e-9 pu, within its existing solver accuracy. Tests compare terminal P/Q
+and the dynamic residual at the unchanged 1e-6 dynamic accuracy, and the
+terminal phasor at the unchanged 1e-3 power-flow accuracy.
+
+Across the existing 240-frequency machine validation, the aggregate admittance
+change is 0.0390359% and the error against the stored PSCAD reference is
+0.877175%; the original `rtol=0.009` passes without changing the data or tolerance.
+The largest per-frequency change is 0.566348% at 1.5 Hz. Other converter and
+example outputs remain bit-identical. Offset-machine and large PF-only stress
+fixtures change through the same reference conversion and initialization.
+
+Both exported M3 fixtures use these updated form defaults and instance values:
+
+| Parameter | Previous | Corrected, serialized |
+|---|---:|---:|
+| Tm0 | 0.9 | 0.901214639 |
+| vref | 1.01 | 1.00970472 |
+| Verror0 | 0.009822008 | 0.00952672767 |
+| Vreg0 | 1.9644016 | 1.90534553 |
 
 ### M3 correction after the first station build
 
@@ -621,8 +698,9 @@ tests do not require the local validation projects.
 
 The additional AVR form values are `Verror0 = vref-Vt0` and
 `Vreg0 = K_A*(vref-Vt0)`; the governor adds `inv_R = 1/R`. Julia computes
-them before planning the block parameters. `Tm0` remains the already computed
-`Pac/S_base`. Every block parameter is a literal number or plain form name;
+them before planning the block parameters. That earlier correction retained
+`Tm0=Pac/S_base`; the reference conversion above supersedes it. Every block
+parameter is a literal number or plain form name;
 lowering rejects expression strings. R9 and the field-voltage scale are
 unchanged by this correction.
 

@@ -47,6 +47,7 @@ end
         include("legacy_converter_adapter_test.jl")
         include("dc_voltage_support_test.jl")
         include("adm_SM_test.jl")
+        include("synchronous_machine_operating_point_test.jl")
         include("adm_IM_test.jl")
         include("Impedance_test.jl")
         include("Source_test.jl")
