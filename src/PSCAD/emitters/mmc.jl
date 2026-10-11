@@ -30,7 +30,7 @@ function mmc_sigma(name, e, equilibrium, transforms)
     clock = Signal("sigma_start_clock_s")
     push!(graph.nodes, TimeStep(clock))
     x = equilibrium.states
-    circulating = PowerImpedance.frame_transform(x.iΣ_d, x.iΣ_q, -2x.Δθ_pll)
+    circulating = PowerImpedance.frame_transform(x.iΣ_d, x.iΣ_q, -2PowerImpedance.syncangle(e.model.sync, x))
     invcurrent = converter_parameter!(parameters, "invIbase", e.model.elec.vDC_base /
                                                               e.model.elec.Sbase)
     append!(graph.nodes,
@@ -346,6 +346,53 @@ function mmc_electrical_canvas(e, equilibrium, arm, project, si)
     return canvas
 end
 
+function mmc_controls(state, e, equilibrium, context, delta::PowerImpedance.ΔdqControlGFL)
+    m = e.model
+    si = mmc_si(m.elec)
+    transforms = context.converter_transforms
+    names = [pscad_name(prefix * "_" * e.pscad; used = state.used)
+             for prefix in ("MEAS", "PLL",
+        delta.outer_active isa PowerImpedance.OuterActiveVdcControl ? "VDCCTRL" : "PCTRL",
+        "QCTRL", "OCC", "SIGMA", "MOD", "ARM")]
+    definitions = [
+        converter_measurements(names[1], e, equilibrium, transforms,
+            (; v = m.elec.vAC_base, i = 2m.elec.Sbase / (3m.elec.vAC_base),
+                dc = m.elec.vDC_base)),
+        converter_pll(names[2], e, equilibrium), converter_active(names[3], e, equilibrium, delta.outer_active),
+        converter_reactive(names[4], e, equilibrium, delta.outer_reactive), converter_occ(
+            names[5], e, equilibrium, delta.occ),
+        mmc_sigma(names[6], e, equilibrium, transforms), mmc_modulation(
+            names[7], e, equilibrium, transforms, context.settings)]
+    arm = mmc_arm(names[8], si, equilibrium.states.vCΣ_z * si.vDC_base)
+    return [d => (;) for d in definitions], arm
+end
+
+function mmc_controls(state, e, equilibrium, context, delta::PowerImpedance.ΔdqControlGFM)
+    m = e.model
+    m.sync isa PowerImpedance.VSEWithDamping || not_exportable(e, m.sync)
+    delta.vi isa PowerImpedance.CCVI || not_exportable(e, delta.vi)
+    si = mmc_si(m.elec)
+    transforms = context.converter_transforms
+    names = [pscad_name(prefix * "_" * e.pscad; used = state.used)
+             for prefix in ("MEAS", "PLL", "VSM", "QCTRL", "CCVI", "OCC", "SIGMA", "MOD", "ARM")]
+    controls = [
+        converter_measurements(names[1], e, equilibrium, transforms,
+            (; v = m.elec.vAC_base, i = 2m.elec.Sbase / (3m.elec.vAC_base),
+                dc = m.elec.vDC_base)) => (;),
+        converter_pll(names[2], e, equilibrium, m.sync.pll) =>
+            (; omega_c = "omega_pll", theta_c = "theta_pll", theta_rel = "theta_pll_rel",
+                theta_vsm_rel = "theta_rel"),
+        converter_vsm(names[3], e, equilibrium, m.sync) => (;),
+        converter_reactive(names[4], e, equilibrium, delta.outer_reactive) =>
+            (; i_q_ref = "q_voltage_ref"),
+        converter_ccvi(names[5], e, equilibrium, delta.vi) => (;),
+        converter_occ(names[6], e, equilibrium, delta.occ) => (;),
+        mmc_sigma(names[7], e, equilibrium, transforms) => (;),
+        mmc_modulation(names[8], e, equilibrium, transforms, context.settings) => (;)]
+    arm = mmc_arm(names[9], si, equilibrium.states.vCΣ_z * si.vDC_base)
+    return controls, arm
+end
+
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, context)
     connected = filter(t -> !t.grounded, e.terminals)
     length(connected) == 2 && any(t -> t.side == 1 && t.bus.domain == 2, connected) &&
@@ -356,8 +403,10 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
     bus = _ac_bus(e, ac, context)
     _terminal_bus(e, dc, context)
     m = e.model
-    m.sync isa PowerImpedance.PLLSynchronization || not_exportable(e, m.sync)
-    m.delta_control isa PowerImpedance.ΔdqControlGFL || not_exportable(e, m.delta_control)
+    m.sync isa Union{PowerImpedance.PLLSynchronization, PowerImpedance.VSEWithDamping} ||
+        not_exportable(e, m.sync)
+    m.delta_control isa Union{PowerImpedance.ΔdqControlGFL, PowerImpedance.ΔdqControlGFM} ||
+        not_exportable(e, m.delta_control)
     m.sigma_control isa PowerImpedance.ΣdqzControlTEC || not_exportable(e, m.sigma_control)
     m.modulation isa PowerImpedance.UncompensatedModulation ||
         not_exportable(e, m.modulation)
@@ -378,27 +427,12 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
     isfinite(si.turnsRatio) && si.turnsRatio > 0 ||
         throw(ArgumentError("converter :$(e.name) has invalid MMC electrical parameters"))
     equilibrium = converter_equilibrium(e)
-    transforms = context.converter_transforms
-    delta = m.delta_control
-    names = [pscad_name(prefix * "_" * e.pscad; used = state.used)
-             for prefix in ("MEAS", "PLL",
-        delta.outer_active isa PowerImpedance.OuterActiveVdcControl ? "VDCCTRL" : "PCTRL",
-        "QCTRL", "OCC", "SIGMA", "MOD", "ARM")]
-    definitions = [
-        converter_measurements(names[1], e, equilibrium, transforms,
-            (; v = m.elec.vAC_base, i = 2m.elec.Sbase / (3m.elec.vAC_base),
-                dc = m.elec.vDC_base)),
-        converter_pll(names[2], e, equilibrium), converter_active(names[3], e, equilibrium, delta.outer_active),
-        converter_reactive(names[4], e, equilibrium, delta.outer_reactive), converter_occ(
-            names[5], e, equilibrium, delta.occ),
-        mmc_sigma(names[6], e, equilibrium, transforms), mmc_modulation(
-            names[7], e, equilibrium, transforms, context.settings)]
-    arm = mmc_arm(names[8], si, equilibrium.states.vCΣ_z * si.vDC_base)
-    append!(state.modules, [definitions; arm])
+    controls, arm = mmc_controls(state, e, equilibrium, context, m.delta_control)
+    append!(state.modules, [first.(controls); arm])
     canvas = mmc_electrical_canvas(e, equilibrium, arm, context.name, si)
-    for (i, definition) in enumerate(definitions)
+    for (i, (definition, signals)) in enumerate(controls)
         converter_instance!(canvas, definition, context.name,
-            (2520 + 540 * ((i - 1) ÷ 3), 108 + 540 * ((i - 1) % 3)))
+            (2520 + 540 * ((i - 1) ÷ 3), 108 + 540 * ((i - 1) % 3)), signals)
     end
     outputs = ["P_ac_f", "Q_ac_f", "v_dc_f", "omega_c", "theta_c",
         ["v_Ctot_" * half * "_" * phase for half in ("u", "l") for phase in ("a", "b", "c")]..., "iS_z"]
@@ -427,6 +461,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
         probe = pscad_name(e.pscad * "_" * signal; used = state.used)
         kind = signal == "P_ac_f" ? :converter_p :
                signal == "Q_ac_f" ? :converter_q :
+               signal == "omega_c" && m.sync isa PowerImpedance.VSEWithDamping ? :machine_speed :
                startswith(signal, "v_Ctot_") ? :converter_arm_voltage :
                signal == "iS_z" ? :converter_sum_current : :converter_diagnostic
         unit = signal == "theta_c" ? "rad" : startswith(signal, "v_Ctot_") ? "kV" : "pu"

@@ -371,7 +371,10 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 throw(ArgumentError("missing power-flow machine $(channel.element)"))
             e = model.netlist.elements[element_index]
             flow = get(model.operating_point.branch_flows, e.name, nothing)
-            flow !== nothing && haskey(flow, :terminal_voltage_kV) ||
+            vsm = e.model isa PowerImpedance.MMC && e.model.sync isa PowerImpedance.VSEWithDamping
+            (!vsm || channel.unit == "pu") ||
+                throw(ArgumentError("speed probe $(channel.name) must use pu"))
+            flow !== nothing && haskey(flow, vsm ? :pt : :terminal_voltage_kV) ||
                 throw(ArgumentError("missing solved machine terminal data for :$(e.name)"))
             actual = settled[channel.name].mean
             add_row(:machine_speed, channel.name, actual, 1.0, 1e-3; absolute = true)

@@ -194,14 +194,27 @@ function converter_measurements(name, e, equilibrium, transforms,
     return converter_definition(name, parameters, graph, inputs, outputs)
 end
 
-function converter_pll(name, e, equilibrium)
-    block = e.model.sync
+function converter_pll(name, e, equilibrium, block = e.model.sync)
     block isa PowerImpedance.PLLSynchronization || not_exportable(e, block)
     parameters = ModuleParameterPlan[]
+    inputs = [("vG_q_f", 1)]
     graph = BlockGraph(ControlBlock[Import("vG_q_f", Signal("vG_q_f"))])
-    converter_filter!(graph, parameters, Signal("vG_q_f"), Signal("v_pll"), block.filter,
+    voltage = Signal("vG_q_f")
+    initial_voltage = equilibrium.outputs.meas.vG_q_f
+    if e.model.sync isa PowerImpedance.VSEWithDamping
+        append!(inputs, [("vG_d_f", 1), ("theta_vsm_rel", 1)])
+        append!(graph.nodes, ControlBlock[Import("vG_d_f", Signal("vG_d_f")),
+            Import("theta_vsm_rel", Signal("theta_vsm_rel")),
+            Sum(Signal.(["theta_rel", "theta_vsm_rel"]), [1, -1], Signal("pll_frame_angle"))])
+        converter_rotation!(graph, Signal("vG_d_f"), Signal("vG_q_f"),
+            Signal("pll_frame_angle"), Signal("vG_d_pll"), Signal("vG_q_pll"), "pll_frame", false)
+        voltage = Signal("vG_q_pll")
+        initial_voltage = PowerImpedance.frame_transform(equilibrium.outputs.meas.vG_d_f,
+            initial_voltage, equilibrium.states.Δθ_pll - equilibrium.states.Δθ_VSM).q
+    end
+    converter_filter!(graph, parameters, voltage, Signal("v_pll"), block.filter,
         PowerImpedance.filter_statenames(:v_q_pll_f, block.filter), equilibrium.states,
-        equilibrium.outputs.meas.vG_q_f, e)
+        initial_voltage, e)
     append!(graph.nodes, ControlBlock[Gain(Signal("v_pll"), Signal("error"), -1.0)])
     converter_pi!(graph, parameters, Signal("error"), Signal("dw"), block.pi_ctrl,
         equilibrium.states.ξ_pll, "pll")
@@ -216,8 +229,79 @@ function converter_pll(name, e, equilibrium)
             Sum([Signal("theta_c"), Signal("theta_nom")], [1, -1], Signal("theta_rel"))])
     outputs = [("omega_c", 1), ("theta_c", 1), ("theta_rel", 1)]
     append!(graph.nodes, [Export(n, Signal(n)) for (n, _) in outputs])
-    return converter_definition(name, parameters, graph, [("vG_q_f", 1)], outputs)
+    return converter_definition(name, parameters, graph, inputs, outputs)
 end
+
+# VSM primitive witnesses: local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:
+# 69653–69864, 69925–69984. Coefficients and equations belong to synchronization.jl.
+function converter_vsm(name, e, equilibrium, block::PowerImpedance.VSEWithDamping)
+    parameters = ModuleParameterPlan[]
+    inputs = [("P_ac_f", 1), ("omega_pll", 1)]
+    graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
+    for (n, v, unit) in (("p_reference", equilibrium.setpoint_pu.p_ac, ""),
+        ("omega_reference", block.ω_ref, ""), ("Kd", block.K_d, ""),
+        ("Kw", block.K_ω, ""), ("inv2H", 1 / (2block.H), ""),
+        ("wbase", e.model.elec.ωbase, ""),
+        ("omega0", equilibrium.states.ω_VSM, ""),
+        ("theta0", equilibrium.states.Δθ_VSM, ""))
+        converter_parameter!(parameters, n, v, unit)
+    end
+    append!(graph.nodes, ControlBlock[
+        Import("p_reference", Signal("p_reference")),
+        Import("omega_reference", Signal("omega_reference")),
+        Sum(Signal.(["omega_c", "omega_pll"]), [1, -1], Signal("damping_error")),
+        Gain(Signal("damping_error"), Signal("damping"), "Kd"),
+        Sum(Signal.(["omega_c", "omega_reference"]), [1, -1], Signal("droop_error")),
+        Gain(Signal("droop_error"), Signal("droop"), "Kw"),
+        Sum(Signal.(["p_reference", "P_ac_f", "damping"]), [1, -1, -1], Signal("power_balance")),
+        Sum(Signal.(["power_balance", "droop"]), [1, -1], Signal("swing_power")),
+        Gain(Signal("swing_power"), Signal("omega_rate"), "inv2H"),
+        Integrator(Signal("omega_rate"), Signal("omega_c"), 1.0, "omega0", -1e8, 1e8),
+        Gain(Signal("omega_c"), Signal("angle_rate"), "wbase"),
+        Integrator(Signal("angle_rate"), Signal("theta_c"), 1.0, "theta0", -1e8, 1e8),
+        TimeStep(Signal("vsm_clock_s")), Gain(Signal("vsm_clock_s"), Signal("theta_nom"), "wbase"),
+        Sum(Signal.(["theta_c", "theta_nom"]), [1, -1], Signal("theta_rel"))])
+    outputs = [("omega_c", 1), ("theta_c", 1), ("theta_rel", 1)]
+    append!(graph.nodes, [Export(n, Signal(n)) for (n, _) in outputs])
+    return converter_definition(name, parameters, graph, inputs, outputs)
+end
+
+# CCVI primitives: the same FFVI.pscx, VI_VSM_CCQSEM_1:65787–66124.
+function converter_ccvi(name, e, equilibrium, block::PowerImpedance.CCVI)
+    parameters = ModuleParameterPlan[]
+    inputs = [(n, 1) for n in ("vG_d_f", "vG_q_f", "omega_c", "q_voltage_ref")]
+    graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
+    for (n, v) in (("Rv", block.R_v), ("Lv", block.L_v),
+        ("vd_reference", block.V_d_ref), ("vq_reference", block.V_q_ref))
+        converter_parameter!(parameters, n, v)
+    end
+    for axis in ("d", "q")
+        converter_filter!(graph, parameters, Signal("vG_" * axis * "_f"),
+            Signal("vi_v" * axis), block.filter,
+            PowerImpedance.filter_statenames(Symbol("vG_" * axis * "_vi_f"), block.filter),
+            equilibrium.states, getproperty(equilibrium.outputs.meas, Symbol("vG_" * axis * "_f")), e)
+    end
+    append!(graph.nodes, ControlBlock[
+        Import("Rv", Signal("Rv")), Import("vd_reference", Signal("vd_reference")),
+        Import("vq_reference", Signal("vq_reference")),
+        Sum(Signal.(["vd_reference", "q_voltage_ref", "vi_vd"]), [1, 1, -1], Signal("vi_ed")),
+        Sum(Signal.(["vq_reference", "vi_vq"]), [1, -1], Signal("vi_eq")),
+        Gain(Signal("omega_c"), Signal("omega_L"), "Lv"),
+        Square(Signal("Rv"), Signal("R2")), Square(Signal("omega_L"), Signal("omega_L2")),
+        Sum(Signal.(["R2", "omega_L2"]), [1, 1], Signal("vi_den")),
+        Gain(Signal("vi_ed"), Signal("R_ed"), "Rv"),
+        Mult(Signal("omega_L"), Signal("vi_eq"), Signal("L_eq")),
+        Sum(Signal.(["R_ed", "L_eq"]), [1, -1], Signal("vi_d_num")),
+        Gain(Signal("vi_eq"), Signal("R_eq"), "Rv"),
+        Mult(Signal("omega_L"), Signal("vi_ed"), Signal("L_ed")),
+        Sum(Signal.(["R_eq", "L_ed"]), [1, 1], Signal("vi_q_num")),
+        Div(Signal("vi_d_num"), Signal("vi_den"), Signal("i_d_ref")),
+        Div(Signal("vi_q_num"), Signal("vi_den"), Signal("i_q_ref"))])
+    outputs = [("i_d_ref", 1), ("i_q_ref", 1)]
+    append!(graph.nodes, [Export(n, Signal(n)) for (n, _) in outputs])
+    return converter_definition(name, parameters, graph, inputs, outputs)
+end
+converter_ccvi(name, e, equilibrium, block) = not_exportable(e, block)
 
 function converter_frequency_support!(
         graph, parameters, block::PowerImpedance.NoFrequencySupport,

@@ -122,6 +122,9 @@ else
     end
     append!(modes, [("mmc_pq_default_ramp", mmc_classic),
         ("tlc_case2_zero_ramp", tlc2_classic)])
+    gfm = PSCADFixtures.mmc_gfm_network()
+    append!(modes, [("mmc_gfm_classic", gfm.classic), ("mmc_gfm_builder", gfm.state)])
+    gfm_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_gfm_saved_fragments.xml")).getroot()
     modes_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_modes_saved_fragments.xml")).getroot()
     reference_root = etree.parse(joinpath(@__DIR__,
         "fixtures/user_module_pscad5.xml")).getroot()
@@ -523,7 +526,14 @@ else
                                   c.xpath("string(./paramlist/param[@name='$field']/@value)"))
                               for c in (saved, emitted)]
                     @test all(endswith(value, " [$unit]") for value in values)
-                    @test P._pscad_number(replace(values[1], " [$unit]" => "")) ==
+                    reference_value = if startswith(name, "mmc_gfm")
+                        element = only(filter(e -> e.name == :DUT, model.netlist.elements))
+                        si = P.mmc_si(element.model.elec)
+                        field == "L" ? si.L_arm : si.R_arm
+                    else
+                        P._pscad_number(replace(values[1], " [$unit]" => ""))
+                    end
+                    @test P._pscad_number(P.pscad_value(reference_value)) ==
                           P._pscad_number(replace(values[2], " [$unit]" => ""))
                 end
                 source = only(mmc_reference.xpath("./User[@defn='master:source_1']"))
@@ -538,6 +548,35 @@ else
                       6
                 @test pylen(root.xpath("./definitions/Definition[@name='ARM_DUT']/schematic/User[@defn='master:integral']")) ==
                       1
+            end
+            if startswith(name, "mmc_gfm")
+                # Every new VSM/CCVI field is witnessed by the saved FFVI
+                # equation canvases. Constants/trig retain the M4 witnesses.
+                for module_name in ("VSM_DUT", "CCVI_DUT", "PLL_DUT")
+                    definition = only(filter(d -> d.name == module_name, plan.modules))
+                    for component in definition.canvas.components
+                        component isa P.ComponentPlan || continue
+                        component.defn in ("master:const", "master:trig", "master:time-sig", "master:datalabel") && continue
+                        witnesses = gfm_reference.xpath(".//User[@defn='$(component.defn)']")
+                        @test pylen(witnesses) > 0
+                        fields = Set(pyconvert(String, p.get("name"))
+                            for c in witnesses for p in c.xpath("./paramlist/param"))
+                        @test Set(first.(component.params)) ⊆ fields
+                        if component.defn == "master:integral"
+                            saved = first(witnesses)
+                            for field in ("Extrn", "Reset", "Mthd")
+                                @test Dict(component.params)[field] == pyconvert(String,
+                                    saved.xpath("string(./paramlist/param[@name='$field']/@value)"))
+                            end
+                        end
+                    end
+                end
+                @test pylen(root.xpath("./definitions/Definition[@name='MMC_DUT']/schematic/User[@defn='$name:VSM_DUT']")) == 1
+                @test pylen(root.xpath("./definitions/Definition[@name='MMC_DUT']/schematic/User[@defn='$name:CCVI_DUT']")) == 1
+                @test pylen(root.xpath("./definitions/Definition[@name='MMC_DUT']/schematic/User[@defn='$name:PCTRL_DUT']")) == 0
+                vi = only(root.xpath("./definitions/Definition[@name='CCVI_DUT']"))
+                @test pylen(vi.xpath("./schematic/User[@defn='master:div']")) == 2
+                @test pylen(vi.xpath("./schematic/User[@defn='master:integral']")) == 4
             end
             if startswith(name, "mmc_vdc") || startswith(name, "mmc_qv")
                 vdc = startswith(name, "mmc_vdc")

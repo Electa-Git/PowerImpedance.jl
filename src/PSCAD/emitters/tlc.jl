@@ -81,13 +81,14 @@ function module_signal_stub!(canvas, point, signal, direction)
     return nothing
 end
 
-function converter_instance!(canvas, definition, project, point)
+function converter_instance!(canvas, definition, project, point, signals = (;))
     params = [p.name => block_value(p.default; unit = isempty(p.unit) ? nothing : p.unit)
               for p in definition.parameters]
     push!(canvas.components, ModuleInstancePlan(project * ":" * definition.name, params, point..., 0))
     for port in definition.ports
         port.kind == :electrical && continue
-        module_signal_stub!(canvas, (point[1] + port.x, point[2] + port.y), port.name,
+        module_signal_stub!(canvas, (point[1] + port.x, point[2] + port.y),
+            get(signals, Symbol(port.name), port.name),
             port.kind == :input ? -1 : 1)
     end
     return nothing

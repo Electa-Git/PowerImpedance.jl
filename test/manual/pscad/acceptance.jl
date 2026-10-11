@@ -117,6 +117,15 @@ tlc_zero_ramp = export_pscad(tlc2_classic;
 append!(cases, [
     (mmc_default_ramp, mmc_default_ramp, 0.01), (tlc_zero_ramp, tlc_zero_ramp, 0.01)])
 
+# M6a uses the MMC timing/hold, including its configured 200 us modulation delay.
+gfm = PSCADFixtures.mmc_gfm_network()
+gfm_classic_model = export_pscad(gfm.classic;
+    path = joinpath(exports, "mmc_gfm_classic.pscx"), settings = mmc_settings, dc_reference = :none)
+gfm_builder_model = export_pscad(gfm.state;
+    path = joinpath(exports, "mmc_gfm_builder.pscx"), settings = mmc_settings, dc_reference = :none)
+append!(cases, [(gfm_classic_model, gfm_classic_model, 0.01),
+    (gfm_builder_model, gfm_classic_model, 0.01)])
+
 # Detect the merged model by its positive-sequence transfer, without relying
 # on a commit hash. Compare against YY to remove the fixture's no-load loss angle.
 dy_classic, dy_state = PSCADFixtures.transformer_network(; organization = :ΔY)

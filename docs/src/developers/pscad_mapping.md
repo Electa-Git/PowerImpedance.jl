@@ -2108,3 +2108,57 @@ is present, and the new mode/ramp tests pass 526/526. The PSCAD suite reports
 cross-export operating-point invariance. Aqua passes 11/11, changed-code
 formatting and `git diff --check` pass, and the final full `Pkg.test()` was not
 started after the stop condition was confirmed. M5b follow-up is incomplete.
+
+## M6a: grid-forming MMC with VSM and CCVI
+
+`ΔdqControlGFM` exports the current Julia sequence: reactive outer control,
+`CCVI`, then the existing OCC. `VSEWithDamping` reuses the M4 PLL generator;
+its voltage is rotated by `Δθ_pll-Δθ_VSM` before the embedded PLL filter.
+The VSM implements
+`ω_VSM'=(p_ac_ref-P_ac_f-K_d*(ω_VSM-ω_PLL)-K_ω*(ω_VSM-ω_ref))/(2H)`.
+Its EMT angle integrates `ωbase*ω_VSM`; subtracting the nominal angle gives
+the Julia relative angle with derivative `ωbase*(ω_VSM-1)`.
+`omega_c` is the VSM frequency. PLL outputs use separate local nets.
+
+CCVI filters both measured voltage axes and sets `e_d=V_d_ref+q_ctrl_ref-v_d`,
+`e_q=V_q_ref-v_q`. Its current references are
+`i_d=(R_v*e_d-ω_c*L_v*e_q)/(R_v²+(ω_c*L_v)²)` and
+`i_q=(R_v*e_q+ω_c*L_v*e_d)/(R_v²+(ω_c*L_v)²)`, exactly as `inner_voltage.jl`.
+No denominator floor, additional filter or control limit is introduced.
+The reactive generator's output is connected as a voltage correction before
+CCVI; its two current outputs supply OCC.
+
+The saved primitive witnesses are in
+`local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx`: CCVI at 65168–66145,
+PLL at 67793–68955, swing equation at 68956–70164, and voltage/power filters
+at 57638–58619. `test/pscad/fixtures/mmc_gfm_saved_fragments.xml` retains
+cited fragments. The exporter composes these primitives to follow Julia;
+the saved project's separate FFVI direct voltage path is not the requested
+CCVI/OCC model. The existing Butterworth realization supplies solved output
+and derivative initial values rather than the saved transfer-function guesses.
+
+`mmc_gfm_network()` mirrors `build_mmc_grid()` in `test/adm_MMC_test.jl`:
+1060 MVA, 320/400 kV LL RMS, 640 kV DC, 742 MW/0 MVAr, VSM 5/100/10,
+CCVI 0.01/0.25, the test's PLL/measurement/CCVI/OCC filters,
+TEC/ZSCC/CCSC and 200 us Padé(5,5) modulation specification.
+The export retains the accepted near-ideal YY transformer and exact dq delay
+with phase compensation; the previously documented transient/frequency-response
+difference from Padé remains. Converged states come through the core accessor.
+The Σ start-up current holds use the core `syncangle`, which is `Δθ_VSM`
+for this model. The accepted ten MEAS/four Σ selectors retain their 0.2 s
+release and physical arm dynamics remain active.
+
+Both acceptance cases use 10 s, 10 us integration, 250 us sampling and zero
+source ramp, with `dc_reference=:none` because the DC source grounds its midpoint.
+The saved FFVI timing is 5 s/1 us/250 us (lines 4–6); the selected 10 us step
+follows the accepted MMC cases. Probe names and converter comparison rows are
+reused. The existing `omega_c` probe uses the existing `:machine_speed` kind
+and row with `abs(mean(omega_c)-1)<=1e-3 pu`; all other limits are unchanged.
+Its row is selected by probe metadata, including when name reservation adds a suffix.
+
+`test/manual/pscad/write_m6a_experiments.jl` writes both projects to
+`/tmp/pscad-m6a/`, their solved terminal/internal references, all 59 converged
+states in indexed TSVs, and a short README. Local plan/connectivity/topology,
+XML round trips and state-equation tests establish the mapping. Native station
+acceptance remains separate: both cases must build, run finite, settle and pass
+every row over the final ten cycles `[9.8,10.0] s`.
