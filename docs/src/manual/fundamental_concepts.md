@@ -960,8 +960,8 @@ $$\begin{aligned}
 &\quad \left. + i_d^\Delta \left( \frac{m_d^\Sigma}{4} + \frac{m_z^\Sigma}{2} \right) - 2\omega C_{arm} v_{Cq}^\Delta \right], \\
 \frac{dv_{Cq}^\Delta}{dt} &= -\frac{N}{2C_{arm}} \left[ \frac{i_d^\Delta m_q^\Sigma}{4} - i_z^\Sigma m_q^\Delta + i_q^\Sigma \left( \frac{m_d^\Delta}{2} - \frac{m_{Zd}^\Delta}{2} \right) + i_d^\Sigma \left( \frac{m_q^\Delta}{2} - \frac{m_{Zq}^\Delta}{2} \right) \right. \\
 &\quad \left. + i_q^\Delta \left( \frac{m_d^\Sigma}{4} - \frac{m_z^\Sigma}{2} \right) - 2\omega C_{arm} v_{Cd}^\Delta \right], \\
-\frac{dv_{CZd}^\Delta}{dt} &= -\frac{N}{8C_{arm}} (i_d^\Delta m_d^\Sigma + 2i_d^\Sigma m_d^\Delta + i_q^\Delta m_q^\Sigma + 2i_q^\Sigma m_q^\Delta + 4i_z^\Sigma m_{Zd}^\Delta) - 3\omega v_{CZq}^\Delta, \\
-\frac{dv_{CZq}^\Delta}{dt} &= -\frac{N}{8C_{arm}} (i_q^\Delta m_d^\Sigma + 2i_d^\Sigma m_q^\Delta - i_d^\Delta m_q^\Sigma - 2i_q^\Sigma m_d^\Delta + 4i_z^\Sigma m_{Zq}^\Delta) + 3\omega v_{CZd}^\Delta,
+\frac{dv_{CZd}^\Delta}{dt} &= \frac{N}{8C_{arm}} (i_d^\Delta m_d^\Sigma + 2i_d^\Sigma m_d^\Delta + i_q^\Delta m_q^\Sigma + 2i_q^\Sigma m_q^\Delta + 4i_z^\Sigma m_{Zd}^\Delta) - 3\omega v_{CZq}^\Delta, \\
+\frac{dv_{CZq}^\Delta}{dt} &= \frac{N}{8C_{arm}} (i_q^\Delta m_d^\Sigma + 2i_d^\Sigma m_q^\Delta - i_d^\Delta m_q^\Sigma - 2i_q^\Sigma m_d^\Delta + 4i_z^\Sigma m_{Zq}^\Delta) + 3\omega v_{CZd}^\Delta,
 \end{aligned}$$
 
 $$\begin{aligned}
@@ -1023,6 +1023,14 @@ W_{z,ref}^{\Sigma} &= \frac{3C_{arm}V_{DC}^2}{N}.
 
 For the PI controls in the dqz frame additional equations have been developed [BergnaDiazFreytesGuillaudDArcoSuul2018, BergnaDiazZonettiSanchezOrtegaTedeschi2018, SakinciBeerten2019](@cite). The different controllers are considered to be tuned using a pole placement method. Also the PLL is implemented using a PI controller structure as in [Freytes2017](@cite).
 
+For Δ-energy balancing, the triplen reconstruction is
+$x_\alpha=x_{Zd}\cos(3\theta)+x_{Zq}\sin(3\theta)$ and
+$x_\beta=x_{Zd}\sin(3\theta)-x_{Zq}\cos(3\theta)$. Its transformation satisfies
+$\dot T T=-3\omega_0J$, with $J=[0\ 1;-1\ 0]$. Thus the notch sections and
+PI integrators, written as $\dot x=u-Gx$, use
+$G=\operatorname{diag}(\omega_0J,+3\omega_0J)$. This matches the triplen
+capacitor-state rotation and damps the formerly unstable 150 Hz balancing mode.
+
 **Phase locked loop (PLL)** The PLL synchronizes the rotating controller frame with the grid frequency. The phase-domain converter voltages and currents are mapped to the *dqz* frame using the same Park transformation without an additional phase shift. Scalar DC quantities and controller states are not transformed by this mapping.
 
 According to Fig. 16 the following equations for PLL can be written.
@@ -1034,7 +1042,7 @@ $$\begin{aligned}
 \omega_C &= \Delta\omega + \omega_0.
 \end{aligned}$$
 
-The output-current and circulating-current controllers operate in the converter reference frame. Their input variables are rotated into that frame before applying the control laws. The converter dynamics are expressed in the grid reference frame, so the controller outputs are rotated back with the inverse matrix:
+The output-current controller and the circulating-current suppression controller operate in the converter reference frame. Their input variables are rotated into that frame before applying the control laws. The leg-energy circulating-current controller (`ΣdqzControlLEC`) instead uses the nominal grid frame directly. Converter-frame voltage commands are rotated back to the grid frame with the inverse matrix:
 
 $$T(\theta) = \begin{bmatrix} \cos(\theta) & -\sin(\theta) \\ \sin(\theta) & \cos(\theta) \end{bmatrix},$$
 

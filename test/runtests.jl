@@ -34,6 +34,7 @@ end
         include("imp_test.jl")
         include("adm_MMC_test.jl")
         include("adm_MMC_compensated_test.jl")
+        include("mmc_triplen_frame_test.jl")
         include("mmc_scaling_test.jl")
         include("solvers_test.jl")
         include("adm_OHL_test.jl")

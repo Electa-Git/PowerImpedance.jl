@@ -122,8 +122,11 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΔEne
     FΔ1 = [x.FΔ1_d, x.FΔ1_q, x.FΔ1_Zd, x.FΔ1_Zq]; FΔ2 = [x.FΔ2_d, x.FΔ2_q, x.FΔ2_Zd, x.FΔ2_Zq]; wΔ = -2 .* [wΔd, wΔq, wΔZd, wΔZq] # PSCAD implementation has a minus sign for wΔ, and *2 TODO check if it is a problem?
     J_dq = [ 0 1
             -1 0]
+    # Triplen reconstruction T = [cos(3θ) sin(3θ); sin(3θ) -cos(3θ)]
+    # gives (dT/dt)*T = -3ωbase*J_dq. Since the equations use -J_G*x,
+    # its triplen block is +3ωbase*J_dq for both notch and PI states.
     J_G = [ J_dq * conv.elec.ωbase zeros(2,2)
-            zeros(2,2) J_dq * (-3*conv.elec.ωbase)] # The minus sign comes from the convention used in Freytes thesis (could this be updated to a more consistent one?)
+            zeros(2,2) J_dq * (3*conv.elec.ωbase)]
 
     F[1:4] = FΔ2 - 2 * ζ * ω_n * (FΔ1 + wΔ) - J_G * FΔ1
     F[5:8] = -ω_n^2 * FΔ1 - J_G * FΔ2
