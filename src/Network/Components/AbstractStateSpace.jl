@@ -103,7 +103,26 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     f!(du, u, p) = _state_space!(du, u, p.inputs, p.setpoint_pu, p.m, Equil())
     @info "Starting to solve for steady-state solution"
     prob = NonlinearProblem(f!, collect(promote(values(init)...)), p_equil)
-    sol = solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+    default_error = nothing
+    sol = try
+        solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+    catch exception
+        is_converter(elem) || rethrow()
+        default_error = exception
+        nothing
+    end
+    if is_converter(elem) && (sol === nothing || !SciMLBase.successful_retcode(sol))
+        retry = try
+            solve(prob, NonlinearSolve.TrustRegion(); maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+        catch
+            nothing
+        end
+        if retry !== nothing && SciMLBase.successful_retcode(retry)
+            sol = retry
+        elseif default_error !== nothing
+            throw(default_error)
+        end
+    end
 
     name = isdefined(elem, :symbol) ? string(elem.symbol) : string(nameof(typeof(m)))
 

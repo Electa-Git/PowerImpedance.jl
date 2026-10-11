@@ -233,7 +233,7 @@ function solve_acdcpf(
         end
     end
 
-    return result
+    return P.canonicalize_converter_voltages!(result)
 end
 
 function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
@@ -423,7 +423,7 @@ function solve_acdcpf_relax(
         end
     end
 
-    return result
+    return P.canonicalize_converter_voltages!(result)
 end
 
 function addbus!(data, bus, global_dict, ::Val{:AC})

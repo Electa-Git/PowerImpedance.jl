@@ -736,6 +736,17 @@ function build_acdcpf(pm::_PM.AbstractPowerModel)
 end
 
 
+function canonicalize_converter_voltages!(result)
+    for converter in values(get(result["solution"], "convdc", Dict()))
+        if get(converter, "vmconv", 0.0) < 0
+            converter["vmconv"] = -converter["vmconv"]
+            angle = rem2pi(converter["vaconv"] + π, RoundNearest)
+            converter["vaconv"] = angle == -Float64(π) ? Float64(π) : angle
+        end
+    end
+    return result
+end
+
 function accept_feasible_power_flow!(result, model)
     result["termination_status"] == MOI.LOCALLY_SOLVED && return true
     JuMP.has_values(model) || return false
@@ -815,7 +826,7 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
 
     end
 
-    return result
+    return canonicalize_converter_voltages!(result)
 
 end
 
@@ -854,7 +865,7 @@ function solve_acdcpf_relax(data::Dict{String, Any}, model_type::Type, solver; k
 		end
 	end
 
-	return result
+	return canonicalize_converter_voltages!(result)
 end
 
 # Function to slightly shift the setpoints of the active elements to nudge the solver towards a solution. "delta" = percentage change

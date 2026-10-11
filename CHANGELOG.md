@@ -30,6 +30,7 @@
 
 ### Fixed
 
+- Canonicalize stored converter voltages and retry failed converter steady-state initialization with a trust-region solve, preserving successful results.
 - Derive synchronous-machine torque and effective AVR references from the power
   flow and initialize states from its phasors, changing machine equilibria,
   linearizations, admittances and PSCAD machine control parameters to reproduce
