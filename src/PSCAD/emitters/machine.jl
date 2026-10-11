@@ -175,6 +175,25 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     end
     output_probe!(state.main, current, "branch", "kA", (x + 144, y + 144))
 
+    # Measure the terminal space-vector magnitude before the rt/lt branch.
+    vabc, va, vb, vc, va2, vb2, vc2, vsum2, vmag2, vmag, vt_meas =
+        Signal.([pscad_name(e.pscad * suffix; used = state.used)
+                 for suffix in ("_Vt_abc", "_Vt_a", "_Vt_b", "_Vt_c",
+                     "_Vt_a2", "_Vt_b2", "_Vt_c2", "_Vt_sum2", "_Vt_mag2",
+                     "_Vt_mag", "_Vt_meas")])
+    x, y = allocate_cell!(state.layout)
+    component!(state.main, "voltmetergnd", (x + 90, y + 72), ["Name" => vabc.name])
+    stub!(state.main, (x + 90, y + 72), inner; direction = -1)
+    vpeak_base = elec.Vᵃᶜ_base * sqrt(2) / sqrt(3)
+    for block in ControlBlock[
+        ArraySplit(vabc, va, 1), ArraySplit(vabc, vb, 2), ArraySplit(vabc, vc, 3),
+        Square(va, va2), Square(vb, vb2), Square(vc, vc2),
+        Sum([va2, vb2, vc2], [1, 1, 1], vsum2), Gain(vsum2, vmag2, 2 / 3),
+        Sqrt(vmag2, vmag), Gain(vmag, vt_meas, 1 / vpeak_base)]
+        x, y = allocate_cell!(state.layout)
+        lower!(state.main, block, (x + 126, y + 72))
+    end
+
     x, y = allocate_cell!(state.layout)
     lower!(state.main,
         BlockGraph(ControlBlock[
@@ -182,7 +201,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
         origin = (x + 126, y + 54))
     avr_name = pscad_name("AVR_" * e.pscad; used = state.used)
     gov_name = pscad_name("GOV_" * e.pscad; used = state.used)
-    machine_module!(state, machine_avr(avr_name, machine, voltage_pu, inputs.vref_SG), context, vt, ef)
+    machine_module!(state, machine_avr(avr_name, machine, voltage_pu, inputs.vref_SG), context, vt_meas, ef)
     machine_module!(
         state, machine_governor(gov_name, machine, torque_pu), context, speed, tm)
 

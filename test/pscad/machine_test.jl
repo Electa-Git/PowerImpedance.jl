@@ -19,6 +19,39 @@ function pin_signal(canvas, point)
     return Dict(label.params)["Name"]
 end
 
+function voltage_measurement_blocks(canvas)
+    primitives = Set("master:" .* ["datatap", "square", "sumjct", "gain", "sqrt"])
+    return filter(canvas.components) do c
+        c.defn in primitives || return false
+        pin = c.defn == "master:datatap" ? (c.x, c.y) : (c.x + 36, c.y)
+        return startswith(pin_signal(canvas, pin), "sg1_Vt_")
+    end
+end
+
+# Evaluate the written primitive fields and named-pin connections, in emission order.
+function measured_voltage_pu(canvas, phases)
+    signals = Dict{String, Any}("sg1_Vt_abc" => phases)
+    for c in voltage_measurement_blocks(canvas)
+        p = Dict(c.params)
+        if c.defn == "master:datatap"
+            input = pin_signal(canvas, (c.x, c.y - 18))
+            signals[pin_signal(canvas, (c.x, c.y))] = signals[input][parse(Int, p["Index"])]
+        elseif c.defn == "master:sumjct"
+            entries = (("D", (c.x - 36, c.y)), ("F", (c.x, c.y + 36)),
+                ("B", (c.x, c.y - 36)))
+            signals[pin_signal(canvas, (c.x + 36, c.y))] =
+                sum(parse(Int, p[key]) * signals[pin_signal(canvas, pin)]
+                for (key, pin) in entries if p[key] != "0")
+        else
+            input = signals[pin_signal(canvas, (c.x - 36, c.y))]
+            output = c.defn == "master:square" ? input^2 :
+                     c.defn == "master:sqrt" ? sqrt(input) : parse(Float64, p["G"]) * input
+            signals[pin_signal(canvas, (c.x + 36, c.y))] = output
+        end
+    end
+    return signals["sg1_Vt_meas"]
+end
+
 @testset "PSCAD scalar block lowering" begin
     a, b, c, d = P.Signal.(["a", "b", "c", "d"])
     graph = P.BlockGraph(P.ControlBlock[
@@ -170,7 +203,8 @@ end
              for n in (classic_netlist, builder_netlist)]
     @test !isempty(builder_netlist.operating_point.bus_states)
     @test_throws ArgumentError P.build_plan(P.netlist(state, nothing))
-    for (plan, net) in zip(plans, (classic, solved.network))
+    for (plan, net, netlist) in zip(plans, (classic, solved.network),
+        (classic_netlist, builder_netlist))
         element = net.elements[:sg1]
         effective, _ = PowerImpedance.pftoinputs(element.element_model, element.setpoint)
         equilibrium = NamedTuple{PowerImpedance.statenames(element.element_model)}(
@@ -305,6 +339,30 @@ end
         @test Set(c.name for c in plan.probes.channels) == Set([
             "V_Bus2", "I_g2_1", "I_sg1_1", "sg1_P", "sg1_Q", "sg1_Vt", "sg1_speed",
             "sg1_Ef0", "sg1_Ef", "sg1_Tm_init"])
+        @test P.check_connectivity(plan) === nothing
+        meter = only(filter(c -> Dict(c.params)["Name"] == "sg1_Vt_abc",
+            components(plan.main, "voltmetergnd")))
+        wire = only(filter(w -> (meter.x, meter.y) in w.vertices, plan.main.wires))
+        endpoint = only(filter(!=((meter.x, meter.y)), wire.vertices))
+        label = only(filter(c -> c.defn == "master:nodelabel" &&
+                                (c.x, c.y) == endpoint, plan.main.components))
+        @test Dict(label.params)["Name"] == "sg1_terminal"
+        sync = only(components(plan.main, "sync_machine"))
+        @test pin_signal(plan.main, (sync.x + 36, sync.y - 72)) == "sg1_Vt"
+        avr_instance = only(filter(c -> c.defn == "sm:AVR_sg1", instances))
+        @test pin_signal(plan.main, (avr_instance.x - 54, avr_instance.y)) == "sg1_Vt_meas"
+        @test defaults["Vt0"] == netlist.operating_point.branch_flows[:sg1].terminal_voltage_kV *
+              sqrt(3) / element.element_model.elec.Vᵃᶜ_base
+        @test Dict(first(components(avr.canvas, "realpole")).params)["YO"] == "Vt0"
+        blocks = voltage_measurement_blocks(plan.main)
+        @test [c.defn for c in blocks] == "master:" .* [
+            "datatap", "datatap", "datatap", "square", "square", "square",
+            "sumjct", "gain", "sqrt", "gain"]
+        for magnitude in (0.0, 0.37, 1.0, 1.23), angle in (0.0, π / 6, 0.47, π / 2)
+            phases = magnitude * 380 * sqrt(2 / 3) .* cos.(angle .+ (0.0, -2π / 3, 2π / 3))
+            # Emitted gains retain the exporter's nine-significant-digit precision.
+            @test measured_voltage_pu(plan.main, phases) ≈ magnitude rtol = 1e-9
+        end
     end
     flow = classic_netlist.operating_point.branch_flows[:sg1]
     # Terminal and bus voltages differ across rt+j*lt; neither may replace the other.

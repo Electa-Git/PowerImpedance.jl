@@ -280,14 +280,32 @@ else
                         end
                     end
                 elseif !startswith(name, "tlc_")
-                    reference = TOML.parsefile(joinpath(@__DIR__,
-                        "fixtures/topology_8be21ee", name * ".toml"))["canvases"]
+                    fixture = TOML.parsefile(joinpath(@__DIR__,
+                        "fixtures/topology_8be21ee", name * ".toml"))
+                    reference = fixture["canvases"]
                     @test Set(keys(graphs)) == Set(keys(reference))
                     for (canvas, graph) in graphs
                         expected = canvas == "Main" ?
                                    PSCADTopology.shunt_meter_returns(reference[canvas], shunt_moves[name]) :
                                    reference[canvas]
                         @test PSCADTopology.equivalent(expected, graph)
+                        if canvas == "Main" && startswith(name, "sm_")
+                            measurement = fixture["avr_terminal_measurement"]
+                            added = measurement["added_blocks"]
+                            @test sum(values(added)) == 10
+                            for (defn, count) in added
+                                # Main already has two P/Q scaling gains.
+                                @test counts[defn] == count + (defn == "master:gain" ? 2 : 0)
+                            end
+                            @test counts["master:voltmetergnd"] == 2
+                            @test summary.nodelabels[measurement["terminal"]] == 3
+                            @test measurement["signal"] ∉ summary.pgbs
+                            @test measurement["meter"] ∉ summary.pgbs
+                            println("Approved topology difference: ", name,
+                                " +1 voltmetergnd at ", measurement["terminal"],
+                                "; +3 datatap, +3 square, +1 sumjct, +2 gain, +1 sqrt on Main; AVR <- ",
+                                measurement["signal"], "; diagnostic probes unchanged")
+                        end
                         if canvas == "Main" && !isempty(shunt_moves[name])
                             println("Approved topology difference: ",
                                 name, " ", shunt_moves[name],

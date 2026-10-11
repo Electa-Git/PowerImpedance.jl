@@ -676,11 +676,15 @@ power-flow reference, an error of `4.2e-3` of rating (previously `3.6e-4`).
 
 The station's internal machine Vt output reads approximately `5e-4` pu high
 because of the M3 control/electrical time-step interface artefact. The exported
-AVR regulates on that output, explaining the increased Q error. Measuring
-terminal voltage on the network side for the exported AVR is a separate PSCAD
-follow-up; the tightened power-flow tolerances leave that measurement and the
-machine control graph unchanged. These are reported native station
-results, separate from the local Julia and XML checks.
+AVR previously regulated on that output, explaining the increased Q error.
+The exporter now measures the three-phase network voltage at `<e>_terminal`,
+before rt/lt, and feeds the AVR `<e>_Vt_meas =
+sqrt((2/3)*(va^2+vb^2+vc^2))/(Vac_base,LL*sqrt(2)/sqrt(3))` in pu.
+The existing `<e>_Vt` diagnostic probe still records the machine's internal
+output, and the AVR filter starts at the solved terminal voltage `Vt0`.
+Local block-chain and XML checks cover this change; its station check is pending,
+with bus Q error limited to `1e-3` and bus P error to `2e-4` of machine rating.
+The preceding numbers remain reported native station results.
 
 ### M3 correction after the first station build
 
@@ -1851,10 +1855,9 @@ equilibrium solve is removed by the internal retained-state accessor in step 4.
 
 Developer known gaps:
 
-- M3 passes the station rerun with the step-6 references, but its internal
-  machine Vt output reads approximately `5e-4` pu high and the exported AVR
-  regulates on it. A network-side terminal-voltage measurement is a separate
-  PSCAD follow-up; see the station results above.
+- M3 passes the station rerun with the step-6 references. The exported AVR now
+  uses the network-side terminal-voltage magnitude; its station check is pending.
+  The internal machine Vt output remains a diagnostic; see the M3 note above.
 - Step 5 adds modular `DCVoltageSupportLag` and maps legacy `:vdc_droop` for
   MMC and TLC. PSCAD generation remains deferred: the exporter rejects this
   support as “not yet exportable” before recovering its equilibrium. The
