@@ -43,7 +43,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Transformer}
     impedance_path!(state, primary_parts, :series, terminal_primary, inner_primary,
         e.pscad * "_primary")
     x, y = allocate_cell!(state.layout)
-    v1 = primary_bus.base_kV * sqrt(3)
+    v1 = something(primary_bus.vm_pu, 1.0) * primary_bus.base_kV * sqrt(3)
     component!(state.main,
         "xfmr-3p2w",
         (x + 144, y + 54),

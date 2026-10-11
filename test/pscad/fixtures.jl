@@ -1,5 +1,6 @@
 module PSCADFixtures
 using PowerImpedance
+include("ieee9_network.jl")
 
 """
     small_ac_network()

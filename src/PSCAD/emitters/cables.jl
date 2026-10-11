@@ -62,6 +62,9 @@ end
 
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Cable}, context)
     cable = e.model
+    if cable.length / 299_792_458 < context.settings.time_step
+        @warn "PSCAD cable :$(e.name), length $(cable.length) m, time step $(context.settings.time_step) s: PSCAD aborts if the travel time is below the step; a smaller step or a longer section is needed."
+    end
     cable.eliminate || throw(ArgumentError(
         "cable :$(e.name): eliminate=false requires exposed sheath/armour interfaces, which are not implemented"))
     cable.configuration == :coaxial && cable.type in (:underground, :aerial) ||

@@ -19,11 +19,6 @@ mmc_sigma(name, e, equilibrium, transforms) =
 mmc_sigma(name, e, equilibrium, transforms, block) = not_exportable(e, block)
 
 function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.ΣdqzControlTEC)
-    block.tec isa PowerImpedance.TotalEnergyControl || not_exportable(e, block.tec)
-    block.zscc isa PowerImpedance.ZeroSequenceCurrentControl ||
-        not_exportable(e, block.zscc)
-    block.ccsc isa PowerImpedance.CirculatingCurrentSuppressionControl ||
-        not_exportable(e, block.ccsc)
     parameters = ModuleParameterPlan[]
     inputs = [("iS_abc", 3), ("theta_c", 1), ("P_ac_f", 1), ("v_dc_f", 1), ("v_dc_divisor", 1)]
     append!(inputs, [("v_Ctot_" * arm * "_" * phase, 1)
@@ -53,6 +48,25 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
                 Gain(Signal("iS_" * axis * "_si"), Signal("iS_" * axis * "_measured"), invcurrent),
                 Gain(Signal("iS_" * axis * "_measured"), Signal("iS_" * axis), 1.0)])
     end
+    mmc_total_energy!(graph, parameters, e, equilibrium, block.tec)
+    mmc_zero_current!(graph, parameters, e, equilibrium, block.zscc)
+    append!(graph.nodes,
+        ControlBlock[Gain(Signal("v_dc_f"), Signal("half_dc"), 0.5),
+            Sum(Signal.(["half_dc", "zero_pi"]), [1, -1], Signal("vMS_z_ref"))])
+    mmc_circulating_current!(graph, parameters, e, equilibrium, block.ccsc)
+    append!(graph.nodes, ControlBlock[Export("vMS_z_ref", Signal("vMS_z_ref")), Export("iS_z", Signal("iS_z"))])
+    return converter_definition(name, parameters, graph, inputs,
+        [(n, 1) for n in ("vMS_d_ref", "vMS_q_ref", "vMS_z_ref", "iS_z")])
+end
+
+mmc_total_energy!(graph, parameters, e, equilibrium, block) = not_exportable(e, block)
+function mmc_total_energy!(graph, parameters, e, equilibrium,
+        ::PowerImpedance.NoTotalEnergyControl)
+    push!(graph.nodes, Const(Signal("iS_z_ref"), 0.0))
+    return nothing
+end
+function mmc_total_energy!(graph, parameters, e, equilibrium,
+        block::PowerImpedance.TotalEnergyControl)
     invcap = converter_parameter!(parameters, "invVbase", 1 / e.model.elec.vDC_base)
     squares = Signal[]
     for arm in ("u", "l"), phase in ("a", "b", "c")
@@ -71,22 +85,45 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
         ControlBlock[Sum(Signal.(["energy_u", "energy_l"]), [1, 1], Signal("energy_sum")),
             Gain(Signal("energy_sum"), Signal("energy_measured"), 1 / 6),
             Gain(Signal("energy_measured"), Signal("energy_pu"), 1.0)])
-    reference = converter_parameter!(parameters, "energy_reference", block.tec.ref)
+    reference = converter_parameter!(parameters, "energy_reference", block.ref)
     append!(graph.nodes,
         ControlBlock[Import(reference, Signal(reference)),
             Sum(Signal.([reference, "energy_pu"]), [1, -1], Signal("energy_error"))])
     converter_pi!(graph, parameters, Signal("energy_error"), Signal("energy_pi"),
-        block.tec.pi_control, equilibrium.states.ξ_Wtot, "energy")
+        block.pi_control, equilibrium.states.ξ_Wtot, "energy")
     append!(graph.nodes,
         ControlBlock[Sum(Signal.(["energy_pi", "P_ac_f"]), [1, 1], Signal("dc_power")),
             Gain(Signal("dc_power"), Signal("third_power"), 1 / 3),
-            Div(Signal("third_power"), Signal("v_dc_divisor"), Signal("iS_z_ref")),
-            Sum(Signal.(["iS_z_ref", "iS_z"]), [1, -1], Signal("zero_error"))])
+            Div(Signal("third_power"), Signal("v_dc_divisor"), Signal("iS_z_ref"))])
+    return nothing
+end
+
+mmc_zero_current!(graph, parameters, e, equilibrium, block) = not_exportable(e, block)
+function mmc_zero_current!(graph, parameters, e, equilibrium,
+        ::PowerImpedance.NoZeroSequenceCurrentControl)
+    push!(graph.nodes, Const(Signal("zero_pi"), 0.0))
+    return nothing
+end
+function mmc_zero_current!(graph, parameters, e, equilibrium,
+        block::PowerImpedance.ZeroSequenceCurrentControl)
+    push!(graph.nodes,
+        Sum(Signal.(["iS_z_ref", "iS_z"]), [1, -1], Signal("zero_error")))
     converter_pi!(graph, parameters, Signal("zero_error"), Signal("zero_pi"),
-        block.zscc.pi_control, equilibrium.states.ξ_iΣ_z, "zero")
-    append!(graph.nodes,
-        ControlBlock[Gain(Signal("v_dc_f"), Signal("half_dc"), 0.5),
-            Sum(Signal.(["half_dc", "zero_pi"]), [1, -1], Signal("vMS_z_ref"))])
+        block.pi_control, equilibrium.states.ξ_iΣ_z, "zero")
+    return nothing
+end
+
+mmc_circulating_current!(graph, parameters, e, equilibrium, block) = not_exportable(e, block)
+function mmc_circulating_current!(graph, parameters, e, equilibrium,
+        ::PowerImpedance.NoCirculatingCurrentSuppressionControl)
+    append!(graph.nodes, ControlBlock[Const(Signal("vMS_" * axis * "_ref"), 0.0)
+        for axis in ("d", "q")])
+    append!(graph.nodes, ControlBlock[Export("vMS_" * axis * "_ref", Signal("vMS_" * axis * "_ref"))
+        for axis in ("d", "q")])
+    return nothing
+end
+function mmc_circulating_current!(graph, parameters, e, equilibrium,
+        block::PowerImpedance.CirculatingCurrentSuppressionControl)
     cross = converter_parameter!(parameters, "twiceLarm", 2 * e.model.elec.Lₐᵣₘ)
     for (axis, other, sign, initial) in (("d", "q", 1, equilibrium.states.ξ_iΣ_d),
         ("q", "d", -1, equilibrium.states.ξ_iΣ_q))
@@ -94,14 +131,12 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
                                             for suffix in ("_error", "_pi", "_cross", "_voltage")])
         push!(graph.nodes, Gain(Signal("iS_" * axis), error, -1.0))
         converter_pi!(
-            graph, parameters, error, pi, block.ccsc.pi_control, initial, "sigma_" * axis)
+            graph, parameters, error, pi, block.pi_control, initial, "sigma_" * axis)
         append!(graph.nodes,
             ControlBlock[Gain(Signal("iS_" * other), term, cross),
                 Sum([pi, term], [-1, sign], voltage), Export("vMS_" * axis * "_ref", voltage)])
     end
-    append!(graph.nodes, ControlBlock[Export("vMS_z_ref", Signal("vMS_z_ref")), Export("iS_z", Signal("iS_z"))])
-    return converter_definition(name, parameters, graph, inputs,
-        [(n, 1) for n in ("vMS_d_ref", "vMS_q_ref", "vMS_z_ref", "iS_z")])
+    return nothing
 end
 
 function mmc_arm_capacitors(states, voltage_base, angle = 0.0)

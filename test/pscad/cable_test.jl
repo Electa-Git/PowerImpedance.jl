@@ -4,6 +4,15 @@ using ..PSCADFixtures: dc_cable_network, small_ac_network
 using ..PSCADPlanTests: plan_shape, counts, check_layout
 const P = PowerImpedance.PSCAD
 
+@testset "PSCAD short cable warning" begin
+    classic, _ = dc_cable_network()
+    classic.elements[:line].element_model.length = 100.0
+    settings = P.SimulationSettings(time_step = 10e-6)
+    @test_logs (:warn, r"cable :line, length 100.0 m, time step 1.0e-5 s: PSCAD aborts if the travel time is below the step") begin
+        P.build_plan(P.netlist(classic, nothing); settings)
+    end
+end
+
 @testset "PSCAD cable row and DC interfaces" begin
     classic, builder = dc_cable_network()
     list = P.netlist(classic, nothing)

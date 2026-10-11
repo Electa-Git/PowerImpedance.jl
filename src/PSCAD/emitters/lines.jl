@@ -69,15 +69,21 @@ end
 
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_line}, context)
     tl = e.model
+    if tl.length / 299_792_458 < context.settings.time_step
+        @warn "PSCAD overhead line :$(e.name), length $(tl.length) m, time step $(context.settings.time_step) s: PSCAD aborts if the travel time is below the step; a smaller step or a longer section is needed."
+    end
     c, g = tl.conductors, tl.groundwires
-    c.nᵇ == 3 ||
-        throw(ArgumentError("PSCAD export of overhead line :$(e.name) with $(c.nᵇ) phases is not implemented yet"))
     length(e.terminals) == 2 && [t.side for t in e.terminals] == [1, 2] ||
         throw(ArgumentError("overhead line :$(e.name) must have two fully connected sides"))
     left, right = e.terminals
     !left.grounded && !right.grounded ||
-        throw(ArgumentError("overhead line :$(e.name) requires two nongrounded AC terminals"))
-    left_bus, right_bus = _ac_bus(e, left, context), _ac_bus(e, right, context)
+        throw(ArgumentError("overhead line :$(e.name) requires two nongrounded terminals"))
+    left_bus, right_bus = _terminal_bus(e, left, context), _terminal_bus(e, right, context)
+    dc = left_bus.kind == :dc
+    (right_bus.kind == :dc) == dc ||
+        throw(ArgumentError("overhead line :$(e.name) cannot join AC and DC buses"))
+    c.nᵇ == (dc ? 2 : 3) ||
+        throw(ArgumentError("overhead line :$(e.name) requires $(dc ? 2 : 3) conductors for $(dc ? "DC" : "AC") export"))
     0 <= g.nᵍ <= 2 ||
         throw(ArgumentError("overhead line :$(e.name): PSCAD supports at most two ground wires"))
     1 <= c.nˢᵇ <= 15 ||
@@ -113,12 +119,34 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
             wy,
             [
                 "Name" => e.pscad, "Freq" =>
-                    pscad_value(context.settings.frequency; unit = "Hz"),
+                    pscad_value(dc ? 0.0 : context.settings.frequency; unit = "Hz"),
                 "Length" => pscad_value(tl.length / 1e3; unit = "km"),
-                "Dim" => pscad_value(c.nᵇ), "Mode" => "1", "CoupleEnab" => "0",
+                "Dim" => pscad_value(c.nᵇ), "Mode" => dc ? "0" : "1", "CoupleEnab" => "0",
                 "CoupleName" => "row", "CoupleOffset" => pscad_value(0.0; unit = "m"),
                 "CoupleRef" => "0", "tname" => "tandem_segment", "sfault" => "0",
                 "linc" => pscad_value(10.0; unit = "km"), "steps" => "3"]))
+    if dc
+        # PSCAD 5.1.0 master:tline_interface, NC=2/View=0: scalar ports
+        # A(-18,-18), C(-18,18), in physical conductor order. Remote wrapper
+        # vertices have no electrical connections. See the M7 mapping record.
+        for (side, (terminal, bus)) in enumerate(zip(e.terminals, (left_bus, right_bus)))
+            ix, iy = allocate_cell!(state.layout)
+            interface = (ix + 144, iy + 72)
+            direction = side == 1 ? -1 : 1
+            push!(state.main.components,
+                ComponentPlan("master:tline_interface",
+                    ["Name" => e.pscad, "NC" => "2", "View" => "0", "send_recv" => "0",
+                        "dim_s" => "0", "dim_r" => "0"], interface..., side == 1 ? 0 : 4))
+            probe = current_probe!(state, e, terminal, context)
+            positive, negative = context.dc_labels[bus.key]
+            ammeter_stub!(state.main, (interface[1] + 18direction, interface[2] - 18),
+                positive, probe; direction)
+            stub!(state.main, (interface[1] + 18direction, interface[2] + 18),
+                negative; direction)
+            output_probe!(state.main, probe, "branch", "kA", (ix + 144, iy + 180))
+        end
+        return nothing
+    end
     first_probe = current_probe!(state, e, left, context)
     second_probe = current_probe!(state, e, right, context)
     ammeter_stub!(state.main, (wx - 54, wy + 18), left_bus.name, first_probe;

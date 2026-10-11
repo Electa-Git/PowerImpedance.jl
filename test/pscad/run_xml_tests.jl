@@ -37,6 +37,7 @@ else
     mhixml = pyimport("mhi.xml.pscad")
     include("fixtures.jl")
     include("topology.jl")
+    include("m7_networks.jl")
     using TOML
     P = PowerImpedance.PSCAD
     # Compare actual pin connectivity against the independent saved fragments,
@@ -1036,6 +1037,80 @@ else
                           value
                 end
             end
+        end
+    end
+    @testset "M7 IEEE9 XML" begin
+        path = joinpath(only(ARGS), "m7_ieee9.pscx")
+        model = export_pscad(PSCADFixtures.ieee9_network(); path,
+            settings = P.SimulationSettings(simulation_time = 3.0))
+        root = etree.parse(path).getroot()
+        summary = P.read_project_summary(path)
+        @test summary.settings["time_duration"] == "3.0"
+        @test summary.settings["time_step"] == "10.0"
+        @test summary.settings["sample_step"] == "100.0"
+        @test length(model.netlist.buses) == 9
+        @test PSCADM7Networks.inventory(model.netlist).subsystems == 6
+        for (name, voltage) in (("g1", "16.5 [kV]"), ("g2", "18.0 [kV]"),
+            ("g3", "13.8 [kV]"))
+            source = only(root.xpath(".//User[@defn='master:source_3'][paramlist/param[@name='Name'][@value='$name']]"))
+            @test pyconvert(String, source.xpath("string(./paramlist/param[@name='Vm']/@value)")) == voltage
+            @test pyconvert(String, source.xpath("string(./paramlist/param[@name='Ph']/@value)")) == "90.0 [deg]"
+            @test pyconvert(String, source.xpath("string(./paramlist/param[@name='Tc']/@value)")) == "0.05 [s]"
+        end
+        @test pylen(root.xpath(".//User[@defn='master:capacitor'][paramlist/param[@name='C'][@value='0.007 [uF]']]")) == 6
+        @test pylen(root.xpath(".//User[@defn='master:capacitor'][paramlist/param[@name='C'][@value='0.012 [uF]']]")) == 3
+        for (name, voltage) in (("t1", "16.5 [kV]"), ("t2", "18.0 [kV]"),
+            ("t3", "13.8 [kV]"))
+            winding = only(root.xpath(".//User[@defn='master:xfmr-3p2w'][paramlist/param[@name='Name'][@value='$name']]"))
+            @test pyconvert(String, winding.xpath("string(./paramlist/param[@name='V1']/@value)")) == voltage
+            @test pyconvert(String, winding.xpath("string(./paramlist/param[@name='V2']/@value)")) == "230.0 [kV]"
+        end
+        graphs = PSCADTopology.xml_graphs(root, x -> pyconvert(String, x); check_named = true)
+        for (name, graph) in graphs
+            PSCADTopology.check_degrees(graph, name)
+        end
+    end
+    @testset "M7 legacy MMC and two-pole overhead line XML" begin
+        state = PSCADM7Networks.p2p_builder(1.0)
+        path = joinpath(only(ARGS), "m7_p2p.pscx")
+        settings = P.SimulationSettings(simulation_time = 25.0,
+            time_step = 10e-6, sample_step = 250e-6, source_ramp = 0.0)
+        model = export_pscad(state; path, settings)
+        root = etree.parse(path).getroot()
+        summary = P.read_project_summary(path)
+        @test summary.components_per_defn["master:tline_interface"] == 2
+        @test summary.settings["time_step"] == "10.0"
+        @test summary.settings["sample_step"] == "250.0"
+        @test summary.settings["time_duration"] == "25.0"
+        witness = etree.parse(joinpath(@__DIR__, "fixtures/dc_ohl_interface.xml")).getroot()
+        defaults = Dict(pyconvert(String, p.get("name")) =>
+            pyconvert(String, p.xpath("string(./value)"))
+            for p in witness.xpath("./form/category/parameter"))
+        for interface in root.xpath(".//User[@defn='master:tline_interface']")
+            for p in interface.xpath("./paramlist/param")
+                field = pyconvert(String, p.get("name"))
+                @test haskey(defaults, field)
+            end
+            params = Dict(pyconvert(String, p.get("name")) => pyconvert(String, p.get("value"))
+                for p in interface.xpath("./paramlist/param"))
+            @test params["NC"] == "2"
+            @test params["View"] == "0"
+            @test params["send_recv"] == params["dim_s"] == params["dim_r"] == "0"
+        end
+        ports = [(parse(Int, pyconvert(String, p.get("x"))),
+            parse(Int, pyconvert(String, p.get("y")))) for p in witness.xpath("./svg/port")]
+        @test ports == [(-18, -18), (-18, 18)]
+        @test PSCADM7Networks.inventory(model.netlist).subsystems == 5
+        for e in model.netlist.elements
+            e.model isa PowerImpedance.MMC || continue
+            @test e.model.sigma_control.tec isa NoTotalEnergyControl
+            @test e.model.sigma_control.zscc isa NoZeroSequenceCurrentControl
+            sigma = only(root.xpath("./definitions/Definition[@name='SIGMA_$(e.pscad)']"))
+            @test pylen(sigma.xpath("./schematic/User[@defn='master:integral']")) == 2
+        end
+        graphs = PSCADTopology.xml_graphs(root, x -> pyconvert(String, x); check_named = true)
+        for (name, graph) in graphs
+            PSCADTopology.check_degrees(graph, name)
         end
     end
 end

@@ -464,6 +464,11 @@ function component_ports(c::ComponentPlan, modules)
         [(0, 0), (36, -36), (36, 0), (36, 36)]
     elseif d == "master:cable_interface"
         [(-18, 54 * (i - 1)) for i in 1:parse(Int, p["NCAB"])]
+    elseif d == "master:tline_interface"
+        p["NC"] == "2" && p["View"] == "0" &&
+            p["dim_s"] == p["dim_r"] == "0" ||
+            throw(ArgumentError("unsupported tline_interface ports"))
+        [(-18, -18), (-18, 18)]
     elseif d == "master:xfmr-3p2w"
         [(-54, 0), (36, 0)]
     elseif d == "master:sync_machine"
@@ -739,7 +744,7 @@ function _check_meter_grounding(canvas, name, modules)
                     "master:src_ccin_1", "master:sync_machine")
                     union!(anchors, nets)
                     union!(sources, nets)
-                elseif c.defn == "master:cable_interface"
+                elseif c.defn in ("master:cable_interface", "master:tline_interface")
                     for (i, n) in enumerate(nets)
                         key = (scope * ":" * lowercase(Dict(c.params)["Name"]), i)
                         haskey(cables, key) ? join(n, cables[key]) : (cables[key] = n)
@@ -847,6 +852,7 @@ function check_connectivity(plan::ProjectPlan)
     main = CanvasPlan(copy(plan.main.components), copy(plan.main.wires))
     for w in plan.wrappers
         w isa TLineWrapperPlan || continue # Cable wrappers have no electrical terminals.
+        Dict(w.params)["Mode"] == "1" || continue # Remote interfaces own the terminals.
         ports = [ModulePortPlan("sending", :electrical, -54, 18),
             ModulePortPlan("receiving", :electrical, 54, 72)]
         modules[w.row] = ModuleDefinitionPlan(w.row, ModuleParameterPlan[], ports, CanvasPlan())

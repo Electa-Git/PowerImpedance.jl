@@ -85,7 +85,8 @@ Three-phase AC `Overhead_line` elements export as one TLine `RowDefn` and one
 direct-connection wrapper on Main. The row contains `Line_Tower_Universal`,
 `Line_Ground`, `Line_FrePhase_Options` and `Line_Out_Disp`. Two series ammeters
 join the sending/receiving vertices to 36-pixel stubs and bus node labels.
-Other phase counts, including two-conductor DC lines, are not implemented yet.
+Two-conductor DC lines use remote scalar interfaces as recorded under M7 below.
+Other phase counts are not implemented yet.
 
 | Julia field | PSCAD field | PSCAD unit / convention |
 |---|---|---|
@@ -180,7 +181,7 @@ user-selected convention, measured with `YD1=1`, `YD2=0`, `Lead=1` on PSCAD 5.1.
 
 | Julia quantity / choice | PSCAD realization | Unit / convention |
 |---|---|---|
-| Primary bus base | `V1 = sqrt(3) * base_kV` | kV LL RMS, independent of solved bus magnitude |
+| Solved primary bus magnitude | `V1 = sqrt(3) * vm_pu * base_kV` | kV LL RMS; unsolved linear plans retain the declared base |
 | `n` | `V2 = V1/n` | kV LL RMS |
 | `:YY` | `YD1=YD2=0`, `Ideal=0` | near-ideal master winding |
 | `:ΔY` (Dyn11) | `YD1=1`, `YD2=0`, `Lead=1`, `Ideal=1` | secondary leads +30 degrees |
@@ -389,8 +390,8 @@ at 0.5 Hz leaves its DC behaviour unconstrained:
 
 Line elements whose terminal buses are all DC use
 `DC_LINE_FIT_START_FREQUENCY=0.001 Hz` as their default `FS`. This shared
-selection applies to DC cables and will apply to DC overhead lines when their
-emitter is supported. AC lines retain `FS=0.5 Hz`; other validation defaults
+selection applies to DC cables and DC overhead lines. AC lines retain
+`FS=0.5 Hz`; other validation defaults
 are retained. `line_options` overrides the selected defaults, including `FS`.
 `DCenab` remains zero because enabling DC correction causes the Yc fit
 singularity for this cable. An explicit `DCenab` override is still accepted;
@@ -2272,3 +2273,168 @@ is emitted at or below 1 us, or for other modulation types.
 Offline equation, connectivity, topology and XML checks remain separate
 from station acceptance: both cases must build, run finite, settle and
 pass every existing row over the final ten cycles `[4.8,5.0] s`.
+
+## M7: IEEE9 acceptance and P2P dynamic validation
+
+The legacy MMC mapping used by `examples/P2P_HVDC_ALT.jl` selects
+`NoTotalEnergyControl` and `NoZeroSequenceCurrentControl`, with the supplied
+circulating-current suppression PI. The exporter now follows the owned optional
+Σ controls individually. `NoTotalEnergyControl` supplies zero `iΣ_z_ref`;
+`NoZeroSequenceCurrentControl` supplies zero PI correction, retaining live
+`v_dc_f/2`; `NoCirculatingCurrentSuppressionControl` supplies zero d/q commands.
+There is no added energy loop, power feedforward, state or reset for a disabled
+control. Enabled controls retain their existing equations and initial states.
+The measurement module's single DC-divisor hold and all live feedback remain
+unchanged. Tests compare all eight combinations with the owned state-space
+equations at displaced current, capacitor energy and DC voltage inputs.
+
+Two-conductor DC `Overhead_line` elements use the same universal-tower row and
+material/earth/fitting mapping as AC lines. Physical conductor 1 is P and
+conductor 2 is N, at both ends. Coordinates are exported before sag correction;
+ground wires remain eliminated. DC fitting retains `FS=0.001 Hz`, `DCenab=0`.
+The TLine wrapper uses `Mode=0`, `Dim=2`, `Freq=0 Hz` and its existing length
+and coupling fields; its vertices are graphical. Each remote end uses
+`master:tline_interface` with matching `Name`, `NC=2`, `View=0`, `send_recv=0`,
+`dim_s=dim_r=0`. Both automatic end specifications follow the uncoupled-line
+mapping. Sending orientation is 0, receiving orientation is 4. P has a scalar
+series ammeter; N has a direct node-label stub.
+
+These fields and ports were read from the PSCAD 5.1.0 station's `master.pslx`,
+SHA256 `0d181e2f1c3eb57ae8019ba6d6311aee458dda02d080a8c4a92c26e6fdad5aeb`.
+For `NC=2` and individual-phase view, its scalar A/C ports are `(-18,-18)` and
+`(-18,18)`; orientation 4 mirrors x. The relevant form/port definitions are
+retained in `test/pscad/fixtures/dc_ohl_interface.xml`. The official
+[overhead-line interface documentation](https://www.pscad.com/webhelp/Master_Library_Models/Transmission_Lines_Cables/Transmission_Line_Models/tline_cable_int.htm)
+specifies conductor order from top to bottom. Connectivity checks treat remote
+TLine wrappers as graphical and their interfaces as the electrical terminals;
+the existing direct AC wrapper remains unchanged.
+
+`test/manual/pscad/acceptance_m7.jl` is separate from M1–M6. It writes projects,
+reference TSVs and inventory to `/tmp/pscad-m7/`, runs **only IEEE9**, and applies
+`compare_operating_point` with the existing 1% AC voltage, 1 degree relative
+angle and 2% current rules. IEEE39 classic and builder are also built through
+the existing runner; their fresh `build-messages.txt` files determine the
+build-only verdict. P2P is exported without building, running or comparing.
+`--export-only` does not contact the station.
+
+After the transformer rating correction, all 36 M1–M6 projects were re-exported
+and compared with the `718636a` baseline
+with the same Julia 1.12.7 Manifest. Their serialized bytes agree after replacing
+only object IDs and the mhi-xml revision timestamp; no other difference remains.
+The standalone YY/ΔY fixtures retain `V1/V2=380/150` kV; MMC interface ratings
+are unchanged.
+
+### EDUCATIONAL licence and network counts
+
+The EDUCATIONAL licence allows **200 electrical nodes and one subsystem**
+([edition limits](https://www.pscad.com/webhelp-v5-ol/Getting_Started/Dimension_Limits.htm)).
+The station message `Subsystem splitting has been internally disabled` is
+normal for this licence. Distributed lines/cables naturally separate electrical
+subsystems, but splitting is disabled here. Bus conductor nodes exclude ground
+and internal component nodes; they are not the licence-counted live-node total.
+
+| Case | Elements | AC/DC buses | Bus conductor nodes | Live nodes | Natural / EDU subsystems |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| IEEE9 classic | 15 | 9 / 0 | 27 | 78, station evidence | 6 / 1 |
+| P2P classic / builder share 0.25 | 8 | 4 / 3 | 18 | 65, station evidence | 5 / 1 |
+| IEEE39 classic | 90 | 49 / 2 | 151 | 528, station evidence | 28 / 1 |
+| IEEE39 builder | 89 | 49 / 2 | 151 | 528, station evidence | 28 / 1 |
+
+IEEE39 classic and builder are **export verified (licence-blocked)**: both
+station builds report the sole error `The current license is limited to a maximum of
+200 electrical nodes. This project contains 528 electrical nodes.` and
+the summary `Build: 1 errors, 0 warnings`.
+The criterion is a completed export with all offline checks and a station build
+whose only error is the licence node-cap message, with no warnings.
+Classic has 11 sources, one TLC, 12 transformers, 32 impedances and 34 OHLs;
+builder disconnects `T8_9`, giving 33 OHLs. The existing legacy STATCOM mapping
+keeps its explicit `Vₘ`-derived setpoint despite the differing supplied
+`vac_supp` reference; no example parameter is rewritten.
+
+### P2P dynamic-validation record
+
+The classic 25 km cable + 75 km DC OHL network is unstable at its solved Julia
+point. Two verified c1 network roots are **+1374.359 / +1426.121 s⁻¹** at
+**3428.518 / 3526.556 Hz dq**. The nearby 50 Hz abc sidebands are
+3478.518 / 3476.556 Hz (approximately 3.48 kHz), with growth times
+0.728 / 0.701 ms. The station's 1 us, 50 us sampled B3 phase-a trace fits
+**3473.033 Hz / 0.687548 ms** over 0.3–1.8 ms. PSCAD therefore reproduces the
+unstable mode; this is **dynamic validation, not operating-point acceptance**.
+Among explicit converter states, c1 differential modulation-delay states carry
+98.81–98.84% participation; implicit distributed-line states are excluded from
+that normalization. The 200 us modulation delay interacts with `tl1`'s roughly
+3 kHz resonance. Exact delay versus Padé 5/5 phase differs by only 0.0345–0.0458
+degrees at the two roots.
+
+The authorized builder screen used share 0.25, all original parameters, and
+c1's c2 interface (`333 kV`, `333/380`, `Lᵣ=0.0461 H`, `Rᵣ=0.4103 Ω`). Both
+converter delays were varied as below; Padé orders stayed 5/5. All power flows
+solved; complete-network scans over 0.01 Hz–100 kHz failed every candidate:
+
+| Candidate | Both delays | Largest located Re(s), s⁻¹ | dq frequency, Hz | Nyquist net |
+| --- | ---: | ---: | ---: | ---: |
+| V1 | 200 us | +1341.276 | 3500.142 | 10 |
+| V2 | 100 us | +331.226 | 8932.535 | 6 |
+| V3 | 50 us | +263.933 | 15058.576 | 2 |
+
+No fourth variant or physical correction was applied. P2P returns to the model
+owner. The committed IEEE14 hybrid (`test/make_y_node_test.jl`) also failed its
+unchanged complete-network screen: largest located root **+72.786701 s⁻¹ at
+29.652282 Hz dq**, full-network Nyquist net **3** over the same band. Its second
+confirmed RHP root is +20.515535 s⁻¹ at 82.762656 Hz; no variant or export followed.
+
+P2P builder is now exported only at share **0.25** (25 km cable + 75 km DC OHL).
+The gitignored classic file remains guarded by `isfile` and is loaded only in
+this manual script. Its old phase-RMS source `V` maps to `sqrt(2)*V`; diagnostic
+scans/plots are excluded. P2P and IEEE39 records retain **25 s / 10 us / 250 us**,
+zero source ramp. Saved failing endpoint projects and station traces remain
+historical evidence, outside the script's acceptance cases.
+
+### Short distributed sections
+
+OHL and cable emitters warn when `length / 299_792_458 m/s < time_step`, naming
+the element, length and step. This conservative check is a warning, not an
+error; PSCAD aborts if its calculated travel time is below the step. A smaller
+step or a longer section is needed. The P2P example regularizes its cable/OHL
+endpoints to 100 m, which cannot run at 10 us: station travel times were
+0.329330 us for the OHL and 0.648293 us for the cable. No length is silently changed.
+
+### IEEE9 acceptance fixture
+
+`PSCADFixtures.ieee9_network()` is a classic `@network` fixture copied from
+`local/IEEE9bus/IEEE9bus_abc.jl`, independent of that gitignored file. Every line,
+transformer, load impedance and connection is preserved. The source `V` values
+are already phase peak (16.5, 18 and 13.8 kV LL times `sqrt(2/3)`): they become
+`Setpoint.Vac` unchanged, with **no extra sqrt(2)**. P/Q remain unspecified;
+all three ideal sources become type-3 reference buses at angle zero, and their
+P/Q injections are solved from the fixed voltages and network/load equations.
+The current classic default phase-RMS base `220/sqrt(3)` kV is retained.
+The explicit transformer model receives only inferred PF-bound rating metadata:
+`V₁ᵒ=(16.5,18,13.8)/sqrt(3)`, `V₂ᵒ=230/sqrt(3)` kV phase RMS. This follows
+`test/Transformer_test.jl:113`; it avoids transformer conversion assuming the
+common base at each primary. These fields do not enter `eval_abcd` for the
+explicit model; no circuit parameter or tolerance changes.
+
+SymEngine series impedances become functions of `s`; `transformation=true`
+selects the supported balanced dq representation with the same steady state.
+All three YY transformers retain `Cₜ=7 nF`, `Cₛ=12 nF`. These existing exported
+paths follow `eval_abcd(::Transformer)` in
+`src/Network/Components/transformer/transformer.jl`: terminal `Y_turn` shunts
+around the T cascade, and `connect_parallel!` adds the stray bridge. No new
+transformer field or equation is introduced. The near-ideal YY realization
+remains the accepted M1–M6 mapping.
+
+Settings are **3 s / 10 us / 100 us**, default **0.05 s source ramp**, final ten
+cycles **(2.8,3.0] s**. The station measured **78 live nodes**, below the 200 cap;
+rating YY and ΔY windings from the solved primary LL RMS voltage (rather than
+the common bus base, or `V₁ᵒ`/`V₂ᵒ` metadata) gives IEEE9 16.5/230, 18/230 and
+13.8/230 kV, and changing only these ratings removed the `NT_2` zero diagonal
+and produced a finite 3 s station run (Bus1 peak 13.47 kV, Bus7 approximately
+189 kV). Solved source dispatch and all nine
+bus voltages/angles are written to `ieee9_classic_reference.tsv`.
+
+IEEE9 **passed** on the EDUCATIONAL licence: **41 comparison rows**, all within
+tolerance, with worst voltage magnitude error **2.19e-5 relative**, worst angle
+error **4.99e-4 degrees**, and worst current error **0.169%** (`I_tl64_2`, **3.9 A**).
+Evidence is `/tmp/pscad-m7/ieee9_classic_comparison.tsv`, station run
+`local/pscad-exchange/m7/ieee9_classic/run-Hcm4nU`.

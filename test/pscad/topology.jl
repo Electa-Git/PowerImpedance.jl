@@ -244,6 +244,13 @@ function xml_graphs(root, string_value; check_named = false)
                 end
             elseif class == "TLine"
                 defn = string_value(w.get("defn"))
+                params = [string_value(p.get("name")) => string_value(p.get("value"))
+                          for p in w.xpath("./User/paramlist/param")]
+                if Dict(params)["Mode"] == "0"
+                    push!(cable_wrappers, Dict("definition" => defn,
+                        "parameters" => Dict(params)))
+                    continue
+                end
                 row = last(split(defn, ':'))
                 # First/last vertices are terminals, as saved in
                 # local/OHL/DUT_2.pscx:1798–1839,17181–17212.

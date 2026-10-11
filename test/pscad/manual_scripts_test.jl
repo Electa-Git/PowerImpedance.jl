@@ -154,6 +154,36 @@ end
                     original = Meta.parseall(replace(source, qualified => name))
                     @test unresolved_globals(original, namespace) == [Symbol(name)]
                 end
+            elseif basename(path) == "acceptance_m7.jl"
+                # Evaluate only the message classifier, never exports or runs.
+                definition = only(filter(statement -> statement isa Expr &&
+                    statement.head == :function &&
+                    first(first(statement.args).args) == :build_verdict, expression.args))
+                Core.eval(namespace, definition)
+                verdict(text) = Base.invokelatest(getproperty(namespace, :build_verdict), text)
+                licence = "error\tbuild\t\tThe current license is limited to a maximum of 200 electrical nodes. This project contains 528 electrical nodes.\n"
+                normal = "normal\tbuild\t\tThe total number of live nodes: 528\n"
+                summary = "normal\tbuild\t\t======== Build: 1 errors, 0 warnings ========\n"
+                @testset "M7 licence build verdict" begin
+                    @test verdict(normal * licence * summary) == "export verified (licence-blocked)"
+                    @test verdict(licence * normal * summary) == "export verified (licence-blocked)"
+                    @test verdict(normal * summary * licence) == "export verified (licence-blocked)"
+                    @test verdict(normal * licence * summary *
+                        "warning\tbuild\t\tUnexpected warning\n") == "fail"
+                    @test verdict(normal * licence * summary *
+                        "error\tbuild\t\tUnrelated build error\n") == "fail"
+                    @test verdict(normal * licence * licence * summary) == "fail"
+                    @test verdict(normal * summary) == "fail"
+                    @test verdict(normal * licence) == "fail"
+                    @test verdict(replace(normal * licence * summary,
+                        "0 warnings" => "1 warnings")) == "fail"
+                    @test verdict(normal * licence * summary *
+                        replace(summary, "0 warnings" => "1 warnings")) == "fail"
+                    @test verdict(replace(normal * licence * summary,
+                        "The current license is limited" => "Another error: The current license is limited")) == "fail"
+                    @test verdict("error\tbuild\n" * licence * summary) == "fail"
+                    @test verdict("") == "fail"
+                end
             end
         end
     end

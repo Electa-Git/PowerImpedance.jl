@@ -4,6 +4,15 @@ using ..PSCADFixtures: small_ac_network, passive_ohl_network, transformer_networ
                        dc_network
 const P = PowerImpedance.PSCAD
 
+@testset "PSCAD short overhead line warning" begin
+    classic, _ = passive_ohl_network()
+    classic.elements[:line].element_model.length = 100.0
+    settings = P.SimulationSettings(time_step = 10e-6)
+    @test_logs (:warn, r"overhead line :line, length 100.0 m, time step 1.0e-5 s: PSCAD aborts if the travel time is below the step") begin
+        P.build_plan(P.netlist(classic, nothing); settings)
+    end
+end
+
 function plan_shape(plan)
     return (
         name = plan.name, description = plan.description, settings = plan.settings.params,
@@ -325,7 +334,7 @@ end
     tl.conductors.positions = ([-11, 1, 9], [28, 35, 31])
     @test only(P.build_plan(P.netlist(classic, nothing)).lines).conductors ==
           [(-11.0, 28.0), (1.0, 35.0), (9.0, 31.0)]
-    # Reject a 2-conductor line before any AC-terminal mapping.
+    # A two-conductor line remains invalid on AC buses.
     tl.conductors.nᵇ = 2
     caught = try
         P.build_plan(P.netlist(classic, nothing))
@@ -333,7 +342,7 @@ end
         error
     end
     @test caught isa ArgumentError
-    @test occursin("not implemented yet", sprint(showerror, caught))
+    @test occursin("requires 3 conductors for AC export", sprint(showerror, caught))
 end
 
 # Resolve labels, wires and touching component ports without treating a
@@ -440,6 +449,35 @@ end
             @test_throws ArgumentError P.build_plan(P.netlist(classic, nothing))
             setproperty!(t, field, previous)
         end
+    end
+end
+
+@testset "PSCAD transformer solved winding ratings" begin
+    for organization in (:YY, :ΔY)
+        classic, _ = transformer_network(; organization, Rₘ = Inf, Lₘ = Inf)
+        classic.voltageBase[1] = 220 / sqrt(3)
+        classic.elements[:source].setpoint = Setpoint(Vac = 16.5 * sqrt(2 / 3), θac = 0.0)
+        t = classic.elements[:line].element_model
+        # IEEE9 t1 winding parameters, on a common base far above its primary.
+        t.n = 16.5 / 230
+        t.Rₚ = t.Rₛ = 0.0
+        t.Lₚ = 4.9916e-4 / 2
+        t.Lₛ = 0.097 / 2
+        t.V₁ᵒ = 16.5 / sqrt(3)
+        t.V₂ᵒ = 230 / sqrt(3)
+        pf = power_flow(classic)
+        @test string(pf[1]["termination_status"]) == "LOCALLY_SOLVED"
+        # Open-circuit metadata must not supply the exported winding ratings.
+        t.V₁ᵒ = t.V₂ᵒ = 0.0
+        plan = P.build_plan(P.netlist(classic, pf))
+        winding = only(filter(c -> c.defn == "master:xfmr-3p2w", plan.main.components))
+        params = Dict(winding.params)
+        @test params["V1"] == "16.5 [kV]"
+        @test params["V2"] == "230.0 [kV]"
+        @test params["Ideal"] == (organization == :YY ? "0" : "1")
+        @test params["Tmva"] == "1000 [MVA]"
+        @test params["Xl"] == "0.0001 [pu]"
+        @test params["Im1"] == "0.001 [%]"
     end
 end
 

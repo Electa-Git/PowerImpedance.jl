@@ -223,9 +223,7 @@ end
         @test all(Dict(c.params)["Tc"] == "0.05 [s]"
         for c in default_plan.main.components
         if c.defn in ("master:source_1", "master:source_3"))
-        for m in (PI.MMC(; e.model.meas, e.model.sync, e.model.delta_control,
-            sigma_control = PI.ΣdqzControlTEC(), e.model.modulation, e.model.elec),
-            PI.MMC(; e.model.meas, sync = PI.NoSynchronization(), e.model.delta_control,
+        for m in (PI.MMC(; e.model.meas, sync = PI.NoSynchronization(), e.model.delta_control,
             e.model.sigma_control, e.model.modulation, e.model.elec),
             PI.MMC(; e.model.meas, e.model.sync,
             delta_control = PI.ΔdqControlGFL(;
