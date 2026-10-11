@@ -3,7 +3,8 @@
 const _CONVERTER_STARTUP_RELEASE = 0.2
 
 # Saved time-based real selector: local/TLC/Simple_2L_VSC_RL.pscx:5912–5929.
-# Keep one construction for the accepted TLC and MMC measurement handovers.
+# Only measured DC voltage used as a divisor has a solved-value handover.
+# All feedback measurements and control-state signals remain live from t=0.
 struct _ConverterStartupHold <: ControlBlock
     clock::Signal
     measured::Signal
@@ -114,19 +115,6 @@ function converter_filter!(graph, parameters, input, output, filter, names, stat
     not_exportable(e, filter)
 end
 
-function converter_measurement_filter!(
-        graph, parameters, input, output, filter, names, states, u, e)
-    if e.model isa PowerImpedance.MMC
-        # Hold the input so solved dynamic filter states remain at equilibrium;
-        # masking only the output would let zero meter inputs discharge them.
-        held = Signal(output.name * "_startup")
-        push!(graph.nodes, _ConverterStartupHold(
-            Signal("meas_start_clock_s"), input, held, Float64(u)))
-        input = held
-    end
-    converter_filter!(graph, parameters, input, output, filter, names, states, u, e)
-end
-
 function converter_measurements(name, e, equilibrium, transforms,
         bases = (; v = e.model.elec.vACbase, i = e.model.elec.iACbase,
             dc = e.model.elec.vDCbase))
@@ -167,7 +155,7 @@ function converter_measurements(name, e, equilibrium, transforms,
         measurement = getproperty(m.meas, field)
         signal = field == :θ ? "theta_rel" : field == :v_dc ? "v_dc_pu" : string(field)
         filtered = field == :θ ? "theta_f" : string(field) * "_f"
-        converter_measurement_filter!(
+        converter_filter!(
             graph, parameters, Signal(signal), Signal(filtered), measurement.filter,
             PowerImpedance.statenames(measurement), equilibrium.states, getproperty(raw, field), e)
     end
@@ -184,12 +172,19 @@ function converter_measurements(name, e, equilibrium, transforms,
         (:Q_ac, -measured.vG_q_f * measured.i_d_f + measured.vG_d_f * measured.i_q_f),
         (:P_dc, measured.v_dc_f * measured.i_dc_f))
         measurement = getproperty(m.meas, field)
-        converter_measurement_filter!(
+        converter_filter!(
             graph, parameters, Signal(string(field)), Signal(string(field) * "_f"),
             measurement.filter, PowerImpedance.statenames(measurement), equilibrium.states, u, e)
     end
     outputs = [(n, 1)
                for n in ("vG_d_f", "vG_q_f", "i_d_f", "i_q_f", "v_dc_f", "P_ac_f", "Q_ac_f")]
+    if m isa PowerImpedance.MMC
+        # Keep Vdc feedback, power products and voltage feedforward live.
+        # Share one protected denominator across all measured-DC divisions.
+        push!(graph.nodes, _ConverterStartupHold(Signal("meas_start_clock_s"),
+            Signal("v_dc_f"), Signal("v_dc_divisor"), measured.v_dc_f))
+        push!(outputs, ("v_dc_divisor", 1))
+    end
     append!(graph.nodes, [Export(n, Signal(n)) for (n, _) in outputs])
     return converter_definition(name, parameters, graph, inputs, outputs)
 end

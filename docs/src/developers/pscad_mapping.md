@@ -1430,9 +1430,9 @@ nominal grid angle zero: Σ is `vCΣ_z + vCΣ_d*cos(-2θ) + vCΣ_q*sin(-2θ)`, �
 `vCΔ_d*cos(θ)+vCΔ_q*sin(θ)+vCΔ_Zd*cos(3θ)+vCΔ_Zq*sin(3θ)`. Upper/lower totals
 are `(Σ±Δ)*vDC_base`. Control PI/filter/delay initial values come from
 `converter_equilibrium`, not from the initialization guesses. No unwitnessed
-inductor initialization field is introduced. The approved 0.2 s measurement
-hold below replaces zero meter outputs during start-up; its full native
-handover and settling passed station round 3 for both PQ representations.
+inductor initialization field is introduced. The final 0.2 s DC-divisor
+hold below protects measured-DC divisions while all feedback stays live.
+Station round 3 validated the earlier broader-hold PQ exports only.
 
 ### PQ fixture and parameter provenance
 
@@ -1474,8 +1474,9 @@ leakage and exciting current are the already accepted exporter construction,
 not extra terms from the Julia plant. The reactor retains the full Julia Lr/Rr.
 
 The saved MMC voltage sources use `Tc=0`; this does not initialize their meter
-outputs. The approved start-up now holds solved control measurements until
-0.2 s, using the TLC's saved selector construction. M5a station round 3 used
+outputs. The approved start-up holds only the measured DC-voltage divisor until
+0.2 s, using the TLC's saved selector construction; control measurements are
+live. M5a station round 3 used
 zero source ramp. After both M5b ramp experiments passed, Amauri approved
 any finite, nonnegative `SimulationSettings.source_ramp` for every supported
 converter. The library default remains 0.05 s, the MMC fixtures retain zero,
@@ -1673,72 +1674,75 @@ passed arm check, failed unheld PQ runs and revised projects awaiting station
 acceptance at the end of round 2. Station round 3 results are recorded below.
 No Julia core defect was found.
 
-### Approved MMC measurement hold
+### Approved MMC DC-divisor hold
 
-Amauri selected a 0.2 s hold of solved control measurements after station
-round 2. The exporter uses the existing saved TLC construction,
-`local/TLC/Simple_2L_VSC_RL.pscx:5912–5929`: `time-sig` feeds a real-valued
-`compare` with `X=0.2`, `OL=solved value`, `OH=measured signal`, `INTR=0`,
-`Dim=1`, `conv=0`. `_CONVERTER_STARTUP_RELEASE` is the single private release
-constant shared by TLC and MMC. The TLC's canvas coordinates, fields and
-nominal-voltage handover are unchanged. All connections retain separate
-straight stubs to named labels, including the selector's named `OH` dependency.
+Amauri's final M6b decision applies to every MMC, compensated or
+uncompensated: **only the measured DC-voltage value used as a divisor is
+held at its solved value for `t<0.2 s`**. Every feedback measurement is live
+from `t=0`: AC/DC voltage and current, P/Q, PLL inputs, circulating-current
+d/q/z, capacitor voltages and all TEC/Σ/Δ energies. The electrical plant
+starts from rest; its closed control loops bring it to the operating point.
+Controller/filter/capacitor integrators and delay histories retain their
+converged initial values, without resets or freezing their derivatives.
 
-| Consumed measurement | Hold placement | Solved value and reason |
-|---|---|---|
-| `vG_d`, `vG_q`, `v_dc`, `i_d`, `i_q`, `i_dc`, relative `θ` | After SI/pu conversion and dq transformation, before each MEAS filter | `converter_equilibrium.outputs.sig_in`; these are the filter inputs at the solved state. The resulting `v_dc_f` supplies every Σ and modulation division. |
-| `P_ac`, `Q_ac`, `P_dc` | Before their MEAS filters | Products of the solved filtered voltage/current outputs, as in the owned measurement equations. This covers the P/Q outer loops and TEC power input. |
-| PLL voltage input and OCC voltage feedforward | Their upstream MEAS inputs are held; their existing local filters remain active | MEAS `vG_q_f` and `vG_d_f` stay at equilibrium, so the already initialized PLL/OCC filter states also remain consistent. |
-| `iS_d`, `iS_q` | After the circulating-current transform at `-2*theta_c` and pu conversion | Solved `iΣ_d/iΣ_q` rotated by `-2*Δθ_pll`, exactly as `MMC/inner_current.jl:31–49`; holding a fixed phase-current array would create rotating dq errors. |
-| `iS_z` | After the arm-current mean and pu conversion | Solved `iΣ_z`; supplies ZSCC and the existing diagnostic probe. |
-| TEC total energy | After six-arm squared-voltage aggregation | Solved harmonic `wΣz` from `MMC/energy.jl:19–25`. Individual capacitor initial values contain harmonic ripple; their energy at one phase is not the solved cycle-mean energy. |
+The shared measurement construction filters the live DC voltage normally,
+then exports a private `v_dc_divisor` alongside the live `v_dc_f`. One
+selector in MEAS supplies this denominator to all measured-DC divisions:
+TEC's zero-sequence current command, LEC's three Σ current commands, and
+uncompensated modulation's common `2/Vdc` factor. Vdc feedback errors,
+DC-power products and the Σ half-DC voltage feedforward consume live
+`v_dc_f`. The divisor is an internal module connection, with no new probe,
+public keyword, comparison row or tolerance. Compensated modulation divides
+by each arm's live capacitor voltage and does not use the measured DC divisor.
+There are no selectors in Σ or modulation, nor on any other loop input.
 
-There are ten selectors in MEAS and four in Σ, with one clock in each canvas.
-Every exported control measurement is protected even when its filter is
-`NoFilter`. A hold before a dynamic filter is necessary: holding only its
-output would hide the filter states drifting under zero or unsettled meter
-inputs, then expose that drift at release. The existing solved output and
-derivative initial values are retained. Holding the solved input leaves those
-states at equilibrium until 0.2 s. At release, dynamic filter states are
-continuous and respond to measured inputs; `NoFilter` outputs immediately
-follow the measured values. PLL and OCC receive the same constant solved MEAS
-outputs during the hold, so their internal filter initialization remains valid.
+The single selector uses the validated TLC construction at
+`local/TLC/Simple_2L_VSC_RL.pscx:5912–5929`: `time-sig` feeds real-valued
+`compare` with `X=0.2`, `OL=solved filtered DC voltage`, `OH=v_dc_f`,
+`INTR=0`, `Dim=1`, `conv=0`. `_CONVERTER_STARTUP_RELEASE` remains the
+single private release constant shared by TLC and MMC. TLC's existing
+nominal-voltage handover, canvas and fields are unchanged. Named-node
+connections retain their separate straight stubs, including `OH`.
+At exactly 0.2 s the saved construction selects the live filtered voltage;
+a later zero voltage passes through as zero, with no clamp or threshold guard.
+Dynamic measurement filters run on live input from their solved states
+throughout startup; the selector protects only their DC output's divisor use.
 
-Controller integrators keep their solved initial values, without resets or
-freezing their derivatives. The PLL's angle continues to advance and its
-frequency remains a controller output, not a zero-initialized meter signal.
-Physical arm currents and capacitor integrators remain active throughout:
-`m_arm*i_arm` still uses the actual electrical current, and controlled arm
-voltages still use the actual capacitor state. The hold affects the energy
-measurement seen by TEC, not the arm plant or capacitor probes. No clamp,
-additional filter, reset, voltage threshold or other guard is introduced.
+Both earlier M6b classic projects built but diverged on the station:
 
-For `t<0.2 s`, the PQ diagnostic measurements report solved P/Q/Vdc/iS_z;
-these held values do not establish physical terminal-power or current-identity
-agreement. The saved selector releases to its measured branch at 0.2 s, with
-equality following the saved `INTR=0` construction. Every held branch becomes
-a direct measurement dependency after release. Existing measurement filters,
-controller equations, arm dynamics and modulation divisions are unchanged,
-so the post-release steady state and transfer functions are unchanged by the
-selector. The already documented harmonic-model versus six-arm energy ripple
-remains; this start-up policy does not add a steady-state physics approximation.
+- Holding solved energy as well as meter measurements hid capacitor charging.
+  The capacitors rose from 635/641 kV initially to 7,260/8,488 kV at 0.05 s
+  and about 10,000 kV before release; DC current reached 9–27 kA against
+  about 1.16 kA solved. At 0.201 s `iS_z` jumped to -98.7 pu, and results
+  became non-finite at 0.278 s. Compensated per-arm division removes the
+  natural capacitor-voltage balance, so frozen energy feedback left charging
+  uncontrolled during the hold.
+- The subsequent meter-only hold made energy feedback live but still froze
+  `iS_z`. This opened the inner current loop under a live outer energy loop:
+  the current controller integrated against a fixed measurement. `I_DUT_1`
+  went from -0.13 to -59 kA in 5 ms, the lower-arm capacitor from 641 to
+  -94 kV in 2 ms, and results became non-finite at 0.608 s. Compensated
+  modulation cannot tolerate this open-loop startup window either.
 
-The regenerated classic/builder PQ projects retain 10 s duration, 10 us step,
-250 us sampling, `Tc=0`, their own namespaces and `pi.out` settings. Inspect
-the first samples, the samples around 0.2 s and the release transient for finite
-signals. Use the final ten 50 Hz cycles, `[9.8,10.0] s`, for comparison after
-checking R15 settling. No sample in the hold is a steady-state validation sample.
-The README distinguishes the passed earlier isolated experiments and failed
-unheld PQ runs from the successful station round 3 of these revised projects.
+The divisor-only policy keeps every inner and outer loop closed from the
+first step while preventing measured-DC divisions by an unsettled startup
+voltage. All diagnostic probes now report live measured/filtered values,
+including P/Q/Vdc/iS_z before 0.2 s. The earlier station round 3 below
+records the historical broader-hold exports; it does not validate this revision.
 
-Tests cover zero meter inputs through MEAS/PLL/P/Q/OCC/Σ/modulation, all ten
-measurement quantities with `NoFilter` and Butterworth orders 1–6, filter-state
-consistency and continuity at release, changed measurements after release,
-and a later zero voltage passing through without a clamp. XML round trips
-compare every new selector's fields/orientation with the cited saved TLC
-fragment and check the complete canvases' connectivity and topology. The
-isolated Σ experiment's held references match its prescribed inputs; its
-original TEC-error, initial-value and slope predictions are retained.
+Regenerated M6b and M5 classic/builder projects retain 10 s duration, 10 us
+integration, 250 us sampling, zero source ramp, their existing probes and
+rating-normalised comparison rules. Inspect finite startup, the denominator
+handover and settling; compare the final ten 50 Hz cycles `[9.8,10.0] s`.
+These revised projects require station build/run acceptance.
+
+Tests check the single saved selector and its release, immediate live meter
+feedback through the whole control cascade, independent energy/current
+changes in TEC and LEC/CCC before release, and the live Vdc feedforward
+separately from its held divisor. All ten measurement filters are exercised
+with `NoFilter` and Butterworth orders 1–6. XML round trips compare the
+selector fields/orientation with the cited TLC fragment and check all module
+connections, topology and the absence of other MMC selectors.
 
 ### Station round 3 and approved MMC comparison rows
 
@@ -1913,8 +1917,8 @@ uses the committed equilibrium constraint, including solved reactive power,
 instead of the original requested Q or an initial guess. Every new mode
 recovers the same converged Julia problem and uses its states, filter outputs
 and derivatives, PI integrals, support lags, arm capacitors and delay histories.
-The approved MMC 0.2 s solved-measurement hold is retained, including solved
-Q for VAC; release restores the original measured equations.
+The final MMC 0.2 s hold protects only the measured DC-voltage divisor.
+VAC Q feedback and Vdc voltage feedback run live from the first step.
 
 `test/pscad/fixtures.jl` supplies classic and builder versions of each mode.
 All MMCs retain the M5a 1000 MVA / 333 kV / 800 kV plant, exact 333/380 ratio,
@@ -2144,9 +2148,9 @@ TEC/ZSCC/CCSC and 200 us Padé(5,5) modulation specification.
 The export retains the accepted near-ideal YY transformer and exact dq delay
 with phase compensation; the previously documented transient/frequency-response
 difference from Padé remains. Converged states come through the core accessor.
-The Σ start-up current holds use the core `syncangle`, which is `Δθ_VSM`
-for this model. The accepted ten MEAS/four Σ selectors retain their 0.2 s
-release and physical arm dynamics remain active.
+TEC circulating-current feedback uses the core `syncangle`, which is
+`Δθ_VSM` for this model, live from the first step. The final construction
+has one measured-DC divisor selector in MEAS and no Σ current/energy selectors.
 
 Both acceptance cases use 10 s, 10 us integration, 250 us sampling and zero
 source ramp, with `dc_reference=:none` because the DC source grounds its midpoint.
@@ -2162,3 +2166,109 @@ states in indexed TSVs, and a short README. Local plan/connectivity/topology,
 XML round trips and state-equation tests establish the mapping. Native station
 acceptance remains separate: both cases must build, run finite, settle and pass
 every row over the final ten cycles `[9.8,10.0] s`.
+
+## M6b: leg-energy control and physical compensated modulation
+
+`ΣdqzControlLEC` exports `ΣEnergyControl`, `ΔEnergyControl` and
+`CirculatingCurrentControl` in their Julia sequence (`MMC/MMC.jl:128–136`).
+The live energies are `(vu²+vl²)/vDC_base²` and `(vl²-vu²)/vDC_base²`.
+Their projections give Julia's `2wΣ` and `-2wΔ`
+(`src/Network/Components/converter/MMC/energy.jl:67–151`). Σ d/q use
+`-2*ωbase*t`; Δ d/q use `ωbase*t`. The scalar Δ zero sequence is lifted
+into the triplen pair by twice its product with `cos(3*ωbase*t)` and
+`sin(3*ωbase*t)`. Cycle means reproduce the seven energy coordinates;
+the physical abc plant retains additional harmonics, including the 6ω
+triplen ripple, as in M5's physical total-energy measurement.
+
+The explicit notch states obey `F1'=F2-sqrt(2)*ωn*(F1+u)-Jframe*F1`,
+`F2'=-ωn²*F1-Jframe*F2`, with output `u+F1` and rotating PI
+`ξ'=Ki*(ref-u-F1)-Jframe*ξ`. Σ uses `ωn=2ωbase`, `Jframe=-2ωbase*J`
+and references `(0,0,2ref)`. Δ uses `ωn=ωbase`, frames `+ωbase` and
+`+3ωbase`, zero references, and current outputs
+`3/4*(d+Zd, -(q+Zq), 0)`. Frequencies stay at their Julia nominal values;
+there is no additional filter or actual-frequency substitution.
+
+The corrected triplen block follows the reconstruction
+`T=[cos(3θ) sin(3θ); sin(3θ) -cos(3θ)]`: `Tdot*T=-3ωbase*J`, so
+`x'=u-Jframe*x` requires `Jframe=+3ωbase*J`. The former `-3ωbase*J`
+notch/PI block rotated against the plant. The fixture retains the original
+Δ PI gains (`k=1`), matching the core compensated-admittance test. Its former
+`+0.115752 ± j942.538554 s^-1` pair (150 Hz, 99.8% Δ-triplen PI participation)
+becomes `-12.550944 ± j940.716108 s^-1`; all 89 poles are stable. Beyond the
+deliberately slow stable OCC filter poles (`-0.000628319 s^-1`), the
+least-damped pair is `-4.873459 ± j10.339475 s^-1`. These are Julia
+linearization results; native station evidence follows below.
+
+CCC uses the grid-frame currents directly, adds the Σ and Δ current
+references, and implements `ξ_i'=Ki*(iref-i)-J_-2ω*ξ_i` and
+`vMΣref=-(ξ_i+Kp*(iref-i))+(0,0,v_dc_f/2)`
+(`src/Network/Components/converter/MMC/inner_current.jl:81–104`).
+Unlike TEC/CCSC, these currents are measured at the nominal grid angle,
+without a VSM-relative rotation. All three current measurements and all seven
+capacitor-energy inputs are live from `t=0`, closing CCC under the live energy
+loops. Only the measured DC-voltage divisor in the three Σ current commands
+uses the shared 0.2 s hold; the half-DC feedforward is live.
+All 24 notch/PI integrators use the converged states. Physical arm
+currents and capacitor dynamics remain active throughout startup.
+
+Amauri selected the standard EMT compensated realization: each upper arm
+uses `(vΣref-vΔref)/v_Ctot,u`, each lower arm
+`(vΣref+vΔref)/v_Ctot,l`, followed by the existing exact `tdelay` primitive.
+Δ references use the AC voltage base and `theta_c`; Σ uses the DC base
+and nominal `-2ωbase` frame, following `modulation.jl:138–141`.
+There are six 200 us physical arm delays, with histories initialized to
+that arm's own solved physical ratio at the initial angle. Exact delay
+and the specified Julia Padé(5,5) have different frequency responses
+away from steady state, as already recorded for uncompensated modulation.
+
+Julia's law is a seven-coordinate harmonic-domain matrix solve
+(`src/Network/Components/converter/MMC/modulation.jl:143–152`), which
+approximates the physical per-arm division. The prescribed steady-harmonic
+preflight, with positive arm capacitors, measured insertion indices
+differing by up to `0.00399397` (about `0.004`) before any delay.
+This is measured evidence for that preflight, not a universal bound.
+Julia's `mΔZd*cos(3θ)+mΔZq*sin(3θ)` maps to the third-harmonic content of
+the physical upper-minus-lower insertion waveform. Per-arm division also
+produces higher harmonics; the six physical delays apply to the entire
+waveform, including its triplen content. No extra triplen voltage command,
+insertion-index probe, comparison row or tolerance is introduced.
+
+`mmc_compensated_network()` mirrors `test/adm_MMC_compensated_test.jl:53–190`
+in classic and NetworkBuilder form: the M6a 1060 MVA / 320–400 kV / 640 kV
+plant and VSM/CCVI/OCC, Σ and Δ energy PI gains `0.5544/5.94`, CCC
+`0.0992/42.9719`, and 200 us compensated modulation. Saved primitive
+witnesses are retained with exact source-line comments in
+`test/pscad/fixtures/mmc_energy_saved_fragments.xml`: FFVI's CCVI division
+and multiplication (65904–65910, 65832–65838), VSM integrator
+(69814–69829), energy square (70421–70427), rotation trig (66570–66578),
+constant (3604–3610), and GFL PQ exact delay (8950–8961). These witness primitive fields and
+ports; the energy equations are the current Julia equations, rather than
+an unrelated saved control substituted for them.
+
+The acceptance entry and `test/manual/pscad/write_m6b_experiments.jl` use
+5 s / 1 us / 250 us for compensated MMCs, zero source ramp and `dc_reference=:none`.
+Both the exported settings and the acceptance run options use this timing.
+Other acceptance cases and the writer's ten M5 cases retain their existing timing.
+The writer produces both revised projects in `/tmp/pscad-m6b/`, each project's
+solved references and all 89 converged states in indexed TSVs, and a README.
+It also writes ten revised M5 MMC exports (pq, pf, qv, vac and vdc, classic
+and builder) with their own references to `/tmp/pscad-m6b/m5-recheck/`.
+Probes and rating-normalized converter comparison rows are reused;
+energy references are checked through the six arm-capacitor cycle means.
+The existing VSM speed row remains. After the core frame correction
+(`3d92c61`), the station's 10 us compensated case still grew from about
+2 s and became non-finite at 2.88 s. At 1 us, the integration step of the
+validated FFVI reference, it remained settled from 1 s through 4.8 s:
+`P=0.7000000`, `Q≈1e-7`, `omega=1`, `iS_z=0.233935` (reference `0.233948`),
+all six arm-capacitor means 639.4–639.5 kV and constant 77.9 kV ripple.
+The remaining instability is a time-step effect of the PSCAD realization.
+
+`export_pscad` emits one warning per export when any MMC uses
+`CompensatedModulation` and the requested `time_step` exceeds 1 us. The
+warning names the affected converters and requested step, identifies 1 us
+as the validated step and states that 10 us grows unstable. Export continues
+with the requested settings; the global default is unchanged. No warning
+is emitted at or below 1 us, or for other modulation types.
+Offline equation, connectivity, topology and XML checks remain separate
+from station acceptance: both cases must build, run finite, settle and
+pass every existing row over the final ten cycles `[4.8,5.0] s`.

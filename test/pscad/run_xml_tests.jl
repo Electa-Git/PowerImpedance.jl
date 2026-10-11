@@ -27,7 +27,7 @@ if get(ENV, "POWERIMPEDANCE_PSCAD_XML_CHILD", "0") != "1"
         end
     end
 else
-    using Test, PowerImpedance
+    using Test, PowerImpedance, Logging
     using CondaPkg
     started = time_ns()
     CondaPkg.resolve()
@@ -124,6 +124,10 @@ else
         ("tlc_case2_zero_ramp", tlc2_classic)])
     gfm = PSCADFixtures.mmc_gfm_network()
     append!(modes, [("mmc_gfm_classic", gfm.classic), ("mmc_gfm_builder", gfm.state)])
+    compensated = PSCADFixtures.mmc_compensated_network()
+    append!(modes, [("mmc_compensated_classic", compensated.classic),
+        ("mmc_compensated_builder", compensated.state)])
+    energy_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_energy_saved_fragments.xml")).getroot()
     gfm_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_gfm_saved_fragments.xml")).getroot()
     modes_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_modes_saved_fragments.xml")).getroot()
     reference_root = etree.parse(joinpath(@__DIR__,
@@ -176,16 +180,25 @@ else
             elseif name == "tlc_case2_zero_ramp"
                 case_settings = P.SimulationSettings(simulation_time = 10.0,
                     time_step = 10e-6, sample_step = 40e-6, source_ramp = 0.0)
+            elseif startswith(name, "mmc_compensated")
+                case_settings = P.SimulationSettings(simulation_time = 5.0,
+                    time_step = 1e-6, sample_step = 250e-6, source_ramp = 0.0)
             end
             dc_reference = startswith(name, "mmc_vdc") ? :midpoint_resistors :
                            startswith(name, "tlc_") || startswith(name, "mmc_") ? :none :
                            :midpoint_resistors
             # ΔY XML checks exercise the selected station realization with no
             # legacy power-flow evidence; native comparison waits for dy-fix.
-            model = startswith(name, "transformer_dy") ?
-                    P._export_project(P.netlist(input, nothing), path, name, settings,
-                false, (;), :midpoint_resistors) :
-                    export_pscad(input; path, settings = case_settings, dc_reference)
+            # At 1 us, or without compensated modulation, there must be no
+            # compensated-MMC step warning. Other existing warnings are allowed.
+            logger = Test.TestLogger(min_level = Logging.Warn)
+            model = with_logger(logger) do
+                startswith(name, "transformer_dy") ?
+                P._export_project(P.netlist(input, nothing), path, name, settings,
+                    false, (;), :midpoint_resistors) :
+                export_pscad(input; path, settings = case_settings, dc_reference)
+            end
+            @test !any(log -> occursin("CompensatedModulation", string(log.message)), logger.logs)
             push!(models, model)
             plan = P.build_plan(model.netlist; settings = case_settings, name,
                 description = "PowerImpedance.jl: $name", dc_reference)
@@ -484,10 +497,14 @@ else
             end
             if startswith(name, "mmc_")
                 saved_guard = only(tlc_reference.xpath("./User[@defn='master:compare']"))
-                for (module_name, count) in (("MEAS_DUT", 10), ("SIGMA_DUT", 4))
+                for definition in plan.modules
+                    module_name = definition.name
+                    count = startswith(module_name, "MEAS_") ? 1 : 0
                     guards = root.xpath("./definitions/Definition[@name='$module_name']/schematic/User[@defn='master:compare']")
                     @test pylen(guards) == count
                     for guard in guards
+                        @test pyconvert(String,
+                            guard.xpath("string(./paramlist/param[@name='OH']/@value)")) == "v_dc_f"
                         @test pyconvert(String, guard.get("orient")) ==
                               pyconvert(String, saved_guard.get("orient"))
                         for field in ("X", "INTR", "Dim", "conv")
@@ -526,7 +543,7 @@ else
                                   c.xpath("string(./paramlist/param[@name='$field']/@value)"))
                               for c in (saved, emitted)]
                     @test all(endswith(value, " [$unit]") for value in values)
-                    reference_value = if startswith(name, "mmc_gfm")
+                    reference_value = if startswith(name, "mmc_gfm") || startswith(name, "mmc_compensated")
                         element = only(filter(e -> e.name == :DUT, model.netlist.elements))
                         si = P.mmc_si(element.model.elec)
                         field == "L" ? si.L_arm : si.R_arm
@@ -549,7 +566,7 @@ else
                 @test pylen(root.xpath("./definitions/Definition[@name='ARM_DUT']/schematic/User[@defn='master:integral']")) ==
                       1
             end
-            if startswith(name, "mmc_gfm")
+            if startswith(name, "mmc_gfm") || startswith(name, "mmc_compensated")
                 # Every new VSM/CCVI field is witnessed by the saved FFVI
                 # equation canvases. Constants/trig retain the M4 witnesses.
                 for module_name in ("VSM_DUT", "CCVI_DUT", "PLL_DUT")
@@ -577,6 +594,70 @@ else
                 vi = only(root.xpath("./definitions/Definition[@name='CCVI_DUT']"))
                 @test pylen(vi.xpath("./schematic/User[@defn='master:div']")) == 2
                 @test pylen(vi.xpath("./schematic/User[@defn='master:integral']")) == 4
+            end
+            if startswith(name, "mmc_compensated")
+                @test summary.settings["time_duration"] == "5.0"
+                @test summary.settings["time_step"] == "1.0"
+                @test summary.settings["sample_step"] == "250.0"
+                # The shared export path warns once, includes converter/step
+                # evidence, and preserves requested settings on both APIs.
+                mktempdir() do directory
+                    for (i, requested) in enumerate((P.SimulationSettings(),
+                        P.SimulationSettings(time_step = nextfloat(1e-6))))
+                        exported = @test_logs (:warn,
+                            r"CompensatedModulation.*DUT.*time_step=.* s.*validated step of 1 us.*10 us grows unstable") min_level=Logging.Warn begin
+                            export_pscad(input; path = joinpath(directory, "warn_$i.pscx"),
+                                settings = requested, dc_reference)
+                        end
+                        @test exported.settings === requested
+                        @test P.read_project_summary(exported.project_path).settings["time_step"] ==
+                              P.pscad_value(requested.time_step * 1e6)
+                    end
+                    smaller = P.SimulationSettings(time_step = 0.5e-6)
+                    exported = @test_logs min_level=Logging.Warn begin
+                        export_pscad(input; path = joinpath(directory, "smaller.pscx"),
+                            settings = smaller, dc_reference)
+                    end
+                    @test exported.settings === smaller
+                end
+                for module_name in ("SIGMA_DUT", "MOD_DUT")
+                    definition = only(filter(d -> d.name == module_name, plan.modules))
+                    for component in definition.canvas.components
+                        component isa P.ComponentPlan || continue
+                        component.defn in ("master:import", "master:export", "master:time-sig", "master:datalabel",
+                            "master:datamerge", "master:datatap") && continue
+                        witnesses = energy_reference.xpath("./User[@defn='$(component.defn)']")
+                        @test pylen(witnesses) > 0
+                        fields = Set(pyconvert(String, p.get("name"))
+                            for c in witnesses for p in c.xpath("./paramlist/param"))
+                        @test Set(first.(component.params)) ⊆ fields
+                        if component.defn == "master:integral"
+                            saved = first(witnesses)
+                            for field in ("Extrn", "Reset", "Mthd")
+                                @test Dict(component.params)[field] == pyconvert(String,
+                                    saved.xpath("string(./paramlist/param[@name='$field']/@value)"))
+                            end
+                        end
+                    end
+                end
+                sigma = only(root.xpath("./definitions/Definition[@name='SIGMA_DUT']"))
+                modulation = only(root.xpath("./definitions/Definition[@name='MOD_DUT']"))
+                @test pylen(sigma.xpath("./schematic/User[@defn='master:integral']")) == 24
+                @test pylen(modulation.xpath("./schematic/User[@defn='master:div']")) == 6
+                @test pylen(modulation.xpath("./schematic/User[@defn='master:tdelay']")) == 6
+                # Saved Init=0 uses a zero history; M5/M6a's already accepted
+                # Init=1 selects the solved X0 history for all six physical arms.
+                for node in modulation.xpath("./schematic/User[@defn='master:tdelay']")
+                    @test pyconvert(String, node.xpath("string(./paramlist/param[@name='Init']/@value)")) == "1"
+                    # The existing ceil(Td/dt)+1 construction includes one
+                    # extra slot from Float64 division at Td=200 us, dt=1 us.
+                    @test pyconvert(String, node.xpath("string(./paramlist/param[@name='N']/@value)")) == "202"
+                end
+                saved_delay = only(energy_reference.xpath("./User[@defn='master:tdelay']"))
+                for node in modulation.xpath("./schematic/User[@defn='master:tdelay']"), field in ("Intp", "Dim")
+                    @test pyconvert(String, node.xpath("string(./paramlist/param[@name='$field']/@value)")) ==
+                        pyconvert(String, saved_delay.xpath("string(./paramlist/param[@name='$field']/@value)"))
+                end
             end
             if startswith(name, "mmc_vdc") || startswith(name, "mmc_qv")
                 vdc = startswith(name, "mmc_vdc")

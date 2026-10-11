@@ -126,6 +126,14 @@ end
 
 function _export_project(
         netlist, path, name, settings, resolved_powerflow, line_options, dc_reference)
+    if settings.time_step > 1e-6
+        converters = [string(e.name) for e in netlist.elements
+                      if e.model isa PowerImpedance.MMC &&
+                         e.model.modulation isa PowerImpedance.CompensatedModulation]
+        if !isempty(converters)
+            @warn "MMC with CompensatedModulation ($(join(converters, ", "))): time_step=$(settings.time_step) s exceeds the validated step of 1 us; 10 us grows unstable."
+        end
+    end
     plan = build_plan(netlist; settings, name, line_options, dc_reference,
         description = "PowerImpedance.jl: $name")
     written = _write_project(plan, abspath(path))

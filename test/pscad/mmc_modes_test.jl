@@ -70,19 +70,23 @@ end
                 @test Dict(p.name => p.default for p in modules[active_name].parameters)["vdcI0"] ==
                       eq.states.ξ_v_dc
             end
-            # Held zero meters must deliver the solved point, including VAC Q.
+            # Zero meters reach both outer loops immediately, including VAC Q
+            # and Vdc feedback; only the measured-DC divisor stays solved.
             if m isa PI.MMC
-                held = evaluate(modules["MEAS_DUT"],
+                measured = evaluate(modules["MEAS_DUT"],
                     Dict{String, Any}(
                         "v_abc" => zeros(3), "i_abc" => zeros(3), "v_dc" => 0.0,
                         "i_dc_si" => 0.0, "theta_c" => 0.0, "theta_rel" => 0.0),
                     0.1)
-                @test held["Q_ac_f"] ≈ eq.setpoint_pu.q_ac atol=1e-6
-                @test evaluate(modules[active_name], merge(held, Dict("omega_c" => 1.0)))["i_d_ref"] ≈
-                      eq.outputs.delta.iΔ_d_ref atol=1e-6
-                @test evaluate(modules["QCTRL_DUT"], held)["i_q_ref"] ≈
+                @test measured["Q_ac_f"] == measured["P_ac_f"] == measured["v_dc_f"] == 0.0
+                @test measured["v_dc_divisor"] ≈ eq.outputs.meas.v_dc_f atol=1e-6
+                live_meas = NamedTuple{keys(eq.outputs.meas)}(ntuple(_ -> 0.0, length(eq.outputs.meas)))
+                @test evaluate(modules[active_name], merge(measured, Dict("omega_c" => 1.0)))["i_d_ref"] ≈
+                      PI.state_space!(zeros(PI.n_states(active)), eq.states,
+                    (; meas = live_meas, sync = (; ω_c = 1.0)), eq.setpoint_pu, active, m).iΔ_d_ref atol=1e-6
+                @test evaluate(modules["QCTRL_DUT"], measured)["i_q_ref"] ≈
                       PI.state_space!(zeros(PI.n_states(reactive)), eq.states,
-                    (; meas = eq.outputs.meas), eq.setpoint_pu, reactive, m).q_ctrl_ref atol=1e-6
+                    (; meas = live_meas), eq.setpoint_pu, reactive, m).q_ctrl_ref atol=1e-6
             end
             # Every converter accepts the same source-ramp setting. Only Main
             # source Tc changes; control initial states and the hold are fixed.

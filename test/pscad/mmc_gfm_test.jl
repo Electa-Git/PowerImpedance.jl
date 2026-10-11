@@ -46,23 +46,26 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         # voltage correction feeds CCVI before its two current references reach OCC.
         parent = modules["MMC_DUT"]
         @test any(c -> c.defn == plan.name * ":VSM_DUT", parent.canvas.components)
-        @test count(c -> c.defn == "master:compare", modules["MEAS_DUT"].canvas.components) == 10
-        @test count(c -> c.defn == "master:compare", modules["SIGMA_DUT"].canvas.components) == 4
-        held = evaluate(modules["MEAS_DUT"], Dict{String, Any}("v_abc" => zeros(3),
+        @test count(c -> c.defn == "master:compare", modules["MEAS_DUT"].canvas.components) == 1
+        @test count(c -> c.defn == "master:compare", modules["SIGMA_DUT"].canvas.components) == 0
+        measured = evaluate(diagnostic(modules["MEAS_DUT"], ["P_ac", "Q_ac", "P_ac_f_ddy"]), Dict{String, Any}("v_abc" => zeros(3),
             "i_abc" => zeros(3), "v_dc" => 0.0, "i_dc_si" => 0.0,
             "theta_c" => 0.0, "theta_rel" => 0.0), 0.1)
-        @test held["P_ac_f"] ≈ eq.outputs.meas.P_ac_f atol=1e-6
-        @test held["Q_ac_f"] ≈ eq.outputs.meas.Q_ac_f atol=1e-6
-        @test held["v_dc_f"] ≈ eq.outputs.meas.v_dc_f atol=1e-6
-        held["theta_vsm_rel"] = eq.states.Δθ_VSM
-        pll = evaluate(modules["PLL_DUT"], held)
-        sync = evaluate(modules["VSM_DUT"], merge(held, Dict("omega_pll" => pll["omega_c"])))
-        reactive = evaluate(modules["QCTRL_DUT"], held)
-        vi = evaluate(modules["CCVI_DUT"], merge(held, sync, Dict("q_voltage_ref" => reactive["i_q_ref"])))
-        occ = evaluate(modules["OCC_DUT"], merge(held, sync, vi))
+        @test measured["P_ac"] == measured["Q_ac"] == measured["v_dc_f"] == 0.0
+        # The dynamic power filter starts solved, but live zero input changes
+        # its acceleration immediately rather than preserving its equilibrium.
+        @test measured["P_ac_f"] ≈ eq.outputs.meas.P_ac_f atol=1e-6
+        w2 = Dict(p.name => p.default for p in modules["MEAS_DUT"].parameters)["P_ac_f_s1W2"]
+        @test measured["P_ac_f_ddy"] ≈ -w2 * eq.outputs.meas.P_ac_f atol=1e-6
+        measured["theta_vsm_rel"] = eq.states.Δθ_VSM
+        pll = evaluate(modules["PLL_DUT"], measured)
+        sync = evaluate(modules["VSM_DUT"], merge(measured, Dict("omega_pll" => pll["omega_c"])))
+        reactive = evaluate(modules["QCTRL_DUT"], measured)
+        vi = evaluate(modules["CCVI_DUT"], merge(measured, sync, Dict("q_voltage_ref" => reactive["i_q_ref"])))
+        occ = evaluate(modules["OCC_DUT"], merge(measured, sync, vi))
+        @test measured["v_dc_divisor"] ≈ eq.outputs.meas.v_dc_f atol=1e-6
         @test sync["omega_c"] ≈ 1.0 atol=1e-6
-        @test occ["vM_d_ref"] ≈ eq.outputs.delta.vMΔ_d_ref_c atol=1e-6
-        @test occ["vM_q_ref"] ≈ eq.outputs.delta.vMΔ_q_ref_c atol=1e-6
+        @test all(isfinite, values(occ))
 
         # Rebuild initial coordinates from displaced states, then compare the
         # emitted rates and outputs directly with the owned Julia equations.
@@ -150,14 +153,23 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         @test out["drate"] ≈ F[end - 1] atol=1e-6
         @test out["qrate"] ≈ F[end] atol=1e-6
 
-        # VSM and PLL angles differ even at a nominal-frequency equilibrium.
-        # Check the circulating-current hold in the synchronization owner's frame.
-        circulating = PI.frame_transform(eq.states.iΣ_d, eq.states.iΣ_q, -2eq.states.Δθ_VSM)
-        sigma = modules["SIGMA_DUT"]
-        for axis in ("d", "q")
-            guard = only(filter(c -> c.defn == "master:compare" &&
-                Dict(c.params)["OH"] == "iS_" * axis * "_measured", sigma.canvas.components))
-            @test P._pscad_number(Dict(guard.params)["OL"]) ≈ getproperty(circulating, Symbol(axis)) atol=1e-6
+        # Circulating currents are live from t=0 in the synchronization
+        # owner's frame, even when the PLL and VSM angles differ.
+        circulating = PI.frame_transform(0.11, -0.07, -2eq.states.Δθ_VSM)
+        phases = (0.0, -2π/3, 2π/3)
+        caps = P.mmc_arm_capacitors(eq.states, m.elec.vDC_base)
+        signals = Dict{String, Any}("iS_abc" =>
+            (m.elec.Sbase / m.elec.vDC_base) .* collect(0.24 .+ 0.11 .* cos.(-2 .* phases) .- 0.07 .* sin.(-2 .* phases)),
+            "theta_c" => eq.states.Δθ_VSM, "P_ac_f" => 0.7,
+            "v_dc_f" => 0.3, "v_dc_divisor" => eq.outputs.meas.v_dc_f)
+        for (arm, voltages) in (("u", caps.upper), ("l", caps.lower)), (phase, voltage) in zip(("a", "b", "c"), voltages)
+            signals["v_Ctot_" * arm * "_" * phase] = voltage
+        end
+        for time in (0.0, 0.05, 0.2 - SETTINGS.time_step, 0.2)
+            live = evaluate(diagnostic(modules["SIGMA_DUT"], ["iS_d", "iS_q"]), signals, time)
+            @test live["iS_d"] ≈ circulating.d atol=1e-6
+            @test live["iS_q"] ≈ circulating.q atol=1e-6
+            @test live["iS_z"] ≈ 0.24 atol=1e-6
         end
 
         # Reuse the existing speed kind/rule with the converter probe name.

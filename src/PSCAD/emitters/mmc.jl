@@ -14,23 +14,21 @@ function mmc_equilibrium_outputs(m, states, inputs, setpoint_pu)
     return (; sig_in, meas, sync, delta, sigma, mod)
 end
 
-function mmc_sigma(name, e, equilibrium, transforms)
-    block = e.model.sigma_control
-    block isa PowerImpedance.ΣdqzControlTEC || not_exportable(e, block)
+mmc_sigma(name, e, equilibrium, transforms) =
+    mmc_sigma(name, e, equilibrium, transforms, e.model.sigma_control)
+mmc_sigma(name, e, equilibrium, transforms, block) = not_exportable(e, block)
+
+function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.ΣdqzControlTEC)
     block.tec isa PowerImpedance.TotalEnergyControl || not_exportable(e, block.tec)
     block.zscc isa PowerImpedance.ZeroSequenceCurrentControl ||
         not_exportable(e, block.zscc)
     block.ccsc isa PowerImpedance.CirculatingCurrentSuppressionControl ||
         not_exportable(e, block.ccsc)
     parameters = ModuleParameterPlan[]
-    inputs = [("iS_abc", 3), ("theta_c", 1), ("P_ac_f", 1), ("v_dc_f", 1)]
+    inputs = [("iS_abc", 3), ("theta_c", 1), ("P_ac_f", 1), ("v_dc_f", 1), ("v_dc_divisor", 1)]
     append!(inputs, [("v_Ctot_" * arm * "_" * phase, 1)
                      for arm in ("u", "l") for phase in ("a", "b", "c")])
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
-    clock = Signal("sigma_start_clock_s")
-    push!(graph.nodes, TimeStep(clock))
-    x = equilibrium.states
-    circulating = PowerImpedance.frame_transform(x.iΣ_d, x.iΣ_q, -2PowerImpedance.syncangle(e.model.sync, x))
     invcurrent = converter_parameter!(parameters, "invIbase", e.model.elec.vDC_base /
                                                               e.model.elec.Sbase)
     append!(graph.nodes,
@@ -47,14 +45,13 @@ function mmc_sigma(name, e, equilibrium, transforms)
                                                            (3 * e.model.elec.Sbase))
     append!(graph.nodes,
         ControlBlock[Gain(Signal("iS_sum"), Signal("iS_z_measured"), invzero),
-            _ConverterStartupHold(clock, Signal("iS_z_measured"), Signal("iS_z"), x.iΣ_z)])
+            Gain(Signal("iS_z_measured"), Signal("iS_z"), 1.0)])
     for (i, axis) in enumerate(("d", "q"))
         append!(graph.nodes,
             ControlBlock[
                 ArraySplit(Signal("iS_dq_si"), Signal("iS_" * axis * "_si"), i),
                 Gain(Signal("iS_" * axis * "_si"), Signal("iS_" * axis * "_measured"), invcurrent),
-                _ConverterStartupHold(clock, Signal("iS_" * axis * "_measured"),
-                    Signal("iS_" * axis), getproperty(circulating, Symbol(axis)))])
+                Gain(Signal("iS_" * axis * "_measured"), Signal("iS_" * axis), 1.0)])
     end
     invcap = converter_parameter!(parameters, "invVbase", 1 / e.model.elec.vDC_base)
     squares = Signal[]
@@ -69,14 +66,11 @@ function mmc_sigma(name, e, equilibrium, transforms)
     # seven-coordinate wΣz; the abc plant also retains its 6ω ripple.
     push!(graph.nodes, Sum(squares[1:3], [1, 1, 1], Signal("energy_u")))
     push!(graph.nodes, Sum(squares[4:6], [1, 1, 1], Signal("energy_l")))
-    # Solved harmonic energy from MMC/energy.jl:19–25. Hold the controller's
-    # energy input, not the physical arm capacitor states or their dynamics.
-    energy_initial = (x.vCΔ_d^2 + x.vCΔ_q^2 + x.vCΔ_Zd^2 + x.vCΔ_Zq^2 +
-                      x.vCΣ_d^2 + x.vCΣ_q^2 + 2x.vCΣ_z^2) / 2
+    # Capacitor energy and inner-current feedback both remain live from t=0.
     append!(graph.nodes,
         ControlBlock[Sum(Signal.(["energy_u", "energy_l"]), [1, 1], Signal("energy_sum")),
             Gain(Signal("energy_sum"), Signal("energy_measured"), 1 / 6),
-            _ConverterStartupHold(clock, Signal("energy_measured"), Signal("energy_pu"), energy_initial)])
+            Gain(Signal("energy_measured"), Signal("energy_pu"), 1.0)])
     reference = converter_parameter!(parameters, "energy_reference", block.tec.ref)
     append!(graph.nodes,
         ControlBlock[Import(reference, Signal(reference)),
@@ -86,7 +80,7 @@ function mmc_sigma(name, e, equilibrium, transforms)
     append!(graph.nodes,
         ControlBlock[Sum(Signal.(["energy_pi", "P_ac_f"]), [1, 1], Signal("dc_power")),
             Gain(Signal("dc_power"), Signal("third_power"), 1 / 3),
-            Div(Signal("third_power"), Signal("v_dc_f"), Signal("iS_z_ref")),
+            Div(Signal("third_power"), Signal("v_dc_divisor"), Signal("iS_z_ref")),
             Sum(Signal.(["iS_z_ref", "iS_z"]), [1, -1], Signal("zero_error"))])
     converter_pi!(graph, parameters, Signal("zero_error"), Signal("zero_pi"),
         block.zscc.pi_control, equilibrium.states.ξ_iΣ_z, "zero")
@@ -120,17 +114,20 @@ function mmc_arm_capacitors(states, voltage_base, angle = 0.0)
         upper = voltage_base .* (sigma .+ delta), lower = voltage_base .* (sigma .- delta))
 end
 
-function mmc_modulation(name, e, equilibrium, transforms, settings)
+mmc_modulation(name, e, equilibrium, transforms, settings) =
+    mmc_modulation(name, e, equilibrium, transforms, settings, e.model.modulation)
+mmc_modulation(name, e, equilibrium, transforms, settings, block) = not_exportable(e, block)
+
+function mmc_modulation(name, e, equilibrium, transforms, settings,
+        block::PowerImpedance.UncompensatedModulation)
     m = e.model
-    m.modulation isa PowerImpedance.UncompensatedModulation ||
-        not_exportable(e, m.modulation)
     parameters = ModuleParameterPlan[]
     inputs = [(n, 1)
-              for n in ("vM_d_ref", "vM_q_ref", "vMS_d_ref", "vMS_q_ref", "vMS_z_ref", "v_dc_f", "theta_rel")]
+              for n in ("vM_d_ref", "vM_q_ref", "vMS_d_ref", "vMS_q_ref", "vMS_z_ref", "v_dc_divisor", "theta_rel")]
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
     append!(graph.nodes,
         ControlBlock[Const(Signal("two"), 2.0),
-            Div(Signal("two"), Signal("v_dc_f"), Signal("sigma_factor")),
+            Div(Signal("two"), Signal("v_dc_divisor"), Signal("sigma_factor")),
             Gain(Signal("sigma_factor"), Signal("delta_factor"), -m.elec.baseConv1),
             Gain(Signal("theta_rel"), Signal("sigma_rel"), -2.0)])
     converter_rotation!(graph, Signal("vM_d_ref"), Signal("vM_q_ref"), Signal("theta_rel"),
@@ -407,16 +404,12 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
         not_exportable(e, m.sync)
     m.delta_control isa Union{PowerImpedance.ΔdqControlGFL, PowerImpedance.ΔdqControlGFM} ||
         not_exportable(e, m.delta_control)
-    m.sigma_control isa PowerImpedance.ΣdqzControlTEC || not_exportable(e, m.sigma_control)
-    m.modulation isa PowerImpedance.UncompensatedModulation ||
+    m.sigma_control isa Union{PowerImpedance.ΣdqzControlTEC, PowerImpedance.ΣdqzControlLEC} ||
+        not_exportable(e, m.sigma_control)
+    m.modulation isa Union{PowerImpedance.UncompensatedModulation, PowerImpedance.CompensatedModulation} ||
         not_exportable(e, m.modulation)
     m.delta_control.occ isa PowerImpedance.InnerCurrentPIControl ||
         not_exportable(e, m.delta_control.occ)
-    for (block, supported) in ((m.sigma_control.tec, PowerImpedance.TotalEnergyControl),
-        (m.sigma_control.zscc, PowerImpedance.ZeroSequenceCurrentControl),
-        (m.sigma_control.ccsc, PowerImpedance.CirculatingCurrentSuppressionControl))
-        block isa supported || not_exportable(e, block)
-    end
     isapprox(m.elec.ωbase, 2π * context.settings.frequency; rtol = 1e-12) ||
         throw(ArgumentError("converter :$(e.name) frequency differs from the network frame"))
     haskey(context.netlist.operating_point.branch_flows, e.name) ||

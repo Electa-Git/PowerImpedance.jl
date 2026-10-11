@@ -18,7 +18,7 @@ function with_modulation(m, modulation)
     return PI.MMC(; m.meas, m.sync, m.delta_control, m.sigma_control, modulation, m.elec)
 end
 
-@testset "MMC solved measurement hold and release" begin
+@testset "MMC live feedback and DC-divisor handover" begin
     fixture = PSCADFixtures.mmc_pq_network()
     list = P.netlist(fixture.classic, power_flow(fixture.classic))
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
@@ -26,122 +26,132 @@ end
     plan = P.build_plan(list; settings = SETTINGS)
     modules = Dict(m.name => m for m in plan.modules)
     @test P._CONVERTER_STARTUP_RELEASE == 0.2
-    for (name, expected_count) in (("MEAS_DUT", 10), ("SIGMA_DUT", 4))
-        selectors = filter(c -> c.defn == "master:compare", modules[name].canvas.components)
-        @test length(selectors) == expected_count
-        for c in selectors
-            parameters = Dict(c.params)
-            @test parameters["X"] == "0.2"
-            @test parameters["INTR"] == parameters["conv"] == "0"
-            @test parameters["Dim"] == "1"
-            @test isfinite(P._pscad_number(parameters["OL"]))
-        end
-    end
-    # Zero electrical meter outputs reproduce the failed station initialization.
-    # Every downstream module must receive solved measurements during the hold.
-    for sample_time in (0.0, 250e-6, 0.1, 0.2 - SETTINGS.time_step)
+    selectors = [(m.name, c) for m in plan.modules for c in m.canvas.components
+                 if c.defn == "master:compare"]
+    @test length(selectors) == 1
+    name, selector = only(selectors)
+    @test name == "MEAS_DUT"
+    parameters = Dict(selector.params)
+    @test parameters["X"] == "0.2"
+    @test parameters["OH"] == "v_dc_f"
+    @test parameters["INTR"] == parameters["conv"] == "0"
+    @test parameters["Dim"] == "1"
+    @test P._pscad_number(parameters["OL"]) ≈ eq.outputs.meas.v_dc_f
+    @test all(!occursin("divisor", c.name) for c in plan.probes.channels)
+
+    # The plant's zero meter inputs must reach every feedback loop immediately;
+    # only the shared denominator is solved until the saved TLC release time.
+    for sample_time in (0.0, 250e-6, 0.05, 0.2 - SETTINGS.time_step)
         signals = Dict{String, Any}("v_abc" => zeros(3), "i_abc" => zeros(3),
             "v_dc" => 0.0, "i_dc_si" => 0.0, "theta_c" => 0.0, "theta_rel" => 0.0,
             "iS_abc" => zeros(3))
         for half in ("u", "l"), phase in ("a", "b", "c")
-
-            signals["v_Ctot_" * half * "_" * phase] = 0.0
+            signals["v_Ctot_" * half * "_" * phase] = e.model.elec.vDC_base
         end
         merge!(signals, evaluate(modules["MEAS_DUT"], signals, sample_time))
         for n in ("vG_d_f", "vG_q_f", "i_d_f", "i_q_f", "v_dc_f", "P_ac_f", "Q_ac_f")
-            @test isapprox(signals[n], getproperty(eq.outputs.meas, Symbol(n)); atol = 1e-6, rtol = 1e-6)
+            @test signals[n] == 0.0
         end
+        @test signals["v_dc_divisor"] ≈ eq.outputs.meas.v_dc_f
         for name in ("PLL_DUT", "PCTRL_DUT", "QCTRL_DUT", "OCC_DUT", "SIGMA_DUT", "MOD_DUT")
             outputs = evaluate(modules[name], signals, sample_time)
             @test all(isfinite, values(outputs))
             merge!(signals, outputs)
         end
-        @test signals["omega_c"] ≈ eq.outputs.sync.ω_c
-        @test signals["iS_z"] ≈ eq.states.iΣ_z
-        @test signals["vMS_z_ref"] ≈ eq.outputs.sigma.vMΣ_z_ref
-        @test signals["vM_d_ref"] ≈ eq.outputs.delta.vMΔ_d_ref_c
-        @test signals["vM_q_ref"] ≈ eq.outputs.delta.vMΔ_q_ref_c
+        @test signals["iS_z"] == 0.0
+        live_meas = NamedTuple{keys(eq.outputs.meas)}(ntuple(_ -> 0.0, length(eq.outputs.meas)))
+        delta = PI.state_space!(zeros(PI.n_states(e.model.delta_control)), eq.states,
+            (; meas = live_meas, sync = eq.outputs.sync), eq.setpoint_pu,
+            e.model.delta_control, e.model)
+        @test signals["vM_d_ref"] ≈ delta.vMΔ_d_ref_c
+        @test signals["vM_q_ref"] ≈ delta.vMΔ_q_ref_c
+        live_states = merge(eq.states, (; iΣ_d = 0.0, iΣ_q = 0.0, iΣ_z = 0.0,
+            vCΔ_d = 0.0, vCΔ_q = 0.0, vCΔ_Zd = 0.0, vCΔ_Zq = 0.0,
+            vCΣ_d = 0.0, vCΣ_q = 0.0, vCΣ_z = 1.0))
+        # The owned equation uses one Vdc. Separate its protected division
+        # from the live half-DC feedforward in the emitted realization.
+        sigma = PI.state_space!(zeros(4), live_states,
+            (; meas = merge(live_meas, (; v_dc_f = signals["v_dc_divisor"])),
+                power = (; P_ac_f = 0.0), sync = eq.outputs.sync),
+            eq.setpoint_pu, e.model.sigma_control, e.model)
+        @test signals["vMS_z_ref"] ≈ sigma.vMΣ_z_ref - signals["v_dc_divisor"] / 2 atol=1e-6
     end
-    # After release, deliberately different measurements must pass through;
-    # the selector must also pass a later zero voltage, rather than clamp it.
-    phases = (0.0, -2π / 3, 2π / 3)
-    for sample_time in (0.2, 0.2 + SETTINGS.time_step, 9.8), voltage in (0.0, 0.94)
 
+    # Independent changes in energy and current must reach TEC and its inner
+    # controller before release. A held current would fail these equations.
+    for sample_time in (0.0, 0.05, 0.2 - SETTINGS.time_step), level in (0.94, 1.08), current in (0.0, 0.31)
+        live_states = merge(eq.states, (; iΣ_d = 0.0, iΣ_q = 0.0, iΣ_z = current,
+            vCΔ_d = 0.0, vCΔ_q = 0.0, vCΔ_Zd = 0.0, vCΔ_Zq = 0.0,
+            vCΣ_d = 0.0, vCΣ_q = 0.0, vCΣ_z = level))
+        signals = Dict{String, Any}("iS_abc" => fill(current * e.model.elec.Sbase / e.model.elec.vDC_base, 3),
+            "theta_c" => 0.0, "P_ac_f" => 0.43, "v_dc_f" => 0.27,
+            "v_dc_divisor" => eq.outputs.meas.v_dc_f)
+        for half in ("u", "l"), phase in ("a", "b", "c")
+            signals["v_Ctot_" * half * "_" * phase] = level * e.model.elec.vDC_base
+        end
+        expected = PI.state_space!(zeros(4), live_states,
+            (; meas = merge(eq.outputs.meas, (; P_ac_f = 0.43)), power = (; P_ac_f = 0.43), sync = eq.outputs.sync),
+            eq.setpoint_pu, e.model.sigma_control, e.model)
+        measured = evaluate(modules["SIGMA_DUT"], signals, sample_time)
+        @test measured["vMS_z_ref"] ≈ expected.vMΣ_z_ref + (0.27 - eq.outputs.meas.v_dc_f) / 2 atol=1e-6
+        @test measured["iS_z"] ≈ current
+    end
+
+    # All measurement filters consume live inputs, on either side of release.
+    # The divisor follows that filtered DC value at exactly 0.2 s, including zero.
+    phases = (0.0, -2π / 3, 2π / 3)
+    for sample_time in (0.0, 0.05, 0.2 - SETTINGS.time_step, 0.2, 0.2 + SETTINGS.time_step, 9.8), voltage in (0.0, 0.94)
         signals = Dict{String, Any}(
             "v_abc" => e.model.elec.vAC_base .* (0.91 .* cos.(phases)),
-            "i_abc" =>
-                (2e.model.elec.Sbase / (3e.model.elec.vAC_base)) .*
-                (0.43 .* cos.(phases) .- 0.17 .* sin.(phases)),
+            "i_abc" => (2e.model.elec.Sbase / (3e.model.elec.vAC_base)) .*
+                       (0.43 .* cos.(phases) .- 0.17 .* sin.(phases)),
             "v_dc" => voltage * 800, "i_dc_si" => 0.35,
             "theta_c" => 0.0, "theta_rel" => 0.14)
         measured = evaluate(modules["MEAS_DUT"], signals, sample_time)
         @test measured["v_dc_f"] ≈ voltage
+        @test measured["v_dc_divisor"] ≈ (sample_time < 0.2 ? eq.outputs.meas.v_dc_f : voltage)
         @test measured["P_ac_f"] ≈ 0.91 * 0.43
         @test measured["Q_ac_f"] ≈ -0.91 * 0.17
     end
-    x = merge(eq.states,
-        (; iΣ_d = 0.023, iΣ_q = -0.017, iΣ_z = 0.21,
-            vCΔ_d = 0.0, vCΔ_q = 0.0, vCΔ_Zd = 0.0, vCΔ_Zq = 0.0,
-            vCΣ_d = 0.0, vCΣ_q = 0.0, vCΣ_z = 1.01))
-    base = e.model.elec.Sbase / e.model.elec.vDC_base
-    signals = Dict{String, Any}(
-        "iS_abc" =>
-            base .* collect(x.iΣ_z .+ x.iΣ_d .* cos.(-2 .* phases) .+
-                    x.iΣ_q .* sin.(-2 .* phases)),
-        "theta_c" => 0.0, "P_ac_f" => 0.43, "v_dc_f" => 0.94)
-    for half in ("u", "l"), phase in ("a", "b", "c")
 
-        signals["v_Ctot_" * half * "_" * phase] = 808.0
-    end
-    meas = merge(eq.outputs.meas, (; P_ac_f = 0.43, v_dc_f = 0.94))
-    expected = PI.state_space!(zeros(4), x,
-        (; meas, power = (; P_ac_f = 0.43), sync = eq.outputs.sync), eq.setpoint_pu,
-        e.model.sigma_control, e.model)
-    for sample_time in (0.2, 0.2 + SETTINGS.time_step, 9.8)
-        measured = evaluate(modules["SIGMA_DUT"], signals, sample_time)
-        @test measured["iS_z"] ≈ x.iΣ_z
-        @test measured["vMS_d_ref"] ≈ expected.vMΣ_d_ref_c
-        @test measured["vMS_q_ref"] ≈ expected.vMΣ_q_ref_c
-        @test measured["vMS_z_ref"] ≈ expected.vMΣ_z_ref
-    end
-    # Exercise all ten measurement quantities and every supported dynamic order.
-    # Held inputs keep the owned filter derivative at its solved value; dynamic
-    # outputs remain continuous when the measured input takes over.
+    # All ten measurement quantities and supported Butterworth orders 1–6
+    # retain solved initial states but respond to live input from the first step.
     for (field, u) in pairs(eq.outputs.meas), order in 0:6
-
         filter = order == 0 ? PI.NoFilter() :
                  PI.measurement_filter_ss(PI.Butterworth(; order, ωc = 500.0))
         names = PI.filter_statenames(field, filter)
         states = PI.filter_initialvalues(filter, names, u)
-        graph = P.BlockGraph(P.ControlBlock[P.Import("raw", P.Signal("raw")),
-            P.TimeStep(P.Signal("meas_start_clock_s"))])
+        graph = P.BlockGraph(P.ControlBlock[P.Import("raw", P.Signal("raw"))])
         parameters = P.ModuleParameterPlan[]
-        P.converter_measurement_filter!(graph, parameters, P.Signal("raw"),
-            P.Signal("filtered"), filter, names, states, u, e)
-        append!(graph.nodes,
-            P.ControlBlock[
-                P.Export("filtered", P.Signal("filtered")),
-                P.Export("selected", P.Signal("filtered_startup"))])
-        definition = P.converter_definition("FILTER_STARTUP", parameters, graph,
-            [("raw", 1)], [("filtered", 1), ("selected", 1)])
+        P.converter_filter!(graph, parameters, P.Signal("raw"), P.Signal("filtered"),
+            filter, names, states, u, e)
+        push!(graph.nodes, P.Export("filtered", P.Signal("filtered")))
+        outputs = [("filtered", 1)]
+        if field == :v_dc_f
+            append!(graph.nodes, P.ControlBlock[P.TimeStep(P.Signal("filter_clock_s")),
+                P._ConverterStartupHold(P.Signal("filter_clock_s"), P.Signal("filtered"), P.Signal("divisor"), u),
+                P.Export("divisor", P.Signal("divisor"))])
+            push!(outputs, ("divisor", 1))
+        end
+        definition = P.converter_definition("LIVE_FILTER", parameters, graph,
+            [("raw", 1)], outputs)
         @test P.check_connectivity(definition.canvas, definition.name,
             Dict(definition.name => definition)) === nothing
-        @test PSCADTopology.check_degrees(
-            PSCADTopology.electrical_graph(
-                definition.canvas, Dict(definition.name => definition)),
-            definition.name) === nothing
-        for sample_time in (0.0, 0.1, 0.2 - SETTINGS.time_step)
-            measured = evaluate(definition, Dict("raw" => 0.0), sample_time)
-            @test isapprox(measured["filtered"], u; atol = 1e-6, rtol = 1e-6)
-            @test isapprox(measured["selected"], u; atol = 1e-6, rtol = 1e-6)
-            derivatives = zeros(length(names))
-            PI.filter_step!(derivatives, 1, states, filter, names, measured["selected"])
-            @test maximum(abs, derivatives; init = 0.0) <= 1e-6
-        end
-        for sample_time in (0.2, 0.2 + SETTINGS.time_step)
-            measured = evaluate(definition, Dict("raw" => 0.37), sample_time)
-            @test measured["selected"] == 0.37
-            @test isapprox(measured["filtered"], order == 0 ? 0.37 : u; atol = 1e-6, rtol = 1e-6)
+        @test PSCADTopology.check_degrees(PSCADTopology.electrical_graph(
+            definition.canvas, Dict(definition.name => definition)), definition.name) === nothing
+        @test count(c -> c.defn == "master:compare", definition.canvas.components) == (field == :v_dc_f ? 1 : 0)
+        for sample_time in (0.0, 0.1, 0.2 - SETTINGS.time_step, 0.2, 0.2 + SETTINGS.time_step)
+            raw = u + 0.37
+            measured = evaluate(definition, Dict("raw" => raw), sample_time)
+            @test measured["filtered"] ≈ (order == 0 ? raw : u) atol=1e-6
+            if field == :v_dc_f
+                @test measured["divisor"] ≈ (sample_time < 0.2 ? u : measured["filtered"]) atol=1e-6
+            end
+            if order > 0
+                derivatives = zeros(length(names))
+                PI.filter_step!(derivatives, 1, states, filter, names, raw)
+                @test maximum(abs, derivatives) > 0.0
+            end
         end
         @test all(Dict(c.params)["Reset"] == "0"
         for c in definition.canvas.components if c.defn == "master:integral")
@@ -213,8 +223,7 @@ end
         @test all(Dict(c.params)["Tc"] == "0.05 [s]"
         for c in default_plan.main.components
         if c.defn in ("master:source_1", "master:source_3"))
-        for m in (with_modulation(e.model, PI.CompensatedModulation()),
-            PI.MMC(; e.model.meas, e.model.sync, e.model.delta_control,
+        for m in (PI.MMC(; e.model.meas, e.model.sync, e.model.delta_control,
             sigma_control = PI.ΣdqzControlTEC(), e.model.modulation, e.model.elec),
             PI.MMC(; e.model.meas, sync = PI.NoSynchronization(), e.model.delta_control,
             e.model.sigma_control, e.model.modulation, e.model.elec),
@@ -317,7 +326,7 @@ end
                            x.iΣ_q .* sin.(-2 .* phases))
         signals = Dict{String, Any}(
             "iS_abc" => currents, "theta_c" => phase_angle + relative_angle,
-            "P_ac_f" => 0.6, "v_dc_f" => 1.0)
+            "P_ac_f" => 0.6, "v_dc_f" => 1.0, "v_dc_divisor" => 1.0)
         for (half, values) in (("u", caps.upper), ("l", caps.lower)),
             (phase, value) in zip(("a", "b", "c"), values)
 
@@ -365,7 +374,7 @@ end
                     eq.outputs.sigma.vMΣ_d_ref_c,
                 "vMS_q_ref" => eq.outputs.sigma.vMΣ_q_ref_c, "vMS_z_ref" =>
                     eq.outputs.sigma.vMΣ_z_ref,
-                "v_dc_f" => eq.outputs.meas.v_dc_f, "theta_rel" => eq.states.Δθ_pll)
+                "v_dc_divisor" => eq.outputs.meas.v_dc_f, "theta_rel" => eq.states.Δθ_pll)
             measured = evaluate(definition, signals, sample_time)
             mod = eq.outputs.mod
             for (i, phase) in enumerate(("a", "b", "c"))
@@ -392,7 +401,7 @@ end
             Dict("vM_d_ref" => delta.vMΔ_d_ref_c,
                 "vM_q_ref" => delta.vMΔ_q_ref_c, "vMS_d_ref" => sigma.vMΣ_d_ref_c,
                 "vMS_q_ref" => sigma.vMΣ_q_ref_c, "vMS_z_ref" => sigma.vMΣ_z_ref,
-                "v_dc_f" => meas.v_dc_f, "theta_rel" => relative_angle),
+                "v_dc_divisor" => meas.v_dc_f, "theta_rel" => relative_angle),
             sample_time)
         for (i, phase) in enumerate(("a", "b", "c"))
             angle = e.model.elec.ωbase * sample_time - 2π * (i - 1) / 3
@@ -407,7 +416,7 @@ end
         measured = evaluate(definition,
             Dict("vM_d_ref" => delta / e.model.elec.vAC_base,
                 "vM_q_ref" => 0.0, "vMS_d_ref" => 0.0, "vMS_q_ref" => 0.0,
-                "vMS_z_ref" => 0.5, "v_dc_f" => 1.0, "theta_rel" => 0.0))
+                "vMS_z_ref" => 0.5, "v_dc_divisor" => 1.0, "theta_rel" => 0.0))
         @test 800measured["m_u_a"] ≈ 400 - delta
         @test 800measured["m_l_a"] ≈ 400 + delta
     end

@@ -573,4 +573,134 @@ function mmc_gfm_network()
 end
 
 
+# test/adm_MMC_compensated_test.jl:53–190, build_mmc_grid().
+"""
+    mmc_compensated_network()
+
+Return `(classic, state)` representations of the compensated MMC validation
+network with its original Δ-energy PI gains `Kp=0.5544`, `Ki=5.94` (`k=1`).
+The plant is rated 1060 MVA, 320/400 kV line-to-line RMS and 640 kV DC.
+
+With the corrected +3ωbase triplen notch/PI frame, the former
+`+0.115752 ± j942.538554` \\[s⁻¹\\] pair becomes
+`-12.550944 ± j940.716108` \\[s⁻¹\\]. Apart from the deliberately slow
+stable OCC filter poles, the least-damped pair is
+`-4.873459 ± j10.339475` \\[s⁻¹\\]. No gain scaling is applied.
+"""
+function mmc_compensated_network()
+    Pmmc, Qmmc = 0.7 * 1060, 0.0
+    Vm, Vdc = 400 / sqrt(3), 640.0
+    elec = PowerImpedance.ElectricalMMC(
+        vDC_base = 640.0,
+        Sbase = 1060.0,
+        vACbase_LL_RMS = 320.0,
+        turnsRatio = 320 / 400,
+        Lᵣ = 0.18 * (320^2 / 1060) / (2π * 50),
+        Rᵣ = 0.001 * (320^2 / 1060),
+        Rₐᵣₘ = 0.4,
+        Lₐᵣₘ = 46.125e-3,
+        Cₐᵣₘ = 11.3867e-3,
+        N = 400,
+    )
+
+    meas = PowerImpedance.Measurement(
+        P_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π),
+        Q_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π),
+    )
+
+    pll = PowerImpedance.PLLSynchronization(
+        pi_ctrl = PowerImpedance.PIControl(
+            Kp = 0.28,
+            Ki = 12.5664,
+        ),
+        filter = PowerImpedance.Butterworth(order = 1, ωc = 75 * 2π),
+    )
+
+    synch = PowerImpedance.VSEWithDamping(
+        H = 5.0,
+        K_d = 100.0,
+        K_ω = 10.0,
+        pll = pll,
+    )
+
+    outerReactive = PowerImpedance.OuterReactiveQControl(
+        pi_ctrl = PowerImpedance.PIControl(Kp = 0.0, Ki = 30.0),
+    )
+
+    innerVoltage = PowerImpedance.CCVI(
+        R_v = 0.01,
+        L_v = 0.25,
+        V_d_ref = 1.0,
+        V_q_ref = 0.0,
+        filter = PowerImpedance.Butterworth(order = 2, ωc = 200.0),
+    )
+
+    innerCurrent = PowerImpedance.InnerCurrentPIControl(
+        pi_ctrl = PowerImpedance.PIControl(
+            Kp = 0.6787,
+            Ki = 292.2087,
+        ),
+        filter = PowerImpedance.Butterworth(order = 1, ωc = 0.0001 * 2π),
+    )
+
+    delta_control = PowerImpedance.ΔdqControlGFM(
+        outer_reactive = outerReactive,
+        vi = innerVoltage,
+        occ = innerCurrent,
+    )
+
+    wsigma = PowerImpedance.ΣEnergyControl(
+        pi_control = PowerImpedance.PIControl(Kp = 0.4 * 1.386, Ki = 0.2 * 29.70))
+    wdelta = PowerImpedance.ΔEnergyControl(
+        pi_control = PowerImpedance.PIControl(Kp = 0.4 * 1.386, Ki = 0.2 * 29.70))
+    ccc = PowerImpedance.CirculatingCurrentControl(
+        PowerImpedance.PIControl(Kp = 0.0992, Ki = 42.9719))
+    sigma_control = PowerImpedance.ΣdqzControlLEC(; wsigma, wdelta, ccc)
+    mod = PowerImpedance.CompensatedModulation(
+        timeDelay = 200e-6, padeOrderNum = 5, padeOrderDen = 5)
+
+    setpoint = PowerImpedance.Setpoint(
+        Pac = Pmmc,
+        Qac = Qmmc,
+        θac = 0.0,
+        Vac = Vm * sqrt(2),
+        Pdc = Pmmc,
+        Vdc = Vdc,
+    )
+
+    limits = PowerImpedance.Limits(
+        P_min = -1500.0,
+        P_max = 1500.0,
+        Q_min = -1000.0,
+        Q_max = 1000.0,
+    )
+
+    elements = (;
+        DUT = mmc(elec = elec, meas = meas, sync = synch,
+            delta_control = delta_control, sigma_control = sigma_control,
+            modulation = mod, setpoint = setpoint, limits = limits),
+        G3 = ac_source(pins = 3, transformation = true,
+            setpoint = Setpoint(Vac = Vm * sqrt(2))),
+        G_DC = dc_source(setpoint = Setpoint(Vdc = Vdc)))
+    rows = [(node = Symbol("AC" * axis), element, side, terminal)
+            for (element, side) in ((:DUT, 2), (:G3, 1))
+            for (terminal, axis) in enumerate(("d", "q"))]
+    append!(rows, [(node = :DC, element, side = 1, terminal = 1)
+                  for element in (:DUT, :G_DC)])
+    state = NetworkBuilder.define(deepcopy(elements), rows; options = (; voltageBase = Vm))
+    classic = Network()
+    classic.voltageBase[1] = Vm
+    for (name, element) in pairs(elements)
+        add!(classic, name, element)
+    end
+    for row in rows
+        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
+    end
+    for (element, count) in ((:G3, 2), (:G_DC, 1)), terminal in 1:count
+        connect!(classic, (element, Symbol("2.$terminal")), :gnd)
+    end
+    connect!(classic)
+    return (; classic, state)
+end
+
 end

@@ -126,6 +126,17 @@ gfm_builder_model = export_pscad(gfm.state;
 append!(cases, [(gfm_classic_model, gfm_classic_model, 0.01),
     (gfm_builder_model, gfm_classic_model, 0.01)])
 
+# M6b requires the validated FFVI 1 us step; 10 us grows unstable.
+compensated_settings = PowerImpedance.PSCAD.SimulationSettings(simulation_time = 5.0,
+    time_step = 1e-6, sample_step = 250e-6, source_ramp = 0.0)
+compensated = PSCADFixtures.mmc_compensated_network()
+compensated_classic_model = export_pscad(compensated.classic;
+    path = joinpath(exports, "mmc_compensated_classic.pscx"), settings = compensated_settings, dc_reference = :none)
+compensated_builder_model = export_pscad(compensated.state;
+    path = joinpath(exports, "mmc_compensated_builder.pscx"), settings = compensated_settings, dc_reference = :none)
+append!(cases, [(compensated_classic_model, compensated_classic_model, 0.01),
+    (compensated_builder_model, compensated_builder_model, 0.01)])
+
 # Detect the merged model by its positive-sequence transfer, without relying
 # on a commit hash. Compare against YY to remove the fixture's no-load loss angle.
 dy_classic, dy_state = PSCADFixtures.transformer_network(; organization = :ΔY)
@@ -152,14 +163,17 @@ for (model, classic_reference, rtol_v) in cases
     machine = any(e -> e.model isa PowerImpedance.SynchronousMachine, model.netlist.elements)
     converter = any(e -> e.model isa Union{PowerImpedance.TLC, PowerImpedance.MMC}, model.netlist.elements)
     mmc = any(e -> e.model isa PowerImpedance.MMC, model.netlist.elements)
-    simulation_time = converter ? 10.0 :
+    compensated_mmc = any(e -> e.model isa PowerImpedance.MMC &&
+                              e.model.modulation isa PowerImpedance.CompensatedModulation,
+        model.netlist.elements)
+    simulation_time = compensated_mmc ? 5.0 : converter ? 10.0 :
                       machine ? 15.0 :
                       dc_cable ? 3.0 :
                       any(bus -> bus.kind == :dc, model.netlist.buses) ? 1.0 : 0.3
     result = compute(model,
         PSCADRun();
         options = (;
-            remote, simulation_time, time_step = (machine || converter) ? 10e-6 : 50e-6,
+            remote, simulation_time, time_step = compensated_mmc ? 1e-6 : (machine || converter) ? 10e-6 : 50e-6,
             sample_step = mmc ? 250e-6 : converter ? 40e-6 : machine ? 1e-3 : 250e-6, verbosity = 1))
     # NB.solve skips power flow for this linear fixture. Both representations
     # therefore compare against the equivalent classic circuit's solved record.
