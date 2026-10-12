@@ -17,13 +17,18 @@ function Base.convert(bs::NetworkState, ::Type{P.PMACDC})
 
     elempitopm = Dict{Symbol, @NamedTuple{pmtype::String, compkey::Int}}() #Maps PM component to element symbol for later use in transformation of results
 
-    for (elemid, stored_element) in pairs(bs.elements) #NamedTuple
+    elements_and_buses = map(collect(pairs(bs.elements))) do (elemid, stored_element)
         element = _element_for_powerflow(stored_element, elemid, bs.topology)
         # Get sorted connectoins (first AC, then DC)
         connections = sortedcomponentconnections(bs.topology, elemid)
         busidtable = Table(domain = connections.domain, bus = connections.bus)
         sortedbusses = Table(unique(busidtable)).bus #unique(connections.bus) #Take unique busidss (elecdomain+bus integer) and then only provide it with bus information
+        return (element, sortedbusses)
+    end
+    P._infer_transformer_voltage_levels!(global_dict, elements_and_buses)
 
+    for (element, sortedbusses) in elements_and_buses
+        elemid = element.symbol
         # Get the PM component key and update LUT
         pmtype = P.pmtype(element)
         compkey = length(data[pmtype]) + 1
@@ -115,6 +120,16 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
     ground_nodes = [k for k in keys(network.nets) if startswith(string(k), "gnd")]
     push!(nodes2bus, ground_nodes => "gnd")
     push!(bus2nodes, "gnd" => ground_nodes)
+
+    elements_and_buses = [
+        (element, element.element_model isa P.Source ?
+            (P.make_non_ground_node(element, bus2nodes),) :
+            Tuple(node for node in (P.make_node(element, 1), P.make_node(element, 2))
+                if !isempty(node) && isdisjoint(node, ground_nodes)))
+        for element in values(network.elements)
+        if P.pmtype(element) in ("gen", "branch")
+    ]
+    P._infer_transformer_voltage_levels!(global_dict, elements_and_buses)
 
     for element in values(network.elements)
         P.convert!(

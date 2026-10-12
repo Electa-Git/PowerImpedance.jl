@@ -106,6 +106,16 @@ function power_flow(net::Network)
     ground_nodes = [k for k in keys(net.nets) if startswith(string(k), "gnd")] #TODO: add other ground identifiers (GND, Gnd, Ground, ground)
     push!(nodes2bus, ground_nodes => "gnd")
     push!(bus2nodes, "gnd" => ground_nodes) 
+
+    elements_and_buses = [
+        (elem, elem.element_model isa Source ?
+            (make_non_ground_node(elem, bus2nodes),) :
+            Tuple(node for node in (make_node(elem, 1), make_node(elem, 2))
+                if !isempty(node) && isdisjoint(node, ground_nodes)))
+        for elem in values(net.elements)
+        if pmtype(elem) in ("gen", "branch")
+    ]
+    _infer_transformer_voltage_levels!(global_dict, elements_and_buses)
     
     #### 1. Create PowerModels dictionary and make interface 
     for elem in values(net.elements)
@@ -600,6 +610,73 @@ function data_init!(data, global_dict)
     data["pst"] = Dict{String, Any}() ## Empty (Phase shifting transformer)
     data["gendc"] = Dict{String, Any}()
     return data
+end
+
+function _infer_transformer_voltage_levels!(global_dict, elements_and_buses)
+    any(pair -> first(pair).element_model isa Transformer, elements_and_buses) ||
+        return nothing
+    voltage_base = global_dict["V"] / 1e3
+    levels = Dict{Any, Float64}()
+    edges = Dict{Any, Vector{Tuple{Any, Float64, Bool}}}()
+    queue = Any[]
+
+    function assign_level!(bus, level)
+        if !haskey(levels, bus)
+            levels[bus] = level
+            push!(queue, bus)
+        elseif abs(level - levels[bus]) > 0.01 * levels[bus]
+            @warn "Conflicting transformer voltage levels at bus $bus: $(levels[bus]) kV and $level kV; retaining the first level."
+        end
+    end
+
+    for (element, buses) in elements_and_buses
+        model = element.element_model
+        if model isa Source && is_three_phase(element)
+            voltage_peak = element.setpoint.Vac
+            if !ismissing(voltage_peak) && isfinite(voltage_peak) && voltage_peak > 0
+                voltage = voltage_peak / sqrt(2)
+                if !(0.9 * voltage_base <= voltage <= 1.1 * voltage_base)
+                    assign_level!(first(buses), voltage)
+                end
+            end
+        elseif pmtype(element) == "branch" && length(buses) == 2 && buses[1] != buses[2]
+            primary, secondary = buses
+            ratio = model isa Transformer ?
+                (model.V₁ᵒ == model.V₂ᵒ == 0 ? model.n : model.V₁ᵒ / model.V₂ᵒ) : 1.0
+            push!(get!(edges, primary, Tuple{Any, Float64, Bool}[]),
+                (secondary, ratio, true))
+            push!(get!(edges, secondary, Tuple{Any, Float64, Bool}[]),
+                (primary, ratio, false))
+        end
+    end
+
+    index = 1
+    function propagate!()
+        while index <= length(queue)
+            bus = queue[index]
+            for (other, ratio, forward) in get(edges, bus, Tuple{Any, Float64, Bool}[])
+                level = forward ? levels[bus] / ratio : levels[bus] * ratio
+                assign_level!(other, level)
+            end
+            index += 1
+        end
+    end
+    propagate!()
+    for (element, buses) in elements_and_buses
+        if element.element_model isa Transformer && !haskey(levels, buses[1])
+            assign_level!(buses[1], voltage_base)
+            propagate!()
+        end
+    end
+
+    global_dict["transformer_voltage_levels"] = Dict(
+        element.symbol => (get(levels, buses[1], voltage_base),
+            get(levels, buses[2], voltage_base))
+        for (element, buses) in elements_and_buses
+        if element.element_model isa Transformer
+    )
+    global_dict["transformer_voltage_bounded_buses"] = Set{Int}()
+    return nothing
 end
 
 function make_non_ground_node(elem::Element, bus2nodes)

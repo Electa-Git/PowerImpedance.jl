@@ -463,8 +463,8 @@ end
         t.Rₚ = t.Rₛ = 0.0
         t.Lₚ = 4.9916e-4 / 2
         t.Lₛ = 0.097 / 2
-        t.V₁ᵒ = 16.5 / sqrt(3)
-        t.V₂ᵒ = 230 / sqrt(3)
+        t.V₁ᵒ = 16.5e3 / sqrt(3)
+        t.V₂ᵒ = 230e3 / sqrt(3)
         pf = power_flow(classic)
         @test string(pf[1]["termination_status"]) == "LOCALLY_SOLVED"
         # Open-circuit metadata must not supply the exported winding ratings.

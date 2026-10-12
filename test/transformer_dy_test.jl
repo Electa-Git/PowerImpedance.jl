@@ -151,7 +151,7 @@ using LinearAlgebra
             add!(net,
                 :transformer,
                 transformer(; parameters..., extra..., pins = 3,
-                    organization, transformation = true, V₁ᵒ = 380 / sqrt(3), V₂ᵒ = 150 /
+                    organization, transformation = true, V₁ᵒ = 380e3 / sqrt(3), V₂ᵒ = 150e3 /
                                                                                     sqrt(3)))
             add!(net, :load, impedance(z = 100.0, pins = 3, transformation = true))
             for k in 1:2

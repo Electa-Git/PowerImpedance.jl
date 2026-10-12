@@ -26,8 +26,8 @@ Construct three-phase `:ΔY` elements with `transformation=true`.
 	ω::Union{Int, Float64}      = 2*π*50   # rated frequency in [rad/s]
 	V₁ᵒ::Union{Int, Float64} = 0      # open circuit primary voltage [V]
 	V₁ˢ::Union{Int, Float64}  = 0      # short circuit primary voltage [V]
-	I₁ᵒ::Union{Int, Float64} = 0      # open circuit primary current [V]
-	I₁ˢ::Union{Int, Float64}  = 0      # short circuit primary current [V]
+	I₁ᵒ::Union{Int, Float64} = 0      # open circuit primary current [A]
+	I₁ˢ::Union{Int, Float64}  = 0      # short circuit primary current [A]
 	P₁ᵒ::Union{Int, Float64} = 0      # open circuit losses on primary side [W]
 	P₁ˢ::Union{Int, Float64}  = 0      # short circuit losses on primary side [W]
 	V₂ᵒ::Union{Int, Float64} = 0      # open circuit secondary voltage [V]
@@ -60,7 +60,7 @@ Construct a one-phase or balanced three-phase transformer element.
   delta primary, grounded-Y secondary, secondary positive sequence leading by 30°).
 - `ω`: Rated angular frequency `\\[rad/s\\]`.
 - `V₁ᵒ`, `V₁ˢ`, `V₂ᵒ`, `V₂ˢ`: Open- and short-circuit voltages
-  `\\[V\\]` used by `def=:tests`.
+  `\\[V\\]` used by `def=:tests`; `V₁ᵒ` and `V₂ᵒ` also specify power-flow voltage ratings.
 - `I₁ᵒ`, `I₁ˢ`: Open- and short-circuit primary currents `\\[A\\]`.
 - `P₁ᵒ`, `P₁ˢ`: Open- and short-circuit losses `\\[W\\]`.
 - `n`: Primary-to-secondary voltage ratio (line-to-line for three phases) `\\[dimensionless\\]`.
@@ -73,6 +73,17 @@ Construct a one-phase or balanced three-phase transformer element.
 - `k`: Winding-resistance frequency exponent `\\[dimensionless\\]`.
 - `transformation`: Whether to expose dq coordinates, discarding zero sequence.
   Required for three-phase `:ΔY`; default: `false`.
+
+For three phases, test data is per phase: phase-RMS voltages, phase currents,
+and per-phase losses. Power-flow voltage ratings use the same phase-RMS
+convention and impose ±10 % bounds. With `V₁ᵒ == V₂ᵒ == 0`, nominal bus
+levels are inferred from finite, positive AC source voltage setpoints outside
+±10 % of the network base. They propagate in both directions through transformer
+voltage ratios and unchanged through AC branches joining two non-ground buses.
+Shunts and converters do not propagate levels. In element order, each unreached
+transformer primary is assigned the base and its level propagated in the same way.
+Sources within the base band do not redefine the nominal level. Conflicting
+levels differing by more than 1 % warn and retain the first level.
 
 All T-model parameters are per-phase Y-equivalent values for both organizations.
 `:ΔY` applies the Dyn11 rotation to the complete `:YY` model, including `Cₜ` and
@@ -261,21 +272,25 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
 	branch["c_rating_a"] = 1
 
 	## Update voltage limits to match the transformer voltage ratings
-	if t.V₁ᵒ == t.V₂ᵒ == 0 
-		@warn ("Transformer has no open-circuit voltage ratings, voltage limits will be updated with 1pu assumed at primary.")
-		Vprim = global_dict["V"] / 1e3
-		Vsec = Vprim / t.n
+	if t.V₁ᵒ == t.V₂ᵒ == 0
+		@warn ("Transformer has no open-circuit voltage ratings; voltage limits will use inferred bus voltage levels.")
+		levels = get(global_dict, "transformer_voltage_levels", nothing)
+		Vbase = global_dict["V"] / 1e3
+		Vprim, Vsec = levels === nothing ? (Vbase, Vbase / t.n) : levels[elem.symbol]
 	else	
-		Vprim = t.V₁ᵒ
-		Vsec = t.V₂ᵒ
+		Vprim = t.V₁ᵒ / 1e3
+		Vsec = t.V₂ᵒ / 1e3
 		((Vprim != global_dict["V"]/1e3) && (Vsec != global_dict["V"]/1e3)) && @warn ("Transformer voltage ratings do not match system base voltage.")
 	end
 
 	Vbase_global = global_dict["V"] / 1e3
-	data["bus"][string(bus1)]["vmax"] = (Vprim/Vbase_global)*1.1
-	data["bus"][string(bus2)]["vmax"] = (Vsec/Vbase_global)*1.1
-	data["bus"][string(bus1)]["vmin"] = (Vprim/Vbase_global)*0.9
-	data["bus"][string(bus2)]["vmin"] = (Vsec/Vbase_global)*0.9
+	bounded_buses = get(global_dict, "transformer_voltage_bounded_buses", nothing)
+	for (bus, voltage) in ((bus1, Vprim), (bus2, Vsec))
+		bounded_buses !== nothing && bus in bounded_buses && continue
+		data["bus"][string(bus)]["vmax"] = (voltage/Vbase_global)*1.1
+		data["bus"][string(bus)]["vmin"] = (voltage/Vbase_global)*0.9
+		bounded_buses === nothing || push!(bounded_buses, bus)
+	end
 	
 
     # Dyn11 has the same balanced tap, series and shunt parameters as YY.

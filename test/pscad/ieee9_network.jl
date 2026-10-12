@@ -3,7 +3,7 @@
 # The balanced circuit uses transformation=true for the supported dq power flow
 # and export. Sources retain unspecified P/Q; the classic default voltage base
 # is retained. Symbolic series impedances become functions of s.
-# Explicit-model voltage ratings are PF-bound metadata (phase RMS kV), inferred
+# Explicit-model voltage ratings are PF-bound metadata (phase RMS V), inferred
 # from the fixed source voltages and turns ratios; they do not enter eval_abcd.
 import PowerImpedance: @network
 
@@ -62,13 +62,13 @@ function ieee9_network()
             earth_parameters = (1, 1, 100), transformation = true)
 
         t1 = transformer(n = 16.5/230, Lₚ = 4.9916e-4/2, Rₚ = 0, Rₛ = 0, Lₛ = 0.097/2,
-            V₁ᵒ = 16.5/sqrt(3), V₂ᵒ = 230/sqrt(3),
+            V₁ᵒ = 16.5e3/sqrt(3), V₂ᵒ = 230e3/sqrt(3),
             Cₜ = 7e-9, Cₛ = 12e-9, pins = 3, transformation = true)
         t2 = transformer(n = 18/230, Lₚ = 6.4458e-4/2, Rₚ = 0, Rₛ = 0, Lₛ = 0.1052/2,
-            V₁ᵒ = 18/sqrt(3), V₂ᵒ = 230/sqrt(3),
+            V₁ᵒ = 18e3/sqrt(3), V₂ᵒ = 230e3/sqrt(3),
             Cₜ = 7e-9, Cₛ = 12e-9, pins = 3, transformation = true)
         t3 = transformer(n = 13.8/230, Lₚ = 3.5523e-4/2, Rₚ = 0, Rₛ = 0, Lₛ = 0.0987/2,
-            V₁ᵒ = 13.8/sqrt(3), V₂ᵒ = 230/sqrt(3),
+            V₁ᵒ = 13.8e3/sqrt(3), V₂ᵒ = 230e3/sqrt(3),
             Cₜ = 7e-9, Cₛ = 12e-9, pins = 3, transformation = true)
 
         l5 = impedance(z = s -> 1269.6 + 10.1 * s, pins = 3, transformation = true) # Nominal P 41.6667 MW, nominal Q 16.66667 MVar
