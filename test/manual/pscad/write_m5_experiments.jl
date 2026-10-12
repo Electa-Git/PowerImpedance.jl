@@ -334,8 +334,8 @@ abs(diff)/max(abs(ref),1000/800) with rtol_i. Approved M5 station checks reuse
 rtol_v=0.01 for capacitor cycle means versus solved Vdc and rtol_i=0.02 for
 idc=3*iS_z. The comparison quantities are :converter_arm_voltage and
 :converter_dc_current_identity, named by each capacitor probe and DUT_iS_z.
-iS_z versus its solved value is reported without an assertion. Amauri accepted
-source_ramp=0. No new tolerance or public keyword is introduced.
+iS_z versus its solved value is reported without an assertion. source_ramp=0
+matches the saved MMC source timing. No new tolerance or public keyword is introduced.
 
 Station round 1 (PSCAD 5.1.0): mmc_r12, mmc_delay and mmc_sigma built and
 ran for 0.1 s with 10 us sampling. Each CSV contains 10001 samples. The
@@ -431,8 +431,9 @@ before choosing initialization-only seeding. Transferring the TLC's 0.2 s
 hold to MMC needs a decision. Permanent nominal-Vdc normalization changes
 the current modulation and DC response. There is no new tolerance or filter.
 
-Amauri subsequently approved the 0.2 s solved-measurement hold described
-above. The classic and builder PQ projects are regenerated with that hold;
+The 0.2 s solved-measurement hold described above was subsequently adopted to
+avoid the zero-denominator start-up failure. The classic and builder PQ projects
+are regenerated with that hold;
 their solved reference values and complete state vectors are retained. The
 isolated Σ module now has the same selectors, with held values matched to its
 prescribed constant current/energy inputs. Its original reference polynomials

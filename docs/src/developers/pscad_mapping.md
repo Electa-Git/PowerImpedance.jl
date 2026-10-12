@@ -4,6 +4,15 @@ This page records how PowerImpedance drives PSCAD, the facts measured on the ref
 and the outcome of every risk experiment of the PSCAD integration. Update it whenever an
 experiment closes or a station fact changes.
 
+M0–M7 are complete: supported passive AC/DC, line/cable, transformer, machine,
+TLC and MMC exports have offline coverage and station records below. The
+transformer voltage-unit/level correction is included. IEEE9 passed operating-point
+comparison; IEEE39 is export verified but licence-blocked, and P2P reproduced
+the Julia-predicted instability rather than passing steady-state acceptance.
+The sections cover station lifecycle, component mappings, control equations,
+comparison rules and milestone evidence. For the user workflow and current
+limitations, see [PSCAD export and simulation](../pscad.md).
+
 ## Station execution model
 
 A `RemoteConfig` describes how to reach a Windows machine with PSCAD 5.1.0: the transport
@@ -969,8 +978,9 @@ than its original requested 70 MW. The station measured approximately
 `-3.083e-5` pu against `-3.2e-5` pu: a `1.17e-6` pu difference, or 117 W on
 100 MVA. Rating normalization accepts that difference; dividing by the
 near-zero reference would report approximately 3.7 %. The solved reference
-is retained exactly. Amauri selected rating normalization for both internal
-powers, replacing the previous 1 % relative rule.
+is retained exactly. Both internal powers use rating normalization, replacing
+the previous 1 % relative rule so near-zero references do not amplify small
+absolute residuals.
 
 Proposed native acceptance settings are **10 s, 10 μs integration, 40 μs
 sampling**, and the supported **0.05 s source ramp**. The integration/sampling
@@ -1008,8 +1018,9 @@ the local bindings in its comprehensions.
 
 ### Converter-connected DC current comparisons
 
-Amauri selected the following error for DC current magnitudes in a DC network
-containing a converter, with the existing `rtol_i` tolerance (default `0.02`):
+DC current magnitudes in a DC network containing a converter use the following
+error, with the existing `rtol_i` tolerance (default `0.02`), to retain a
+rating-based denominator at low load:
 
 `abs(measured_kA-reference_kA) / max(abs(reference_kA), Sbase/vDCbase)`.
 
@@ -1478,7 +1489,7 @@ The saved MMC voltage sources use `Tc=0`; this does not initialize their meter
 outputs. The approved start-up holds only the measured DC-voltage divisor until
 0.2 s, using the TLC's saved selector construction; control measurements are
 live. M5a station round 3 used
-zero source ramp. After both M5b ramp experiments passed, Amauri approved
+zero source ramp. Both M5b ramp experiments passed, establishing support for
 any finite, nonnegative `SimulationSettings.source_ramp` for every supported
 converter. The library default remains 0.05 s, the MMC fixtures retain zero,
 and TLC fixtures retain the default. No public name or keyword is added.
@@ -1677,9 +1688,9 @@ No Julia core defect was found.
 
 ### Approved MMC DC-divisor hold
 
-Amauri's final M6b decision applies to every MMC, compensated or
-uncompensated: **only the measured DC-voltage value used as a divisor is
-held at its solved value for `t<0.2 s`**. Every feedback measurement is live
+Every MMC, compensated or uncompensated, uses the same start-up rule to avoid
+division by zero while retaining live feedback: **only the measured DC-voltage
+value used as a divisor is held at its solved value for `t<0.2 s`**. Every feedback measurement is live
 from `t=0`: AC/DC voltage and current, P/Q, PLL inputs, circulating-current
 d/q/z, capacitor voltages and all TEC/Σ/Δ energies. The electrical plant
 starts from rest; its closed control loops bring it to the operating point.
@@ -1766,9 +1777,10 @@ the approved comparisons:
 | `I_DUT_1` | 0.753663 kA | `3*DUT_iS_z*1.25 kA`, agreeing to 1e-6 kA |
 | DC terminal current against power flow | 0.753663 kA | 603.41 MW / 800 kV; −0.08 % |
 
-Amauri approved `DUT_v_Ctot_{u,l}_{a,b,c}` and `DUT_iS_z`, capacitor cycle
-means versus solved pole-to-pole Vdc with `rtol_v`, and the signed DC-current
-identity with `rtol_i`. `compare_operating_point` emits these rows for the
+`DUT_v_Ctot_{u,l}_{a,b,c}` and `DUT_iS_z` provide capacitor cycle means versus
+solved pole-to-pole Vdc with `rtol_v`, and the signed DC-current identity with
+`rtol_i`, checking arm energy and current consistency without suppressing ripple.
+`compare_operating_point` emits these rows for the
 corresponding probes of every exported MMC:
 
 | `quantity` | Row `name` | `pscad` / `powerflow` columns | Error and tolerance |
@@ -1989,7 +2001,7 @@ Both source-ramp experiments passed station round 1: PQ MMC with the default
 changed only Main source `Tc` fields after building the zero-ramp plan; all
 module sources, namespace, canvas and output settings were retained. It ran
 10 s with finite output, as did the zero-ramp TLC, whose settled result was
-unchanged from its ramped case. Amauri approved lifting the MMC-only rejection:
+unchanged from its ramped case. These results remove the MMC-only rejection:
 every supported converter now accepts any finite, nonnegative source ramp.
 The library default remains 0.05 s; normal MMC fixtures retain zero and normal
 TLC fixtures retain the default. The experiment writer now exports default-ramp
@@ -2212,8 +2224,8 @@ uses the shared 0.2 s hold; the half-DC feedforward is live.
 All 24 notch/PI integrators use the converged states. Physical arm
 currents and capacitor dynamics remain active throughout startup.
 
-Amauri selected the standard EMT compensated realization: each upper arm
-uses `(vΣref-vΔref)/v_Ctot,u`, each lower arm
+The standard EMT compensated realization uses physical arm-capacitor division:
+each upper arm uses `(vΣref-vΔref)/v_Ctot,u`, each lower arm
 `(vΣref+vΔref)/v_Ctot,l`, followed by the existing exact `tdelay` primitive.
 Δ references use the AC voltage base and `theta_c`; Σ uses the DC base
 and nominal `-2ωbase` frame, following `modulation.jl:138–141`.
@@ -2410,7 +2422,7 @@ all three ideal sources become type-3 reference buses at angle zero, and their
 P/Q injections are solved from the fixed voltages and network/load equations.
 The current classic default phase-RMS base `220/sqrt(3)` kV is retained.
 The explicit transformer model receives only inferred PF-bound rating metadata:
-`V₁ᵒ=(16.5,18,13.8)/sqrt(3)`, `V₂ᵒ=230/sqrt(3)` kV phase RMS. This follows
+`V₁ᵒ=(16.5e3,18e3,13.8e3)/sqrt(3)`, `V₂ᵒ=230e3/sqrt(3)` V phase RMS. This follows
 `test/Transformer_test.jl:113`; it avoids transformer conversion assuming the
 common base at each primary. These fields do not enter `eval_abcd` for the
 explicit model; no circuit parameter or tolerance changes.

@@ -24,7 +24,7 @@
     <param name="Check" value="0"/>
     <param name="Debug" value="0"/>
     <param name="description" value="PowerImpedance.jl: transformer_yy_classic"/>
-    <param name="revisor" value="amartins,1791543733"/>
+    <param name="revisor" value="contributor,1791543733"/>
   </paramlist>
   <Layers/>
   <List classid="Settings"/>

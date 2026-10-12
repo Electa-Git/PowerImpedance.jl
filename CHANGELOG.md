@@ -11,13 +11,18 @@
   nominal voltage: at 672 kV with a 640 kV base, gain 5, 500 MVA and reference
   1.05 pu, the reference is 672 rather than 705.6 kV and the slope is 3.90625
   rather than 3.720238095 MW/kV. PSCAD export is not yet supported.
-- PSCAD integration (work in progress): remote PSCAD execution of existing projects
-  (`PSCADModel`, `PSCADRun`, `RemoteConfig`, `read_pscad_output`), export of passive AC
-  networks to PSCAD projects (`export_pscad`, requires `using PythonCall`), and comparison
-  of the simulated steady state with the power flow (`compare_operating_point`).
+- Export passive AC/DC networks, overhead lines, cables, transformers,
+  synchronous machines with AVR/governor, TLC grid-following controls and MMC
+  grid-following/grid-forming controls, energy controls and compensated
+  modulation to PSCAD 5 projects (`export_pscad`, requires `using PythonCall`).
+  Run projects remotely (`PSCADModel`, `PSCADRun`, `RemoteConfig`,
+  `read_pscad_output`) and compare their steady state with the power flow
+  (`compare_operating_point`).
 
 ### Changed
 
+- **Breaking:** Read transformer `V₁ᵒ`/`V₂ᵒ` power-flow ratings in volts per
+  phase (previously kV per phase).
 - Tighten default Classic and NetworkBuilder power-flow settings to `tol=1e-6`,
   `constr_viol_tol=1e-5` and `max_iter=300`; accept returned points within the
   configured primal feasibility tolerance with a warning regardless of solver
@@ -30,6 +35,8 @@
 
 ### Fixed
 
+- Correct inferred transformer voltage levels for unrated transformers.
+- Set PSCAD transformer winding ratings from the solved primary voltage.
 - Correct the Δ-triplen energy-balancing frame direction, changing compensated-MMC admittances slightly and damping the previously unstable 150 Hz mode.
 - Canonicalize stored converter voltages and retry failed converter steady-state initialization with a trust-region solve, preserving successful results.
 - Derive synchronous-machine torque and effective AVR references from the power

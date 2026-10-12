@@ -159,8 +159,8 @@ terminal currents and six capacitor traces after release, settling warnings,
 transformer diagnostics and source-ramp transients. Existing comparisons use
 rtol_v=0.01, rtol_i=0.02, angle_atol=1 degree and atol_p=0.01 of converter MVA;
 capacitor means use solved Vdc and idc=3*iS_z uses the approved current base.
-Both ramp experiments passed station round 1. Amauri approved every supported
-converter accepting any finite, nonnegative source ramp. The library default
+Both ramp experiments passed station round 1, establishing that every supported
+converter accepts any finite, nonnegative source ramp. The library default
 remains 0.05 s; regular MMC fixtures retain zero and TLC fixtures retain the
 default. Both ramp cases are also included in the full acceptance pass.
 
