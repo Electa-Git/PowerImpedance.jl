@@ -64,10 +64,16 @@ function scan_quality(time, baseline, runs, spec; columns = eachindex(spec.axes)
         end
     end
     drift = max(dc_drift, fundamental_drift)
-    input_departure = maximum(maximum(abs, (run.input - baseline.input) ./
-                                           baseline.input_base') for run in runs)
-    output_departure = maximum(maximum(abs, (run.output - baseline.output) ./
-                                            baseline.output_base') for run in runs)
+    # The linearity gate qualifies the same settled, coherent windows as C.
+    # A sharp shunt-current turn-on into inductors produces a voltage impulse
+    # proportional to amplitude/dt; retain that full-run maximum diagnostically.
+    # Do not remove means: a steady baseline offset still counts as departure.
+    input_deltas = [(run.input-baseline.input) ./ baseline.input_base' for run in runs]
+    output_deltas = [(run.output-baseline.output) ./ baseline.output_base' for run in runs]
+    full_input_departure = maximum(maximum(abs,delta) for delta in input_deltas)
+    full_output_departure = maximum(maximum(abs,delta) for delta in output_deltas)
+    input_departure = maximum(maximum(abs,delta[window,:]) for delta in input_deltas for window in windows)
+    output_departure = maximum(maximum(abs,delta[window,:]) for delta in output_deltas for window in windows)
     amplitude_error, clamped = 0.0, 0.0
     for (run, column) in zip(runs, columns), start in spec.window_starts
 
@@ -95,6 +101,9 @@ function scan_quality(time, baseline, runs, spec; columns = eachindex(spec.axes)
     return Dict{String, Any}("valid" => valid, "baseline_drift" => drift,
         "baseline_dc_drift" => dc_drift, "baseline_fundamental_drift" => fundamental_drift,
         "input_departure_pu" => input_departure, "output_departure_pu" => output_departure,
+        "departure_scope" => "baseline-subtracted samples in the declared coherent measurement windows; means retained",
+        "full_run_input_departure_pu" => full_input_departure,
+        "full_run_output_departure_pu" => full_output_departure,
         "drive_amplitude_error" => amplitude_error, "clamped_voltage_departure_pu" =>
             clamped)
 end

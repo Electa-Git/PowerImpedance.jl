@@ -190,8 +190,8 @@ function tlc_scan_definition(net,list)
         currents=[("DUT","2")],axes=["p1_d","p1_q"], frequencies,
         phases=[-π*k*(k-1)/length(frequencies) for k in eachindex(frequencies)],
         voltage_bases=fill(elec.vACbase,2),current_bases=fill(elec.iACbase,2),
-        drive="current", active=true,protocol="dq_active", tone_peak_pu=1e-4,
-        time_step=10e-6,sample_step=20e-6,injection_time=2.0,
+        drive="current", active=true,protocol="dq_active", tone_peak_pu=5e-5,
+        time_step=2.5e-6,sample_step=20e-6,injection_time=2.0,
         window_starts=(8.0,9.0),window_duration=1.0,simulation_time=10.0,
         travel_lower_bound_s=0.0,estimated_station_seconds=1800))
     reference=scan_reference(net,list,spec)

@@ -102,7 +102,7 @@ The nominal fixed 50 Hz frame matches native TLC input coordinates.
 
 | Axes / grid | Integration / sampling | Injection / windows | Per-tone amplitude | Station estimate |
 |---|---|---|---|---|
-| d,q; 23 coherent tones 1–1000 Hz, omit 50 Hz | 10 us / 20 us; half step 5 us | onset 2 s; [8,9), [9,10) s | 1e-4 pu current (0.0371 A peak); Schroeder phases | 20–30 min; 60 min deadline |
+| d,q; 23 coherent tones 1–1000 Hz, omit 50 Hz | 2.5 us / 20 us; half step 1.25 us | onset 2 s; [8,9), [9,10) s | 5e-5 pu current (0.0186 A peak); Schroeder phases | 15–25 min; 60 min deadline |
 
 Voltage/current bases are nominal phase-peak 179.6292478 kV / 0.37113481 kA,
 100 MVA total three-phase rating. Sampling gives 47.62 samples/period at the
@@ -111,7 +111,7 @@ from the 0.2 s DC-divisor hold, and 11.95 from tone onset. Baseline drift,
 window consistency and departures are measured, not inferred from that estimate.
 Six runs execute: baseline, d, q, one half-amplitude axis, half-step baseline
 and that axis at the worst band plus 1000 Hz. Prepared half-step candidates are
-750/1000 Hz; a different worst band is generated locally by the resumable runner.
+18/1000 and 750/1000 Hz; the runner selects the new worst band from the new comparison.
 For current drive the one-axis refinements compare both `V/Idrive` and
 `Iconverter/Idrive`; a single coupled voltage axis cannot identify a Y column.
 Expected half-amplitude change is below the unchanged 2% linearity gate (an
@@ -123,9 +123,75 @@ gates remain mandatory. Padé versus exact-delay mismatch is recorded separately
 julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-01 --timeout=3600
 ```
 
-Offline on Julia 1.12.7 and 1.10.11: **17,449/17,449 PSCAD suite checks**
-(including 59 name-guard checks and 43 new TLC/gate checks), plus **804/804 XML
-checks** per version. Synthetic converter Y recovery error is 3.37e-13; the
+M9b-2 stored-run diagnosis: the 10-to-5 us witness change is 0.453% Frobenius /
+2.319% worst entry at 18 Hz, and 3.318% / 3.748% at 1000 Hz. Comparing measured
+converter current with `YJulia * Vmeasured`, the normalized directional residual
+falls from 1.270% to 0.635% at 18 Hz and 1.932% to 0.952% at 1000 Hz. A single
+5 us injected axis cannot identify a full 2x2 Y; this directional comparison
+uses its measured voltage rather than mixing it with the other 10 us run.
+The complete 10 us Y errors are 1.579% / 1.960%; 18 Hz is the worst-entry selection,
+while 1000 Hz carries the maximum Frobenius error. Profiles and component values
+are in `data/m9b2/`. Old projects, outputs and evaluations are archived at
+`data/L2-01/history/m9b1-station-run/`; no old run is eligible for reuse.
+
+M9b-3 identified the departure scope error. The former quantity was
+`max(abs((Vaxis(t)-Vbaseline(t))/Vbase))` over **every recorded time**, including
+turn-on. Both runs peak at exactly 2 s, with no difference before onset. The
+voltage jump is 1.95152 / 1.95145 kV. Halving amplitude and step together keeps
+`amplitude/dt=10 /s` unchanged; this is the inductive turn-on impulse, not an
+operating-point offset. With `Lgrid || Lfilter = 0.0750062 H` and the Schroeder
+onset current jump 0.1300815 A, the inductive companion estimate
+`2*Leq*DeltaI/dt = 1.95138 kV` agrees with the observed jump. It is consistent
+with the sampled inductive switching response; the internal block responsible
+for the subsequent first-order interface error has not been isolated.
+
+The corrected input/output departure gates take the same baseline-subtracted
+samples **only in the predeclared C windows**, [8,9) and [9,10) s. The 0.01 gate
+is unchanged, and means are retained so steady offsets still count. Whole-run
+maxima remain diagnostic fields. The current signal, voltage/current bases,
+orientation, source path and nominal frame are unchanged.
+
+| Stored run | Base step | Window input departure | C max Frobenius error | C result | Remaining qualification failures |
+|---|---|---|---|---|---|
+| 1 | 10 us | 0.000357836 pu | 1.96038% | failed, valid measurement | 18 Hz d-d entry: error 0.00187869 pu > 0.001 pu limit; step 3.31770% |
+| 2 | 5 us | 0.000180544 pu | 0.96533% | passed, valid measurement | step 1.65658% |
+
+Tier A and half-amplitude gates pass for both stored runs. Their overall status
+remains failed under the unchanged entry and step rules. Re-evaluation tables
+are retained beside the old station evaluations; no raw data are changed.
+
+| Frequency | Julia directional current residual, 10 us | 5 us | 2.5 us |
+|---|---|---|---|
+| 18 Hz | 1.27024% | 0.63489% | 0.31731% |
+| 1000 Hz | 1.93234% | 0.95194% | 0.47279% |
+
+These residuals score `norm(I-YJulia*V)/max(norm(YJulia*V),0.1)` using normalized
+current-drive response vectors and recorded inward converter currents. The
+2.5 us data contain one witness axis, so this is a directional admittance check,
+not a full 2x2 identification. Full-matrix maxima at 10 / 5 us are 1.96038 /
+0.96533%. Step-response-vector changes at 1000 Hz are 3.31770 / 1.65658% for
+10-to-5 / 5-to-2.5 us. Halving dt approximately halves both errors: documented
+**first-order converter/interface discretization error** over this band.
+
+For 1–1000 Hz, recommend **2.5 us base / 1.25 us witness** for the remaining TLC
+fixtures, and as the initial candidate for uncompensated MMC fixtures. MMC must
+qualify independently for each control mode and grid variant; TLC does not
+establish MMC convergence. Compensated MMC retains its **1 us** requirement
+(with a half-step witness). Keep all phase, complex, floor and refinement gates.
+The new L2-01 pair is predicted to give about 0.828% norm / 0.937% entry change
+under first-order scaling; actual station qualification is mandatory.
+
+New projects use amplitude 5e-5 pu, 2.5 / 1.25 us integration, and unchanged
+20 us sampling, 2 s onset and settled windows. Expected input departure is
+about 0.000181 pu, based on the measured settled response. Six fresh runs are
+estimated at **15–25 minutes** from run 2's measured 658.5 s workflow; the
+60-minute deadline remains. The full previous tree is archived at
+`data/L2-01/history/m9b2-station-run/`, including run 1's nested archive. All
+new project hashes differ. Diagnostics and convergence are under `data/m9b3/`.
+
+Offline on Julia 1.12.7 and 1.10.11: **17,467/17,467 PSCAD suite checks**
+(including 59 name-guard checks, 53 TLC/gate checks and 8 departure-scope checks), plus **819/819 XML
+checks** per version. Synthetic converter Y recovery error is 1.83e-13; the
 known unstable network is rejected. Station tier A/C/refinement remain pending.
 
 Projects/reference/manifest are under `data/L2-01/`. Existing hash-valid completed

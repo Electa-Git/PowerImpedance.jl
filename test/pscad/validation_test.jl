@@ -704,6 +704,31 @@ end
     @test all(isfinite, response) && norm(response[4:6, 4:6]) > 0
 end
 
+@testset "Perturbation departure uses declared windows and retains steady offsets" begin
+    time=collect(0.0:1e-4:3.0)
+    spec=merge(V.l1_settings(),(;dimension=1,axes=["dc"],quantity="Y",
+        frequencies=[1.0],phases=[0.0],tone_peak_pu=0.004))
+    baseline=(input=ones(length(time),1),output=ones(length(time),1),input_base=[1.0],output_base=[1.0])
+    wave=reshape(V.multitone(time,spec.frequencies,spec.phases;amplitude=spec.tone_peak_pu,onset=spec.injection_time),:,1)
+    whole=copy(wave);whole[1]=0.2 # turn-on/startup evidence outside the C windows
+    run=merge(baseline,(input=baseline.input+whole,output=baseline.output+0.4whole))
+    quality=V.scan_quality(time,baseline,[run],spec)
+    @test quality["valid"]
+    @test quality["input_departure_pu"]≈0.004
+    @test quality["full_run_input_departure_pu"]≈0.2
+    half=copy(wave)/2;half[1]=0.2
+    half_run=merge(baseline,(input=baseline.input+half,output=baseline.output+0.4half))
+    half_quality=V.scan_quality(time,baseline,[half_run],merge(spec,(tone_peak_pu=0.002,)))
+    @test half_quality["valid"]
+    @test half_quality["input_departure_pu"]≈quality["input_departure_pu"]/2
+    @test half_quality["full_run_input_departure_pu"]≈quality["full_run_input_departure_pu"]
+    unsafe=0.011wave/spec.tone_peak_pu
+    unsafe_run=merge(baseline,(input=baseline.input+unsafe,output=baseline.output+0.4unsafe))
+    @test !V.scan_quality(time,baseline,[unsafe_run],merge(spec,(tone_peak_pu=0.011,)))["valid"]
+    offset=merge(run,(input=run.input .+ 0.011,))
+    @test !V.scan_quality(time,baseline,[offset],spec)["valid"]
+end
+
 @testset "Complete-network gate stable and unstable witnesses" begin
     A=-Matrix{Float64}(I,2,2); B=Matrix{Float64}(I,2,2); D=zeros(2,2)
     grid(s)=Matrix{ComplexF64}(I,2,2)/(1+s)
@@ -726,8 +751,16 @@ end
     list=P.netlist(net,point); original,reference=V.applicable_scan("L2-01",net,list)
     @test reference[:,:,1]≈PowerImpedance.get_y(net.elements[:DUT],2π*im)[2:3,2:3]
     @test original.drive=="current" && original.active
+    @test original.time_step==2.5e-6 && original.tone_peak_pu==5e-5
+    for band in (original,V.step_definition(original,18.0),V.step_definition(original,1000.0))
+        @test inv(band.sample_step*(maximum(band.frequencies)+50))>=40
+        @test all(isapprox(t/band.sample_step,round(t/band.sample_step);atol=1e-7)
+            for t in (band.window_starts...,band.window_duration,band.simulation_time))
+        @test all(isapprox(f*band.window_duration,round(f*band.window_duration);atol=1e-10)
+            for f in band.frequencies)
+    end
     @test V.step_definition(original,1.0).window_starts==(8.0,9.0)
-    @test V.step_definition(original,1000.0).time_step==5e-6
+    @test V.step_definition(original,1000.0).time_step==1.25e-6
     @test V.band_sample_step(original)≈20e-6
     form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
     @test 220^2/100/hypot(form.R,2π*50*form.L)≈8
