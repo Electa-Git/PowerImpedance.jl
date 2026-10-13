@@ -147,11 +147,13 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
     ensure_slack_bus!(data)
     P.PowerModelsACDC.process_additional_data!(data)
 
+    P._prepare_power_flow_start!(network.powerflow_start, data, (nodes2bus, elem2comp, network.nets))
     result = solve_acdcpf(
         data,
         P._PM.ACPPowerModel,
         powerflow_optimizer(options),
-        is_bounded_options(options);
+        is_bounded_options(options),
+        network.powerflow_start;
         setting = powerflow_setting(options)
     )
 
@@ -185,7 +187,8 @@ function solve_acdcpf(
         data::Dict{String, Any},
         model_type::Type,
         optimizer,
-        variables::NamedTuple;
+        variables::NamedTuple,
+        start::P._PowerFlowStart = P._PowerFlowStart();
         kwargs...
 )
     ref_ext = [
@@ -206,7 +209,9 @@ function solve_acdcpf(
     )
 
     P.JuMP.set_optimizer(pm.model, optimizer)
+    P._initialize_power_flow!(pm.model, start)
     P.JuMP.optimize!(pm.model)
+    P._store_power_flow_start!(start, pm.model)
     result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
     @info result["termination_status"]
     if P.accept_feasible_power_flow!(result, pm.model)
@@ -227,6 +232,7 @@ function solve_acdcpf(
                 )
                 P.JuMP.set_optimizer(pm.model, optimizer)
                 P.JuMP.optimize!(pm.model)
+                P._store_power_flow_start!(start, pm.model)
                 result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
                 if P.accept_feasible_power_flow!(result, pm.model)
                     @info "Power flow converged succesfully after $r increment change."
@@ -285,6 +291,7 @@ function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
         pm,
         bounded = variable_bounded(variables, :dc_converter, false)
     )
+    P._initialize_converter_current!(pm)
     P._PMACDC.variable_dcgrid_voltage_magnitude(
         pm,
         bounded = variable_bounded(variables, :dcgrid_voltage_magnitude, false)

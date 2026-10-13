@@ -71,8 +71,8 @@ using PowerImpedance, Test
     const fallback_mode = Ref(:native)
 
     @eval PI function solve_acdcpf(data::Dict{String, Any},
-            ::Type{_PM.ACPPowerModel}, optimizer::JuMP.MOI.OptimizerWithAttributes;
-            kwargs...)
+            ::Type{_PM.ACPPowerModel}, optimizer::JuMP.MOI.OptimizerWithAttributes,
+            start::_PowerFlowStart; kwargs...)
         Main.initial_calls[] += 1
         return Dict("termination_status" => MOI.ITERATION_LIMIT)
     end

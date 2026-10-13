@@ -42,6 +42,7 @@ end
         include("adm_TLC_test.jl")
         include("converter_voltage_test.jl")
         include("power_flow_fallback_test.jl")
+        include("power_flow_start_test.jl")
     include("power_flow_idempotence_test.jl")
     include("pscad/power_flow_idempotence_test.jl")
         include("tlc_initialization_test.jl")

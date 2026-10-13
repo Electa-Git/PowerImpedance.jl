@@ -159,7 +159,8 @@ function power_flow(net::Network)
         "expect_infeasible_problem" => "yes",
     )
     s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false)
-    result = solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting = s)
+    _prepare_power_flow_start!(net.powerflow_start, data, (nodes2bus, elem2comp, net.nets))
+    result = solve_acdcpf(data, _PM.ACPPowerModel, ipopt, net.powerflow_start; setting = s)
     
     # Rerun power flow with relaxed constraints if no convergence
     if result["termination_status"] == MOI.LOCALLY_SOLVED || get(result, "primal_feasible", false)
@@ -708,6 +709,7 @@ function build_acdcpf(pm::_PM.AbstractPowerModel)
     PowerModelsACDC.variable_active_dcbranch_flow(pm, bounded = false)
     PowerModelsACDC.variable_dcbranch_current(pm, bounded = false)
     PowerModelsACDC.variable_dc_converter(pm, bounded = false)
+    _initialize_converter_current!(pm)
     PowerModelsACDC.variable_dcgrid_voltage_magnitude(pm, bounded = false)
     PowerModelsACDC.variable_dcgenerator_power(pm; bounded = false)
     PowerModelsACDC.variable_flexible_demand(pm, bounded = false)
@@ -837,7 +839,48 @@ function accept_feasible_power_flow!(result, model)
     return false
 end
 
-function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs...)
+function _prepare_power_flow_start!(start::_PowerFlowStart, data, mapping)
+    # Include component identities and endpoints, but leave numerical targets free
+    # to change: a previous point is only a start for the newly built constraints.
+    fields = ("index", "status", "gen_bus", "load_bus", "shunt_bus",
+        "storage_bus", "f_bus", "t_bus", "busac_i", "busdc_i", "fbusdc", "tbusdc")
+    topology = (mapping, Dict(group => Dict(id => Dict(key => component[key]
+        for key in fields if haskey(component, key)) for (id, component) in data[group])
+        for group in ("bus", "busdc", "gen", "gendc", "branch", "branchdc", "convdc",
+            "load", "shunt", "storage") if haskey(data, group)))
+    if !isequal(start.topology, topology)
+        empty!(start.primal)
+        start.topology = deepcopy(topology)
+    end
+    return start
+end
+
+function _initialize_power_flow!(model, start::_PowerFlowStart)
+    variables = JuMP.all_variables(model)
+    if length(variables) == length(start.primal) &&
+       all(variable -> haskey(start.primal, JuMP.name(variable)), variables)
+        for variable in variables
+            JuMP.set_start_value(variable, start.primal[JuMP.name(variable)])
+        end
+    else
+        empty!(start.primal)
+    end
+    return nothing
+end
+
+function _store_power_flow_start!(start::_PowerFlowStart, model)
+    # Residual acceptance and penalty relaxation are not converged primal points.
+    if JuMP.termination_status(model) == MOI.LOCALLY_SOLVED
+        empty!(start.primal)
+        for variable in JuMP.all_variables(model)
+            start.primal[JuMP.name(variable)] = JuMP.value(variable)
+        end
+    end
+    return nothing
+end
+
+function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver,
+        start::_PowerFlowStart = _PowerFlowStart(); kwargs...)
     #PowerModels function that generates PowerModel
     ref_ext = [
         _PMACDC.add_ref_dcgrid!,
@@ -857,7 +900,9 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
 
     #Set the Ipopt optimizer
     JuMP.set_optimizer(pm.model, solver)
+    _initialize_power_flow!(pm.model, start)
     JuMP.optimize!(pm.model)
+    _store_power_flow_start!(start, pm.model)
     result = _IM.build_result(pm, JuMP.solve_time(pm.model))
     @info result["termination_status"]
     if accept_feasible_power_flow!(result, pm.model)
@@ -878,6 +923,7 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
                 )
                 JuMP.set_optimizer(pm.model, solver)
                 JuMP.optimize!(pm.model)
+                _store_power_flow_start!(start, pm.model)
                 result = _IM.build_result(pm, JuMP.solve_time(pm.model))
                 if accept_feasible_power_flow!(result, pm.model)
                     @info "Power flow converged succesfully after $r increment change."

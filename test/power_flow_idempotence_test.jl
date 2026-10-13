@@ -19,30 +19,6 @@ Base.include(e -> e == :(using CairoMakie) ? nothing : e, @__MODULE__,
     joinpath(pkgdir(PowerImpedance), "examples/P2P_HVDC_ALT.jl"))
 end
 
-@testset "P2P builder repeated calls and exported setpoints" begin
-    state = first(P2PExample.transition_network_space([0.0]))
-    declared = Dict(n => e.setpoint for (n, e) in pairs(state.elements))
-    one = compute(PowerFlowProblem(state), ACDCPowerFlow())
-    two = compute(PowerFlowProblem(state), ACDCPowerFlow())
-    @test declared == Dict(n => e.setpoint for (n, e) in pairs(state.elements))
-    @test one.result["solution"] == two.result["solution"]
-    @test one.operating_point.setpoints == two.operating_point.setpoints
-    a = PSC.netlist(state, one)
-    b = PSC.netlist(state, two)
-    @test a.operating_point.branch_flows == b.operating_point.branch_flows
-    @test a.operating_point.setpoints == b.operating_point.setpoints
-    @test a.operating_point.bus_states == b.operating_point.bus_states
-    for n in (:c1, :c2)
-        i = string(one.elem2comp[n].compkey)
-        point = one.operating_point[n]
-        @test point.Qac ==
-              -one.result["solution"]["convdc"][i]["qgrid"] * one.data["baseMVA"]
-        @test point.Qac > 1e-6
-        e = only(filter(e -> e.name == n, a.elements))
-        @test e.setpoint == point
-        @test PI.pftoinputs(e.model, e.setpoint)[2].q_ac == point.Qac / e.model.elec.Sbase
-    end
-end
 
 function tlc_qv_fixture()
     state = PSCADFixtures.tlc_network(false).state
@@ -128,6 +104,68 @@ function qv_reactive_bounds(one, two, data, tolerance)
     return Dict(("branch", branch, "qf") => delta_q + 6tolerance,
         ("gen", generator, "qg") => delta_q + 8tolerance)
 end
+
+function check_setpoints(one, two, data, voltage_base, tolerance)
+    @test keys(one) == keys(two)
+    for name in keys(one), field in fieldnames(Setpoint)
+        x, y = getfield(one[name], field), getfield(two[name], field)
+        if ismissing(x) || ismissing(y)
+            @test isequal(x, y)
+        else
+            base = field in (:Pac, :Qac, :Pdc) ? data["baseMVA"] :
+                   field === :Vac ? sqrt(2) * voltage_base :
+                   field === :Vdc ? data["dcpol"] * voltage_base : 1.0
+            @test abs(x - y) / base <= tolerance
+        end
+    end
+end
+
+@testset "P2P builder repeated calls and exported setpoints" begin
+    state = first(P2PExample.transition_network_space([0.0]))
+    declared = Dict(n => e.setpoint for (n, e) in pairs(state.elements))
+    one = compute(PowerFlowProblem(state), ACDCPowerFlow())
+    two = compute(PowerFlowProblem(state), ACDCPowerFlow())
+    @test declared == Dict(n => e.setpoint for (n, e) in pairs(state.elements))
+    tolerance = constraint_tolerance(state.options)
+    # A warm solve reoptimizes the converged point; compare using the same
+    # physical tolerance as the converter repeats rather than exact rounding.
+    check_powerflow(one.result["solution"], two.result["solution"], tolerance)
+    check_setpoints(one.operating_point.setpoints, two.operating_point.setpoints,
+        one.data, state.options.voltageBase, tolerance)
+    a = PSC.netlist(state, one)
+    b = PSC.netlist(state, two)
+    @test keys(a.operating_point.branch_flows) == keys(b.operating_point.branch_flows)
+    for name in keys(a.operating_point.branch_flows)
+        x, y = a.operating_point.branch_flows[name], b.operating_point.branch_flows[name]
+        @test keys(x) == keys(y)
+        @test norm(collect(values(x)) - collect(values(y)), Inf) / one.data["baseMVA"] <= tolerance
+    end
+    check_setpoints(a.operating_point.setpoints, b.operating_point.setpoints,
+        one.data, state.options.voltageBase, tolerance)
+    @test keys(a.operating_point.bus_states) == keys(b.operating_point.bus_states)
+    for key in keys(a.operating_point.bus_states)
+        x, y = a.operating_point.bus_states[key], b.operating_point.bus_states[key]
+        @test keys(x) == keys(y)
+        for field in keys(x)
+            if x[field] isa Number && y[field] isa Number
+                @test abs(x[field] - y[field]) <= tolerance
+            else
+                @test isequal(x[field], y[field])
+            end
+        end
+    end
+    for n in (:c1, :c2)
+        i = string(one.elem2comp[n].compkey)
+        point = one.operating_point[n]
+        @test point.Qac ==
+              -one.result["solution"]["convdc"][i]["qgrid"] * one.data["baseMVA"]
+        @test point.Qac > 1e-6
+        e = only(filter(e -> e.name == n, a.elements))
+        @test e.setpoint == point
+        @test PI.pftoinputs(e.model, e.setpoint)[2].q_ac == point.Qac / e.model.elec.Sbase
+    end
+end
+
 
 @testset "Excluded pre-existing builder-to-classic VAC failures" begin
     # These archived cross-formulation re-solves are explicitly excluded:
