@@ -93,7 +93,7 @@ function scan_quality(time, baseline, runs, spec; columns = eachindex(spec.axes)
                     baseline.input_base[others]')))
         end
     end
-    if get(spec,:drive,"")=="current"
+    if get(spec,:drive,"")=="current" && get(spec,:dc_clamped,true)
         clamped=maximum(maximum(abs,run.dc_voltage-baseline.dc_voltage)/640 for run in runs)
     end
     valid = drift <= 1e-3 && input_departure <= 0.01 && output_departure <= 0.01 &&
@@ -334,12 +334,12 @@ function run_fixture(id; remote = RemoteConfig(),
     entry = fixture(id)
     net = entry.factory()
     point = power_flow(net)
-    stability_gate(net, entry)
-    list = P.netlist(net, point)
+    gate = stability_gate(net, entry)
+    gate["status"] == "passed" || error("$(entry.id) failed complete-network stability gate: $gate")
+    list = fixture_netlist(net, point)
     spec, reference = applicable_scan(id, net, list; definition = record["tier_c"])
     stored = read_response(joinpath(directory, reference_filename(spec)), length(spec.axes), spec.frequencies)
-    isapprox(reference, stored; rtol = 1e-12, atol = 1e-14) ||
-        error("native reference changed")
+    record_native_reference!(record,directory,spec,reference,stored,list)
     scan_record(spec) ==
     Dict(key=>record["tier_c"][key] for key in keys(scan_record(spec))) ||
         error("scan definition changed")

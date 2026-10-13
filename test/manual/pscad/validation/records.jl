@@ -19,7 +19,7 @@ end
 # TOML reads empty arrays as Union{}[]. These ledger fields accept appended
 # records or declared model differences, both before and after serialization.
 function manifest_lists!(record)
-    for field in ("run_records", "model_differences", "projects", "harness_revisions")
+    for field in ("run_records", "model_differences", "projects", "harness_revisions", "native_reference_checks")
         record[field] = Any[get(record, field, Any[])...]
     end
     return record
@@ -143,16 +143,16 @@ function preparation_record(entry, gate, models; directory)
         "retention" => "all generated payload kept; commit decision deferred until measured sizes"))
 end
 
-function write_operating_point(path, model)
+function operating_point_rows(list)
     rows = NamedTuple[]
-    for bus in model.netlist.buses
-        point = model.operating_point.bus_states[bus.key]
+    for bus in list.buses
+        point = list.operating_point.bus_states[bus.key]
         push!(rows, (
             owner = bus.name, quantity = "voltage_pu", value = point.vm_pu, unit = "pu"))
         push!(rows, (
             owner = bus.name, quantity = "angle", value = point.va_rad, unit = "rad"))
     end
-    for (element, flow) in model.operating_point.branch_flows,
+    for (element, flow) in list.operating_point.branch_flows,
         (quantity, value) in pairs(flow)
 
         push!(rows,
@@ -160,5 +160,85 @@ function write_operating_point(path, model)
                 unit =
                 startswith(string(quantity), "q") ? "MVAr" : "MW"))
     end
-    return write_table(path, rows)
+    return rows
+end
+
+write_operating_point(path, model) = write_table(path, operating_point_rows(model.netlist))
+
+# Reference identity has its own enforced forward-error budget. NonlinearSolve
+# uses 1e-6 absolute/relative residual tolerances; these do NOT imply a uniform
+# forward-admittance bound for ill-conditioned realisations. Require the actual
+# difference to stay within one ppm on the declared pu bases/floors, or stop.
+# This is 20,000/50,000 times tighter than passive/active C; C always uses the
+# frozen file. Never widen this budget from the measured discrepancy.
+const NATIVE_REFERENCE_LIMIT = 1e-6
+
+function native_reference_check(spec, recomputed, frozen)
+    size(recomputed)==size(frozen) || throw(ArgumentError("native reference dimensions changed"))
+    size(frozen,3)==length(spec.frequencies) || throw(ArgumentError("native reference frequency count changed"))
+    all(isfinite,recomputed) && all(isfinite,frozen) ||
+        throw(ArgumentError("non-finite native reference"))
+    actual=scale_response(recomputed,spec);expected=scale_response(frozen,spec)
+    delta=actual-expected
+    entries=abs.(delta)./max.(abs.(expected),0.02)
+    frobenius=[norm(delta[:,:,k])/max(norm(expected[:,:,k]),0.1) for k in eachindex(spec.frequencies)]
+    worst=argmax(entries)
+    return Dict{String,Any}("passed"=>maximum(entries)<=NATIVE_REFERENCE_LIMIT && maximum(frobenius)<=NATIVE_REFERENCE_LIMIT,
+        "limit"=>NATIVE_REFERENCE_LIMIT,"entry_floor_pu"=>0.02,"frobenius_floor_pu"=>0.1,
+        "max_entry_scaled_error"=>maximum(entries),"max_frobenius_scaled_error"=>maximum(frobenius),
+        "max_absolute_pu"=>maximum(abs,delta),"max_absolute_SI"=>maximum(abs,recomputed-frozen),
+        "SI_unit"=>spec.quantity=="Y" ? "S" : "ohm",
+        "max_relative_nonzero_entry_error"=>maximum(abs(recomputed[i]-frozen[i])/abs(frozen[i])
+            for i in eachindex(frozen) if !iszero(frozen[i]);init=0.0),
+        "worst_frequency_Hz"=>spec.frequencies[worst[3]],"worst_row"=>worst[1],"worst_column"=>worst[2],
+        "per_frequency"=>[Dict("frequency_Hz"=>f,"max_entry_scaled_error"=>maximum(entries[:,:,k]),
+            "frobenius_scaled_error"=>frobenius[k],"max_absolute_SI"=>maximum(abs,recomputed[:,:,k]-frozen[:,:,k]))
+            for (k,f) in enumerate(spec.frequencies)],
+        "bound_scope"=>"enforced actual forward discrepancy; solver residual convergence alone gives no universal forward-error guarantee",
+        "authority"=>"frozen prepared reference; C tolerances and reference bytes unchanged")
+end
+
+function native_operating_point_check(list, path)
+    frozen=Dict((r[1],r[2])=>(value=r[3],unit=r[4])
+        for r in split.(readlines(path)[2:end],'\t'))
+    actual=Dict((r.owner,r.quantity)=>(value=string(r.value),unit=r.unit) for r in operating_point_rows(list))
+    keys(actual)==keys(frozen) || throw(ArgumentError("native operating-point rows changed"))
+    rows=Dict{String,Any}[]
+    for key in sort!(collect(keys(frozen)))
+        old,new=frozen[key],actual[key]
+        old.unit==new.unit || throw(ArgumentError("native operating-point units changed"))
+        old_value,new_value=tryparse(Float64,old.value),tryparse(Float64,new.value)
+        if old_value===nothing || new_value===nothing
+            old.value==new.value || throw(ArgumentError("native operating-point missing value changed"))
+            continue
+        end
+        # PF uses 1000 MVA globally and constr_viol_tol=1e-5. This is an
+        # enforced point-identity budget, not an inverse-Jacobian error theorem.
+        base=old.unit in ("MW","MVAr") ? 1000.0 : max(abs(old_value),1.0)
+        difference=abs(new_value-old_value)
+        push!(rows,Dict("owner"=>key[1],"quantity"=>key[2],"unit"=>old.unit,
+            "frozen"=>old_value,"recomputed"=>new_value,"absolute_difference"=>difference,
+            "scaled_difference"=>difference/base))
+    end
+    maximum_difference=maximum(r["scaled_difference"] for r in rows;init=0.0)
+    return Dict("passed"=>maximum_difference<=1e-5,"limit"=>1e-5,
+        "power_base_MVA"=>1000.0,"max_scaled_difference"=>maximum_difference,"rows"=>rows)
+end
+
+function record_native_reference!(record, directory, spec, recomputed, frozen, list;
+        purpose="station recomputation")
+    check=native_reference_check(spec,recomputed,frozen)
+    check["operating_point"]=native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))
+    check["passed"] &= check["operating_point"]["passed"]
+    check["purpose"]=purpose
+    check["julia_version"]=string(VERSION)
+    check["recorded_utc"]=string(now(UTC))
+    check["reference_file"]=reference_filename(spec)
+    check["frozen_sha256"]=digest(joinpath(directory,reference_filename(spec)))
+    check["status"]=check["passed"] ? "passed" : "native_reference_outside_solver_scale_budget"
+    manifest_lists!(record)
+    push!(record["native_reference_checks"],check)
+    write_manifest(directory,record)
+    check["passed"] || error("native reference changed beyond solver-scale guard: entry=$(check["max_entry_scaled_error"]), Frobenius=$(check["max_frobenius_scaled_error"]), limit=$(check["limit"]); see native_reference_checks in manifest")
+    return check
 end

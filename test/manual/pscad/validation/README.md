@@ -197,6 +197,42 @@ known unstable network is rejected. Station tier A/C/refinement remain pending.
 Projects/reference/manifest are under `data/L2-01/`. Existing hash-valid completed
 runs resume; no L2 station execution has occurred during preparation.
 
+## L2 batch A (M9b-4)
+
+Owner station evidence closes L2-01: tier A and refinement passed; converter admittance within 0.48% of Julia at 2.5 us. The five new fixtures are prepared; their station results are pending.
+
+| Fixture / control | SCR / X:R | Solved P / Q (MW / MVAr) | AC voltage (pu) | Gate: most positive real part (1/s) | Expected station time |
+|---|---|---|---|---|---|
+| L2-02 P-f + Q | 8 / 10 | 70.00000 / 5.00000 | 1.0111003 | passed: -1.9917811 | 15–25 min |
+| L2-03 P + Q-V | 8 / 10 | 70.00000 / -1.37412 | 1.0031871 | passed: -3.1363304 | 15–25 min |
+| L2-04 P + VAC | 8 / 10 | 70.00000 / -3.91261 | 1.0000000 | passed: -3.0903588 | 15–25 min |
+| L2-05 Vdc + Q / DC resistor | 8 / 10 | -70.03996 / 5.00000 | 0.9935849 | passed: -0.7760760 | 18–30 min |
+| L2-06 P/Q weak-grid twin | 2.5 / 10 | 70.00000 / 5.00000 | 1.0090226 | passed: -1.9714563 | 15–25 min |
+
+All retain the 100 MVA, 220 kV AC / 640 kV DC M4 TLC, PLL, OCC and averaged electrical/modulation blocks. SCR uses the rated AC voltage: strong-grid R=6.019975 ohm, L=0.191621756 H; weak-grid R=19.263920 ohm, L=0.613189618 H. X/R=10 at 50 Hz. No gains or grid strengths were tuned.
+
+M4 `tlc_network` supplies P/Q PI 0.04/40, P-f support K=5 and cutoff 2 rad/s, PLL/current-loop/filter/modulation parameters and limits. M5b mapping evidence supplies Q-V K=20/cutoff 100 rad/s and VAC PI 0/100 with **NoFilter**. Vdc PI is the M4 TLC 5/5. L2-03/04 have plain P (NoFrequencySupport); L2-05 has plain Q (NoVoltageSupport). **L2-01 already has the M4 P-f lag**, so L2-02 explicitly repeats that physics. L2-06 preserves every L2-01 controller and request.
+
+L2-05 consumes 70 MW on DC through R=640^2/70=5851.428571 ohm differential (2925.714286 ohm per pole to ground). It rectifies 70.039956 MW from AC, including loss. Native PF uses a remote ideal zero-voltage reference; the harness contracts that zero-voltage source to ground using internal Netlist/Terminal metadata. Existing `src/PSCAD/emitters/impedance.jl:emit!` supplies the grounded R/2 legs; no DC voltage-source component or auxiliary midpoint shunts are exported. This contraction is electrically exact. The AC reference is the native 3-port converter plus resistor nodal Schur reduction, **not** the converter AC block with DC clamped. The measured DUT current excludes the AC grid branch. DC voltage may respond; only the DC clamp check is inapplicable. AC departure, drive, drift and refinement thresholds remain unchanged.
+
+The complete-network gate retains all converter and RL states (and DC feedback for L2-05), native admittances on 6001 points at 0.01 Hz–100 kHz, and all finite descriptor roots. VAC has an open-subsystem integrator at zero but stable complete-network poles. The corrected Nyquist contour uses Re(s)=1e-6 1/s, its real-axis closure point, and the enclosed open-loop pole count; it requires zero closed RHP count and the unchanged strict negative complete-network root margin. Tests cover an integrator stabilized by its network, a stabilized RHP subsystem, and the known unstable pair. This fixes the earlier assumption that every standalone subsystem must itself be strictly stable.
+
+Common C settings: two nominal fixed-frame dq shunt-current drives; **2.5 us integration / 1.25 us witness**, **20 us sampling**, onset 2 s, windows **[8,9), [9,10) s**, 10 s main runs. Half-amplitude repeat: 2.5e-5 pu on one selected axis; half-step baseline plus that axis at the worst band and 1000 Hz. Nine projects per fixture are prepared; six normally run, and the runner writes an adaptive witness band when needed.
+
+Per-tone peak **5e-5 pu current = 0.01856 A**; Schroeder phases -pi*k*(k-1)/N. Bases: 179.629247804 kV AC phase peak and 0.371134809513 kA phase peak. The 23 integer coherent bins (Hz) are: 1, 2, 3, 4, 6, 7, 10, 13, 18, 24, 32, 42, 56, 75, 100, 133, 178, 237, 316, 422, 562, 750, 1000. Sampling provides 47.6 samples/period at the highest 1050 Hz sideband. Active C remains **5% complex / 3 degrees**, with the approved 0.02-entry and 0.1-Frobenius floors. No tolerance changed.
+
+Slowest decay times are 0.5021, 0.3188, 0.3236, **1.2885**, 0.5072 s. The common 8 s settle is retained as requested; it is 6.21 time constants for L2-05, and its measured baseline drift remains mandatory. Native triangle bounds on settled AC voltage/current departures are <=0.000954 pu across this batch; they are predictions, not station gate results. Each fixture still must pass the half-amplitude and half-step measurements.
+
+Resumable command (78–130 min estimate; 180 min deadline):
+
+```sh
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-02 L2-03 L2-04 L2-05 L2-06 --timeout=10800
+```
+
+Projects, native references, hashes, settings and root lists are in `data/L2-02/` through `data/L2-06/`. Completed runs resume only with matching project hashes and valid completion records. Evidence summary: `data/m9b4/summary.tsv`; native stability records: `data/m9b4/L2-0x-gate.toml`. Instantiate the gitignored harness Manifest with the Julia version used for the station command.
+
+Offline final checks on Julia 1.12.7 and 1.10.11: **17,575/17,575 PSCAD suite assertions** per version, including **59 name-guard assertions**; **1,044/1,044 XML assertions** per version. The new batch/DC-termination testset is 103/103; converter-port synthetic recovery remains 1.83e-13 normalized, and DC-terminated recovery is <=1.54e-17 S. The independent unreduced DC descriptor matches the finite-mode count and rightmost mode, with normalized pencil residual <=4.31e-18. It uses QZ beta to distinguish algebraic infinity and backward error for root consistency; no C or qualification tolerance changed. All nine prepared project hashes, retained file inventories and producing-source hashes verify for each new fixture. No station execution or src/dependency changes. Logs and checksums: `data/m9b4/`.
+
 ## Frozen settings
 
 | Fixture | Applicable injection / response | Grid | Base / half step | Full run / windows | Original station estimate |

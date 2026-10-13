@@ -19,7 +19,8 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
     net = entry.factory()
     point = power_flow(net)
     gate = stability_gate(net, entry)
-    list = P.netlist(net, point)
+    gate["status"] == "passed" || error("$(entry.id) failed complete-network stability gate: $gate")
+    list = fixture_netlist(net, point)
     spec, reference = applicable_scan(id, net, list;
         definition = prior === nothing ? definition : prior["tier_c"])
     spec.travel_lower_bound_s == 0 || spec.time_step < spec.travel_lower_bound_s ||
@@ -36,8 +37,8 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
     reference_path = joinpath(directory, reference_filename(spec))
     if isfile(reference_path)
         stored = read_response(reference_path, length(spec.axes), spec.frequencies)
-        isapprox(stored, reference; rtol = 1e-12, atol = 1e-14) ||
-            error("prepared native reference changed")
+        native_reference_check(spec,reference,stored)["passed"] ||
+            error("prepared native reference changed beyond solver-scale guard")
     else
         write_response(reference_path, reference, spec.frequencies; quantity = spec.quantity)
     end
@@ -84,6 +85,9 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
             "duration_s"=>8.0, "predicted_drift"=>9.27e-7,
             "acceptance"=>"prediction sizes run only; actual drift <=1e-3 remains mandatory; DC fits unchanged")
     end
+    record_native_reference!(record,directory,spec,reference,
+        read_response(reference_path,length(spec.axes),spec.frequencies),list; purpose="preparation verification")
+    record["stability"] = gate
     record["tiers"] = ["A", "C"]
     if isempty(spec.protocol) && get(get(record, "corrected_analysis", Dict()), "status", "") == "passed"
         record["qualification_status"] = "passed"

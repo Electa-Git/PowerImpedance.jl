@@ -205,9 +205,58 @@ end
     @test_throws ArgumentError V.comparison_rows(frequency, measured .* NaN, reference)
 end
 
+
+@testset "Frozen native reference identity budget and recorded provenance" begin
+    spec=(;quantity="Y",voltage_bases=[1.,2.],current_bases=[2.,1.],frequencies=[1.,1000.])
+    reference=cat([0.4+0.1im 0.0;0.1 0.2],[0.2 0.1im;0. 0.3];dims=3)
+    frozen=copy(reference)
+    check=V.native_reference_check(spec,reference,reference)
+    @test check["passed"] && check["max_absolute_SI"]==0
+    @test check["limit"]==1e-6
+    @test length(check["per_frequency"])==2
+    @test V.native_reference_check(spec,reference*(1+0.5e-6),frozen)["passed"]
+    @test !V.native_reference_check(spec,reference*(1+2e-6),frozen)["passed"]
+    # A structurally zero entry uses the fixed pu floor, not a raw relative error.
+    small=copy(reference);small[1,2,1]=0.5e-6*0.02
+    @test V.native_reference_check(spec,small,frozen)["passed"]
+    large=copy(reference);large[1,2,1]=2e-6*0.02
+    @test !V.native_reference_check(spec,large,frozen)["passed"]
+    @test reference==frozen
+    @test_throws ArgumentError V.native_reference_check(spec,reference[:,:,1:1],frozen)
+    invalid=copy(reference);invalid[1]=NaN
+    @test_throws ArgumentError V.native_reference_check(spec,invalid,frozen)
+    net=V.ac_rl_network();list=P.netlist(net,power_flow(net))
+    actual_spec,actual_reference=V.applicable_scan("L1-01",net,list)
+    mktempdir() do dir
+        path=joinpath(dir,V.reference_filename(actual_spec))
+        V.write_response(path,actual_reference,actual_spec.frequencies)
+        V.write_table(joinpath(dir,"operating_point.tsv"),V.operating_point_rows(list))
+        record=V.manifest_lists!(TOML.parse("native_reference_checks = []"))
+        hash_before=V.digest(path)
+        accepted=V.record_native_reference!(record,dir,actual_spec,actual_reference,actual_reference,list)
+        @test accepted["passed"] && accepted["operating_point"]["passed"]
+        @test accepted["frozen_sha256"]==hash_before
+        @test V.digest(path)==hash_before
+        parsed=V.manifest_lists!(TOML.parsefile(joinpath(dir,"manifest.toml")))
+        @test parsed["native_reference_checks"] isa Vector{Any}
+        @test length(parsed["native_reference_checks"])==1
+        @test_throws ErrorException V.record_native_reference!(parsed,dir,actual_spec,actual_reference*1.01,actual_reference,list)
+        failed=TOML.parsefile(joinpath(dir,"manifest.toml"))
+        @test length(failed["native_reference_checks"])==2
+        @test !last(failed["native_reference_checks"])["passed"]
+        @test V.digest(path)==hash_before
+        # Freeze first; do not bless a changed point merely because Y matched.
+        rows=V.operating_point_rows(list)
+        first_voltage=findfirst(r->r.quantity=="voltage_pu",rows)
+        rows[first_voltage]=merge(rows[first_voltage],(value=rows[first_voltage].value+0.01,))
+        V.write_table(joinpath(dir,"operating_point.tsv"),rows)
+        @test !V.native_operating_point_check(list,joinpath(dir,"operating_point.tsv"))["passed"]
+    end
+end
+
 @testset "Passive catalogue and generated source plans" begin
-    @test length(V.REGISTRY) == 9
-    @test length(unique(entry.id for entry in V.REGISTRY)) == 9
+    @test length(V.REGISTRY) == 14
+    @test length(unique(entry.id for entry in V.REGISTRY)) == 14
     for entry in filter(e->startswith(e.id,"L1-"),V.REGISTRY)
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"
@@ -741,6 +790,14 @@ end
     @test unstable["status"]=="failed"
     @test unstable["most_positive_located_real_per_s"]>0
     @test unstable["nyquist_net"]!=0
+    integrator=V.network_stability(zeros(2,2),B,B,D,grid,1.0,1.0,rotation)
+    @test integrator["status"]=="passed"
+    @test integrator["nyquist_closed_RHP_count"]==0
+    unstable_grid(s)=Matrix{ComplexF64}(I,2,2)/(2+s)
+    stabilized=V.network_stability(B,B,3B,D,unstable_grid,2.0,1.0,rotation)
+    @test stabilized["status"]=="passed"
+    @test stabilized["nyquist_open_RHP_poles"]==2
+    @test stabilized["nyquist_net"]==-2
 end
 
 @testset "TLC port current drive, native reference and synthetic dq recovery" begin
@@ -831,6 +888,124 @@ end
         @test size(base)==(4,1,4) && bq["valid"] && hq["valid"]
         @test V.matrix_change(half,base;epsilon=0.02)["passed"]
     end
+end
+
+@testset "TLC batch controls, grid and physical DC termination" begin
+    for (id,scr) in (("L2-02",8.0),("L2-03",8.0),("L2-04",8.0),("L2-05",8.0),("L2-06",2.5))
+        net=V.fixture(id).factory()
+        form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+        @test 220^2/100/hypot(form.R,2π*50*form.L)≈scr
+        @test 2π*50*form.L/form.R≈10
+        m=net.elements[:DUT].element_model
+        @test m.innerVoltage isa PowerImpedance.NoInnerVoltageControl
+        @test m.sync isa PowerImpedance.PLLSynchronization
+        if id in ("L2-02","L2-06")
+            @test m.outerActive.support isa PowerImpedance.FrequencySupportLag
+            @test m.outerActive.support.Kω==5 && m.outerActive.support.ωc==2
+        elseif id=="L2-03"
+            @test m.outerActive.support isa PowerImpedance.NoFrequencySupport
+            @test m.outerReactive.support.K==20 && m.outerReactive.support.ωc==100
+        elseif id=="L2-04"
+            @test m.outerReactive.filter isa PowerImpedance.NoFilter
+            @test m.outerReactive.pi_ctrl.Kp==0 && m.outerReactive.pi_ctrl.Ki==100
+        else
+            @test m.outerActive isa PowerImpedance.OuterActiveVdcControl
+            @test m.outerActive.pi_ctrl.Kp==5 && m.outerActive.pi_ctrl.Ki==5
+            @test !haskey(net.elements,:CableDC12)
+            @test P.identify_rlc(net.elements[:DC_load];name=:DC_load).form.R≈640^2/70
+        end
+    end
+    # The DC load is physical, not an ideal voltage clamp. Its PF-only remote
+    # zero reference contracts to the emitter's existing grounded DC terminal.
+    net=V.fixture("L2-05").factory();point=power_flow(net)
+    @test string(point[1]["termination_status"])=="LOCALLY_SOLVED"
+    @test net.elements[:DUT].setpoint.Vdc≈640
+    @test net.elements[:DUT].setpoint.Pdc≈-70
+    list=V.fixture_netlist(net,point)
+    @test all(e.name!=:G_DC for e in list.elements)
+    load=only(filter(e->e.name==:DC_load,list.elements))
+    @test load.terminals[2].grounded && load.terminals[2].bus===nothing
+    spec,reference=V.applicable_scan("L2-05",net,list)
+    @test !spec.dc_clamped && spec.active && spec.drive=="current"
+    @test spec.time_step==2.5e-6 && spec.window_starts==(8.,9.)
+    @test V.step_definition(spec,18.0).time_step==1.25e-6
+    for (k,f) in enumerate(spec.frequencies)
+        y=PowerImpedance.get_y(net.elements[:DUT],ComplexF64(2π*im*f))
+        g=70/640^2
+        # Direct 3-node KCL solve, independent of the Schur reference formula.
+        voltage=vcat(-(y[1,1]+g)\y[1:1,2:3],Matrix{ComplexF64}(I,2,2))
+        @test reference[:,:,k]≈(y*voltage)[2:3,:] rtol=1e-12
+        @test norm(reference[:,:,k]-y[2:3,2:3])>0
+    end
+    # Independent unreduced complete descriptor retains the DC algebraic node.
+    e=net.elements[:DUT];el=e.element_model.elec;n=size(e.A,1)
+    form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+    rotation=real.((inv(PowerImpedance.get_y(net.elements[:Grid],0.0im)[1:2,1:2])-form.R*I)/form.L)
+    ac=Matrix{Float64}(I,2,2)
+    # Use native per-unit variables for the independent descriptor so tiny SI
+    # conductances do not spoil the generalized eigenvalue backward error.
+    zbase=el.vACbase/el.iACbase
+    dc_conductance_pu=(70/640^2)*el.vDCbase/el.iDCbase
+    full=[e.A zeros(n,2) e.B;
+        zeros(2,n) -form.R/zbase*ac-form.L/zbase*rotation zeros(2,1) ac;
+        e.C vcat(zeros(1,2),ac) e.D+diagm([dc_conductance_pu,0.,0.])]
+    storage=diagm([ones(n);fill(form.L/zbase,2);zeros(3)])
+    pencil=schur(full,storage)
+    # Algebraic constraints have beta=0 in QZ. Round-off can report a finite
+    # 1e19 quotient for an infinite pole; classify beta at backward-error scale,
+    # rather than treating that quotient as a located dynamic mode.
+    finite=abs.(pencil.β) .> 100eps(Float64)*max(norm(storage),1.0)
+    poles=pencil.α[finite]./pencil.β[finite]
+    gate=V.stability_gate(net,V.fixture("L2-05"))
+    @test length(poles)==length(gate["poles_real_per_s"])
+    # A singular descriptor's forward eigenvalue error depends on conditioning.
+    # Check the same rightmost finite mode and its pencil backward error;
+    # do not demand spurious extra digits from the QZ quotient.
+    located=gate["most_positive_located_real_per_s"]
+    residual=minimum(svdvals(full-located*storage))/max(norm(full),1.0)
+    @test maximum(real,poles)<0 && argmin(abs.(poles.-located))==argmax(real.(poles)) && residual<1e-12
+    println("DC complete-pencil normalized root residual: ",residual)
+    for axis in ["baseline";spec.axes]
+        plan,_=V.scan_plan(list,spec,axis)
+        @test P.check_connectivity(plan)===nothing
+        @test !any(c->c isa P.ComponentPlan && c.defn=="master:source_1",plan.main.components)
+        @test count(c->c isa P.ComponentPlan && c.defn=="master:resistor" &&
+            parse(Float64,first(split(Dict(c.params)["R"])))≈640^2/140,plan.main.components)==2
+        probe=only(filter(c->c.kind==:current && c.element=="DC_load",plan.probes.channels))
+        @test probe.orientation==:into
+    end
+    # Keep the 1e-6 clamp gate for source-clamped cases. A terminated converter
+    # must be free to respond on DC; AC departures and drive gates are unchanged.
+    short=merge(spec,(;frequencies=[7.],window_starts=(0.,1.),window_duration=1.,
+        simulation_time=2.,injection_time=0.,tone_peak_pu=5e-5))
+    time=collect(0.:.001:2.)
+    wave=cos.(2π*7*time)
+    input=zeros(length(time),2); input[:,1].=el.vACbase
+    baseline=(;input,output=zeros(length(time),2),input_base=spec.voltage_bases,
+        output_base=spec.current_bases,drive=zeros(length(time),2),drive_base=spec.current_bases,dc_voltage=fill(640.,length(time)))
+    drive=hcat(5e-5*el.iACbase*wave,zeros(length(time)))
+    run=merge(baseline,(;input=input+hcat(1e-4*el.vACbase*wave,zeros(length(time))),drive,
+        dc_voltage=640 .+ 0.001wave))
+    @test V.scan_quality(time,baseline,[run],short;columns=[1])["valid"]
+    @test !V.scan_quality(time,baseline,[run],merge(short,(dc_clamped=true,));columns=[1])["valid"]
+    frequencies=[1.,7.,137.]
+    known=cat((V.tlc_port_y(net,ComplexF64(2π*im*f)) for f in frequencies)...;dims=3)
+    inputs=[zeros(length(time),2) for _ in 1:2]
+    outputs=[zeros(length(time),2) for _ in 1:2]
+    mixing=[0.4 0.15;-0.1 0.35]
+    for column in 1:2, (k,f) in enumerate(frequencies)
+        v=mixing[:,column]*1e-4*el.vACbase
+        current=known[:,:,k]*v
+        for row in 1:2
+            inputs[column][:,row].+=real.(v[row]*cis.(2π*f*time))
+            outputs[column][:,row].+=real.(current[row]*cis.(2π*f*time))
+        end
+    end
+    extracted=V.extract_response(time,inputs,outputs,zeros(length(time),2),
+        zeros(length(time),2),frequencies;starts=(0.,1.),duration=1.,input_bases=spec.voltage_bases)
+    recovery=maximum(maximum(abs,matrix-known) for matrix in extracted.matrices)
+    @test recovery<1e-9
+    println("DC-terminated TLC synthetic recovery error: ",recovery," S")
 end
 
 end

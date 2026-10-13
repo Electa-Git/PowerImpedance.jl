@@ -1,4 +1,4 @@
-# Complete source-clamped TLC + RL network. Native Jacobian blocks own control
+# Complete source-referenced TLC + RL network. Native Jacobian blocks own control
 # physics; native get_y owns the grid's dq signs. The descriptor imposes KCL,
 # rather than testing a converter alone. No distributed-line state truncation.
 function network_poles(A, B, C, D, resistance, inductance, rotation)
@@ -23,18 +23,27 @@ function network_stability(A, B, C, D, grid_y, resistance, inductance, rotation;
     # eigenlocus crossings alone misses a real-axis unstable root already
     # present below the first sample. The native models have real coefficients
     # and this proper TLC/RL loop has a finite high-frequency limit.
-    characteristic=[det(I+loops[:,:,k]) for k in eachindex(frequencies)]
-    contour=[conj.(reverse(characteristic));characteristic]
+    # VAC has an open-subsystem integrator at zero. Use an infinitesimally
+    # right-shifted complete contour, including its real-axis closure point,
+    # and count enclosed open-loop poles. Strictly stable complete-network
+    # roots are still required; this does not remove or tune a device mode.
+    contour_shift=1e-6
+    characteristic=[det(I + grid_y(s) \ (C*((s*I-A)\B)+D))
+        for s in ComplexF64.(contour_shift .+ im*2π.*[0.;frequencies])]
+    contour=[conj.(reverse(characteristic[2:end]));characteristic]
     turns=sum(angle(contour[mod1(k+1,length(contour))]/contour[k])
         for k in eachindex(contour))/(2π)
     net=-round(Int,turns)
     abs(turns+net)<1e-6 || error("unresolved complete Nyquist contour")
+    open_rhp=count(s->real(s)>contour_shift,eigvals(A))
     residuals = [minimum(svdvals(grid_y(s)+C*((s*I-A)\B)+D)) /
         max(norm(grid_y(s)),1e-12) for s in poles if minimum(abs.(s.-eigvals(A)))>1e-6]
-    stable = maximum(real,poles)<-1e-7 && maximum(real,eigvals(A))<-1e-7 && net==0
+    stable = maximum(real,poles)<-1e-7 && net+open_rhp==0
     return Dict("method"=>"complete-network native-admittance generalized Nyquist plus descriptor roots",
         "status"=>stable ? "passed" : "failed", "frequency_band_Hz"=>[first(frequencies),last(frequencies)],
-        "frequency_count"=>length(frequencies), "nyquist_net"=>net, "positive_band_eigenlocus_net"=>nyquist.net,
+        "frequency_count"=>length(frequencies), "nyquist_net"=>net,
+        "nyquist_contour_shift_per_s"=>contour_shift, "nyquist_open_RHP_poles"=>open_rhp,
+        "nyquist_closed_RHP_count"=>net+open_rhp, "positive_band_eigenlocus_net"=>nyquist.net,
         "subsystem_max_real_per_s"=>maximum(real,eigvals(A)),
         "most_positive_located_real_per_s"=>maximum(real,poles),
         "poles_real_per_s"=>real.(poles), "poles_imag_rad_per_s"=>imag.(poles),
@@ -44,16 +53,32 @@ end
 
 function stability_gate(net, entry)
     startswith(entry.id,"L1-") && return passive_gate(net,entry)
-    entry.id == "L2-01" || error("no complete-network gate for $(entry.id)")
-    # A/B/C/D are produced by the same native linearisation as get_y.
+    startswith(entry.id,"L2-") || error("no complete-network gate for $(entry.id)")
     dut=net.elements[:DUT]
     elec=dut.element_model.elec
     form=P.identify_rlc(net.elements[:Grid]; name=:Grid).form
     grid_y(s)=PowerImpedance.get_y(net.elements[:Grid],s)[1:2,1:2]
     rotation=real.((inv(grid_y(0.0im))-form.R*I)/form.L)
-    gate=network_stability(dut.A,dut.B[:,2:3]/elec.vACbase,
-        dut.C[2:3,:]*elec.iACbase,dut.D[2:3,2:3]*elec.iACbase/elec.vACbase,
-        grid_y,form.R,form.L,rotation)
-    gate["status"]=="passed" || error("L2-01 failed complete-network stability gate: $gate")
+    A=dut.A
+    B=dut.B ./ [elec.vDCbase elec.vACbase elec.vACbase]
+    C=dut.C .* [elec.iDCbase; elec.iACbase; elec.iACbase]
+    D=dut.D .* [elec.iDCbase; elec.iACbase; elec.iACbase] ./
+        [elec.vDCbase elec.vACbase elec.vACbase]
+    if haskey(net.elements,:DC_load)
+        # Eliminate only the algebraic DC node, not converter states. KCL:
+        # (Ddc + 1/R)*vdc = -Cdc*x - Ddc,ac*vac. Aeff retains all coupled
+        # DC-control modes. Native get_y resistor owns its physical conductance.
+        g=real(PowerImpedance.get_y(net.elements[:DC_load],0.0im)[1,1])
+        denom=D[1,1]+g
+        A=A-B[:,1:1]*(C[1:1,:]/denom)
+        Bac=B[:,2:3]-B[:,1:1]*(D[1:1,2:3]/denom)
+        Cac=C[2:3,:]-D[2:3,1:1]*(C[1:1,:]/denom)
+        Dac=D[2:3,2:3]-D[2:3,1:1]*(D[1:1,2:3]/denom)
+    else
+        Bac,Cac,Dac=B[:,2:3],C[2:3,:],D[2:3,2:3]
+    end
+    gate=network_stability(A,Bac,Cac,Dac,grid_y,form.R,form.L,rotation)
+    gate["DC_termination"]=haskey(net.elements,:DC_load) ?
+        "physical DC resistor; exact algebraic node elimination, converter DC states retained" : "ideal DC voltage source"
     return gate
 end

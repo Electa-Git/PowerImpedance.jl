@@ -97,7 +97,14 @@ function prepare_resonance_fixture(;directory=joinpath(ROOT,"data","L1-08"))
     step=merge(spec,(;time_step=spec.time_step/2))
     append!(models,prepare_scan_projects(directory,list,step,[axis];prefix=scan_prefix(spec)*"half_step__"))
     for (key,model) in models;record_project!(record,key,model,directory);end
-    write_response(joinpath(directory,reference_filename(spec)),reference,spec.frequencies;quantity=spec.quantity)
+    reference_path=joinpath(directory,reference_filename(spec))
+    if isfile(reference_path)
+        frozen=read_response(reference_path,3,spec.frequencies)
+        native_reference_check(spec,reference,frozen)["passed"] ||
+            error("prepared resonance reference changed beyond solver-scale guard")
+    else
+        write_response(reference_path,reference,spec.frequencies;quantity=spec.quantity)
+    end
     record["resonance_scan"]=merge(scan_record(spec),Dict("bus"=>"Bus5","witness_axis"=>axis,
         "frequency_spacing_Hz"=>.25,"frequency_band_Hz"=>[312.,322.],"existing_frequency_reused_Hz"=>[316.],
         "resolution_gate"=>"both half-power crossings and at least six grid intervals per width; five points inside",
@@ -109,6 +116,8 @@ function prepare_resonance_fixture(;directory=joinpath(ROOT,"data","L1-08"))
         "byte_estimate_provenance"=>"retained PSCAD OUT: 24-byte numeric columns, first 23 bytes, CRLF, 74-byte project header; six scalar signals plus time",
         "selection"=>"Bus5 a/b/c voltage and outward shunt a/b/c current only; remove unused master:pgb instances from Main; keep all electrical meters/wires",
         "sampling"=>"largest integration-grid multiple dividing all windows and run duration with >=40 samples per highest measured sideband")
+    record_native_reference!(record,directory,spec,reference,
+        read_response(reference_path,3,spec.frequencies),list; purpose="resonance preparation verification")
     record["resonance_scan"]["export_commit"] = readchomp(`git -C $REPOSITORY rev-parse HEAD`)
     record["resonance_scan"]["export_source_files"] = source_record()
     record["source_files"]=source_record()
@@ -124,14 +133,14 @@ function run_resonance!(record,net,list,base;directory,remote,deadline)
     spec=merge(spec,(;tone_peak_pu=Float64(prepared["tone_peak_pu"])))
     scan_record(spec)==Dict(key=>prepared[key] for key in keys(scan_record(spec))) || error("resonance scan definition changed")
     stored=read_response(joinpath(directory,reference_filename(spec)),3,spec.frequencies)
-    isapprox(reference,stored;rtol=1e-12,atol=1e-14) || error("resonance reference changed")
+    record_native_reference!(record,directory,spec,reference,stored,list; purpose="resonance recomputation")
     results=Dict{String,P.PSCADResult}();models=Dict{String,P.PSCADModel}()
     for axis in ["baseline";spec.axes]
         key=scan_prefix(spec)*axis;model=existing_model(record,key,list,spec,directory)
         models[axis]=model;results[axis]=execute_axis!(record,key,model,directory,remote,deadline)
     end
     output=mkpath(joinpath(directory,"analysis",spec.protocol))
-    quality=compare_frequency_runs(results,models,reference,output;spec)
+    quality=compare_frequency_runs(results,models,stored,output;spec)
     axis=prepared["witness_axis"];column=only(findall(==(axis),spec.axes))
     base_column,base_quality=single_response(results[axis],results["baseline"],models[axis],spec,column)
     half_spec=merge(spec,(;tone_peak_pu=spec.tone_peak_pu/2));half_key=scan_prefix(spec)*"half_amplitude_"*axis
@@ -153,7 +162,7 @@ function run_resonance!(record,net,list,base;directory,remote,deadline)
     old_reference=read_response(joinpath(directory,reference_filename(base)),6,base.frequencies)
     frequencies=sort([spec.frequencies;316.]);old_k=only(findall(==(316.),base.frequencies))
     measured=cat((f==316. ? old[4:6,4:6,old_k] : fine[:,:,only(findall(==(f),spec.frequencies))] for f in frequencies)...;dims=3)
-    expected=cat((f==316. ? old_reference[4:6,4:6,old_k] : reference[:,:,only(findall(==(f),spec.frequencies))] for f in frequencies)...;dims=3)
+    expected=cat((f==316. ? old_reference[4:6,4:6,old_k] : stored[:,:,only(findall(==(f),spec.frequencies))] for f in frequencies)...;dims=3)
     rule=resonance_qualification(frequencies,measured,expected)
     valid=quality["valid"] && record["tier_c_result"]["valid"]
     fine_rows=comparison_rows(frequencies,scale_response(measured,spec),scale_response(expected,spec);valid)

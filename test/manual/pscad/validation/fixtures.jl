@@ -1,5 +1,5 @@
 # The registry is a catalogue of frozen physical circuits, not a dispatch layer.
-# L2 currently contains one strong-grid TLC; L3/L4 circuits remain later work.
+# L2 TLC variants retain the M4/M5b controls; L3/L4 remain later work.
 const REGISTRY = [
     (id = "L1-01", description = "AC series/parallel RLC; RL two-source witness",
         parent = "M1 small_ac_network", factory = () -> ac_rl_network(),
@@ -68,6 +68,46 @@ const REGISTRY = [
         dissipativity = "complete-network Nyquist and located roots required; no passive shortcut",
         differences = ["M4 Padé 3/3 200 us modulation delay versus PSCAD exact delay; quantify phase in band",
             "averaged TLC; limits retained at M4 values; ideal DC source; no DC cable"],
+        tiers = ["A", "C"], estimated_nodes = 45),
+    (id = "L2-02", description = "TLC P-f/Q, SCR 8 / X/R 10",
+        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        factory = () -> tlc_strong_network(mode = :pf, scr = 8.0),
+        topology = "AC source — RL — TLC; ideal DC source",
+        physics = ["frequency support lag", "PLL/grid interaction", "terminated AC-port admittance"],
+        dissipativity = "complete-network Nyquist and all finite descriptor roots required",
+        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "L2-01 already contains the same M4 frequency support lag; explicit mode witness"],
+        tiers = ["A", "C"], estimated_nodes = 45),
+    (id = "L2-03", description = "TLC P/Q-V, SCR 8 / X/R 10",
+        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        factory = () -> tlc_strong_network(mode = :qv, scr = 8.0),
+        topology = "AC source — RL — TLC; ideal DC source",
+        physics = ["voltage support lag/droop", "PLL/grid interaction", "terminated AC-port admittance"],
+        dissipativity = "complete-network Nyquist and all finite descriptor roots required",
+        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "Q-V K=20, omega_c=100 rad/s; P has no frequency support"],
+        tiers = ["A", "C"], estimated_nodes = 45),
+    (id = "L2-04", description = "TLC P/VAC, SCR 8 / X/R 10",
+        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        factory = () -> tlc_strong_network(mode = :vac, scr = 8.0),
+        topology = "AC source — RL — TLC; ideal DC source",
+        physics = ["AC voltage regulation", "PLL/grid interaction", "terminated AC-port admittance"],
+        dissipativity = "complete-network Nyquist and all finite descriptor roots required",
+        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "VAC NoFilter, Kp=0, Ki=100; P has no frequency support"],
+        tiers = ["A", "C"], estimated_nodes = 45),
+    (id = "L2-05", description = "TLC Vdc/Q with resistive DC load, SCR 8 / X/R 10",
+        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        factory = () -> tlc_strong_network(mode = :vdc, scr = 8.0),
+        topology = "AC source — RL — TLC; DC — resistor — zero-voltage reference",
+        physics = ["DC voltage regulation and AC/DC feedback", "PLL/grid interaction", "terminated AC-port admittance"],
+        dissipativity = "complete-network Nyquist and all finite descriptor roots required",
+        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "DC load 640^2/70 ohm; remote zero-voltage reference is a short, not a clamp at the converter"],
+        tiers = ["A", "C"], estimated_nodes = 49),
+    (id = "L2-06", description = "TLC P/Q weak-grid twin, SCR 2.5 / X/R 10",
+        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        factory = () -> tlc_strong_network(mode = :pq, scr = 2.5),
+        topology = "AC source — RL — TLC; ideal DC source",
+        physics = ["weak-grid PLL/controller coupling", "PLL/grid interaction", "terminated AC-port admittance"],
+        dissipativity = "complete-network Nyquist and all finite descriptor roots required",
+        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "Identical M4 controls and requests to L2-01, including its P-f lag"],
         tiers = ["A", "C"], estimated_nodes = 45)
 ]
 
@@ -200,17 +240,37 @@ function l1_settings()
 end
 
 # M4 owned factory supplies every TLC block; only topology and Q=5 MVAr change.
-function tlc_strong_network()
+function tlc_strong_network(; mode = :pq, scr = 8.0)
     parent = PSCADFixtures.tlc_case2_network().classic
     net = Network()
     net.voltageBase .= parent.voltageBase
     dut = deepcopy(parent.elements[:DUT])
-    dut.setpoint = Setpoint(Pac=70.0, Qac=5.0, Vac=220sqrt(2/3), Pdc=70.0, Vdc=640.0)
+    m = dut.element_model
+    # M4 fixtures.jl:tlc_network owns plant/PLL/current loops and P-f gains.
+    # M5b mapping table owns Q-V 20/100 and VAC 0/100 (NoFilter).
+    active = mode in (:pq, :pf) ? m.outerActive :
+        mode == :vdc ? PowerImpedance.OuterActiveVdcControl(
+            pi_ctrl = PowerImpedance.PIControl(Kp=5.0, Ki=5.0)) :
+        PowerImpedance.OuterActivePowerControl(pi_ctrl=m.outerActive.pi_ctrl,
+            support=PowerImpedance.NoFrequencySupport())
+    reactive = mode == :qv ? PowerImpedance.OuterReactiveQControl(
+        pi_ctrl=m.outerReactive.pi_ctrl,
+        support=PowerImpedance.VoltageSupportLag(K=20.0, ωc=100.0)) :
+        mode == :vac ? PowerImpedance.OuterReactiveVacControl(
+            pi_ctrl=PowerImpedance.PIControl(Kp=0.0, Ki=100.0),
+            filter=PowerImpedance.NoFilter()) : m.outerReactive
+    mode in (:pq, :pf, :qv, :vac, :vdc) || error("unknown TLC fixture mode $mode")
+    # A resistive DC load consumes power: Vdc-control case rectifies from AC.
+    power = mode == :vdc ? -70.0 : 70.0
+    dut = tlc(elec=m.elec, meas=m.meas, sync=m.sync, outerActive=active,
+        outerReactive=reactive, innerVoltage=m.innerVoltage,
+        innerCurrent=m.innerCurrent, mod=m.mod, limits=dut.limits,
+        setpoint=Setpoint(Pac=power,Qac=5.0,Vac=220sqrt(2/3),Pdc=power,Vdc=640.0))
     add!(net, :DUT, dut)
     for name in (:G3, :G_DC)
         add!(net, name, deepcopy(parent.elements[name]))
     end
-    z = 220.0^2 / 100.0 / 8
+    z = 220.0^2 / 100.0 / scr
     resistance = z/sqrt(101)
     inductance = 10resistance/(2π*50)
     add!(net, :Grid, impedance(z=s->resistance+inductance*s, pins=3, transformation=true))
@@ -221,8 +281,50 @@ function tlc_strong_network()
         connect!(net, (:G3,Symbol("2.$terminal")), :gnd)
     end
     connect!(net, (:DUT,Symbol("1.1")), :DC)
-    connect!(net, (:G_DC,Symbol("1.1")), :DC)
+    if mode == :vdc
+        # PF-only zero-voltage reference draws zero power. fixture_netlist
+        # contracts it to ground; emitters/impedance.jl:emit! supplies the
+        # existing grounded R/2 pole-resistor construction.
+        net.elements[:G_DC] = dc_source(setpoint=Setpoint(Vdc=0.0))
+        add!(net, :DC_load, impedance(z=s->640.0^2/70.0,pins=1))
+        connect!(net, (:DC_load,Symbol("1.1")), :DC)
+        connect!(net, (:DC_load,Symbol("2.1")), :DC_zero)
+        connect!(net, (:G_DC,Symbol("1.1")), :DC_zero)
+    else
+        connect!(net, (:G_DC,Symbol("1.1")), :DC)
+    end
     connect!(net, (:G_DC,Symbol("2.1")), :gnd)
     connect!(net)
     return net
+end
+
+# PF represents a DC resistor as a two-bus branch and needs a remote 0 V
+# reference. PSCAD's existing DC-impedance emitter directly supports a grounded
+# terminal (emitters/impedance.jl:1-37), while dc_source! requires positive Vdc.
+# Collapse only that ideal zero-voltage reference to ground, preserving the
+# converter's solved point and resistor's terminal-1 power. No component or
+# PSCAD field is introduced: this is the exact same circuit with its ideal
+# zero-voltage source contracted to node identity.
+function fixture_netlist(net, point)
+    list=P.netlist(net,point)
+    haskey(net.elements,:DC_load) || return list
+    source=only(filter(e->e.name==:G_DC,list.elements))
+    source.setpoint.Vdc==0.0 || error("DC ground reference must be exactly zero")
+    ground_bus=only(source.terminals[findall(t->!t.grounded,source.terminals)]).bus
+    elements=P.NetlistElement[]
+    for e in list.elements
+        e.name==:G_DC && continue
+        terminals=[t.bus==ground_bus ?
+            P.Terminal(t.element,t.side,t.terminals,fill(:gnd,length(t.nets)),nothing,true) : t
+            for t in e.terminals]
+        role=e.name==:DC_load ? :load : e.role
+        push!(elements,P.NetlistElement(e.name,e.pscad,e.element,e.model,terminals,role,e.setpoint))
+    end
+    op=list.operating_point
+    operating_point=P.OperatingPointRecord(
+        Dict(k=>v for (k,v) in op.bus_states if k!=ground_bus),
+        Dict(k=>v for (k,v) in op.branch_flows if k!=:G_DC),
+        Dict(k=>v for (k,v) in op.setpoints if k!=:G_DC),op.slack_bus,op.bases)
+    return P.Netlist(filter(b->b.key!=ground_bus,list.buses),elements,operating_point,
+        list.voltageBase,list.frequency)
 end

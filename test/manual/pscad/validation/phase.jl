@@ -69,7 +69,7 @@ function applicable_scan(id, net, list; definition = nothing)
                 window_starts = (start, start + 1.0), simulation_time = start + 2.0,
                 estimated_station_seconds = id == "L1-03" ? 840 : 2040))
         end
-    elseif id == "L2-01"
+    elseif startswith(id,"L2-")
         # Already frozen by the active-device measurement definition.
     elseif id == "L1-05"
         spec = merge(spec, (; protocol = "settled", window_starts = (6.0, 7.0),
