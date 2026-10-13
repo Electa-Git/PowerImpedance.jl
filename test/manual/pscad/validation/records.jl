@@ -60,6 +60,8 @@ function source_record()
             "src/PSCAD/blocks.jl", "src/PSCAD/export.jl", "src/PSCAD/emitters/tlc.jl",
             "src/PSCAD/emitters/sources.jl", "src/PSCAD/emitters/probes.jl",
             "src/PSCAD/emitters/impedance.jl", "ext/PowerImpedancePSCADExt/writer.jl"])
+    append!(paths, ["src/Network/Components/converter/MMC/" * file for file in
+        ("MMC.jl", "electrical.jl", "modulation.jl", "inner_current.jl", "energy.jl")])
     return [Dict("path" => path, "sha256" => digest(joinpath(REPOSITORY, path)))
             for path in paths]
 end

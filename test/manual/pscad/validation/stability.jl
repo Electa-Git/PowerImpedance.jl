@@ -1,4 +1,4 @@
-# Complete source-referenced TLC + RL network. Native Jacobian blocks own control
+# Complete source-referenced converter + RL network. Native Jacobian blocks own control
 # physics; native get_y owns the grid's dq signs. The descriptor imposes KCL,
 # rather than testing a converter alone. No distributed-line state truncation.
 function network_poles(A, B, C, D, resistance, inductance, rotation)
@@ -55,15 +55,14 @@ function stability_gate(net, entry)
     startswith(entry.id,"L1-") && return passive_gate(net,entry)
     startswith(entry.id,"L2-") || error("no complete-network gate for $(entry.id)")
     dut=net.elements[:DUT]
-    elec=dut.element_model.elec
+    bases=converter_bases(dut.element_model.elec)
     form=P.identify_rlc(net.elements[:Grid]; name=:Grid).form
     grid_y(s)=PowerImpedance.get_y(net.elements[:Grid],s)[1:2,1:2]
     rotation=real.((inv(grid_y(0.0im))-form.R*I)/form.L)
     A=dut.A
-    B=dut.B ./ [elec.vDCbase elec.vACbase elec.vACbase]
-    C=dut.C .* [elec.iDCbase; elec.iACbase; elec.iACbase]
-    D=dut.D .* [elec.iDCbase; elec.iACbase; elec.iACbase] ./
-        [elec.vDCbase elec.vACbase elec.vACbase]
+    B=dut.B ./ bases.voltage_inputs'
+    C=dut.C .* bases.current_outputs
+    D=dut.D .* bases.current_outputs ./ bases.voltage_inputs'
     if haskey(net.elements,:DC_load)
         # Eliminate only the algebraic DC node, not converter states. KCL:
         # (Ddc + 1/R)*vdc = -Cdc*x - Ddc,ac*vac. Aeff retains all coupled

@@ -108,7 +108,21 @@ const REGISTRY = [
         physics = ["weak-grid PLL/controller coupling", "PLL/grid interaction", "terminated AC-port admittance"],
         dissipativity = "complete-network Nyquist and all finite descriptor roots required",
         differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "Identical M4 controls and requests to L2-01, including its P-f lag"],
-        tiers = ["A", "C"], estimated_nodes = 45)
+        tiers = ["A", "C"], estimated_nodes = 45),
+    [(id = id, description = "MMC $(label), SCR $(scr) / X/R 10",
+        parent = "M5a/M5b mmc_network parameters and controls",
+        factory = () -> mmc_grid_network(; mode, scr),
+        topology = mode == :vdc ? "AC source — RL — MMC; physical DC resistor to ground" :
+            "AC source — RL — MMC; ideal DC source",
+        physics = ["PLL/grid interaction", "TEC/ZSCC/CCSC", "terminated AC-port admittance"],
+        dissipativity = "complete-network Nyquist and all finite descriptor roots required",
+        differences = ["averaged MMC with uncompensated modulation; M5a/M5b parameters unchanged",
+            "Thevenin SCR at external 380 kV / 1000 MVA; transformer ratio 333/380 retained"],
+        tiers = ["A", "C"], estimated_nodes = mode == :vdc ? 65 : 61)
+     for (id, mode, label, scr) in (("L2-07", :pq, "P/Q", 8.0),
+         ("L2-08", :pf, "P-f/Q", 8.0), ("L2-09", :qv, "P/Q-V", 8.0),
+         ("L2-10", :vac, "P/VAC", 8.0), ("L2-11", :vdc, "Vdc/Q", 8.0),
+         ("L2-12", :pq, "P/Q weak-grid twin", 2.5))]...
 ]
 
 function fixture(id)
@@ -327,4 +341,43 @@ function fixture_netlist(net, point)
         Dict(k=>v for (k,v) in op.setpoints if k!=:G_DC),op.slack_bus,op.bases)
     return P.Netlist(filter(b->b.key!=ground_bus,list.buses),elements,operating_point,
         list.voltageBase,list.frequency)
+end
+
+# M5a/M5b owns the MMC and every controller; only the terminal network changes.
+function mmc_grid_network(; mode = :pq, scr = 8.0)
+    parent = PSCADFixtures.mmc_network(mode).state
+    dut = deepcopy(parent.elements.DUT)
+    elec = dut.element_model.elec
+    voltage = elec.vAC_base / elec.turnsRatio
+    power = mode == :vdc ? -600.0 : 600.0
+    dut.setpoint = Setpoint(Pac=power, Qac=200.0, Vac=voltage,
+        Vdc=elec.vDC_base, Pdc=power)
+    net = Network()
+    net.voltageBase[1] = voltage / sqrt(2)
+    add!(net, :DUT, dut)
+    add!(net, :G3, deepcopy(parent.elements.G_AC))
+    add!(net, :G_DC, dc_source(setpoint=Setpoint(Vdc=mode == :vdc ? 0.0 : elec.vDC_base)))
+    impedance_magnitude = (voltage * sqrt(3/2))^2 / elec.Sbase / scr
+    resistance = impedance_magnitude / sqrt(101)
+    inductance = 10resistance / (2π*50)
+    add!(net, :Grid, impedance(z=s->resistance+inductance*s, pins=3, transformation=true))
+    for terminal in 1:2
+        for (element, side, bus) in ((:DUT,2,"AC"), (:Grid,1,"AC"), (:Grid,2,"Grid"), (:G3,1,"Grid"))
+            connect!(net, (element, Symbol("$side.$terminal")), Symbol(bus*string(terminal)))
+        end
+        connect!(net, (:G3,Symbol("2.$terminal")), :gnd)
+    end
+    connect!(net, (:DUT,Symbol("1.1")), :DC)
+    if mode == :vdc
+        resistance_dc = elec.vDC_base^2 / abs(power)
+        add!(net, :DC_load, impedance(z=s->resistance_dc,pins=1))
+        connect!(net, (:DC_load,Symbol("1.1")), :DC)
+        connect!(net, (:DC_load,Symbol("2.1")), :DC_zero)
+        connect!(net, (:G_DC,Symbol("1.1")), :DC_zero)
+    else
+        connect!(net, (:G_DC,Symbol("1.1")), :DC)
+    end
+    connect!(net, (:G_DC,Symbol("2.1")), :gnd)
+    connect!(net)
+    return net
 end

@@ -4,7 +4,7 @@ include("validation.jl")
 const V = PSCADValidation
 const P = PowerImpedance.PSCAD
 @testset "All validation written project XML" begin
-    for entry in V.REGISTRY
+    for entry in (isempty(ARGS) ? V.REGISTRY : V.fixture.(ARGS))
         directory = joinpath(V.ROOT, "data", entry.id)
         record = TOML.parsefile(joinpath(directory, "manifest.toml"))
         baseline = read(

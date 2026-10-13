@@ -255,8 +255,8 @@ end
 end
 
 @testset "Passive catalogue and generated source plans" begin
-    @test length(V.REGISTRY) == 14
-    @test length(unique(entry.id for entry in V.REGISTRY)) == 14
+    @test length(V.REGISTRY) == 20
+    @test length(unique(entry.id for entry in V.REGISTRY)) == 20
     for entry in filter(e->startswith(e.id,"L1-"),V.REGISTRY)
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"
@@ -890,6 +890,123 @@ end
     end
 end
 
+@testset "MMC batch B: owned controls, terminal bases and DC feedback" begin
+    for (id,mode,scr) in (("L2-07",:pq,8.),("L2-08",:pf,8.),("L2-09",:qv,8.),
+        ("L2-10",:vac,8.),("L2-11",:vdc,8.),("L2-12",:pq,2.5))
+        net=V.fixture(id).factory()
+        parent=V.PSCADFixtures.mmc_network(mode).state.elements.DUT
+        dut=net.elements[:DUT];m=dut.element_model
+        @test repr(m)==repr(parent.element_model)
+        @test dut.limits==parent.limits
+        @test m.modulation isa PowerImpedance.UncompensatedModulation
+        @test m.sigma_control.tec isa PowerImpedance.TotalEnergyControl
+        @test m.sigma_control.zscc isa PowerImpedance.ZeroSequenceCurrentControl
+        @test m.sigma_control.ccsc isa PowerImpedance.CirculatingCurrentSuppressionControl
+        if mode==:vac
+            @test m.delta_control.outer_reactive.filter isa PowerImpedance.NoFilter
+        end
+        form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+        @test 380^2/1000/hypot(form.R,2π*50*form.L)≈scr
+        @test 2π*50*form.L/form.R≈10
+        @test dut.setpoint.Pac==(mode==:vdc ? -600. : 600.)
+        @test dut.setpoint.Qac==200. && dut.setpoint.Vdc==800.
+        point=power_flow(net);list=V.fixture_netlist(net,point)
+        spec,reference=V.applicable_scan(id,net,list)
+        bases=V.converter_bases(m.elec)
+        @test spec.voltage_bases≈fill(380sqrt(2/3),2)
+        @test spec.current_bases≈fill(1000sqrt(2)/(sqrt(3)*380),2)
+        @test spec.dc_voltage_base_kV==800. && spec.power_base_MVA==1000.
+        @test spec.time_step==(mode==:vdc ? 1.25e-6 : 2.5e-6)
+        @test V.step_definition(spec,75.).time_step==spec.time_step/2
+        @test spec.dc_clamped==(mode!=:vdc)
+        @test V.scan_record(spec)["power_base_MVA"]==1000.
+        # Verify state-space SI scaling against native full three-port Y,
+        # including both transformer cross terms and the DC-current factor.
+        B=dut.B./bases.voltage_inputs';C=dut.C.*bases.current_outputs
+        D=dut.D.*bases.current_outputs./bases.voltage_inputs'
+        for f in (1.,75.,1000.)
+            z=ComplexF64(2π*im*f)
+            y=PowerImpedance.get_y(dut,z)
+            @test C*((z*I-dut.A)\B)+D≈y rtol=1e-11 atol=1e-12
+            k=only(findall(==(f),spec.frequencies))
+            if mode==:vdc
+                # Independent full-node KCL with the physical resistor.
+                g=600/800^2
+                voltage=vcat(-(y[1,1]+g)\y[1:1,2:3],Matrix{ComplexF64}(I,2,2))
+                @test reference[:,:,k]≈(y*voltage)[2:3,:] rtol=1e-11
+                @test norm(reference[:,:,k]-y[2:3,2:3])>0
+            else
+                @test reference[:,:,k]≈y[2:3,2:3]
+            end
+        end
+        if mode==:vdc
+            @test all(e.name!=:G_DC for e in list.elements)
+            load=only(filter(e->e.name==:DC_load,list.elements))
+            @test load.terminals[2].grounded
+            @test P.identify_rlc(net.elements[:DC_load];name=:DC_load).form.R≈800^2/600
+        end
+        for axis in ["baseline";spec.axes]
+            plan,_=V.scan_plan(list,spec,axis)
+            @test P.check_connectivity(plan)===nothing
+            @test count(c->c isa P.ModuleInstancePlan && occursin(":CurrentPort_",c.defn),plan.main.components)==1
+            probe=only(filter(c->c.kind==:current && c.element=="DUT" && c.side=="2",plan.probes.channels))
+            @test probe.orientation==:out
+            if mode==:vdc
+                @test !any(c->c isa P.ComponentPlan && c.defn=="master:source_1",plan.main.components)
+                @test count(c->c isa P.ComponentPlan && c.defn=="master:resistor" &&
+                    parse(Float64,first(split(Dict(c.params)["R"])))≈800^2/1200,plan.main.components)==2
+            end
+        end
+    end
+    # The unchanged 1e-6 pu DC clamp gate must use the MMC's 800 kV base.
+    net=V.fixture("L2-07").factory();list=V.fixture_netlist(net,power_flow(net))
+    original,_=V.applicable_scan("L2-07",net,list)
+    spec=merge(original,(frequencies=[7.],window_starts=(0.,1.),window_duration=1.,))
+    time=collect(0.:.001:2.);wave=cos.(2π*7*time)
+    baseline=(input=zeros(length(time),2),output=zeros(length(time),2),
+        input_base=spec.voltage_bases,output_base=spec.current_bases,
+        drive=zeros(length(time),2),drive_base=spec.current_bases,dc_voltage=fill(800.,length(time)))
+    run=merge(baseline,(drive=hcat(spec.tone_peak_pu*spec.current_bases[1]*wave,zeros(length(time))),
+        dc_voltage=800 .+ .00072wave))
+    @test V.scan_quality(time,baseline,[run],spec;columns=[1])["valid"]
+    @test !V.scan_quality(time,baseline,[merge(run,(dc_voltage=800 .+ .00088wave,))],spec;columns=[1])["valid"]
+end
+
+@testset "Adaptive witness windows contain whole tone and frame periods" begin
+    spec = merge(V.l1_settings(), (protocol = "dq_active", time_step = 2.5e-6,
+        sample_step = 20e-6, window_starts = (8.0, 9.0)))
+    old_time = collect(0.0:spec.sample_step:8.2)
+    old_signal = reshape(cos.(2π * 75 .* old_time), :, 1)
+    @test_throws ArgumentError V.dft_phasors(old_time, old_signal, [75.0, 1000.0];
+        start = 8.0, duration = 0.1)
+    witness = V.step_definition(spec, 75.0)
+    @test witness.frequencies == [75.0, 1000.0]
+    @test witness.window_duration == 0.12
+    @test witness.window_starts == (8.0, 8.12)
+    @test witness.simulation_time == 8.24
+    @test_throws ArgumentError V.dft_phasors(old_time, old_signal, witness.frequencies;
+        start = last(witness.window_starts), duration = witness.window_duration)
+    time = collect(0.0:witness.sample_step:witness.simulation_time)
+    signal = reshape(V.multitone(time, witness.frequencies, witness.phases;
+        amplitude = 1.0, onset = 2.0), :, 1)
+    for start in witness.window_starts
+        phasors = V.dft_phasors(time, signal, witness.frequencies;
+            start, duration = witness.window_duration)
+        @test vec(phasors) ≈ cis.(witness.phases) atol = 1e-10
+    end
+    for frequency in filter(!=(50.0), spec.frequencies)
+        band = V.step_definition(spec, frequency)
+        @test band.window_duration >= 0.1
+        @test all(isapprox.(band.frequencies .* band.window_duration,
+            round.(band.frequencies .* band.window_duration); atol = 1e-10))
+        @test isinteger(round(50 * band.window_duration; digits = 10))
+        @test all(isapprox.(collect(band.window_starts) ./ band.sample_step,
+            round.(collect(band.window_starts) ./ band.sample_step); atol = 1e-8))
+        @test isapprox(band.simulation_time / band.sample_step,
+            round(band.simulation_time / band.sample_step); atol = 1e-8)
+    end
+end
+
 @testset "TLC batch controls, grid and physical DC termination" begin
     for (id,scr) in (("L2-02",8.0),("L2-03",8.0),("L2-04",8.0),("L2-05",8.0),("L2-06",2.5))
         net=V.fixture(id).factory()
@@ -927,8 +1044,8 @@ end
     @test load.terminals[2].grounded && load.terminals[2].bus===nothing
     spec,reference=V.applicable_scan("L2-05",net,list)
     @test !spec.dc_clamped && spec.active && spec.drive=="current"
-    @test spec.time_step==2.5e-6 && spec.window_starts==(8.,9.)
-    @test V.step_definition(spec,18.0).time_step==1.25e-6
+    @test spec.time_step==0.625e-6 && spec.window_starts==(8.,9.)
+    @test V.step_definition(spec,18.0).time_step==0.3125e-6
     for (k,f) in enumerate(spec.frequencies)
         y=PowerImpedance.get_y(net.elements[:DUT],ComplexF64(2π*im*f))
         g=70/640^2
@@ -989,7 +1106,7 @@ end
     @test V.scan_quality(time,baseline,[run],short;columns=[1])["valid"]
     @test !V.scan_quality(time,baseline,[run],merge(short,(dc_clamped=true,));columns=[1])["valid"]
     frequencies=[1.,7.,137.]
-    known=cat((V.tlc_port_y(net,ComplexF64(2π*im*f)) for f in frequencies)...;dims=3)
+    known=cat((V.converter_port_y(net,ComplexF64(2π*im*f)) for f in frequencies)...;dims=3)
     inputs=[zeros(length(time),2) for _ in 1:2]
     outputs=[zeros(length(time),2) for _ in 1:2]
     mixing=[0.4 0.15;-0.1 0.35]

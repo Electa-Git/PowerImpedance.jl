@@ -6,7 +6,7 @@ function port_probe(list, element, side)
 end
 
 function scan_definition(id, net, list)
-    startswith(id,"L2-") && return tlc_scan_definition(net,list; id)
+    startswith(id,"L2-") && return converter_scan_definition(net,list; id)
     old = l1_settings()
     if id == "L1-01"
         buses = [port_probe(list, :branch, 1)]
@@ -61,7 +61,7 @@ end
 
 function scan_reference(net, list, spec)
     if startswith(spec.id,"L2-")
-        return cat((tlc_port_y(net, ComplexF64(im*2π*f))
+        return cat((converter_port_y(net, ComplexF64(im*2π*f))
             for f in spec.frequencies)...; dims=3)
     elseif spec.id == "L1-01"
         return cat(
@@ -151,7 +151,7 @@ function scan_record(spec)
         "protocol" => get(spec, :protocol, ""),
         "applicable_comparison" => spec.dimension == 3 ? "phase-domain physics" : "native dq/DC physics",
         "phase_order" => spec.dimension == 3 ? ["a", "b", "c"] : String[],
-        "SI_units" => startswith(spec.id,"L2-") ? "kV/kA: S; fixed nominal 50 Hz dq, phase-peak 179.629247804 kV / 0.371134809513 kA, 100 MVA total three-phase rating base" :
+        "SI_units" => startswith(spec.id,"L2-") ? "kV/kA: S; fixed nominal 50 Hz dq; declared external AC phase-peak voltage/current bases and total three-phase rating" :
             "phase kV/kA imply S for Y and ohm for Z; phase-peak AC bases, 1000 MVA total three-phase base",
         "IEEE9_blocks" => spec.id == "L1-08" && spec.dimension == 3 ? "separate local Bus1/Bus5 3x3; full 6x6 transfer retained as evidence" : "not applicable",
         "frequencies" => spec.frequencies, "phases" => spec.phases,
@@ -174,7 +174,9 @@ function scan_record(spec)
         "excluded_ac_frequency_Hz" =>
             spec.dimension == 2 && spec.id != "L1-01" ? [50.0] : Float64[])
     if startswith(spec.id,"L2-")
-        record["drive"]="shunt current at TLC AC terminal; measured voltage matrix is the Y input"
+        record["drive"]="shunt current at converter AC terminal; measured voltage matrix is the Y input"
+        record["dc_voltage_base_kV"]=spec.dc_voltage_base_kV
+        record["power_base_MVA"]=spec.power_base_MVA
         record["active"]=true
         record["dc_clamped"]=spec.dc_clamped
         record["reference_scope"]=spec.dc_clamped ? "native DUT AC block with DC clamped" : "native DUT + DC resistor AC-terminal Schur reduction; remote zero-voltage reference grounded"
@@ -183,17 +185,35 @@ function scan_record(spec)
     return record
 end
 
-function tlc_scan_definition(net,list; id="L2-01")
+# Native state-space voltage inputs and inward-current outputs retain each
+# converter's normalization. Measurement bases refer to the external terminal.
+function converter_bases(e::PowerImpedance.ElectricalTLC)
+    return (voltage_inputs=[e.vDCbase,e.vACbase,e.vACbase],
+        current_outputs=[e.iDCbase,e.iACbase,e.iACbase],
+        ac_voltage=e.vACbase, ac_current=e.iACbase, dc_voltage=e.vDCbase, power=e.Sbase)
+end
+
+function converter_bases(e::PowerImpedance.ElectricalMMC)
+    current = 2e.Sbase / (3e.vAC_base) * e.turnsRatio
+    return (voltage_inputs=[e.vDC_base,e.vAC_base,e.vAC_base],
+        current_outputs=[e.Sbase/e.vDC_base,current,current],
+        ac_voltage=e.vAC_base/e.turnsRatio, ac_current=current,
+        dc_voltage=e.vDC_base, power=e.Sbase)
+end
+
+function converter_scan_definition(net,list; id="L2-01")
     old=l1_settings()
     elec=net.elements[:DUT].element_model.elec
+    bases=converter_bases(elec)
     bus=port_probe(list,:DUT,2)
     frequencies=filter(!=(50.0),old.frequencies)
     spec=merge(old,(; id,quantity="Y",dimension=2,buses=[bus],
         currents=[("DUT","2")],axes=["p1_d","p1_q"], frequencies,
         phases=[-π*k*(k-1)/length(frequencies) for k in eachindex(frequencies)],
-        voltage_bases=fill(elec.vACbase,2),current_bases=fill(elec.iACbase,2),
+        voltage_bases=fill(bases.ac_voltage,2),current_bases=fill(bases.ac_current,2),
+        dc_voltage_base_kV=bases.dc_voltage, power_base_MVA=bases.power,
         drive="current", dc_clamped=!haskey(net.elements,:DC_load), active=true,protocol="dq_active", tone_peak_pu=5e-5,
-        time_step=2.5e-6,sample_step=20e-6,injection_time=2.0,
+        time_step=id=="L2-05" ? 0.625e-6 : id=="L2-11" ? 1.25e-6 : 2.5e-6,sample_step=20e-6,injection_time=2.0,
         window_starts=(8.0,9.0),window_duration=1.0,simulation_time=10.0,
         travel_lower_bound_s=0.0,estimated_station_seconds=1800))
     reference=scan_reference(net,list,spec)
@@ -203,7 +223,7 @@ end
 # Exact native nodal Schur reduction of the converter plus passive DC load.
 # The zero-voltage remote reference is ground; the AC Thevenin is excluded
 # because the meter measures DUT current alone (the load has no AC terminal).
-function tlc_port_y(net, s)
+function converter_port_y(net, s)
     y = PowerImpedance.get_y(net.elements[:DUT],s)
     haskey(net.elements,:DC_load) || return y[2:3,2:3]
     g = PowerImpedance.get_y(net.elements[:DC_load],s)[1,1]

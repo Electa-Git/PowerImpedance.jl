@@ -94,7 +94,7 @@ function scan_quality(time, baseline, runs, spec; columns = eachindex(spec.axes)
         end
     end
     if get(spec,:drive,"")=="current" && get(spec,:dc_clamped,true)
-        clamped=maximum(maximum(abs,run.dc_voltage-baseline.dc_voltage)/640 for run in runs)
+        clamped=maximum(maximum(abs,run.dc_voltage-baseline.dc_voltage)/spec.dc_voltage_base_kV for run in runs)
     end
     valid = drift <= 1e-3 && input_departure <= 0.01 && output_departure <= 0.01 &&
             amplitude_error <= 0.01 && clamped <= 1e-6
@@ -160,11 +160,13 @@ step_prefix(spec) = scan_prefix(spec) * "half_step_" * join(round.(Int, spec.fre
 
 function step_definition(spec, frequency)
     frequencies = frequency == 1000.0 ? [750.0, 1000.0] : unique(sort([frequency, 1000.0]))
-    period = 1 / gcd(50, reduce(gcd, round.(Int, frequencies)))
-    duration = max(0.1, period)
+    common_frequency = gcd(50, reduce(gcd, round.(Int, frequencies)))
+    # The minimum window must contain whole common periods too: 75/1000 Hz
+    # needs 0.12 s, since a 0.1 s window contains 7.5 cycles at 75 Hz.
+    duration = ceil(Int, 0.1 * common_frequency) / common_frequency
     settle = get(spec, :protocol, "") in ("settled", "abc_settled", "dq_active") ?
              first(spec.window_starts) : 0.8
-    start = ceil(settle / duration) * duration
+    start = ceil(Int, settle * common_frequency) / common_frequency
     n = length(frequencies)
     return merge(spec,
         (; frequencies, phases = [-π * k * (k - 1) / n for k in 1:n],
