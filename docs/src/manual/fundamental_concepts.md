@@ -834,7 +834,8 @@ for
 
 $$\begin{aligned} D &= \begin{cases} \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} & \text{for cables } i \neq j, \\ r_i & \text{radius of the cable } i, \end{cases} \\ H &= \begin{cases} y_i + y_j & \text{for cables } i \neq j, \\ 2y_i & \text{for the cable } i, \end{cases} \end{aligned}$$
 
-and  $\gamma \approx 0.5772156649$  being Euler's constant.
+and $\gamma = \exp(\gamma_{\mathrm E}) \approx 1.781072418$, where
+$\gamma_{\mathrm E} \approx 0.5772156649$ is Euler's constant.
 
 According to [Ametani1980, DeArizonDommel1987](@cite), one cable is represented with its series impedance  $\mathbf{Z}_{ii}$  matrix. Each matrix  $\mathbf{Z}_{ii}$  has the size  $n_c \times n_c$  and its entries for  $j \in \{1, \dots, n_c - 1\}$  are given by
 

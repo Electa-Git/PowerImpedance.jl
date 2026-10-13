@@ -39,6 +39,16 @@
 
 ### Fixed
 
+- Correct the Wedepohl–Wilcox cable earth-return logarithmic constant to
+  `exp(γ_E) ≈ 1.781072418` in both self and mutual terms. For earth relative
+  permeability 1, this removes excess reactance of approximately
+  `1.41592 f μΩ/m` (70.7961 μΩ/m at 50 Hz) from each earth coefficient;
+  the correction vanishes at DC. Evaluate each cable's self earth-return term
+  at its own burial depth instead of reusing the first cable's depth;
+  common-depth cable groups retain bit-identical results from the constant fix.
+- Start repeated power-flow solves from the converged point and seed converter
+  current from apparent power, eliminating drift in repeated solves of the TLC
+  DC-voltage-control case.
 - Correct inferred transformer voltage levels for unrated transformers.
 - Set PSCAD transformer winding ratings from the solved primary voltage.
 - Correct the Δ-triplen energy-balancing frame direction, changing compensated-MMC admittances slightly and damping the previously unstable 150 Hz mode.

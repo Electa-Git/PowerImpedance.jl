@@ -220,7 +220,7 @@ function eval_parameters(c::Cable, s::Complex)
 	μᵍ = μᵣᵍ * μ₀
 	# ϵᵍ = ϵᵣᵍ * ϵ₀   # not used in the original assembly
 	# σᵍ = 1/ρᵍ        # not used in the original assembly
-	γE = 0.5772156649
+	γE = exp(Base.MathConstants.eulergamma)
 
 	nₗ = length(c.conductors)
 	n = length(c.positions)
@@ -263,18 +263,11 @@ function eval_parameters(c::Cable, s::Complex)
 			Zb[i-1, i-1] += Zᵃᵃ
 		end
 
-		if i == nₗ
-			mᵍ = sqrt(s * μᵍ / ρᵍ)
-			H = 2 * c.positions[1][2]  # keep original behavior (uses positions[1] for self term)
-			d = max_r
-			Zᵍ = s*μᵍ/(2π) * (-log(γE*mᵍ*d/2) + 0.5 - 2*mᵍ*H/3)
-			Zb[i, i] += Zᵍ
-		end
-
 		i += 1
 	end
 
 	# shunt "P" build from insulators (same indexing logic as original)
+	outer_insulation = nothing
 	i = 1
 	for key in keys(c.insulators)
 		rᵢ = c.insulators[key].rᵢ
@@ -285,7 +278,12 @@ function eval_parameters(c::Cable, s::Complex)
 		Zⁱ = s*μ/(2π) * log(rₒ/rᵢ)
 		Pⁱ = log(rₒ/rᵢ) / (2π*ϵ)
 
-		Zb[i, i] += Zⁱ
+		# Preserve the original outer-diagonal addition order: metal, earth, insulation.
+		if i == nₗ
+			outer_insulation = Zⁱ
+		else
+			Zb[i, i] += Zⁱ
+		end
 		Pb[1:i, 1:i] .+= ones(ComplexF64, i, i) .* Pⁱ
 
 		i += 1
@@ -298,8 +296,19 @@ function eval_parameters(c::Cable, s::Complex)
 		P[idx, idx] .= Pb
 	end
 
-	# mutual earth-return impedance between cables (only at outer layer index, same as original)
+	# Self earth return uses each cable's own depth at its outer conducting layer.
 	mᵍ = sqrt(s * μᵍ / ρᵍ)
+	for i in 1:n
+		H = 2 * c.positions[i][2]
+		d = max_r
+		Zᵍ = s*μᵍ/(2π) * (-log(γE*mᵍ*d/2) + 0.5 - 2*mᵍ*H/3)
+		Z[i*nₗ, i*nₗ] += Zᵍ
+		if outer_insulation !== nothing
+			Z[i*nₗ, i*nₗ] += outer_insulation
+		end
+	end
+
+	# mutual earth-return impedance between cables (only at outer layer index, same as original)
 	for i in 1:n
 		for j in (i+1):n
 			H = c.positions[i][2] + c.positions[j][2]
