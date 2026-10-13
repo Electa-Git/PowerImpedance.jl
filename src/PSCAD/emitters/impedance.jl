@@ -22,8 +22,8 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Impedance}, 
     dc = left_bus.kind == :dc
     # Multiplying Z by 1/2 divides R and L, and doubles C in either topology.
     parts = impedance_parts(form; scale = dc ? 0.5 : 1.0)
-    first_probe = current_probe!(state, e, left, context)
-    second_probe = right.grounded ? nothing : current_probe!(state, e, right, context)
+    first_probe = current_probe!(state, e, left, context; orientation = :into)
+    second_probe = right.grounded ? nothing : current_probe!(state, e, right, context; orientation = :out)
     left_labels = dc ? context.dc_labels[left_bus.key] : (left_bus.name,)
     right_labels = right.grounded ? ntuple(_ -> nothing, length(left_labels)) :
                    dc ? context.dc_labels[right_bus.key] : (right_bus.name,)

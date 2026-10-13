@@ -25,7 +25,8 @@ function definitions!(bound, expression)
         else
             bind!(bound, target)
         end
-    elseif expression.head in (:toplevel, :block, :if, :elseif, :const, :global, :local)
+    elseif expression.head in
+           (:toplevel, :block, :if, :elseif, :try, :const, :global, :local)
         foreach(argument -> definitions!(bound, argument), expression.args)
     end
     return bound
@@ -46,7 +47,10 @@ function unresolved_globals(expression, namespace)
 
     function visit(node, bound)
         if node isa Symbol
-            node in bound || isdefined(namespace, node) || push!(missing, node)
+            reference = Base.isoperator(node) && startswith(string(node), ".") ?
+                        Symbol(string(node)[2:end]) : node
+            reference in bound || isdefined(namespace, reference) ||
+                push!(missing, reference)
         elseif node isa Expr
             head, arguments = node.head, node.args
             if head in (:error, :incomplete)
@@ -59,6 +63,10 @@ function unresolved_globals(expression, namespace)
                 foreach(argument -> visit(argument, bound), arguments)
             elseif head == :kw
                 visit(last(arguments), bound)
+            elseif head == :ref
+                visit(first(arguments), bound)
+                inner = union(copy(bound), Set([:begin, :end]))
+                foreach(argument -> visit(argument, inner), arguments[2:end])
             elseif head == :tuple
                 for argument in arguments
                     if argument isa Expr && argument.head == :(=)
@@ -67,6 +75,15 @@ function unresolved_globals(expression, namespace)
                         visit(argument, bound)
                     end
                 end
+            elseif head == :module
+                child = getfield(namespace, arguments[2])
+                union!(missing, unresolved_globals(last(arguments), child))
+            elseif head == :try
+                visit(arguments[1], bound)
+                inner = copy(bound)
+                arguments[2] isa Symbol && bind!(inner, arguments[2])
+                visit(arguments[3], inner)
+                foreach(argument -> visit(argument, bound), arguments[4:end])
             elseif head == :function ||
                    (head == :(=) && first(arguments) isa Expr &&
                     first(arguments).head == :call)
@@ -90,8 +107,16 @@ function unresolved_globals(expression, namespace)
                              [bindings]
                 for binding in iterations
                     binding isa LineNumberNode && continue
-                    visit(last(binding.args), inner)
-                    bind!(inner, first(binding.args))
+                    if binding.head == :filter
+                        for iteration in binding.args[2:end]
+                            visit(last(iteration.args), inner)
+                            bind!(inner, first(iteration.args))
+                        end
+                        visit(first(binding.args), inner)
+                    else
+                        visit(last(binding.args), inner)
+                        bind!(inner, first(binding.args))
+                    end
                 end
                 visit(body, definitions!(inner, body))
             elseif head == :(=)
@@ -140,11 +165,23 @@ end
 
 @testset "PSCAD manual script globals" begin
     directory = normpath(joinpath(@__DIR__, "../manual/pscad"))
-    for path in sort(readdir(directory; join = true))
+    validation_directory = joinpath(directory, "validation")
+    validation_parent = Module(:ValidationManualScripts)
+    Base.include(validation_parent, joinpath(validation_directory, "validation.jl"))
+    paths = [joinpath(root, file) for (root, _, files) in walkdir(directory)
+             for file in files
+             if endswith(file, ".jl") && !occursin(joinpath("validation", "data"), root)]
+    for path in sort(paths)
         endswith(path, ".jl") || continue
         source = read(path, String)
         expression = Meta.parseall(source; filename = path)
-        namespace = script_namespace(expression, path)
+        namespace = if dirname(path) == validation_directory &&
+                       basename(path) ∉ ("prepare.jl", "run_station.jl", "check_projects.jl", "reanalyse.jl")
+            basename(path) == "validation.jl" ? validation_parent :
+            getfield(validation_parent, :PSCADValidation)
+        else
+            script_namespace(expression, path)
+        end
         @testset "$(basename(path))" begin
             @test isempty(unresolved_globals(expression, namespace))
             if basename(path) == "acceptance.jl"
@@ -156,34 +193,44 @@ end
                 end
             elseif basename(path) == "acceptance_m7.jl"
                 # Evaluate only the message classifier, never exports or runs.
-                definition = only(filter(statement -> statement isa Expr &&
-                    statement.head == :function &&
-                    first(first(statement.args).args) == :build_verdict, expression.args))
+                definition = only(filter(
+                    statement -> statement isa Expr &&
+                                 statement.head == :function &&
+                                 first(first(statement.args).args) == :build_verdict,
+                    expression.args))
                 Core.eval(namespace, definition)
                 verdict(text) = Base.invokelatest(getproperty(namespace, :build_verdict), text)
                 licence = "error\tbuild\t\tThe current license is limited to a maximum of 200 electrical nodes. This project contains 528 electrical nodes.\n"
                 normal = "normal\tbuild\t\tThe total number of live nodes: 528\n"
                 summary = "normal\tbuild\t\t======== Build: 1 errors, 0 warnings ========\n"
                 @testset "M7 licence build verdict" begin
-                    @test verdict(normal * licence * summary) == "export verified (licence-blocked)"
-                    @test verdict(licence * normal * summary) == "export verified (licence-blocked)"
-                    @test verdict(normal * summary * licence) == "export verified (licence-blocked)"
+                    @test verdict(normal * licence * summary) ==
+                          "export verified (licence-blocked)"
+                    @test verdict(licence * normal * summary) ==
+                          "export verified (licence-blocked)"
+                    @test verdict(normal * summary * licence) ==
+                          "export verified (licence-blocked)"
                     @test verdict(normal * licence * summary *
-                        "warning\tbuild\t\tUnexpected warning\n") == "fail"
+                                  "warning\tbuild\t\tUnexpected warning\n") == "fail"
                     @test verdict(normal * licence * summary *
-                        "error\tbuild\t\tUnrelated build error\n") == "fail"
+                                  "error\tbuild\t\tUnrelated build error\n") == "fail"
                     @test verdict(normal * licence * licence * summary) == "fail"
                     @test verdict(normal * summary) == "fail"
                     @test verdict(normal * licence) == "fail"
                     @test verdict(replace(normal * licence * summary,
                         "0 warnings" => "1 warnings")) == "fail"
                     @test verdict(normal * licence * summary *
-                        replace(summary, "0 warnings" => "1 warnings")) == "fail"
+                                  replace(summary, "0 warnings" => "1 warnings")) == "fail"
                     @test verdict(replace(normal * licence * summary,
-                        "The current license is limited" => "Another error: The current license is limited")) == "fail"
+                        "The current license is limited" => "Another error: The current license is limited")) ==
+                          "fail"
                     @test verdict("error\tbuild\n" * licence * summary) == "fail"
                     @test verdict("") == "fail"
                 end
+            elseif dirname(path) == validation_directory &&
+                   basename(path) == "run_station.jl"
+                original = Meta.parseall(replace(source, "PSCADValidation.run_fixture" => "run_fixture"))
+                @test unresolved_globals(original, namespace) == [:run_fixture]
             end
         end
     end
@@ -210,7 +257,9 @@ end
             """)
         @test isempty(unresolved_globals(valid, namespace))
         for source in ("[(n, side) for n in 1:2 for side in 1:n]",
-            "Dict(n => side for n in 1:2, side in 1:n)")
+            "Dict(n => side for n in 1:2, side in 1:n)",
+            "[n for n in 1:2 if n > 1]", "[1,2][begin:end] .+ [3,4]",
+            "try; values = [1,2]; values[end]; catch failure; sprint(showerror, failure); end")
             @test isempty(unresolved_globals(Meta.parseall(source), namespace))
         end
         for (source, names) in (
@@ -222,6 +271,7 @@ end
             ("function f(x); x; end; x", [:x]),
             ("for x in 1:2; y = x; end; y", [:y]),
             ("[n + unknown for n in 1:2]", [:unknown]),
+            ("[n for n in 1:2 if missing_function(n)]", [:missing_function]),
             ("[n for n in 1:2]; n", [:n]))
             @test unresolved_globals(Meta.parseall(source), namespace) == names
         end

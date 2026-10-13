@@ -48,11 +48,25 @@ end
 
 # A breakout joins the scalar core labels to the existing three-phase bus.
 # The bus-side ammeter retains the array probe contract and physical phase order.
-function _cable_ac_connection!(state, bus, labels, probe)
+function _cable_ac_connection!(state, bus, labels, probe, side)
     x, y = allocate_cell!(state.layout)
     point = (x + 144, y + 90)
     component!(state.main, "breakout", point)
-    ammeter_stub!(state.main, point, bus.name, probe; direction = -1)
+    outer = ammeter_stub!(state.main, point, bus.name, probe; direction = -1)
+    if side == 2
+        # Reverse only the meter's named-node connections. Keep the witnessed
+        # breakout geometry and every wire: side 2 is element -> bus.
+        bus_index = findlast(c -> c.defn == "master:nodelabel" &&
+                                 (c.x, c.y) == outer, state.main.components)
+        inner_index = findlast(c -> c.defn == "master:nodelabel" &&
+                                   (c.x, c.y) == (point[1], point[2] - 72),
+            state.main.components)
+        bus_label, inner_label = state.main.components[bus_index], state.main.components[inner_index]
+        state.main.components[bus_index] = ComponentPlan(bus_label.defn,
+            inner_label.params, bus_label.x, bus_label.y, bus_label.orient)
+        state.main.components[inner_index] = ComponentPlan(inner_label.defn,
+            bus_label.params, inner_label.x, inner_label.y, inner_label.orient)
+    end
     for (index, label) in enumerate(labels)
         stub!(state.main, (point[1] + 36, point[2] + 36 * (index - 2)), label)
     end
@@ -115,7 +129,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Cable}, cont
             ComponentPlan("master:cable_interface",
                 _cable_interface_parameters(e.pscad, positions), interface..., side == 1 ?
                                                                                0 : 4))
-        probe = current_probe!(state, e, terminal, context)
+        probe = current_probe!(state, e, terminal, context; orientation = side == 1 ? :into : :out)
         labels = dc ? context.dc_labels[bus.key] :
                  [pscad_name(e.pscad * "_$(side)_" * phase; used = state.used)
                   for phase in ("A", "B", "C")]
@@ -130,7 +144,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Cable}, cont
         if dc
             output_probe!(state.main, probe, "branch", "kA", (x + 144, y + 180))
         else
-            _cable_ac_connection!(state, bus, labels, probe)
+            _cable_ac_connection!(state, bus, labels, probe, side)
         end
     end
     return nothing

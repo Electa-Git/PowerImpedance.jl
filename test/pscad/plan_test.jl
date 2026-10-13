@@ -261,7 +261,7 @@ end
         "GPERM" => "1", "GRP" => "1")
     @test Dict(row.frephase) == Dict("Interp1" => "1", "Output" => "0", "Inflen" => "0",
         "FS" => "0.5 [Hz]", "FE" => "1000000.0 [Hz]", "Numf" => "100",
-        "YMaxP" => "20", "YMaxE" => "0.2 [%]", "AMaxP" => "20", "AMaxE" => "0.2 [%]",
+        "YMaxP" => "20", "YMaxE" => "0.02 [%]", "AMaxP" => "20", "AMaxE" => "0.02 [%]",
         "MaxRPtol" => "2000000.0", "CPASS" => "0", "DCenab" => "0", "DCCOR" => "1",
         "enablf" => "1")
     @test Dict(row.outdisp) == Dict("DataF" => "50.0 [Hz]")
@@ -293,13 +293,15 @@ end
                  Dict(c.params)["Name"] == bus,
             plan.main.components)
     end
-    overrides = (; FS = 2.0, FE = "2.0E5 [Hz]", Numf = 200, CPASS = 1,
+    overrides = (; FS = 2.0, FE = "2.0E5 [Hz]", Numf = 200, YMaxE = 0.3, AMaxE = "0.4 [%]", CPASS = 1,
         EarthForm2 = 2, GRRES = 250.0, GPERM = 1.2, GRP = 5.0, W2 = 1000.0)
     altered = only(P.build_plan(list; line_options = overrides).lines)
     @test Dict(altered.frephase)["FS"] == "2.0 [Hz]"
     @test Dict(altered.frephase)["FE"] == "2.0E5 [Hz]"
     @test Dict(altered.frephase)["Numf"] == "200"
     @test Dict(altered.frephase)["CPASS"] == "1"
+    @test Dict(altered.frephase)["YMaxE"] == "0.3 [%]"
+    @test Dict(altered.frephase)["AMaxE"] == "0.4 [%]"
     @test Dict(altered.frephase)["W2"] == "1000.0"
     @test Dict(altered.ground)["EarthForm2"] == "2"
     @test Dict(altered.ground)["GRRES"] == "250.0 [ohm*m]"

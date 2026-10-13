@@ -21,6 +21,10 @@
 
 ### Changed
 
+- Tighten default PSCAD overhead-line and cable frequency-dependent fit targets
+  `YMaxE`/`AMaxE` from 0.2% to 0.02%, still overridable through `line_options`;
+  exported projects containing AC/DC lines or cables change.
+
 - **Breaking:** Read transformer `V₁ᵒ`/`V₂ᵒ` power-flow ratings in volts per
   phase (previously kV per phase).
 - Tighten default Classic and NetworkBuilder power-flow settings to `tol=1e-6`,

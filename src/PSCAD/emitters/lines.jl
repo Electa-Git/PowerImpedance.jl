@@ -60,8 +60,8 @@ function _line_frephase_parameters(overrides, buses)
     defaults = ["Interp1" => "1", "Output" => "0", "Inflen" => "0",
         "FS" => pscad_value(start_frequency; unit = "Hz"), "FE" =>
             pscad_value(1e6; unit = "Hz"),
-        "Numf" => "100", "YMaxP" => "20", "YMaxE" => pscad_value(0.2; unit = "%"),
-        "AMaxP" => "20", "AMaxE" => pscad_value(0.2; unit = "%"),
+        "Numf" => "100", "YMaxP" => "20", "YMaxE" => pscad_value(0.02; unit = "%"),
+        "AMaxP" => "20", "AMaxE" => pscad_value(0.02; unit = "%"),
         "MaxRPtol" => pscad_value(2e6), "CPASS" => "0", "DCenab" => "0",
         "DCCOR" => "1", "enablf" => "1"]
     return _override_line_parameters(defaults, overrides)
@@ -137,7 +137,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
                 ComponentPlan("master:tline_interface",
                     ["Name" => e.pscad, "NC" => "2", "View" => "0", "send_recv" => "0",
                         "dim_s" => "0", "dim_r" => "0"], interface..., side == 1 ? 0 : 4))
-            probe = current_probe!(state, e, terminal, context)
+            probe = current_probe!(state, e, terminal, context; orientation = side == 1 ? :into : :out)
             positive, negative = context.dc_labels[bus.key]
             ammeter_stub!(state.main, (interface[1] + 18direction, interface[2] - 18),
                 positive, probe; direction)
@@ -147,8 +147,8 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
         end
         return nothing
     end
-    first_probe = current_probe!(state, e, left, context)
-    second_probe = current_probe!(state, e, right, context)
+    first_probe = current_probe!(state, e, left, context; orientation = :into)
+    second_probe = current_probe!(state, e, right, context; orientation = :out)
     ammeter_stub!(state.main, (wx - 54, wy + 18), left_bus.name, first_probe;
         direction = -1)
     ammeter_stub!(state.main, (wx + 54, wy + 72), right_bus.name, second_probe)

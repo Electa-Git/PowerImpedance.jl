@@ -84,6 +84,18 @@ struct ProbeChannel
     dim::Int
     "Physical unit recorded for the channel."
     unit::String
+    "Positive terminal current direction: `:into` or `:out`; `nothing` for other quantities."
+    orientation::Union{Nothing, Symbol}
+    function ProbeChannel(name, kind, bus, element, side, dim, unit, orientation = nothing)
+        if kind in (:current, :injection_current)
+            orientation in (:into, :out) ||
+                throw(ArgumentError("terminal current probe requires :into or :out orientation"))
+        else
+            orientation === nothing ||
+                throw(ArgumentError("only terminal current probes have orientation"))
+        end
+        return new(name, kind, bus, element, side, dim, unit, orientation)
+    end
 end
 
 """

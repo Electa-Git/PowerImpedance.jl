@@ -1,5 +1,7 @@
 # PSCAD export and simulation
 
+Overhead-line and cable exports use `YMaxE=AMaxE=0.02%` by default (AC/DC), overridable through `line_options`; all other fitting defaults are unchanged.
+
 `export_pscad(::Network)` and `export_pscad(::NetworkBuilder.NetworkState)`
 write runnable PSCAD 5 projects from PowerImpedance networks. Load `PythonCall`
 to activate the writer; CondaPkg installs `mhi-xml` and its XML dependencies.
@@ -146,13 +148,34 @@ inspect traces and build warnings before interpreting comparison rows.
 | Quantity | Default comparison rule |
 |:--|:--|
 | AC voltage and relative angle | Positive-sequence phase RMS magnitude within 1%; angle relative to the model's reference bus within 1 degree. |
-| AC current | Fundamental RMS magnitude within 2%, retaining terminal orientation. |
+| AC current | Fundamental RMS magnitude within 2%; raw probe signs follow the terminal-current convention below. |
 | DC voltage | Mean pole-to-pole voltage within 1%. |
 | DC current | Magnitude error within 2%; converter-connected DC networks use `abs(diff)/max(abs(reference), Sbase/vDCbase)` with MVA/kV giving kA. Converter-free networks use relative error. Differing converter current bases in one DC network raise an error. |
 | Machine and converter P/Q | Absolute MW/MVAr error divided by the device MVA rating within 1%; converter internal P/Q means use the same rating. Machine terminal voltage also uses the 1% voltage rule. |
 | MMC arm capacitors | Each of six capacitor cycle means within 1% of solved pole-to-pole DC voltage; instantaneous ripple is retained. |
 | MMC DC current identity | Signed `i_dc = 3 iS_z`, converting `iS_z` from pu with `Sbase/vDC_base`; 2% with the same current-base floor. The identity reference comes from measured `iS_z`; its equilibrium value is diagnostic. |
 | Machine or MMC VSM speed | Mean speed within `1e-3` pu of 1. |
+
+
+Terminal-current probe metadata records `orientation = :into` or `:out`, relative
+to the element at the named terminal. Other channels have `orientation = nothing`.
+These signs describe measured currents, independently of power direction.
+
+| Element | Positive probe current |
+|:--|:--|
+| Passive AC/DC two-port: impedance, OHL, cable, YY or Dyn11 transformer | Side 1 into the element; side 2 out of the element (branch direction 1 → 2). |
+| Grounded impedance | Into the sole nongrounded terminal. |
+| AC source, synchronous machine | Out of the element, toward the AC bus (injection). |
+| DC source | Into its positive-pole terminal. |
+| TLC/MMC | DC side 1 into the element; AC side 2 out toward the AC bus. |
+
+To compare with Julia's inward port admittance, negate every `:out` terminal
+current. For a shunt-source network impedance measurement, the input is current
+injected into the network, so retain `:out` source current instead. Use the
+metadata of the project that produced the run: AC cable projects exported before
+the orientation correction measured inward current at both ends. AC RMS and DC
+magnitude acceptance rows do not detect sign reversal; signed machine/converter
+power and MMC DC-current identity rows retain their existing conventions.
 
 All durations and steps in Julia are in seconds. A 10 μs integration step is
 typical; **use the validated 1 μs step for compensated MMC modulation**

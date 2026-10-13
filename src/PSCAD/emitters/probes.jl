@@ -15,14 +15,14 @@ function _ac_bus(e, terminal, context)
     return bus
 end
 
-function current_probe!(state::PlanState, e, terminal, context)
+function current_probe!(state::PlanState, e, terminal, context; orientation)
     bus = _terminal_bus(e, terminal, context)
     bus === nothing &&
         throw(ArgumentError("element :$(e.name) has a grounded measurement terminal"))
     name = pscad_name(current_probe_name(e.pscad, terminal.side); used = state.used)
     push!(state.channels,
         ProbeChannel(name, :current, bus.name, string(e.name),
-            string(terminal.side), bus.kind == :dc ? 1 : 3, "kA"))
+            string(terminal.side), bus.kind == :dc ? 1 : 3, "kA", orientation))
     return name
 end
 

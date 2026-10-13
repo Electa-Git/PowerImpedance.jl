@@ -478,9 +478,9 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
     point = (x + 144, y + 108)
     push!(state.main.components,
         ModuleInstancePlan(context.name * ":" * name, Pair{String, String}[], point..., 0))
-    ac_current = current_probe!(state, e, ac, context)
+    ac_current = current_probe!(state, e, ac, context; orientation = :out)
     ammeter_stub!(state.main, (point[1] + 54, point[2]), bus.name, ac_current)
-    dc_current = current_probe!(state, e, dc, context)
+    dc_current = current_probe!(state, e, dc, context; orientation = :into)
     positive, negative = context.dc_labels[dc.bus]
     ammeter_stub!(
         state.main, (point[1] - 54, point[2]), positive, dc_current; direction = -1)

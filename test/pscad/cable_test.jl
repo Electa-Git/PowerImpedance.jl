@@ -59,18 +59,20 @@ end
         "GrRho" => "0", "GRRES" => "100.0 [ohm*m]", "GPERM" => "1", "GRP" => "1")
     @test Dict(row.frephase) == Dict("Interp1" => "1", "Output" => "0", "Inflen" => "0",
         "FS" => "0.001 [Hz]", "FE" => "1000000.0 [Hz]", "Numf" => "100",
-        "YMaxP" => "20", "YMaxE" => "0.2 [%]", "AMaxP" => "20", "AMaxE" => "0.2 [%]",
+        "YMaxP" => "20", "YMaxE" => "0.02 [%]", "AMaxP" => "20", "AMaxE" => "0.02 [%]",
         "MaxRPtol" => "2000000.0", "CPASS" => "0", "DCenab" => "0", "DCCOR" => "1", "enablf" => "1")
     @test Dict(row.outdisp) == Dict("DataF" => "50.0 [Hz]")
     altered = only(P.build_plan(list;
         line_options = (; GRRES = 250.0, GPERM = 1.2,
-            GRP = 5.0, FS = 2.0, Numf = 200, DCenab = 1)).lines)
+            GRP = 5.0, FS = 2.0, Numf = 200, YMaxE = 0.3, AMaxE = "0.4 [%]", DCenab = 1)).lines)
     @test Dict(altered.ground)["GRRES"] == "250.0 [ohm*m]"
     @test Dict(altered.ground)["GPERM"] == "1.2"
     @test Dict(altered.ground)["GRP"] == "5.0"
     @test Dict(altered.frephase)["FS"] == "2.0 [Hz]"
     @test Dict(altered.frephase)["Numf"] == "200"
     @test Dict(altered.frephase)["DCenab"] == "1"
+    @test Dict(altered.frephase)["YMaxE"] == "0.3 [%]"
+    @test Dict(altered.frephase)["AMaxE"] == "0.4 [%]"
     interfaces = filter(c -> c.defn == "master:cable_interface", plan.main.components)
     @test length(interfaces) == 2
     @test [c.orient for c in interfaces] == [0, 4]

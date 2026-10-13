@@ -646,7 +646,7 @@ end
             wrong_units = P.ProbeManifest(
                 [c.name == name ?
                  P.ProbeChannel(c.name, c.kind, c.bus, c.element,
-                     c.side, c.dim, unit) : c for c in probes.channels],
+                     c.side, c.dim, unit, c.orientation) : c for c in probes.channels],
                 probes.reference_bus)
             reference = PSCADModel(model.project_path, model.project_name, list,
                 wrong_units, SETTINGS, point, model.provenance)

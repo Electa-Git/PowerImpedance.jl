@@ -164,7 +164,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
         iszero(value) || push!(parts, (defn, parameter, value, unit))
     end
     endpoint = component_chain!(state.main, parts, start, e.pscad * "_stepup", state.used)
-    current = current_probe!(state, e, terminal, context)
+    current = current_probe!(state, e, terminal, context; orientation = :out)
     if isempty(parts)
         component!(state.main, "ammeter", start, ["Name" => current])
         stub!(state.main, start, inner; direction = -1)

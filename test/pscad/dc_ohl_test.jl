@@ -27,6 +27,8 @@ end
     @test Dict(row.tower)["SAGC"] == "6.0 [m]"
     @test Dict(row.tower)["SAGG"] == "6.0 [m]"
     @test Dict(row.frephase)["FS"] == "0.001 [Hz]"
+    @test Dict(row.frephase)["YMaxE"] == "0.02 [%]"
+    @test Dict(row.frephase)["AMaxE"] == "0.02 [%]"
     @test Dict(wrapper.params)["Mode"] == "0"
     @test Dict(wrapper.params)["Dim"] == "2"
     @test Dict(wrapper.params)["Freq"] == "0.0 [Hz]"

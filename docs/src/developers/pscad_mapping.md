@@ -1,5 +1,27 @@
 # PSCAD mapping and station notes
 
+## Terminal-current orientation
+
+`ProbeChannel.orientation` records `:into` / `:out` at the named element terminal;
+non-current channels record `nothing`. This is independent of operating power direction.
+
+| Emitter | Positive current direction |
+|:--|:--|
+| AC/DC impedance, OHL and cable; YY/Dyn11 | Side 1 inward, side 2 outward. Grounded impedance: sole nongrounded terminal inward. |
+| AC source and synchronous machine | Outward, injection into the AC bus. |
+| DC source | Inward at the positive pole. |
+| TLC/MMC | DC side 1 inward; AC side 2 outward. |
+
+The AC-cable correction swaps only the two named-node connections around its
+existing side-2 ammeter in `_cable_ac_connection!`; fields, coordinates, wires,
+phase order, and electrical circuit stay unchanged. Older AC-cable projects had
+both terminal probes inward. Retained-run metadata is audited against each saved
+project hash before analysis; it must not be replaced with current exporter metadata.
+No signed acceptance equations or machine/converter current conventions changed.
+The validation harness negates outward terminal currents for inward Y comparisons;
+it retains outward shunt-source currents when measuring network Z directly.
+
+
 This page records how PowerImpedance drives PSCAD, the facts measured on the reference station,
 and the outcome of every risk experiment of the PSCAD integration. Update it whenever an
 experiment closes or a station fact changes.
@@ -133,7 +155,7 @@ that rejection. Correcting the evaluator guard requires a separate change.
 The default ground settings reproduce `local/OHL/DUT_2.pscx`:
 `EarthForm2=0`, `EarthForm=2`, `EarthForm3=2`, `GrRho=0`. Frequency/phase defaults
 are `Interp1=1`, `Output=0`, `Inflen=0`, `FS=0.5 Hz`, `FE=1e6 Hz`, `Numf=100`,
-`YMaxP=AMaxP=20`, `YMaxE=AMaxE=0.2 %`, `MaxRPtol=2e6`, `CPASS=0`, `DCenab=0`,
+`YMaxP=AMaxP=20`, `YMaxE=AMaxE=0.02 %`, `MaxRPtol=2e6`, `CPASS=0`, `DCenab=0`,
 `DCCOR=1`, `enablf=1`. Display settings override only `DataF=50 Hz`; other fields
 retain mhi-xml defaults.
 
@@ -2450,3 +2472,62 @@ tolerance, with worst voltage magnitude error **2.19e-5 relative**, worst angle
 error **4.99e-4 degrees**, and worst current error **0.169%** (`I_tl64_2`, **3.9 A**).
 Evidence is `/tmp/pscad-m7/ieee9_classic_comparison.tsv`, station run
 `local/pscad-exchange/m7/ieee9_classic/run-Hcm4nU`.
+
+
+### M9a7–M9a9: constants attribution and tighter fitting defaults
+
+Every AC/DC overhead-line and cable export now defaults to
+`YMaxE=AMaxE=0.02 %`, retaining all other settings. `line_options` can override
+both fields numerically or with explicit PSCAD unit strings. Projects containing
+these components change; electrical topology, probe orientation, power-flow
+references and Julia physics do not.
+
+M9a7 used PSCAD per-length matrix dumps with the same conductor ordering and
+internal sheath/armour/ground-wire elimination as Julia. Near 1 Hz, the AC cable
+has both a constants difference (7.51% in per-length Z, 1.55% in terminal Y)
+and a fitting contribution (4.32% in terminal Y). These percentages have
+different denominators/directions and are not additive. DC OHL constants at
+0.001 Hz give 1.9950563 ohm/pole, matching Julia, while its original fit gives
+2.0516059 ohm/pole (+2.8345%): that resistance error belongs to the fit.
+
+M9a8's sampled 1–1000 Hz **fit-versus-constants** relative Frobenius terminal-Y
+errors were:
+
+| Element | Original targets (0.2%) | Numf=400 | Targets 0.02% |
+|---|---:|---:|---:|
+| AC cable | 4.34% | 3.68% | 0.84% |
+| DC cable | 2.88% | 7.32% | 0.49% |
+| DC OHL | 4.31% | 4.09% | 0.35% |
+
+The two tighter targets are the smallest tested successful change for this band;
+changing only one target has not been tested. Yc orders per column rise from
+10/13/11 to 19/20/18 for AC cable/DC cable/DC OHL. H orders per delay group
+rise from 10/12/(6,7) to 15/18/(10,12). Retained build-plus-run times were
+19.27/62.28 s for the two tighter-target diagnostic projects versus baseline
+18.59/62.37 s; isolated build time is unavailable. These single measurements
+are not a performance guarantee or a station tier-C pass.
+
+Enabling functional-form DC correction (`DCenab=1`, `DCCOR=1`, FS=0.001 Hz)
+failed both cable-containing diagnostic projects during Yc fitting:
+`Error in INVCJD. Singularity occurs`. Both logs terminate in line constants.
+Zero dielectric loss tangents with the V5 loss-tangent method are consistent
+with a singular DC shunt/characteristic-admittance limit; the failed matrix is
+not exposed, so that mechanism remains an inference. No leakage is added and
+DC correction remains disabled by default.
+
+**Documented PSCAD fitting limitation:** tighter targets do not constrain the
+DC cable's true-DC extrapolation. With the 0.02% targets and FS=0.001 Hz,
+DCenab=0, fitted resistance at s=0 is 0.4844791 ohm/pole versus Julia's
+0.2724856 ohm (+77.8%); at 0.001 Hz it is 0.2754051 ohm (+1.07%), and full
+terminal-Y fit error there is still 2.17%. DC OHL's fitted true-DC resistance
+is 2.0001793 ohm versus 1.9950563 ohm (+0.257%). These are measured fixture
+limitations, not assertions about every PSCAD cable. Constants differences
+remain documented physics; no tolerance is relaxed and DC-cable operating-point
+acceptance is not implied by the band improvement.
+
+Evidence is retained locally in the gitignored validation data's
+`m9a7/report.md` and `m9a8/report.md`, per-frequency tables, fit files, logs and
+input hashes. PSCAD's [line/cable modelling guidelines](https://www.pscad.com/knowledge-base/download/Overhead%20Lines%20and%20Cable%20Modeling%20Guidelines%20for%20PSCAD.pdf),
+printed pp.12 and 40–41, describe functional-form correction and the V5
+loss-tangent handling. Existing station runs with 0.2% targets retain their
+original project hashes and require re-acceptance under the new default.

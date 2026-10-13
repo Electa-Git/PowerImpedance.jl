@@ -304,7 +304,16 @@ else
                     for (canvas, graph) in graphs
                         expected = canvas == "Main" ?
                                    PSCADTopology.shunt_meter_returns(reference[canvas], shunt_moves[name]) :
-                                   reference[canvas]
+                                   deepcopy(reference[canvas])
+                        # Preserve the historical independent graph and approve
+                        # exactly the owner-selected fitting target changes.
+                        for component in expected["components"]
+                            component["definition"] == "master:Line_FrePhase_Options" || continue
+                            for target in ("YMaxE", "AMaxE")
+                                @test component["parameters"][target] == "0.2 [%]"
+                                component["parameters"][target] = "0.02 [%]"
+                            end
+                        end
                         @test PSCADTopology.equivalent(expected, graph)
                         if canvas == "Main" && startswith(name, "sm_")
                             measurement = fixture["avr_terminal_measurement"]
