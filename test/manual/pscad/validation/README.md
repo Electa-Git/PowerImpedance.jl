@@ -1,7 +1,7 @@
 # Manual PSCAD physics validation
 
-L1 covers eight passive fixtures; L2 one device, L3 interactions and L4 systems
-remain later work. Tier D remains the original P2P early growth fit. Code is
+L1 is closed with seven passes and one owner-explained system result. L2 starts
+with one strong-grid TLC fixture; L3 interactions and L4 systems remain later work. Tier D remains the original P2P early growth fit. Code is
 manual and private; `data/`, `Manifest*.toml` and `.CondaPkg/` are gitignored.
 No station operation occurs during preparation or offline tests.
 
@@ -36,9 +36,104 @@ identity. Only missing runs execute. Analysis is repeated. All runs must report
 **<100 live nodes**. The all-L1 invocation shares a **5400 s wall-time budget**;
 a timeout leaves reusable completed runs and preserved failure evidence.
 
+## Layer 1 closure (M9b-1)
+
+All tier-A comparisons passed under the existing rules. C errors below are
+maximum relative Frobenius errors after recorded orientation and model
+corrections; dq projection results remain informational for asymmetric
+fixtures. Seven fixtures also passed the amplitude/step refinement gates.
+
+| Fixture | Element / physics | Domain | Tier A | C max error | Status | Key evidence |
+|---|---|---|---|---|---|---|
+| L1-01 | RL; dq coupling, loss | dq Y 2x2 | passed | 0.00131% | passed | all 24 frequencies; refinements passed |
+| L1-02 | DC RLC; charging, pole bases | differential DC Y 2x2 | passed | 0.00131% | passed | inward-current conversion; refinements passed |
+| L1-03 | AC OHL; earth return, propagation | abc Y 6x6 | passed | 0.381% | passed | later settling, tighter fit; refinements passed |
+| L1-04 | AC cable; sheath elimination, earth return | abc Y 6x6 | passed | 0.843% | passed | corrected native earth constant/depth; unchanged PSCAD project; refinements passed |
+| L1-05 | DC cable + OHL; mixed-medium/DC loss | differential DC Y 2x2 | passed | 0.303% | passed | longer settling, tighter fit and native earth correction; refinements passed |
+| L1-06 | YY; turns ratio, winding loss | dq Y 4x4 | passed | 0.0118% | passed | terminal orientation applied; refinements passed |
+| L1-07 | Dyn11; phase shift, winding loss | dq Y 4x4 | passed | 0.0122% | passed | +30 degree convention; refinements passed |
+| L1-08 | IEEE9; network resonance/reduction | abc local Z 3x3 | passed | 3.88% point error (3.35% coarse grid) | explained | resonance centre/width reproduced; remaining point failures retained |
+
+L1-08 disposition: **explained: resonance reproduced; point failures from slope
+amplification and marginal single entries**. At the 0.25 Hz refined grid, Julia
+and PSCAD centres are 316.9407 / 316.8704 Hz (0.0222%); half-power widths are
+3.29618 / 3.29380 Hz (0.0721%). All 126 in-band comparison rows pass the approved
+resonance rule. Steep shoulders just outside its band still fail the unchanged
+2% point rule (2.0–2.6%); the point profile peaks near 3.9% at resonance and is
+1.2% at ±5 Hz. Marginal single entries remain at 237, 562 and 1000 Hz. This owner
+disposition preserves failing rows and is not numerical acceptance of them.
+Resonance amplitude/step witnesses passed. Raw results and manifest history remain.
+
+Outcomes: the cable investigation identified the native earth-return constant
+`exp(gamma)=1.7811` and each cable's own self-term depth; correcting them reduced
+L1-04 C to 0.843% without changing PSCAD projects. Separately, PSCAD fit targets
+`YMaxE=AMaxE=0.02%` reduced fit-versus-own-constants terminal errors from
+4.34/2.88/4.31% to 0.84/0.49/0.35% for AC cable/DC cable/DC OHL. Constants physics
+and fit accuracy remain separate ledger items; comparison tolerances did not change.
+
+## L2-01: TLC P/Q against a strong grid
+
+The M4 case-2 current API supplies the 100 MVA, 220 kV line-line RMS, 640 kV DC
+TLC, P/Q PI controllers, PLL, OCC, measurement filters, frequency-support lag
+and 200 us Padé 3/3 modulation. Setpoints are 70 MW / 5 MVAr (0.7 / 0.05 pu).
+Its DC cable is replaced by a direct ideal DC source. The AC ideal source remains
+behind a series RL: `|Z|=60.5 ohm`, `R=6.019975 ohm`, `L=0.191621756 H`.
+SCR is exactly 8 at the 100 MVA / 220 kV rating and X/R is exactly 10.
+The solved terminal voltage is 1.0111003 pu at 0.0855993 rad; the terminal-voltage
+short-circuit ratio is 8.17859. DC power is 70.03854 MW including converter loss.
+
+Preparation runs the complete-network gate before writing projects: native
+admittances on 6001 logarithmic points from 0.01 Hz to 100 kHz, generalized
+Nyquist net 0, plus all finite poles of the source-clamped TLC + RL descriptor.
+The most positive located real part is -1.9917811 /s (0.5021 s time constant);
+next poles are -3.12835, -3.13641 and -24.39368 /s. The standalone subsystem is
+also stable. The descriptor retains grid dq dynamics and imposes terminal KCL;
+converter-only pole stability is insufficient. Native characteristic residuals
+and all poles are saved in the manifest.
+
+A shunt controlled current source adds zero current at the operating point.
+Two d/q runs measure converter current (recorded outward, converted inward)
+and the actual terminal voltage matrix; `I_converter=Y_converter*V_terminal`
+recovers the native `get_y(DUT,s)[2:3,2:3]`, with DC clamped. No network-Y subtraction
+or measured-Y inversion is used. Construction reuses `current_port`, whose
+`master:src_ccin_1` fields and current sign are from `src/PSCAD/emitters/tlc.jl`
+and the saved M4 TLC project, plus the existing `dq_to_abc_module`.
+The nominal fixed 50 Hz frame matches native TLC input coordinates.
+
+| Axes / grid | Integration / sampling | Injection / windows | Per-tone amplitude | Station estimate |
+|---|---|---|---|---|
+| d,q; 23 coherent tones 1–1000 Hz, omit 50 Hz | 10 us / 20 us; half step 5 us | onset 2 s; [8,9), [9,10) s | 1e-4 pu current (0.0371 A peak); Schroeder phases | 20–30 min; 60 min deadline |
+
+Voltage/current bases are nominal phase-peak 179.6292478 kV / 0.37113481 kA,
+100 MVA total three-phase rating. Sampling gives 47.62 samples/period at the
+1050 Hz highest sideband. The 8 s settle exceeds 15 slow-mode time constants
+from the 0.2 s DC-divisor hold, and 11.95 from tone onset. Baseline drift,
+window consistency and departures are measured, not inferred from that estimate.
+Six runs execute: baseline, d, q, one half-amplitude axis, half-step baseline
+and that axis at the worst band plus 1000 Hz. Prepared half-step candidates are
+750/1000 Hz; a different worst band is generated locally by the resumable runner.
+For current drive the one-axis refinements compare both `V/Idrive` and
+`Iconverter/Idrive`; a single coupled voltage axis cannot identify a Y column.
+Expected half-amplitude change is below the unchanged 2% linearity gate (an
+expectation pending station measurement). C uses the approved **5% / 3 degrees**
+active rule with unchanged floors; full-matrix conditioning and both refinement
+gates remain mandatory. Padé versus exact-delay mismatch is recorded separately.
+
+```sh
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-01 --timeout=3600
+```
+
+Offline on Julia 1.12.7 and 1.10.11: **17,449/17,449 PSCAD suite checks**
+(including 59 name-guard checks and 43 new TLC/gate checks), plus **804/804 XML
+checks** per version. Synthetic converter Y recovery error is 3.37e-13; the
+known unstable network is rejected. Station tier A/C/refinement remain pending.
+
+Projects/reference/manifest are under `data/L2-01/`. Existing hash-valid completed
+runs resume; no L2 station execution has occurred during preparation.
+
 ## Frozen settings
 
-| Fixture | Applicable injection / response | Grid | Base / half step | Full run / windows | Remaining station estimate |
+| Fixture | Applicable injection / response | Grid | Base / half step | Full run / windows | Original station estimate |
 |---|---|---|---|---|---|
 | L1-01 RL | d,q; Y 2x2 | 24 | 2 / 1 us | 3 s; [1,2), [2,3) | accepted evidence reused |
 | L1-02 DC RLC | differential voltage per outer port; Y 2x2 | 24 | 2 / 1 us | 3 s; [1,2), [2,3) | accepted evidence reused |
@@ -49,14 +144,9 @@ a timeout leaves reusable completed runs and preserved failure evidence.
 | L1-07 Dyn11 | d,q voltage at each port; Y 4x4 | 23 | 2 / 1 us | 3 s; [1,2), [2,3) | accepted evidence reused |
 | L1-08 IEEE9 | a,b,c shunt current at Bus1 and Bus5; direct Z, separate local 3x3 blocks | 24 | 2 / 1 us | 3 s; [1,2), [2,3) | 40 min |
 
-The current data need **36 missing runs**: ten each for OHL/cable/IEEE9
-(baseline, six axes, one half-amplitude axis, half-step baseline and axis),
-and six for DC. Estimated remaining station workflow is **77 minutes**;
-the existing **90-minute shared wall-time deadline** remains enforced. Estimates
-use the stored workflows, including IEEE9's measured 29-minute original dq scan.
-The four accepted fixtures reuse hash-verified operating-point, corrected-C and
-refinement evidence. A fresh checkout without that evidence requires those runs;
-completed work remains resumable and a deadline never relaxes acceptance.
+Layer 1 uses retained, hash-verified station evidence. No layer-1 re-run is
+requested by the L2 preparation. The historical settings above describe the
+original workflow; later settling and resonance settings are recorded below.
 
 The 24-tone coherent grid is
 `[1,2,3,4,6,7,10,13,18,24,32,42,50,56,75,100,133,178,237,316,422,562,750,1000]` Hz.
@@ -322,3 +412,115 @@ The same commands resume matching completed **new-project** runs after an
 interruption. The gitignored harness Manifest must be instantiated with the
 Julia version used. The tightened targets improve the initial tier-C band;
 the documented true-DC cable fit limitation and all acceptance gates remain.
+
+## Cable reference refresh and resolved resonances (M9a-11)
+
+`reanalyse.jl L1-04 --refresh-reference` (and `L1-05`) archives the previous
+manifest, operating point, reference and analysis, regenerates Julia's power-flow
+and admittance references, and compares the retained SI measurements. It reads
+baseline output for tier A, preserves recorded probe orientations and measured
+refinement gates, and verifies every prepared project hash before and after.
+It performs no station operation and does not regenerate native projects.
+
+A resonance qualifies only when **both** curves have a bracketed magnitude peak
+(or admittance dip), both half-power crossings, at least five samples inside,
+and at least six grid intervals across the half-power width. Magnitude is the
+local port-matrix Frobenius norm. A three-point quadratic power interpolation
+estimates the centre; linear interpolation determines the half-power crossings.
+A dip uses reciprocal admittance magnitude. Unresolved curves retain the
+ordinary complex rule and cannot qualify a resonance measurement.
+
+Inside either qualified half-power band, comparison uses centre-frequency error
+<= max(1% of Julia centre, one local grid interval) and relative half-power-width
+error <=10%. Outside both bands the original complex, magnitude and phase
+checks apply. Point errors remain recorded inside the bands as information.
+`comparison_C_qualified.tsv` records `comparison_rule` on every point; the
+manifest retains both fitted bands, resolution evidence and original complex
+results. Measurement and amplitude/time-step refinement gates still apply.
+
+L1-08 has an additional **Bus5-only**, unchanged-topology current-injection scan:
+312–322 Hz every 0.25 Hz, excluding the completed 316 Hz tone (40 extra bins).
+The completed 316 Hz local Z is merged for resonance qualification, without a
+repeat of its original injections. Three new phase injections and a matching
+zero-amplitude baseline measure local 3x3 Z directly. Coherent windows are
+[2,6) and [6,10) s (4 s each); source injection begins at 0.5 s. The normal step
+is 2 us; sampling is 64 us (48.5 samples per 322 Hz period). One phase-a
+half-amplitude repeat and a matching half-step baseline/phase-a repeat cover
+only those extra bins. Exact amplitude and hashes are in `resonance_scan`.
+Existing base-band amplitude/step witnesses are reused by project hash.
+
+Run from the repository root, with the harness environment instantiated using
+the same Julia version:
+
+```sh
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L1-08 --timeout=7200
+```
+
+Allow **45–75 minutes** (120-minute deadline), including retained-output loading,
+seven new runs and refinement analysis. Completed runs resume by matching hash.
+Existing base-band failures outside the resolved resonance keep their ordinary
+rule; qualification of the 317 Hz peak alone does not waive them.
+
+Reference-only results after 4ac59bd:
+
+| Fixture | Tier A | Tier C maximum Frobenius error | Refinement | Projects |
+| --- | --- | --- | --- | --- |
+| L1-04 | 7/7 pass | 0.842910% (all 864 entries pass; maximum phase 0.97656 degrees) | Existing gates pass | All 25 hashes unchanged |
+| L1-05 | 12/12 pass | 0.303155% (all 96 entries pass; maximum phase 0.37478 degrees) | Existing gates pass | All 13 hashes unchanged |
+
+The old evaluations are under each fixture's `history/m9a11-*`; raw runs are
+shared and remain unchanged. Stored witness axes/bands stay fixed when only a
+Julia reference changes. Source pins for the remaining fixtures are refreshed
+only after their native references verify unchanged, with the prior manifest
+retained in history.
+
+IEEE9's current data also have seven failed entry rows at 237, 562 and 1000 Hz,
+outside the prepared 317 Hz band. These stay subject to the complex rule. The
+new resonance runs therefore qualify the peak method; they do not establish
+that all of L1-08 passes. Detailed reference results and those unchanged rows
+are retained in `data/m9a11/evidence.json`.
+
+## Sampling and output volume (M9a-12)
+
+New resonance plans choose the largest multiple of the integration step that
+also divides every window boundary, window duration and run duration, with at
+least 40 samples per period at the highest measured sideband. dq includes
+f+50 Hz; abc includes the measured nominal 50 Hz baseline fundamental; DC uses
+the injected band. Completed base-band projects retain their recorded sample
+intervals and hashes. Integration steps and the approved comparisons do not
+change.
+
+For the 312–322 Hz abc scan, 80 us would give only 38.8 samples per 322 Hz
+period. **64 us** meets the band and coherence constraints for both 2 us and
+1 us integration: each four-second window has **62,500 samples** and each
+10-second run has **156,251 output rows**, including both endpoints.
+
+Only **Bus5 voltage a/b/c** and **injected current a/b/c** are recorded. The
+harness removes unused Main recorder assemblies (`master:pgb` plus their
+private control label and wire, constructed by
+`src/PSCAD/emitters/probes.jl:output_probe!`). Electrical meters, connections,
+line definitions and control modules remain intact. No new master field is
+used. Base-band projects retain every tier-A channel.
+
+| Run group | Count executed | Integration step | Sample interval | OUT files/run | Rows/run | Expected OUT bytes/run |
+| --- | --- | --- | --- | --- | --- | --- |
+| Resonance baseline and a/b/c injections | 4 | 2 us | 64 us | 1 | 156,251 | 26,406,493 (~26.4 MB) |
+| Half-amplitude phase-a injection | 1 | 2 us | 64 us | 1 | 156,251 | 26,406,493 (~26.4 MB) |
+| Half-step baseline and phase-a injection | 2 | 1 us | 64 us | 1 | 156,251 | 26,406,493 (~26.4 MB) |
+
+Sizes are estimates from the retained fixed-width PSCAD OUT format: six signal
+columns plus time, 169 bytes per row including CRLF and a 74-byte header. INF,
+console/build logs and projects are additional small files. The seven expected
+OUT files total **184,845,451 bytes (~185 MB)**. The old 102-signal, eleven-file
+resonance projects would produce about 2.72 GB per run at 10 us; the failed run's
+large OUT files were not retained locally, so this old size is an estimate,
+not a measured size. Its console records 1,000,001 rows in each of eleven files.
+
+Old resonance projects/manifest are archived under `L1-08/history/`; native
+runs and failure evidence stay at their original hashes. Changed resonance
+projects must run again; completed base-band projects and witnesses resume.
+The unchanged 60-second output wait remains a separate robustness item.
+The command above has a 120-minute deadline; **45–75 minutes** is the estimate
+for the seven runs, retained base-band loading and comparison. Integration
+work is unchanged, so the output reduction does not imply the same reduction
+in simulation time.

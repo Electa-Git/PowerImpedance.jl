@@ -113,7 +113,7 @@ end
 function preparation_record(entry, gate, models; directory)
     return manifest_lists!(Dict{String, Any}(
         "schema_version" => 1, "fixture_id" => entry.id,
-        "fixture_version" => 1, "layer" => "L1", "description" => entry.description,
+        "fixture_version" => 1, "layer" => first(split(entry.id,'-')), "description" => entry.description,
         "parent_fixture" => entry.parent, "topology" => entry.topology, "physics" =>
             entry.physics,
         "stability" => gate, "tiers" => entry.tiers, "estimated_live_nodes" =>

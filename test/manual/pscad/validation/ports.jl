@@ -105,6 +105,7 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
     plan = P.build_plan(list; settings, name)
     (spec.dimension == 2 || spec.quantity == "Y" && spec.dimension == 3) &&
         push!(plan.modules, P.dq_to_abc_module("Validation_DQ_ABC"))
+    current_drive = get(spec, :drive, "") == "current" || spec.quantity == "Z"
     for (port, bus) in enumerate(spec.buses)
         local_spec = merge(spec,
             (; voltage_base_kV = spec.voltage_bases[1 + (port - 1) * spec.dimension],
@@ -129,9 +130,9 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
                     amplitude_values(spec, axis, port), source.x, source.y, source.orient)
             end
         else
-            module_name = (spec.quantity == "Z" ? "CurrentPort_" : "VoltagePort_") *
+            module_name = (current_drive ? "CurrentPort_" : "VoltagePort_") *
                           string(port)
-            definition = spec.quantity == "Z" ?
+            definition = current_drive ?
                          current_port(name, module_name, local_spec) :
                          voltage_port(name, local_spec, local_spec.voltage_base_kV,
                 something(bus.va_rad, 0.0); name = module_name)
@@ -144,7 +145,7 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
                               any(t -> t.bus == bus.key, e.terminals),
                          list.elements),
                 plan.main.components)
-            if spec.quantity == "Y" && existing !== nothing
+            if !current_drive && existing !== nothing
                 source = plan.main.components[existing]
                 plan.main.components[existing] = P.ModuleInstancePlan(
                     name * ":" * module_name,
@@ -156,7 +157,7 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
                     P.ModuleInstancePlan(name * ":" * module_name,
                         amplitude_values(spec, axis, port), x, y, 0))
                 P.stub!(plan.main, (x + 36, y), bus.name)
-                if spec.quantity == "Z"
+                if current_drive
                     probe = "I_injection_$port"
                     P.module_signal_stub!(plan.main, (x, y + 72), probe, 1)
                     P.output_probe!(plan.main, probe, "injection", "kA", (x + 108, y + 72))
@@ -166,6 +167,26 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
                 end
             end
         end
+    end
+    if get(spec, :protocol, "") == "abc_resonance"
+        # master:pgb is the existing output_probe! component (probes.jl:29).
+        # Remove unused recorder instances and their private label/wire,
+        # retaining all electrical meters and connections. No master field or
+        # signal is invented; output_probe! owns this exact recorder geometry.
+        needed = filter(c -> c.kind == :voltage && c.bus == only(spec.buses).name ||
+            c.kind == :injection_current && c.element == only(spec.currents)[1], plan.probes.channels)
+        names = Set(c.name for c in needed)
+        discarded = filter(c -> c isa P.ComponentPlan && c.defn == "master:pgb" &&
+            !(Dict(c.params)["Name"] in names), plan.main.components)
+        for recorder in discarded
+            endpoint=(recorder.x,recorder.y);labelpoint=(recorder.x-36,recorder.y)
+            label=only(filter(c -> c isa P.ComponentPlan && c.defn=="master:datalabel" &&
+                (c.x,c.y)==labelpoint && Dict(c.params)["Name"]==Dict(recorder.params)["Name"],plan.main.components))
+            wire=only(filter(w -> w.vertices==[labelpoint,endpoint],plan.main.wires))
+            filter!(c -> c!==recorder && c!==label,plan.main.components)
+            filter!(w -> w!==wire,plan.main.wires)
+        end
+        filter!(c -> c.name in names, plan.probes.channels)
     end
     P.check_connectivity(plan)
     return plan, settings

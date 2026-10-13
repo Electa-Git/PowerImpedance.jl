@@ -1,5 +1,5 @@
 # The registry is a catalogue of frozen physical circuits, not a dispatch layer.
-# L2 grid-strength variants and L3/L4 circuits are deliberately not constructed here.
+# L2 currently contains one strong-grid TLC; L3/L4 circuits remain later work.
 const REGISTRY = [
     (id = "L1-01", description = "AC series/parallel RLC; RL two-source witness",
         parent = "M1 small_ac_network", factory = () -> ac_rl_network(),
@@ -59,7 +59,16 @@ const REGISTRY = [
         dissipativity = "lossy lines and resistive loads terminate the lossless transformer storage",
         differences = ["YY winding regularization", "rational line/earth fits",
             "power-flow approximation versus explicit transformer T/capacitance model"],
-        tiers = ["A", "C"], estimated_nodes = 78)
+        tiers = ["A", "C"], estimated_nodes = 78),
+    (id = "L2-01", description = "TLC P/Q, PLL/OCC against SCR 8 Thevenin grid",
+        parent = "M4 tlc_case2_network controls and electrical parameters",
+        factory = () -> tlc_strong_network(),
+        topology = "AC source — series RL — TLC AC; ideal DC source clamps TLC DC",
+        physics = ["PLL/grid interaction", "P/Q outer and current inner loops", "clamped-DC AC admittance"],
+        dissipativity = "complete-network Nyquist and located roots required; no passive shortcut",
+        differences = ["M4 Padé 3/3 200 us modulation delay versus PSCAD exact delay; quantify phase in band",
+            "averaged TLC; limits retained at M4 values; ideal DC source; no DC cable"],
+        tiers = ["A", "C"], estimated_nodes = 45)
 ]
 
 function fixture(id)
@@ -188,4 +197,32 @@ function l1_settings()
         time_step = 2e-6, sample_step = 10e-6, frequency = 50.0,
         voltage_base_kV = 380sqrt(2 / 3),
         current_base_kA = 1000sqrt(2) / (sqrt(3) * 380), station_budget_seconds = 900)
+end
+
+# M4 owned factory supplies every TLC block; only topology and Q=5 MVAr change.
+function tlc_strong_network()
+    parent = PSCADFixtures.tlc_case2_network().classic
+    net = Network()
+    net.voltageBase .= parent.voltageBase
+    dut = deepcopy(parent.elements[:DUT])
+    dut.setpoint = Setpoint(Pac=70.0, Qac=5.0, Vac=220sqrt(2/3), Pdc=70.0, Vdc=640.0)
+    add!(net, :DUT, dut)
+    for name in (:G3, :G_DC)
+        add!(net, name, deepcopy(parent.elements[name]))
+    end
+    z = 220.0^2 / 100.0 / 8
+    resistance = z/sqrt(101)
+    inductance = 10resistance/(2π*50)
+    add!(net, :Grid, impedance(z=s->resistance+inductance*s, pins=3, transformation=true))
+    for terminal in 1:2
+        for (element, side, bus) in ((:DUT,2,"AC"), (:Grid,1,"AC"), (:Grid,2,"Grid"), (:G3,1,"Grid"))
+            connect!(net, (element, Symbol("$side.$terminal")), Symbol(bus*string(terminal)))
+        end
+        connect!(net, (:G3,Symbol("2.$terminal")), :gnd)
+    end
+    connect!(net, (:DUT,Symbol("1.1")), :DC)
+    connect!(net, (:G_DC,Symbol("1.1")), :DC)
+    connect!(net, (:G_DC,Symbol("2.1")), :gnd)
+    connect!(net)
+    return net
 end

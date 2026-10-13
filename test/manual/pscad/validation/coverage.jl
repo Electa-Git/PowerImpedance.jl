@@ -6,6 +6,7 @@ function port_probe(list, element, side)
 end
 
 function scan_definition(id, net, list)
+    id == "L2-01" && return tlc_scan_definition(net,list)
     old = l1_settings()
     if id == "L1-01"
         buses = [port_probe(list, :branch, 1)]
@@ -59,7 +60,10 @@ function scan_definition(id, net, list)
 end
 
 function scan_reference(net, list, spec)
-    if spec.id == "L1-01"
+    if spec.id == "L2-01"
+        return cat((PowerImpedance.get_y(net.elements[:DUT], ComplexF64(im*2π*f))[2:3,2:3]
+            for f in spec.frequencies)...; dims=3)
+    elseif spec.id == "L1-01"
         return cat(
             (PowerImpedance.get_y(net.elements[:branch], ComplexF64(im * 2π * f))[1:2, 1:2]
             for f in spec.frequencies)...;
@@ -118,6 +122,23 @@ function scale_response(matrix, spec)
     return matrix .* reshape(1 ./ output, :, 1, 1) .* reshape(input, 1, :, 1)
 end
 
+function band_sample_step(spec)
+    # Nominal 50 Hz remains measured for the abc baseline-drift gate. A dq
+    # tone also measures its +/- nominal-frequency sidebands.
+    highest = spec.dimension == 1 ? maximum(spec.frequencies) :
+        max(spec.frequency, maximum(spec.frequencies) +
+            (spec.dimension == 2 ? spec.frequency : 0.0))
+    limit = floor(Int, 1 / (40highest * spec.time_step))
+    boundaries = [spec.window_starts...; spec.window_duration; spec.simulation_time]
+    ticks = round.(Int, boundaries ./ spec.time_step)
+    all(isapprox(t * spec.time_step, b; rtol=0, atol=1e-12)
+        for (t,b) in zip(ticks,boundaries)) || error("windows are not integration-grid coherent")
+    common = reduce(gcd,ticks)
+    tick_step = findfirst(k -> common % k == 0, limit:-1:1)
+    tick_step === nothing && error("integration step undersamples the measured band")
+    return (limit-tick_step+1) * spec.time_step
+end
+
 function scan_settings(spec)
     return P.SimulationSettings(simulation_time = spec.simulation_time,
         time_step = spec.time_step, sample_step = spec.sample_step,
@@ -125,12 +146,13 @@ function scan_settings(spec)
 end
 
 function scan_record(spec)
-    return Dict("quantity" => spec.quantity, "axes" => spec.axes,
+    record = Dict("quantity" => spec.quantity, "axes" => spec.axes,
         "coordinates" => spec.dimension == 3 ? "abc" : spec.dimension == 2 ? "dq" : "DC differential",
         "protocol" => get(spec, :protocol, ""),
         "applicable_comparison" => spec.dimension == 3 ? "phase-domain physics" : "native dq/DC physics",
         "phase_order" => spec.dimension == 3 ? ["a", "b", "c"] : String[],
-        "SI_units" => "phase kV/kA imply S for Y and ohm for Z; phase-peak AC bases, 1000 MVA total three-phase base",
+        "SI_units" => spec.id=="L2-01" ? "kV/kA: S; fixed nominal 50 Hz dq, phase-peak 179.629247804 kV / 0.371134809513 kA, 100 MVA total three-phase rating base" :
+            "phase kV/kA imply S for Y and ohm for Z; phase-peak AC bases, 1000 MVA total three-phase base",
         "IEEE9_blocks" => spec.id == "L1-08" && spec.dimension == 3 ? "separate local Bus1/Bus5 3x3; full 6x6 transfer retained as evidence" : "not applicable",
         "frequencies" => spec.frequencies, "phases" => spec.phases,
         "tone_peak_pu" => spec.tone_peak_pu, "injection_time" => spec.injection_time,
@@ -145,8 +167,33 @@ function scan_record(spec)
              something(b.va_rad, 0.0)) for b in spec.buses],
         "refinement" =>
             Dict("amplitude_change_limit" => 0.02, "step_change_limit" => 0.01,
-                "selection" => "one worst-error column; half-step baseline plus column at worst frequency and 1000 Hz; retain predeclared coherent windows",
-                "amplitude_scale" => 0.5, "half_step_s" => 1e-6),
+                "selection" => get(spec, :protocol, "") == "abc_resonance" ?
+                    "phase-a column; full extra resonance band for amplitude/step witnesses; completed base-band witnesses retained" :
+                    "one worst-error column; half-step baseline plus column at worst frequency and 1000 Hz; retain predeclared coherent windows",
+                "amplitude_scale" => 0.5, "half_step_s" => spec.time_step/2),
         "excluded_ac_frequency_Hz" =>
             spec.dimension == 2 && spec.id != "L1-01" ? [50.0] : Float64[])
+    if spec.id=="L2-01"
+        record["drive"]="shunt current at TLC AC terminal; measured voltage matrix is the Y input"
+        record["active"]=true
+        record["refinement"]["selection"]="one worst-error drive axis; qualify both V/Idrive and Iconverter/Idrive, including cross-axis voltage; half-step at worst frequency plus 1000 Hz"
+    end
+    return record
+end
+
+function tlc_scan_definition(net,list)
+    old=l1_settings()
+    elec=net.elements[:DUT].element_model.elec
+    bus=port_probe(list,:DUT,2)
+    frequencies=filter(!=(50.0),old.frequencies)
+    spec=merge(old,(; id="L2-01",quantity="Y",dimension=2,buses=[bus],
+        currents=[("DUT","2")],axes=["p1_d","p1_q"], frequencies,
+        phases=[-π*k*(k-1)/length(frequencies) for k in eachindex(frequencies)],
+        voltage_bases=fill(elec.vACbase,2),current_bases=fill(elec.iACbase,2),
+        drive="current", active=true,protocol="dq_active", tone_peak_pu=1e-4,
+        time_step=10e-6,sample_step=20e-6,injection_time=2.0,
+        window_starts=(8.0,9.0),window_duration=1.0,simulation_time=10.0,
+        travel_lower_bound_s=0.0,estimated_station_seconds=1800))
+    reference=scan_reference(net,list,spec)
+    return spec,reference
 end

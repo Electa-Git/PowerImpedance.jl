@@ -17,8 +17,9 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
                               Dates.format(now(UTC), "yyyymmddTHHMMSS") * ".toml"))
     end
     net = entry.factory()
-    gate = passive_gate(net, entry)
-    list = P.netlist(net, power_flow(net))
+    point = power_flow(net)
+    gate = stability_gate(net, entry)
+    list = P.netlist(net, point)
     spec, reference = applicable_scan(id, net, list;
         definition = prior === nothing ? definition : prior["tier_c"])
     spec.travel_lower_bound_s == 0 || spec.time_step < spec.travel_lower_bound_s ||
@@ -144,7 +145,7 @@ function compare_frequency_runs(results, models, reference, directory; spec = no
                "phase-domain frequency coupling absent from native fixed-dq LTI reference" :
                ""
     rows = response_rows(spec, scale_response(measured, spec),
-        scale_response(reference, spec); valid = quality["valid"], model_mismatch = mismatch)
+        scale_response(reference, spec); active = get(spec,:active,false), valid = quality["valid"], model_mismatch = mismatch)
     write_table(joinpath(directory, "comparison_C.tsv"), rows)
     write_response(
         joinpath(directory, spec.quantity == "Y" ? "measured_S.tsv" : "measured_ohm.tsv"),
@@ -271,4 +272,55 @@ function reanalyse_fixture(id; directory = joinpath(ROOT, "data", id))
     write_manifest(directory, record)
     println(id, ": stored-run status=", status, " max_F=", result["max_frobenius_error"])
     return record["corrected_analysis"]
+end
+
+# Change only Julia's evaluation of a retained measurement; the native project,
+# probes, drive, bases and refinement comparisons remain the recorded ones.
+function refresh_references(id; directory = joinpath(ROOT, "data", id))
+    id in ("L1-04", "L1-05") || error("reference refresh is restricted to the corrected cable fixtures")
+    record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
+    stamp = Dates.format(now(UTC), "yyyymmddTHHMMSS")
+    history = mkpath(joinpath(directory, "history", "m9a11-" * stamp))
+    for file in ("manifest.toml", "operating_point.tsv", reference_filename((; protocol=record["tier_c"]["protocol"])))
+        cp(joinpath(directory,file),joinpath(history,file))
+    end
+    analysis = joinpath(directory,"analysis", isempty(record["tier_c"]["protocol"]) ? "dq" : record["tier_c"]["protocol"])
+    measured_path = joinpath(analysis, "measured_S.tsv")
+    saved = only(filter(f -> f["path"] == relpath(measured_path, directory), record["files"]))
+    digest(measured_path) == saved["sha256"] || error("retained measured matrix changed")
+    cp(analysis,joinpath(history,"analysis"))
+    projects = Dict(p["path"]=>p["sha256"] for p in record["projects"])
+    all(digest(joinpath(directory,path))==hash for (path,hash) in projects) || error("project hash changed")
+    net = fixture(id).factory(); list = P.netlist(net,power_flow(net))
+    spec, reference = applicable_scan(id,net,list;definition=record["tier_c"])
+    model, result = stored_axis(record,scan_prefix(spec)*"baseline",list,spec,directory)
+    rows_a = compare_operating_point(result,model)
+    write_table(joinpath(analysis,"comparison_A.tsv"),rows_a)
+    write_operating_point(joinpath(directory,"operating_point.tsv"),model)
+    write_response(joinpath(directory,reference_filename(spec)),reference,spec.frequencies;quantity=spec.quantity)
+    measured = read_response(measured_path,length(spec.axes),spec.frequencies)
+    quality = deepcopy(record["tier_c_result"])
+    rows = response_rows(spec,scale_response(measured,spec),scale_response(reference,spec);
+        valid=quality["valid"],model_mismatch=quality["model_mismatch"])
+    write_table(joinpath(analysis,"comparison_C.tsv"),rows)
+    quality["max_frobenius_error"] = maximum(r.frobenius_error for r in rows)
+    quality["status"] = !isempty(quality["model_mismatch"]) ? "model_mismatch" :
+        !quality["valid"] ? "invalid_measurement" : all(r.within_tolerance for r in rows) ? "passed" : "failed"
+    worst = argmax([r.complex_error_pu/max(abs(complex(r.reference_real_pu,r.reference_imag_pu)),.02) for r in rows])
+    quality["worst_column"] = rows[worst].column; quality["worst_frequency_Hz"] = rows[worst].frequency_Hz
+    record["tier_a_status"] = all(rows_a.within_tolerance) ? "passed" : "failed"
+    record["tier_c_result"] = quality
+    qualified = record["amplitude_refinement"]["passed"] && record["step_refinement"]["passed"]
+    record["status"] = record["tier_a_status"]==quality["status"]=="passed" && qualified ? "passed" : "failed"
+    push!(record["harness_revisions"],Dict("purpose"=>"M9a11 corrected cable Julia references only",
+        "history"=>relpath(history,directory),"reference_commit"=>readchomp(`git -C $REPOSITORY rev-parse HEAD`),
+        "old_source_files"=>record["source_files"],"projects_unchanged"=>true,
+        "measurement"=>"retained extracted SI matrices and original quality gates; baseline raw output for tier A",
+        "refinements"=>"reference-independent measured half-amplitude and half-step gates retained"))
+    record["source_files"] = source_record()
+    record["corrected_analysis"] = Dict("status"=>record["status"],"tier_c_result"=>quality)
+    all(digest(joinpath(directory,path))==hash for (path,hash) in projects) || error("project hash changed")
+    write_manifest(directory,record)
+    println(id,": A=",record["tier_a_status"]," C=",quality["status"]," max_F=",quality["max_frobenius_error"])
+    return record
 end

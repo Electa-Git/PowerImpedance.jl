@@ -15,7 +15,12 @@ const P = PowerImpedance.PSCAD
             summary = P.read_project_summary(path)
             @test parse(Float64, summary.settings["time_step"]) ==
                   project["settings"]["time_step_us"]
-            @test summary.settings["sample_step"] == "10.0"
+            @test parse(Float64,summary.settings["sample_step"]) == project["settings"]["sample_step_us"]
+            if startswith(project["axis"],"abc_resonance_")
+                @test length(summary.pgbs)==2
+                @test sum(c["components"] for c in project["probes"])==6
+                @test parse(Float64,summary.settings["sample_step"])≈64.0
+            end
             @test length(summary.pgbs) >= length(project["probes"])
             @test V.digest(path) == project["sha256"]
             # Every non-baseline project is an exact clone with only amplitude

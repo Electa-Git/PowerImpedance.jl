@@ -35,6 +35,15 @@ function scan_samples(result, model, spec)
     input_base, output_base = spec.quantity == "Y" ?
                               (spec.voltage_bases, spec.current_bases) :
                               (spec.current_bases, spec.voltage_bases)
+    if get(spec,:drive,"") == "current"
+        probe=only(filter(c->c.kind==:injection_current,model.probes.channels))
+        drive=fixed_dq(result.time,probe_samples(result,probe))
+        probe.orientation==:out || error("injected current must be recorded outwards")
+        poles=[only(filter(c->c.kind==:voltage && c.bus==port_probe(model.netlist,:DUT,1).name && c.side==pole,
+            model.probes.channels)) for pole in ("P","N")]
+        dc_voltage=result.channels[poles[1].name]-result.channels[poles[2].name]
+        return (; voltage,current,input,output,input_base,output_base,drive,drive_base=spec.current_bases,dc_voltage)
+    end
     return (; voltage, current, input, output, input_base, output_base)
 end
 
@@ -62,18 +71,24 @@ function scan_quality(time, baseline, runs, spec; columns = eachindex(spec.axes)
     amplitude_error, clamped = 0.0, 0.0
     for (run, column) in zip(runs, columns), start in spec.window_starts
 
-        phasors = dft_phasors(time, run.input - baseline.input, spec.frequencies;
+        driven = get(spec,:drive,"")=="current"
+        signal = driven ? run.drive-baseline.drive : run.input-baseline.input
+        base = driven ? baseline.drive_base : baseline.input_base
+        phasors = dft_phasors(time, signal, spec.frequencies;
             start, duration = spec.window_duration)
         amplitude_error = max(amplitude_error,
             maximum(abs.(abs.(phasors[column, :]) ./
-                         (spec.tone_peak_pu * baseline.input_base[column]) .- 1)))
-        if spec.quantity == "Y"
+                         (spec.tone_peak_pu * base[column]) .- 1)))
+        if spec.quantity == "Y" && !driven
             others = setdiff(axes(run.input, 2), [column])
             isempty(others) || (clamped = max(clamped,
                 maximum(abs,
                     (run.input[:, others] - baseline.input[:, others]) ./
                     baseline.input_base[others]')))
         end
+    end
+    if get(spec,:drive,"")=="current"
+        clamped=maximum(maximum(abs,run.dc_voltage-baseline.dc_voltage)/640 for run in runs)
     end
     valid = drift <= 1e-3 && input_departure <= 0.01 && output_departure <= 0.01 &&
             amplitude_error <= 0.01 && clamped <= 1e-6
@@ -103,10 +118,20 @@ function single_response(result, baseline_result, model, spec, column)
             spec.frequencies; start, duration = spec.window_duration)
         output = dft_phasors(result.time, run.output - baseline.output,
             spec.frequencies; start, duration = spec.window_duration)
+        if get(spec,:drive,"")=="current"
+            # One current-drive witness cannot identify two Y columns when the
+            # terminal voltage couples dq. Qualify both measured V/I responses
+            # per injected current instead, preserving the ONE-axis witness.
+            input=dft_phasors(result.time,run.drive-baseline.drive,spec.frequencies;
+                start,duration=spec.window_duration)
+            output=vcat(dft_phasors(result.time,run.voltage-baseline.voltage,spec.frequencies;
+                start,duration=spec.window_duration),output)
+        end
         all(>(0), abs.(input[column, :])) || error("zero witness drive")
         response = reshape(output ./ input[column:column, :], size(output, 1), 1, :)
-        push!(matrices, response .*
-                        reshape(baseline.input_base[column] ./ baseline.output_base, :, 1, 1))
+        input_base = get(spec,:drive,"")=="current" ? baseline.drive_base[column] : baseline.input_base[column]
+        output_base = get(spec,:drive,"")=="current" ? [baseline.input_base;baseline.output_base] : baseline.output_base
+        push!(matrices,response .* reshape(input_base ./ output_base,:,1,1))
     end
     quality = scan_quality(result.time, baseline, [run], spec; columns = [column])
     change = matrix_change(matrices[2], matrices[1]; epsilon = 0.01)
@@ -128,7 +153,7 @@ function step_definition(spec, frequency)
     frequencies = frequency == 1000.0 ? [750.0, 1000.0] : unique(sort([frequency, 1000.0]))
     period = 1 / gcd(50, reduce(gcd, round.(Int, frequencies)))
     duration = max(0.1, period)
-    settle = get(spec, :protocol, "") in ("settled", "abc_settled") ?
+    settle = get(spec, :protocol, "") in ("settled", "abc_settled", "dq_active") ?
              first(spec.window_starts) : 0.8
     start = ceil(settle / duration) * duration
     n = length(frequencies)
@@ -281,9 +306,9 @@ function execute_axis!(record, key, model, directory, remote, deadline)
     return result
 end
 
-function existing_model(record, key, list, spec, directory)
+function existing_model(record, key, list, spec, directory; prefix = scan_prefix(spec))
     project = only(filter(p -> p["axis"] == key, record["projects"]))
-    logical = chop(key; head = length(scan_prefix(spec)), tail = 0)
+    logical = chop(key; head = length(prefix), tail = 0)
     axis = logical == "baseline" ? "baseline" : replace(logical, "half_amplitude_"=>"")
     plan, settings = scan_plan(list, spec, axis)
     return P.PSCADModel(
@@ -299,8 +324,9 @@ function run_fixture(id; remote = RemoteConfig(),
     record["fixture_id"] == id || error("fixture mismatch")
     entry = fixture(id)
     net = entry.factory()
-    passive_gate(net, entry)
-    list = P.netlist(net, power_flow(net))
+    point = power_flow(net)
+    stability_gate(net, entry)
+    list = P.netlist(net, point)
     spec, reference = applicable_scan(id, net, list; definition = record["tier_c"])
     stored = read_response(joinpath(directory, reference_filename(spec)), length(spec.axes), spec.frequencies)
     isapprox(reference, stored; rtol = 1e-12, atol = 1e-14) ||
@@ -308,6 +334,10 @@ function run_fixture(id; remote = RemoteConfig(),
     scan_record(spec) ==
     Dict(key=>record["tier_c"][key] for key in keys(scan_record(spec))) ||
         error("scan definition changed")
+    if startswith(get(record,"status",""),"explained:")
+        println(id,": ",record["status"],"; owner disposition retained, numerical rules unchanged")
+        return record
+    end
     accepted = get(record, "status", "") == "passed" &&
         get(record, "tier_a_status", "") == "passed" &&
         get(get(record, "corrected_analysis", Dict()), "status", "") == "passed" &&
@@ -337,7 +367,11 @@ function run_fixture(id; remote = RemoteConfig(),
         end
         record["tier_c_result"] = compare_frequency_runs(
             results, models, stored, comparison_directory; spec)
-        selected = record["tier_c_result"]["worst_column"]
+        # Reference-only revisions do not invalidate measured method witnesses.
+        # Retain their original axis/band instead of requesting another run.
+        selected = haskey(record, "step_witness_definition") ?
+            only(findall(==(record["step_witness_definition"]["axis"]), spec.axes)) :
+            record["tier_c_result"]["worst_column"]
         axis = spec.axes[selected]
         half_spec = merge(spec, (tone_peak_pu = spec.tone_peak_pu/2,))
         half_key = scan_prefix(spec) * "half_amplitude_" * axis
@@ -356,7 +390,10 @@ function run_fixture(id; remote = RemoteConfig(),
                 limit = 0.02, valid = amp["valid"]))
         record["amplitude_refinement"] = merge(amp, Dict("axis"=>axis, "quality"=>half_quality))
         write_manifest(directory, record)
-        step_spec = step_definition(spec, record["tier_c_result"]["worst_frequency_Hz"])
+        witness_frequency = haskey(record, "step_witness_definition") ?
+            first(record["step_witness_definition"]["frequencies"]) :
+            record["tier_c_result"]["worst_frequency_Hz"]
+        step_spec = step_definition(spec, witness_frequency)
         if !haskey(record, "step_witness_definition")
             record["step_witness_definition"] = merge(scan_record(step_spec), Dict("axis"=>axis))
         else
@@ -395,6 +432,9 @@ function run_fixture(id; remote = RemoteConfig(),
                            record["tier_a_status"] == "passed" &&
                            record["tier_c_result"]["status"] == "passed" && qualified ?
                            "passed" : "failed"
+        if haskey(record, "resonance_scan")
+            run_resonance!(record, net, list, spec; directory, remote, deadline)
+        end
     catch failure
         record["status"] = "run_or_analysis_failed"
         record["failure"] = sprint(showerror, failure)
@@ -408,7 +448,7 @@ function run_fixture(id; remote = RemoteConfig(),
 end
 
 function run_l1(; remote = RemoteConfig(), deadline = time()+5400)
-    records = [run_fixture(entry.id; remote, deadline) for entry in REGISTRY]
+    records = [run_fixture(entry.id; remote, deadline) for entry in REGISTRY if startswith(entry.id,"L1-")]
     return records
 end
 

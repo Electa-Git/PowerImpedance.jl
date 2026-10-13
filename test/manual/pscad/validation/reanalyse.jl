@@ -1,8 +1,14 @@
 # Stored-output analysis only. This entry point never calls native compute.
 using PowerImpedance, TOML
 include("validation.jl")
-length(ARGS) == 1 || error("usage: reanalyse.jl <fixture|L1>")
-ids = only(ARGS) == "L1" ? [entry.id for entry in PSCADValidation.REGISTRY] : ARGS
+refresh = "--refresh-reference" in ARGS
+fixtures = filter(!=("--refresh-reference"), ARGS)
+length(fixtures) == 1 || error("usage: reanalyse.jl <fixture|L1> [--refresh-reference]")
+ids = only(fixtures) == "L1" ? [entry.id for entry in PSCADValidation.REGISTRY] : fixtures
 for id in ids
-    PSCADValidation.reanalyse_fixture(id)
+    if refresh
+        PSCADValidation.refresh_references(id)
+    else
+        PSCADValidation.reanalyse_fixture(id)
+    end
 end

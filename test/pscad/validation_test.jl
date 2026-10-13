@@ -206,9 +206,9 @@ end
 end
 
 @testset "Passive catalogue and generated source plans" begin
-    @test length(V.REGISTRY) == 8
-    @test length(unique(entry.id for entry in V.REGISTRY)) == 8
-    for entry in V.REGISTRY
+    @test length(V.REGISTRY) == 9
+    @test length(unique(entry.id for entry in V.REGISTRY)) == 9
+    for entry in filter(e->startswith(e.id,"L1-"),V.REGISTRY)
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"
         powerflow = entry.id == "L1-08" ? power_flow(net) : nothing
@@ -372,7 +372,7 @@ end
 end
 
 @testset "Every L1 port construction and native reduction" begin
-    for entry in V.REGISTRY
+    for entry in filter(e->startswith(e.id,"L1-"),V.REGISTRY)
         net=entry.factory()
         list=P.netlist(net, power_flow(net))
         spec, reference=V.scan_definition(entry.id, net, list)
@@ -704,4 +704,254 @@ end
     @test all(isfinite, response) && norm(response[4:6, 4:6]) > 0
 end
 
+@testset "Complete-network gate stable and unstable witnesses" begin
+    A=-Matrix{Float64}(I,2,2); B=Matrix{Float64}(I,2,2); D=zeros(2,2)
+    grid(s)=Matrix{ComplexF64}(I,2,2)/(1+s)
+    rotation=zeros(2,2)
+    stable=V.network_stability(A,B,0.5B,D,grid,1.0,1.0,rotation)
+    cascade=[A zeros(2,2);B A]
+    unstable=V.network_stability(cascade,[B;zeros(2,2)],[zeros(2,2) -2B],D,grid,1.0,1.0,rotation)
+    @test stable["status"]=="passed" && stable["nyquist_net"]==0
+    @test stable["most_positive_located_real_per_s"]≈-1
+    @test unstable["status"]=="failed"
+    @test unstable["most_positive_located_real_per_s"]>0
+    @test unstable["nyquist_net"]!=0
+end
+
+@testset "TLC port current drive, native reference and synthetic dq recovery" begin
+    net=V.fixture("L2-01").factory(); point=power_flow(net)
+    gate=V.stability_gate(net,V.fixture("L2-01"))
+    @test gate["status"]=="passed"
+    @test gate["most_positive_located_real_per_s"]≈-1.991781088 rtol=1e-6
+    list=P.netlist(net,point); original,reference=V.applicable_scan("L2-01",net,list)
+    @test reference[:,:,1]≈PowerImpedance.get_y(net.elements[:DUT],2π*im)[2:3,2:3]
+    @test original.drive=="current" && original.active
+    @test V.step_definition(original,1.0).window_starts==(8.0,9.0)
+    @test V.step_definition(original,1000.0).time_step==5e-6
+    @test V.band_sample_step(original)≈20e-6
+    form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+    @test 220^2/100/hypot(form.R,2π*50*form.L)≈8
+    @test 2π*50*form.L/form.R≈10
+    frequencies=[1.0,7.0,137.0,1000.0]
+    spec=merge(original,(;frequencies,phases=zeros(4),injection_time=0.0,
+        window_starts=(1.0,2.0),simulation_time=3.0))
+    time=collect(0.0:spec.sample_step:spec.simulation_time)
+    known_pu=cat(([0.2+0.00001im*f -0.05+0.02im;0.08-0.03im 0.3-0.00002im*f]
+        for f in frequencies)...;dims=3)
+    known=known_pu .* reshape(spec.current_bases,:,1,1) ./ reshape(spec.voltage_bases,1,:,1)
+    # Current drive produces mixed terminal voltages. Recover Y using the full
+    # voltage matrix, never dividing each measured current by command current.
+    mixing=[0.4 0.15; -0.1 0.35]
+    models=Dict{String,P.PSCADModel}(); results=Dict{String,P.PSCADResult}()
+    for (j,axis) in enumerate(["baseline";spec.axes;"half"])
+        logical=axis=="half" ? spec.axes[1] : axis
+        local_spec=axis=="half" ? merge(spec,(tone_peak_pu=spec.tone_peak_pu/2,)) : spec
+        plan,settings=V.scan_plan(list,local_spec,logical)
+        @test count(c->c isa P.ModuleInstancePlan && occursin(":CurrentPort_",c.defn),plan.main.components)==1
+        @test count(c->c isa P.ComponentPlan && c.defn=="master:source_3",plan.main.components)==1
+        @test P.check_connectivity(plan)===nothing
+        voltage=repeat([spec.voltage_bases[1] 0.0],length(time),1)
+        current=zeros(length(time),2); drive=zeros(length(time),2)
+        if axis!="baseline"
+            column=axis=="half" ? 1 : j-1
+            for (k,f) in enumerate(frequencies)
+                amplitude=local_spec.tone_peak_pu*spec.current_bases[column]
+                v=mixing[:,column].*local_spec.tone_peak_pu*spec.voltage_bases[column]
+                i=known[:,:,k]*v
+                drive[:,column].+=amplitude*cos.(2π*f.*time)
+                for row in 1:2
+                    voltage[:,row].+=real.(v[row].*cis.(2π*f.*time))
+                    current[:,row].+=real.(i[row].*cis.(2π*f.*time))
+                end
+            end
+        end
+        voltage_abc=phase_wave(time,voltage);current_abc=phase_wave(time,current);drive_abc=phase_wave(time,drive)
+        channels=PowerImpedance.OrderedDict{String,Vector{Float64}}()
+        vp=only(filter(c->c.kind==:voltage && c.bus==only(spec.buses).name,plan.probes.channels))
+        ip=only(filter(c->c.kind==:current && c.element=="DUT" && c.side=="2",plan.probes.channels))
+        dp=only(filter(c->c.kind==:injection_current,plan.probes.channels))
+        @test ip.orientation==:out && dp.orientation==:out
+        for phase in 1:3
+            channels[vp.name*":"*string(phase)]=voltage_abc[:,phase]
+            channels[ip.name*":"*string(phase)]=-current_abc[:,phase]
+            channels[dp.name*":"*string(phase)]=drive_abc[:,phase]
+        end
+        for pole in ("P","N")
+            probe=only(filter(c->c.kind==:voltage && c.bus==V.port_probe(list,:DUT,1).name && c.side==pole,plan.probes.channels))
+            channels[probe.name]=fill(pole=="P" ? 320.0 : -320.0,length(time))
+        end
+        models[axis]=P.PSCADModel("synthetic.pscx",plan.name,list,plan.probes,settings,list.operating_point,(;))
+        results[axis]=P.PSCADResult(PSCADRun(),time,channels,plan.probes,settings,(;),(;))
+        recovered=V.scan_samples(results[axis],models[axis],local_spec)
+        @test recovered.current≈current atol=1e-14
+        @test maximum(abs,recovered.voltage-voltage)<1e-10
+    end
+    mktempdir() do directory
+        outcome=V.compare_frequency_runs(results,models,known,directory;spec)
+        @test outcome["status"]=="passed"
+        @test outcome["max_frobenius_error"]<1e-9
+        println("TLC synthetic max Frobenius recovery error: ",outcome["max_frobenius_error"])
+        @test all(r.frobenius_limit==0.05 && r.phase_limit_deg==3 for r in
+            V.response_rows(spec,known_pu,known_pu;active=true))
+        base,bq=V.single_response(results[spec.axes[1]],results["baseline"],models[spec.axes[1]],spec,1)
+        half,hq=V.single_response(results["half"],results["baseline"],models["half"],merge(spec,(tone_peak_pu=spec.tone_peak_pu/2,)),1)
+        @test size(base)==(4,1,4) && bq["valid"] && hq["valid"]
+        @test V.matrix_change(half,base;epsilon=0.02)["passed"]
+    end
+end
+
+end
+
+module PSCADResonanceTests
+using Test, PowerImpedance, LinearAlgebra
+include("../manual/pscad/validation/validation.jl")
+const V=PSCADValidation
+@testset "Resolved resonance owner rule" begin
+    f=collect(90.:.1:110.)
+    response(centre,width)=reshape(ComplexF64[1/(1+im*2*(x-centre)/width) for x in f],1,1,:)
+    reference=response(100.,4.)
+    matched=V.resonance_qualification(f,reference,reference)
+    @test matched["resolved"] && matched["passed"]
+    @test abs(matched["Julia"]["width_Hz"]-4)<.01
+    shifted=response(100.5,4.)
+    rule=V.resonance_qualification(f,shifted,reference)
+    @test rule["resolved"] && rule["passed"]
+    rows=V.comparison_rows(f,shifted,reference)
+    judged=V.resonance_judged_rows(rows,rule)
+    @test any(!r.within_tolerance for r in rows if 99<=r.frequency_Hz<=101)
+    @test all(r.within_tolerance for r in judged if r.comparison_rule=="resonance_frequency_width")
+    @test all(r.within_tolerance==old.within_tolerance for (r,old) in zip(judged,rows) if r.comparison_rule=="complex")
+    @test !V.resonance_qualification(f,response(102.,4.),reference)["passed"]
+    @test !V.resonance_qualification(f,response(100.,4.5),reference)["passed"]
+    @test_throws ArgumentError V.half_power_resonance([90.,100.,110.],[.1,1.,.1])
+    sparse=V.resonance_qualification(f[1:20:end],reference[:,:,1:20:end],reference[:,:,1:20:end])
+    @test !sparse["resolved"]
+    @test all(r.comparison_rule=="complex" for r in V.resonance_judged_rows(rows,sparse))
+    @test !V.resonance_qualification(f,response(90.,4.),reference)["resolved"]
+    @test all(!r.within_tolerance for r in V.resonance_judged_rows(rows,rule;valid=false))
+    @test all(r.status=="model_mismatch" for r in V.resonance_judged_rows(
+        V.comparison_rows(f,shifted,reference;model_mismatch="documented difference"),rule))
+    @test all(r.status=="invalid_measurement" for r in V.resonance_judged_rows(
+        V.comparison_rows(f,shifted,reference;valid=false),rule))
+    @test all(!r.within_tolerance for r in V.resonance_judged_rows(
+        V.comparison_rows(f,reference,reference),rule;valid=false))
+    dip=V.resonance_qualification(f,inv.(reference),inv.(reference);quantity="Y")
+    @test dip["resolved"] && dip["passed"]
+    @test_throws ArgumentError V.half_power_resonance(reverse(f),ones(length(f)))
+end
+@testset "Quarter-Hz three-phase coherent extraction" begin
+    f=collect(312.:.25:313.)
+    t=collect(0.:1/4096:8.)
+    y=ComplexF64[2+.1im .1+.2im .2-.1im;.3+.1im 3+.2im .1+.1im;.2+.3im .4-.1im 4+.1im]
+    zero=zeros(length(t),3);inputs=Matrix{Float64}[];outputs=Matrix{Float64}[]
+    for axis in 1:3
+        u=zeros(length(t),3);v=zeros(length(t),3)
+        for (k,freq) in enumerate(f)
+            phase=-π*k*(k-1)/length(f)
+            u[:,axis].+=cos.(2π*freq.*t.+phase)
+            for row in 1:3
+                v[:,row].+=real.(y[row,axis].*cis.(2π*freq.*t.+phase))
+            end
+        end
+        push!(inputs,u);push!(outputs,v)
+    end
+    r=V.extract_response(t,inputs,outputs,zero,zero,f;starts=(0.,4.),duration=4.)
+    @test all(maximum(abs,m[:,:,k]-y)<1e-9 for m in r.matrices for k in eachindex(f))
+end
+end
+
+module PSCADResonanceConstructionTests
+using Test,PowerImpedance
+include("../manual/pscad/validation/validation.jl")
+const V=PSCADValidation
+@testset "Bus5 extra-bin construction and retained half-step model" begin
+    net=V.fixture("L1-08").factory();list=V.P.netlist(net,power_flow(net))
+    base,_=V.applicable_scan("L1-08",net,list)
+    spec,reference=V.resonance_spec(net,list,base)
+    @test length(spec.buses)==1 && only(spec.buses).name=="Bus5"
+    @test spec.currents==[("injection_1","1")]
+    @test size(reference)==(3,3,40)
+    @test isempty(intersect(spec.frequencies,base.frequencies))
+    @test all(isinteger(f*spec.window_duration) for f in spec.frequencies)
+    @test 1/(spec.sample_step*maximum(spec.frequencies))>=40
+    @test spec.window_starts==(2.,6.) && spec.simulation_time==10.
+    plan,_=V.scan_plan(list,spec,"p1_a")
+    probes=filter(c->c.kind==:injection_current,plan.probes.channels)
+    @test length(probes)==1 && only(probes).bus=="Bus5" && only(probes).orientation==:out
+    step=merge(spec,(;time_step=spec.time_step/2));prefix=V.scan_prefix(spec)*"half_step__"
+    mktempdir() do directory
+        write(joinpath(directory,"fixture.pscx"),"<project/>")
+        record=Dict("projects"=>[Dict("axis"=>prefix*"p1_a","path"=>"fixture.pscx",
+            "probes"=>V.probe_record.(plan.probes.channels))])
+        model=V.existing_model(record,prefix*"p1_a",list,step,directory;prefix)
+        @test model.settings.time_step==1e-6
+    end
+end
+@testset "Frequency grid interval can dominate the one-percent limit" begin
+    f=collect(.3:.025:1.7)
+    r(c)=reshape(ComplexF64[1/(1+im*2*(x-c)/.4) for x in f],1,1,:)
+    q=V.resonance_qualification(f,r(1.02),r(1.))
+    @test q["resolved"] && q["passed"]
+    @test q["frequency_limit_Hz"]≈.025
+end
+end
+
+module PSCADBandSamplingTests
+using Test,PowerImpedance,LinearAlgebra
+include("../manual/pscad/validation/validation.jl")
+const V=PSCADValidation
+@testset "Band sampling preserves windows, sidebands and integration steps" begin
+    spec=(;frequency=50.,frequencies=collect(312.:.25:322.),dimension=3,
+        time_step=2e-6,window_starts=(2.,6.),window_duration=4.,simulation_time=10.)
+    dt=V.band_sample_step(spec)
+    @test dt≈64e-6
+    @test V.band_sample_step(merge(spec,(;time_step=1e-6)))≈dt
+    @test 1/(dt*maximum(spec.frequencies))>=40
+    @test all(isapprox(b/dt,round(b/dt);atol=1e-8) for b in (2.,6.,4.,10.))
+    @test round(Int,10/dt)+1==156251
+    @test round(Int,4/dt)==62500
+    dq=merge(spec,(;dimension=2,frequencies=[1000.]))
+    @test 1/(V.band_sample_step(dq)*1050)>=40
+    @test dq.time_step==2e-6
+    @test_throws ErrorException V.band_sample_step(merge(spec,(;time_step=.1)))
+end
+@testset "64-us coherent abc response recovery" begin
+    dt=64e-6;t=collect(0.:dt:8.);f=[312.,316.25,322.]
+    y=ComplexF64[2+.1im .1+.2im .2-.1im;.3+.1im 3+.2im .1+.1im;.2+.3im .4-.1im 4+.1im]
+    baseline=zeros(length(t),3);inputs=Matrix{Float64}[];outputs=Matrix{Float64}[]
+    for axis in 1:3
+        u=zeros(length(t),3);v=zeros(length(t),3)
+        for (k,freq) in enumerate(f)
+            phase=-π*k*(k-1)/length(f)
+            u[:,axis].+=cos.(2π*freq.*t.+phase)
+            for row in 1:3
+                v[:,row].+=real.(y[row,axis].*cis.(2π*freq.*t.+phase))
+            end
+        end
+        push!(inputs,u);push!(outputs,v)
+    end
+    extracted=V.extract_response(t,inputs,outputs,baseline,baseline,f;starts=(0.,4.),duration=4.)
+    @test all(maximum(abs,m[:,:,k]-y)<1e-9 for m in extracted.matrices for k in eachindex(f))
+end
+@testset "Resonance recorder selection leaves the circuit intact" begin
+    net=V.fixture("L1-08").factory();list=V.P.netlist(net,power_flow(net))
+    base,_=V.applicable_scan("L1-08",net,list);spec,_=V.resonance_spec(net,list,base)
+    selected,_=V.scan_plan(list,spec,"p1_a")
+    full,_=V.scan_plan(list,merge(spec,(;protocol="abc_resonance_all_probes")),"p1_a")
+    discarded=filter(c->c isa V.P.ComponentPlan && c.defn=="master:pgb" &&
+        !(Dict(c.params)["Name"] in Set(p.name for p in selected.probes.channels)),full.main.components)
+    labelpoints=Set((c.x-36,c.y) for c in discarded)
+    recording_wires=Set(((c.x-36,c.y),(c.x,c.y)) for c in discarded)
+    keep(c)=!(c isa V.P.ComponentPlan && (c.defn=="master:pgb" ||
+        c.defn=="master:datalabel" && (c.x,c.y) in labelpoints))
+    # Only recorder assemblies change, no electrical component/connection does.
+    @test repr(filter(keep,selected.main.components))==repr(filter(keep,full.main.components))
+    @test repr(selected.main.wires)==repr(filter(w->Tuple(w.vertices) ∉ recording_wires,full.main.wires))
+    @test repr(selected.lines)==repr(full.lines)
+    @test repr(selected.modules)==repr(full.modules)
+    @test length(selected.probes.channels)==2
+    @test sum(c.dim for c in selected.probes.channels)==6
+    @test all(c.bus=="Bus5" for c in selected.probes.channels)
+    @test count(c->c isa V.P.ComponentPlan && c.defn=="master:pgb",selected.main.components)==2
+end
 end
