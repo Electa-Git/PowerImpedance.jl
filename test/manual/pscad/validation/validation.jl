@@ -7,6 +7,7 @@ const P = PowerImpedance.PSCAD
 const ROOT = @__DIR__
 const REPOSITORY = normpath(joinpath(ROOT, "../../../.."))
 include("../../../pscad/fixtures.jl")
+include("../../../pscad/m7_networks.jl")
 include("fixtures.jl")
 include("stability.jl")
 include("frequency.jl")

@@ -440,6 +440,154 @@ passes **270/270** per version. All 54 project hashes, 78 retained payload
 files and 49 producing-source hashes per fixture verify; native references
 pass the unchanged one-ppm identity guard. Logs and summary: `data/m9b8/`.
 
+## L2 batch C: GFM/energy MMC and machine (M9b-9)
+
+All six TLC fixtures L2-01..06 are owner-qualified at 97bdf86. Batch B is
+running on the owner's station; `data/L2-07/` through `data/L2-12/` are untouched.
+Four batch-C fixtures pass the complete-network gate without tuning and are
+prepared. Their station tier A/C and refinements remain pending. L2-17 fails
+and has no projects or native runs.
+
+| Fixture / device | SCR | Solved P / Q (MW / MVAr) | AC voltage (pu) | Gate / rightmost finite root (1/s) | Base / witness (us) | Estimated nodes | Expected time |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| L2-13 GFM, VSE/CCVI + TEC/ZSCC/CCSC | 8 | 742 / 0 | 1.0049037 | passed: -0.000628312 | 2.5 / 1.25 | 65 | 25–40 min |
+| L2-14 LEC/CCC, compensated | 8 | 742 / 0 | 1.0049037 | passed: -0.000628319 | 1 / 0.5 | 65 | 45–75 min |
+| L2-15 P/Q, disabled TEC/ZSCC, CCSC on | 8 | 100 / 100 | 1.0134393 | passed: -19.693285 | 2.5 / 1.25 | 65 | 25–40 min |
+| L2-16 machine, AVR/governor/steam turbine | 8 | 900 / 6.633245 | 0.9991198 | passed: -0.197564 | 5 / 2.5 | 45 | 45–75 min |
+| L2-17 GFM weak-grid twin | 2.5 | 742 / 0 | 0.9875930 | failed: +100.731659 +/- j359.941514 | requested 2.5 / 1.25 | 65 (not built) | skipped |
+
+L2-13/14/17 retain the M6a/M6b factories unchanged: 1060 MVA, 320/400 kV
+converter winding/external terminal, ratio 0.8 and 640 kV clamped DC. VSE
+H=5, Kd=100, Komega=10; CCVI Rv=0.01, Lv=0.25 with its 200 rad/s second-order
+filter; measurement, PLL, OCC and 200 us Padé 5/5 modulation are unchanged.
+L2-14 retains original Sigma/Delta-energy PI 0.5544/5.94, CCC and compensated
+modulation. No energy-gain scaling or replacement of its corrected triplen
+controller frame is applied. The very slow OCC filter poles (about -0.0006283/s,
+1592 s decay time) remain in the gate. The 8 s measurement candidate relies on
+the native equilibrium initialization, not full slow-filter decay; measured
+baseline drift and window consistency remain mandatory.
+
+L2-15 reuses the actual legacy-mapped P2P receiving converter `c2` through the
+existing test factory, including 1000 MVA, 333/380 kV, 640 kV DC, 30 mH arms,
+P/Q 100 MW / 100 MVAr, NoTotalEnergyControl, NoZeroSequenceCurrentControl and
+CCSC on. This clamped-DC fixture does not qualify the full P2P system.
+L2-16 retains the M3 1000 MVA / 380 kV machine, 900 MW request, original voltage
+request 1.000177992 pu, rt/lt, AVR, governor and steam-turbine parameters.
+
+All grids use X/R=10 at 50 Hz and rated external voltage for SCR. For the
+1060 MVA / 400 kV devices, strong-grid R=1.877428661 ohm, L=0.059760410 H;
+the weak twin scales these by 8/2.5. The 1000 MVA / 380 kV devices use
+R=1.796042128 ohm, L=0.057169797 H. Each AC reference measures DUT current
+alone. The native machine `get_y` is per-unit; its full 2x2 AC-terminal Y is
+converted to SI by Sbase/VLL^2 at the harness boundary, without a source change.
+No DC port, clamp gate or converter AC subblock is assumed for the machine.
+
+The singular KCL descriptor originally reported a finite 7.45e17/s quotient
+for L2-15's algebraic infinity. QZ beta now distinguishes finite poles using
+the same backward-error-scale criterion as the existing independent descriptor
+test. The unchanged strict negative finite-root margin and Nyquist rule are
+retained. Independent KCL elimination gives an ordinary state matrix and
+checks all finite-mode counts and rightmost roots, including the weak-grid
+rejection. L2-17 has two closed RHP roots at the pair shown above; its full
+located spectrum and operating point are in `data/L2-17/stability_rejected.toml`.
+
+The machine's slowest mode is -0.197563788/s (tau=5.06166 s). The next pair is
+-0.472166676 +/- j8.7230884/s; governor/turbine and AVR states remain included.
+Settling starts from the existing emitter's 1 s mechanical-control transfer:
+ceil(1+12*tau)=62 s, also exceeding eight decay times from the 2 s tone onset.
+Main and witness windows are **[62,64), [64,66) s**, with 66 s runs. A 1 s
+window is mathematically coherent at 1 Hz; the chosen **2 s windows** provide
+two cycles per window and more low-frequency averaging. Longer windows are
+not required for coherence; actual drift/window gates decide qualification.
+
+Other admitted fixtures keep 2 s onset, [8,9), [9,10) s main windows and 10 s
+runs. All use 20 us sampling, the existing 23 integer tones at 1–1000 Hz
+excluding 50 Hz, 5e-5 pu current per tone and adaptive coherent witnesses.
+All active C **5% / 3 degrees**, floors, conditioning, departure, drift,
+drive/window and amplitude/step gates are unchanged. Native settled-response
+triangle bounds are at most 0.000426 pu voltage / 0.000463 pu current;
+these are predictions, not station acceptance.
+
+One resumable command selects only the four admitted fixtures:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-13 L2-14 L2-15 L2-16 --timeout=18000
+```
+
+Allow **140–230 minutes overall**, with a **300-minute shared deadline**.
+Estimates include finer compensated integration, 66 s machine traces,
+transfer and analysis; no new station timings are claimed. Estimated live
+nodes are below 100; actual native counts must still pass the existing gate.
+Nine projects per admitted fixture normally require six fresh runs and resume
+only matching completed hashes. XML checking can select L2-13..17 explicitly;
+it reports the rejected fixture without reading batch B.
+
+Projects, references, operating points and source pins are in `data/L2-13/`
+through `data/L2-16/`. Gate spectra, preparation evidence and logs are under
+`data/m9b9/`. No station contact, `src/` changes or commits.
+
+Offline on Julia **1.12.7 (repository Manifest)** and **1.10.11**:
+**18,032/18,032 PSCAD suite checks** per version, including **107 new batch-C
+checks** and **59 name-guard checks**. Batch-only XML/rejection checks pass
+**181/181** per version (180 project checks plus the explicit L2-17 rejection).
+All 36 admitted project hashes, 52 retained payload files and 53 producing-source
+hashes per fixture verify. Independent ODE reduction confirms every finite
+mode count and rightmost root; machine synthetic dq recovery passes below
+1e-9 normalized error. No gate or comparison tolerance was changed.
+
+
+## L2-07 diagnosis and L2-16 refinement (M9b-10/11)
+
+L2-07 stored-run diagnosis rejects the turns-ratio scaling hypotheses in the
+measurements, OCC, PLL, voltage feedforward and interface L/R referral. An
+**effective two-EMT-step lag in the exported Delta modulation path** reproduces
+the high-frequency discrepancy: 5 us lag at the 2.5 us base step reduces the
+133–1000 Hz residual to 0.12–0.17%; the independent 1.25 us witness fits 2.5 us
+lag. Delaying only Delta reproduces it; delaying only Sigma does not. The exact
+scheduling stages are not located because compiled EMTDC source was not retained.
+The 11.5% plateau uses the approved Frobenius floor, and the stored witness
+also fails its entry gate. Full audit and numerical evidence: `data/m9b10/`.
+
+Owner decision: **locate the source of each step from a kept build, remove
+avoidable lags, and compensate the inherent one-step lag in the exported
+modulation delay when the model has one**. MMC fixtures wait for that exporter
+change; this settings round does not implement it. L2-17 remains recorded as
+**unstable in Julia**, with roots +100.731659 +/- j359.941514 /s, and is skipped
+without tuning.
+
+Owner station evidence for L2-16: tier A and half-amplitude passed; C error is
+0.02–0.1% through 100 Hz and rises approximately with frequency squared to
+5.52348% at 1000 Hz, above the active 5% limit. The 5-to-2.5 us witness fails:
+1.61323% Frobenius / 3.54330% entry change against the unchanged 1% gate.
+This is retained as time-step evidence, not qualification.
+
+L2-16 is re-prepared at **2.5 us base / 1.25 us witness**. All runs remain
+**66 s**, with **[62,64), [64,66) s** windows, **2 s** window duration,
+**20 us** sampling, 2 s tone onset, the original 23 coherent tones and 5e-5 pu
+amplitude. Physical parameters, operating point, complete-network gate and all
+approved tolerances/refinement gates are unchanged. The entire previous tree
+is archived at `data/archive/m9b11/L2-16/`; new project hashes differ and no
+completed old run is eligible for reuse.
+
+Allow **70–90 minutes**, with a **120-minute deadline**, for six fresh runs,
+transfer and analysis. The old workflow took 47.52 minutes, including 21.94
+minutes of native runs; doubling integration work with unchanged output volume
+predicts about 69.46 minutes before margin. This is a planning estimate.
+From the repository root, with the Julia 1.10.11 harness environment:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-16 --timeout=7200
+```
+
+The command resumes only matching completed new-project runs. Preparation and
+offline checks perform no station operation. Evidence and logs: `data/m9b11/`.
+
+Offline on Julia **1.12.7 (repository Manifest)** and **1.10.11**:
+**18,033/18,033 PSCAD suite assertions**, **59/59 standalone name-guard
+assertions**, and **45/45 L2-16 project XML assertions** per version. Archived
+inventory hashes, all nine changed project hashes and all 53 fresh producing-source
+pins verify. Native reference and operating-point bytes are unchanged.
+
 ## Frozen settings
 
 | Fixture | Applicable injection / response | Grid | Base / half step | Full run / windows | Original station estimate |

@@ -39,6 +39,9 @@ function scan_samples(result, model, spec)
         probe=only(filter(c->c.kind==:injection_current,model.probes.channels))
         drive=fixed_dq(result.time,probe_samples(result,probe))
         probe.orientation==:out || error("injected current must be recorded outwards")
+        if spec.dc_voltage_base_kV===nothing
+            return (; voltage,current,input,output,input_base,output_base,drive,drive_base=spec.current_bases)
+        end
         poles=[only(filter(c->c.kind==:voltage && c.bus==port_probe(model.netlist,:DUT,1).name && c.side==pole,
             model.probes.channels)) for pole in ("P","N")]
         dc_voltage=result.channels[poles[1].name]-result.channels[poles[2].name]
@@ -163,7 +166,7 @@ function step_definition(spec, frequency)
     common_frequency = gcd(50, reduce(gcd, round.(Int, frequencies)))
     # The minimum window must contain whole common periods too: 75/1000 Hz
     # needs 0.12 s, since a 0.1 s window contains 7.5 cycles at 75 Hz.
-    duration = ceil(Int, 0.1 * common_frequency) / common_frequency
+    duration = ceil(Int, get(spec,:minimum_witness_window_s,0.1) * common_frequency) / common_frequency
     settle = get(spec, :protocol, "") in ("settled", "abc_settled", "dq_active") ?
              first(spec.window_starts) : 0.8
     start = ceil(Int, settle * common_frequency) / common_frequency

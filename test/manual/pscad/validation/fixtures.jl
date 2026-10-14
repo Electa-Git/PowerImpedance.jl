@@ -122,7 +122,21 @@ const REGISTRY = [
      for (id, mode, label, scr) in (("L2-07", :pq, "P/Q", 8.0),
          ("L2-08", :pf, "P-f/Q", 8.0), ("L2-09", :qv, "P/Q-V", 8.0),
          ("L2-10", :vac, "P/VAC", 8.0), ("L2-11", :vdc, "Vdc/Q", 8.0),
-         ("L2-12", :pq, "P/Q weak-grid twin", 2.5))]...
+         ("L2-12", :pq, "P/Q weak-grid twin", 2.5))]...,
+    [(id=id, description=label, parent=parent,
+        factory=()->batch_c_network(kind; scr),
+        topology=kind==:machine ? "AC source — RL — synchronous machine with native rt/lt" :
+            "AC source — RL — MMC; ideal DC source",
+        physics=["complete-network active-device dynamics", "AC-terminal dq admittance"],
+        dissipativity="complete-network Nyquist and all finite descriptor roots required",
+        differences=kind==:machine ? ["native machine Y is per-unit; explicit SI boundary conversion", "existing PSCAD machine iron-loss and initialization conventions"] :
+            ["200 us Padé 5/5 modulation versus native PSCAD delay; controls and electrical parameters unchanged"],
+        tiers=["A","C"], estimated_nodes=kind==:machine ? 45 : 65)
+     for (id,kind,label,parent,scr) in (("L2-13",:gfm,"GFM MMC, SCR 8","M6a mmc_gfm_network",8.),
+         ("L2-14",:compensated,"LEC/CCC compensated MMC","M6b mmc_compensated_network",8.),
+         ("L2-15",:disabled,"P/Q MMC with disabled TEC/ZSCC","legacy-mapped P2P receiving MMC c2",8.),
+         ("L2-16",:machine,"Synchronous machine with AVR/governor/turbine","M3 sm_network",8.),
+         ("L2-17",:gfm,"GFM MMC weak-grid twin","M6a mmc_gfm_network",2.5))]...
 ]
 
 function fixture(id)
@@ -378,6 +392,40 @@ function mmc_grid_network(; mode = :pq, scr = 8.0)
         connect!(net, (:G_DC,Symbol("1.1")), :DC)
     end
     connect!(net, (:G_DC,Symbol("2.1")), :gnd)
+    connect!(net)
+    return net
+end
+
+function batch_c_device(kind)
+    kind==:gfm && return deepcopy(PSCADFixtures.mmc_gfm_network().state.elements.DUT)
+    kind==:compensated && return deepcopy(PSCADFixtures.mmc_compensated_network().state.elements.DUT)
+    kind==:disabled && return deepcopy(PSCADM7Networks.p2p_builder(1.).elements.c2)
+    kind==:machine && return deepcopy(PSCADFixtures.sm_network().state.elements.sg1)
+    throw(ArgumentError("unknown batch C device $kind"))
+end
+
+function batch_c_network(kind; scr=8.)
+    dut=batch_c_device(kind)
+    bases=device_bases(dut.element_model.elec)
+    net=Network();net.voltageBase[1]=bases.ac_voltage/sqrt(2)
+    add!(net,:DUT,dut)
+    add!(net,:G3,ac_source(pins=3,transformation=true,setpoint=Setpoint(Vac=bases.ac_voltage)))
+    z=(bases.ac_voltage*sqrt(3/2))^2/bases.power/scr
+    resistance=z/sqrt(101);inductance=10resistance/(2π*50)
+    add!(net,:Grid,impedance(z=s->resistance+inductance*s,pins=3,transformation=true))
+    for terminal in 1:2
+        for (element,side,bus) in ((:DUT,bases.ac_side,"AC"),(:Grid,1,"AC"),(:Grid,2,"Grid"),(:G3,1,"Grid"))
+            connect!(net,(element,Symbol("$side.$terminal")),Symbol(bus*string(terminal)))
+        end
+        connect!(net,(:G3,Symbol("2.$terminal")),:gnd)
+        bases.dc_voltage===nothing && connect!(net,(:DUT,Symbol("2.$terminal")),:gnd)
+    end
+    if bases.dc_voltage!==nothing
+        add!(net,:G_DC,dc_source(setpoint=Setpoint(Vdc=bases.dc_voltage)))
+        connect!(net,(:DUT,Symbol("1.1")),:DC)
+        connect!(net,(:G_DC,Symbol("1.1")),:DC)
+        connect!(net,(:G_DC,Symbol("2.1")),:gnd)
+    end
     connect!(net)
     return net
 end

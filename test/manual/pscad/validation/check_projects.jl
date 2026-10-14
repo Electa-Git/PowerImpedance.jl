@@ -6,6 +6,12 @@ const P = PowerImpedance.PSCAD
 @testset "All validation written project XML" begin
     for entry in (isempty(ARGS) ? V.REGISTRY : V.fixture.(ARGS))
         directory = joinpath(V.ROOT, "data", entry.id)
+        if !isfile(joinpath(directory,"manifest.toml")) && isfile(joinpath(directory,"stability_rejected.toml"))
+            rejected=TOML.parsefile(joinpath(directory,"stability_rejected.toml"))
+            @test rejected["gate"]["status"]=="failed"
+            println("Skipped ",entry.id,": complete-network stability gate failed")
+            continue
+        end
         record = TOML.parsefile(joinpath(directory, "manifest.toml"))
         baseline = read(
             joinpath(directory, only(filter(p->p["axis"]==(isempty(get(record["tier_c"], "protocol", "")) ? "baseline" : record["tier_c"]["protocol"] * "_baseline"), record["projects"]))["path"]),

@@ -8,7 +8,12 @@ function network_poles(A, B, C, D, resistance, inductance, rotation)
         zeros(2,n) -resistance*identity-inductance*rotation identity;
         C identity D]
     storage = diagm([ones(n); fill(inductance,2); zeros(2)])
-    poles = filter(isfinite, eigvals(dynamics, storage))
+    # Singular KCL rows have algebraic infinity, which eigvals can round to a
+    # finite 1e18 quotient. Classify the QZ denominator at backward-error scale
+    # before scoring finite roots; the strict stability margin is unchanged.
+    pencil=schur(dynamics,storage)
+    finite=abs.(pencil.β) .> 100eps(Float64)*max(norm(storage),1.)
+    poles=pencil.α[finite]./pencil.β[finite]
     return sort!(poles; by=real, rev=true)
 end
 
@@ -55,7 +60,7 @@ function stability_gate(net, entry)
     startswith(entry.id,"L1-") && return passive_gate(net,entry)
     startswith(entry.id,"L2-") || error("no complete-network gate for $(entry.id)")
     dut=net.elements[:DUT]
-    bases=converter_bases(dut.element_model.elec)
+    bases=device_bases(dut.element_model.elec)
     form=P.identify_rlc(net.elements[:Grid]; name=:Grid).form
     grid_y(s)=PowerImpedance.get_y(net.elements[:Grid],s)[1:2,1:2]
     rotation=real.((inv(grid_y(0.0im))-form.R*I)/form.L)
@@ -74,10 +79,11 @@ function stability_gate(net, entry)
         Cac=C[2:3,:]-D[2:3,1:1]*(C[1:1,:]/denom)
         Dac=D[2:3,2:3]-D[2:3,1:1]*(D[1:1,2:3]/denom)
     else
-        Bac,Cac,Dac=B[:,2:3],C[2:3,:],D[2:3,2:3]
+        indices=bases.ac_indices
+        Bac,Cac,Dac=B[:,indices],C[indices,:],D[indices,indices]
     end
     gate=network_stability(A,Bac,Cac,Dac,grid_y,form.R,form.L,rotation)
     gate["DC_termination"]=haskey(net.elements,:DC_load) ?
-        "physical DC resistor; exact algebraic node elimination, converter DC states retained" : "ideal DC voltage source"
+        "physical DC resistor; exact algebraic node elimination, converter DC states retained" : bases.dc_voltage===nothing ? "not applicable: AC-only machine" : "ideal DC voltage source"
     return gate
 end

@@ -255,8 +255,8 @@ end
 end
 
 @testset "Passive catalogue and generated source plans" begin
-    @test length(V.REGISTRY) == 20
-    @test length(unique(entry.id for entry in V.REGISTRY)) == 20
+    @test length(V.REGISTRY) == 25
+    @test length(unique(entry.id for entry in V.REGISTRY)) == 25
     for entry in filter(e->startswith(e.id,"L1-"),V.REGISTRY)
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"
@@ -890,6 +890,116 @@ end
     end
 end
 
+@testset "Batch C device ports and finite complete-network roots" begin
+    for (id,kind,scr) in (("L2-13",:gfm,8.),("L2-14",:compensated,8.),
+        ("L2-15",:disabled,8.),("L2-16",:machine,8.),("L2-17",:gfm,2.5))
+        parent=V.batch_c_device(kind);net=V.fixture(id).factory();dut=net.elements[:DUT]
+        @test repr(parent.element_model)==repr(dut.element_model)
+        @test parent.setpoint==dut.setpoint
+        point=power_flow(net);list=V.fixture_netlist(net,point)
+        bases=V.device_bases(dut.element_model.elec)
+        form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+        @test (bases.ac_voltage*sqrt(3/2))^2/bases.power/hypot(form.R,2π*50*form.L)≈scr
+        @test 2π*50*form.L/form.R≈10
+        B=dut.B./bases.voltage_inputs';C=dut.C.*bases.current_outputs
+        D=dut.D.*bases.current_outputs./bases.voltage_inputs'
+        ix=bases.ac_indices;B=B[:,ix];C=C[ix,:];D=D[ix,ix]
+        @test iszero(D)
+        rotation=real.((inv(PowerImpedance.get_y(net.elements[:Grid],0.0im)[1:2,1:2])-form.R*I)/form.L)
+        # Independent ODE: differentiate grid KCL ig=-C*x and eliminate only
+        # terminal voltage. This has no algebraic-infinity classification.
+        closed=dut.A-B*((I+form.L*C*B)\(form.L*C*dut.A+form.R*C+form.L*rotation*C))
+        poles=eigvals(closed)
+        gate=V.stability_gate(net,V.fixture(id))
+        @test length(gate["poles_real_per_s"])==size(dut.A,1)
+        @test gate["most_positive_located_real_per_s"]≈maximum(real,poles) rtol=1e-3 atol=1e-8
+        if id=="L2-17"
+            @test maximum(real,poles)>0
+            @test gate["status"]=="failed" && gate["nyquist_closed_RHP_count"]==2
+            @test count(>(0),gate["poles_real_per_s"])==2
+            continue
+        end
+        @test maximum(real,poles)<-1e-7
+        @test gate["status"]=="passed" && gate["nyquist_closed_RHP_count"]==0
+        spec,reference=V.applicable_scan(id,net,list)
+        @test spec.currents==[("DUT",string(bases.ac_side))]
+        @test spec.dc_clamped==(kind!=:machine)
+        @test spec.time_step==(kind==:compensated ? 1e-6 : 2.5e-6)
+        for f in (1.,75.,1000.)
+            z=ComplexF64(2π*im*f);full=V.physical_y(dut,z)
+            @test C*((z*I-dut.A)\B)+D≈full[ix,ix] rtol=1e-10 atol=1e-12
+            @test reference[:,:,only(findall(==(f),spec.frequencies))]≈full[ix,ix]
+        end
+        if kind==:disabled
+            @test dut.element_model.sigma_control.tec isa PowerImpedance.NoTotalEnergyControl
+            @test dut.element_model.sigma_control.zscc isa PowerImpedance.NoZeroSequenceCurrentControl
+            @test dut.element_model.sigma_control.ccsc isa PowerImpedance.CirculatingCurrentSuppressionControl
+        elseif kind==:compensated
+            @test dut.element_model.sigma_control isa PowerImpedance.ΣdqzControlLEC
+            @test dut.element_model.modulation isa PowerImpedance.CompensatedModulation
+        elseif kind==:machine
+            @test spec.window_starts==(62.,64.) && spec.simulation_time==66.
+            @test spec.window_duration==2.
+            @test !haskey(V.scan_record(spec),"dc_voltage_base_kV")
+            @test V.step_definition(spec,1000.).window_duration==2.
+            @test V.step_definition(spec,1000.).time_step==1.25e-6
+            @test first(spec.window_starts)>=1-12/gate["most_positive_located_real_per_s"]
+            @test !haskey(net.elements,:G_DC)
+            @test V.physical_y(dut,2π*im)≈PowerImpedance.get_y(dut,2π*im)*(1000/380^2)
+        end
+        plan,settings=V.scan_plan(list,spec,"baseline")
+        @test P.check_connectivity(plan)===nothing
+        probe=only(filter(c->c.kind==:current && c.element=="DUT" && c.side==string(bases.ac_side),plan.probes.channels))
+        @test probe.orientation==:out
+    end
+end
+
+@testset "Machine current-drive dq recovery without a DC port" begin
+    net=V.fixture("L2-16").factory();list=V.fixture_netlist(net,power_flow(net))
+    original,_=V.applicable_scan("L2-16",net,list)
+    spec=merge(original,(frequencies=[1.,75.,1000.],phases=zeros(3),
+        window_starts=(0.,2.),simulation_time=4.,injection_time=0.))
+    time=collect(0.:spec.sample_step:4.)
+    known=cat((V.physical_y(net.elements[:DUT],ComplexF64(2π*im*f)) for f in spec.frequencies)...;dims=3)
+    models=Dict{String,P.PSCADModel}();results=Dict{String,P.PSCADResult}()
+    for (j,axis) in enumerate(["baseline";spec.axes])
+        plan,settings=V.scan_plan(list,spec,axis)
+        voltage=repeat([spec.voltage_bases[1] 0.],length(time),1)
+        current=zeros(length(time),2);drive=zeros(length(time),2)
+        if axis!="baseline"
+            column=j-1;mixing=[.4 .15;-.1 .35]
+            for (k,f) in enumerate(spec.frequencies)
+                v=mixing[:,column]*spec.tone_peak_pu*spec.voltage_bases[column]
+                i=known[:,:,k]*v
+                drive[:,column].+=spec.tone_peak_pu*spec.current_bases[column]*cos.(2π*f*time)
+                for row in 1:2
+                    voltage[:,row].+=real.(v[row]*cis.(2π*f*time))
+                    current[:,row].+=real.(i[row]*cis.(2π*f*time))
+                end
+            end
+        end
+        channels=PowerImpedance.OrderedDict{String,Vector{Float64}}()
+        vp=only(filter(c->c.kind==:voltage && c.bus==only(spec.buses).name,plan.probes.channels))
+        ip=only(filter(c->c.kind==:current && c.element=="DUT" && c.side=="1",plan.probes.channels))
+        dp=only(filter(c->c.kind==:injection_current,plan.probes.channels))
+        for (probe,wave) in ((vp,phase_wave(time,voltage)),(ip,phase_wave(time,-current)),(dp,phase_wave(time,drive)))
+            for phase in 1:3
+                channels[probe.name*":"*string(phase)]=wave[:,phase]
+            end
+        end
+        models[axis]=P.PSCADModel("synthetic.pscx",plan.name,list,plan.probes,settings,list.operating_point,(;))
+        results[axis]=P.PSCADResult(PSCADRun(),time,channels,plan.probes,settings,(;),(;))
+        samples=V.scan_samples(results[axis],models[axis],spec)
+        @test !haskey(samples,:dc_voltage)
+    end
+    mktempdir() do directory
+        result=V.compare_frequency_runs(results,models,known,directory;spec)
+        @test result["status"]=="passed" && result["max_frobenius_error"]<1e-9
+        response,quality=V.single_response(results[spec.axes[1]],results["baseline"],models[spec.axes[1]],spec,1)
+        @test size(response)==(4,1,3) && quality["valid"]
+    end
+end
+
 @testset "MMC batch B: owned controls, terminal bases and DC feedback" begin
     for (id,mode,scr) in (("L2-07",:pq,8.),("L2-08",:pf,8.),("L2-09",:qv,8.),
         ("L2-10",:vac,8.),("L2-11",:vdc,8.),("L2-12",:pq,2.5))
@@ -912,7 +1022,7 @@ end
         @test dut.setpoint.Qac==200. && dut.setpoint.Vdc==800.
         point=power_flow(net);list=V.fixture_netlist(net,point)
         spec,reference=V.applicable_scan(id,net,list)
-        bases=V.converter_bases(m.elec)
+        bases=V.device_bases(m.elec)
         @test spec.voltage_bases≈fill(380sqrt(2/3),2)
         @test spec.current_bases≈fill(1000sqrt(2)/(sqrt(3)*380),2)
         @test spec.dc_voltage_base_kV==800. && spec.power_base_MVA==1000.
@@ -1106,7 +1216,7 @@ end
     @test V.scan_quality(time,baseline,[run],short;columns=[1])["valid"]
     @test !V.scan_quality(time,baseline,[run],merge(short,(dc_clamped=true,));columns=[1])["valid"]
     frequencies=[1.,7.,137.]
-    known=cat((V.converter_port_y(net,ComplexF64(2π*im*f)) for f in frequencies)...;dims=3)
+    known=cat((V.device_port_y(net,ComplexF64(2π*im*f)) for f in frequencies)...;dims=3)
     inputs=[zeros(length(time),2) for _ in 1:2]
     outputs=[zeros(length(time),2) for _ in 1:2]
     mixing=[0.4 0.15;-0.1 0.35]
