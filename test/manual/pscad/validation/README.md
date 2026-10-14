@@ -1099,3 +1099,40 @@ with its existing per-run timeouts. Timing/L2 resume hash-matching completed run
 acceptance creates fresh exports and runs on each invocation. This is preparation only;
 no new native result or passing status is claimed. All runs must report <100
 live nodes (L2-11's conservative estimate increases from 65 to 67).
+
+## M9c-6: MMC amplitude sizing and final queue
+
+The owner approved larger current-drive amplitudes for L2-07 through L2-15.
+Each amplitude targets a **0.0045 pu** maximum baseline-subtracted terminal
+voltage departure in the existing coherent main windows, predicted from the
+native Julia converter-plus-grid admittance and the unchanged Schroeder tones.
+The combined injected voltage waveform must exceed **100 V RMS** (1000 times
+0.1 V noise) on each driven axis. This is an aggregate waveform criterion;
+individual low-frequency tone responses are smaller and are tabulated separately.
+Predicted converter-current departures are checked against the unchanged 0.01
+gate. Predictions size the runs; measured departure, window, amplitude and step
+gates still decide qualification. The half-amplitude witness remains mandatory.
+
+Per-fixture settings, predictions and offline checks are in `data/m9c6/report.md`
+and `amplitudes.toml`. Complete old fixture trees are retained at
+`data/archive/m9c6/L2-07` through `L2-15`; fresh ledgers contain no old runs.
+Native references and operating points are retained byte-for-byte. Integration,
+sampling, onset, windows, durations, circuit, fitting targets and all approved
+gates remain unchanged. Main and half-step drives use the new per-fixture
+amplitude; the half-amplitude drive uses exactly half that value.
+
+From the repository root, using the existing station configuration:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c6(timeout=43200.0)'
+```
+
+Order: **L2-07, L2-08, L2-09, L2-10, L2-11, L2-12, L2-13, L2-14,
+L2-15, then M4–M6 converter acceptance (`acceptance.jl --converters`, 22 cases)**.
+The completed timing and TLC checks are omitted. Expected total **405–660 min
+(6 h 45 min–11 h)**: GFL 07–10 40–65 min each; 11 35–55 min;
+12/13/15 25–40 min each; 14 45–75 min; acceptance 90–150 min.
+The 12-hour deadline covers L2; acceptance uses its existing per-run timeouts.
+L2 resumes only hash-matching fresh runs. Acceptance creates fresh exports/runs
+on each invocation; interruption there restarts acceptance. No station contact
+occurs when loading the harness or preparing these settings.

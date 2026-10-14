@@ -83,3 +83,16 @@ function run_m9c3(; timeout = 43200.0)
     run(converter_acceptance_command())
     return nothing
 end
+
+# The timing and TLC checks are already complete. This queue resumes only the
+# fresh MMC measurements, then starts the converter acceptance with fresh runs.
+function run_m9c6(; timeout = 43200.0)
+    isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
+    deadline = time() + timeout
+    remote = RemoteConfig()
+    for id in M9C2_IDS
+        run_fixture(id; remote, deadline)
+    end
+    run(converter_acceptance_command())
+    return nothing
+end
