@@ -88,7 +88,16 @@ function applicable_scan(id, net, list; definition = nothing)
             definition["ports"][port]["angle_rad"], b.pf_index)
             for (port, b) in enumerate(spec.buses)]
         spec = merge(spec, (; buses, voltage_bases = voltages, current_bases = currents,
-            tone_peak_pu = Float64(definition["tone_peak_pu"])))
+            tone_peak_pu = Float64(definition["tone_peak_pu"]),
+            time_step = Float64(definition["time_step"]), sample_step = Float64(definition["sample_step"]),
+            window_starts = Tuple(Float64.(definition["window_starts"])),
+            window_duration = Float64(definition["window_duration"]),
+            simulation_time = Float64(definition["simulation_time"]),
+            minimum_witness_window_s = Float64(get(definition, "minimum_witness_window_s", 0.1)),
+            estimated_station_seconds = definition["estimated_station_seconds"]))
+        if haskey(definition, "settling")
+            spec = merge(spec, (; settling = definition["settling"]))
+        end
     end
     return spec, reference
 end

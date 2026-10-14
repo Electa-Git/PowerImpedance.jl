@@ -25,7 +25,7 @@ function tlc_modulation(name, e, equilibrium, transforms, settings)
         delay = m.mod.delay
         (iszero(delay.timeDelay) || delay.padeOrderNum == delay.padeOrderDen == 3) ||
             not_exportable(e, m.mod)
-        residual = _converter_export_delay(delay.timeDelay, settings.time_step)
+        residual = _converter_export_delay(delay.timeDelay, settings.time_step; converter = e.name)
         # Carrier rotation and initialized history use the residual together.
         # The acquired electrical signal supplies the remaining one-step lag.
         initial = PowerImpedance.phase_compensated_dq(

@@ -682,9 +682,9 @@ else
                 for node in modulation.xpath("./schematic/User[@defn='master:tdelay']")
                     @test pyconvert(String, node.xpath("string(./paramlist/param[@name='Init']/@value)")) == "1"
                     # The model's 200 us budget includes the 1 us interface
-                    # step; capacity follows the 199 us residual, including
-                    # conservative Float64 ceiling at the integer boundary.
-                    expected_capacity = ceil(Int, (200e-6 - 1e-6)/1e-6) + 1
+                    # step; quantization normalizes the 199-step residual.
+                    residual = round((200e-6 - 1e-6)/1e-6, RoundNearestTiesUp) * 1e-6
+                    expected_capacity = ceil(Int, residual/1e-6) + 1
                     @test pyconvert(String, node.xpath("string(./paramlist/param[@name='N']/@value)")) == string(expected_capacity)
                 end
                 saved_delay = only(energy_reference.xpath("./User[@defn='master:tdelay']"))

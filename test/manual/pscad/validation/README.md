@@ -1037,3 +1037,65 @@ The command above has a 120-minute deadline; **45–75 minutes** is the estimate
 for the seven runs, retained base-band loading and comparison. Integration
 work is unchanged, so the output reduction does not imply the same reduction
 in simulation time.
+
+
+## M9c-2 preparation: realization comparison, settling and DC pre-charge
+
+The original active C rule (5% complex / 3 degrees), 0.02/0.1 floors,
+qualification and all quality gates are unchanged. Plain Julia C remains
+reported with its own status and controls the original fixture status. Zero-model
+modulation-delay converter fixtures additionally report **Julia + one inherent
+interface step**, using exact `exp(-s dt)` inside modulation feedback with native
+carrier corrections. This reference is frozen separately; it does not multiply
+terminal Y by a phase factor. Its rows/status and the plain status are both in
+the fixture summary. Neither reference can waive amplitude/step/window failure.
+Positive-delay models and the machine do not receive this comparison.
+
+L2-07–10 main windows are now **[16,17), [17,18) s**, duration **18 s**. Tone onset
+remains 2 s, amplitude 5e-5 pu, dt 2.5 us / witness 1.25 us and sampling 20 us.
+Sizing uses each complete-network native rightmost root, a conservative 1 pu
+transient normalized by the tone and unchanged entry floor, and target 0.1%
+(tenfold below the window gate). The slowest root is L2-08's -1.99183483/s;
+at 16 s the estimated normalized tail from onset is below 7.8e-7. The pole
+estimate does not bound residues or unmodelled sampled/transformer startup modes;
+actual window and refinement measurements still determine qualification.
+High-band witnesses start at 16 s and normally end at 16.2 s; adaptive lower
+bands retain whole common periods and may end later. No tolerances changed.
+
+L2-11 now has temporary pre-charge sources at its solved +/-400 kV DC poles,
+closed through series breakers until 0.2 s, then released with its resistor and
+Vdc controller still live. The final circuit and native reference are retained.
+The exporter rule also affects L2-05; M9c-3 archives its previous evidence under
+`data/archive/m9c3/L2-05/` and prepares fresh projects with the same frozen settings.
+The new native startup/release remains pending station execution.
+
+L2-01's finer-step variant is separate at `data/L2-01-1p25us/`: **1.25 us base /
+0.625 us witness**, 20 us sampling, original [8,9), [9,10) s windows and 10 s main
+runs. Its original 2.5 us folder and failed rows remain intact. L2-07 through
+L2-15 old trees are retained under `data/archive/m9c2/`; no old run is reused.
+New ledgers pin exporter/harness source hashes and start with no run records.
+
+The isolated timing witness is under `data/m9c2/timing/`. Fractional residuals
+round to nearest step, half-step ties upward: dt=10 us, model=25 us requests
+15 us residual and realizes 20 us, hence **30 us total** (5 us quantization
+error). Its expected response is that integer sampled shift; it is no longer
+compared to a fractional linear blend. It runs first and stops the queue if its
+unchanged voltage-error gate fails.
+
+One resumable station command (existing station configuration; Julia 1.10.11):
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c3(timeout=43200.0)'
+```
+
+Order: timing witness; L2-05; L2-01 finer-step variant;
+L2-07,08,09,10,11,12,13,14,15; M4–M6 converter acceptance (`--converters`, 22 cases).
+Expected times: witness 2–5 min; L2-05 30–45 min; finer TLC 30–45 min;
+L2-07–10 **40–65 min each**; L2-11 35–55 min; L2-12/13/15 25–40 min each;
+L2-14 45–75 min; acceptance 90–150 min. Total **467–755 min (about 8–13 hours)**.
+The shared **12-hour** deadline covers timing and L2; the final acceptance subprocess
+uses the same Julia version, active project and inherited station configuration,
+with its existing per-run timeouts. Timing/L2 resume hash-matching completed runs;
+acceptance creates fresh exports and runs on each invocation. This is preparation only;
+no new native result or passing status is claimed. All runs must report <100
+live nodes (L2-11's conservative estimate increases from 65 to 67).

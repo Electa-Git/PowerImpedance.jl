@@ -72,6 +72,9 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
     for e in elements
         emit!(state, e, context)
     end
+    for bus in _dc_precharge_buses(netlist)
+        dc_precharge!(state, bus, context)
+    end
     for bus in netlist.buses
         labels = bus.kind == :dc ? dc_labels[bus.key] : (bus.name,)
         if bus.kind == :dc && dc_reference == :midpoint_resistors

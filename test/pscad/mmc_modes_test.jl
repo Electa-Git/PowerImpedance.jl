@@ -95,7 +95,9 @@ end
                     time_step = 10e-6, sample_step = 250e-6, source_ramp = ramp)
                 ramp_plan = P.build_plan(list; settings = ramp_settings)
                 @test P.check_connectivity(ramp_plan) === nothing
-                @test all(Dict(c.params)["Tc"] == P.pscad_value(ramp; unit = "s")
+                @test all(Dict(c.params)["Tc"] ==
+                    (startswith(get(Dict(c.params), "Name", ""), "precharge_") ?
+                     "0.0 [s]" : P.pscad_value(ramp; unit = "s"))
                 for c in ramp_plan.main.components
                 if c.defn in ("master:source_1", "master:source_3"))
                 @test [(d.name, [(p.name, p.default) for p in d.parameters],

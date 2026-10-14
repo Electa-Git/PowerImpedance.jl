@@ -444,6 +444,8 @@ function component_ports(c::ComponentPlan, modules)
         [(0, 0), (36, 0)]
     elseif d in ("master:voltmetergnd", "master:xnode")
         [(0, 0)]
+    elseif d == "master:breaker1"
+        [(-36, 0), (36, 0)]
     elseif d == "master:voltmeter"
         [(0, 0), (0, 36)]
     elseif d == "master:source_3"
@@ -621,6 +623,15 @@ function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
             push!(ends, point)
             push!(points, point)
         end
+    end
+    # breaker1's NAME is an implicit real input, not a graphical signal pin.
+    # Saved master:breaker1 Dsdyn calls NINT(1-NAME); require its timed driver.
+    for c in canvas.components
+        c isa ComponentPlan && c.defn == "master:breaker1" || continue
+        command = get(Dict(c.params), "NAME", "")
+        tryparse(Float64, command) === nothing || continue
+        length(get(drivers, lowercase(command), NTuple{2, Int}[])) == 1 ||
+            fail((c.x, c.y), "breaker1 NAME must have one signal driver")
     end
     # Sorted coordinate indices avoid scanning every canvas point per stub.
     rows, columns = Dict{Int, Vector{Int}}(), Dict{Int, Vector{Int}}()

@@ -248,7 +248,7 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
     acbase = converter_parameter!(parameters, "ACbase", m.elec.vAC_base)
     push!(graph.nodes, Gain(Signal("vMS_z_ref"), Signal("comp_zero_kV"), dcbase))
     delay = block.delay1
-    residual = _converter_export_delay(delay.timeDelay, settings.time_step)
+    residual = _converter_export_delay(delay.timeDelay, settings.time_step; converter = e.name)
     caps = mmc_arm_capacitors(equilibrium.states, m.elec.vDC_base)
     theta0 = PowerImpedance.syncangle(m.sync, equilibrium.states)
     phases = (0.0, -2π/3, 2π/3)

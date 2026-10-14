@@ -2615,3 +2615,53 @@ Model fields, controller formulas/gains, physical parameters and the divisor
 startup hold are unchanged. Exact export delay versus Julia Pade realization
 remains a separate model difference. The isolated electrical timing witness
 checks actual library/interface timing before the L2 re-validation queue.
+
+
+## Nearest-step residuals and DC pre-charge (M9c-2)
+
+The converter residual budget rounds `(tau_model-dt)/dt` with
+`RoundNearestTiesUp`: nearest integer, positive half-step ties upward. Zero model
+delay retains the inherent step, and `0 < tau_model < dt` is rejected. Round-off
+at an integer boundary is treated as integer timing; a fractional residual warns
+with converter name, model delay, dt, requested/realized residual, realized total
+and signed error. Quantization changes total physical transport by at most dt/2.
+TLC and uncompensated MMC rotations/history seeds use the rounded residual;
+compensated MMC uses the same rounded abc queue length and physical seed.
+
+`emitters/dc_precharge.jl` owns DC-island detection and the startup sources.
+Islands traverse elements' DC terminal incidence; ground is not an island edge,
+and converters do not connect DC through their AC side. A qualifying island has
+no `Source` attached to a DC bus and at least one TLC `OuterActiveVdcControl` or
+GFL MMC active Vdc controller. PQ-only and GFM-only islands do not qualify.
+Every bus in that island has a pair of sources at its positive solved
+pole-to-ground magnitude and its negative. Missing/nonpositive solved voltages
+are rejected; no power flow is silently performed by the plan builder.
+
+Source fields/polarity follow the supplied
+`local/P2P HVDC/PowerStabilityACDC_Validation.pscx:19424–19450` 639.843 kV source
+and the existing `emitters/sources.jl` orient-0 NA-positive mapping. The series
+`master:breaker1` field/pin witness is the same saved project:24613–24635;
+orient-0 electrical ports are (-36,0), (+36,0). These saved instances are disabled
+and therefore establish construction provenance, not native acceptance of this
+new composite. The supplied station master `breaker1:5452–5665` declares NAME as
+a real input and calls `E1PBRKR1_EXE(...,NINT(1-NAME))` (internal close flag). NAME=0 closes, NAME=1
+opens, as specified in the [Single-Phase Breaker documentation](https://www.pscad.com/webhelp-v502-ol/Master_Library_Models/Breakers_And_Faults/Breakers/1p_break.htm). OPCUR=1 permits opening at nonzero DC current; ENAB=0 disables insertion
+resistors. RON=0 is allowed by that definition; ROFF=1e100 ohm represents the
+open branch to numerical precision, with 1e-100 S residual conductance.
+
+The release uses the already exercised `TimeStep` / `Compare`
+primitives: `open = (TIME >= 0.2)`, at the same owner-local release constant
+as the measured-DC-divisor handover. Breaker NAME is a named input without a
+schematic signal pin; connectivity checks require exactly one driver. No
+controller gain, setpoint, load, model delay field or final midpoint reference
+changes. Physical sources have zero ramp even when permanent sources ramp.
+
+For the existing M4–M7 acceptance inventory, the pre-charge additions affect
+M5 `mmc_vdc_classic` and `mmc_vdc_builder`, and M7 `p2p_classic` /
+`p2p_builder` (including the all-OHL builder XML fixture). M4's Vdc TLC still has
+an ideal DC source in its DC island and gains no pre-charge. Other M4–M6 cases,
+M7 IEEE9 and IEEE39 remain unchanged by pre-charge. In L2 it affects L2-05 and
+L2-11 only. The detailed bus/source/breaker inventory is retained under
+`test/manual/pscad/validation/data/m9c2/export-change-list.tsv`. Only L2-11 is
+re-prepared in this queue; retained L2-05 evidence is not overwritten. Existing
+native acceptance does not qualify the changed Vdc/P2P exports until re-run.

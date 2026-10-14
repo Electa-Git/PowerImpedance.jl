@@ -1062,7 +1062,10 @@ end
             probe=only(filter(c->c.kind==:current && c.element=="DUT" && c.side=="2",plan.probes.channels))
             @test probe.orientation==:out
             if mode==:vdc
-                @test !any(c->c isa P.ComponentPlan && c.defn=="master:source_1",plan.main.components)
+                @test count(c -> c isa P.ComponentPlan && c.defn == "master:source_1", plan.main.components) == 2
+                @test all(c -> startswith(Dict(c.params)["Name"], "precharge_"),
+                    filter(c -> c isa P.ComponentPlan && c.defn == "master:source_1", plan.main.components))
+                @test count(c -> c isa P.ComponentPlan && c.defn == "master:breaker1", plan.main.components) == 2
                 @test count(c->c isa P.ComponentPlan && c.defn=="master:resistor" &&
                     parse(Float64,first(split(Dict(c.params)["R"])))≈800^2/1200,plan.main.components)==2
             end
@@ -1195,7 +1198,10 @@ end
     for axis in ["baseline";spec.axes]
         plan,_=V.scan_plan(list,spec,axis)
         @test P.check_connectivity(plan)===nothing
-        @test !any(c->c isa P.ComponentPlan && c.defn=="master:source_1",plan.main.components)
+        @test count(c -> c isa P.ComponentPlan && c.defn == "master:source_1", plan.main.components) == 2
+                @test all(c -> startswith(Dict(c.params)["Name"], "precharge_"),
+                    filter(c -> c isa P.ComponentPlan && c.defn == "master:source_1", plan.main.components))
+                @test count(c -> c isa P.ComponentPlan && c.defn == "master:breaker1", plan.main.components) == 2
         @test count(c->c isa P.ComponentPlan && c.defn=="master:resistor" &&
             parse(Float64,first(split(Dict(c.params)["R"])))≈640^2/140,plan.main.components)==2
         probe=only(filter(c->c.kind==:current && c.element=="DC_load",plan.probes.channels))
@@ -1233,6 +1239,106 @@ end
     recovery=maximum(maximum(abs,matrix-known) for matrix in extracted.matrices)
     @test recovery<1e-9
     println("DC-terminated TLC synthetic recovery error: ",recovery," S")
+end
+
+@testset "Isolated timing witness transport and topology" begin
+    plan, settings = V.timing_plan()
+    @test length(plan.probes.channels) == 5
+    @test count(c -> c.defn == "master:source_1", plan.main.components) == 5
+    @test count(c -> c.defn == "master:tdelay", plan.main.components) == 2
+    @test settings.sample_step == settings.time_step
+    @test P.check_connectivity(plan) === nothing
+    time = collect(0.0:settings.time_step:settings.simulation_time)
+    input = 0.1sin.(2pi*1000 .* time) .+ (time .>= 0.002)
+    channels = Dict("V_input" => input)
+    for (name, tau) in V.TIMING_DELAYS
+        total = iszero(tau) ? settings.time_step : settings.time_step * (1 + round((tau-settings.time_step)/settings.time_step, RoundNearestTiesUp))
+        k = floor(Int, total/settings.time_step)
+        f = total/settings.time_step-k
+        channels["V_"*name] = [i > k+1 ? (1-f)*input[i-k] + f*input[i-k-1] : 0.0 for i in eachindex(time)]
+    end
+    @test all(row.passed for row in V.timing_comparison(time, channels, settings.time_step))
+    # Another whole step in the library/source path must stop the L2 queue.
+    channels["V_four"] = [0.0; channels["V_four"][1:end-1]]
+    @test !only(filter(row -> row.name == "four", V.timing_comparison(time, channels, settings.time_step))).passed
+end
+
+@testset "One-step realization reference keeps the native comparison separate" begin
+    for id in ("L2-07", "L2-11", "L2-14", "L2-01", "L2-05")
+        net = V.fixture(id).factory(); list = V.fixture_netlist(net, power_flow(net))
+        spec, native = V.applicable_scan(id, net, list)
+        if id == "L2-14"
+            el = net.elements[:DUT]; m = el.element_model
+            @test !V.interface_step_eligible(m) # existing fixture has positive delay
+            el.element_model = MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
+                CompensatedModulation(), m.elec)
+            PowerImpedance.update!(el, el.setpoint)
+        end
+        if id == "L2-05"
+            el = net.elements[:DUT]; m = el.element_model
+            net.elements[:DUT] = PowerImpedance.Element(element_model =
+                TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
+                    m.innerVoltage, m.innerCurrent, NoModulation()),
+                input_pins = 1, output_pins = 2, setpoint = el.setpoint,
+                limits = el.limits, pins = deepcopy(el.pins), symbol = :DUT)
+            el = net.elements[:DUT]
+            PowerImpedance.update!(el, el.setpoint)
+        end
+        short = merge(spec, (; frequencies = [18.0, 1000.0]))
+        original = deepcopy(net.elements[:DUT].A)
+        realization = V.interface_step_reference(net, short)
+        @test net.elements[:DUT].A == original
+        if id == "L2-01"
+            @test realization === nothing # positive 200 us model delay
+            continue
+        end
+        @test size(realization) == (2, 2, 2)
+        @test all(isfinite, realization)
+        delayed = deepcopy(net)
+        el = delayed.elements[:DUT]
+        delayed.elements[:DUT] = PowerImpedance.Element(element_model =
+            V.one_step_model(el.element_model, short.time_step),
+            input_pins = 1, output_pins = 2, setpoint = el.setpoint, limits = el.limits)
+        el = delayed.elements[:DUT]
+        PowerImpedance.update!(el, el.setpoint)
+        rational = cat((V.device_port_y(delayed, ComplexF64(im*2π*f)) for f in short.frequencies)...; dims = 3)
+        # At these small steps the independent 3/3 rational evaluation is
+        # indistinguishable from exact transport, including DC Schur reduction.
+        @test norm(realization-rational)/norm(realization) < 1e-9
+        quality = Dict("valid" => true, "model_mismatch" => "", "status" => "failed")
+        rows, result = V.interface_step_comparison(short, realization, realization, quality)
+        @test result["status"] == "passed"
+        @test result["original_model_status"] == "failed" && quality["status"] == "failed"
+        @test all(row.within_tolerance for row in rows)
+        quality["valid"] = false
+        _, invalid = V.interface_step_comparison(short, realization, realization, quality)
+        @test invalid["status"] == "invalid_measurement"
+        @test_throws ErrorException V.interface_step_reference(net, merge(short, (; time_step = 0.0)))
+    end
+    @test !V.zero_modulation_delay(UncompensatedModulation(timeDelay = 1e-6, padeOrderNum = 3, padeOrderDen = 3))
+end
+
+@testset "MMC GFL modal settling and frozen fine-step variant" begin
+    for decay in (10.952732, 1.99183483, 10.9087697, 10.8907848)
+        settling = V.gfl_settling(Dict("most_positive_located_real_per_s" => -decay))
+        @test settling["window_starts_s"] == [16.0, 17.0]
+        @test settling["simulation_time_s"] == 18.0
+        @test settling["predicted_normalized_tail"] < 0.001
+    end
+    @test_throws ErrorException V.gfl_settling(Dict("most_positive_located_real_per_s" => 1.0))
+    net = V.fixture("L2-01").factory(); list = V.fixture_netlist(net, power_flow(net))
+    spec, native = V.applicable_scan("L2-01", net, list)
+    frozen = V.scan_record(spec); frozen["time_step"] = 1.25e-6
+    fine, reference = V.applicable_scan("L2-01", net, list; definition = frozen)
+    @test spec.time_step == 2.5e-6 && fine.time_step == 1.25e-6
+    @test V.step_definition(fine, 18.0).time_step == 0.625e-6
+    @test fine.window_starts == spec.window_starts && reference == native
+    @test V.M9C2_TLC_DIRECTORY != joinpath(V.ROOT, "data", "L2-01")
+    @test V.M9C2_IDS == ["L2-" * lpad(i, 2, '0') for i in 7:15]
+    command = V.converter_acceptance_command()
+    @test command.exec[end] == "--converters"
+    @test command.exec[end - 1] == joinpath(V.REPOSITORY, "test/manual/pscad/acceptance.jl")
+    @test "--project=$(dirname(Base.active_project()))" in command.exec
 end
 
 end
@@ -1389,4 +1495,5 @@ end
     @test all(c.bus=="Bus5" for c in selected.probes.channels)
     @test count(c->c isa V.P.ComponentPlan && c.defn=="master:pgb",selected.main.components)==2
 end
+
 end

@@ -1,0 +1,85 @@
+const M9C2_IDS = ["L2-" * lpad(n, 2, '0') for n in 7:15]
+const M9C2_TLC_DIRECTORY = joinpath(ROOT, "data", "L2-01-1p25us")
+
+# Explicit local preparation only. Archive complete fixture trees, never reuse
+# an old run or overwrite the retained 2.5 us TLC evidence.
+function prepare_m9c2()
+    archive = mkpath(joinpath(ROOT, "data", "archive", "m9c2"))
+    for id in M9C2_IDS
+        directory = joinpath(ROOT, "data", id)
+        destination = joinpath(archive, id)
+        ispath(destination) && error("archive already exists: $destination")
+        prior = TOML.parsefile(joinpath(directory, "manifest.toml"))
+        definition = deepcopy(prior["tier_c"])
+        if id in ("L2-07", "L2-08", "L2-09", "L2-10")
+            settling = gfl_settling(prior["stability"]; tone_peak_pu = definition["tone_peak_pu"])
+            definition["window_starts"] = settling["window_starts_s"]
+            definition["simulation_time"] = settling["simulation_time_s"]
+            definition["estimated_station_seconds"] = 3300
+            definition["settling"] = settling
+        end
+        mv(directory, destination)
+        mkpath(directory)
+        for file in ("dq_active_reference.tsv", "operating_point.tsv")
+            cp(joinpath(destination, file), joinpath(directory, file))
+        end
+        models = prepare_fixture(id; directory, definition)
+        record = TOML.parsefile(joinpath(directory, "manifest.toml"))
+        old_reference = read_response(joinpath(destination, "dq_active_reference.tsv"),
+            length(definition["axes"]), definition["frequencies"])
+        new_reference = read_response(joinpath(directory, "dq_active_reference.tsv"),
+            length(definition["axes"]), definition["frequencies"])
+        preservation_spec = (; quantity = "Y", voltage_bases = definition["voltage_bases_kV"],
+            current_bases = definition["current_bases_kA"], frequencies = definition["frequencies"])
+        native_reference_check(preservation_spec, new_reference, old_reference)["passed"] ||
+            error("native reference changed: $id")
+        record["archive_directory"] = relpath(destination, ROOT)
+        write_manifest(directory, record)
+        isempty(record["run_records"]) || error("fresh preparation inherited runs")
+    end
+    ispath(M9C2_TLC_DIRECTORY) && error("fine-step TLC directory already exists")
+    definition = deepcopy(TOML.parsefile(joinpath(ROOT, "data", "L2-01", "manifest.toml"))["tier_c"])
+    definition["time_step"] = 1.25e-6
+    definition["estimated_station_seconds"] = 2700
+    mkpath(M9C2_TLC_DIRECTORY)
+    for file in ("dq_active_reference.tsv", "operating_point.tsv")
+        cp(joinpath(ROOT, "data", "L2-01", file), joinpath(M9C2_TLC_DIRECTORY, file))
+    end
+    prepare_fixture("L2-01"; directory = M9C2_TLC_DIRECTORY, definition)
+    record = TOML.parsefile(joinpath(M9C2_TLC_DIRECTORY, "manifest.toml"))
+    record["variant"] = "L2-01: 1.25 us base / 0.625 us witness; original 2.5 us evidence retained"
+    write_manifest(M9C2_TLC_DIRECTORY, record)
+    model, directory = prepare_timing()
+    return (; archive, timing = directory, tlc = M9C2_TLC_DIRECTORY, fixtures = copy(M9C2_IDS))
+end
+
+# This function is called only by the owner's station command. An interrupted
+# queue resumes matching completed runs through the existing native hash checks.
+function run_m9c2(; remote = RemoteConfig(), timeout = 43200.0)
+    isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
+    deadline = time() + timeout
+    run_timing(remote, deadline)
+    run_fixture("L2-05"; remote, deadline)
+    run_fixture("L2-01"; remote, directory = M9C2_TLC_DIRECTORY, deadline)
+    for id in M9C2_IDS
+        run_fixture(id; remote, deadline)
+    end
+    return nothing
+end
+
+# The acceptance script owns fresh exports and station runs. Keep its command
+# separate from inclusion so loading the harness never contacts the station.
+function converter_acceptance_command()
+    project = Base.active_project()
+    project === nothing && error("converter acceptance requires an active Julia project")
+    script = joinpath(REPOSITORY, "test", "manual", "pscad", "acceptance.jl")
+    return `$(Base.julia_cmd()) --project=$(dirname(project)) $script --converters`
+end
+
+# L2 resumes matching runs; acceptance always starts fresh after L2 completes.
+# Its per-run timeouts belong to the station configuration, not the L2 deadline.
+function run_m9c3(; timeout = 43200.0)
+    run_m9c2(; timeout)
+    run(converter_acceptance_command())
+    return nothing
+end

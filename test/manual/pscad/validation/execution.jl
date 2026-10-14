@@ -87,6 +87,15 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
     end
     record_native_reference!(record,directory,spec,reference,
         read_response(reference_path,length(spec.axes),spec.frequencies),list; purpose="preparation verification")
+    interface_reference = interface_step_reference(net, spec)
+    if interface_reference !== nothing
+        write_response(joinpath(directory, "interface_step_reference.tsv"), interface_reference, spec.frequencies; quantity = "Y")
+        record["interface_step_comparison"] = Dict("label" => "Julia + one inherent interface step",
+            "step_s" => spec.time_step, "reference_file" => "interface_step_reference.tsv",
+            "status" => "station_pending", "policy" => "separate realization comparison; plain model and refinement statuses retained")
+    end
+    record["estimated_live_nodes"] = entry.estimated_nodes + 2length(P._dc_precharge_buses(list))
+    record["estimated_live_nodes"] < 100 || error("prepared fixture exceeds live-node limit")
     record["stability"] = gate
     record["tiers"] = ["A", "C"]
     if isempty(spec.protocol) && get(get(record, "corrected_analysis", Dict()), "status", "") == "passed"

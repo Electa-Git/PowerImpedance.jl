@@ -186,10 +186,34 @@ is independent, must be at least the integration step, and 250 μs is a typical
 50 Hz comparison interval. The default source ramp is 0.05 s; any finite,
 nonnegative ramp is accepted.
 
-Converter start-up holds only the measured DC-voltage divisor at its solved
+The measurement start-up hold keeps the DC-voltage divisor at its solved
 value for `t < 0.2 s`. Feedback remains live from the first step; converged
 controller states and delay histories are retained. This hold is a start-up
 handover, without a permanent voltage floor or changed comparison tolerance.
+
+Residual modulation delays are rounded to the nearest integration step, with
+half-step ties upward. For a positive model delay, the requested residual is
+`tau_model - dt`; the realized total is `dt + rounded_residual`. A warning names
+the converter and records the model delay, step, requested/realized residual and
+error, bounded by `dt/2`. Carrier corrections and initialization use the realized
+residual. Positive delays below one step remain rejected; a zero model delay
+retains one inherent interface step.
+
+A DC island without a permanent DC voltage source is pre-charged when it contains
+at least one TLC with `OuterActiveVdcControl`, or a GFL MMC with that active
+controller. DC branches join islands; shared ground and converter AC terminals
+do not. Every bus in a qualifying island requires positive solved pole voltages.
+Two ideal DC sources hold each bus at `+vm_pu * base_kV` and its negative until
+0.2 s, then their series breakers open at arbitrary current. Sources have zero
+ramp; breakers use zero closed resistance and `1e100 ohm` open resistance
+(residual conductance `1e-100 S`). Feedback, gains, loads and the solved final
+operating point are retained. A source anywhere in the island suppresses this
+startup addition. Pre-charge is independent of `dc_reference`; existing final
+midpoint references remain in place.
+
+The pre-charge composite is export/XML verified offline; native release and
+startup qualification must be measured on fresh runs. The saved source/breaker
+fields, pins and release-command convention are cited in the developer mapping.
 
 ## Limitations
 

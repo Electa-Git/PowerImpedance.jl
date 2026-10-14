@@ -25,6 +25,7 @@ include("mmc_gfm_test.jl")
 include("mmc_energy_test.jl")
 include("converter_timing_test.jl")
 include("converter_delay_test.jl")
+include("dc_precharge_test.jl")
 include("validation_test.jl")
 
 include("orientation_test.jl")

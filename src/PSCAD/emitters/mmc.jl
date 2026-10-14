@@ -175,7 +175,7 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
         ("vMD_d_grid", "vMD_q_grid"), "delta_factor"),
         ("mS", m.modulation.delay2, -2,
         ("vMS_d_grid", "vMS_q_grid"), "sigma_factor"))
-        residual = _converter_export_delay(delay.timeDelay, settings.time_step)
+        residual = _converter_export_delay(delay.timeDelay, settings.time_step; converter = e.name)
         for (axis, ref) in zip(("d", "q"), refs)
             raw, delayed = Signal.([
                 stem * "_" * axis * "_raw", stem * "_" * axis * "_delay"])
@@ -210,7 +210,7 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
     raw = Signal("mS_z_raw")
     push!(graph.nodes, Mult(Signal("vMS_z_ref"), Signal("sigma_factor"), raw))
     delay = m.modulation.delay3
-    residual = _converter_export_delay(delay.timeDelay, settings.time_step)
+    residual = _converter_export_delay(delay.timeDelay, settings.time_step; converter = e.name)
     if iszero(residual)
         push!(graph.nodes, Gain(raw, Signal("mS_z"), 1.0))
     else

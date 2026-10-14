@@ -15,7 +15,7 @@ function timing_plan()
         P._ConverterPhaseTransfer(P.Signal("V_input"), P.Signal("acquired"), :dsdyn, 1)])
     commands = [("input", "input_command")]
     for (name, tau) in TIMING_DELAYS
-        residual = P._converter_export_delay(tau, settings.time_step)
+        residual = P._converter_export_delay(tau, settings.time_step; converter = Symbol("timing_" * name))
         output = P.Signal("command_" * name)
         push!(graph.nodes, iszero(residual) ? P.Gain(P.Signal("acquired"), output, 1.0) :
             P.Delay(P.Signal("acquired"), output, residual,
@@ -43,11 +43,11 @@ function timing_plan()
     return plan, settings
 end
 
-function prepare_timing(directory = joinpath(ROOT, "data", "m9b17", "timing"))
+function prepare_timing(directory = joinpath(ROOT, "data", "m9c2", "timing"))
     plan, settings = timing_plan()
     path = joinpath(mkpath(directory), plan.name*".pscx")
     isfile(path) || P._write_project(plan, path)
-    record = Dict{String, Any}("fixture_id"=>"M9b17-Timing", "source_files"=>source_record(),
+    record = Dict{String, Any}("fixture_id"=>"M9c2-Timing", "source_files"=>source_record(),
         "projects"=>[Dict("axis"=>"timing", "sha256"=>digest(path),
             "probes"=>probe_record.(plan.probes.channels))], "run_records"=>Dict{String, Any}[])
     isfile(joinpath(directory, "manifest.toml")) || write_manifest(directory, record)
@@ -58,12 +58,11 @@ function timing_comparison(time, channels, dt)
     input = channels["V_input"]
     rows = NamedTuple[]
     for (name, tau) in TIMING_DELAYS
-        total = iszero(tau) ? dt : tau
-        lower = floor(Int, total/dt)
-        fraction = total/dt - lower
-        # Ignore initial prehistory and compare against sampled linear transport.
+        steps = iszero(tau) ? 1 : 1 + round(Int, (tau-dt)/dt, RoundNearestTiesUp)
+        total = steps * dt
+        # Ignore initial prehistory; nearest-step residual, half-step ties upward.
         indices = findall(t -> 0.001 <= t <= 0.018, time)
-        reference = [(1-fraction)*input[i-lower] + fraction*input[i-lower-1] for i in indices]
+        reference = [input[i-steps] for i in indices]
         error = maximum(abs, channels["V_"*name][indices] - reference)
         push!(rows, (; name, model_delay_s = tau, expected_total_delay_s = total,
             max_voltage_error_kV = error, passed = error <= 1e-6))
@@ -71,7 +70,7 @@ function timing_comparison(time, channels, dt)
     return rows
 end
 
-function run_timing(remote, deadline; directory = joinpath(ROOT, "data", "m9b17", "timing"))
+function run_timing(remote, deadline; directory = joinpath(ROOT, "data", "m9c2", "timing"))
     model, directory = prepare_timing(directory)
     record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
     record["source_files"] == source_record() || error("timing witness source hashes changed")

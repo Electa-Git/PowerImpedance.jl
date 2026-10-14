@@ -174,6 +174,7 @@ function scan_record(spec)
                 "amplitude_scale" => 0.5, "half_step_s" => spec.time_step/2),
         "excluded_ac_frequency_Hz" =>
             spec.dimension == 2 && spec.id != "L1-01" ? [50.0] : Float64[])
+    haskey(spec, :settling) && (record["settling"] = spec.settling)
     if startswith(spec.id,"L2-")
         record["drive"]="shunt current at converter AC terminal; measured voltage matrix is the Y input"
         spec.dc_voltage_base_kV===nothing || (record["dc_voltage_base_kV"]=spec.dc_voltage_base_kV)
@@ -232,6 +233,11 @@ function device_scan_definition(net,list; id="L2-01")
         time_step=id=="L2-05" ? 0.625e-6 : id=="L2-11" ? 1.25e-6 : id=="L2-14" ? 1e-6 : 2.5e-6,sample_step=20e-6,injection_time=2.0,
         window_starts=(8.0,9.0),window_duration=1.0,simulation_time=10.0,
         travel_lower_bound_s=0.0,estimated_station_seconds=1800))
+    if id in ("L2-07", "L2-08", "L2-09", "L2-10")
+        settling = gfl_settling(stability_gate(net, fixture(id)); tone_peak_pu = spec.tone_peak_pu)
+        spec = merge(spec, (; window_starts = Tuple(settling["window_starts_s"]),
+            simulation_time = settling["simulation_time_s"], settling, estimated_station_seconds = 3300))
+    end
     if id=="L2-16"
         gate=stability_gate(net,fixture(id))
         gate["status"]=="passed" || error("machine measurement requires a stable complete network")

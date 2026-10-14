@@ -4,13 +4,18 @@ const _CONVERTER_STARTUP_RELEASE = 0.2
 
 # One completed electrical solve feeds the following dynamics/source pass.
 # Positive model delays budget that inherent step; zero-delay models retain it.
-function _converter_export_delay(delay, dt)
+function _converter_export_delay(delay, dt; converter = :converter)
     isfinite(dt) && dt > 0 || throw(ArgumentError("converter step must be finite and positive"))
-    isfinite(delay) && delay >= 0 ||
-        throw(ArgumentError("converter delay must be finite and nonnegative"))
+    isfinite(delay) && delay >= 0 || throw(ArgumentError("converter delay must be finite and nonnegative"))
     iszero(delay) && return 0.0
     delay >= dt || throw(ArgumentError("positive converter delay is shorter than the EMT step; use a finer step"))
-    return Float64(delay - dt)
+    requested = Float64(delay - dt)
+    # Residuals are nonnegative: half-step ties round upward (away from zero).
+    realized = round(requested / dt, RoundNearestTiesUp) * dt
+    if !isapprox(requested, realized; rtol = 0, atol = 8eps(max(Float64(delay), Float64(dt))))
+        @warn "Converter modulation residual rounded to nearest step (half-step ties upward)" converter model_delay_s=delay step_s=dt requested_residual_s=requested realized_residual_s=realized realized_total_s=dt+realized error_s=realized-requested
+    end
+    return Float64(realized)
 end
 
 # Saved time-based real selector: local/TLC/Simple_2L_VSC_RL.pscx:5912–5929.

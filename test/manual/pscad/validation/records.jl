@@ -52,14 +52,17 @@ function source_record()
             "src/Network/Solvers/make_y.jl", "src/Network/Solvers/make_z.jl",
             "src/Network/Components/source/source.jl", "src/Network/Components/transformer/transformer.jl",
             "src/Network/Components/transmission_line/cable.jl", "src/Network/Components/transmission_line/overhead_line.jl",
-            "src/Network/Components/AbstractElement.jl", "src/Tools/abcd_parameters.jl",
+            "src/Network/Components/AbstractElement.jl", "src/Network/Components/AbstractStateSpace.jl",
+            "src/Network/Components/converter/common/kernels/delay.jl",
+            "src/Network/Components/converter/common/loops/synchronization.jl",
+            "src/PSCAD/PSCAD.jl", "src/Tools/abcd_parameters.jl",
             "src/Network/Components/impedance/impedance.jl", "src/PSCAD/units.jl", "src/PSCAD/rlc.jl",
             "src/PSCAD/types.jl", "src/PSCAD/plan.jl", "src/PSCAD/emitters/cables.jl",
             "src/PSCAD/emitters/lines.jl", "src/PSCAD/emitters/transformer.jl",
             "src/PSCAD/emitters/machine.jl", "src/PSCAD/emitters/mmc.jl",
             "src/PSCAD/emitters/mmc_energy.jl", "src/PSCAD/emitters/converter_common.jl",
             "src/PSCAD/blocks.jl", "src/PSCAD/export.jl", "src/PSCAD/emitters/tlc.jl",
-            "src/PSCAD/emitters/sources.jl", "src/PSCAD/emitters/probes.jl",
+            "src/PSCAD/emitters/sources.jl", "src/PSCAD/emitters/dc_precharge.jl", "src/PSCAD/emitters/probes.jl",
             "src/PSCAD/emitters/impedance.jl", "ext/PowerImpedancePSCADExt/writer.jl"])
     append!(paths, ["src/Network/Components/converter/MMC/" * file for file in
         ("MMC.jl", "electrical.jl", "modulation.jl", "inner_current.jl", "energy.jl")])

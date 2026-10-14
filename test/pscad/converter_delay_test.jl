@@ -9,7 +9,10 @@ const P = PowerImpedance.PSCAD
     @test P._converter_export_delay(0.0, dt) == 0.0
     @test P._converter_export_delay(dt, dt) == 0.0
     @test P._converter_export_delay(4dt, dt) ≈ 3dt
-    @test P._converter_export_delay(2.5dt, dt) ≈ 1.5dt
+    @test_logs (:warn, r"residual rounded") @test P._converter_export_delay(2.5dt, dt; converter = :DUT) ≈ 2dt
+    @test_logs (:warn, r"residual rounded") @test P._converter_export_delay(2.49dt, dt) ≈ dt
+    @test_logs (:warn, r"residual rounded") @test P._converter_export_delay(2.51dt, dt) ≈ 2dt
+    @test_logs @test P._converter_export_delay(200e-6, 2.5e-6) ≈ 197.5e-6
     for (tau, step) in ((dt/2, dt), (-dt, dt), (Inf, dt), (NaN, dt),
         (dt, 0.0), (dt, -dt), (dt, Inf), (dt, NaN))
         @test_throws ArgumentError P._converter_export_delay(tau, step)
@@ -39,7 +42,7 @@ const P = PowerImpedance.PSCAD
             end
             definition = build()
             parameters = Dict(p.name => p.default for p in definition.parameters)
-            residual = iszero(tau) ? 0.0 : tau - dt
+            residual = iszero(tau) ? 0.0 : round((tau-dt)/dt, RoundNearestTiesUp)*dt
             queues = filter(c -> c.defn == "master:tdelay", definition.canvas.components)
             @test length(queues) == (iszero(residual) ? 0 : kind == :tlc ? 2 : kind == :uncompensated ? 5 : 6)
             for queue in queues
@@ -83,32 +86,9 @@ const P = PowerImpedance.PSCAD
                     exp(-s*residual + im*harmonic*m.elec.ωbase*residual)
                 @test realized ≈ exp(-s*total + im*harmonic*m.elec.ωbase*total)
             end
-            !iszero(tau) && @test total ≈ tau
+            !iszero(tau) && @test abs(total - tau) <= dt/2 + eps(tau)
         end
     end
-end
-@testset "Isolated timing witness transport and topology" begin
-    include(joinpath(@__DIR__, "../manual/pscad/validation/validation.jl"))
-    V = PSCADValidation
-    plan, settings = V.timing_plan()
-    @test length(plan.probes.channels) == 5
-    @test count(c -> c.defn == "master:source_1", plan.main.components) == 5
-    @test count(c -> c.defn == "master:tdelay", plan.main.components) == 2
-    @test settings.sample_step == settings.time_step
-    @test P.check_connectivity(plan) === nothing
-    time = collect(0.0:settings.time_step:settings.simulation_time)
-    input = 0.1sin.(2pi*1000 .* time) .+ (time .>= 0.002)
-    channels = Dict("V_input" => input)
-    for (name, tau) in V.TIMING_DELAYS
-        total = iszero(tau) ? settings.time_step : tau
-        k = floor(Int, total/settings.time_step)
-        f = total/settings.time_step-k
-        channels["V_"*name] = [i > k+1 ? (1-f)*input[i-k] + f*input[i-k-1] : 0.0 for i in eachindex(time)]
-    end
-    @test all(row.passed for row in V.timing_comparison(time, channels, settings.time_step))
-    # Another whole step in the library/source path must stop the L2 queue.
-    channels["V_four"] = [0.0; channels["V_four"][1:end-1]]
-    @test !only(filter(row -> row.name == "four", V.timing_comparison(time, channels, settings.time_step))).passed
 end
 
 end

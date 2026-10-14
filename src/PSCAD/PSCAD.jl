@@ -75,6 +75,7 @@ include("emitters/converter_common.jl")
 include("emitters/tlc.jl")
 include("emitters/mmc.jl")
 include("emitters/mmc_energy.jl")
+include("emitters/dc_precharge.jl")
 include("export.jl")
 include("compute.jl")
 

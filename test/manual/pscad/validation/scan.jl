@@ -381,6 +381,7 @@ function run_fixture(id; remote = RemoteConfig(),
         end
         record["tier_c_result"] = compare_frequency_runs(
             results, models, stored, comparison_directory; spec)
+        record_interface_comparison!(record, net, spec, directory, comparison_directory)
         # Reference-only revisions do not invalidate measured method witnesses.
         # Retain their original axis/band instead of requesting another run.
         selected = haskey(record, "step_witness_definition") ?
@@ -446,6 +447,9 @@ function run_fixture(id; remote = RemoteConfig(),
                            record["tier_a_status"] == "passed" &&
                            record["tier_c_result"]["status"] == "passed" && qualified ?
                            "passed" : "failed"
+        record["comparison_summary"] = Dict("plain_model" => record["tier_c_result"]["status"],
+            "one_step_realization" => get(get(record, "interface_step_result", Dict()), "status", "not_applicable"),
+            "qualification" => record["qualification_status"], "fixture" => record["status"])
         if haskey(record, "resonance_scan")
             run_resonance!(record, net, list, spec; directory, remote, deadline)
         end
@@ -457,7 +461,7 @@ function run_fixture(id; remote = RemoteConfig(),
         record["station_workflow_seconds"] = time()-started
         write_manifest(directory, record)
     end
-    println(id, ": ", record["status"])
+    println(id, ": ", record["status"], "; comparisons: ", get(record, "comparison_summary", Dict()))
     return record
 end
 
