@@ -130,5 +130,6 @@ function PSCAD._write_project(plan::PSCAD.ProjectPlan,
         write_line_wrapper!(main, plan.name, wrapper)
     end
     project.save()
+    PSCAD.check_connectivity(path)
     return (path = abspath(path), mhi_xml_version = _mhi_xml_version())
 end

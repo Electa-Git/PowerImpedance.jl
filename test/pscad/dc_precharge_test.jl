@@ -12,6 +12,29 @@ const P = PowerImpedance.PSCAD
     @test P.check_connectivity(plan) === nothing
     breakers = filter(c -> c.defn == "master:breaker1", plan.main.components)
     @test length(breakers) == 4
+    taps = filter(c -> c.defn == "master:nodelabel" &&
+        get(Dict(c.params), "MeasV", "0") == "1", plan.main.components)
+    @test length(taps) == 4
+    @test Set(Dict(c.params)["VName"] for c in taps) ==
+        Set(("V_DC_P", "V_DC_N", "V_DC_SEND_P", "V_DC_SEND_N"))
+    @test all(c -> Dict(c.params)["PU"] == "0", taps)
+    @test !any(c -> c.defn == "master:voltmetergnd" &&
+        get(Dict(c.params), "Name", "") in Set(Dict(t.params)["VName"] for t in taps),
+        plan.main.components)
+    missing_name = deepcopy(plan.main)
+    index = findfirst(c -> c.defn == "master:nodelabel" &&
+        get(Dict(c.params), "MeasV", "0") == "1", missing_name.components)
+    tap = missing_name.components[index]
+    missing_name.components[index] = P.ComponentPlan(tap.defn,
+        filter(p -> first(p) != "VName", tap.params), tap.x, tap.y, tap.orient)
+    @test_throws ArgumentError P.check_connectivity(missing_name, "missing_voltage_name",
+        Dict(m.name => m for m in plan.modules))
+    floating_tap = P.CanvasPlan()
+    P.component!(floating_tap, "nodelabel", (990, 3168),
+        ["Name" => "DC_P", "MeasV" => "1", "VName" => "V_DC_P"])
+    P.component!(floating_tap, "voltmetergnd", (1026, 3168), ["Name" => "unused"])
+    P.wire!(floating_tap, (990, 3168), (1026, 3168))
+    @test_throws ArgumentError P.check_connectivity(floating_tap, "voltage_only_tap")
     function signal_at(point)
         wire = only(filter(w -> point in w.vertices, plan.main.wires))
         labelpoint = only(filter(!=(point), wire.vertices))

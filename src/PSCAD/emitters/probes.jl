@@ -38,14 +38,34 @@ function output_probe!(canvas::CanvasPlan, name, group, unit, point)
     return nothing
 end
 
-function voltage_probe!(state::PlanState, bus::Bus, labels = (bus.name,))
+function voltage_probe!(state::PlanState, bus::Bus, labels = (bus.name,);
+        at_conducting_node = false)
     x, y = allocate_cell!(state.layout)
     for (index, label) in enumerate(labels)
         row = y + 72 + 54 * (index - 1)
         name = pscad_name(voltage_probe_name(label); used = state.used)
-        label!(state.main, label, (x + 54, row))
-        wire!(state.main, (x + 54, row), (x + 90, row))
-        component!(state.main, "voltmetergnd", (x + 90, row), ["Name" => name])
+        if at_conducting_node
+            # master:nodelabel MeasV=1 and voltmetergnd both emit EMTDC_VVDC
+            # with the electrical node and ground (saved master:246190–246203,
+            # 359606–359608). Measure on an existing conducting branch stub.
+            # The kept nt1-mvdc project relocated the separate meter by 18 px
+            # on load without moving its wire; no extra meter is placed here.
+            target = get(state.main.aliases, lowercase(label), label)
+            target === nothing && throw(ArgumentError("grounded voltage tap for $label"))
+            index = findfirst(state.main.components) do c
+                c.defn == "master:nodelabel" &&
+                    lowercase(Dict(c.params)["Name"]) == lowercase(target) &&
+                    get(Dict(c.params), "MeasV", "0") != "1"
+            end
+            index === nothing && throw(ArgumentError("no conducting voltage tap for $label"))
+            c = state.main.components[index]
+            params = [c.params; ["MeasV" => "1", "PU" => "0", "VName" => name]]
+            state.main.components[index] = ComponentPlan(c.defn, params, c.x, c.y, c.orient)
+        else
+            label!(state.main, label, (x + 54, row))
+            wire!(state.main, (x + 54, row), (x + 90, row))
+            component!(state.main, "voltmetergnd", (x + 90, row), ["Name" => name])
+        end
         output_probe!(state.main, name, "bus", "kV", (x + 180, row))
         side = bus.kind == :dc ? (index == 1 ? "P" : "N") : nothing
         push!(state.channels,

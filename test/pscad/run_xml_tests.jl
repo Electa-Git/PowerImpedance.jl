@@ -40,6 +40,27 @@ else
     include("m7_networks.jl")
     using TOML
     P = PowerImpedance.PSCAD
+    @testset "Loaded dangling voltage terminal" begin
+        fragment = joinpath(@__DIR__, "fixtures", "nt1_loaded_fragment.pscx")
+        err = try
+            P.check_connectivity(fragment)
+            nothing
+        catch error
+            error
+        end
+        @test err isa ArgumentError
+        @test occursin("must join one component port and one label", sprint(showerror, err))
+        @test occursin("(1026, 3168)", sprint(showerror, err))
+        # The same recorded wire was valid before the native relocation.
+        tree = etree.parse(fragment)
+        meter = tree.xpath("//User[@id='298012955']")[0]
+        meter.set("y", "3168")
+        mktempdir() do dir
+            original = joinpath(dir, "before_load.pscx")
+            tree.write(original)
+            @test P.check_connectivity(original) === nothing
+        end
+    end
     # Compare actual pin connectivity against the independent saved fragments,
     # including their original abutments, multi-segment wires and T-junctions.
     function pin_partition(schematic)
@@ -222,6 +243,17 @@ else
                 export_pscad(input; path, settings = case_settings, dc_reference)
             end
             @test !any(log -> occursin("CompensatedModulation", string(log.message)), logger.logs)
+            if name == "passive_ohl_classic"
+                @test P.check_connectivity(path) === nothing
+                tree = etree.parse(path)
+                vertex = tree.xpath("//Wire[@classid='TLine']/vertex")[0]
+                vertex.set("y", "36")
+                mktempdir() do directory
+                    dangling = joinpath(directory, "moved_line_terminal.pscx")
+                    tree.write(dangling)
+                    @test_throws ArgumentError P.check_connectivity(dangling)
+                end
+            end
             push!(models, model)
             plan = P.build_plan(model.netlist; settings = case_settings, name,
                 description = "PowerImpedance.jl: $name", dc_reference)

@@ -558,6 +558,11 @@ between a known component port and a label or ground. Require every input and
 electrical port to have a stub, and every signal input to have exactly one
 driver on the same canvas. Reject isolated ideal-meter grounding chains.
 Coordinates are pixels.
+
+With `PythonCall` loaded, `check_connectivity(path::AbstractString)` reads the
+serialized project coordinates and applies the same checks. This also checks
+projects saved after native loading, where a relocated component can leave
+its original wire endpoint dangling.
 """
 function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
     fail(point, reason) = throw(ArgumentError("PSCAD canvas $name at $point: $reason"))
@@ -573,6 +578,11 @@ function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
             labels[point] = c.defn == "master:datalabel" ? :signal : :electrical
             c.defn == "master:datalabel" &&
                 (signal_names[point] = lowercase(Dict(c.params)["Name"]))
+            if c.defn == "master:nodelabel" && get(Dict(c.params), "MeasV", "0") == "1"
+                signal = get(Dict(c.params), "VName", "")
+                isempty(signal) && fail(point, "measuring node label requires VName")
+                push!(get!(drivers, lowercase(signal), NTuple{2, Int}[]), point)
+            end
         else
             known_ports = try
                 component_ports(c, modules)
@@ -676,6 +686,16 @@ function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
     end
     for point in keys(labels)
         point in ends || fail(point, "label has no component port stub")
+    end
+    for c in canvas.components
+        c.defn == "master:nodelabel" && get(Dict(c.params), "MeasV", "0") == "1" || continue
+        point = (c.x, c.y)
+        port = only(p for (p, label) in connected_labels if label == point)
+        owner = only(filter(canvas.components) do candidate
+            any(p -> first(p) == port, component_ports(candidate, modules))
+        end)
+        owner.defn in ("master:voltmeter", "master:voltmetergnd") &&
+            fail(point, "measuring node label must tap a conducting branch, not a voltage-only stub")
     end
     _check_meter_grounding(canvas, name, modules)
     return nothing

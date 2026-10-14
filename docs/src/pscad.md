@@ -233,3 +233,12 @@ fields, pins and release-command convention are cited in the developer mapping.
   example reproduces an unstable mode near 3.48 kHz with a growth time near
   0.7 ms; that is dynamic-validation evidence, without steady-state acceptance.
   See the [P2P record](developers/pscad_mapping.md#P2P-dynamic-validation-record).
+
+Voltage probes on temporarily pre-charged DC networks measure an existing
+conducting node label directly, using the same line-to-ground voltage function
+and output names as the standalone meter. This avoids a separate meter whose
+position can change during native project loading. With `PythonCall` loaded,
+`PowerImpedance.PSCAD.check_connectivity(path)` also checks the coordinates in
+an exported project or a project saved after loading. Export performs this
+serialized check automatically; offline checks do not establish native build
+or scientific acceptance.

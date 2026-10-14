@@ -72,7 +72,8 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
     for e in elements
         emit!(state, e, context)
     end
-    for bus in _dc_precharge_buses(netlist)
+    precharge_buses = _dc_precharge_buses(netlist)
+    for bus in precharge_buses
         dc_precharge!(state, bus, context)
     end
     for bus in netlist.buses
@@ -86,7 +87,8 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
             end
             grounded || dc_reference!(state, bus, labels)
         end
-        voltage_probe!(state, bus, labels)
+        voltage_probe!(state, bus, labels;
+            at_conducting_node = any(b -> b.key == bus.key, precharge_buses))
     end
     reference_key = netlist.operating_point.slack_bus
     if reference_key === nothing

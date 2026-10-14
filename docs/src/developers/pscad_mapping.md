@@ -2665,3 +2665,27 @@ L2-11 only. The detailed bus/source/breaker inventory is retained under
 `test/manual/pscad/validation/data/m9c2/export-change-list.tsv`. Only L2-11 is
 re-prepared in this queue; retained L2-05 evidence is not overwritten. Existing
 native acceptance does not qualify the changed Vdc/P2P exports until re-run.
+
+### Pre-charged DC voltage taps and native coordinate checks
+
+The kept `local/pscad-exchange/diag/nt1-mvdc/mmc_vdc_classic-report/` build
+shows `V_DC_P` (component 298012955) at (1026,3150) after loading, versus
+(1026,3168) in the source. Its wire still ends at (1026,3168); the loaded
+meter terminal is unlabelled and reported as `NT_1`. The pre-load plan checker
+could not observe that relocation. Its trigger inside native loading is not
+established by these files.
+
+On pre-charged DC islands, bus voltage outputs now use `master:nodelabel`
+with `MeasV=1`, `PU=0` and the original probe name as `VName`, on an existing
+conducting branch stub. No separate voltage-meter branch is placed. The saved
+master at `local/pscad-exchange/m7-master.pslx:246190–246203` emits
+`EMTDC_VVDC` for `$VDC:A:0`; `voltmetergnd` at 359606–359608 emits the same
+function for `$VDC:N1:0`. Pole voltage, ground reference, units, probe names,
+measurement stage and final circuit are preserved. The pre-charge qualification
+rule, sources, breaker release and controller parameters are unchanged.
+
+`check_connectivity(path)` checks the actual serialized or native-saved
+coordinates through the same canvas guard. Export now checks both the plan
+and its written XML. A portable fragment of the kept dangling terminal is
+retained in `test/pscad/fixtures/nt1_loaded_fragment.pscx`; native build
+acceptance of the corrected project remains a separate station check.
