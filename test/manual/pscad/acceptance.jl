@@ -155,6 +155,13 @@ else
     println("ΔY skipped: model fix not merged")
 end
 
+converters_only = "--converters" in ARGS
+all(arg -> arg == "--converters", ARGS) || error("usage: acceptance.jl [--converters]")
+if converters_only
+    filter!(case -> any(e -> e.model isa Union{PowerImpedance.TLC, PowerImpedance.MMC},
+        case[1].netlist.elements), cases)
+end
+
 for (model, classic_reference, rtol_v) in cases
     dc_cable = any(model.netlist.elements) do element
         element.model isa PowerImpedance.Cable &&
@@ -240,6 +247,7 @@ end
 # Diagnostic, not asserted: the Transformer_test magnetizing branch (Lₘ = 10 H,
 # Rₘ = 1e4 Ω) draws a magnetizing current comparable to the load current and
 # exposes the power-flow pi-model approximation of the transformer T-model.
+if !converters_only
 stress_classic, _ = PSCADFixtures.transformer_network(; Rₘ = 1e4, Lₘ = 10.0)
 stress_model = export_pscad(stress_classic;
     path = joinpath(exports, "transformer_yy_stress.pscx"))
@@ -249,3 +257,4 @@ stress = compute(stress_model, PSCADRun();
 println("transformer_yy_stress (diagnostic, not asserted)")
 show(stdout, MIME("text/plain"), compare_operating_point(stress, stress_model))
 println()
+end

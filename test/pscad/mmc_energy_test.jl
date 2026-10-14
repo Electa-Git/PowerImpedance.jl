@@ -37,7 +37,7 @@ end
         @test P.check_connectivity(plan) === nothing
         @test Set(keys(modules)) == Set(["ABC_DQ", "DQ_ABC", "MEAS_DUT", "PLL_DUT",
             "VSM_DUT", "QCTRL_DUT", "CCVI_DUT", "OCC_DUT",
-            "SIGMA_DUT", "MOD_DUT", "ARM_DUT", "MMC_DUT"])
+            "SIGMA_DUT", "MOD_DUT", "MMC_DUT"])
         for (name, canvas) in [("Main", plan.main);
                                [(d.name, d.canvas) for d in plan.modules]]
             @test PSCADTopology.check_degrees(PSCADTopology.electrical_graph(canvas, modules), name) ===
@@ -311,8 +311,9 @@ end
         for c in modules["MOD_DUT"].canvas.components
             c.defn == "master:tdelay" || continue
             fields = Dict(c.params)
-            @test params[fields["T"]] == 200e-6
-            @test fields["N"] == "21"
+            residual = 200e-6 - SETTINGS.time_step
+            @test params[fields["T"]] == residual
+            @test fields["N"] == string(ceil(Int, residual/SETTINGS.time_step) + 1)
             @test fields["Intp"] == "0" && fields["Init"] == "1"
             stem = replace(fields["X0"], "arm" => "", "Y0" => "")
             @test params[fields["X0"]] ≈ initial_outputs["m_" * stem] atol=1e-6

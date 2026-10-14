@@ -248,6 +248,7 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
     acbase = converter_parameter!(parameters, "ACbase", m.elec.vAC_base)
     push!(graph.nodes, Gain(Signal("vMS_z_ref"), Signal("comp_zero_kV"), dcbase))
     delay = block.delay1
+    residual = _converter_export_delay(delay.timeDelay, settings.time_step)
     caps = mmc_arm_capacitors(equilibrium.states, m.elec.vDC_base)
     theta0 = PowerImpedance.syncangle(m.sync, equilibrium.states)
     phases = (0.0, -2π/3, 2π/3)
@@ -277,14 +278,14 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
                         Signal.(["comp_total_" * phase, "comp_delta_" * phase * "_kV"]), [
                             1, sign], voltage),
                     Div(voltage, Signal("v_Ctot_" * stem), raw)])
-            if iszero(delay.timeDelay)
+            if iszero(residual)
                 push!(graph.nodes, Gain(raw, output, 1.0))
             else
-                td = converter_parameter!(parameters, "arm" * stem * "Td", delay.timeDelay, "s")
+                td = converter_parameter!(parameters, "arm" * stem * "Td", residual, "s")
                 y0 = converter_parameter!(parameters, "arm" * stem * "Y0", (vs0 + sign*vd0)/cap)
                 push!(graph.nodes,
                     Delay(raw, output, td,
-                        ceil(Int, delay.timeDelay/settings.time_step) + 1, y0))
+                        ceil(Int, residual/settings.time_step) + 1, y0))
             end
             push!(graph.nodes, Export(output.name, output))
             push!(outputs, (output.name, 1))

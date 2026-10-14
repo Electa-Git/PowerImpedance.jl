@@ -2531,3 +2531,87 @@ input hashes. PSCAD's [line/cable modelling guidelines](https://www.pscad.com/kn
 printed pp.12 and 40–41, describe functional-form correction and the V5
 loss-tangent handling. Existing station runs with 0.2% targets retain their
 original project hashes and require re-acceptance under the new default.
+
+
+## Converter execution boundaries
+
+The MMC parent canvas contains the six arm sources, inductances, resistances,
+meters and capacitor integrators. The isolated arm experiment shares this same
+construction. The arm voltage product uses the insertion index from MOD in the
+current dynamics evaluation, with no opaque ARM module command boundary.
+
+`master:force_dsout` captures each applied insertion index and its post-solve arm
+current. Their product supplies capacitor charging; `master:force_dsdyn` transfers
+that charging history to the following dynamics pass. This preserves the physical
+insertion/current pairing while exposing the source command dependency to PSCAD's
+sequencer. Same-solve upper/lower currents also form the circulating-current
+vector and DC-current sum in the electrical-output phase. One dynamics transfer
+supplies that common measurement set to both TEC and LEC consumers.
+
+MMC and TLC select their synchronization feedback boundary with
+`master:zminusone`, initialized from the solved relative angle. All acquisition
+and inverse rotations use that one relative-angle snapshot plus the nominal
+angle at the current timestamp. GFM uses separate initialized VSM and PLL
+snapshots; its PLL frame rotation uses their difference. The fresh measured q
+voltage drives the PLL rate, and the updated relative angle feeds the next
+evaluation's snapshot. Controller equations, physical values, initial capacitor
+voltages, probes and the 0.2 s DC-divisor hold are retained.
+
+This stage leaves every model modulation delay unchanged. Electrical measurement
+and subsequent actuation retain the inherent EMT interface step. Native generated
+order must be checked in kept builds (L2-07, L2-01 and L2-13): current MOD indices
+must precede all six arm-source preparations, Σ/DC aggregation must occur after
+one completed solve, and fresh q acquisition must precede PLL evaluation. Offline
+connectivity/XML tests establish the requested structure, not the native schedule.
+Delay compensation is deferred until that schedule is verified.
+
+
+The first kept builds showed that the sources do consume current MOD outputs,
+with fresh q acquisition preceding PLL evaluation. They also showed a capacitor
+feedback cut: SIGMA received five advanced physical capacitor states and one
+cached state (lower-c in L2-07, lower-a in L2-13). Capacitor measurement therefore
+belongs in the same electrical-output acquisition set as the arm currents.
+The seq3 and seq4 attempts captured physical capacitor voltages in DSOUT and
+returned initialized deviations to DSDYN. Seq4 moved all deviation arithmetic
+into DSOUT, but the dynamics reconstructions still formed a feedback cycle:
+SIGMA (and compensated MOD) read selected previous reconstructions. Execution
+phase qualifiers select scripts; they do not declare a state-history cut.
+
+Each capacitor consumer now reads an initialized `master:zminusone` snapshot
+of the applied physical capacitor state. This is the same explicit feedback
+boundary used for synchronization states. Its input is the physical integrator
+output, not an already acquired DSOUT copy. The physical state changes only in
+DSDYN and is held throughout the following solve and DSOUT; therefore the next
+DSDYN snapshot equals the capacitor voltage observed by that completed solve,
+coherent with its acquired arm currents. Feeding a DSOUT copy through this
+selector instead would add another step. SIGMA and compensated MOD share these
+six snapshots. Source products and probes retain the advancing physical states,
+and each snapshot has the same initial voltage as its physical integrator.
+
+The next kept builds must show all six initialized capacitor snapshots available
+before SIGMA and compensated MOD, with snapshot commits after the capacitor consumers and physical state
+advances, and current-pass commands at every source. The previous applied capacitor level must equal
+the completed DSOUT level; no extra delayed measurement may enter the selector.
+Offline checks cover the bindings, initialization and distinct successive state
+levels. Native ordering remains pending. Delay compensation remains deferred.
+
+
+Seq4b kept builds verify one remaining interface step for MMC GFL, TLC, MMC
+GFM and LEC/compensated MMC. All six capacitor snapshots are initialized before
+consumers and committed from current physical states after source preparation.
+The complete DSOUT level matches the following pass's state/current acquisition.
+There is no residual two-step capacitor path in those builds.
+
+Positive model delays now export `tau_model - dt`, valid only for
+`tau_model >= dt`. Shorter positive delays require a finer step and are rejected.
+Zero model delay retains zero explicit delay and the one inherent interface step.
+A zero residual bypasses the queue; positive residuals retain the existing
+history capacity rule and master delay realization. TLC and uncompensated MMC
+use the residual carrier rotations (+omega for Delta, -2omega for Sigma) with
+buffer initialization inverse-rotated from the target physical equilibrium.
+Compensated MMC delays abc insertion indices with the residual and retains its
+physical initial insertion values, with no additional dq phase rotation.
+Model fields, controller formulas/gains, physical parameters and the divisor
+startup hold are unchanged. Exact export delay versus Julia Pade realization
+remains a separate model difference. The isolated electrical timing witness
+checks actual library/interface timing before the L2 re-validation queue.

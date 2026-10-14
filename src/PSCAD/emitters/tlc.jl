@@ -23,24 +23,28 @@ function tlc_modulation(name, e, equilibrium, transforms, settings)
         Signal("md_g"), Signal("mq_g"), "grid", true)
     if m.mod isa PowerImpedance.DelayModulation
         delay = m.mod.delay
-        delay.padeOrderNum == delay.padeOrderDen == 3 && delay.timeDelay > 0 ||
+        (iszero(delay.timeDelay) || delay.padeOrderNum == delay.padeOrderDen == 3) ||
             not_exportable(e, m.mod)
-        # Keep the core delay's output phase compensation. Exact and Padé
-        # delays both have unity DC gain in this global synchronous dq frame.
-        command = PowerImpedance.inverse_frame_transform(
-            2equilibrium.outputs.iloop.vMΔ_d_ref_c / equilibrium.outputs.meas.v_dc_f,
-            2equilibrium.outputs.iloop.vMΔ_q_ref_c / equilibrium.outputs.meas.v_dc_f,
-            equilibrium.states.Δθ_pll)
-        xd = [getproperty(equilibrium.states, n) for n in PowerImpedance.statenames(delay)]
-        initial = delay.C * xd + delay.D * collect(values(command))
-        t = converter_parameter!(parameters, "Td", delay.timeDelay, "s")
-        n = ceil(Int, delay.timeDelay / settings.time_step) + 1
-        for (i, axis) in enumerate(("d", "q"))
-            x0 = converter_parameter!(parameters, axis * "Delay0", initial[i])
-            push!(graph.nodes, Delay(
-                Signal("m" * axis * "_g"), Signal("m" * axis * "_delay"), t, n, x0))
+        residual = _converter_export_delay(delay.timeDelay, settings.time_step)
+        # Carrier rotation and initialized history use the residual together.
+        # The acquired electrical signal supplies the remaining one-step lag.
+        initial = PowerImpedance.phase_compensated_dq(
+            [equilibrium.outputs.mod.m_d, equilibrium.outputs.mod.m_q],
+            -m.elec.ωbase * residual)
+        if !iszero(residual)
+            t = converter_parameter!(parameters, "Td", residual, "s")
         end
-        converter_parameter!(parameters, "compensation", m.elec.ωbase * delay.timeDelay)
+        for (i, axis) in enumerate(("d", "q"))
+            raw, delayed = Signal("m" * axis * "_g"), Signal("m" * axis * "_delay")
+            if iszero(residual)
+                push!(graph.nodes, Gain(raw, delayed, 1.0))
+            else
+                x0 = converter_parameter!(parameters, axis * "Delay0", initial[i])
+                push!(graph.nodes, Delay(raw, delayed, t,
+                    ceil(Int, residual / settings.time_step) + 1, x0))
+            end
+        end
+        converter_parameter!(parameters, "compensation", m.elec.ωbase * residual)
         push!(graph.nodes, Import("compensation", Signal("compensation")))
         converter_rotation!(
             graph, Signal("md_delay"), Signal("mq_delay"), Signal("compensation"),
@@ -205,9 +209,11 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.TLC}, contex
         tlc_modulation(names[6], e, equilibrium, transforms, context.settings)]
     append!(state.modules, definitions)
     canvas = tlc_electrical_canvas(e)
+    converter_angle_snapshot!(canvas, e, equilibrium; origin = (2160, 1512))
     for (i, definition) in enumerate(definitions)
         converter_instance!(canvas, definition, context.name,
-            (2160 + 432 * ((i - 1) ÷ 3), 108 + 432 * ((i - 1) % 3)))
+            (2160 + 432 * ((i - 1) ÷ 3), 108 + 432 * ((i - 1) % 3)),
+            i == 2 ? (; theta_c = "theta_next", theta_rel = "theta_rel_next") : (;))
     end
     outputs = ("P_ac_f", "Q_ac_f", "v_dc_f", "omega_c", "theta_c")
     diagnostics = lower!(CanvasPlan(), BlockGraph(ControlBlock[Export(n, Signal(n))

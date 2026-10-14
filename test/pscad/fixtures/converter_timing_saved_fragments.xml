@@ -1,0 +1,243 @@
+<SavedMasterDefinitions source="PSCAD master library, kept M7 build">
+  <Definition classid="UserCmpDefn" name="force_dsdyn" url="" view="false" instances="0" date="0" crc="47662438" id="837548069" group="Miscellaneous">
+    <form name="Force to DSDyn" w="280" h="420" splitter="70" commentlines="4">
+      <category name="Configuration" visible="true">
+        <parameter name="Name" desc="Name for Identification" type="Text" group="" helpmode="Overwrite" allowemptystr="true">
+          <value />
+          <cond type="Enable">true</cond>
+          <help>Enter a name for identification</help>
+          <regex />
+          <error_msg />
+        </parameter>
+        <parameter type="Choice" name="Dtype" desc="Data Type" group="" helpmode="Overwrite" animate="false">
+          <value>0</value>
+          <cond type="Enable" />
+          <help>Select data type from logical, integer, real or complex</help>
+          <choice>0 = Real</choice>
+          <choice>1 = Integer</choice>
+          <choice>2 = Logical</choice>
+          <choice>3 = Complex</choice>
+        </parameter>
+        <parameter type="Integer" name="Dim" desc="Dimension" content_type="Literal" min="1" max="2147483647" unit="" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1</value>
+          <cond type="Enable" />
+          <help>Enter the dimension of input/output signals</help>
+        </parameter>
+        <cond>true</cond>
+      </category>
+    </form>
+    <svg viewBox="-200 -200 200 200">
+      <port model="Transfer" name="in:Dim" x="-36" y="0" dim="0" mode="Input" type="Real">Dtype==0</port>
+      <port model="Transfer" name="out:Dim" x="36" y="0" dim="0" mode="Output" type="Real">Dtype==0</port>
+      <port model="Transfer" name="in:Dim" x="-36" y="0" dim="0" mode="Input" type="Integer">Dtype==1</port>
+      <port model="Transfer" name="out:Dim" x="36" y="0" dim="0" mode="Output" type="Integer">Dtype==1</port>
+      <port model="Transfer" name="in:Dim" x="-36" y="0" dim="0" mode="Input" type="Logical">Dtype==2</port>
+      <port model="Transfer" name="out:Dim" x="36" y="0" dim="0" mode="Output" type="Logical">Dtype==2</port>
+      <rect x="-24" y="-11" width="47" height="20" stroke="Teal" stroke-dasharray="none" stroke-width="0.2" fill-style="Hollow" fill-fg="Black" fill-bg="" />
+      <cond>Dtype==0</cond>
+      <line x1="-36" y1="0" x2="-24" y2="0" stroke="Green" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>true</cond>
+      <line x1="-24" y1="0" x2="-29" y2="-5" stroke="Black" stroke-dasharray="none" stroke-width="0.2" />
+      <line x1="-24" y1="0" x2="-29" y2="5" stroke="Black" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>Dtype==0</cond>
+      <line x1="36" y1="0" x2="23" y2="0" stroke="Green" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>true</cond>
+      <text x="0" y="3" stroke="Black" fill="Black" font-size="Small" text-anchor="Middle">DSDyn</text>
+      <cond>Dtype==1</cond>
+      <line x1="-36" y1="0" x2="-24" y2="0" stroke="Green" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>Dtype==2</cond>
+      <line x1="-36" y1="0" x2="-24" y2="0" stroke="Fuchsia" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>Dtype==1</cond>
+      <line x1="36" y1="0" x2="23" y2="0" stroke="Green" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>Dtype==2</cond>
+      <line x1="36" y1="0" x2="23" y2="0" stroke="Fuchsia" stroke-dasharray="none" stroke-width="0.2" />
+    </svg>
+    <script>
+      <segment name="Dsdyn" id="2079572039" classid="CoreSegment">      $out = $in</segment>
+      <segment classid="CoreSegment" id="1339595490" name="FlyBy">Force a signal to Dsdyn
+
+:in
+input
+:out
+output</segment>
+    </script>
+  </Definition>
+  <Definition classid="UserCmpDefn" name="force_dsout" url="" view="false" instances="0" date="0" crc="58107097" id="1042167050" group="Miscellaneous">
+    <form name="Force to DSOut" w="280" h="420" splitter="70" commentlines="4">
+      <category name="Configuration" visible="true">
+        <parameter name="Name" desc="Name for Identification" type="Text" group="" helpmode="Overwrite" allowemptystr="true">
+          <value />
+          <cond type="Enable">true</cond>
+          <help>Enter a name for identification</help>
+          <regex />
+          <error_msg />
+        </parameter>
+        <parameter type="Choice" name="Dtype" desc="Data Type" group="" helpmode="Overwrite" animate="false">
+          <value>0</value>
+          <cond type="Enable" />
+          <help>Select from logical, integer, real or complex</help>
+          <choice>0 = Real</choice>
+          <choice>1 = Integer</choice>
+          <choice>2 = Logical</choice>
+          <choice>3 = Complex</choice>
+        </parameter>
+        <parameter type="Integer" name="Dim" desc="Dimension" content_type="Literal" min="1" max="2147483647" unit="" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1</value>
+          <cond type="Enable" />
+          <help>Enter the dimension of input/output signals</help>
+        </parameter>
+        <cond>true</cond>
+      </category>
+    </form>
+    <svg viewBox="-200 -200 200 200">
+      <port model="Transfer" name="in:Dim" x="-36" y="0" dim="0" mode="Input" type="Real">Dtype==0</port>
+      <port model="Transfer" name="out:Dim" x="36" y="0" dim="0" mode="Output" type="Real">Dtype==0</port>
+      <port model="Transfer" name="in:Dim" x="-36" y="0" dim="0" mode="Input" type="Integer">Dtype==1</port>
+      <port model="Transfer" name="out:Dim" x="36" y="0" dim="0" mode="Output" type="Integer">Dtype==1</port>
+      <port model="Transfer" name="in:Dim" x="-36" y="0" dim="0" mode="Input" type="Logical">Dtype==2</port>
+      <port model="Transfer" name="out:Dim" x="36" y="0" dim="0" mode="Output" type="Logical">Dtype==2</port>
+      <rect x="-24" y="-11" width="47" height="20" stroke="Olive" stroke-dasharray="none" stroke-width="0.2" fill-style="Hollow" fill-fg="Black" fill-bg="" />
+      <cond>Dtype==0</cond>
+      <line x1="-36" y1="0" x2="-24" y2="0" stroke="Green" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>true</cond>
+      <line x1="-24" y1="0" x2="-29" y2="-5" stroke="Black" stroke-dasharray="none" stroke-width="0.2" />
+      <line x1="-24" y1="0" x2="-29" y2="5" stroke="Black" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>Dtype==0</cond>
+      <line x1="36" y1="0" x2="23" y2="0" stroke="Green" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>true</cond>
+      <text x="0" y="3" stroke="Black" fill="Black" font-size="Small" text-anchor="Middle">DSOut</text>
+      <cond>Dtype==1</cond>
+      <line x1="-36" y1="0" x2="-24" y2="0" stroke="Green" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>Dtype==2</cond>
+      <line x1="-36" y1="0" x2="-24" y2="0" stroke="Fuchsia" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>Dtype==1</cond>
+      <line x1="36" y1="0" x2="23" y2="0" stroke="Green" stroke-dasharray="none" stroke-width="0.2" />
+      <cond>Dtype==2</cond>
+      <line x1="36" y1="0" x2="23" y2="0" stroke="Fuchsia" stroke-dasharray="none" stroke-width="0.2" />
+    </svg>
+    <script>
+      <segment name="Dsout" id="1156719220" classid="CoreSegment">      $out = $in</segment>
+      <segment classid="CoreSegment" id="929256868" name="FlyBy">Force a signal to Dsout
+
+:in
+input
+:out
+output</segment>
+    </script>
+  </Definition>
+  <Definition classid="UserCmpDefn" name="zminusone" url="" view="false" instances="0" date="0" crc="117562198" id="670745022" group="Miscellaneous">
+    <form name="Feedback Loop Selector" w="280" h="420" splitter="70" commentlines="4">
+      <category name="Configuration" visible="true">
+        <cond />
+        <parameter type="Text" name="Name" desc="Feedback Signal Comment" group="" helpmode="Append" allowemptystr="false">
+          <value>Loop</value>
+          <cond />
+          <help />
+          <regex />
+          <error_msg />
+        </parameter>
+        <parameter type="Choice" name="Type" desc="Data Type" group="" helpmode="Append">
+          <value>2</value>
+          <cond />
+          <help />
+          <choice>0 = Logical</choice>
+          <choice>1 = Integer</choice>
+          <choice>2 = Real</choice>
+          <choice>3 = Complex</choice>
+        </parameter>
+        <parameter type="Integer" name="Dim" desc="Dimension" content_type="Literal" min="1" max="2147483647" unit="" group="" helpmode="Append" intent="Input" dim="1">
+          <value>1</value>
+          <cond />
+          <help />
+        </parameter>
+      </category>
+      <category name="Initial Values" visible="true">
+        <cond />
+        <parameter type="Choice" name="Init" desc="Specify Initial Values" group="" helpmode="Append">
+          <value>0</value>
+          <cond />
+          <help />
+          <choice>0 = No</choice>
+          <choice>1 = Yes</choice>
+        </parameter>
+        <parameter type="Choice" name="InitL" desc="Initial Logical Value" group="" helpmode="Append">
+          <value>0</value>
+          <cond>(Init==1)&amp;&amp;(Type==0)</cond>
+          <help />
+          <choice>0 = False</choice>
+          <choice>1 = True</choice>
+        </parameter>
+        <parameter type="Integer" name="InitI" desc="Initial Integer Value" content_type="Literal" min="-2147483648" max="2147483647" unit="" group="" helpmode="Append" intent="Input" dim="1">
+          <value>0</value>
+          <cond>(Init==1)&amp;&amp;(Type==1)</cond>
+          <help />
+        </parameter>
+        <parameter type="Real" name="InitR" desc="Initial Real Value" content_type="Literal" min="-1E+308" max="1E+308" unit="" group="" helpmode="Append" intent="Input" dim="1">
+          <value>0.0</value>
+          <cond>(Init==1)&amp;&amp;(Type==2)</cond>
+          <help />
+        </parameter>
+        <parameter name="InitC" desc="Initial Complex Value" type="Complex" group="" helpmode="Append" content_type="Literal" intent="Input" dim="1" unit="" min="-1E+308" max="1E+308">
+          <value>(0.0, 0.0)</value>
+          <cond>(Init==1)&amp;&amp;(Type==3)</cond>
+          <help />
+        </parameter>
+      </category>
+    </form>
+    <svg viewBox="-200 -200 200 200">
+      <port model="Transfer" name="INR:Dim" x="36" y="0" dim="0" mode="Output" type="Real">Type==2</port>
+      <port model="Transfer" name="OUTR:Dim" x="-36" y="0" dim="0" mode="Input" type="Real">Type==2</port>
+      <port model="Transfer" name="INL:Dim" x="36" y="0" dim="0" mode="Output" type="Logical">Type==0</port>
+      <port model="Transfer" name="INI:Dim" x="36" y="0" dim="0" mode="Output" type="Integer">Type==1</port>
+      <port model="Transfer" name="OUTI:Dim" x="-36" y="0" dim="0" mode="Input" type="Integer">Type==1</port>
+      <port model="Transfer" name="OUTL:Dim" x="-36" y="0" dim="0" mode="Input" type="Logical">Type==0</port>
+      <line x1="7" y1="0" x2="-7" y2="0" stroke="Black" stroke-dasharray="none" stroke-width="0.2" />
+      <line x1="18" y1="-7" x2="25" y2="0" stroke="Blue" stroke-dasharray="none" stroke-width="0.2" />
+      <line x1="-18" y1="-7" x2="-10" y2="0" stroke="Blue" stroke-dasharray="none" stroke-width="0.2" />
+      <line x1="12" y1="0" x2="25" y2="0" stroke="Blue" stroke-dasharray="none" stroke-width="0.2" />
+      <line x1="-25" y1="0" x2="-10" y2="0" stroke="Blue" stroke-dasharray="none" stroke-width="0.2" />
+      <line x1="36" y1="0" x2="28" y2="0" stroke="Black" stroke-dasharray="none" stroke-width="0.2" />
+      <line x1="-28" y1="0" x2="-36" y2="0" stroke="Black" stroke-dasharray="none" stroke-width="0.2" />
+    </svg>
+    <script>
+      <segment name="Fortran" id="597801431" classid="CoreSegment">! $Name
+#IF  Type==0
+ #IF Init==1
+  #TOP ~
+      IF (TIMEZERO) $INL = ~
+  #CASE InitL {~.FALSE.}{~.TRUE.}
+ #ENDIF
+#ELSEIF  Type==1
+ #IF Init==1
+  #TOP ~
+      IF (TIMEZERO) $INI = $InitI
+ #ENDIF
+#ELSEIF Type==2
+ #IF Init==1
+  #TOP ~ 
+      IF (TIMEZERO) $INR = $InitR
+ #ENDIF
+#ELSEIF Type==3
+ #IF Init==1
+  #TOP ~ 
+      IF (TIMEZERO) $INC = $InitC
+ #ENDIF
+#ENDIF
+#IF  Type==0
+      $INL = $OUTL
+#ELSEIF  Type==1
+      $INI = $OUTI
+#ELSEIF Type==2
+      $INR = $OUTR
+#ELSEIF Type==3
+      $INC = $OUTC
+#ENDIF</segment>
+      <segment name="FlyBy" id="666179770" classid="CoreSegment">When this component is used in a feedback loop,
+PSCAD will break the loop (by adding a time step delay)
+at the selected point.  Without this component, PSCAD
+will insert a time step delay in an optimum spot.
+If used where a feedback path does not exist, this component
+does nothing.</segment>
+    </script>
+  </Definition>
+</SavedMasterDefinitions>

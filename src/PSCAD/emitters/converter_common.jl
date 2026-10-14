@@ -2,6 +2,17 @@
 # assembles their supported control objects as PSCAD block diagrams.
 const _CONVERTER_STARTUP_RELEASE = 0.2
 
+# One completed electrical solve feeds the following dynamics/source pass.
+# Positive model delays budget that inherent step; zero-delay models retain it.
+function _converter_export_delay(delay, dt)
+    isfinite(dt) && dt > 0 || throw(ArgumentError("converter step must be finite and positive"))
+    isfinite(delay) && delay >= 0 ||
+        throw(ArgumentError("converter delay must be finite and nonnegative"))
+    iszero(delay) && return 0.0
+    delay >= dt || throw(ArgumentError("positive converter delay is shorter than the EMT step; use a finer step"))
+    return Float64(delay - dt)
+end
+
 # Saved time-based real selector: local/TLC/Simple_2L_VSC_RL.pscx:5912–5929.
 # Only measured DC voltage used as a divisor has a solved-value handover.
 # All feedback measurements and control-state signals remain live from t=0.
@@ -17,6 +28,54 @@ function lower!(canvas::CanvasPlan, node::_ConverterStartupHold, point)
         ["X" => block_value(_CONVERTER_STARTUP_RELEASE),
             "OL" => block_value(node.initial), "OH" => node.measured.name,
             "INTR" => "0", "Dim" => "1", "conv" => "0"], node.clock, node.output)
+end
+
+# Master-library execution-phase transfers and explicit feedback state boundary.
+# force_dsout/force_dsdyn copy in the selected electrical-output/dynamics phase;
+# zminusone selects the feedback cut and initializes its real state at TIMEZERO.
+# Its input is the just-applied physical/controller state, not an already held
+# measurement; the next pass reads that state from the existing STOF history.
+struct _ConverterPhaseTransfer <: ControlBlock
+    input::Signal
+    output::Signal
+    phase::Symbol
+    dimension::Int
+end
+
+function lower!(canvas::CanvasPlan, node::_ConverterPhaseTransfer, point)
+    node.phase in (:dsout, :dsdyn) || throw(ArgumentError("invalid converter phase"))
+    unary_block!(canvas, "force_" * string(node.phase), point,
+        ["Dtype" => "0", "Dim" => string(node.dimension)], node.input, node.output)
+end
+
+struct _ConverterStateSnapshot <: ControlBlock
+    input::Signal
+    output::Signal
+    initial::Float64
+end
+
+function lower!(canvas::CanvasPlan, node::_ConverterStateSnapshot, point)
+    unary_block!(canvas, "zminusone", point,
+        ["Type" => "2", "Dim" => "1", "Init" => "1", "InitR" => block_value(node.initial)],
+        node.input, node.output)
+end
+
+function converter_angle_snapshot!(canvas, e, equilibrium; origin)
+    # Snapshot the relative state, then use the current nominal timestamp for
+    # both acquisition and inverse rotations. Never mix old/new angle frames.
+    gfm = e.model.sync isa PowerImpedance.VSEWithDamping
+    initial = gfm ? equilibrium.states.Δθ_VSM : equilibrium.states.Δθ_pll
+    graph = BlockGraph(ControlBlock[
+        _ConverterStateSnapshot(Signal("theta_rel_next"), Signal("theta_rel"), initial),
+        TimeStep(Signal("angle_clock_s")),
+        Gain(Signal("angle_clock_s"), Signal("angle_nominal"), e.model.elec.ωbase),
+        Sum(Signal.(["angle_nominal", "theta_rel"]), [1, 1], Signal("theta_c"))])
+    if gfm
+        push!(graph.nodes, _ConverterStateSnapshot(Signal("theta_pll_rel_next"),
+            Signal("theta_pll_rel"), equilibrium.states.Δθ_pll))
+    end
+    lower!(canvas, graph; origin)
+    return nothing
 end
 
 function converter_equilibrium(e)
@@ -197,10 +256,11 @@ function converter_pll(name, e, equilibrium, block = e.model.sync)
     voltage = Signal("vG_q_f")
     initial_voltage = equilibrium.outputs.meas.vG_q_f
     if e.model.sync isa PowerImpedance.VSEWithDamping
-        append!(inputs, [("vG_d_f", 1), ("theta_vsm_rel", 1)])
+        append!(inputs, [("vG_d_f", 1), ("theta_vsm_rel", 1), ("theta_pll_rel", 1)])
         append!(graph.nodes, ControlBlock[Import("vG_d_f", Signal("vG_d_f")),
             Import("theta_vsm_rel", Signal("theta_vsm_rel")),
-            Sum(Signal.(["theta_rel", "theta_vsm_rel"]), [1, -1], Signal("pll_frame_angle"))])
+            Import("theta_pll_rel", Signal("theta_pll_rel")),
+            Sum(Signal.(["theta_pll_rel", "theta_vsm_rel"]), [1, -1], Signal("pll_frame_angle"))])
         converter_rotation!(graph, Signal("vG_d_f"), Signal("vG_q_f"),
             Signal("pll_frame_angle"), Signal("vG_d_pll"), Signal("vG_q_pll"), "pll_frame", false)
         voltage = Signal("vG_q_pll")

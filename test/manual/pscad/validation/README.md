@@ -588,6 +588,62 @@ assertions**, and **45/45 L2-16 project XML assertions** per version. Archived
 inventory hashes, all nine changed project hashes and all 53 fresh producing-source
 pins verify. Native reference and operating-point bytes are unchanged.
 
+## Converter interface compensation and re-validation (M9b-17)
+
+The owner-kept seq4b builds prove **exactly one inherent measurement-to-source
+step** for L2-07 MMC GFL, L2-01 TLC, L2-13 MMC GFM and L2-14 LEC/compensated MMC.
+All six initialized capacitor snapshots precede SIGMA/compensated MOD and are
+committed from the applied physical states after source preparation. Those
+states remain fixed through the solve/DSOUT, so their next-pass history matches
+the acquired arm currents. No extra capacitor-to-Sigma/MOD step remains; the
+owner's optional residual-lag calculation is unnecessary. Detailed native line
+references and the 57 source hashes are under `data/m9b17/`.
+
+Stage 2 exports **tau_model - dt** for positive delays with tau_model >= dt;
+shorter positive delays are rejected. Zero model delay keeps zero explicit
+transport and the unavoidable dt. Zero residual uses unity. TLC/uncompensated
+MMC update carrier rotation and equilibrium buffer initialization together;
+compensated MMC updates its abc insertion queue without a dq phase rotation.
+Controller formulas, gains, initial operating points, electrical values, probes,
+0.2 s divisor hold and every approved tolerance/gate remain unchanged.
+
+L2-01..15 are freshly prepared with the frozen settings. Entire old fixture
+folders are retained at `data/archive/m9b17/L2-xx/`, including completed runs and
+status/evidence. New ledgers are empty and old runs are not eligible for reuse.
+L2-16 remains as prepared and L2-17 remains Julia-unstable, skipped without tuning.
+
+The first queue item is `data/m9b17/timing/converter_timing.pscx`: five grounded
+source nodes, 20 ms duration, 10 us integration/sampling, with zero, one-step,
+40 us and noninteger 25 us model-delay branches. Its sampled transport comparison
+checks for an extra interface/library step, including fractional timing. A
+failure stops the queue before L2. Its 1e-6 kV timing check is an isolated
+realization check; the approved scientific fixture gates are unchanged.
+
+From the repository root with the existing station configuration:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/run_converter_validation.jl --timeout=43200
+```
+
+This one resumable queue runs the timing witness, then L2-01 through L2-15 in
+order. It shares a **12-hour deadline** and resumes only verified completed
+new-project runs. Expected total: **6–10 hours**, including witness/overhead.
+Per fixture: L2-01..04/06 15–25 min each; L2-05 30–45 min; L2-07..10/12/13/15
+25–40 min each; L2-11 35–55 min; L2-14 45–75 min. Timing witness: 2–5 min.
+Active source pins include common and energy modulation emitters.
+
+M4–M6 operating-point acceptance, 22 converter cases (the existing full command
+remains available without the selection flag):
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/acceptance.jl --converters
+```
+
+Allow **90–150 minutes** for this separate acceptance command. Both classic and
+builder cases, source-ramp variants, physical DC termination and M6b's 1 us step
+are retained. These are estimates; native timing and A/C/refinement acceptance
+are pending owner execution. No station connection occurs during preparation.
+
 ## Frozen settings
 
 | Fixture | Applicable injection / response | Grid | Base / half step | Full run / windows | Original station estimate |

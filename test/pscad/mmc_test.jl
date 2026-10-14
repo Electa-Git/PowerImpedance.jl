@@ -177,7 +177,7 @@ end
         plan = P.build_plan(list; settings = SETTINGS)
         push!(plans, plan)
         @test P.check_connectivity(plan) === nothing
-        @test length(plan.modules) == 11
+        @test length(plan.modules) == 10
         modules = Dict(m.name => m for m in plan.modules)
         for (name, canvas) in [("Main", plan.main);
                                [(m.name, m.canvas) for m in plan.modules]]
@@ -193,24 +193,27 @@ end
         for n in ["P_ac_f", "Q_ac_f", "v_dc_f", "omega_c", "theta_c", "iS_z",
             ["v_Ctot_" * half * "_" * phase for half in ("u", "l")
              for phase in ("a", "b", "c")]...])
-        parent, arm = modules["MMC_DUT"], modules["ARM_DUT"]
-        @test count(c -> c.defn == "network:ARM_DUT", parent.canvas.components) == 6
+        parent = modules["MMC_DUT"]
+        @test !haskey(modules, "ARM_DUT")
         @test count(c -> c.defn == "master:xfmr-3p2w", parent.canvas.components) == 1
-        @test count(c -> c.defn == "master:ammeter", parent.canvas.components) == 1
-        @test count(c -> c.defn == "master:source_1", arm.canvas.components) == 1
-        @test count(c -> c.defn == "master:inductor", arm.canvas.components) == 1
-        @test count(c -> c.defn == "master:resistor", arm.canvas.components) == 1
-        @test count(c -> c.defn == "master:integral", arm.canvas.components) == 1
-        inductor = only(filter(c -> c.defn == "master:inductor", arm.canvas.components))
-        resistor = only(filter(c -> c.defn == "master:resistor", arm.canvas.components))
-        @test Dict(inductor.params)["L"] == "0.05 [H]"
-        @test Dict(resistor.params)["R"] == "1.07 [ohm]"
-        @test Set(p.name for p in arm.parameters) == Set(["capGain", "capInitial"])
+        @test count(c -> c.defn == "master:ammeter", parent.canvas.components) == 7
+        for kind in ("source_1", "inductor", "resistor", "integral")
+            @test count(c -> c.defn == "master:" * kind &&
+                (kind == "integral" || occursin("_arm_", get(Dict(c.params), "Name", ""))), parent.canvas.components) == 6
+        end
+        inductors = filter(c -> c.defn == "master:inductor" &&
+            endswith(get(Dict(c.params), "Name", ""), "_arm_inductance"), parent.canvas.components)
+        resistors = filter(c -> c.defn == "master:resistor" &&
+            endswith(get(Dict(c.params), "Name", ""), "_arm_resistance"), parent.canvas.components)
+        @test all(Dict(c.params)["L"] == "0.05 [H]" for c in inductors)
+        @test all(Dict(c.params)["R"] == "1.07 [ohm]" for c in resistors)
         caps = P.mmc_arm_capacitors(equilibrium.states, 800.0)
-        instances = filter(c -> c.defn == "network:ARM_DUT", parent.canvas.components)
-        @test [P._pscad_number(Dict(c.params)["capInitial"]) for c in instances] ≈
+        integrators = filter(c -> c.defn == "master:integral", parent.canvas.components)
+        @test [P._pscad_number(Dict(c.params)["Yo"]) for c in integrators] ≈
               collect(Iterators.flatten(zip(caps.upper, caps.lower)))
-        @test Dict(p.name => p.default for p in arm.parameters)["capGain"] ≈ 400 / 0.01
+        gains = filter(c -> c.defn == "master:gain" &&
+            P._pscad_number(Dict(c.params)["G"]) == 400 / 0.01, parent.canvas.components)
+        @test length(gains) == 6
         transformer = only(filter(c -> c.defn == "master:xfmr-3p2w", parent.canvas.components))
         @test Dict(transformer.params)["Ideal"] == "0"
         @test P._pscad_number(replace(Dict(transformer.params)["V2"], " [kV]" => "")) ≈
@@ -237,10 +240,15 @@ end
         end
         unity_si = P.mmc_si(e.model.elec)
         unity = merge(unity_si, (; turnsRatio = 1.0))
-        unity_canvas = P.mmc_electrical_canvas(e, equilibrium, arm, "network", unity)
+        unity_canvas = P.mmc_electrical_canvas(e, equilibrium, unity)
+        P.converter_angle_snapshot!(unity_canvas, e, equilibrium; origin = (5400, 2160))
+        capacitor_measurements = (; (Symbol("v_Ctot_" * half * "_" * phase) =>
+            "v_Cmeas_" * half * "_" * phase for half in ("u", "l") for phase in ("a", "b", "c"))...)
         for (i, definition) in enumerate(plan.modules[3:9])
             P.converter_instance!(unity_canvas, definition, "network",
-                (2520 + 540 * ((i - 1) ÷ 3), 108 + 540 * ((i - 1) % 3)))
+                (5400 + 540 * ((i - 1) ÷ 3), 108 + 540 * ((i - 1) % 3)),
+                merge(capacitor_measurements,
+                    i == 2 ? (; theta_c = "theta_next", theta_rel = "theta_rel_next") : (;)))
         end
         @test count(c -> c.defn == "master:xfmr-3p2w", unity_canvas.components) == 0
         @test P.check_connectivity(unity_canvas, "unity", modules) === nothing
@@ -282,25 +290,25 @@ end
     list = P.netlist(fixture.classic, power_flow(fixture.classic))
     plan = P.build_plan(list; settings = SETTINGS)
     for (module_name, defn, field, invalid) in (
-        ("ARM_DUT", "inductor", "L", "armL"),
-        ("ARM_DUT", "resistor", "R", "armR"),
-        ("ARM_DUT", "source_1", "Tc", "source_ramp [s]"),
+        ("MMC_DUT", "inductor", "L", "armL"),
+        ("MMC_DUT", "resistor", "R", "armR"),
+        ("MMC_DUT", "source_1", "Tc", "source_ramp [s]"),
         ("MMC_DUT", "xfmr-3p2w", "Xl", "leakage"),
-        ("ARM_DUT", "inductor", "L", "NaN [H]"),
-        ("ARM_DUT", "resistor", "R", "Inf [ohm]"),
-        ("ARM_DUT", "inductor", "L", "1e999 [H]"),
-        ("ARM_DUT", "resistor", "R", "1 + 0.07 [ohm]"))
+        ("MMC_DUT", "inductor", "L", "NaN [H]"),
+        ("MMC_DUT", "resistor", "R", "Inf [ohm]"),
+        ("MMC_DUT", "inductor", "L", "1e999 [H]"),
+        ("MMC_DUT", "resistor", "R", "1 + 0.07 [ohm]"))
         invalid_plan = deepcopy(plan)
         definition = only(filter(m -> m.name == module_name, invalid_plan.modules))
-        component = only(filter(c -> c.defn == "master:" * defn, definition.canvas.components))
+        component = first(filter(c -> c.defn == "master:" * defn, definition.canvas.components))
         index = findfirst(p -> first(p) == field, component.params)
         component.params[index] = field => invalid
         @test_throws r"requires a finite numeric literal" P.check_connectivity(invalid_plan)
     end
     # The saved arm's unit-bearing scientific notation is accepted, as are
     # control-module parameters capGain/capInitial and electrical Name labels.
-    arm = only(filter(m -> m.name == "ARM_DUT", plan.modules))
-    inductor = only(filter(c -> c.defn == "master:inductor", arm.canvas.components))
+    arm = only(filter(m -> m.name == "MMC_DUT", plan.modules))
+    inductor = first(filter(c -> c.defn == "master:inductor", arm.canvas.components))
     index = findfirst(p -> first(p) == "L", inductor.params)
     inductor.params[index] = "L" => "50e-3 [H]"
     @test P.check_connectivity(plan) === nothing

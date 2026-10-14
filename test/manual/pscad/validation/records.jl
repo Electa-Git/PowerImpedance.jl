@@ -57,6 +57,7 @@ function source_record()
             "src/PSCAD/types.jl", "src/PSCAD/plan.jl", "src/PSCAD/emitters/cables.jl",
             "src/PSCAD/emitters/lines.jl", "src/PSCAD/emitters/transformer.jl",
             "src/PSCAD/emitters/machine.jl", "src/PSCAD/emitters/mmc.jl",
+            "src/PSCAD/emitters/mmc_energy.jl", "src/PSCAD/emitters/converter_common.jl",
             "src/PSCAD/blocks.jl", "src/PSCAD/export.jl", "src/PSCAD/emitters/tlc.jl",
             "src/PSCAD/emitters/sources.jl", "src/PSCAD/emitters/probes.jl",
             "src/PSCAD/emitters/impedance.jl", "ext/PowerImpedancePSCADExt/writer.jl"])

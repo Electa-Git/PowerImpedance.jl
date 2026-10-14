@@ -19,5 +19,6 @@ include("resonance.jl")
 include("ports.jl")
 include("execution.jl")
 include("scan.jl")
+include("timing.jl")
 
 end

@@ -12,7 +12,7 @@ end
 
 # Evaluate the emitted network at its declared dynamic initial state and
 # supplied time. The core state-space model supplies controller references.
-function evaluate(definition, inputs, sample_time = 0.0)
+function evaluate(definition, inputs, sample_time = 0.0; snapshots = Dict{String, Any}())
     canvas = definition.canvas
     parameters = Dict(p.name => p.default for p in definition.parameters)
     signals = Dict{String, Any}(inputs)
@@ -38,7 +38,9 @@ function evaluate(definition, inputs, sample_time = 0.0)
     end
     for c in canvas.components
         p = Dict(c.params)
-        if c.defn == "master:integral"
+        if c.defn == "master:zminusone"
+            signals[output(c)] = get(snapshots, output(c), value(p["InitR"], parameters))
+        elseif c.defn == "master:integral"
             signals[output(c)] = value(p["Yo"], parameters)
         elseif c.defn == "master:realpole"
             signals[output(c)] = value(p["YO"], parameters)
@@ -50,7 +52,7 @@ function evaluate(definition, inputs, sample_time = 0.0)
         for c in canvas.components
             p = Dict(c.params)
             c.defn in ("master:datalabel", "master:export", "master:integral",
-                "master:realpole", "master:tdelay") && continue
+                "master:realpole", "master:tdelay", "master:zminusone") && continue
             c.defn == "master:import" && begin
                 name = p["Name"]
                 haskey(signals, name) || haskey(parameters, name) || continue
@@ -109,7 +111,8 @@ function evaluate(definition, inputs, sample_time = 0.0)
                                          value(selected, parameters)
                     continue
                 end
-                signals[output(c)] = c.defn == "master:gain" ?
+                signals[output(c)] = c.defn in ("master:force_dsout", "master:force_dsdyn") ? u :
+                                     c.defn == "master:gain" ?
                                      value(p["G"], parameters) * u :
                                      c.defn == "master:trig" ?
                                      (p["Type"] == "1" ? sin(u) : cos(u)) :
@@ -214,8 +217,13 @@ end
         @test Dict(only(filter(c -> c.defn == "master:voltmeter",
             parent.canvas.components)).params)["Name"] == "v_dc_m"
         @test count(c -> c.defn == "master:capacitor", parent.canvas.components) == 0
+        clock_labels = Set((c.x, c.y) for c in parent.canvas.components
+            if c.defn == "master:datalabel" && Dict(c.params)["Name"] == "dc_start_clock_s")
         guard_components = filter(parent.canvas.components) do c
-            c.defn in ("master:time-sig", "master:compare") ||
+            c.defn == "master:compare" ||
+                (c.defn == "master:time-sig" && any(w ->
+                    (c.x + 36, c.y) in w.vertices && any(p -> p in clock_labels, w.vertices),
+                    parent.canvas.wires)) ||
                 (c.defn == "master:datalabel" &&
                  Dict(c.params)["Name"] in ("dc_start_clock_s", "v_dc"))
         end

@@ -152,8 +152,30 @@ else
         union!(get!(Set{String}, saved_fields, defn),
             [pyconvert(String, p.get("name")) for p in component.xpath("./paramlist/param")])
     end
+    timing_reference = etree.parse(joinpath(@__DIR__,
+        "fixtures/converter_timing_saved_fragments.xml")).getroot()
+    for definition in timing_reference.xpath("./Definition")
+        defn = "master:" * pyconvert(String, definition.get("name"))
+        saved_fields[defn] = Set(pyconvert(String, p.get("name"))
+            for p in definition.xpath("./form/category/parameter"))
+    end
     settings = P.SimulationSettings(simulation_time = 0.3, time_step = 50e-6,
         sample_step = 250e-6, snapshot_time = 0.2)
+    @testset "Converter timing master witnesses" begin
+        for definition in timing_reference.xpath("./Definition")
+            name = pyconvert(String, definition.get("name"))
+            ports = definition.xpath("./svg/port[@type='Real']")
+            @test pylen(ports) == 2
+            @test Set([(pyconvert(String, p.get("mode")),
+                parse(Int, pyconvert(String, p.get("x"))),
+                parse(Int, pyconvert(String, p.get("y")))) for p in ports]) ==
+                Set([("Input", -36, 0), ("Output", 36, 0)])
+            phase = name == "force_dsout" ? "Dsout" : name == "force_dsdyn" ? "Dsdyn" : "Fortran"
+            script = only(definition.xpath("./script/segment[@name='$phase']"))
+            @test occursin(name == "zminusone" ? "IF (TIMEZERO) \$INR = \$InitR" : "\$out = \$in",
+                pyconvert(String, script.text))
+        end
+    end
     @testset "PSCAD mhi-xml export round trip" begin
         models = PSCADModel[]
         for (name, input) in (("small_ac_classic", classic), ("small_ac_builder", state),
@@ -533,12 +555,12 @@ else
                     @test haskey(saved_fields, component.defn)
                     @test Set(first.(component.params)) ⊆ saved_fields[component.defn]
                 end
-                arm = only(root.xpath("./definitions/Definition[@name='ARM_DUT']"))
+                arm = only(root.xpath("./definitions/Definition[@name='MMC_DUT']"))
                 for (defn, fields) in ((
                     "master:source_1", ("Type", "Grnd", "Spec", "Cntrl", "AC")),
                     ("master:integral", ("Extrn", "Reset", "Mthd")))
                     saved = only(mmc_reference.xpath("./User[@defn='$defn']"))
-                    emitted = only(arm.xpath("./schematic/User[@defn='$defn']"))
+                    emitted = first(arm.xpath("./schematic/User[@defn='$defn']"))
                     for field in fields
                         @test pyconvert(String,
                             emitted.xpath("string(./paramlist/param[@name='$field']/@value)")) ==
@@ -548,7 +570,7 @@ else
                 for (defn, field, unit) in (("master:inductor", "L", "H"),
                     ("master:resistor", "R", "ohm"))
                     saved = only(mmc_reference.xpath("./User[@defn='$defn']"))
-                    emitted = only(arm.xpath("./schematic/User[@defn='$defn']"))
+                    emitted = first(arm.xpath("./schematic/User[@defn='$defn']"))
                     values = [pyconvert(String,
                                   c.xpath("string(./paramlist/param[@name='$field']/@value)"))
                               for c in (saved, emitted)]
@@ -572,9 +594,9 @@ else
                         "master:source_1", params, 828, 450, 1), Dict())
                 @test first.(ports) == [(828, 414), (828, 486), (792, 450)]
                 @test pylen(root.xpath("./definitions/Definition[@name='MMC_DUT']/schematic/User[@defn='$name:ARM_DUT']")) ==
+                      0
+                @test pylen(root.xpath("./definitions/Definition[@name='MMC_DUT']/schematic/User[@defn='master:integral']")) ==
                       6
-                @test pylen(root.xpath("./definitions/Definition[@name='ARM_DUT']/schematic/User[@defn='master:integral']")) ==
-                      1
             end
             if startswith(name, "mmc_gfm") || startswith(name, "mmc_compensated")
                 # Every new VSM/CCVI field is witnessed by the saved FFVI
@@ -659,9 +681,11 @@ else
                 # Init=1 selects the solved X0 history for all six physical arms.
                 for node in modulation.xpath("./schematic/User[@defn='master:tdelay']")
                     @test pyconvert(String, node.xpath("string(./paramlist/param[@name='Init']/@value)")) == "1"
-                    # The existing ceil(Td/dt)+1 construction includes one
-                    # extra slot from Float64 division at Td=200 us, dt=1 us.
-                    @test pyconvert(String, node.xpath("string(./paramlist/param[@name='N']/@value)")) == "202"
+                    # The model's 200 us budget includes the 1 us interface
+                    # step; capacity follows the 199 us residual, including
+                    # conservative Float64 ceiling at the integer boundary.
+                    expected_capacity = ceil(Int, (200e-6 - 1e-6)/1e-6) + 1
+                    @test pyconvert(String, node.xpath("string(./paramlist/param[@name='N']/@value)")) == string(expected_capacity)
                 end
                 saved_delay = only(energy_reference.xpath("./User[@defn='master:tdelay']"))
                 for node in modulation.xpath("./schematic/User[@defn='master:tdelay']"), field in ("Intp", "Dim")

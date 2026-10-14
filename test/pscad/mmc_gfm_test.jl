@@ -21,7 +21,7 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         modules = Dict(d.name => d for d in plan.modules)
         @test P.check_connectivity(plan) === nothing
         @test Set(keys(modules)) == Set(["ABC_DQ", "DQ_ABC", "MEAS_DUT", "PLL_DUT",
-            "VSM_DUT", "QCTRL_DUT", "CCVI_DUT", "OCC_DUT", "SIGMA_DUT", "MOD_DUT", "ARM_DUT", "MMC_DUT"])
+            "VSM_DUT", "QCTRL_DUT", "CCVI_DUT", "OCC_DUT", "SIGMA_DUT", "MOD_DUT", "MMC_DUT"])
         for (name, canvas) in [("Main", plan.main); [(d.name, d.canvas) for d in plan.modules]]
             @test PSCADTopology.check_degrees(PSCADTopology.electrical_graph(canvas, modules), name) === nothing
         end
@@ -58,6 +58,7 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         w2 = Dict(p.name => p.default for p in modules["MEAS_DUT"].parameters)["P_ac_f_s1W2"]
         @test measured["P_ac_f_ddy"] ≈ -w2 * eq.outputs.meas.P_ac_f atol=1e-6
         measured["theta_vsm_rel"] = eq.states.Δθ_VSM
+        measured["theta_pll_rel"] = eq.states.Δθ_pll
         pll = evaluate(modules["PLL_DUT"], measured)
         sync = evaluate(modules["VSM_DUT"], merge(measured, Dict("omega_pll" => pll["omega_c"])))
         reactive = evaluate(modules["QCTRL_DUT"], measured)
@@ -79,7 +80,7 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
             owned = PI.state_space!(F, x, meas, eq.setpoint_pu, swing, m)
             pll_def = P.converter_pll("PLL_EQ", e, displaced, m.sync.pll)
             pll_signals = Dict{String, Any}("vG_d_f" => meas.vG_d_f, "vG_q_f" => meas.vG_q_f,
-                "theta_vsm_rel" => vsm_angle)
+                "theta_vsm_rel" => vsm_angle, "theta_pll_rel" => pll_angle)
             pll_out = evaluate(diagnostic(pll_def, ["pllrate", "w_rad", "vG_q_pll", "v_pll"]), pll_signals)
             rotated = PI.frame_transform(meas.vG_d_f, meas.vG_q_f, pll_angle - vsm_angle)
             @test pll_out["vG_q_pll"] ≈ rotated.q atol=1e-6

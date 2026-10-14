@@ -505,7 +505,8 @@ function component_ports(c::ComponentPlan, modules)
             [(0, -18), (0, 0)]
         elseif d in ("master:gain", "master:integral", "master:trig", "master:sqrt",
             "master:square", "master:realpole", "master:tdelay", "master:trans_filt",
-            "master:pi_ctl", "master:hardlimit", "master:compare", "master:leadlag")
+            "master:pi_ctl", "master:hardlimit", "master:compare", "master:leadlag",
+            "master:force_dsout", "master:force_dsdyn", "master:zminusone")
             [(-36, 0), (36, 0)]
         else
             throw(ArgumentError("unknown ports for $(c.defn) at ($(c.x), $(c.y))"))

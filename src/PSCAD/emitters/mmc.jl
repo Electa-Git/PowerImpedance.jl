@@ -175,6 +175,7 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
         ("vMD_d_grid", "vMD_q_grid"), "delta_factor"),
         ("mS", m.modulation.delay2, -2,
         ("vMS_d_grid", "vMS_q_grid"), "sigma_factor"))
+        residual = _converter_export_delay(delay.timeDelay, settings.time_step)
         for (axis, ref) in zip(("d", "q"), refs)
             raw, delayed = Signal.([
                 stem * "_" * axis * "_raw", stem * "_" * axis * "_delay"])
@@ -184,23 +185,23 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
             compensated = frame == 1 ?
                           PowerImpedance.phase_compensated_dq(
                 [equilibrium.outputs.mod.mΔd, equilibrium.outputs.mod.mΔq], -m.elec.ωbase *
-                                                                            delay.timeDelay) :
+                                                                            residual) :
                           PowerImpedance.phase_compensated_dq(
                 [equilibrium.outputs.mod.mΣd, equilibrium.outputs.mod.mΣq], 2m.elec.ωbase *
-                                                                            delay.timeDelay)
+                                                                            residual)
             initial = compensated[axis == "d" ? 1 : 2]
-            if iszero(delay.timeDelay)
+            if iszero(residual)
                 push!(graph.nodes, Gain(raw, delayed, 1.0))
             else
-                td = converter_parameter!(parameters, stem * axis * "Td", delay.timeDelay, "s")
+                td = converter_parameter!(parameters, stem * axis * "Td", residual, "s")
                 y0 = converter_parameter!(parameters, stem * axis * "Y0", initial)
                 push!(graph.nodes,
                     Delay(raw, delayed, td,
-                        ceil(Int, delay.timeDelay / settings.time_step) + 1, y0))
+                        ceil(Int, residual / settings.time_step) + 1, y0))
             end
         end
         theta = converter_parameter!(parameters, stem * "phase", frame * m.elec.ωbase *
-                                                                 delay.timeDelay)
+                                                                 residual)
         push!(graph.nodes, Import(theta, Signal(theta)))
         converter_rotation!(
             graph, Signal(stem * "_d_delay"), Signal(stem * "_q_delay"), Signal(theta),
@@ -209,14 +210,15 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
     raw = Signal("mS_z_raw")
     push!(graph.nodes, Mult(Signal("vMS_z_ref"), Signal("sigma_factor"), raw))
     delay = m.modulation.delay3
-    if iszero(delay.timeDelay)
+    residual = _converter_export_delay(delay.timeDelay, settings.time_step)
+    if iszero(residual)
         push!(graph.nodes, Gain(raw, Signal("mS_z"), 1.0))
     else
-        td = converter_parameter!(parameters, "zeroTd", delay.timeDelay, "s")
+        td = converter_parameter!(parameters, "zeroTd", residual, "s")
         y0 = converter_parameter!(parameters, "zeroY0", equilibrium.outputs.mod.mΣz)
         push!(graph.nodes,
             Delay(raw, Signal("mS_z"), td,
-                ceil(Int, delay.timeDelay / settings.time_step) + 1, y0))
+                ceil(Int, residual / settings.time_step) + 1, y0))
     end
     append!(graph.nodes,
         ControlBlock[TimeStep(Signal("mmc_clock_s")),
@@ -246,38 +248,65 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
     return converter_definition(name, parameters, graph, inputs, outputs)
 end
 
+function mmc_arm_canvas!(canvas, si; stem = "", origin = (0, 0),
+        positive = "arm_positive", negative = "arm_negative",
+        insertion = "m_arm", current = "i_arm", capacitor = "v_Ctot",
+        cap_gain = "capGain", cap_initial = "capInitial", measured_capacitor = nothing)
+    private(n) = Signal(isempty(stem) ? n : stem * "_" * n)
+    applied, measured, charging, rate, history = private.([
+        "applied_insertion", "solved_current", "cap_current", "cap_rate_out", "cap_rate"])
+    # Charge uses the command actually applied before this solve and its solved
+    # current. The next dynamics pass integrates that history, not a future m.
+    graph = BlockGraph(ControlBlock[
+        _ConverterPhaseTransfer(Signal(insertion), applied, :dsout, 1),
+        _ConverterPhaseTransfer(Signal(current), measured, :dsout, 1),
+        Mult(applied, measured, charging), Gain(charging, rate, cap_gain),
+        _ConverterPhaseTransfer(rate, history, :dsdyn, 1),
+        Integrator(history, Signal(capacitor), 1.0, cap_initial, -100000.0, 100000.0),
+        Mult(Signal(insertion), Signal(capacitor), private("arm_voltage"))])
+    if measured_capacitor !== nothing
+        # The physical capacitor changes only in DSDYN and is held throughout
+        # the following network solve/DSOUT. Snapshot that applied state at the
+        # explicit feedback boundary: next DSDYN then sees the same capacitor
+        # level as its completed-solve arm currents, before any state advances.
+        # Capturing a previous DSOUT copy here would add another whole step.
+        push!(graph.nodes, _ConverterStateSnapshot(Signal(capacitor),
+            Signal(measured_capacitor), cap_initial))
+    end
+    lower!(canvas, graph; origin = (origin[1] + 72, origin[2] + 432))
+    at(x, y) = (origin[1] + x, origin[2] + y)
+    label(n) = private(n).name
+    # ArmAvg_1: local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:7624–7741.
+    # Preserve source polarity, positive charging current and physical L/R.
+    component!(canvas, "source_1", at(180, 108),
+        ["Name" => label("arm_source"), "Type" => "6", "Grnd" => "0", "Spec" => "0",
+            "Cntrl" => "1", "AC" => "0", "Tc" => "0.0 [s]"])
+    stub!(canvas, at(144, 108), positive; direction = -1)
+    stub!(canvas, at(216, 108), label("arm_after_source"))
+    module_signal_stub!(canvas, at(180, 144), label("arm_voltage"), 1)
+    component!(canvas, "inductor", at(360, 108),
+        ["Name" => label("arm_inductance"), "L" => pscad_value(si.L_arm; unit = "H")])
+    stub!(canvas, at(360, 108), label("arm_after_source"); direction = -1)
+    stub!(canvas, at(396, 108), label("arm_after_L"))
+    component!(canvas, "resistor", at(540, 108),
+        ["Name" => label("arm_resistance"), "R" => pscad_value(si.R_arm; unit = "ohm")])
+    stub!(canvas, at(540, 108), label("arm_after_L"); direction = -1)
+    stub!(canvas, at(576, 108), label("arm_after_R"))
+    component!(canvas, "ammeter", at(720, 108), ["Name" => current])
+    stub!(canvas, at(720, 108), label("arm_after_R"); direction = -1)
+    stub!(canvas, at(756, 108), negative)
+    return canvas
+end
+
+# Retain the isolated arm experiment, sharing exactly the parent-canvas physics.
 function mmc_arm(name, si, initial)
     parameters = [ModuleParameterPlan("capGain", si.N / si.C_SM, ""),
         ModuleParameterPlan("capInitial", initial, "")]
     canvas = CanvasPlan()
-    graph = BlockGraph(ControlBlock[Import("m_arm", Signal("m_arm")),
-        Mult(Signal("m_arm"), Signal("i_arm"), Signal("cap_current")),
-        Gain(Signal("cap_current"), Signal("cap_rate"), "capGain"),
-        Integrator(
-            Signal("cap_rate"), Signal("v_Ctot"), 1.0, "capInitial", -100000.0, 100000.0),
-        Mult(Signal("m_arm"), Signal("v_Ctot"), Signal("arm_voltage")),
-        Export("i_arm", Signal("i_arm")), Export("v_Ctot", Signal("v_Ctot"))])
-    lower!(canvas, graph; origin = (72, 432))
-    # ArmAvg_1: local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:7624–7741.
-    # The source's positive pole precedes the current meter; positive current
-    # charges the capacitor through m*i. L/R witnesses:11345–11359.
-    component!(canvas, "source_1", (180, 108),
-        ["Name" => "arm_source", "Type" => "6", "Grnd" => "0", "Spec" => "0",
-            "Cntrl" => "1", "AC" => "0", "Tc" => "0.0 [s]"])
-    stub!(canvas, (144, 108), "arm_positive"; direction = -1)
-    stub!(canvas, (216, 108), "arm_after_source")
-    module_signal_stub!(canvas, (180, 144), "arm_voltage", 1)
-    component!(canvas, "inductor", (360, 108),
-        ["Name" => "arm_inductance", "L" => pscad_value(si.L_arm; unit = "H")])
-    stub!(canvas, (360, 108), "arm_after_source"; direction = -1)
-    stub!(canvas, (396, 108), "arm_after_L")
-    component!(canvas, "resistor", (540, 108),
-        ["Name" => "arm_resistance", "R" => pscad_value(si.R_arm; unit = "ohm")])
-    stub!(canvas, (540, 108), "arm_after_L"; direction = -1)
-    stub!(canvas, (576, 108), "arm_after_R")
-    component!(canvas, "ammeter", (720, 108), ["Name" => "i_arm"])
-    stub!(canvas, (720, 108), "arm_after_R"; direction = -1)
-    stub!(canvas, (756, 108), "arm_negative")
+    mmc_arm_canvas!(canvas, si)
+    lower!(canvas, BlockGraph(ControlBlock[Import("m_arm", Signal("m_arm")),
+        Export("i_arm", Signal("i_arm")), Export("v_Ctot", Signal("v_Ctot"))]);
+        origin = (72, 864))
     for (port, node, x) in (("POS", "arm_positive", 72), ("NEG", "arm_negative", 936))
         component!(canvas, "xnode", (x, 216), ["Name" => port])
         stub!(canvas, (x, 216), node)
@@ -289,58 +318,54 @@ function mmc_arm(name, si, initial)
             ModulePortPlan("v_Ctot", :output, 54, 108)], canvas)
 end
 
-function mmc_electrical_canvas(e, equilibrium, arm, project, si)
+function mmc_electrical_canvas(e, equilibrium, si)
     canvas = CanvasPlan()
     initial = mmc_arm_capacitors(equilibrium.states, si.vDC_base)
     for (phase_index, phase) in enumerate(("a", "b", "c")),
         (arm_index, half) in enumerate(("u", "l"))
 
         stem = half * "_" * phase
-        point = (216 + 540 * (phase_index - 1), 108 + 288 * (arm_index - 1))
         cap = half == "u" ? initial.upper[phase_index] : initial.lower[phase_index]
-        params = [p.name => block_value(p.name == "capInitial" ? cap : p.default;
-                      unit = isempty(p.unit) ? nothing : p.unit) for p in arm.parameters]
-        push!(canvas.components, ModuleInstancePlan(project * ":" * arm.name, params, point..., 0))
         positive, negative = half == "u" ? ("dc_positive", "phase_" * phase) :
                              ("phase_" * phase, "dc_negative")
-        stub!(canvas, (point[1] - 54, point[2]), positive; direction = -1)
-        stub!(canvas, (point[1] + 54, point[2]), negative)
-        for (port, signal) in ((arm.ports[3], "m_" * stem), (arm.ports[4], "i_" * stem),
-            (arm.ports[5], "v_Ctot_" * stem))
-            module_signal_stub!(canvas, (point[1] + port.x, point[2] + port.y), signal,
-                port.kind == :input ? -1 : 1)
-        end
+        mmc_arm_canvas!(canvas, si; stem,
+            origin = (1728 * (phase_index - 1), 1296 * (arm_index - 1)),
+            positive, negative, insertion = "m_" * stem, current = "i_" * stem,
+            capacitor = "v_Ctot_" * stem, cap_gain = si.N / si.C_SM, cap_initial = cap,
+            measured_capacitor = "v_Cmeas_" * stem)
     end
+    # Keep the physical interface below the six exposed arm schematics.
+    interface = CanvasPlan()
     for (i, phase) in enumerate(("a", "b", "c"))
         y = 720 + 144 * (i - 1)
         parts = Tuple{String, String, Float64, String}[]
         iszero(si.R_r) || push!(parts, ("resistor", "R", si.R_r, "ohm"))
         iszero(si.L_r) || push!(parts, ("inductor", "L", si.L_r, "H"))
         if isempty(parts)
-            join_node_labels!(canvas, "phase_" * phase, "reactor_" * phase)
+            join_node_labels!(interface, "phase_" * phase, "reactor_" * phase)
         else
             endpoint = component_chain!(
-                canvas, parts, (180, y), "reactor_" * phase, canvas.used)
-            stub!(canvas, (180, y), "phase_" * phase; direction = -1)
-            stub!(canvas, endpoint, "reactor_" * phase)
+                interface, parts, (180, y), "reactor_" * phase, interface.used)
+            stub!(interface, (180, y), "phase_" * phase; direction = -1)
+            stub!(interface, endpoint, "reactor_" * phase)
         end
-        stub!(canvas, (576, 864 + 36 * (i - 2)), "reactor_" * phase; direction = -1)
+        stub!(interface, (576, 864 + 36 * (i - 2)), "reactor_" * phase; direction = -1)
     end
-    push!(canvas.components, ComponentPlan(
+    push!(interface.components, ComponentPlan(
         "master:breakout", ["Dis" => "0", "Com" => "0"], 612, 864, 4))
-    stub!(canvas, (612, 864), "converter_ac")
-    component!(canvas, "ammeter", (756, 864), ["Name" => "i_abc"])
-    stub!(canvas, (756, 864), "converter_ac"; direction = -1)
-    stub!(canvas, (792, 864), "transformer_ac")
-    component!(canvas, "voltmetergnd", (936, 936), ["Name" => "v_abc"])
-    stub!(canvas, (936, 936), "transformer_ac"; direction = -1)
+    stub!(interface, (612, 864), "converter_ac")
+    component!(interface, "ammeter", (756, 864), ["Name" => "i_abc"])
+    stub!(interface, (756, 864), "converter_ac"; direction = -1)
+    stub!(interface, (792, 864), "transformer_ac")
+    component!(interface, "voltmetergnd", (936, 936), ["Name" => "v_abc"])
+    stub!(interface, (936, 936), "transformer_ac"; direction = -1)
     if si.turnsRatio == 1
-        join_node_labels!(canvas, "transformer_ac", "network_ac")
+        join_node_labels!(interface, "transformer_ac", "network_ac")
     else
         # YY near-ideal construction accepted in M2/M4. Every field is saved
         # at local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:11813–11889;
         # source/return solvability is retained through the physical arm/DC path.
-        component!(canvas, "xfmr-3p2w", (1116, 864),
+        component!(interface, "xfmr-3p2w", (1116, 864),
             ["Name" => "converter_transformer",
                 "Tmva" => pscad_value(si.Sbase; unit = "MVA"),
                 "f" => pscad_value(si.ωbase / (2π); unit = "Hz"), "YD1" => "0", "YD2" => "0", "Lead" => "1",
@@ -349,17 +374,23 @@ function mmc_electrical_canvas(e, equilibrium, arm, project, si)
                 "NLL" => "0.0 [pu]", "CuL" => "0.0 [pu]", "Tap" => "0", "View" => "1", "Dtls" => "0",
                 "V1" => pscad_value(si.vAC_base_LL_RMS; unit = "kV"),
                 "V2" => pscad_value(si.vAC_base_LL_RMS / si.turnsRatio; unit = "kV"), "Enab" => "0"])
-        stub!(canvas, (1062, 864), "transformer_ac"; direction = -1)
-        stub!(canvas, (1152, 864), "network_ac")
+        stub!(interface, (1062, 864), "transformer_ac"; direction = -1)
+        stub!(interface, (1152, 864), "network_ac")
     end
     for (port, node, point) in (("AC", "network_ac", (1368, 864)),
         ("DC_P", "dc_positive", (1800, 108)), ("DC_N", "dc_negative", (1800, 252)))
-        component!(canvas, "xnode", point, ["Name" => port])
-        stub!(canvas, point, node)
+        component!(interface, "xnode", point, ["Name" => port])
+        stub!(interface, point, node)
     end
-    component!(canvas, "voltmeter", (1800, 432), ["Name" => "v_dc"])
-    stub!(canvas, (1800, 432), "dc_positive"; direction = -1)
-    stub!(canvas, (1800, 468), "dc_negative"; direction = -1)
+    component!(interface, "voltmeter", (1800, 432), ["Name" => "v_dc"])
+    stub!(interface, (1800, 432), "dc_positive"; direction = -1)
+    stub!(interface, (1800, 468), "dc_negative"; direction = -1)
+    append!(canvas.components,
+        [ComponentPlan(c.defn, c.params, c.x, c.y + 2592, c.orient)
+         for c in interface.components])
+    append!(canvas.wires, [WirePlan([(x, y + 2592) for (x, y) in w.vertices])
+                           for w in interface.wires])
+    merge!(canvas.aliases, interface.aliases)
     # Use the existing arm currents for controls rather than adding another
     # ideal DC meter in series with the Main terminal meter.
     graph = BlockGraph()
@@ -367,25 +398,30 @@ function mmc_electrical_canvas(e, equilibrium, arm, project, si)
     for phase in ("a", "b", "c")
         sum, average = Signal.(["iS_sum_" * phase, "iS_" * phase * "_si"])
         append!(graph.nodes,
-            ControlBlock[Sum(Signal.(["i_u_" * phase, "i_l_" * phase]), [1, 1], sum),
+            ControlBlock[_ConverterPhaseTransfer(Signal("i_u_" * phase),
+                    Signal("i_u_solved_" * phase), :dsout, 1),
+                _ConverterPhaseTransfer(Signal("i_l_" * phase),
+                    Signal("i_l_solved_" * phase), :dsout, 1),
+                Sum(Signal.(["i_u_solved_" * phase, "i_l_solved_" * phase]), [1, 1], sum),
                 Gain(sum, average, 0.5)])
         push!(currents, average)
     end
     append!(graph.nodes,
-        ControlBlock[ArrayMerge(currents, Signal("iS_abc")),
-            Sum(currents, [1, 1, 1], Signal("i_dc_si"))])
-    lower!(canvas, graph; origin = (72, 1296))
+        ControlBlock[ArrayMerge(currents, Signal("iS_solved_abc")),
+            Sum(currents, [1, 1, 1], Signal("i_dc_solved_si")),
+            _ConverterPhaseTransfer(Signal("iS_solved_abc"), Signal("iS_abc"), :dsdyn, 3),
+            _ConverterPhaseTransfer(Signal("i_dc_solved_si"), Signal("i_dc_si"), :dsdyn, 1)])
+    lower!(canvas, graph; origin = (2520, 2592))
     return canvas
 end
 
 function mmc_controls(state, e, equilibrium, context, delta::PowerImpedance.ΔdqControlGFL)
     m = e.model
-    si = mmc_si(m.elec)
     transforms = context.converter_transforms
     names = [pscad_name(prefix * "_" * e.pscad; used = state.used)
              for prefix in ("MEAS", "PLL",
         delta.outer_active isa PowerImpedance.OuterActiveVdcControl ? "VDCCTRL" : "PCTRL",
-        "QCTRL", "OCC", "SIGMA", "MOD", "ARM")]
+        "QCTRL", "OCC", "SIGMA", "MOD")]
     definitions = [
         converter_measurements(names[1], e, equilibrium, transforms,
             (; v = m.elec.vAC_base, i = 2m.elec.Sbase / (3m.elec.vAC_base),
@@ -395,34 +431,33 @@ function mmc_controls(state, e, equilibrium, context, delta::PowerImpedance.Δdq
             names[5], e, equilibrium, delta.occ),
         mmc_sigma(names[6], e, equilibrium, transforms), mmc_modulation(
             names[7], e, equilibrium, transforms, context.settings)]
-    arm = mmc_arm(names[8], si, equilibrium.states.vCΣ_z * si.vDC_base)
-    return [d => (;) for d in definitions], arm
+    return [d => (i == 2 ? (; theta_c = "theta_next", theta_rel = "theta_rel_next") : (;))
+            for (i, d) in enumerate(definitions)]
 end
 
 function mmc_controls(state, e, equilibrium, context, delta::PowerImpedance.ΔdqControlGFM)
     m = e.model
     m.sync isa PowerImpedance.VSEWithDamping || not_exportable(e, m.sync)
     delta.vi isa PowerImpedance.CCVI || not_exportable(e, delta.vi)
-    si = mmc_si(m.elec)
     transforms = context.converter_transforms
     names = [pscad_name(prefix * "_" * e.pscad; used = state.used)
-             for prefix in ("MEAS", "PLL", "VSM", "QCTRL", "CCVI", "OCC", "SIGMA", "MOD", "ARM")]
+             for prefix in ("MEAS", "PLL", "VSM", "QCTRL", "CCVI", "OCC", "SIGMA", "MOD")]
     controls = [
         converter_measurements(names[1], e, equilibrium, transforms,
             (; v = m.elec.vAC_base, i = 2m.elec.Sbase / (3m.elec.vAC_base),
                 dc = m.elec.vDC_base)) => (;),
         converter_pll(names[2], e, equilibrium, m.sync.pll) =>
-            (; omega_c = "omega_pll", theta_c = "theta_pll", theta_rel = "theta_pll_rel",
+            (; omega_c = "omega_pll", theta_c = "theta_pll_next", theta_rel = "theta_pll_rel_next",
                 theta_vsm_rel = "theta_rel"),
-        converter_vsm(names[3], e, equilibrium, m.sync) => (;),
+        converter_vsm(names[3], e, equilibrium, m.sync) =>
+            (; theta_c = "theta_next", theta_rel = "theta_rel_next"),
         converter_reactive(names[4], e, equilibrium, delta.outer_reactive) =>
             (; i_q_ref = "q_voltage_ref"),
         converter_ccvi(names[5], e, equilibrium, delta.vi) => (;),
         converter_occ(names[6], e, equilibrium, delta.occ) => (;),
         mmc_sigma(names[7], e, equilibrium, transforms) => (;),
         mmc_modulation(names[8], e, equilibrium, transforms, context.settings) => (;)]
-    arm = mmc_arm(names[9], si, equilibrium.states.vCΣ_z * si.vDC_base)
-    return controls, arm
+    return controls
 end
 
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, context)
@@ -455,17 +490,21 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
     isfinite(si.turnsRatio) && si.turnsRatio > 0 ||
         throw(ArgumentError("converter :$(e.name) has invalid MMC electrical parameters"))
     equilibrium = converter_equilibrium(e)
-    controls, arm = mmc_controls(state, e, equilibrium, context, m.delta_control)
-    append!(state.modules, [first.(controls); arm])
-    canvas = mmc_electrical_canvas(e, equilibrium, arm, context.name, si)
+    controls = mmc_controls(state, e, equilibrium, context, m.delta_control)
+    append!(state.modules, first.(controls))
+    canvas = mmc_electrical_canvas(e, equilibrium, si)
+    converter_angle_snapshot!(canvas, e, equilibrium; origin = (5400, 2160))
+    capacitor_measurements = (; (Symbol("v_Ctot_" * half * "_" * phase) =>
+        "v_Cmeas_" * half * "_" * phase for half in ("u", "l") for phase in ("a", "b", "c"))...)
     for (i, (definition, signals)) in enumerate(controls)
         converter_instance!(canvas, definition, context.name,
-            (2520 + 540 * ((i - 1) ÷ 3), 108 + 540 * ((i - 1) % 3)), signals)
+            (5400 + 540 * ((i - 1) ÷ 3), 108 + 540 * ((i - 1) % 3)),
+            merge(capacitor_measurements, signals))
     end
     outputs = ["P_ac_f", "Q_ac_f", "v_dc_f", "omega_c", "theta_c",
         ["v_Ctot_" * half * "_" * phase for half in ("u", "l") for phase in ("a", "b", "c")]..., "iS_z"]
     lower!(canvas, BlockGraph(ControlBlock[Export(n, Signal(n)) for n in outputs]); origin = (
-        4320, 108))
+        7200, 108))
     ports = [ModulePortPlan("AC", :electrical, 54, 0, 3),
         ModulePortPlan("DC_P", :electrical, -54, 0),
         ModulePortPlan("DC_N", :electrical, -54, 36)]
