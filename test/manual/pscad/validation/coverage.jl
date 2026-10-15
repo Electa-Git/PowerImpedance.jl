@@ -139,6 +139,27 @@ function band_sample_step(spec)
     return (limit-tick_step+1) * spec.time_step
 end
 
+# Preparation only: retained even-ratio evidence remains readable as produced.
+function check_recorder_sampling(spec)
+    isfinite(spec.time_step) && spec.time_step > 0 &&
+        isfinite(spec.sample_step) && spec.sample_step > 0 ||
+        error("recorder and integration steps must be finite and positive")
+    ratio = spec.sample_step / spec.time_step
+    ticks = round(Int, ratio)
+    isapprox(ratio, ticks; rtol = 0, atol = 1e-9) && isodd(ticks) ||
+        error("preparation requires an odd integer sample_step / time_step ratio")
+    boundaries = (spec.window_starts..., spec.window_duration, spec.simulation_time)
+    all(isapprox(t / spec.sample_step, round(t / spec.sample_step); rtol = 0, atol = 1e-7)
+        for t in boundaries) || error("recorder windows are not sample coherent")
+    tones = spec.dimension == 1 ? spec.frequencies : [spec.frequencies; spec.frequency]
+    all(isapprox(f * spec.window_duration, round(f * spec.window_duration); rtol = 0, atol = 1e-9)
+        for f in tones) || error("recorder windows are not tone coherent")
+    highest = maximum(spec.frequencies) + (spec.dimension == 2 ? spec.frequency : 0.0)
+    spec.dimension == 1 || (highest = max(highest, spec.frequency))
+    inv(2spec.sample_step) > 4highest || error("recorder Nyquist must exceed four times the measured band")
+    return ticks
+end
+
 function scan_settings(spec)
     return P.SimulationSettings(simulation_time = spec.simulation_time,
         time_step = spec.time_step, sample_step = spec.sample_step,

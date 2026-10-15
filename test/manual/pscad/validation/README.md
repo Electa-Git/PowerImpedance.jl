@@ -1245,3 +1245,109 @@ regression. Independent archive/preparation verification passed **534/534**
 checks. Successful preparation used the recorded **Julia 1.10.11 harness
 Manifest**; no full `Pkg.test()`, station contact, `src/` changes or commits.
 Final logs, hashes and preparation details are under `data/m9c8/`.
+
+
+## M9c-10: odd recorder ratio for MMC measurements
+
+Preparation now rejects every even or noninteger `sample_step / time_step`
+ratio, for every fixture, before writing projects. Windows must contain whole
+samples and tone/frame periods; recorder Nyquist must exceed four times the
+highest measured abc frequency. Already-passed fixtures and existing evidence
+and provenance remain untouched. Historical settings above describe their
+original records. Newly prepared half-step witnesses retain the odd ratio at
+their own integration step.
+
+The [M9c9 diagnosis](data/m9c9/report.md) identified EMT-Nyquist voltage chatter
+folding into the low-frequency records. The owner's direct 1 s, every-step
+L2-07 checks at `local/pscad-exchange/diag/alias/alias_{base,p1d}-report`
+confirm it: adjacent decimation offsets of injected-minus-baseline V_BUS2
+correlate **-0.999**, offsets two apart **+0.998**. Chatter is **0.74–0.85 V RMS**,
+matching **0.89/0.58 V** off-grid content in the 50 kHz records, **21 times**
+baseline, with **1.1 kV RMS** at onset and sustained chatter thereafter.
+Currents are clean. Even ratios 8/16/20 fold this term to DC; an odd ratio
+moves it to recorder Nyquist. This owner-selected recorder change leaves the
+exporter, signal processing and approved scientific gates unchanged. The
+synthetic regression includes coherent tones plus slowly modulated `(-1)^n`
+EMT chatter: ratio 8 corrupts tone phasors; ratio 25 preserves them within
+**1e-6 relative**, including a noncoherent envelope term and all offsets.
+This synthetic result does not qualify native measurements.
+
+All nine fixtures use **ratio 25**, with no alternative ratio needed:
+
+| Fixture | Integration main / witness (us) | Sampling main / witness (us) | Main duration; windows (s) | Per-tone peak current (pu) | Expected full workflow |
+| --- | --- | --- | --- | --- | --- |
+| L2-07 | 2.5 / 1.25 | 62.5 / 31.25 | 18; [16,17), [17,18) | 0.0005440688720429209 | 45–60 min |
+| L2-08 | 2.5 / 1.25 | 62.5 / 31.25 | 18; [16,17), [17,18) | 0.0005440743596753004 | 45–60 min |
+| L2-09 | 2.5 / 1.25 | 62.5 / 31.25 | 18; [16,17), [17,18) | 0.0005362934865329716 | 45–60 min |
+| L2-10 | 2.5 / 1.25 | 62.5 / 31.25 | 18; [16,17), [17,18) | 0.0005575931872666588 | 45–60 min |
+| L2-11 | 1.25 / 0.625 | 31.25 / 15.625 | 10; [8,9), [9,10) | 0.000525086145788741 | 45–60 min |
+| L2-12 | 2.5 / 1.25 | 62.5 / 31.25 | 10; [8,9), [9,10) | 0.00015106615855105086 | 25–35 min |
+| L2-13 | 2.5 / 1.25 | 62.5 / 31.25 | 10; [8,9), [9,10) | 0.0008531113277568782 | 25–35 min |
+| L2-14 | 1 / 0.5 | 25 / 12.5 | 10; [8,9), [9,10) | 0.0008553820834429869 | 55–70 min |
+| L2-15 | 2.5 / 1.25 | 62.5 / 31.25 | 10; [8,9), [9,10) | 0.0007060481370190227 | 25–35 min |
+
+Every fixture retains onset **2 s**, the exact existing 23 tones
+`[1,2,3,4,6,7,10,13,18,24,32,42,56,75,100,133,178,237,316,422,562,750,1000] Hz`,
+Schroeder phases and one-second main windows. Half-amplitude runs retain the
+same duration/windows/tones and exactly half each tabulated amplitude.
+The common 750/1000 Hz witness retains 0.1 s windows at 16/16.1 s for
+07–10 (16.2 s duration), and 8/8.1 s for 11–15 (8.2 s duration).
+Existing additional prepared bands also remain: 10 has 562/1000 Hz at
+[16,16.5), [16.5,17), duration 17 s; 13/15 have 42/1000 Hz and 14 has
+24/1000 Hz at [8,8.5), [8.5,9), duration 9 s. Each witness uses its own
+half integration step and ratio 25. Fresh measurements still select the
+worst band/axis with the existing coherent adaptive rule.
+
+One-second main windows contain **16,000/32,000 samples** (main/witness)
+for 07–10/12/13/15, **32,000/64,000** for 11 and **40,000/80,000** for 14.
+The 0.1 s witnesses contain **3,200**, **6,400** and **8,000** samples
+respectively; additional 0.5 s windows contain **16,000** (10/13/15) or
+**40,000** (14). All selectable adaptive windows have whole samples and tone
+periods. Nyquist is **8/16 kHz**, **16/32 kHz** and **20/40 kHz**, respectively,
+always above **4 × (50 + 1000) = 4,200 Hz**.
+
+Complete prior fixture folders are archived under `data/archive/m9c10/`.
+All projects and run ledgers are fresh at **adbf8c2**; no old native run is
+eligible for reuse. Plain Julia and the separate **Julia + one inherent
+interface step** reference/status remain for zero-delay MMC models (07–12).
+Positive-delay 13–15 retain their existing plain comparison. Preparation and
+offline checks perform no station operation.
+
+From the repository root with the existing Julia 1.10.11 harness environment
+and station configuration:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c10(timeout=36000.0)'
+```
+
+Order: **07, 08, 09, 10, 12, 13, 15, 11, 14**. Each fixture outcome is saved
+in `data/m9c10/manifest.toml` before advancing; a failed fixture permits the
+next one, and interrupts stop execution. Reinvocation retries failures and
+resumes only native completions verified against the new project/input/solver
+hashes. This queue contains only these nine fixtures.
+
+Allow **355–475 min (about 6–8 hours)** with a shared **10-hour deadline**.
+The estimates scale the owner's measured **~5 min for an 18 s MMC run at
+2.5 us**, plus transfer, against six normal runs (four at the main step and
+two at half step); a measured **~14 min for 60 s** supports that scale.
+The common main outputs at 62.5 us are **3.125 times smaller** than 20 us
+records. Witnesses and finer-step fixtures have different output ratios, so
+this does not imply a threefold runtime improvement. Adaptive low-frequency
+witnesses can extend the tabulated budgets. Native measurement qualification
+remains pending; all original tolerances and gates remain fixed.
+
+Final offline checks on **Julia 1.12.7 with the repository Manifest**:
+**19,596/19,596 PSCAD suite assertions**, **2,231/2,231 standalone validation
+assertions**, and **70/70 standalone name-guard assertions**. The new recorder,
+coherence/guard and queue regressions contribute **741 assertions**. Fresh
+preparation and **465/465 project XML checks** pass on **Julia 1.10.11**.
+The XML checker compares the exporter's exact decimal representation of the
+sample interval, avoiding a false binary-roundoff mismatch at 25 us; no
+scientific tolerance changes. **6,002/6,002 preservation checks** verify all
+1,811 archived files (35,035,816,987 bytes), new source/project/payload hashes,
+frozen settings, physical XML and coherence. New exports also inherit the
+existing canvas size 5; archived size-0 projects remain untouched. Plain
+references and operating points are byte-identical; two fresh interface-step
+references differ by at most 4e-18 relative from solver roundoff. Logs, detailed
+settings and verification records are under `data/m9c10/`. No full `Pkg.test()`,
+station contact, `src/` changes or commits.

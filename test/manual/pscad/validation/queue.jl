@@ -199,3 +199,69 @@ function run_m9c8(; timeout = 14400.0)
     write_manifest(directory, record)
     return record
 end
+
+const M9C10_IDS = ["L2-07", "L2-08", "L2-09", "L2-10", "L2-12",
+    "L2-13", "L2-15", "L2-11", "L2-14"]
+
+# Fresh local exports only; complete old trees retain their original provenance.
+function prepare_m9c10()
+    revision = readchomp(`git -C $REPOSITORY rev-parse HEAD`)
+    revision == "adbf8c2e9f43eccef3d82fa37756fe942d677a93" ||
+        error("M9c10 preparation requires adbf8c2")
+    archive = joinpath(ROOT, "data", "archive", "m9c10")
+    for id in M9C10_IDS
+        ispath(joinpath(archive, id)) && error("archive already exists: $id")
+        isfile(joinpath(ROOT, "data", id, "manifest.toml")) || error("missing fixture: $id")
+    end
+    mkpath(archive)
+    for id in M9C10_IDS
+        directory = joinpath(ROOT, "data", id)
+        destination = joinpath(archive, id)
+        prior = TOML.parsefile(joinpath(directory, "manifest.toml"))
+        definition = deepcopy(prior["tier_c"])
+        definition["sample_step"] = 25 * definition["time_step"]
+        mv(directory, destination)
+        prepare_fixture(id; directory, definition)
+        record = TOML.parsefile(joinpath(directory, "manifest.toml"))
+        net = fixture(id).factory()
+        list = fixture_netlist(net, power_flow(net))
+        spec, reference = applicable_scan(id, net, list; definition)
+        old_reference = read_response(joinpath(destination, reference_filename(spec)),
+            length(spec.axes), spec.frequencies)
+        native_reference_check(spec, reference, old_reference)["passed"] ||
+            error("native reference changed: $id")
+        # Retain every previously prepared adaptive band, with fresh projects;
+        # the next measurement still selects its own worst axis and frequency.
+        if haskey(prior, "step_witness_definition")
+            witness = step_definition(spec, first(prior["step_witness_definition"]["frequencies"]))
+            prefix = step_prefix(witness)
+            if !any(startswith(project["axis"], prefix) for project in record["projects"])
+                for (axis, model) in prepare_scan_projects(directory, list, witness, spec.axes; prefix)
+                    record_project!(record, axis, model, directory)
+                end
+            end
+        end
+        record["archive_directory"] = relpath(destination, ROOT)
+        record["recorder_ratio"] = check_recorder_sampling(spec)
+        record["preparation_purpose"] = "M9c10 odd recorder ratio; fresh native runs required"
+        isempty(record["run_records"]) || error("fresh preparation inherited runs")
+        write_manifest(directory, record)
+    end
+    return copy(M9C10_IDS)
+end
+
+# Save each outcome before continuing. Native completion/hash checks own resume.
+function run_m9c10(; timeout = 36000.0)
+    isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
+    directory = mkpath(joinpath(ROOT, "data", "m9c10"))
+    record = Dict{String, Any}()
+    remote = RemoteConfig()
+    deadline = time() + timeout
+    for id in M9C10_IDS
+        result = run_fixture_continuing(id; remote, deadline)
+        record[id] = Dict("status" => result["status"])
+        haskey(result, "failure") && (record[id]["failure"] = result["failure"])
+        write_manifest(directory, record)
+    end
+    return record
+end

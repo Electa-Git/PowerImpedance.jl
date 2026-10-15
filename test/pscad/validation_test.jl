@@ -1584,3 +1584,111 @@ end
     rm(Queue.ROOT; recursive = true)
 end
 end
+
+module PSCADOddRecorderTests
+using Test, PowerImpedance
+include("../manual/pscad/validation/validation.jl")
+const V = PSCADValidation
+
+@testset "Odd recorder ratio preparation and coherent half-step witnesses" begin
+    spec = merge(V.l1_settings(), (; dimension = 2, protocol = "dq_active",
+        frequencies = [1.0, 7.0, 1000.0], time_step = 2.5e-6,
+        sample_step = 25 * 2.5e-6, window_starts = (16.0, 17.0),
+        window_duration = 1.0, simulation_time = 18.0))
+    @test V.check_recorder_sampling(spec) == 25
+    for ratio in (8, 16, 20, 24, 26)
+        even = merge(spec, (; sample_step = ratio * spec.time_step))
+        @test_throws ErrorException V.check_recorder_sampling(even)
+        mktempdir() do directory
+            @test_throws ErrorException V.prepare_scan_projects(directory, nothing, even, String[])
+            @test isempty(readdir(directory))
+        end
+    end
+    for ratio in (1, 5, 25)
+        @test V.check_recorder_sampling(merge(spec, (; sample_step = ratio * spec.time_step))) == ratio
+    end
+    @test_throws ErrorException V.check_recorder_sampling(merge(spec, (; sample_step = 25.5spec.time_step)))
+    @test_throws ErrorException V.check_recorder_sampling(merge(spec, (; window_duration = 1.00001)))
+    @test_throws ErrorException V.check_recorder_sampling(merge(spec, (; frequencies = [1.1, 1000.0])))
+    @test_throws ErrorException V.check_recorder_sampling(merge(spec, (; frequencies = [2000.0, 10000.0])))
+    for n in 7:15
+        dt = n == 11 ? 1.25e-6 : n == 14 ? 1e-6 : 2.5e-6
+        starts = n <= 10 ? (16.0, 17.0) : (8.0, 9.0)
+        main = merge(spec, (; time_step = dt, sample_step = 25dt,
+            frequencies = filter(!=(50.0), V.l1_settings().frequencies),
+            window_starts = starts, simulation_time = last(starts) + 1))
+        @test V.check_recorder_sampling(main) == 25
+        @test inv(2main.sample_step) > 4 * 1050
+        for frequency in main.frequencies
+            witness = V.step_definition(main, frequency)
+            @test V.check_recorder_sampling(witness) == 25
+            @test witness.sample_step == 25witness.time_step
+            @test witness.time_step == dt / 2
+        end
+    end
+end
+
+@testset "EMT Nyquist chatter under even and odd decimation" begin
+    dt = 2.5e-6
+    frequencies = [1.0, 7.0, 1000.0]
+    phases = [0.3, -0.7, 1.2]
+    times = collect((0:400024) .* dt)
+    clean = V.multitone(times, frequencies, phases; amplitude = 1.0)
+    # The 1 Hz envelope overlaps a driven tone after even decimation. Its slow
+    # 0.23 Hz term is deliberately noncoherent with the one-second DFT window.
+    signal = clean + [0.2 * (1 + 0.4cos(2π*t) + 0.02sin(2π*0.23t)) *
+        (isodd(n) ? -1 : 1) for (n, t) in zip(0:400024, times)]
+    expected = cis.(phases)
+    for ratio in (8, 25), offset in 0:(ratio-1)
+        indices = (offset+1):ratio:(offset+400000)
+        recorded_times = times[indices]
+        phasors = vec(V.dft_phasors(recorded_times, reshape(signal[indices], :, 1),
+            frequencies; start = first(recorded_times), duration = 1.0))
+        clean_phasors = vec(V.dft_phasors(recorded_times, reshape(clean[indices], :, 1),
+            frequencies; start = first(recorded_times), duration = 1.0))
+        @test maximum(abs.((clean_phasors - expected) ./ expected)) < 1e-10
+        relative_error = abs.((phasors - expected) ./ expected)
+        if ratio == 8
+            @test relative_error[1] > 0.05
+        else
+            @test maximum(relative_error) < 1e-6
+        end
+    end
+end
+end
+
+module PSCADM9c10QueueTests
+using Test, TOML
+module Queue
+const ROOT = mktempdir()
+const calls = String[]
+RemoteConfig() = nothing
+manifest_lists!(record) = record
+write_manifest(directory, record) = open(io -> TOML.print(io, record), joinpath(directory, "manifest.toml"), "w")
+using TOML
+function run_fixture(id; kwargs...)
+    push!(calls, id)
+    id == "L2-07" && error("offline fixture failure")
+    return Dict("status" => "completed")
+end
+include("../manual/pscad/validation/queue.jl")
+end
+@testset "MMC queue preserves order and continues after a fixture failure" begin
+    for timeout in (0.0, -1.0, Inf, NaN)
+        @test_throws ErrorException Queue.run_m9c10(; timeout)
+    end
+    @test isempty(Queue.calls)
+    directory = mkpath(joinpath(Queue.ROOT, "data", "L2-07"))
+    write(joinpath(directory, "manifest.toml"), "fixture_id = \"L2-07\"\n")
+    record = @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_m9c10(timeout = 1)
+    @test Queue.calls == ["L2-07", "L2-08", "L2-09", "L2-10", "L2-12", "L2-13", "L2-15", "L2-11", "L2-14"]
+    @test record["L2-07"]["status"] == "run_or_analysis_failed"
+    @test occursin("offline fixture failure", record["L2-07"]["failure"])
+    @test all(record[id]["status"] == "completed" for id in Queue.calls[2:end])
+    @test TOML.parsefile(joinpath(Queue.ROOT, "data", "m9c10", "manifest.toml")) == record
+    empty!(Queue.calls)
+    @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_m9c10(timeout = 1)
+    @test length(Queue.calls) == 9
+    rm(Queue.ROOT; recursive = true)
+end
+end

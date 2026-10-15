@@ -171,9 +171,13 @@ function step_definition(spec, frequency)
              first(spec.window_starts) : 0.8
     start = ceil(Int, settle * common_frequency) / common_frequency
     n = length(frequencies)
+    # Preserve an odd recorder ratio at the witness's own half step. Historical
+    # even-ratio definitions retain their original sampling for stored analyses.
+    sample_step = isodd(round(Int, spec.sample_step / spec.time_step)) ?
+        spec.sample_step / 2 : spec.sample_step
     return merge(spec,
         (; frequencies, phases = [-π * k * (k - 1) / n for k in 1:n],
-            time_step = spec.time_step / 2, window_duration = duration,
+            time_step = spec.time_step / 2, sample_step, window_duration = duration,
             window_starts = (start, start + duration), simulation_time = start + 2duration))
 end
 
@@ -218,6 +222,7 @@ function axis_project(baseline, plan, spec, axis)
 end
 
 function prepare_scan_projects(directory, list, spec, axes; prefix = "")
+    check_recorder_sampling(spec)
     name = lowercase(replace(spec.id, '-' => '_'))
     baseline_axis = prefix * "baseline"
     baseline_path = joinpath(mkpath(joinpath(directory, baseline_axis)), name * ".pscx")

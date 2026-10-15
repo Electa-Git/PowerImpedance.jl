@@ -11,10 +11,6 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
             isfile(kept) && filesize(kept) == file["bytes"] &&
             digest(kept) == file["sha256"] || error("kept artifact changed: $kept")
         end
-        history = mkpath(joinpath(directory, "history"))
-        cp(path,
-            joinpath(history, "manifest-before-m9a4-" *
-                              Dates.format(now(UTC), "yyyymmddTHHMMSS") * ".toml"))
     end
     net = entry.factory()
     point = power_flow(net)
@@ -23,6 +19,13 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
     list = fixture_netlist(net, point)
     spec, reference = applicable_scan(id, net, list;
         definition = prior === nothing ? definition : prior["tier_c"])
+    check_recorder_sampling(spec)
+    if prior !== nothing
+        history = mkpath(joinpath(directory, "history"))
+        cp(path,
+            joinpath(history, "manifest-before-m9a4-" *
+                              Dates.format(now(UTC), "yyyymmddTHHMMSS") * ".toml"))
+    end
     spec.travel_lower_bound_s == 0 || spec.time_step < spec.travel_lower_bound_s ||
         error("step exceeds conservative travel bound")
     models = prepare_scan_projects(directory, list, spec, spec.axes; prefix = scan_prefix(spec))
