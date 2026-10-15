@@ -731,4 +731,46 @@ end
     end
 end
 
+@testset "PSCAD large output completion" begin
+    mktempdir() do root
+        write(joinpath(root, "large.inf"), "PGB(1) Desc=\"Voltage\" Group=\"\"\n")
+        path = joinpath(root, "large_01.out")
+        write(path, "0.0 1.0\n")
+        P._wait_outputs([root], "large", 1; timeout = 5.0, poll_interval = 0.001)
+        rows = 1_000_000
+        open(path, "w") do io
+            for _ in 1:rows
+                println(io, "0.0 1.0")
+            end
+        end
+        # The stability timeout excludes the subsequent large row count.
+        elapsed = @elapsed files = P._wait_outputs([root], "large", rows;
+            timeout = 0.1, poll_interval = 0.001)
+        @test files.outs == [path]
+        @test elapsed > 0.1
+        @test_throws r"rows per file: \[1000000\]; expected 1000001" P._wait_outputs(
+            [root], "large", rows + 1; timeout = 0.1, poll_interval = 0.001)
+    end
+end
+
+@testset "PSCAD buffered output completion" begin
+    mktempdir() do root
+        write(joinpath(root, "buffered.inf"), "PGB(1) Desc=\"Voltage\" Group=\"\"\n")
+        path = joinpath(root, "buffered_01.out")
+        write(path, "0.0 1.0\n")
+        writer = @async begin
+            sleep(0.2)
+            open(path, "a") do io
+                println(io, "0.1 2.0")
+            end
+        end
+        try
+            @test P._wait_outputs([root], "buffered", 2;
+                timeout = 5.0, poll_interval = 0.01).outs == [path]
+        finally
+            wait(writer)
+        end
+    end
+end
+
 end

@@ -110,3 +110,27 @@ function PSCAD.check_connectivity(path::AbstractString)
     end
     return nothing
 end
+
+function PSCAD.check_geometry(path::AbstractString)
+    root = PythonCall.pyimport("xml.etree.ElementTree").parse(String(path)).getroot()
+    text(node, key) = PythonCall.pyconvert(String, node.get(key))
+    integer(node, key) = parse(Int, text(node, key))
+    for definition in root.findall("./definitions/Definition")
+        name = text(definition, "name")
+        for canvas in definition.findall("schematic")
+            sizes = canvas.findall("./paramlist/param[@name='size']")
+            PythonCall.pylen(sizes) == 1 && text(sizes[0], "value") == "5" ||
+                throw(ArgumentError("PSCAD canvas $name requires sheet size 5"))
+            for node in canvas
+                PythonCall.pyis(node.get("x"), PythonCall.pybuiltins.None) && continue
+                x, y = integer(node, "x"), integer(node, "y")
+                PSCAD._check_coordinate((x, y), name)
+                for vertex in node.findall("vertex")
+                    PSCAD._check_coordinate((x + integer(vertex, "x"),
+                        y + integer(vertex, "y")), name)
+                end
+            end
+        end
+    end
+    return nothing
+end

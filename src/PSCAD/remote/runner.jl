@@ -7,6 +7,34 @@ const MHI_PSCAD_VERSION = "3.1.2"
 _string(value) = pyconvert(String, pybuiltins.str(value))
 _components(value) = pyconvert(Vector{Py}, pybuiltins.list(value))
 
+function _schematic_origins(path)
+    root = pyimport("xml.etree.ElementTree").parse(String(path)).getroot()
+    objects = Dict{Tuple{String, String}, NamedTuple{(:x, :y, :kind), Tuple{Int, Int, String}}}()
+    for definition in root.findall("./definitions/Definition")
+        name = _string(definition.get("name"))
+        for canvas in definition.findall("schematic"), node in canvas.iter()
+            pyis(node.get("id"), pybuiltins.None) && continue
+            pyis(node.get("x"), pybuiltins.None) && continue
+            objects[(name, _string(node.get("id")))] = (
+                x = parse(Int, _string(node.get("x"))),
+                y = parse(Int, _string(node.get("y"))),
+                kind = _string(node.get("defn", node.get("classid", node.tag))))
+        end
+    end
+    return objects
+end
+
+function _load_relocations(before, after)
+    moved = String[]
+    for key in sort!(collect(keys(before)))
+        haskey(after, key) || continue
+        a, b = before[key], after[key]
+        (a.x, a.y) == (b.x, b.y) && continue
+        push!(moved, "$(key[1]) id=$(key[2]) $(a.kind): $((a.x, a.y)) -> $((b.x, b.y))")
+    end
+    return moved
+end
+
 function _parameters(component)
     raw = pyconvert(Dict, component.parameters())
     return Dict(string(key) => value for (key, value) in raw)
@@ -183,6 +211,7 @@ function main(arguments)
         end
         _report(console, verbosity, 1, "Loading staged project $project_name")
         load_attempted = true
+        origins = _schematic_origins(project_path)
         app.load(abspath(project_path))
         project = try
             app.project(project_name)
@@ -194,6 +223,14 @@ function main(arguments)
         phase = "simulation settings"
         _apply_settings(project, settings, joinpath(output, "settings-readback.toml"))
         project.save()
+        phase = "load geometry"
+        moved = _load_relocations(origins, _schematic_origins(project_path))
+        if !isempty(moved)
+            relocation_path = joinpath(output, "load-relocations.txt")
+            write(relocation_path, join(moved, '\n') * "\n")
+            error("PSCAD moved $(length(moved)) schematic objects on load; see $relocation_path\n" *
+                join(first(moved, 20), '\n'))
+        end
         _record_diagnostics(console, project, verbosity, "PSCAD diagnostics before execution")
         phase = "project run"
         _report(console, verbosity, 1, "Starting PSCAD project.run()")

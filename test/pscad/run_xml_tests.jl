@@ -40,6 +40,34 @@ else
     include("m7_networks.jl")
     using TOML
     P = PowerImpedance.PSCAD
+    runner = Module(:GeometryRunner)
+    Core.eval(runner, :(include(path) = Base.include($runner, path)))
+    Base.include(runner, joinpath(@__DIR__, "../../src/PSCAD/remote/runner.jl"))
+    @testset "Sheet size, coordinate bounds and load relocation" begin
+        mktempdir() do directory
+            path = joinpath(directory, "geometry.pscx")
+            xml = """<project><definitions><Definition name="Main"><schematic>
+                <paramlist><param name="size" value="5"/></paramlist>
+                <User id="1" defn="master:const" x="14382" y="0"/>
+                <Wire id="2" classid="WireOrthogonal" x="18" y="18">
+                <vertex x="-18" y="-18"/><vertex x="14364" y="14364"/>
+                </Wire></schematic></Definition></definitions></project>"""
+            write(path, xml)
+            @test P.check_geometry(path) === nothing
+            write(path, replace(xml, "value=\"5\"" => "value=\"0\""))
+            @test_throws r"sheet size 5" P.check_geometry(path)
+            write(path, replace(xml, "x=\"14382\"" => "x=\"14383\""))
+            @test_throws r"coordinates must lie" P.check_geometry(path)
+            write(path, replace(xml, "x=\"14364\"" => "x=\"14365\""))
+            @test_throws r"coordinates must lie" P.check_geometry(path)
+            write(path, xml)
+            before = runner._schematic_origins(path)
+            @test isempty(runner._load_relocations(before, runner._schematic_origins(path)))
+            write(path, replace(xml, "y=\"0\"" => "y=\"18\""))
+            moved = runner._load_relocations(before, runner._schematic_origins(path))
+            @test moved == ["Main id=1 master:const: (14382, 0) -> (14382, 18)"]
+        end
+    end
     @testset "Loaded dangling voltage terminal" begin
         fragment = joinpath(@__DIR__, "fixtures", "nt1_loaded_fragment.pscx")
         err = try
@@ -784,6 +812,8 @@ else
                 saved_settings = Dict(pyconvert(String, p.get("name")) =>
                                           pyconvert(String, p.get("value"))
                 for p in tlc_reference.xpath("./Definition[@name='dq2abc']/schematic/paramlist/param"))
+                # Retain the saved settings except the required largest sheet.
+                saved_settings["size"] = "5"
                 @test canvas_settings == saved_settings
                 xml = only(root.xpath("./definitions/Definition[@name='$(definition.name)']"))
                 @test pylen(xml.xpath("./graphics")) == 0

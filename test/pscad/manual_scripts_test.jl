@@ -1,5 +1,5 @@
 module PSCADManualScriptTests
-using Test
+using Test, PowerImpedance
 
 # Inspect source syntax only: macros are checked, never expanded. The walker
 # covers the binding forms used by these scripts and their regression examples.
@@ -190,6 +190,55 @@ end
                     @test occursin(qualified, source)
                     original = Meta.parseall(replace(source, qualified => name))
                     @test unresolved_globals(original, namespace) == [Symbol(name)]
+                end
+                @testset "Acceptance continues after run and comparison failures" begin
+                    loop = only(filter(expression.args) do statement
+                        statement isa Expr && statement.head == :for &&
+                            last(statement.args[1].args) == :cases
+                    end)
+                    harness = Module(:AcceptanceFailureTest)
+                    Core.eval(harness, :(const PowerImpedance = $PowerImpedance))
+                    Core.eval(harness, quote
+                        failures = Pair{String, String}[]
+                        attempted = String[]
+                        remote = nothing
+                        exports = mktempdir()
+                        cases = [( (; project_name = name,
+                            netlist = (; elements = [], buses = []),
+                            operating_point = (; bus_states = Dict())), nothing, 0.01)
+                            for name in ("run_error", "first_pass", "comparison_error", "last_pass")]
+                        PSCADRun() = nothing
+                        function compute(model, run; options)
+                            push!(attempted, model.project_name)
+                            model.project_name == "run_error" && error("recorded build failure")
+                            return model.project_name
+                        end
+                        function compare_operating_point(result, reference; rtol_v)
+                            return PowerImpedance.PSCAD.Table((;
+                                quantity = ["voltage"], name = [result],
+                                pscad = [1.0], powerflow = [1.0], error = [0.0],
+                                within_tolerance = [result != "comparison_error"]))
+                        end
+                    end)
+                    redirect_stdout(devnull) do
+                        redirect_stderr(devnull) do
+                            Core.eval(harness, loop)
+                        end
+                    end
+                    @test harness.attempted ==
+                        ["run_error", "first_pass", "comparison_error", "last_pass"]
+                    @test first.(harness.failures) == ["run_error", "comparison_error"]
+                    @test occursin("recorded build failure", first(harness.failures).second)
+                    @test occursin("PSCAD acceptance failed", last(harness.failures).second)
+                    @test isfile(joinpath(harness.exports, "last_pass_comparison.tsv"))
+                    rm(harness.exports; recursive = true)
+                    final_verdict = last(filter(s -> s isa Expr, expression.args))
+                    code = "failures = [\"failed_case\" => \"recorded failure\"]\n" *
+                           string(final_verdict)
+                    child = run(pipeline(`$(Base.julia_cmd()) --startup-file=no -e $code`;
+                        stdout = devnull, stderr = devnull); wait = false)
+                    wait(child)
+                    @test child.exitcode == 1
                 end
             elseif basename(path) == "acceptance_m7.jl"
                 # Evaluate only the message classifier, never exports or runs.

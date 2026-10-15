@@ -58,6 +58,21 @@ function write_component!(project, canvas, component::PSCAD.ModuleInstancePlan)
     return nothing
 end
 
+function write_sheet_size!(canvas)
+    # Native load/build experiments (diag/relo): size 0 clamped meters at
+    # y=3168 to 3150; preset size 5 retained all origins with zero build errors.
+    settings = canvas.find("paramlist")
+    sizes = settings.findall("param[@name='size']")
+    if PythonCall.pylen(sizes) == 0
+        PythonCall.pyimport("lxml.etree").SubElement(settings, "param"; name = "size", value = "5")
+    else
+        for size in sizes
+            size.set("value", "5")
+        end
+    end
+    return nothing
+end
+
 function write_canvas!(project, canvas, plan::PSCAD.CanvasPlan)
     for component in plan.components
         write_component!(project, canvas, component)
@@ -100,7 +115,7 @@ function write_module_definition!(project, plan::PSCAD.ModuleDefinitionPlan)
     # local/TLC/Simple_2L_VSC_RL.pscx:2069–2083 (dq2abc), and
     # local/SG/SG_Project.pscx:978–992 (the machine module).
     settings = definition.schematic.find("paramlist")
-    for (key, value) in (("show_grid", "1"), ("size", "0"), ("orient", "1"),
+    for (key, value) in (("show_grid", "1"), ("size", "5"), ("orient", "1"),
         ("show_border", "0"), ("monitor_bus_voltage", "0"), ("show_signal", "0"),
         ("show_virtual", "0"), ("show_sequence", "0"), ("auto_sequence", "1"),
         ("show_terminals", "0"), ("virtual_filter", ""), ("animation_freq", "500"))
@@ -129,7 +144,11 @@ function PSCAD._write_project(plan::PSCAD.ProjectPlan,
     for wrapper in plan.wrappers
         write_line_wrapper!(main, plan.name, wrapper)
     end
+    for canvas in main.getroottree().findall("./definitions/Definition/schematic")
+        write_sheet_size!(canvas)
+    end
     project.save()
+    PSCAD.check_geometry(path)
     PSCAD.check_connectivity(path)
     return (path = abspath(path), mhi_xml_version = _mhi_xml_version())
 end

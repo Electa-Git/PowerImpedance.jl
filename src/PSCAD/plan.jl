@@ -566,6 +566,12 @@ its original wire endpoint dangling.
 """
 function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
     fail(point, reason) = throw(ArgumentError("PSCAD canvas $name at $point: $reason"))
+    for c in canvas.components
+        _check_coordinate((c.x, c.y), name)
+    end
+    for w in canvas.wires, point in w.vertices
+        _check_coordinate(point, name)
+    end
     ports = Dict{NTuple{2, Int}, Symbol}()
     directions = Dict{NTuple{2, Int}, Symbol}()
     labels = Dict{NTuple{2, Int}, Symbol}()
@@ -916,4 +922,13 @@ end
 
 function emit!(state::PlanState, e::NetlistElement, context)
     throw(ArgumentError("PSCAD export of :$(e.name) ($(typeof(e.model))) is not implemented yet"))
+end
+
+# XML verification extends this guard when PythonCall is loaded.
+function check_geometry end
+
+function _check_coordinate(point, name)
+    all(value -> 0 <= value <= 14382, point) || throw(ArgumentError(
+        "PSCAD canvas $name at $point: coordinates must lie in [0, 14382]"))
+    return nothing
 end

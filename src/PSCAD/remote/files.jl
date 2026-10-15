@@ -54,7 +54,8 @@ end
 """
 Wait for one INF file and every corresponding OUT file for at most `timeout`
 \\[s\\], polling every `poll_interval` \\[s\\]. Require exactly `expected_rows`
-numeric rows and unchanged INF/OUT sizes across two polls.
+numeric rows after INF/OUT sizes remain unchanged across two polls. Row counting
+is outside the stability timeout.
 """
 function _wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
         timeout::Real = 60, poll_interval::Real = 0.25)
@@ -65,12 +66,15 @@ function _wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
         throw(ArgumentError("poll_interval must be positive and finite"))
     deadline = time() + timeout
     previous = nothing
+    counted = Set{Tuple}()
+    rows = Int[]
+    found = String[]
     observed = "INF files found: []; rows per file: []"
     while time() < deadline
         matches = _output_matches(roots, stem * ".inf")
         length(matches) <= 1 ||
             throw(ArgumentError("PSCAD emitted multiple $(stem).inf files: $matches"))
-        observed = "INF files found: $matches; rows per file: []"
+        observed = "INF files found: $matches; rows per file: $rows"
         if length(matches) == 1
             inf = only(matches)
             # The INF writer may still be completing its metadata.
@@ -84,16 +88,32 @@ function _wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
                                            ".out")
                     for index in 1:cld(count, 10)]
             found = filter(isfile, outs)
-            rows = [_data_rows(path) for path in found]
             observed = "INF files found: $matches; OUT files found: $found; rows per file: $rows; expected $expected_rows"
-            state = (inf, filesize(inf), found, filesize.(found), rows)
-            if count > 0 && length(found) == length(outs) && all(==(expected_rows), rows) &&
-               state == previous
-                return (; inf, outs)
+            state = (inf, count, filesize(inf), found, filesize.(found))
+            if count > 0 && length(found) == length(outs) && state == previous &&
+               state ∉ counted
+                # Count each stable state once, outside the stability timeout.
+                push!(counted, state)
+                rows = [_data_rows(path) for path in outs]
+                observed = "INF files found: $matches; OUT files found: $found; rows per file: $rows; expected $expected_rows"
+                any(>(expected_rows), rows) && throw(ArgumentError(
+                    "PSCAD outputs did not become complete within $timeout seconds; last observed $observed"))
+                if state[3] == filesize(inf) && state[5] == filesize.(outs) &&
+                   all(==(expected_rows), rows)
+                    return (; inf, outs)
+                end
+                previous = nothing
+                sleep(poll_interval)
+                continue
             end
             previous = state
         end
         sleep(poll_interval)
+    end
+    if isempty(counted)
+        uncounted = "rows per file: $rows"
+        rows = [_data_rows(path) for path in found]
+        observed = replace(observed, uncounted => "rows per file: $rows")
     end
     throw(ArgumentError("PSCAD outputs did not become complete within $timeout seconds; last observed $observed"))
 end

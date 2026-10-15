@@ -2689,3 +2689,13 @@ coordinates through the same canvas guard. Export now checks both the plan
 and its written XML. A portable fragment of the kept dangling terminal is
 retained in `test/pscad/fixtures/nt1_loaded_fragment.pscx`; native build
 acceptance of the corrected project remains a separate station check.
+
+Every schematic canvas, including `Main` and line definitions, is written with
+sheet `size = 5`. Native load experiments showed that size 0 can clamp objects
+before PSCAD grows the sheet, leaving their wires at the original coordinates.
+The offline plan and XML guards require instance origins and absolute wire
+vertices to lie in `[0, 14382]` on both axes; the XML guard also requires size 5.
+The remote runner records schematic object origins before loading and compares
+them immediately after saving the applied settings. Any movement fails the
+`load geometry` phase, reports up to 20 objects, and retains the full list in
+`outputs/load-relocations.txt` before simulation starts.

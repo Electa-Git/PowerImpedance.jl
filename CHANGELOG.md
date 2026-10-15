@@ -39,6 +39,8 @@
 
 ### Fixed
 
+- Preset PSCAD sheets to size 5, guard coordinate bounds and load relocation, and count output rows after file-size stability without a counting timeout.
+
 - Correct the Wedepohl–Wilcox cable earth-return logarithmic constant to
   `exp(γ_E) ≈ 1.781072418` in both self and mutual terms. For earth relative
   permeability 1, this removes excess reactance of approximately

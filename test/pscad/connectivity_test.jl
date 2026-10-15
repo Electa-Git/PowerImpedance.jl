@@ -280,4 +280,15 @@ end
         broken.components)
 end
 
+@testset "PSCAD coordinate bounds" begin
+    canvas = P.CanvasPlan()
+    push!(canvas.components, P.ComponentPlan("master:const", ["Name" => "edge", "Value" => "1"], 14382, 0, 0))
+    @test P.check_connectivity(canvas, "edge") === nothing
+    canvas.components[1] = P.ComponentPlan("master:const", ["Name" => "edge", "Value" => "1"], 14383, 0, 0)
+    @test_throws r"coordinates must lie" P.check_connectivity(canvas, "edge")
+    empty!(canvas.components)
+    push!(canvas.wires, P.WirePlan([(0, 0), (0, -18)]))
+    @test_throws r"coordinates must lie" P.check_connectivity(canvas, "edge")
+end
+
 end

@@ -162,99 +162,127 @@ if converters_only
         case[1].netlist.elements), cases)
 end
 
+failures = Pair{String, String}[]
 for (model, classic_reference, rtol_v) in cases
-    dc_cable = any(model.netlist.elements) do element
-        element.model isa PowerImpedance.Cable &&
-            all(t -> t.bus !== nothing && t.bus.domain == 2, element.terminals)
-    end
-    machine = any(e -> e.model isa PowerImpedance.SynchronousMachine, model.netlist.elements)
-    converter = any(e -> e.model isa Union{PowerImpedance.TLC, PowerImpedance.MMC}, model.netlist.elements)
-    mmc = any(e -> e.model isa PowerImpedance.MMC, model.netlist.elements)
-    compensated_mmc = any(e -> e.model isa PowerImpedance.MMC &&
-                              e.model.modulation isa PowerImpedance.CompensatedModulation,
-        model.netlist.elements)
-    simulation_time = compensated_mmc ? 5.0 : converter ? 10.0 :
-                      machine ? 15.0 :
-                      dc_cable ? 3.0 :
-                      any(bus -> bus.kind == :dc, model.netlist.buses) ? 1.0 : 0.3
-    result = compute(model,
-        PSCADRun();
-        options = (;
-            remote, simulation_time, time_step = compensated_mmc ? 1e-6 : (machine || converter) ? 10e-6 : 50e-6,
-            sample_step = mmc ? 250e-6 : converter ? 40e-6 : machine ? 1e-3 : 250e-6, verbosity = 1))
-    # NB.solve skips power flow for this linear fixture. Both representations
-    # therefore compare against the equivalent classic circuit's solved record.
-    reference = isempty(model.operating_point.bus_states) ? classic_reference : model
-    comparison = compare_operating_point(result, reference; rtol_v)
-    if any(bus -> bus.kind == :dc, model.netlist.buses)
-        settled = PowerImpedance.PSCAD.steady_state(result)
-        for bus in filter(bus -> bus.kind == :dc, model.netlist.buses)
-            poles = filter(c -> c.kind == :voltage && c.bus == bus.name, model.probes.channels)
-            positive = only(filter(c -> c.side == "P", poles))
-            negative = only(filter(c -> c.side == "N", poles))
-            vp, vn = settled[positive.name].mean, settled[negative.name].mean
-            println(bus.name, " pole voltages [kV]: ", vp, ", ", vn,
-                "; relative midpoint error: ", abs(vp + vn) / (2bus.base_kV))
-            vp > 0 && vn < 0 && isapprox(vp, -vn; rtol = 0.01, atol = 0) ||
-                error("DC pole symmetry failed at $(bus.name)")
+    try
+        dc_cable = any(model.netlist.elements) do element
+            element.model isa PowerImpedance.Cable &&
+                all(t -> t.bus !== nothing && t.bus.domain == 2, element.terminals)
         end
-    end
-    println(model.project_name)
-    show(stdout, MIME("text/plain"), comparison)
-    println()
-    if machine
-        settled = PowerImpedance.PSCAD.steady_state(result)
-        for channel in model.probes.channels
-            channel.kind in
-            (:machine_p, :machine_q, :machine_voltage, :machine_diagnostic) || continue
-            println(channel.name, " settled mean [", channel.unit, "]: ",
-                settled[channel.name].mean)
-        end
-    end
-    if converter
-        settled = PowerImpedance.PSCAD.steady_state(result)
-        for channel in model.probes.channels
-            channel.kind in
-            (:converter_diagnostic, :converter_arm_voltage, :converter_sum_current) ||
-                continue
-            if channel.kind == :converter_sum_current
-                element = only(filter(e -> string(e.name) == channel.element,
-                    model.netlist.elements))
-                equilibrium = PowerImpedance.PSCAD.converter_equilibrium(element)
-                reference_current = equilibrium.states.iΣ_z
-                println(channel.name, " settled mean [pu]: ", settled[channel.name].mean,
-                    "; solved equilibrium [pu]: ", reference_current,
-                    "; difference [pu]: ", settled[channel.name].mean - reference_current)
-                continue
+        machine = any(e -> e.model isa PowerImpedance.SynchronousMachine, model.netlist.elements)
+        converter = any(e -> e.model isa Union{PowerImpedance.TLC, PowerImpedance.MMC}, model.netlist.elements)
+        mmc = any(e -> e.model isa PowerImpedance.MMC, model.netlist.elements)
+        compensated_mmc = any(e -> e.model isa PowerImpedance.MMC &&
+                                  e.model.modulation isa PowerImpedance.CompensatedModulation,
+            model.netlist.elements)
+        simulation_time = compensated_mmc ? 5.0 : converter ? 10.0 :
+                          machine ? 15.0 :
+                          dc_cable ? 3.0 :
+                          any(bus -> bus.kind == :dc, model.netlist.buses) ? 1.0 : 0.3
+        result = compute(model,
+            PSCADRun();
+            options = (;
+                remote, simulation_time, time_step = compensated_mmc ? 1e-6 : (machine || converter) ? 10e-6 : 50e-6,
+                sample_step = mmc ? 250e-6 : converter ? 40e-6 : machine ? 1e-3 : 250e-6, verbosity = 1))
+        # NB.solve skips power flow for this linear fixture. Both representations
+        # therefore compare against the equivalent classic circuit's solved record.
+        reference = isempty(model.operating_point.bus_states) ? classic_reference : model
+        comparison = compare_operating_point(result, reference; rtol_v)
+        if any(bus -> bus.kind == :dc, model.netlist.buses)
+            settled = PowerImpedance.PSCAD.steady_state(result)
+            for bus in filter(bus -> bus.kind == :dc, model.netlist.buses)
+                poles = filter(c -> c.kind == :voltage && c.bus == bus.name, model.probes.channels)
+                positive = only(filter(c -> c.side == "P", poles))
+                negative = only(filter(c -> c.side == "N", poles))
+                vp, vn = settled[positive.name].mean, settled[negative.name].mean
+                println(bus.name, " pole voltages [kV]: ", vp, ", ", vn,
+                    "; relative midpoint error: ", abs(vp + vn) / (2bus.base_kV))
+                vp > 0 && vn < 0 && isapprox(vp, -vn; rtol = 0.01, atol = 0) ||
+                    error("DC pole symmetry failed at $(bus.name)")
             end
-            println(channel.name, " settled mean [", channel.unit,
-                "]: ", settled[channel.name].mean)
         end
-    end
-    # A frequency-dependent cable fit and remaining lag transients can affect
-    # the final window; inspect settling warnings before accepting the table.
-    # Retain all measured errors, including the OHL case's 2% voltage check.
-    open(joinpath(exports, model.project_name * "_comparison.tsv"), "w") do io
-        println(io, "quantity\tname\tpscad\tpowerflow\terror\twithin_tolerance")
-        for row in comparison
-            println(io, join(values(row), '\t'))
+        println(model.project_name)
+        show(stdout, MIME("text/plain"), comparison)
+        println()
+        if machine
+            settled = PowerImpedance.PSCAD.steady_state(result)
+            for channel in model.probes.channels
+                channel.kind in
+                (:machine_p, :machine_q, :machine_voltage, :machine_diagnostic) || continue
+                println(channel.name, " settled mean [", channel.unit, "]: ",
+                    settled[channel.name].mean)
+            end
         end
+        if converter
+            settled = PowerImpedance.PSCAD.steady_state(result)
+            for channel in model.probes.channels
+                channel.kind in
+                (:converter_diagnostic, :converter_arm_voltage, :converter_sum_current) ||
+                    continue
+                if channel.kind == :converter_sum_current
+                    element = only(filter(e -> string(e.name) == channel.element,
+                        model.netlist.elements))
+                    equilibrium = PowerImpedance.PSCAD.converter_equilibrium(element)
+                    reference_current = equilibrium.states.iΣ_z
+                    println(channel.name, " settled mean [pu]: ", settled[channel.name].mean,
+                        "; solved equilibrium [pu]: ", reference_current,
+                        "; difference [pu]: ", settled[channel.name].mean - reference_current)
+                    continue
+                end
+                println(channel.name, " settled mean [", channel.unit,
+                    "]: ", settled[channel.name].mean)
+            end
+        end
+        # A frequency-dependent cable fit and remaining lag transients can affect
+        # the final window; inspect settling warnings before accepting the table.
+        # Retain all measured errors, including the OHL case's 2% voltage check.
+        open(joinpath(exports, model.project_name * "_comparison.tsv"), "w") do io
+            println(io, "quantity\tname\tpscad\tpowerflow\terror\twithin_tolerance")
+            for row in comparison
+                println(io, join(values(row), '\t'))
+            end
+        end
+        all(comparison.within_tolerance) ||
+            error("PSCAD acceptance failed for $(model.project_name)")
+    catch err
+        err isa InterruptException && rethrow()
+        detail = sprint(showerror, err, catch_backtrace())
+        push!(failures, model.project_name => detail)
+        println(stderr, model.project_name, ": FAILED: ", detail)
     end
-    all(comparison.within_tolerance) ||
-        error("PSCAD acceptance failed for $(model.project_name)")
 end
 
 # Diagnostic, not asserted: the Transformer_test magnetizing branch (Lₘ = 10 H,
 # Rₘ = 1e4 Ω) draws a magnetizing current comparable to the load current and
 # exposes the power-flow pi-model approximation of the transformer T-model.
 if !converters_only
-stress_classic, _ = PSCADFixtures.transformer_network(; Rₘ = 1e4, Lₘ = 10.0)
-stress_model = export_pscad(stress_classic;
-    path = joinpath(exports, "transformer_yy_stress.pscx"))
-stress = compute(stress_model, PSCADRun();
-    options = (; remote, simulation_time = 0.3, time_step = 50e-6,
-        sample_step = 250e-6, verbosity = 1))
-println("transformer_yy_stress (diagnostic, not asserted)")
-show(stdout, MIME("text/plain"), compare_operating_point(stress, stress_model))
-println()
+    try
+        stress_classic, _ = PSCADFixtures.transformer_network(; Rₘ = 1e4, Lₘ = 10.0)
+        stress_model = export_pscad(stress_classic;
+            path = joinpath(exports, "transformer_yy_stress.pscx"))
+        stress = compute(stress_model, PSCADRun();
+            options = (; remote, simulation_time = 0.3, time_step = 50e-6,
+                sample_step = 250e-6, verbosity = 1))
+        println("transformer_yy_stress (diagnostic, not asserted)")
+        show(stdout, MIME("text/plain"), compare_operating_point(stress, stress_model))
+        println()
+    catch err
+        err isa InterruptException && rethrow()
+        detail = sprint(showerror, err, catch_backtrace())
+        push!(failures, "transformer_yy_stress" => detail)
+    end
+end
+
+open(joinpath(exports, "acceptance_failures.txt"), "w") do io
+    println(io, length(failures), " failed cases")
+    for (name, detail) in failures
+        println(io, "\n", name, "\n", detail)
+    end
+end
+if !isempty(failures)
+    println(stderr, "PSCAD acceptance failures (", length(failures), "):")
+    for (name, detail) in failures
+        println(stderr, "\n", name, "\n", detail)
+    end
+    exit(1)
 end
