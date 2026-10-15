@@ -1463,3 +1463,94 @@ Post-analysis verification confirms 756 native input files, all six original
 manifests, and all 65 analysing source files match their recorded hashes.
 Logs and preservation counts are retained under `data/m9c12/`. No station contact,
 `src/` changes, staging, or commits were performed.
+
+## M9c-13: predeclared 8 s zero-delay windows
+
+The owner predeclares **8 s main windows for all six zero-delay fixtures
+L2-07..L2-12**, replacing their 1 s windows before new measurements. Keep the
+first window start fixed, and accept the resulting pass/fail outcomes under the
+existing gates. **No further window changes after seeing these results.**
+This applies to the full-band main and half-amplitude runs. Step witnesses keep
+their own short coherent windows and the existing adaptive band/axis selection.
+
+The owner reports that L2-07 fails only full-Y window consistency: its 42 Hz
+d-row/q-column entry is about 0.017 pu and changes by 3.7e-4 pu between 1 s
+windows, exceeding 1% of the unchanged 0.02 pu floor. Near the 44 Hz mode,
+the Julia 2x2 input-voltage matrix has condition numbers **10.0 at 42 Hz** and
+**13.8 at 56 Hz**, versus **1.1–5 elsewhere**, amplifying small window
+differences. Every zero-delay fixture's worst window entry is at 42/56 Hz;
+the reported L2-08, L2-10 and L2-12 changes are **0.98%, 0.58% and 0.44%**.
+These observations motivate the predeclared measurement change; they do not
+establish that the new measurements pass.
+
+| Fixture | Main / witness integration (us) | Main / witness sampling (us) | Main windows (s); duration | Per-tone peak current (pu) | Expected workflow |
+| --- | --- | --- | --- | --- | --- |
+| L2-07 | 2.5 / 1.25 | 62.5 / 31.25 | [16,24), [24,32); 32 s | 0.0005440688720429209 | 21–28 min |
+| L2-08 | 2.5 / 1.25 | 62.5 / 31.25 | [16,24), [24,32); 32 s | 0.0005440743596753004 | 21–28 min |
+| L2-09 | 2.5 / 1.25 | 62.5 / 31.25 | [16,24), [24,32); 32 s | 0.0005362934865329716 | 21–28 min |
+| L2-10 | 2.5 / 1.25 | 62.5 / 31.25 | [16,24), [24,32); 32 s | 0.0005575931872666588 | 21–28 min |
+| L2-11 | 1.25 / 0.625 | 31.25 / 15.625 | [8,16), [16,24); 24 s | 0.000525086145788741 | 28–38 min |
+| L2-12 | 2.5 / 1.25 | 62.5 / 31.25 | [8,16), [16,24); 24 s | 0.00015106615855105086 | 14–19 min |
+
+Onset remains **2 s**, recorder ratio **25** at both integration steps, with
+the same 23 tones listed in M9c-10, Schroeder phases and exact amplitudes.
+Half-amplitude projects use half the tabulated amplitudes and the same 8 s
+windows. Each main window has **128,000 samples**, or **256,000 for L2-11**.
+`check_recorder_sampling` requires whole samples, tone/frame periods, odd ratio,
+and Nyquist above 4,200 Hz for main, amplitude and step projects.
+The common 750/1000 Hz witness remains at [16,16.1), [16.1,16.2) for 07–10
+and [8,8.1), [8.1,8.2) for 11/12. L2-10's additional prepared 562/1000 Hz
+witness remains at [16,16.5), [16.5,17), ending at 17 s. The main-window
+extension does not lengthen these witnesses. Physical/control parameters,
+all tolerances, and every qualification gate remain unchanged. Zero-delay
+fixtures qualify through the **M9c-12 residual step witness and discrete
+admittance comparison**, with the raw witness and plain comparison retained.
+
+Preparation at **635ef92** moves each complete old fixture folder to
+`data/archive/m9c13/<id>/` and writes fresh projects, references, manifests
+and empty run ledgers. No old native completion is reused. Official M9c-12
+re-analysis outputs remain untouched in `data/m9c12/`. Preparation and offline
+tests perform no station operation. Preservation inventories, preparation logs
+and offline checks are under `data/m9c13/`.
+
+Run from the repository root with the existing Julia 1.10.11 harness environment
+and station configuration:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c13(timeout=14400.0)'
+```
+
+Order is **L2-07, L2-08, L2-09, L2-10, L2-11, L2-12**. Each outcome is saved
+to `data/m9c13/manifest.toml` before advancing. Failures permit the next fixture;
+interrupts stop the queue. Reinvocation retries failed fixtures and resumes only
+fresh completions verified by the existing project/input/solver hash checks.
+
+The estimate is **126–169 min total**, with a shared **4-hour deadline**.
+The owner's measured **15–20 min** per 18 s workflow at 2.5 us and ratio 25
+includes witnesses. Scaling four main-step runs and two half-step witnesses
+gives work proportional to `4*Tmain + 4*Twitness`: 136.8 step-equivalent seconds
+for the 18 s / 16.2 s reference, versus 192.8 for 07–10 (about 1.41 times),
+257.6 for finer-step 11 (1.88 times), and 128.8 for 12 (0.94 times).
+These are workflow estimates; transfer overhead and adaptive low-frequency
+witnesses can extend them. No new native result is claimed during preparation.
+
+Fresh preparation on **Julia 1.10.11** passes **285/285 project XML checks**
+and **1,434/1,434 definition, coherence and reference checks**, including every
+selectable adaptive witness frequency. The six fixtures contain 57 fresh
+projects and no native runs. Plain and interface-step references, plus operating
+points, are byte-identical to the archived versions. **5,037/5,037 preservation
+and settings checks** verify the complete 1,209-file archive, all 61 official
+M9c-12 analysis files, fresh project/payload/source hashes, and frozen physical
+settings. Project comparison accounts for freshly allocated component IDs and
+revision timestamps; only main/half-amplitude simulation durations change.
+
+Offline on **Julia 1.12.7 with the repository Manifest**, standalone validation
+passes **2,652/2,652 assertions**, the full PSCAD suite passes
+**20,018/20,018**, and the standalone name guard passes **71/71**.
+Validation and suite runs use `OPENBLAS_NUM_THREADS=1`.
+The new window and queue regressions contribute 327 assertions;
+the queue's 21 assertions also pass on **Julia 1.10.11**. The queue regression
+covers ordered continuation, per-fixture outcome persistence, reinvocation,
+invalid measurements, and interrupt propagation.
+Logs are retained under `data/m9c13/`. No full `Pkg.test()`, station contact,
+`src/` changes, staging, or commits were performed.

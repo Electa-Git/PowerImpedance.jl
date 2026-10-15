@@ -265,3 +265,80 @@ function run_m9c10(; timeout = 36000.0)
     end
     return record
 end
+
+const M9C13_IDS = ["L2-07", "L2-08", "L2-09", "L2-10", "L2-11", "L2-12"]
+
+# One predeclared window change; complete old trees remain read-only evidence.
+function prepare_m9c13()
+    revision = readchomp(`git -C $REPOSITORY rev-parse --short=7 HEAD`)
+    revision == "635ef92" || error("M9c13 preparation requires 635ef92")
+    archive = joinpath(ROOT, "data", "archive", "m9c13")
+    for id in M9C13_IDS
+        ispath(joinpath(archive, id)) && error("archive already exists: $id")
+        isfile(joinpath(ROOT, "data", id, "manifest.toml")) || error("missing fixture: $id")
+    end
+    mkpath(archive)
+    for id in M9C13_IDS
+        directory = joinpath(ROOT, "data", id)
+        destination = joinpath(archive, id)
+        prior = TOML.parsefile(joinpath(directory, "manifest.toml"))
+        definition = deepcopy(prior["tier_c"])
+        start = first(definition["window_starts"])
+        definition["window_duration"] = 8.0
+        definition["window_starts"] = [start, start + 8.0]
+        definition["simulation_time"] = start + 16.0
+        definition["estimated_station_seconds"] = id == "L2-11" ? 2280 : id == "L2-12" ? 1140 : 1680
+        if haskey(definition, "settling")
+            definition["settling"]["window_starts_s"] = definition["window_starts"]
+            definition["settling"]["window_duration_s"] = 8.0
+            definition["settling"]["simulation_time_s"] = definition["simulation_time"]
+        end
+        net = fixture(id).factory()
+        residual_step_eligible(id, net) || error("M9c13 requires a zero-delay fixture: $id")
+        list = fixture_netlist(net, power_flow(net))
+        spec, reference = applicable_scan(id, net, list; definition)
+        check_recorder_sampling(spec) == 25 || error("M9c13 requires recorder ratio 25")
+        mv(directory, destination)
+        prepare_fixture(id; directory, definition)
+        record = TOML.parsefile(joinpath(directory, "manifest.toml"))
+        old_reference = read_response(joinpath(destination, reference_filename(spec)),
+            length(spec.axes), spec.frequencies)
+        native_reference_check(spec, reference, old_reference)["passed"] ||
+            error("native reference changed: $id")
+        # Preserve all prepared witness bands, without inheriting the old
+        # measured axis/band selection or any native completion.
+        for project in prior["projects"]
+            band = match(r"half_step_(\d+)_1000__baseline$", project["axis"])
+            band === nothing && continue
+            witness = step_definition(spec, parse(Float64, only(band.captures)))
+            prefix = step_prefix(witness)
+            if !any(startswith(project["axis"], prefix) for project in record["projects"])
+                for (axis, model) in prepare_scan_projects(directory, list, witness, spec.axes; prefix)
+                    record_project!(record, axis, model, directory)
+                end
+            end
+        end
+        record["archive_directory"] = relpath(destination, ROOT)
+        record["recorder_ratio"] = check_recorder_sampling(spec)
+        record["preparation_purpose"] = "M9c13 predeclared 8 s main windows; fresh native runs required; no further window changes after results"
+        isempty(record["run_records"]) || error("fresh preparation inherited runs")
+        write_manifest(directory, record)
+    end
+    return copy(M9C13_IDS)
+end
+
+# The committed fixture runner owns residual qualification and verified resume.
+function run_m9c13(; timeout = 14400.0)
+    isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
+    directory = mkpath(joinpath(ROOT, "data", "m9c13"))
+    record = Dict{String, Any}()
+    remote = RemoteConfig()
+    deadline = time() + timeout
+    for id in M9C13_IDS
+        result = run_fixture_continuing(id; remote, deadline)
+        record[id] = Dict("status" => result["status"])
+        haskey(result, "failure") && (record[id]["failure"] = result["failure"])
+        write_manifest(directory, record)
+    end
+    return record
+end

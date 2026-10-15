@@ -1628,6 +1628,31 @@ const V = PSCADValidation
     end
 end
 
+@testset "Eight-second zero-delay windows retain short coherent witnesses" begin
+    for id in V.M9C13_IDS
+        dt = id == "L2-11" ? 1.25e-6 : 2.5e-6
+        start = id in ("L2-11", "L2-12") ? 8.0 : 16.0
+        old = merge(V.l1_settings(), (; id, dimension = 2, protocol = "dq_active",
+            frequencies = filter(!=(50.0), V.l1_settings().frequencies),
+            time_step = dt, sample_step = 25dt, window_starts = (start, start + 1),
+            window_duration = 1.0, simulation_time = start + 2))
+        main = merge(old, (; window_starts = (start, start + 8),
+            window_duration = 8.0, simulation_time = start + 16))
+        @test V.check_recorder_sampling(main) == 25
+        @test main.simulation_time == (start == 16 ? 32.0 : 24.0)
+        @test round(Int, main.window_duration / main.sample_step) == (id == "L2-11" ? 256000 : 128000)
+        for frequency in main.frequencies
+            witness = V.step_definition(main, frequency)
+            previous = V.step_definition(old, frequency)
+            @test V.check_recorder_sampling(witness) == 25
+            @test witness == previous
+        end
+        witness = V.step_definition(main, 1000.0)
+        @test witness.window_duration == 0.1
+        @test witness.simulation_time == start + 0.2
+    end
+end
+
 @testset "EMT Nyquist chatter under even and odd decimation" begin
     dt = 2.5e-6
     frequencies = [1.0, 7.0, 1000.0]
@@ -1689,6 +1714,55 @@ end
     empty!(Queue.calls)
     @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_m9c10(timeout = 1)
     @test length(Queue.calls) == 9
+    rm(Queue.ROOT; recursive = true)
+end
+end
+
+module PSCADM9c13QueueTests
+using Test, TOML
+module Queue
+using TOML
+const ROOT = mktempdir()
+const calls = String[]
+const interrupt = Ref(false)
+RemoteConfig() = nothing
+manifest_lists!(record) = record
+write_manifest(directory, record) = open(io -> TOML.print(io, record), joinpath(directory, "manifest.toml"), "w")
+function run_fixture(id; directory, remote, deadline)
+    isfinite(deadline) || error("missing queue deadline")
+    if !isempty(calls)
+        saved = TOML.parsefile(joinpath(ROOT, "data", "m9c13", "manifest.toml"))
+        haskey(saved, last(calls)) || error("previous outcome not saved before advancing")
+    end
+    push!(calls, id)
+    interrupt[] && throw(InterruptException())
+    id == "L2-07" && error("offline fixture failure")
+    return Dict("status" => id == "L2-09" ? "invalid_measurement" : "passed")
+end
+include("../manual/pscad/validation/queue.jl")
+end
+@testset "Eight-second queue records failures, resumes and stops on interrupt" begin
+    for timeout in (0.0, -1.0, Inf, NaN)
+        @test_throws ErrorException Queue.run_m9c13(; timeout)
+    end
+    @test isempty(Queue.calls)
+    directory = mkpath(joinpath(Queue.ROOT, "data", "L2-07"))
+    write(joinpath(directory, "manifest.toml"), "fixture_id = \"L2-07\"\n")
+    expected = ["L2-07", "L2-08", "L2-09", "L2-10", "L2-11", "L2-12"]
+    for attempt in 1:2
+        empty!(Queue.calls)
+        record = @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_m9c13(timeout = 1)
+        @test Queue.calls == expected
+        @test record["L2-07"]["status"] == "run_or_analysis_failed"
+        @test occursin("offline fixture failure", record["L2-07"]["failure"])
+        @test record["L2-09"]["status"] == "invalid_measurement"
+        @test all(record[id]["status"] == "passed" for id in expected[[2, 4, 5, 6]])
+        @test TOML.parsefile(joinpath(Queue.ROOT, "data", "m9c13", "manifest.toml")) == record
+    end
+    empty!(Queue.calls)
+    Queue.interrupt[] = true
+    @test_throws InterruptException Queue.run_m9c13(timeout = 1)
+    @test Queue.calls == ["L2-07"]
     rm(Queue.ROOT; recursive = true)
 end
 end
