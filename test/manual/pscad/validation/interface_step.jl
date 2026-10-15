@@ -1,5 +1,5 @@
-# A separate realization reference. The native model/reference and every gate
-# retain their own authority; this comparison never upgrades their status.
+# Discrete DUT realization reference; fixture/probe columns and their residual
+# step qualification are owned by residual_step.jl.
 zero_modulation_delay(::Any) = false
 zero_modulation_delay(::PowerImpedance.NoModulation) = true
 zero_modulation_delay(m::PowerImpedance.DelayModulation) = iszero(m.delay.timeDelay)
@@ -27,7 +27,7 @@ end
 modulation_states(m::PowerImpedance.MMC) = PowerImpedance.statenames(m.modulation)
 modulation_states(m::PowerImpedance.TLC) = PowerImpedance.statenames(m.mod)
 
-function interface_step_reference(net, spec)
+function interface_step_reference(net, spec; dc_conductance = nothing)
     original = net.elements[:DUT]
     interface_step_eligible(original.element_model) || return nothing
     dt = spec.time_step
@@ -61,7 +61,8 @@ function interface_step_reference(net, spec)
         y .*= bases.current_outputs
         y ./= bases.voltage_inputs'
         if haskey(net.elements, :DC_load)
-            g = PowerImpedance.get_y(net.elements[:DC_load], s)[1,1]
+            g = dc_conductance === nothing ?
+                PowerImpedance.get_y(net.elements[:DC_load], s)[1,1] : dc_conductance
             y = y[2:3,2:3] - y[2:3,1:1] * ((y[1,1]+g) \ y[1:1,2:3])
         else
             y = y[bases.ac_indices, bases.ac_indices]

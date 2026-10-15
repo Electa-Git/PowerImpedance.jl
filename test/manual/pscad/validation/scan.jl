@@ -436,25 +436,20 @@ function run_fixture(id; remote = RemoteConfig(),
             record, prefix * axis, last(step_models).second, directory, remote, deadline)
         step_column, step_quality = single_response(
             step_run, step_baseline, last(step_models).second, step_spec, selected)
-        indices = [only(findall(==(f), spec.frequencies)) for f in step_spec.frequencies]
-        step = matrix_change(step_column, base_column[:, :, indices]; epsilon = 0.01)
-        step["valid"] = step_quality["valid"]
-        step["passed"] &= step["valid"]
-        record["step_refinement"] = merge(step,
-            Dict("axis"=>axis, "quality"=>step_quality, "frequencies"=>step_spec.frequencies))
-        write_table(joinpath(comparison_directory, "comparison_half_step.tsv"),
-            refinement_rows(step_spec.frequencies, step_column, base_column[:, :, indices];
-                limit = 0.01, valid = step["valid"]))
-        qualified = amp["passed"] && step["passed"]
-        record["qualification_status"] = qualified ? "passed" : "failed"
-        record["status"] = record["tier_c_result"]["status"] == "model_mismatch" ?
-                           "model_mismatch" :
-                           record["tier_a_status"] == "passed" &&
-                           record["tier_c_result"]["status"] == "passed" && qualified ?
-                           "passed" : "failed"
-        record["comparison_summary"] = Dict("plain_model" => record["tier_c_result"]["status"],
-            "one_step_realization" => get(get(record, "interface_step_result", Dict()), "status", "not_applicable"),
-            "qualification" => record["qualification_status"], "fixture" => record["status"])
+        checks = Dict{String, Any}[]
+        if residual_step_eligible(id, net)
+            for (index, key) in enumerate(spec.axes)
+                push!(checks, readout_evidence(results[key], results["baseline"], models[key], spec, index))
+            end
+            push!(checks, readout_evidence(half_result, results["baseline"], half_model, half_spec, selected;
+                axis = half_key))
+            push!(checks, readout_evidence(step_run, step_baseline, last(step_models).second, step_spec, selected;
+                axis = prefix * axis))
+        end
+        record_step_witness!(record, net, spec, step_spec, selected,
+            base_column, step_column, base_quality, step_quality, models[axis],
+            last(step_models).second, checks, comparison_directory)
+        qualify_fixture!(record; residual = residual_step_eligible(id, net))
         if haskey(record, "resonance_scan")
             run_resonance!(record, net, list, spec; directory, remote, deadline)
         end

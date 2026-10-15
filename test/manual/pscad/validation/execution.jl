@@ -177,6 +177,13 @@ function compare_frequency_runs(results, models, reference, directory; spec = no
                         !quality["valid"] ? "invalid_measurement" :
                         all(row.within_tolerance for row in rows) ? "passed" : "failed"
     quality["window_change"] = change["frobenius_change"]
+    quality["window_entry_change"] = change["entry_change"]
+    window_worst = argmax(abs.(normalized[2] - normalized[1]) ./ max.(abs.(normalized[1]), 0.02))
+    quality["window_worst_frequency_Hz"] = spec.frequencies[window_worst[3]]
+    quality["window_worst_row"] = window_worst[1]
+    quality["window_worst_column"] = window_worst[2]
+    write_table(joinpath(directory, "comparison_windows.tsv"),
+        refinement_rows(spec.frequencies, normalized[2], normalized[1]; limit = 0.01, valid = true))
     quality["max_input_condition"] = maximum(extracted.conditions)
     quality["max_frobenius_error"] = maximum(row.frobenius_error for row in rows)
     quality["worst_column"] = rows[worst].column

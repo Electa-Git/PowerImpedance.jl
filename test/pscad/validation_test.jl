@@ -1692,3 +1692,147 @@ end
     rm(Queue.ROOT; recursive = true)
 end
 end
+
+module PSCADResidualStepTests
+using Test, PowerImpedance, LinearAlgebra, TOML
+include("../manual/pscad/validation/validation.jl")
+const V = PSCADValidation
+
+@testset "Residual step columns and measured readout timing" begin
+    spec = (; time_step = 1e-5, frequency = 50.0)
+    gamma = V.injection_readout_factor(1000.0, spec)
+    @test V.kcl_readout_check(2gamma, 2.0, gamma)["passed"]
+    @test !V.kcl_readout_check(2.0, 2.0, gamma)["passed"]
+    @test !V.kcl_readout_check(0.0, 0.0, gamma)["passed"]
+    predicted = reshape(ComplexF64[1, 0.2im, 0.3, 0.05], 4, 1, 1) .* gamma
+    gamma_half = V.injection_readout_factor(1000.0, merge(spec, (; time_step = spec.time_step/2)))
+    predicted_half = predicted .* (gamma_half / gamma)
+    @test !V.matrix_change(predicted_half, predicted; epsilon = 0.01)["passed"]
+    offset = fill(0.0001 + 0.0002im, 4, 1, 1)
+    main, half = predicted + offset, predicted_half + offset
+    @test V.residual_step_change(main, half, predicted, predicted_half; valid = true)["passed"]
+    @test !V.residual_step_change(main, half .+ 0.001, predicted, predicted_half; valid = true)["passed"]
+    @test V.residual_step_change(main, half, predicted, predicted_half; valid = false)["status"] == "invalid_measurement"
+    @test V.residual_step_change(main, half, predicted, predicted; valid = true)["status"] == "failed"
+    large_reference = reshape(ComplexF64[6, 5, 2, 1], 4, 1, 1)
+    large_main = large_reference + offset
+    large_half = large_reference .* (gamma_half / gamma) + offset .+ 0.0014
+    change = V.residual_step_change(large_main, large_half, large_reference,
+        large_reference .* (gamma_half / gamma); valid = true)
+    @test change["passed"] && change["status"] == "passed"
+    @test change["residual_normalised_frobenius"] > 0.01
+    @test change["residual_normalised_entry"] > 0.01
+    @test change["frobenius_change"] ≈ norm(fill(0.0014, 4)) / norm(large_main)
+    @test change["entry_change"] ≈ maximum(0.0014 ./ abs.(large_main))
+end
+
+@testset "KCL readout evidence uses recorded orientations and both windows" begin
+    times = collect(0.0:1e-4:3.0)
+    spec = (; time_step = 2.5e-6, frequency = 50.0, frequencies = [100.0, 700.0],
+        buses = [(; name = "AC")], axes = ["p1_d", "p1_q"],
+        window_starts = (1.0, 2.0), window_duration = 1.0)
+    probes = V.P.ProbeManifest([
+        V.P.ProbeChannel("dut", :current, "AC", "DUT", "2", 3, "kA", :out),
+        V.P.ProbeChannel("grid", :current, "AC", "Grid", "1", 3, "kA", :into),
+        V.P.ProbeChannel("drive", :injection_current, "AC", "injection_1", "1", 3, "kA", :out)], nothing)
+    model = (; probes)
+    wave(dq) = hcat([dq[:,1] .* cos.(2π*50 .* times .+ phase) +
+        dq[:,2] .* sin.(2π*50 .* times .+ phase) for phase in (0, -2π/3, 2π/3)]...)
+    baseline = (; time = times, channels = Dict("$(name):$phase" => zeros(length(times))
+        for name in ("dut", "grid", "drive") for phase in 1:3))
+    for column in 1:2
+        drive, terminal = zeros(length(times), 2), zeros(length(times), 2)
+        for f in spec.frequencies
+            drive[:,column] .+= cos.(2π*f .* times)
+            terminal[:,column] .+= real.(V.injection_readout_factor(f, spec) .* cis.(2π*f .* times))
+        end
+        function recorded(total)
+            signals = Dict("dut" => wave(-0.4total), "grid" => wave(0.6total), "drive" => wave(drive))
+            channels = Dict("$(name):$phase" => samples[:,phase] for (name,samples) in signals for phase in 1:3)
+            return (; time = times, channels)
+        end
+        evidence = V.readout_evidence(recorded(terminal), baseline, model, spec, column)
+        @test evidence["passed"]
+        @test length(evidence["rows"]) == 4
+        @test evidence["max_relative_error"] < 1e-10
+        @test !V.readout_evidence(recorded(drive), baseline, model, spec, column)["passed"]
+    end
+end
+
+@testset "Exported termination and all affected converter topologies" begin
+    for n in 7:15
+        id = "L2-" * lpad(n, 2, '0')
+        net = V.fixture(id).factory()
+        @test V.residual_step_eligible(id, net) == (n <= 12)
+        n <= 12 || continue
+        list = V.fixture_netlist(net, power_flow(net))
+        spec, _ = V.applicable_scan(id, net, list)
+        short = merge(spec, (; frequencies = [750.0, 1000.0], phases = [0.0, -π]))
+        plan, _ = V.scan_plan(list, short, "p1_q")
+        parts = filter(c -> c isa V.P.ComponentPlan && c.defn in ("master:resistor", "master:inductor"), plan.main.components)
+        # Use the actual exported component fields; their rounding differs
+        # from the fixture's unrounded parameters.
+        text = join(["<User defn=\"$(c.defn)\">" *
+            join(["<param name=\"$k\" value=\"$v\"/>" for (k,v) in c.params]) * "</User>" for c in parts])
+        mktempdir() do directory
+            path = joinpath(directory, "fixture.pscx")
+            write(path, text)
+            termination = V.exported_termination(net, path)
+            @test (termination.dc_resistance === nothing) == (n != 11)
+            prediction = V.discrete_response_column(net, short, 2, termination)
+            @test size(prediction) == (4, 1, 2)
+            @test all(isfinite, prediction)
+            y = V.interface_step_reference(net, short;
+                dc_conductance = termination.dc_resistance === nothing ? nothing : inv(termination.dc_resistance))
+            for (k,f) in enumerate(short.frequencies)
+                scale = short.current_bases[2] ./ [short.voltage_bases; short.current_bases]
+                physical = prediction[:,1,k] ./ scale ./ V.injection_readout_factor(f, short)
+                r, l = termination.resistance, termination.inductance
+                z = [r+im*2π*f*l 2π*50*l; -2π*50*l r+im*2π*f*l]
+                @test physical[3:4] ≈ y[:,:,k] * physical[1:2]
+                @test physical[3:4] + z \ physical[1:2] ≈ [0, 1]
+            end
+            write(path, replace(text, "[ohm]" => "[H]"))
+            @test_throws ErrorException V.exported_termination(net, path)
+        end
+    end
+end
+
+@testset "Qualification uses the fixture's selected reference and step rule" begin
+    function record()
+        Dict{String, Any}("tier_a_status" => "passed",
+            "tier_c_result" => Dict("valid" => true, "status" => "failed", "model_mismatch" => ""),
+            "interface_step_result" => Dict("status" => "passed"),
+            "amplitude_refinement" => Dict("valid" => true, "passed" => true),
+            "raw_step_refinement" => Dict("valid" => true, "passed" => false, "status" => "failed"),
+            "residual_step_refinement" => Dict("valid" => true, "passed" => true, "status" => "passed"),
+            "step_refinement" => Dict("valid" => true, "passed" => true, "status" => "passed"))
+    end
+    r = record()
+    @test V.qualify_fixture!(r; residual = true)["status"] == "passed"
+    @test r["comparison_summary"]["plain_model"] == "failed"
+    @test r["comparison_summary"]["raw_step"] == "failed"
+    @test V.qualify_fixture!(r; residual = false)["status"] == "failed"
+    r["tier_c_result"]["status"] = "passed"
+    r["step_refinement"] = r["raw_step_refinement"]
+    @test V.qualify_fixture!(r; residual = false)["status"] == "failed"
+    r = record(); r["tier_c_result"]["valid"] = false
+    @test V.qualify_fixture!(r; residual = true)["status"] == "invalid_measurement"
+    for gate in ("amplitude_refinement", "step_refinement")
+        r = record(); r[gate]["passed"] = false
+        @test V.qualify_fixture!(r; residual = true)["status"] == "failed"
+        r[gate]["valid"] = false
+        @test V.qualify_fixture!(r; residual = true)["status"] == "invalid_measurement"
+    end
+    r = record(); r["interface_step_result"]["status"] = "failed"
+    @test V.qualify_fixture!(r; residual = true)["status"] == "failed"
+    r = record(); r["tier_a_status"] = "failed"
+    @test V.qualify_fixture!(r; residual = true)["status"] == "failed"
+    r = record(); r["tier_c_result"]["status"] = "passed"
+    @test V.qualify_fixture!(r; residual = false)["status"] == "passed"
+    r = record(); r["tier_c_result"]["model_mismatch"] = "declared mismatch"
+    @test V.qualify_fixture!(r; residual = true)["status"] == "model_mismatch"
+    @test_throws ErrorException V.reanalyse_m9c12(["L2-13"]; data_root = "/tmp")
+    @test_throws ErrorException V.reanalyse_m9c12(["L2-07"]; data_root = "/tmp", output_root = "/")
+end
+end

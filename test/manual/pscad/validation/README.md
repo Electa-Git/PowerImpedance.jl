@@ -1351,3 +1351,115 @@ references and operating points are byte-identical; two fresh interface-step
 references differ by at most 4e-18 relative from solver roundoff. Logs, detailed
 settings and verification records are under `data/m9c10/`. No full `Pkg.test()`,
 station contact, `src/` changes or commits.
+
+## M9c-12: zero-delay residual step witness
+
+L2-07..L2-12 have zero modulation delay. Their qualification uses the full
+**discrete realization**: Julia with one inherent interface step, the fixture's
+exported grid R/L and DC termination, and the injection-current readout timing.
+L2-13..L2-15 have 200 µs modulation delay and retain the raw step witness.
+The plain zero-delay comparison remains visible as realization bias; the raw
+step witness and the Julia + one-step admittance comparison remain separate.
+This decision qualifies the discrete realization, without certifying agreement
+with the zero-delay continuous model.
+
+At each integration step h and frequency s = j2πf, the reference column is
+`P_h = gamma_h * diag(Ibase/Vbase, Ibase/Vbase, 1, 1) * [v_h; i_h]`, with
+`v_h = (Y_h + inv(Zgrid)) \ e_axis`, `i_h = Y_h * v_h`, and
+`gamma_h = exp(s*h)/cos(2π*50*h)`. `Y_h` comes from
+`interface_step_reference`, retaining exact modulation feedback delay and native
+carrier corrections. Grid and termination values are read from the actual
+exported project, never refitted. L2-11 uses the sum of its two exported DC pole
+resistances for the differential load reduction; L2-12 uses its weak-grid R/L.
+Main-column and half-step reproduction errors are recorded and required to meet
+the existing 1% column-change rule, with the same 0.1 norm and 0.02 entry floors.
+
+The readout factor is checked from baseline-subtracted **recorded** inward DUT
+plus grid currents, divided by the recorded injection component on the driven
+axis. Every coherent window and driven tone is checked for each main-axis run,
+the amplitude witness, and the half-step witness. A relative discrepancy above
+1e-6 from `gamma_h` makes the residual witness `invalid_measurement`. This check
+measures timing on the recorded path; no measured columns are shifted.
+
+The residual step gate uses the **same measured main response denominators as
+the raw witness**; only the numerator removes the known one-step effect:
+
+```text
+dR = (M_half - P_half) - (M_h - P_h)
+frobenius_change = norm(dR) / max(norm(M_h), 0.1)
+entry_change = maximum(abs.(dR) ./ max.(abs.(M_h), 0.02))
+passed = frobenius_change <= 0.01 && entry_change <= 0.01
+```
+
+Band results take the maximum across frequencies. The former residual-normalised
+values remain in records and tables as `residual_normalised_frobenius` and
+`residual_normalised_entry`, strictly diagnostic and never gating. L2-12's
+weak-grid response column has norm 7.1–9.5, versus 2.0–2.6 for L2-07/08.
+Its unexplained absolute change is about 1e-3: dividing by the residual with a
+0.1 floor gives 1.06% / 5.16%, while scaling against the measured response gives
+about 0.011% Frobenius / 0.14% maximum entry. The gate therefore measures the
+unexplained change relative to the response being qualified.
+Window, quality, conditioning, amplitude (2%), operating-point, and pointwise
+comparison gates retain their approved tolerances. The discrete admittance
+comparison must pass alongside the residual witness and all independent gates.
+The manifest records `raw_step_refinement`, `residual_step_refinement`, the
+selected `step_refinement`, `tier_c_result` (plain), `interface_step_result`, and
+`comparison_summary`. Complex response/reference columns, per-frequency step
+results, reproduction errors, exported termination, and KCL factors are retained.
+
+The decided gate gives L2-07 Frobenius / maximum-entry changes of
+**0.0041% / 0.0661% at 750 Hz**, and **0.0025% / 0.0815% at 1000 Hz**.
+L2-12 gives **0.0122% / 0.0890% at 750 Hz** and **0.0111% / 0.1405% at 1000 Hz**.
+The former L2-07 residual-normalised diagnostic remains 0.0817% / 0.3322% and
+0.0658% / 0.2024%, respectively.
+Its independent full-Y window-entry failure at 42 Hz (**1.870988%**) remains
+reported and prevents qualification.
+
+Completed evidence can be reanalysed locally without native execution or station
+contact. From this worktree, using Julia 1.12.7:
+
+```julia
+include("test/manual/pscad/validation/validation.jl")
+PSCADValidation.reanalyse_m9c12(["L2-07", "L2-08"];
+    data_root = "/path/to/stored/validation/data")
+```
+
+Run Julia with `--project=test/manual/pscad/validation`. Results go to this
+worktree's `data/m9c12/<id>/`, with a root `summary.tsv`; `output_root` may select
+another directory below worktree `data/m9c12` or `/tmp`. Native outputs, projects,
+and source manifests are read only. Completion hashes and settings readback are
+verified locally. Each output manifest records the analysing commit, Julia
+version, harness source hashes, source manifest hash, and native input hashes.
+
+Stored-run re-analysis on Julia 1.12.7 (all errors below are percentages; maxima
+across each main or half-step band):
+
+| Fixture | Main reproduction F / entry | Half reproduction F / entry | Qualification |
+|---|---|---|---|
+| L2-07 | 0.01854 / 0.16645 | 0.00385 / 0.08859 | invalid_measurement |
+| L2-08 | 0.01770 / 0.17366 | 0.00386 / 0.09344 | passed |
+| L2-09 | 0.06182 / 0.14317 | 0.00354 / 0.05965 | passed |
+| L2-10 | 0.07276 / 0.29886 | 0.00462 / 0.16092 | passed |
+| L2-11 | 0.03392 / 0.52105 | 0.00316 / 0.10495 | passed |
+| L2-12 | 0.02665 / 0.44553 | 0.01236 / 0.21055 | passed |
+
+All reproduction checks pass the unchanged 1% rule. The largest KCL readout
+discrepancy is 4.94e-9 relative. Raw witnesses remain failed for all six fixtures.
+L2-07 retains its independent 42 Hz window failure. L2-08..12 qualify against
+the discrete realization. With the decided measured-response denominators,
+L2-12's residual gate is 0.01219% Frobenius / 0.14049% maximum entry across its
+band. Its residual-normalised diagnostic remains 1.05795% / 5.16170% and does
+not gate qualification. The 1% limit, floors, and all independent gates remain
+unchanged.
+Detailed comparisons and analysing source hashes are in
+[`data/m9c12/summary.tsv`](data/m9c12/summary.tsv) and the per-fixture manifests.
+
+Offline checks on Julia 1.12.7 with this worktree's repository Manifest pass:
+**2,325/2,325 validation assertions**, **19,691/19,691 PSCAD suite assertions**,
+and **71/71 standalone name-guard assertions**. The new synthetic tests contribute
+94 assertions; the new included source file adds one name-guard assertion.
+The isolated residual and qualification checks also pass 29/29 on Julia 1.10.11.
+Post-analysis verification confirms 756 native input files, all six original
+manifests, and all 65 analysing source files match their recorded hashes.
+Logs and preservation counts are retained under `data/m9c12/`. No station contact,
+`src/` changes, staging, or commits were performed.

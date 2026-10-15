@@ -21,6 +21,7 @@ include("ports.jl")
 include("execution.jl")
 include("scan.jl")
 include("interface_step.jl")
+include("residual_step.jl")
 include("timing.jl")
 include("queue.jl")
 
