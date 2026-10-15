@@ -1177,3 +1177,71 @@ controller, step or gate change is made. Expected total **215–365 min
 L2-14 30–50; bounded experiment 30–45. The 12-hour shared deadline starts
 after acceptance. M9c-7b verification is restricted to the PSCAD suite, name
 guard and affected XML on Julia 1.12.7; full package testing belongs to the owner.
+
+## M9c-8: fresh pending work at d942c30
+
+Passed-fixture evidence was produced with sheet size 0. The supplied d942c30
+re-export comparison of all **91 projects** changed only the canvas `size`
+attribute, **0 -> 5**. No passed fixture is re-run for this canvas change;
+its original evidence and provenance records remain as produced. Pending work
+below has fresh project/source hashes at d942c30 and empty native-run ledgers.
+No old completed run is reused.
+
+The complete former `data/m9c7/L2-07-settling/` tree, including its completed
+baseline and failed injected-run evidence, is retained at
+`data/archive/m9c7/L2-07-settling/`. The active experiment is rebuilt at the
+same path with the same two 60 s runs (baseline and `p1_d`), 2.5 us integration,
+20 us sampling, 2 s onset, amplitude and phases. Early windows start at
+8/12/16 s; late windows at 48/52/56 s; all last 4 s. Both late adjacent pairs
+still require the existing 1% norm/entry and quality rules. This remains a
+directional settling diagnosis, without fixture qualification.
+
+The fresh isolated witness is `data/m9c8/timing/`; old timing evidence remains
+at its original path. At dt=10 us, commit 425e9b0's nearest-step residual
+rounding (half-step ties upward) gives:
+
+| Case | Model delay | Realised residual | Expected total including interface |
+| --- | ---: | ---: | ---: |
+| zero | 0 us | 0 us | 10 us |
+| one | 10 us | 0 us | 10 us |
+| four | 40 us | 30 us | 40 us |
+| fractional | 25 us | 20 us | 30 us |
+
+The fractional case requests 15 us residual and has 5 us quantization error.
+The unchanged 1e-6 kV witness gate compares integer sampled shifts.
+
+L2-16's 2.5 us evidence (C 2.92%, step-witness entry change 1.81%) is retained
+in full at `data/archive/m9c8/L2-16/`. Fresh `data/L2-16/` projects use
+**1.25 us base / 0.625 us witness**, **20 us sampling** (16/32 integration
+steps), **66 s** runs and **[62,64), [64,66) s** windows. Each 2 s window
+contains 100,000 samples and whole tone/frame periods. Amplitude, onset, tones,
+physical parameters and frozen native reference/operating-point bytes remain
+unchanged. All approved tolerances and qualification gates remain fixed.
+
+From the repository root with the existing station configuration:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c8(timeout=14400.0)'
+```
+
+Order: **settling experiment -> timing witness -> L2-16**. Each item records
+failure and permits the next item to proceed; interrupts stop execution.
+Outcomes are saved after each item in `data/m9c8/manifest.toml`; detailed run
+records remain in each item's manifest. Reinvocation retries failed work and
+resumes only hash-matching completed native runs, including the witness.
+
+Allow **25–35 min** for settling (two measured ~8 min native MMC runs plus
+transfer/loading/analysis), **2–5 min** for timing and **115–150 min** for
+L2-16: **142–190 min total (about 2 h 20 min–3 h 10 min)**, with a shared
+**4-hour deadline**. The machine estimate scales the earlier measured 21.94 min
+native workload at 5 us by four and retains its ~25.6 min other work, with
+margin. These are planning estimates; no station execution is performed here.
+
+Final offline checks on **Julia 1.12.7 with the repository Manifest**:
+**18,855/18,855 PSCAD suite assertions**, **1,490/1,490 standalone validation
+assertions**, and **70/70 standalone name-guard assertions**. The suite includes
+the validation/name-guard checks and the new 8-assertion queue-continuation
+regression. Independent archive/preparation verification passed **534/534**
+checks. Successful preparation used the recorded **Julia 1.10.11 harness
+Manifest**; no full `Pkg.test()`, station contact, `src/` changes or commits.
+Final logs, hashes and preparation details are under `data/m9c8/`.

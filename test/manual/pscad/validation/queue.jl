@@ -136,3 +136,66 @@ function run_m9c7(; timeout = 43200.0)
     run_settling_experiment(; remote, deadline)
     return nothing
 end
+
+# Local preparation only; old station evidence is retained in complete trees.
+function prepare_m9c8()
+    machine = joinpath(ROOT, "data", "L2-16")
+    archive = joinpath(ROOT, "data", "archive", "m9c8", "L2-16")
+    timing = joinpath(ROOT, "data", "m9c8", "timing")
+    ispath(archive) && error("archive already exists: $archive")
+    ispath(timing) && error("timing witness already prepared: $timing")
+    prior = TOML.parsefile(joinpath(machine, "manifest.toml"))
+    prepare_settling_experiment()
+    prepare_timing(timing)
+    definition = deepcopy(prior["tier_c"])
+    definition["time_step"] = 1.25e-6
+    definition["estimated_station_seconds"] = 9000
+    mkpath(dirname(archive))
+    mv(machine, archive)
+    mkpath(machine)
+    for file in ("dq_active_reference.tsv", "operating_point.tsv")
+        cp(joinpath(archive, file), joinpath(machine, file))
+    end
+    prepare_fixture("L2-16"; directory = machine, definition)
+    record = TOML.parsefile(joinpath(machine, "manifest.toml"))
+    record["archive_directory"] = relpath(archive, ROOT)
+    record["variant"] = "1.25 us base / 0.625 us witness; 2.5 us evidence archived"
+    write_manifest(machine, record)
+    return nothing
+end
+
+# Each outcome is saved before advancing. Native completion/hash verification
+# provides resumption; failed items are retried on the next invocation.
+function run_m9c8(; timeout = 14400.0)
+    isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
+    directory = mkpath(joinpath(ROOT, "data", "m9c8"))
+    record = Dict{String, Any}()
+    remote = RemoteConfig()
+    deadline = time() + timeout
+    try
+        result = run_settling_experiment(; remote, deadline)
+        record["settling"] = Dict("status" => result["status"])
+        haskey(result, "failure") && (record["settling"]["failure"] = result["failure"])
+    catch failure
+        failure isa InterruptException && rethrow()
+        record["settling"] = Dict("status" => "run_or_analysis_failed",
+            "failure" => sprint(showerror, failure))
+        @warn "Settling experiment failed; continuing queue" error = record["settling"]["failure"]
+    end
+    write_manifest(directory, record)
+    try
+        run_timing(remote, deadline; directory = joinpath(directory, "timing"))
+        record["timing"] = Dict("status" => "passed")
+    catch failure
+        failure isa InterruptException && rethrow()
+        record["timing"] = Dict("status" => "run_or_analysis_failed",
+            "failure" => sprint(showerror, failure))
+        @warn "Timing witness failed; continuing queue" error = record["timing"]["failure"]
+    end
+    write_manifest(directory, record)
+    result = run_fixture_continuing("L2-16"; remote, deadline)
+    record["L2-16"] = Dict("status" => result["status"])
+    haskey(result, "failure") && (record["L2-16"]["failure"] = result["failure"])
+    write_manifest(directory, record)
+    return record
+end

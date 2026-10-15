@@ -1251,12 +1251,13 @@ end
     time = collect(0.0:settings.time_step:settings.simulation_time)
     input = 0.1sin.(2pi*1000 .* time) .+ (time .>= 0.002)
     channels = Dict("V_input" => input)
-    for (name, tau) in V.TIMING_DELAYS
-        total = iszero(tau) ? settings.time_step : settings.time_step * (1 + round((tau-settings.time_step)/settings.time_step, RoundNearestTiesUp))
-        k = floor(Int, total/settings.time_step)
-        f = total/settings.time_step-k
-        channels["V_"*name] = [i > k+1 ? (1-f)*input[i-k] + f*input[i-k-1] : 0.0 for i in eachindex(time)]
+    expected_steps = Dict("zero" => 1, "one" => 1, "four" => 4, "fractional" => 3)
+    for (name, _) in V.TIMING_DELAYS
+        steps = expected_steps[name]
+        channels["V_"*name] = [i > steps ? input[i-steps] : 0.0 for i in eachindex(time)]
     end
+    rows = V.timing_comparison(time, channels, settings.time_step)
+    @test all(row.expected_total_delay_s ≈ expected_steps[row.name]*settings.time_step for row in rows)
     @test all(row.passed for row in V.timing_comparison(time, channels, settings.time_step))
     # Another whole step in the library/source path must stop the L2 queue.
     channels["V_four"] = [0.0; channels["V_four"][1:end-1]]
@@ -1546,5 +1547,40 @@ end
     persistent = V.settling_window_changes(times, baseline, response(1 .+ 0.1sin.(2π*0.027times)), spec)
     @test !persistent["late"]["valid"]
     @test all(!change["passed"] for change in persistent["late"]["adjacent_changes"])
+end
+end
+
+module PSCADM9c8QueueTests
+using Test
+# Isolated orchestration doubles never load or contact a station.
+module Queue
+const ROOT = mktempdir()
+const calls = String[]
+RemoteConfig() = nothing
+write_manifest(directory, record) = nothing
+function run_settling_experiment(; kwargs...)
+    push!(calls, "settling")
+    error("offline settling failure")
+end
+function run_timing(args...; kwargs...)
+    push!(calls, "timing")
+    error("offline timing failure")
+end
+function run_fixture(id; kwargs...)
+    push!(calls, id)
+    return Dict("status" => "prepared_station_pending")
+end
+include("../manual/pscad/validation/queue.jl")
+end
+@testset "Pending queue continues after settling and timing failures" begin
+    @test_throws ErrorException Queue.run_m9c8(timeout = 0)
+    @test isempty(Queue.calls)
+    record = @test_logs (:warn, r"Settling experiment failed") (:warn, r"Timing witness failed") Queue.run_m9c8(timeout = 1)
+    @test Queue.calls == ["settling", "timing", "L2-16"]
+    @test record["settling"]["status"] == "run_or_analysis_failed"
+    @test record["timing"]["status"] == "run_or_analysis_failed"
+    @test occursin("offline timing failure", record["timing"]["failure"])
+    @test record["L2-16"]["status"] == "prepared_station_pending"
+    rm(Queue.ROOT; recursive = true)
 end
 end

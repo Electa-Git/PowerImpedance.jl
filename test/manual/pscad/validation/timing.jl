@@ -48,6 +48,9 @@ function prepare_timing(directory = joinpath(ROOT, "data", "m9c2", "timing"))
     path = joinpath(mkpath(directory), plan.name*".pscx")
     isfile(path) || P._write_project(plan, path)
     record = Dict{String, Any}("fixture_id"=>"M9c2-Timing", "source_files"=>source_record(),
+        "expected_total_delays_s" => Dict("zero" => 10e-6, "one" => 10e-6,
+            "four" => 40e-6, "fractional" => 30e-6),
+        "rounding" => "nearest residual step; half-step ties upward (425e9b0)",
         "projects"=>[Dict("axis"=>"timing", "sha256"=>digest(path),
             "probes"=>probe_record.(plan.probes.channels))], "run_records"=>Dict{String, Any}[])
     isfile(joinpath(directory, "manifest.toml")) || write_manifest(directory, record)
@@ -78,6 +81,6 @@ function run_timing(remote, deadline; directory = joinpath(ROOT, "data", "m9c2",
     result = execute_axis!(record, "timing", model, directory, remote, deadline)
     rows = timing_comparison(result.time, result.channels, model.settings.time_step)
     write_table(joinpath(directory, "comparison.tsv"), rows)
-    all(row.passed for row in rows) || error("Residual-delay timing witness failed; L2 queue stopped")
+    all(row.passed for row in rows) || error("Residual-delay timing witness failed")
     return rows
 end

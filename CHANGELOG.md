@@ -39,6 +39,10 @@
 
 ### Fixed
 
+- Pre-charge source-free DC networks with a Vdc-controlling converter through
+  temporary ideal sources behind breakers, released at 0.2 s.
+- Round fractional residual PSCAD modulation delays to the nearest integration
+  step, with half-step ties upward and a warning when rounding changes the delay.
 - Preset PSCAD sheets to size 5, guard coordinate bounds and load relocation, and count output rows after file-size stability without a counting timeout.
 
 - Correct the Wedepohl–Wilcox cable earth-return logarithmic constant to

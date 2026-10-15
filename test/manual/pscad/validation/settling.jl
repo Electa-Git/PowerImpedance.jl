@@ -17,6 +17,30 @@ end
 
 const MMC_SETTLING_DIRECTORY = joinpath(ROOT, "data", "m9c7", "L2-07-settling")
 
+# Rebuild the bounded experiment from its frozen design, retaining all old runs.
+function prepare_settling_experiment()
+    directory = MMC_SETTLING_DIRECTORY
+    archive = joinpath(ROOT, "data", "archive", "m9c7", "L2-07-settling")
+    ispath(archive) && error("archive already exists: $archive")
+    prior = TOML.parsefile(joinpath(directory, "manifest.toml"))
+    definition = deepcopy(prior["tier_c"])
+    mkpath(dirname(archive))
+    mv(directory, archive)
+    mkpath(directory)
+    net = fixture("L2-07").factory()
+    list = fixture_netlist(net, power_flow(net))
+    spec, reference = applicable_scan("L2-07", net, list; definition)
+    models = prepare_scan_projects(directory, list, spec, ["p1_d"]; prefix = scan_prefix(spec))
+    record = preparation_record(fixture("L2-07"), prior["stability"], models; directory)
+    record["tier_c"] = scan_record(spec)
+    record["status"] = "diagnostic_prepared"
+    record["experiment"] = prior["experiment"]
+    record["archive_directory"] = relpath(archive, ROOT)
+    write_response(joinpath(directory, reference_filename(spec)), reference, spec.frequencies)
+    write_manifest(directory, record)
+    return record
+end
+
 # Diagnostic only: one baseline and one d-axis drive. No Y identification or
 # fixture qualification can be inferred from this single injected axis.
 function run_settling_experiment(; remote, deadline)
