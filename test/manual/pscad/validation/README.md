@@ -1136,3 +1136,44 @@ The 12-hour deadline covers L2; acceptance uses its existing per-run timeouts.
 L2 resumes only hash-matching fresh runs. Acceptance creates fresh exports/runs
 on each invocation; interruption there restarts acceptance. No station contact
 occurs when loading the harness or preparing these settings.
+
+## M9c-7: crash correction and bounded settling check
+
+The conducting-label voltage emitter overwrote its pole-loop index with a
+component index, tagging both DC voltage channels as N. The signals and
+circuit are present; the fix restores the P/N metadata. L2-11's electrical
+projects and native baseline are retained, with corrected metadata and an
+archived prior manifest. L2-12–15 retain their projects/settings; only source
+pins/history are refreshed. The pre-charged M5 Vdc pair, M7 P2P classic/builder/
+overhead-line builder, L2-05 and L2-11 are checked offline for P/N pairs and DC
+operating-point comparison. No comparison gate is relaxed.
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c7(timeout=43200.0)'
+```
+
+Order: converter acceptance (`--converters`, 22 cases), L2-11,12,13,14,15,
+then one L2-07 baseline/d-axis settling experiment. Fixture exceptions record
+`run_or_analysis_failed` and their error, then continue. Acceptance failure is
+recorded in `data/m9c7/acceptance.toml` and also permits the rest of the queue.
+Interrupts still stop execution. L2 and experiment native runs resume matching
+completed projects; the acceptance subprocess creates fresh exports/runs on
+each invocation.
+
+The separate experiment at `data/m9c7/L2-07-settling` has exactly **two 60 s
+runs**, unchanged 2.5 us integration, 20 us sampling, 2 s onset, original M9c6
+amplitude and tone phases. Three late windows **[48,52), [52,56), [56,60) s**
+are compared with three early windows [8,12), [12,16), [16,20) s. Every window
+is coherent for all integer tones. Directional V/Idrive and I/Idrive, both
+adjacent norm/entry changes and baseline/departure/drive quality are retained.
+Both late pairs must meet the existing 1% window rule. This is a bounded
+settling diagnosis, with no full Y identification or fixture qualification.
+Persistence at 60 s cannot establish an asymptotic limit cycle.
+
+The M9c6 large-amplitude station result rejects M9c5's additive-noise
+explanation for the persistent window inconsistency. No further amplitude,
+controller, step or gate change is made. Expected total **215–365 min
+(3 h 35 min–6 h 5 min)**: acceptance 90–150; L2-11 20–30; L2-12/13/15 15–30 each;
+L2-14 30–50; bounded experiment 30–45. The 12-hour shared deadline starts
+after acceptance. M9c-7b verification is restricted to the PSCAD suite, name
+guard and affected XML on Julia 1.12.7; full package testing belongs to the owner.

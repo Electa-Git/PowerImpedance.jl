@@ -52,15 +52,15 @@ function voltage_probe!(state::PlanState, bus::Bus, labels = (bus.name,);
             # on load without moving its wire; no extra meter is placed here.
             target = get(state.main.aliases, lowercase(label), label)
             target === nothing && throw(ArgumentError("grounded voltage tap for $label"))
-            index = findfirst(state.main.components) do c
+            tap_index = findfirst(state.main.components) do c
                 c.defn == "master:nodelabel" &&
                     lowercase(Dict(c.params)["Name"]) == lowercase(target) &&
                     get(Dict(c.params), "MeasV", "0") != "1"
             end
-            index === nothing && throw(ArgumentError("no conducting voltage tap for $label"))
-            c = state.main.components[index]
+            tap_index === nothing && throw(ArgumentError("no conducting voltage tap for $label"))
+            c = state.main.components[tap_index]
             params = [c.params; ["MeasV" => "1", "PU" => "0", "VName" => name]]
-            state.main.components[index] = ComponentPlan(c.defn, params, c.x, c.y, c.orient)
+            state.main.components[tap_index] = ComponentPlan(c.defn, params, c.x, c.y, c.orient)
         else
             label!(state.main, label, (x + 54, row))
             wire!(state.main, (x + 54, row), (x + 90, row))

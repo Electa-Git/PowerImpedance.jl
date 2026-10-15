@@ -96,3 +96,43 @@ function run_m9c6(; timeout = 43200.0)
     run(converter_acceptance_command())
     return nothing
 end
+
+# Catch fixture failures outside run_fixture's inner analysis try block too
+# (input verification, reconstruction and stability can fail before that block).
+function run_fixture_continuing(id; directory = joinpath(ROOT, "data", id),
+        remote, deadline)
+    try
+        return run_fixture(id; directory, remote, deadline)
+    catch failure
+        failure isa InterruptException && rethrow()
+        record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
+        record["status"] = "run_or_analysis_failed"
+        record["failure"] = sprint(showerror, failure)
+        write_manifest(directory, record)
+        @warn "Fixture failed; continuing queue" fixture = id error = record["failure"]
+        return record
+    end
+end
+
+# Acceptance is deliberately first; its own native runs remain fresh.
+function run_m9c7(; timeout = 43200.0)
+    isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
+    acceptance_directory = mkpath(joinpath(ROOT, "data", "m9c7"))
+    acceptance = Dict{String, Any}("status" => "completed")
+    try
+        run(converter_acceptance_command())
+    catch failure
+        failure isa InterruptException && rethrow()
+        acceptance["status"] = "run_or_analysis_failed"
+        acceptance["failure"] = sprint(showerror, failure)
+        @warn "Converter acceptance failed; continuing queue" error = acceptance["failure"]
+    end
+    open(io -> TOML.print(io, acceptance), joinpath(acceptance_directory, "acceptance.toml"), "w")
+    remote = RemoteConfig()
+    deadline = time() + timeout
+    for n in 11:15
+        run_fixture_continuing("L2-" * lpad(n, 2, '0'); remote, deadline)
+    end
+    run_settling_experiment(; remote, deadline)
+    return nothing
+end

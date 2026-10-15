@@ -18,6 +18,25 @@ const P = PowerImpedance.PSCAD
     @test Set(Dict(c.params)["VName"] for c in taps) ==
         Set(("V_DC_P", "V_DC_N", "V_DC_SEND_P", "V_DC_SEND_N"))
     @test all(c -> Dict(c.params)["PU"] == "0", taps)
+    for bus in buses
+        channels = filter(c -> c.kind == :voltage && c.bus == bus.name, plan.probes.channels)
+        @test Set(c.side for c in channels) == Set(("P", "N"))
+        @test only(filter(c -> c.side == "P", channels)).name == P.voltage_probe_name(bus.name * "_P")
+        @test only(filter(c -> c.side == "N", channels)).name == P.voltage_probe_name(bus.name * "_N")
+    end
+    dc_probes = P.ProbeManifest(filter(c -> c.kind == :voltage &&
+        c.bus in Set(b.name for b in buses), plan.probes.channels), nothing)
+    times = collect(0.0:250e-6:0.3)
+    channels = PowerImpedance.OrderedDict(c.name => fill(
+        (c.side == "P" ? 1 : -1) * only(filter(b -> b.name == c.bus, buses)).vm_pu *
+        only(filter(b -> b.name == c.bus, buses)).base_kV, length(times)) for c in dc_probes.channels)
+    model = PSCADModel("precharge.pscx", "precharge", list, dc_probes,
+        P.SimulationSettings(), list.operating_point, (;))
+    result = PSCADResult(PSCADRun(), times, channels, dc_probes,
+        model.settings, (;), (;))
+    rows = compare_operating_point(result, model)
+    @test length(rows) == length(buses)
+    @test all(rows.within_tolerance)
     @test !any(c -> c.defn == "master:voltmetergnd" &&
         get(Dict(c.params), "Name", "") in Set(Dict(t.params)["VName"] for t in taps),
         plan.main.components)

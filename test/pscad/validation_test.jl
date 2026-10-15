@@ -1497,3 +1497,54 @@ end
 end
 
 end
+
+module PSCADQueueSettlingTests
+using Test, PowerImpedance, TOML
+include("../manual/pscad/validation/validation.jl")
+const V = PSCADValidation
+
+V.run_fixture(::Val{:queue_failure}; kwargs...) = error("offline fixture failure")
+V.run_fixture(::Val{:queue_success}; kwargs...) = Dict("status" => "completed")
+@testset "Queue records a thrown fixture and continues" begin
+    mktempdir() do directory
+        write(joinpath(directory, "payload.txt"), "kept")
+        write(joinpath(directory, "manifest.toml"), "fixture_id = \"offline\"\n")
+        outcomes = Any[]
+        @test_logs (:warn, r"Fixture failed; continuing queue") begin
+            for id in (Val(:queue_failure), Val(:queue_success))
+                push!(outcomes, V.run_fixture_continuing(id; directory, remote = nothing, deadline = Inf))
+            end
+        end
+        @test outcomes[1]["status"] == "run_or_analysis_failed"
+        @test occursin("offline fixture failure", outcomes[1]["failure"])
+        @test outcomes[2]["status"] == "completed"
+        @test TOML.parsefile(joinpath(directory, "manifest.toml"))["status"] == "run_or_analysis_failed"
+    end
+end
+
+@testset "Three coherent settling windows distinguish decay and persistence" begin
+    times = collect(0.0:0.001:60.0)
+    spec = (; quantity = "Y", dimension = 2, drive = "current", dc_clamped = false,
+        frequencies = [1.0, 3.0], phases = [0.0, -π], axes = ["p1_d", "p1_q"],
+        tone_peak_pu = 0.0005, window_starts = (48.0, 52.0, 56.0), window_duration = 4.0)
+    zeros2 = zeros(length(times), 2)
+    voltage = hcat(ones(length(times)), zeros(length(times)))
+    baseline = (; input = voltage, output = zeros2, voltage, current = zeros2,
+        drive = zeros2, input_base = ones(2), output_base = ones(2), drive_base = ones(2))
+    drive = hcat(V.multitone(times, spec.frequencies, spec.phases; amplitude = spec.tone_peak_pu),
+        zeros(length(times)))
+    function response(envelope)
+        delta = drive .* envelope
+        return (; input = voltage + delta, output = delta, voltage = voltage + delta,
+            current = delta, drive)
+    end
+    steady = V.settling_window_changes(times, baseline, response(ones(length(times))), spec)
+    @test steady["late"]["valid"] && steady["early"]["valid"]
+    @test length(steady["late"]["adjacent_changes"]) == 2
+    decay = V.settling_window_changes(times, baseline, response(1 .+ 0.8exp.(-times/10)), spec)
+    @test !decay["early"]["valid"] && decay["late"]["valid"]
+    persistent = V.settling_window_changes(times, baseline, response(1 .+ 0.1sin.(2π*0.027times)), spec)
+    @test !persistent["late"]["valid"]
+    @test all(!change["passed"] for change in persistent["late"]["adjacent_changes"])
+end
+end
