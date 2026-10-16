@@ -247,7 +247,7 @@ function prepare_l4_growth(setup;directory,remote)
 end
 
 function execute_l4_growth!(record,key,model,directory,remote,deadline)
-    remaining=deadline-time();remaining>0 || error("L4 growth runtime budget exhausted")
+    remaining=floor(Int,deadline-time());remaining>0 || error("L4 growth runtime budget exhausted")
     parent=mkpath(joinpath(remote.local_root,"validation",record["fixture_id"]))
     work=mktempdir(parent;prefix=key*"-",cleanup=false)
     destination=joinpath(directory,"runs",basename(work));mkpath(dirname(destination))

@@ -59,3 +59,41 @@
     @test V.L4_GROWTH_WINDOW==(.0003,.0018)
     @test V.L4_GROWTH_LIMITS==(frequency=.02,growth=.10,growth_floor=.5)
 end
+
+module L4GrowthExecution
+using PowerImpedance: RemoteConfig,PSCADRun
+using ..PSCADValidation: ROOT,budget_remote,digest,native_node_limit,write_manifest
+const remotes=RemoteConfig[]
+# Fix the clock so both timeout limits can be checked exactly.
+time()=1000.
+function compute(model,::PSCADRun;options)
+    push!(remotes,options.remote)
+    messages=joinpath(options.work_root,"build_messages.txt")
+    write(messages,"The total number of live nodes: 12\n")
+    return (paths=(build_messages=messages,),
+        diagnostics=(solver_identity="fixture",elapsed_seconds=.1))
+end
+for expression in Meta.parseall(Base.read(joinpath(ROOT,"l4_growth.jl"),String)).args
+    expression isa Expr && expression.head==:function || continue
+    name=first(expression.args).args[1]
+    name==:execute_l4_growth! && Core.eval(@__MODULE__,expression)
+end
+end
+
+@testset "L4 growth passes whole seconds to the station timeout" begin
+    mktempdir() do root
+        project=joinpath(root,"model.pscx");write(project,"fixture")
+        model=(project_path=project,)
+        deadline=1120.75
+        remaining=deadline-L4GrowthExecution.time()
+        for timeout in (60,600)
+            remote=RemoteConfig("fixture",root,"unused","julia","python";local_root=root,timeout)
+            directory=mkpath(joinpath(root,"output-$timeout"))
+            record=Dict{String,Any}("fixture_id"=>"L4-00D","run_records"=>Any[])
+            L4GrowthExecution.execute_l4_growth!(record,"g_driven",model,directory,remote,deadline)
+            observed=last(L4GrowthExecution.remotes)
+            @test observed.timeout isa Int
+            @test observed.timeout==min(remote.timeout,floor(Int,remaining))
+        end
+    end
+end
