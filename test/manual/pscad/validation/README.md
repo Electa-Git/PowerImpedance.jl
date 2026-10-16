@@ -1,7 +1,7 @@
 # Manual PSCAD physics validation
 
 L1 is closed with seven passes and one owner-explained system result. L2 starts
-with one strong-grid TLC fixture; L3 stage A prepares two interactions; L4 systems remain later work. Tier D remains the original P2P early growth fit. Code is
+with one strong-grid TLC fixture; L3 stages A/B register five interactions; L4 systems remain later work. Tier D remains the original P2P early growth fit. Code is
 manual and private; `data/`, `Manifest*.toml` and `.CondaPkg/` are gitignored.
 No station operation occurs during preparation or offline tests.
 
@@ -1693,3 +1693,181 @@ original individual and declared aggregate bases, local scan resolution,
 exported values, source/payload hashes and empty native ledgers. All 80 approved
 proposal artifacts retain their hashes. Logs, counts and final manifest digests
 are under [`data/m9d2/`](data/m9d2/). No station qualification is claimed.
+
+
+## M9d-3: Layer 3 stage B
+
+Stage B registers the frozen **L3-02, L3-04 and L3-03** interactions, in that
+queue order. It retains stage A's complete lumped-network stability admission,
+individual device Y on original L2 bases, aggregate Y on declared bases, direct
+Z from the recorded drive, exported-passive checks, per-port KCL timing checks
+and independent measurement/witness gates. All three use the composed discrete
+reference for qualification and the residual step witness; the plain C and raw
+step results remain visible. Approved tolerances and gates are unchanged.
+
+| Fixture | Frozen circuit | Aggregate base | Coarse current/tone, pu | Recorded native live nodes | Expected station time |
+| --- | --- | --- | --- | --- | --- |
+| L3-02 | L2-07 P/Q C1 + L2-09 P/Q-V C2 on one bus; separate 800 kV clamps; original R=1.7960421283290304 ohm, L=0.05716979654497069 H grid (SCR=4 combined) | 2000 MVA / 380 kV LL | 0.000255889219949928 | 77 | 40–60 min |
+| L3-04 | L2-07 at remote end of a literal lumped pi line: series R=2 ohm, L=20 mH, C=2 uF to ground at each end; original SCR-8 grid at near end; near-end drive and port measurement; remote converter V/I retained | 1000 MVA / 380 kV LL | 0.0007118962353546502 | 67 | 60–90 min including local scan |
+| L3-03 | L2-13 GFM C1 + L2-07 GFL C2 on one 380 kV bus; separate 640/800 kV clamps; grid R=0.8718651108393352 ohm, L=0.027752328419888683 H (SCR=8 on 2060 MVA) | 2060 MVA / 380 kV LL | 0.0006924416531567809 | 77 | 40–60 min |
+
+L3-02 adds one interface step inside **both** zero-delay MMC modulation loops.
+L3-03 retains C1's original 200 us Padé 5/5 delay and adds the interface step
+**only to C2**, its zero-delay GFL. C1 retains its 1060 MVA / 400 kV external
+nameplate; no 400-to-380 kV rescaling is applied. The frozen equilibrium
+initialization is an explicit L3-03 qualification caveat: its very slow GFM
+filters are not settled by waiting twelve time constants. The eight-second
+windows do not establish generic startup settling, and measured baseline drift
+and every other gate remain mandatory. The caveat is retained in the fixture
+ledger and scan manifest.
+
+Each coarse group retains the 23 stage A tones, onset 2 s, [16,24)/[24,32) s
+windows, 32 s main records, 2.5 us base / 1.25 us half step and recorder ratio 25
+at both steps. L3-04 also has a **predeclared 43-tone local scan: 357–378 Hz every
+0.5 Hz**, at 2.4385006018880013e-5 pu per tone. Its two axes, baseline,
+half-amplitude witness and matching half-step baseline/axis all retain the same
+32 s duration and eight-second windows. This is one contiguous resonance band;
+L3-08 retains its two disjoint bands. The existing centre/width rule applies to
+direct Z only after both curves satisfy the original resolution requirements.
+Ordinary Y and all independent gates remain mandatory. Local scan definitions
+and band indices are frozen in the manifest before execution.
+
+For L3-04 the aggregate Y includes the line and both capacitors, with the remote
+node eliminated in the reference. Individual C1 Y uses its **remote terminal
+voltage and converter current**; its local departure/drift/conditioning gates
+cannot be replaced by near-end checks. Injected-run recorder pruning retains
+these remote channels and the DC clamp witnesses while preserving all electrical
+meters. Offline tests check analytic line elimination and recover independent
+synthetic near/remote responses, including a remote-only departure failure.
+
+Offline reproduction builds and solves all three networks, runs the complete
+6001-frequency stability gate, and computes plain and discrete references
+without preparation. The dense conditioning grid is the proposal's 3001
+logarithmic points from 1 to 1000 Hz plus its frozen coarse tones; the refined
+plain peak is checked at the proposal's refined frequency. Julia 1.10.11 gives:
+
+| Fixture | Rightmost Re(lambda), per s | Refined plain conditioning peak | Sampled discrete conditioning peak |
+| --- | --- | --- | --- |
+| L3-02 | -10.872237947687708 | 21.799547835064686 | 21.801587951588523 |
+| L3-04 | -10.954087715861519 | 41.05819735993361 | 34.467198177827754 |
+| L3-03 | -0.0006283185305982802 | 26.38472976239633 | 26.384932410754047 |
+
+All reproduce the frozen proposal within **1e-9 relative**; the largest relative
+root difference is 4.40e-10 for the slow L3-03 mode. L3-04's qualifying discrete
+local-Z geometry reproduces centre **366.91885337237056 Hz** and width
+**5.727917076969902 Hz**, both within 1e-9 relative. Plain geometry remains
+separate (centre 367.2291841671143 Hz, width 4.833451283563875 Hz). Numerical
+admission and reference reproduction supply no new station qualification.
+
+Preparation must run from the main repository **after this change is merged**.
+`prepare_m9d_b()` checks `composed_execution.jl`, `queue.jl`, `coverage.jl` and
+`scan.jl` byte-for-byte against `git show HEAD:<path>` before creating any output. A dirty
+or staged-only stage B implementation is refused; individual stage B preparation uses
+the same check. The worktree's uncommitted implementation therefore cannot be
+prepared. No preparation was performed here.
+
+From the main repository root, after merge and with the existing environment:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.prepare_m9d_b()'
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9d_b(timeout=14400.0)'
+```
+
+Preparation creates fresh `data/L3-02/`, `data/L3-04/` and `data/L3-03/` projects,
+references and empty native ledgers; existing fixture directories are refused.
+There are four measurement groups, ten prepared projects per group and normally
+**24 native runs**. The resilient queue records each outcome immediately in
+`data/m9d3/queue.toml`, continues after failures and stops on interrupts. A failed
+coarse group stops its fixture before a local group. All fixtures share the
+**240 min deadline**; expected total is **140–210 min**, including the declared
+L3-04 local scan. These are planning estimates. Retries retain witness selection
+and reuse only exact project/input/solver-hash matching completions.
+
+Final offline checks on **Julia 1.12.7**, with the repository Manifest and
+`OPENBLAS_NUM_THREADS=1`: **3,109/3,109 validation assertions**,
+**20,478/20,478 PSCAD suite assertions**, and **74/74 standalone name-guard
+assertions**. Stage B adds **228 assertions**. The composed A/B, queue and
+band-runner subsets also pass **457/457 on Julia 1.10.11**. The preparation source check was run
+read-only and refused the uncommitted implementation as intended. No stage B
+fixture or queue directories were created, no station was contacted, and no
+`src/` or dependency files changed.
+
+
+### Compact local witness paths and stage A continuation
+
+The owner reports L3-01 passing every measurand. L3-08's coarse and local
+comparisons pass on the discrete reference (0.01–0.19 percent errors), with both
+local resonance bands qualified. Its local half-step witness did not start:
+the frequency-list axis name exceeded the Windows path limit before the
+supervisor could launch. L3-08 remains witness-pending; this is not a failed
+native comparison or a completed qualification.
+
+`step_prefix` retains the exact existing rounded-frequency spelling when that
+label is at most 48 characters. Longer lists use
+`<first>_<last>_n<count>_<digest>`, where the digest is the first 12 hexadecimal
+SHA-256 characters of the comma-separated IEEE-754 bit strings of the exact
+ordered Float64 frequency list. Thus short coarse witnesses and their stored
+L1–L3 names are unchanged, while half-Hz frequencies remain distinguishable.
+The local half-step prefixes are:
+
+- L3-08: `composed_local_half_step_232_361_n39_0d674b400f77__`
+- L3-04: `composed_local_half_step_357_378_n43_ec5aa7b9b0a2__`
+
+Compact half-step projects also include the frequency digest in their project
+namespace/file stem, producing fresh project hashes without changing the
+circuit or measurement settings. Axis and baseline suffixes remain explicit.
+
+Preparation checks each possible run path before creating projects, including
+all possible coarse witness selections. It reserves the six-character random
+suffixes in
+`<root>/validation/<id>/<axis>-XXXXXX/run-XXXXXX/toolkit/<longest toolkit file>`.
+The longest toolkit filename is currently `supervisor.ps1`. It checks station
+scratch, the Z:-mapped share, and the caller's local root independently; any
+path above **240 UTF-16 code units** is refused. Boundary tests cover exactly
+240 and 241 for each root and verify refusal before directory writes.
+For the roots recorded by the failed run, the registered L3 maxima are:
+
+| Fixtures | Station scratch | Z:-mapped local | Caller local |
+| --- | --- | --- | --- |
+| L3-01, L3-02, L3-03 | 160 | 158 | 170 |
+| L3-04, L3-08 | 175 | 173 | 185 |
+
+`prepare_m9d_a_local_witness()` is restricted to L3-08 and uses the same committed
+source check as `prepare_m9d_b()`. It verifies retained payloads, unchanged
+sources outside the reviewed four-file harness revision, solved operating point,
+stability and both groups' frozen references. It stages fresh compact projects
+before archiving the three unused long-name local half-step project directories
+and the previous manifest under `history/local-witness-<timestamp>/`. It refuses
+any long-name project with either a run ledger entry or an unindexed completion.
+Every completed run, its project record, group results and stored selection are
+retained; the previous sources and unused project records remain in the repair
+ledger. Failed partial-run diagnostics also remain untouched.
+
+After merge, from the main repository root with the existing configured station
+environment, prepare the repair and stage B without executing native runs:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.prepare_m9d_a_local_witness(); PSCADValidation.prepare_m9d_b()'
+```
+
+Then use one resilient queue:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9d_ab(timeout=18000.0)'
+```
+
+This runs the **L3-08 local witness first, then L3-02, L3-04, L3-03**. For L3-08,
+only the local group is revisited: exact completed main and half-amplitude
+projects resume through the existing verified-reuse path, and the two compact
+half-step runs complete the witness. The passed coarse group remains retained.
+Each fixture outcome is saved immediately to `data/m9d3-ab/queue.toml`; failures
+continue to the next fixture, interrupts stop, and all share the 300-minute
+budget. The original `run_m9d_b` queue remains available for stage B alone.
+No preparation or native execution was performed in this worktree.
+
+Path-fix verification on **Julia 1.12.7**, with `OPENBLAS_NUM_THREADS=1`:
+**3,180/3,180 validation assertions**, **20,549/20,549 PSCAD suite assertions**,
+and **74/74 name-guard assertions**. The fix adds 71 assertions; its focused
+prefix, boundary and preservation tests also pass **65/65 on Julia 1.10.11**.
+The uncommitted source guard refuses preparation as intended. These checks
+neither prepare a station fixture nor contact the station.

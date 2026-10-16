@@ -345,14 +345,18 @@ end
 
 const M9D_A_IDS = ["L3-01", "L3-08"]
 
-function run_m9d_a(;timeout=10800.,remote=RemoteConfig())
+const M9D_B_IDS = ["L3-02", "L3-04", "L3-03"]
+
+function run_composed_queue(ids,stage;timeout,remote,local_witness_first=false)
     isfinite(timeout)&&timeout>0 || error("timeout must be finite and positive")
-    deadline=time()+timeout;directory=mkpath(joinpath(ROOT,"data","m9d2"))
+    deadline=time()+timeout;directory=mkpath(joinpath(ROOT,"data",stage))
     path=joinpath(directory,"queue.toml")
-    record=isfile(path) ? TOML.parsefile(path) : Dict{String,Any}("order"=>copy(M9D_A_IDS),"outcomes"=>Dict{String,Any}())
-    for id in M9D_A_IDS
+    record=isfile(path) ? TOML.parsefile(path) : Dict{String,Any}("order"=>copy(ids),"outcomes"=>Dict{String,Any}())
+    record["order"]==ids || error("composed queue order changed")
+    for id in ids
         try
-            result=run_composed(id;remote,deadline)
+            result=local_witness_first && id=="L3-08" ?
+                run_composed(id;remote,deadline,protocols=["composed_local"]) : run_composed(id;remote,deadline)
             record["outcomes"][id]=Dict("status"=>result["status"])
         catch failure
             failure isa InterruptException && rethrow()
@@ -362,4 +366,16 @@ function run_m9d_a(;timeout=10800.,remote=RemoteConfig())
         open(io->TOML.print(io,record;sorted=true),path,"w")
     end
     return record
+end
+
+function run_m9d_a(;timeout=10800.,remote=RemoteConfig())
+    return run_composed_queue(M9D_A_IDS,"m9d2";timeout,remote)
+end
+
+function run_m9d_b(;timeout=14400.,remote=RemoteConfig())
+    return run_composed_queue(M9D_B_IDS,"m9d3";timeout,remote)
+end
+
+function run_m9d_ab(;timeout=18000.,remote=RemoteConfig())
+    return run_composed_queue(["L3-08";M9D_B_IDS],"m9d3-ab";timeout,remote,local_witness_first=true)
 end

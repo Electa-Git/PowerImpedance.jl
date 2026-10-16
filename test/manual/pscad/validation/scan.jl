@@ -159,7 +159,37 @@ function single_response(result, baseline_result, model, spec, column)
     return sum(matrices) / length(matrices), quality
 end
 
-step_prefix(spec) = scan_prefix(spec) * "half_step_" * join(round.(Int, spec.frequencies), "_") * "__"
+function step_prefix(spec)
+    label=join(round.(Int,spec.frequencies),"_")
+    if length(label)>48
+        exact=join(bitstring.(Float64.(spec.frequencies)),",")
+        fingerprint=bytes2hex(sha256(exact))[1:12]
+        first_f=@sprintf("%.12g",first(spec.frequencies))
+        last_f=@sprintf("%.12g",last(spec.frequencies))
+        label=first_f*"_"*last_f*"_n"*string(length(spec.frequencies))*"_"*fingerprint
+    end
+    return scan_prefix(spec)*"half_step_"*label*"__"
+end
+
+# Reserve the actual six-character random suffixes before creating any project.
+# Windows counts UTF-16 code units; the mapped share is a station-local path.
+function prepared_run_paths(id,axes,remote)
+    longest=sort!(collect(keys(P.PSCAD_REMOTE_SOURCES));by=n->(length(n),n))[end]
+    paths=Dict{String,String}()
+    for (label,root) in (("remote",remote.remote_root),("mapped_local",remote.shared_root),("local",remote.local_root))
+        candidates=[P._remote_path(root,"validation",id,axis*"-XXXXXX","run-XXXXXX","toolkit",longest) for axis in axes]
+        paths[label]=candidates[argmax(length.(transcode.(UInt16,candidates)))]
+    end
+    return Dict(label=>Dict("path"=>path,"length"=>length(transcode(UInt16,path))) for (label,path) in paths)
+end
+
+function check_prepared_run_paths(id,axes,remote)
+    paths=prepared_run_paths(id,axes,remote)
+    for (label,item) in paths
+        item["length"]<=240 || error("prepared $id $label path exceeds 240 characters ($(item["length"])): $(item["path"])")
+    end
+    return paths
+end
 
 function step_definition(spec, frequency)
     frequencies = frequency == 1000.0 ? [750.0, 1000.0] : unique(sort([frequency, 1000.0]))
@@ -221,9 +251,14 @@ function axis_project(baseline, plan, spec, axis)
     return text
 end
 
-function prepare_scan_projects(directory, list, spec, axes; prefix = "")
+function prepare_scan_projects(directory, list, spec, axes; prefix = "", remote=nothing)
     check_recorder_sampling(spec)
+    remote===nothing && (remote=RemoteConfig())
+    check_prepared_run_paths(spec.id,[prefix*axis for axis in ["baseline";axes]],remote)
     name = lowercase(replace(spec.id, '-' => '_'))
+    if length(join(round.(Int,spec.frequencies),"_"))>48 && prefix==step_prefix(spec)
+        name*="_"*bytes2hex(sha256(join(bitstring.(Float64.(spec.frequencies)),",")))[1:12]
+    end
     baseline_axis = prefix * "baseline"
     baseline_path = joinpath(mkpath(joinpath(directory, baseline_axis)), name * ".pscx")
     plan, settings = scan_plan(list, spec, "baseline"; name)
@@ -332,7 +367,7 @@ function existing_model(record, key, list, spec, directory; prefix = scan_prefix
     axis = logical == "baseline" ? "baseline" : replace(logical, "half_amplitude_"=>"")
     plan, settings = scan_plan(list, spec, axis)
     return P.PSCADModel(
-        joinpath(directory, project["path"]), lowercase(replace(spec.id, '-'=>'_')),
+        joinpath(directory, project["path"]), splitext(basename(project["path"]))[1],
         list, recorded_probes(project["probes"], plan.probes.reference_bus),
         settings, list.operating_point, (source = :validation,))
 end
@@ -426,7 +461,7 @@ function run_fixture(id; remote = RemoteConfig(),
         # Local project writing only. The manual environment activates the
         # existing writer; no native component or public API is introduced.
         prefix = step_prefix(step_spec)
-        step_models = prepare_scan_projects(directory, list, step_spec, [axis]; prefix)
+        step_models = prepare_scan_projects(directory, list, step_spec, [axis]; prefix, remote)
         for (key, model) in step_models
             record_project!(record, key, model, directory)
         end

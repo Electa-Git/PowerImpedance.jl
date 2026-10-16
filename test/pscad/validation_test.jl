@@ -255,8 +255,8 @@ end
 end
 
 @testset "Passive catalogue and generated source plans" begin
-    @test length(V.REGISTRY) == 27
-    @test length(unique(entry.id for entry in V.REGISTRY)) == 27
+    @test length(V.REGISTRY) == 30
+    @test length(unique(entry.id for entry in V.REGISTRY)) == 30
     for entry in filter(e->startswith(e.id,"L1-"),V.REGISTRY)
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"
@@ -2172,7 +2172,7 @@ end
 
 @testset "Frozen L3 registration, complete-network gate and composed residual reference" begin
     @test V.M9D_A_IDS==["L3-01","L3-08"]
-    @test sort!([e.id for e in V.REGISTRY if startswith(e.id,"L3-")])==V.M9D_A_IDS
+    @test sort!([e.id for e in V.REGISTRY if startswith(e.id,"L3-")])==sort([V.M9D_A_IDS;V.M9D_B_IDS])
     @test V.L3_NATIVE_NODES==Dict("L3-01"=>31,"L3-02"=>77,"L3-03"=>77,"L3-04"=>67,
         "L3-05"=>52,"L3-06"=>55,"L3-07"=>96,"L3-08"=>55)
     for (id,right,amp) in (("L3-01",-1.9916375342503203,.0004508893578873102),
@@ -2325,6 +2325,211 @@ end
     end
 end
 
+
+@testset "Stage B frozen factories, numerical admission and conditioning" begin
+    @test V.M9D_B_IDS==["L3-02","L3-04","L3-03"]
+    # Independent values frozen by the proposal; no preparation or native runs.
+    for (id,right,peak,peak_f,sampled,discrete_peak,amp) in (
+            ("L3-02",-10.872237947687688,21.79954783506469,50.232250432178716,
+                21.79954608163451,21.801587951588505,.000255889219949928),
+            ("L3-04",-10.954087715861549,41.05819735993356,367.28750909034244,
+                41.05810094572044,34.467198177827676,.0007118962353546502),
+            ("L3-03",-.0006283185308747,26.3847297623963,50.49689963194021,
+                26.38423668513727,26.38493241075408,.0006924416531567809))
+        net=V.fixture(id).factory();point=power_flow(net);list=V.fixture_netlist(net,point);c=V.l3_circuit(id,net)
+        spec=V.l3_spec(id,list);gate=V.composed_stability(c)
+        @test gate["status"]=="passed"
+        @test gate["most_positive_located_real_per_s"]≈right rtol=1e-9
+        j=argmax(gate["poles_real_per_s"])
+        if id=="L3-03"
+            @test abs(gate["poles_imag_rad_per_s"][j])<1e-12
+        else
+            @test abs(gate["poles_imag_rad_per_s"][j])≈(id=="L3-02" ? 18.51585338533926 : 18.562915099914086) rtol=1e-9
+        end
+        @test gate["closed_RHP_count"]==0
+        @test gate["descriptor_native_residual"]<1e-10
+        @test gate["frequency_count"]==6001
+        @test spec.tone_peak_pu==amp
+        @test spec.window_starts==(16.,24.) && spec.window_duration==8. && spec.simulation_time==32.
+        @test V.check_recorder_sampling(spec)==25
+        @test V.check_recorder_sampling(V.composed_step_spec(spec,7.))==25
+        @test V.L3_NATIVE_NODES[id]==(id=="L3-04" ? 67 : 77)
+        @test net.voltageBase[1]==380/sqrt(3)
+        @test spec.power_base_MVA==(id=="L3-02" ? 2000. : id=="L3-03" ? 2060. : 1000.)
+        grid=PowerImpedance.get_y(net.elements[:Grid_A],ComplexF64(1.))
+        rating=id=="L3-03" ? 2060. : 1000.
+        r=380^2/rating/8/sqrt(101);l=10r/(2π*50);q=I(2)+[0. 2π*50;-2π*50 0.]
+        @test grid[1:2,1:2]≈inv(r*I(2)+l*q) rtol=1e-12
+        # Reproduce the exact dense proposal grid and the refined peak height.
+        fs=sort!(unique([exp10.(range(0,3;length=3001));spec.frequencies]))
+        dense_spec=merge(spec,(;frequencies=fs))
+        plain=V.composed_reference(c,dense_spec)
+        discrete=V.composed_reference(c,dense_spec;time_step=spec.time_step)
+        @test maximum(cond(plain["direct_Z"][:,:,k]) for k in eachindex(fs))≈sampled rtol=1e-9
+        @test maximum(cond(discrete["direct_Z"][:,:,k]) for k in eachindex(fs))≈discrete_peak rtol=1e-9
+        refined=V.composed_reference(c,merge(spec,(;frequencies=[peak_f])))
+        @test cond(refined["direct_Z"][:,:,1])≈peak rtol=1e-9
+        @test Set(keys(plain))==Set(["aggregate_Y","direct_Z",[string(n)*"_Y" for n in c.devices]...])
+        plan,_=V.scan_plan(list,spec,"baseline")
+        measured,_=V.scan_plan(list,merge(spec,(;recorder_scope="measurement")),"p1_d")
+        @test P.check_connectivity(plan)===nothing
+        @test P.check_connectivity(measured)===nothing
+        @test count(x->x isa P.ComponentPlan && x.defn=="master:ammeter",measured.main.components)==
+            count(x->x isa P.ComponentPlan && x.defn=="master:ammeter",plan.main.components)
+        @test all(p.kind in (:voltage,:current,:injection_current) for p in measured.probes.channels)
+        for name in c.devices
+            b=V.device_bases(net.elements[name].element_model.elec)
+            @test any(p->p.kind==:voltage && p.bus==V.port_probe(list,name,b.ac_side).name,measured.probes.channels)
+            @test any(p->p.kind==:current && p.element==string(name) && p.side==string(b.ac_side),measured.probes.channels)
+            @test net.elements[Symbol("D_",name)].setpoint.Vdc==b.dc_voltage
+        end
+        mktempdir() do directory
+            project=passive_project(plan,joinpath(directory,"actual.pscx"))
+            forms=V.exported_composed_passives(c,project,list)
+            functions=V.composed_device_functions(c;time_step=spec.time_step)
+            native=V.composed_device_functions(c)
+            for name in c.devices
+                e=net.elements[name];b=V.device_bases(e.element_model.elec)
+                changed=V.interface_step_eligible(e.element_model)
+                @test changed==(id!="L3-03" || name==:C2)
+                for f in (7.,137.,750.)
+                    s=ComplexF64(im*2π*f)
+                    if changed
+                        isolated=Network();isolated.elements[:DUT]=e
+                        independent=V.interface_step_reference(isolated,merge(spec,(;frequencies=[f])))[:,:,1]
+                        @test functions[name](s)[b.ac_indices,b.ac_indices]≈independent rtol=1e-12
+                        @test norm(functions[name](s)-native[name](s))>1e-8
+                    else
+                        @test functions[name](s)==native[name](s)
+                        @test e.element_model.modulation.delay1.timeDelay==200e-6
+                    end
+                end
+            end
+            if id!="L3-04"
+                refs=V.composed_reference(c,spec;time_step=spec.time_step,forms)
+                @test refs["aggregate_Y"]≈refs["C1_Y"]+refs["C2_Y"] rtol=1e-12
+                for (k,f) in enumerate(spec.frequencies)
+                    gy=V.composed_passive_y(net.elements[:Grid_A],forms[:Grid_A],im*2π*f)[1:2,1:2]
+                    @test refs["direct_Z"][:,:,k]≈inv(refs["C1_Y"][:,:,k]+refs["C2_Y"][:,:,k]+gy) rtol=1e-12
+                end
+            else
+                @test length(c.nodes)==4 && c.ports==[(:Line,1)]
+                @test forms[:Line].R==2. && forms[:Line].L==.02
+                @test forms[:Cnear].C≈2e-6 && forms[:Cfar].C≈2e-6
+                @test only(spec.buses).name==V.port_probe(list,:Line,1).name
+                @test only(spec.buses).name!=V.port_probe(list,:C1,2).name
+                local_spec=V.l3_spec(id,list;local_scan=true)
+                @test local_spec.frequencies==collect(357.:.5:378.)
+                @test local_spec.tone_peak_pu==2.4385006018880013e-5
+                @test local_spec.resonance_groups==[collect(1:43)]
+                @test V.scan_record(local_spec)["resonance_groups"]==[collect(1:43)]
+                step=V.composed_step_spec(local_spec,367.;local_scan=true)
+                @test step.frequencies==local_spec.frequencies && step.window_starts==(16.,24.)
+                @test step.simulation_time==32. && V.check_recorder_sampling(step)==25
+                local_refs=V.composed_reference(c,local_spec;time_step=spec.time_step)
+                resolution=V.half_power_resonance(local_spec.frequencies,
+                    [norm(local_refs["direct_Z"][:,:,k]) for k in eachindex(local_spec.frequencies)])
+                @test resolution["resolved"]
+                @test resolution["centre_Hz"]≈366.9188533723705 rtol=1e-9
+                @test resolution["width_Hz"]≈5.727917076969845 rtol=1e-9
+                @test length(V.l3_specs(id,list))==2
+            end
+            # Each device/aggregate/direct-Z residual is independently qualified.
+            step=V.composed_step_spec(spec,750.)
+            pred=V.composed_predicted_columns(c,spec,1,forms)
+            predhalf=V.composed_predicted_columns(c,step,1,forms)
+            main=Dict(t=>(matrix=p,quality=Dict("valid"=>true)) for (t,p) in pred)
+            half=Dict(t=>(matrix=p,quality=Dict("valid"=>true)) for (t,p) in predhalf)
+            model=(;project_path=project,netlist=list);group=Dict{String,Any}()
+            witness=V.composed_witnesses!(group,c,spec,step,1,main,half,main,
+                (main=model,half=model),[Dict("passed"=>true)],directory)
+            @test all(w["status"]=="passed" && w["step_reference"]=="composed_residual" for w in values(witness))
+            @test all(w["selected_step"]["entry_change"]<1e-12 for w in values(witness))
+        end
+        if id=="L3-03"
+            @test occursin("equilibrium",spec.settling["scope"])
+            @test occursin("400-to-380",only(filter(x->occursin("equilibrium",x),V.fixture(id).differences)))
+            b=V.device_bases(net.elements[:C1].element_model.elec)
+            @test b.power==1060. && b.dc_voltage==640.
+            @test b.ac_voltage≈400sqrt(2/3)
+        end
+    end
+end
+
+@testset "Near-end scan retains remote converter V/I and local departure gates" begin
+    net=V.l3_network("L3-04");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.l3_circuit("L3-04",net)
+    spec=merge(V.l3_spec("L3-04",list),(;frequencies=[7.,137.],phases=[0.,-π],
+        window_starts=(1.,2.),window_duration=1.,simulation_time=3.,injection_time=0.,
+        tone_peak_pu=1e-4,recorder_scope="measurement"))
+    scale=spec.current_bases[1]/spec.voltage_bases[1]
+    yd=ComplexF64[.4+.06im .03;-.02 .3-.08im]*scale
+    yl=ComplexF64[.8+.1im .02;-.02 .8+.1im]*scale
+    cn=ComplexF64[.08+.12im .01;-.01 .08+.12im]*scale
+    cf=1.2cn;yg=ComplexF64[.9-.25im .03;-.03 .9-.25im]*scale
+    remote=(yl+cf+yd)\yl;aggregate=cn+yl-yl*remote;z=inv(aggregate+yg)
+    times=collect(0.:spec.sample_step:spec.simulation_time)
+    models=Dict{String,P.PSCADModel}();results=Dict{String,P.PSCADResult}()
+    remote_bus=V.port_probe(list,:C1,2).name
+    for axis in ["baseline";spec.axes]
+        plan,settings=V.scan_plan(list,spec,axis)
+        v=zeros(length(times),2);u=copy(v);d=copy(v)
+        currents=Dict((element,side)=>copy(v) for (element,side) in
+            (("C1","2"),("Cnear","1"),("Cfar","1"),("Line","1"),("Grid_A","1")))
+        if axis!="baseline"
+            column=only(findall(==(axis),spec.axes))
+            for (k,f) in enumerate(spec.frequencies)
+                drive=zeros(ComplexF64,2);drive[column]=spec.tone_peak_pu*spec.current_bases[column]*cis(spec.phases[k])
+                near=V.injection_readout_factor(f,spec)*z*drive;far=remote*near
+                pairs=[(v,near),(u,far),(d,recorded_drive(drive,spec)),
+                    (currents[("C1","2")],yd*far),(currents[("Cnear","1")],cn*near),
+                    (currents[("Cfar","1")],cf*far),(currents[("Line","1")],yl*(near-far)),
+                    (currents[("Grid_A","1")],yg*near)]
+                for (samples,phasor) in pairs, row in 1:2
+                    samples[:,row].+=real.(phasor[row].*cis.(2π*f.*times))
+                end
+            end
+        end
+        v[:,1].+=spec.voltage_bases[1];u[:,1].+=spec.voltage_bases[1]
+        channels=PowerImpedance.OrderedDict{String,Vector{Float64}}()
+        for probe in plan.probes.channels
+            if probe.dim==3
+                samples=if probe.kind==:voltage
+                    probe.bus==remote_bus ? u : v
+                elseif probe.kind==:injection_current
+                    d
+                else
+                    inward=currents[(probe.element,probe.side)]
+                    probe.orientation==:into ? inward : -inward
+                end
+                abc=abc_wave(times,samples)
+                for phase in 1:3;channels[probe.name*":"*string(phase)]=abc[:,phase];end
+            else
+                channels[probe.name]=fill(probe.kind==:voltage && probe.side=="P" ? 400. :
+                    probe.kind==:voltage && probe.side=="N" ? -400. : 0.,length(times))
+            end
+        end
+        models[axis]=P.PSCADModel("remote.pscx",plan.name,list,plan.probes,settings,list.operating_point,(;))
+        results[axis]=P.PSCADResult(PSCADRun(),times,channels,plan.probes,settings,(;),(;))
+    end
+    refs=Dict("C1_Y"=>cat(yd,yd;dims=3),"aggregate_Y"=>cat(aggregate,aggregate;dims=3),
+        "direct_Z"=>cat((z*direct_readout(f,spec) for f in spec.frequencies)...;dims=3))
+    mktempdir() do directory
+        comparison=V.composed_comparison(results,models,refs,directory,spec,c)
+        @test all(x["status"]=="passed" for x in values(comparison.comparisons))
+        @test all(x["passed"] for x in comparison.kcl)
+        base=V.composed_samples(results["baseline"],models["baseline"],spec,c)
+        run=V.composed_samples(results["p1_d"],models["p1_d"],spec,c)
+        @test norm(run.device_voltages["C1_Y"]-run.voltage)>1e-3
+        @test haskey(run.outputs,"C1_Y")
+        bad_voltages=Dict(k=>copy(v) for (k,v) in run.device_voltages)
+        bad_voltages["C1_Y"][:,1].+=.02V.device_bases(net.elements[:C1].element_model.elec).ac_voltage
+        bad=merge(run,(;device_voltages=bad_voltages))
+        individual=V.composed_quality(times,base,[bad],spec,c,"C1_Y";columns=[1])
+        @test !individual["valid"] && "input_departure_pu" in individual["invalid_reasons"]
+        @test V.composed_quality(times,base,[bad],spec,c,"aggregate_Y";columns=[1])["valid"]
+    end
+end
+
 end
 
 module PSCADM9dAQueueTests
@@ -2334,12 +2539,14 @@ using TOML
 const ROOT=mktempdir()
 const calls=String[]
 const interrupt=Ref(false)
+const deadlines=Float64[]
+const protocols_seen=Any[]
 RemoteConfig()=nothing
-function run_composed(id;remote,deadline)
-    push!(calls,id)
+function run_composed(id;remote,deadline,protocols=nothing)
+    push!(calls,id);push!(deadlines,deadline);push!(protocols_seen,protocols)
     interrupt[] && throw(InterruptException())
-    id=="L3-01" && error("offline fixture failure")
-    return Dict("status"=>"passed")
+    id in ("L3-01","L3-02") && error("offline fixture failure")
+    return Dict("status"=>id=="L3-04" ? "failed" : "passed")
 end
 include("../manual/pscad/validation/queue.jl")
 end
@@ -2358,6 +2565,39 @@ end
     @test Queue.calls==["L3-01"]
     rm(Queue.ROOT;recursive=true)
 end
+@testset "Stage B queue persists outcomes, continues in order and stops on interrupt" begin
+    empty!(Queue.calls);empty!(Queue.deadlines);Queue.interrupt[]=false
+    for timeout in (0.,-1.,Inf,NaN)
+        @test_throws ErrorException Queue.run_m9d_b(;timeout)
+    end
+    @test isempty(Queue.calls)
+    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_m9d_b(timeout=10.)
+    @test Queue.calls==["L3-02","L3-04","L3-03"]
+    @test length(unique(Queue.deadlines))==1
+    @test record["order"]==Queue.calls
+    @test record["outcomes"]["L3-02"]["status"]=="run_or_analysis_failed"
+    @test record["outcomes"]["L3-04"]["status"]=="failed"
+    @test record["outcomes"]["L3-03"]["status"]=="passed"
+    path=joinpath(Queue.ROOT,"data","m9d3","queue.toml")
+    @test TOML.parsefile(path)==record
+    empty!(Queue.calls);Queue.interrupt[]=true
+    @test_throws InterruptException Queue.run_m9d_b(timeout=1.)
+    @test Queue.calls==["L3-02"]
+    @test TOML.parsefile(path)==record
+    rm(Queue.ROOT;recursive=true)
+end
+
+@testset "Combined queue starts with the L3-08 local witness only" begin
+    empty!(Queue.calls);empty!(Queue.protocols_seen);Queue.interrupt[]=false
+    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_m9d_ab(timeout=10.)
+    @test Queue.calls==["L3-08","L3-02","L3-04","L3-03"]
+    @test Queue.protocols_seen==[["composed_local"],nothing,nothing,nothing]
+    @test record["outcomes"]["L3-08"]["status"]=="passed"
+    @test record["outcomes"]["L3-02"]["status"]=="run_or_analysis_failed"
+    @test record["outcomes"]["L3-03"]["status"]=="passed"
+    rm(Queue.ROOT;recursive=true)
+end
+
 end
 
 module PSCADComposedInvalidEvidenceTests
@@ -2380,8 +2620,12 @@ exported_composed_passives(args...)=nothing
 composed_reference_files!(args...;kwargs...)=nothing
 interface_step_eligible(args...)=false
 composed_frozen_references(args...)=nothing
-composed_comparison(args...;kwargs...)=(;comparisons=Dict("aggregate_Y"=>Dict("status"=>"invalid_measurement",
-    "invalid_reasons"=>["kcl_readout"])),selection=(;column=1,frequency=7.),kcl=checks)
+const seen_resonance_groups=Ref{Any}(nothing)
+function composed_comparison(args...;resonance_groups)
+    seen_resonance_groups[]=resonance_groups
+    return (;comparisons=Dict("aggregate_Y"=>Dict("status"=>"invalid_measurement",
+        "invalid_reasons"=>["kcl_readout"])),selection=(;column=1,frequency=7.),kcl=checks)
+end
 function write_manifest(directory,record)
     open(io->TOML.print(io,record),joinpath(directory,"manifest.toml"),"w")
 end
@@ -2400,6 +2644,128 @@ include_string(@__MODULE__,source[first(first_line):first(last_line)-1])
         @test saved["invalid_reasons"]["aggregate_Y"]==["kcl_readout"]
         @test saved["measurand_summary"]["aggregate_Y"]["invalid_reasons"]==["kcl_readout"]
         @test saved["measurand_summary"]["aggregate_Y"]["witness"]=="not_run"
+        @test isempty(seen_resonance_groups[])
+        local_spec=merge(spec,(;protocol="composed_local",resonance_groups=[collect(1:43)]))
+        local_group=run_composed_group!(Dict{String,Any}(),circuit,nothing,local_spec;
+            directory,remote=nothing,deadline=Inf)
+        @test seen_resonance_groups[]==[collect(1:43)]
+        @test local_group["status"]=="invalid_measurement"
+    end
+end
+end
+
+module PSCADCompactWitnessTests
+using Test, PowerImpedance, TOML, SHA
+include("../manual/pscad/validation/validation.jl")
+const V=PSCADValidation
+const P=PowerImpedance.PSCAD
+
+@testset "Compact exact-frequency witness labels preserve short evidence names" begin
+    for protocol in ("","dq_active","composed_coarse"), fs in ([750.,1000.],[7.,1000.])
+        spec=(;protocol,frequencies=fs)
+        @test V.step_prefix(spec)==V.scan_prefix(spec)*"half_step_"*join(round.(Int,fs),"_")*"__"
+    end
+    for (fs,label) in (([collect(232.:1.5:260.5);collect(334.:1.5:361.)],"232_361_n39_0d674b400f77"),
+            (collect(357.:.5:378.),"357_378_n43_ec5aa7b9b0a2"))
+        spec=(;protocol="composed_local",frequencies=fs)
+        @test V.step_prefix(spec)=="composed_local_half_step_"*label*"__"
+        changed=copy(fs);changed[2]+=.001
+        @test round.(Int,changed)==round.(Int,fs)
+        @test V.step_prefix(merge(spec,(;frequencies=changed)))!=V.step_prefix(spec)
+        @test V.step_prefix(merge(spec,(;frequencies=copy(fs))))==V.step_prefix(spec)
+    end
+end
+
+@testset "Preparation bounds station scratch and mapped local paths before writes" begin
+    remote=(;remote_root=raw"C:\Users\Amauri\AppData\Local\PowerImpedance\PSCAD\Remote",
+        shared_root=raw"Z:\Documents\KUL\PowerImpedance.jl\local\pscad-exchange",
+        local_root="/home/amartins/Documents/KUL/PowerImpedance.jl/local/pscad-exchange")
+    for id in [V.M9D_A_IDS;V.M9D_B_IDS]
+        spec=(;id,frequencies=[1.,7.,750.,1000.],protocol="composed_coarse",axes=["p1_d","p1_q"],
+            time_step=2.5e-6,sample_step=62.5e-6,window_duration=8.,window_starts=(16.,24.),simulation_time=32.)
+        specs=[spec]
+        if id in ("L3-04","L3-08")
+            fs=id=="L3-04" ? collect(357.:.5:378.) : [collect(232.:1.5:260.5);collect(334.:1.5:361.)]
+            push!(specs,merge(spec,(;protocol="composed_local",frequencies=fs)))
+        end
+        paths=V.check_prepared_run_paths(id,V.composed_run_axes(specs),remote)
+        @test paths["remote"]["length"]==(id in ("L3-04","L3-08") ? 175 : 160)
+        @test paths["mapped_local"]["length"]==(id in ("L3-04","L3-08") ? 173 : 158)
+        @test paths["local"]["length"]==(id in ("L3-04","L3-08") ? 185 : 170)
+        @test all(endswith(item["path"],raw"\run-XXXXXX\toolkit\supervisor.ps1") for item in values(paths))
+    end
+    axes=["compact_baseline"]
+    lengths=V.prepared_run_paths("L3-08",axes,remote)
+    for (field,label) in ((:remote_root,"remote"),(:shared_root,"mapped_local"),(:local_root,"local"))
+        root=getproperty(remote,field)*repeat("x",240-lengths[label]["length"])
+        boundary=merge(remote,NamedTuple{(field,)}((root,)))
+        @test V.check_prepared_run_paths("L3-08",axes,boundary)[label]["length"]==240
+        too_long=merge(remote,NamedTuple{(field,)}((root*"x",)))
+        @test_throws r"exceeds 240 characters" V.check_prepared_run_paths("L3-08",axes,too_long)
+        mktempdir() do directory
+            spec=merge(V.l1_settings(),(;id="L3-08",dimension=2,protocol="composed_local",
+                time_step=2.5e-6,sample_step=62.5e-6,frequencies=[7.,1000.]))
+            @test_throws r"exceeds 240 characters" V.prepare_scan_projects(directory,nothing,spec,String[];
+                prefix="compact_",remote=merge(too_long,(;remote_root=repeat("x",250))))
+            @test isempty(readdir(directory))
+        end
+    end
+end
+
+@testset "Local witness repair archives unused projects and preserves completed evidence" begin
+    mktempdir() do directory
+        mktempdir() do staging
+            old_prefix="composed_local_half_step_"*join(round.(Int,[collect(232.:1.5:260.5);collect(334.:1.5:361.)]),"_")*"__"
+            compact=V.step_prefix((;protocol="composed_local",frequencies=[collect(232.:1.5:260.5);collect(334.:1.5:361.)]))
+            projects=Dict{String,Any}[];models=Pair{String,P.PSCADModel}[]
+            settings=P.SimulationSettings();probes=P.ProbeManifest()
+            for axis in ("baseline","p1_d","p1_q")
+                old=joinpath(mkpath(joinpath(directory,old_prefix*axis)),"l3_08.pscx")
+                write(old,"old local witness $axis")
+                push!(projects,Dict("axis"=>old_prefix*axis,"path"=>relpath(old,directory),"sha256"=>V.digest(old)))
+                key=compact*axis;path=joinpath(mkpath(joinpath(staging,key)),"l3_08_0d674b400f77.pscx")
+                write(path,"compact namespace local witness $axis")
+                model=P.PSCADModel(path,"l3_08_0d674b400f77",nothing,probes,settings,nothing,
+                    (;source=:validation,mhi_xml_version="offline",baseline_axis=compact*"baseline"))
+                push!(models,key=>model)
+            end
+            retained=joinpath(mkpath(joinpath(directory,"runs","composed_local_p1_d-ABCDEF","run-ABCDEF")),"completed.out")
+            write(retained,"completed local main evidence")
+            runs=[Dict{String,Any}("axis"=>"composed_coarse_p1_d","status"=>"passed"),
+                Dict{String,Any}("axis"=>"composed_local_p1_d","path"=>relpath(retained,directory)),
+                Dict{String,Any}("axis"=>"composed_local_half_amplitude_p1_d","status"=>"passed")]
+            groups=Dict("composed_coarse"=>Dict("status"=>"passed"),"composed_local"=>Dict("selection"=>Dict("column"=>1)))
+            record=Dict{String,Any}("projects"=>projects,"run_records"=>runs,"groups"=>groups,"source_files"=>[Dict("path"=>"old","sha256"=>"old")])
+            write(joinpath(directory,"manifest.toml"),sprint(TOML.print,record))
+            before=deepcopy(record);payload=V.digest(retained);manifest=V.digest(joinpath(directory,"manifest.toml"))
+            push!(record["run_records"],Dict("axis"=>first(projects)["axis"]))
+            @test_throws r"run-recorded witness" V.replace_local_witness_projects!(record,directory,models,old_prefix)
+            pop!(record["run_records"])
+            @test V.digest(joinpath(directory,"manifest.toml"))==manifest
+            # A completion missing from the manifest is protected too.
+            unindexed=mkpath(joinpath(directory,"runs",first(projects)["axis"]*"-ABCDEF","run-ABCDEF"))
+            write(joinpath(unindexed,"complete.toml"),"")
+            write(joinpath(unindexed,"generated.pscx"),"old")
+            write(joinpath(unindexed,"computation.toml"),sprint(TOML.print,Dict("project_sha256"=>first(projects)["sha256"])))
+            @test_throws r"completed witness" V.replace_local_witness_projects!(record,directory,models,old_prefix)
+            rm(unindexed;recursive=true)
+            V.replace_local_witness_projects!(record,directory,models,old_prefix)
+            @test record["run_records"]==before["run_records"]
+            @test record["groups"]==before["groups"]
+            @test V.digest(retained)==payload
+            repair=record["local_witness_repair"]
+            @test repair["previous_projects"]==before["projects"]
+            @test repair["previous_source_files"]==before["source_files"]
+            @test V.digest(joinpath(directory,repair["archive"],"manifest.toml"))==manifest
+            for old in before["projects"]
+                @test V.digest(joinpath(directory,repair["archive"],old["path"]))==old["sha256"]
+                @test !ispath(joinpath(directory,old["path"]))
+            end
+            @test length(record["projects"])==3
+            @test all(startswith(p["axis"],compact) for p in record["projects"])
+            @test all(isfile(joinpath(directory,p["path"])) for p in record["projects"])
+            @test all(p["sha256"]!=q["sha256"] for p in record["projects"] for q in before["projects"])
+        end
     end
 end
 end

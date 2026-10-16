@@ -211,6 +211,10 @@ function scan_record(spec)
         record["dc_clamped"]=spec.dc_clamped
         record["reference_scope"]="individual local device Y on original L2 bases; aggregate port Y and direct V/Idrive on predeclared aggregate bases"
         record["comparison_rule"]=Dict(string(k)=>v for (k,v) in pairs(C_ACTIVE))
+        record["resonance_groups"]=get(spec,:resonance_groups,Vector{Int}[])
+        if spec.protocol=="composed_local"
+            record["refinement"]["selection"]="one worst-error drive axis; full predeclared local band at half amplitude and half step; matching half-step baseline; original eight-second windows"
+        end
     end
     return record
 end
