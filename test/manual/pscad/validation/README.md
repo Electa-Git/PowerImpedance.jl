@@ -156,6 +156,13 @@ residual-normalized diagnostics remain recorded. The selected denominator is the
 response, not its small unexplained residual. The Y comparison with the one-step (discrete) model,
 KCL, amplitude and window checks must pass independently.
 
+Coupled circuits select the step-size rule for each block. A zero-delay converter uses the
+residual step-size check and must meet both reproduction checks. Machines and converters with
+positive delays use the raw step change. Aggregate and direct-Z blocks use the residual check
+when the circuit reference reproduces both measured columns within 1 %; otherwise they use the
+raw step change. Each block records `step_reference` and `step_reference_reason`. Reproduction
+errors remain diagnostic when the raw rule applies.
+
 ## Checks and tolerances
 
 The suite reports operating-point, frequency-response, time-domain response and instability-growth
@@ -620,8 +627,21 @@ tone.
 
 The coarse frequency-response comparisons pass against the one-step (discrete) model, with maximum
 error 1.51 % (limit 5 %). The run uses 1.25/0.625 us integration, recorder ratio 25, 80 s duration
-and [64,72), [72,80) s windows. The residual step-size check is pending, so the fixture has no final
-passing result.
+and [64,72), [72,80) s windows. Re-analysis of the retained native runs gives these step-size
+results; both norm and entry changes must be at most 1 %.
+
+| Block | Applied rule | Norm change | Entry change | Result |
+|---|---|---|---|---|
+| Machine C1 | Raw step change; no zero-delay modulation | 0.342 % | 1.117 % | Fail |
+| MMC C2 | Residual step-size check; zero-delay modulation | 0.133 % | 0.377 % | Pass |
+| Aggregate Y | Raw step change; main reference reproduction exceeds 1 % | 0.342 % | 1.34 % | Fail |
+| Direct Z | Residual step-size check; both reference reproductions pass | 0.133 % | 0.377 % | Pass |
+
+The half-amplitude repeats pass. The fixture fails the step-size limit, with valid measured
+columns. The machine's PSCAD discretisation is at the 1 % step-size edge at 1.25/0.625 us;
+the standalone machine passed at 0.90 %. A finer repeat would require 80 s runs at 0.3125 us.
+The re-analysis record and per-block columns are under `data/L3-06/`; native evidence is retained
+separately.
 
 #### Two MMCs coupled by a distributed DC cable (`L3-07`)
 
@@ -821,6 +841,7 @@ PSCADValidation.run_l4(; ids=["L4-00D", "L4-04D"], timeout=2400.)
 | Growing modes from fixed-frame dq line reduction | Julia's fixed-frame dq reduction of an untransposed line can be non-passive. For the 170 km IEEE9 line, the minimum Hermitian admittance is -0.005134 S in dq versus +0.0005009 S in phase coordinates. With a 100 MVA TLC at bus 2, the dq model predicts a growing pair near 124.24/124.34 kHz (+2.37 s⁻¹); the phase-domain harmonic calculation gives -670.4 s⁻¹, converged at K=1..3. | Dq-frame frequency-response and stability comparisons are invalid for systems with significant asymmetry in their untransposed lines at the frequencies of interest; compare in the phase domain instead. |
 | Inconsistent low-frequency voltage phasors despite clean currents | EMT-Nyquist voltage chatter aliases to DC at even recorder/integration ratios | Prepare an odd integer ratio at both steps and preserve coherent windows. Adjacent decimation offsets correlated -0.999, offsets two apart +0.998; 0.74–0.85 V RMS chatter persisted after onset. Ratio 25 separates it at recorder Nyquist. |
 | Zero-delay converter Y/step errors rise with frequency | One inherent electrical-measurement-to-source step | Use the one-step (discrete) model and residual step-size check, retaining continuous model errors and raw step changes and KCL readout checks. Positive delays export a rounded residual after subtracting one step. |
+| Machine step change exceeds 1 % in the shared machine/MMC circuit | PSCAD machine discretisation is at the step-size edge at 1.25/0.625 us | The machine column in `L3-06` is valid but fails the raw entry-change limit at 1.117 %; aggregate Y also fails at 1.34 %. The standalone machine passed at 0.90 %. A finer repeat requires 80 s runs at 0.3125 us. Apply the residual rule only to eligible blocks. |
 | Window-entry failure near a lightly damped mode | Ill-conditioned measured voltage matrix amplifies residual drift/noise | Keep the ≤100 condition check and extend predeclared coherent windows. The stiff-grid P/Q MMC had 1.87 % window-entry change at 42 Hz against 1 %; 8 s windows resolve the stored case. Larger amplitude alone did not remove it. |
 | DFT rejects an adaptive band | Window lacks whole tone periods | A 75 Hz tone has 7.5 cycles in 0.1 s. Use whole common periods including the 50 Hz frame: [8,8.12), [8.12,8.24) s for the recorded 75/1000 Hz case, and retain enough output to cover both. |
 | Large relative error on a tiny cross entry | Reference below the entry floor | Report the 0.02 pu absolute-floor comparison. Do not claim relative accuracy for sub-floor entries or let a passing aggregate hide them. |

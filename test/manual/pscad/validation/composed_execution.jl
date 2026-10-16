@@ -252,12 +252,22 @@ function composed_witnesses!(group_record,c,spec,step_spec,column,main,half,amp,
         raw["valid"]=a.quality["valid"]&&b.quality["valid"]&&all(x["passed"] for x in checks)
         raw["passed"] &= raw["valid"];raw["quality"]=b.quality
         selected=raw;reproduction=Dict{String,Any}()
+        device=findfirst(n->target==string(n)*"_Y",c.devices)
+        device_residual=device!==nothing && interface_step_eligible(c.net.elements[c.devices[device]].element_model)
+        use_residual=false
         if residual
             pm=pred[target];ph=predhalf[target]
             rm=matrix_change(a.matrix,pm;epsilon=.01);rh=matrix_change(b.matrix,ph;epsilon=.01)
+            reproduction=Dict("main"=>rm,"half"=>rh)
+            use_residual=device===nothing ? rm["passed"]&&rh["passed"] : device_residual
+        end
+        reason=device!==nothing ? (device_residual ? "zero-delay converter" : "device without zero-delay modulation") :
+            !residual ? "circuit has no zero-delay converter" : use_residual ?
+            "circuit reference reproduces main and half-step columns within 1 %" :
+            "circuit reference does not reproduce main and half-step columns within 1 %"
+        if use_residual
             valid=raw["valid"]&&rm["passed"]&&rh["passed"]
             selected=residual_step_change(a.matrix[:,:,indices],b.matrix,pm[:,:,indices],ph;valid)
-            reproduction=Dict("main"=>rm,"half"=>rh)
             rows=[(step=label,frequency_Hz=f,row=r,measured_real=real(m[r,1,k]),measured_imag=imag(m[r,1,k]),
                 predicted_real=real(p[r,1,k]),predicted_imag=imag(p[r,1,k]))
                 for (label,fs,m,p) in (("main",spec.frequencies,a.matrix,pm),("half",step_spec.frequencies,b.matrix,ph))
@@ -281,12 +291,13 @@ function composed_witnesses!(group_record,c,spec,step_spec,column,main,half,amp,
         append!(reasons,["half_amplitude: "*r for r in get(am.quality,"invalid_reasons",String[])])
         append!(reasons,["half_step: "*r for r in get(b.quality,"invalid_reasons",String[])])
         all(x["passed"] for x in checks) || push!(reasons,"kcl_readout")
-        if residual
+        if use_residual
             reproduction["main"]["passed"] || push!(reasons,"main_discrete_reproduction")
             reproduction["half"]["passed"] || push!(reasons,"half_step_discrete_reproduction")
         end
         witnesses[target]=Dict("status"=>status,"invalid_reasons"=>reasons,"amplitude"=>amplitude,"raw_step"=>raw,"selected_step"=>selected,
-            "reproduction"=>reproduction,"step_reference"=>residual ? "composed_residual" : "raw")
+            "reproduction"=>reproduction,"step_reference"=>use_residual ? "composed_residual" : "raw",
+            "step_reference_reason"=>reason)
     end
     group_record["witnesses"]=witnesses;group_record["readout_checks"]=checks
     group_record["exported_passives"]=Dict(string(n)=>Dict("topology"=>string(f.topology),

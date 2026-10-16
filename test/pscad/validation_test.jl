@@ -2436,7 +2436,6 @@ end
                 @test resolution["width_Hz"]≈5.727917076969845 rtol=1e-9
                 @test length(V.l3_specs(id,list))==2
             end
-            # Each device/aggregate/direct-Z residual is independently qualified.
             step=V.composed_step_spec(spec,750.)
             pred=V.composed_predicted_columns(c,spec,1,forms)
             predhalf=V.composed_predicted_columns(c,step,1,forms)
@@ -2445,8 +2444,17 @@ end
             model=(;project_path=project,netlist=list);group=Dict{String,Any}()
             witness=V.composed_witnesses!(group,c,spec,step,1,main,half,main,
                 (main=model,half=model),[Dict("passed"=>true)],directory)
-            @test all(w["status"]=="passed" && w["step_reference"]=="composed_residual" for w in values(witness))
-            @test all(w["selected_step"]["entry_change"]<1e-12 for w in values(witness))
+            @test all(w["status"]=="passed" for w in values(witness))
+            for (target,w) in witness
+                plain=id=="L3-03" && target=="C1_Y"
+                @test w["step_reference"]==(plain ? "raw" : "composed_residual")
+                @test !isempty(w["step_reference_reason"])
+                if plain
+                    @test w["selected_step"]==w["raw_step"]
+                else
+                    @test w["selected_step"]["entry_change"]<1e-12
+                end
+            end
         end
         if id=="L3-03"
             @test occursin("equilibrium",spec.settling["scope"])
@@ -2455,6 +2463,62 @@ end
             @test b.power==1060. && b.dc_voltage==640.
             @test b.ac_voltage≈400sqrt(2/3)
         end
+    end
+end
+
+@testset "Composed machine and zero-delay converter use separate step rules" begin
+    net=V.l3_network("L3-06");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.l3_circuit("L3-06",net)
+    spec=merge(V.l3_spec("L3-06",list),(;frequencies=[750.,1000.],phases=[0.,-π]))
+    step=V.composed_step_spec(spec,1000.)
+    plan,_=V.scan_plan(list,spec,"baseline")
+    mktempdir() do directory
+        project=passive_project(plan,joinpath(directory,"mixed.pscx"))
+        forms=V.exported_composed_passives(c,project,list)
+        pred=V.composed_predicted_columns(c,spec,2,forms)
+        predhalf=V.composed_predicted_columns(c,step,2,forms)
+        main=Dict(t=>(matrix=copy(p),quality=Dict("valid"=>true)) for (t,p) in pred)
+        half=Dict(t=>(matrix=copy(p),quality=Dict("valid"=>true)) for (t,p) in predhalf)
+        for target in ("C1_Y","aggregate_Y")
+            main[target].matrix .*= 1.04
+            half[target].matrix .= main[target].matrix
+        end
+        model=(;project_path=project,netlist=list);group=Dict{String,Any}()
+        qualify()=V.composed_witnesses!(group,c,spec,step,2,main,half,main,
+            (main=model,half=model),[Dict("passed"=>true)],directory)
+        witnesses=qualify()
+        for target in ("C1_Y","aggregate_Y")
+            w=witnesses[target]
+            @test w["status"]=="passed" && w["step_reference"]=="raw"
+            @test w["selected_step"]["entry_change"]==0
+            @test !w["reproduction"]["main"]["passed"]
+            @test isempty(w["invalid_reasons"])
+        end
+        @test witnesses["C1_Y"]["step_reference_reason"]=="device without zero-delay modulation"
+        @test occursin("does not reproduce",witnesses["aggregate_Y"]["step_reference_reason"])
+        for target in ("C2_Y","direct_Z")
+            w=witnesses[target]
+            @test w["status"]=="passed" && w["step_reference"]=="composed_residual"
+            @test w["selected_step"]["entry_change"]<1e-12
+        end
+        @test witnesses["C2_Y"]["step_reference_reason"]=="zero-delay converter"
+        @test !witnesses["C2_Y"]["raw_step"]["passed"]
+        @test occursin("reproduces",witnesses["direct_Z"]["step_reference_reason"])
+        half["C1_Y"].matrix .*= 1.02
+        witnesses=qualify()
+        @test witnesses["C1_Y"]["status"]=="failed"
+        @test witnesses["C1_Y"]["selected_step"]["entry_change"]>.01
+        @test isempty(witnesses["C1_Y"]["invalid_reasons"])
+        main["C2_Y"].matrix .*= 1.04
+        witnesses=qualify()
+        @test witnesses["C2_Y"]["status"]=="invalid_measurement"
+        @test witnesses["C2_Y"]["step_reference"]=="composed_residual"
+        @test "main_discrete_reproduction" in witnesses["C2_Y"]["invalid_reasons"]
+        main["direct_Z"].matrix .*= 1.04
+        half["direct_Z"].matrix .= main["direct_Z"].matrix
+        witnesses=qualify()
+        @test witnesses["direct_Z"]["status"]=="passed"
+        @test witnesses["direct_Z"]["step_reference"]=="raw"
+        @test occursin("does not reproduce",witnesses["direct_Z"]["step_reference_reason"])
     end
 end
 
