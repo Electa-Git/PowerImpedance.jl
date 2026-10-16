@@ -8,7 +8,7 @@ Describe one master-library instance in pixel coordinates.
 $(TYPEDFIELDS)
 """
 struct ComponentPlan <: AbstractComponentPlan
-    "Qualified library definition."
+    "Library definition name, including its prefix."
     defn::String
     "String-valued master parameters in emission order."
     params::Vector{Pair{String, String}}
@@ -23,12 +23,12 @@ end
 """
 $(TYPEDEF)
 
-Place an instance of a project-owned module in pixel coordinates.
+Place an instance of a module defined in the project in pixel coordinates.
 
 $(TYPEDFIELDS)
 """
 struct ModuleInstancePlan <: AbstractComponentPlan
-    "Qualified project definition."
+    "Project definition name, including its prefix."
     defn::String
     "Instance parameter values in emission order."
     params::Vector{Pair{String, String}}
@@ -49,7 +49,7 @@ the 18-pixel PSCAD grid.
 $(TYPEDFIELDS)
 """
 struct WirePlan
-    "Two endpoint coordinates in pixels."
+    "Wire endpoint coordinates in pixels."
     vertices::Vector{NTuple{2, Int}}
     function WirePlan(vertices::Vector{NTuple{2, Int}})
         length(vertices) == 2 ||
@@ -66,7 +66,7 @@ end
 """
 $(TYPEDEF)
 
-Retain the component instances and wires of one schematic.
+Store the component instances and wires of one schematic.
 
 $(TYPEDFIELDS)
 """
@@ -75,7 +75,7 @@ struct CanvasPlan
     components::Vector{AbstractComponentPlan}
     "Wire segments in emission order."
     wires::Vector{WirePlan}
-    "Canvas-owned internal name reservations."
+    "Internal names reserved within this canvas."
     used::_NameReservations
     "Electrical node aliases for an empty series path."
     aliases::Dict{String, Union{Nothing, String}}
@@ -108,12 +108,12 @@ end
 """
 $(TYPEDEF)
 
-Describe a module boundary port on the 18-pixel grid.
+Describe a module port on the 18-pixel grid.
 
 $(TYPEDFIELDS)
 """
 struct ModulePortPlan
-    "Boundary signal or electrical node identifier."
+    "Module signal or electrical node identifier."
     name::String
     "Port kind: `:input`, `:output`, or `:electrical`."
     kind::Symbol
@@ -123,7 +123,7 @@ struct ModulePortPlan
     y::Int
     "Signal or conductor count."
     dim::Int
-    "PSCAD signal type: 3 for real, 2 for integer, 0 for electrical."
+    "PSCAD signal type code (3=real, 2=integer, 0=electrical)."
     datatype::Int
     function ModulePortPlan(name, kind, x, y, dim = 1, datatype = 3)
         kind in (:input, :output, :electrical) ||
@@ -137,18 +137,18 @@ end
 """
 $(TYPEDEF)
 
-Retain a project-owned module's typed form, graphics ports and schematic.
-Copy the supplied canvas and lower its parameter imports so each declared
-input parameter has a schematic binding. Existing signal imports are reused.
+Store a module's typed parameters, ports and schematic. Copy the canvas and
+add parameter imports so each declared input has a schematic name.
+Reuse existing signal imports.
 
 $(TYPEDFIELDS)
 """
 struct ModuleDefinitionPlan
-    "Unqualified definition identifier."
+    "Definition name without a project prefix."
     name::String
     "Typed parameters in form order."
     parameters::Vector{ModuleParameterPlan}
-    "Boundary ports in graphics order."
+    "Module ports in graphics order."
     ports::Vector{ModulePortPlan}
     "Control schematic."
     canvas::CanvasPlan
@@ -162,7 +162,7 @@ end
 """
 $(TYPEDEF)
 
-Retain project settings as file parameter strings.
+Store project settings as file parameter strings.
 
 $(TYPEDFIELDS)
 """
@@ -176,15 +176,15 @@ abstract type AbstractLineDefinitionPlan end
 """
 $(TYPEDEF)
 
-Retain one transmission-line row definition with tower coordinates before
+Store one transmission-line row definition with tower coordinates before
 sag correction. Parameter values use PSCAD field names and unit strings.
 
 $(TYPEDFIELDS)
 """
 struct LineDefinitionPlan <: AbstractLineDefinitionPlan
-    "Unqualified row-definition identifier."
+    "Row-definition name without a project prefix."
     name::String
-    "Row kind; `:tline` for an overhead line."
+    "Row kind, `:tline` for an overhead line."
     kind::Symbol
     "Universal-tower keyword parameters."
     tower::Vector{Pair{String, String}}
@@ -203,13 +203,13 @@ end
 """
 $(TYPEDEF)
 
-Retain one cable row with a coaxial component per physical position and
+Store one cable row with a coaxial component per physical position and
 shared earth-return and frequency/phase parameters.
 
 $(TYPEDFIELDS)
 """
 struct CableDefinitionPlan <: AbstractLineDefinitionPlan
-    "Unqualified row-definition identifier."
+    "Row-definition name without a project prefix."
     name::String
     "Coaxial cable instances in physical position order."
     cables::Vector{ComponentPlan}
@@ -232,7 +232,7 @@ and receiving terminals are at offsets `(-54, 18)` and `(54, 72)` pixels.
 $(TYPEDFIELDS)
 """
 struct TLineWrapperPlan <: AbstractLineWrapperPlan
-    "Unqualified row-definition identifier."
+    "Row-definition name without a project prefix."
     row::String
     "Horizontal origin in pixels."
     x::Int
@@ -246,12 +246,12 @@ end
 $(TYPEDEF)
 
 Place one cable wrapper on Main in remote-ends mode. Electrical terminals
-belong to the paired cable interfaces; wrapper vertices are graphical.
+belong to the paired cable interfaces. Wrapper vertices are graphical.
 
 $(TYPEDFIELDS)
 """
 struct CableWrapperPlan <: AbstractLineWrapperPlan
-    "Unqualified row-definition identifier."
+    "Row-definition name without a project prefix."
     row::String
     "Horizontal origin in pixels."
     x::Int
@@ -273,7 +273,7 @@ struct ProjectPlan
     name::String
     "Project description."
     description::String
-    "Detached-run settings."
+    "Simulation settings."
     settings::SettingsPlan
     "Main schematic."
     main::CanvasPlan
@@ -281,7 +281,7 @@ struct ProjectPlan
     lines::Vector{AbstractLineDefinitionPlan}
     "Transmission-line wrappers on Main in emission order."
     wrappers::Vector{AbstractLineWrapperPlan}
-    "Project-owned control module definitions in emission order."
+    "Control modules defined in the project, in emission order."
     modules::Vector{ModuleDefinitionPlan}
     "Emitted output channels and reference bus."
     probes::ProbeManifest
@@ -295,17 +295,17 @@ Summarize a written project for XML round-trip verification.
 $(TYPEDFIELDS)
 """
 struct ProjectSummary
-    "Instance counts keyed by qualified definition."
+    "Instance counts indexed by definition name with library or project prefix."
     components_per_defn::Dict{String, Int}
     "Node-label occurrence counts."
     nodelabels::Dict{String, Int}
     "PGB names in schematic order."
     pgbs::Vector{String}
-    "Component counts per unqualified row-definition name."
+    "Component counts per row-definition name without a project prefix."
     row_definitions::Dict{String, Dict{String, Int}}
-    "Main wrapper counts keyed by qualified row-definition name."
+    "Wrapper counts on Main, indexed by row-definition name with project prefix."
     wrappers_per_defn::Dict{String, Int}
-    "Boundary ports keyed by unqualified module definition name."
+    "Module ports indexed by module definition name without project prefix."
     modules_and_ports::Dict{String, Vector{ModulePortPlan}}
     "Project setting strings."
     settings::Dict{String, String}
@@ -317,7 +317,7 @@ end
 $(TYPEDEF)
 
 Allocate 432-by-216-pixel cells, six per row, starting at grid coordinate
-`(4, 4)`. Each cell holds a group of element instances or probes.
+`(4, 4)`. Each cell contains element instances or probes.
 
 $(TYPEDFIELDS)
 """
@@ -330,7 +330,15 @@ GridLayout() = GridLayout(0)
 """
 $(TYPEDSIGNATURES)
 
-Reserve the next cell and return its upper-left pixel coordinates.
+Reserve the next layout cell.
+
+# Arguments
+
+- `layout`: Grid with the next cell index.
+
+# Returns
+
+- `(x, y)`: Upper-left coordinates in pixels.
 """
 function allocate_cell!(layout::GridLayout)
     index = layout.next
@@ -338,7 +346,6 @@ function allocate_cell!(layout::GridLayout)
     return (72 + 432 * (index % 6), 72 + 216 * (index ÷ 6))
 end
 
-# Only the builder owns these mutable arrays and identifier reservations.
 struct PlanState
     main::CanvasPlan
     lines::Vector{AbstractLineDefinitionPlan}
@@ -363,7 +370,7 @@ function label!(canvas::CanvasPlan, name, point)
     component!(canvas, "nodelabel", point, ["Name" => name])
 end
 
-# An empty series path identifies nodes; it introduces no electrical device.
+# An empty series path makes its endpoint labels denote the same node.
 function join_node_labels!(canvas, left, right)
     left = left === nothing ? nothing : get(canvas.aliases, lowercase(left), left)
     right = right === nothing ? nothing : get(canvas.aliases, lowercase(right), right)
@@ -385,7 +392,7 @@ function join_node_labels!(canvas, left, right)
     return nothing
 end
 
-# Known orient-0 ports only: every label/ground stub is 36 pixels long.
+# A 36-pixel stub separates each orient-0 port from its label or ground.
 function stub!(canvas::CanvasPlan, port, name; direction = 1)
     endpoint = (port[1] + 36 * direction, port[2])
     wire!(canvas, port, endpoint)
@@ -428,11 +435,8 @@ function component_chain!(canvas::CanvasPlan, parts, start, stem, used)
     return point
 end
 
-# Offsets are the pins used by the saved canvases and the primitive lowering.
-# Electrical witnesses: local/OHL/DUT_2.pscx:1689–1779 (transformer/passives),
-# local/TLC/Simple_2L_VSC_RL.pscx:3377–3529,5589–5630 (breakout, source, xnode,
-# meters). Control witnesses: the complete saved abc/dq canvases at 1851–3234;
-# local/SG/SG_Project.pscx supplies the M3 primitives and machine pins (see doc).
+# Port offsets follow the master components and the abc/dq transforms.
+# Each port needs its own label stub for the connectivity check.
 function component_ports(c::ComponentPlan, modules)
     p = Dict(c.params)
     d = c.defn
@@ -498,9 +502,8 @@ function component_ports(c::ComponentPlan, modules)
             [(-36, 0), (0, 36), (36, 0)]
         elseif d == "master:datamerge" && c.orient == 4
             n = parse(Int, p["N"])
-            # Saved orient-4 pins are already in canvas coordinates:
-            # local/TLC/Simple_2L_VSC_RL.pscx:2214–2238,2857–2891,2937–2961.
-            # For N=2 the inputs are (-18,-72), (-18,-54), output (0,-18).
+            # The orient-4 merge inputs already use canvas coordinates. For N=2,
+            # the inputs are (-18,-72), (-18,-54) and the output is (0,-18).
             return [[((c.x - 18, c.y + 18 * (i - 5)), :signal, :input) for i in 1:n];
                     [((c.x, c.y + 18 * (n - 3)), :signal, :output)]]
         elseif d == "master:datatap" && c.orient == 0
@@ -553,16 +556,31 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Reject port abutment and every connection except a separate straight stub
-between a known component port and a label or ground. Require every input and
-electrical port to have a stub, and every signal input to have exactly one
-driver on the same canvas. Reject isolated ideal-meter grounding chains.
-Coordinates are pixels.
+Check component ports, label stubs and signal drivers on one canvas.
+Require a separate straight wire from each input or electrical port to a label
+or ground. Each signal input requires exactly one driver on the same canvas.
+Check isolated ideal-meter chains for a solvable ground connection.
 
-With `PythonCall` loaded, `check_connectivity(path::AbstractString)` reads the
-serialized project coordinates and applies the same checks. This also checks
-projects saved after native loading, where a relocated component can leave
-its original wire endpoint dangling.
+# Arguments
+
+- `canvas`: Components and wires to check, with coordinates in pixels.
+- `name`: Canvas identifier for error messages.
+- `modules`: Module definitions indexed by name. Default: an empty dictionary.
+
+# Returns
+
+- `nothing` if the connections satisfy the checks.
+
+# Notes
+
+With `PythonCall` loaded, `check_connectivity(path::AbstractString)` applies
+the same checks to a saved project. PSCAD can relocate a component on load
+without moving its wire endpoint.
+
+# Errors
+
+- Throws `ArgumentError` for abutting ports, missing or intersecting stubs,
+  invalid coordinates, missing signal drivers or unsolvable ideal-meter chains.
 """
 function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
     fail(point, reason) = throw(ArgumentError("PSCAD canvas $name at $point: $reason"))
@@ -601,9 +619,8 @@ function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
                 ports[point] = kind
                 directions[point] = direction
             end
-            # Meter names and machine P/Q are implicit signal outputs, as saved
-            # in local/TLC/Simple_2L_VSC_RL.pscx:4317–4337,5618–5630 and
-            # local/SG/SG_Project.pscx:998–1198 (POut/QOut).
+            # Meters and machine P/Q outputs publish signals by name without
+            # explicit output ports.
             implicit_keys = c.defn in
                             ("master:ammeter", "master:voltmeter", "master:voltmetergnd") ?
                             ("Name",) :
@@ -640,8 +657,8 @@ function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
             push!(points, point)
         end
     end
-    # breaker1's NAME is an implicit real input, not a graphical signal pin.
-    # Saved master:breaker1 Dsdyn calls NINT(1-NAME); require its timed driver.
+    # breaker1 reads NAME as a real-valued command through NINT(1-NAME),
+    # so a symbolic command requires a timed signal driver.
     for c in canvas.components
         c isa ComponentPlan && c.defn == "master:breaker1" || continue
         command = get(Dict(c.params), "NAME", "")
@@ -649,7 +666,7 @@ function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
         length(get(drivers, lowercase(command), NTuple{2, Int}[])) == 1 ||
             fail((c.x, c.y), "breaker1 NAME must have one signal driver")
     end
-    # Sorted coordinate indices avoid scanning every canvas point per stub.
+    # Sorted coordinates restrict each stub intersection search to its row or column.
     rows, columns = Dict{Int, Vector{Int}}(), Dict{Int, Vector{Int}}()
     for (x, y) in points
         push!(get!(rows, y, Int[]), x)
@@ -707,9 +724,8 @@ function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
     return nothing
 end
 
-# Native evidence: local/pscad-exchange/diag/yy_named-report/Main.dta:22–27
-# contains two separate ideal A branches around B2; the load-return variant
-# runs with the same passive parameters. Source-grounded chains remain valid.
+# A series chain of ideal meters can make an isolated winding unsolvable.
+# A source in that circuit supplies a voltage reference.
 function _check_meter_grounding(canvas, name, modules)
     parent = Dict{String, String}()
     root(n) = get!(parent, n, n) == n ? n : (parent[n] = root(parent[n]))
@@ -745,8 +761,7 @@ function _check_meter_grounding(canvas, name, modules)
             if c isa ModuleInstancePlan
                 definition = modules[last(split(c.defn, ':'))]
                 if isempty(definition.canvas.components)
-                    # Transmission-line wrappers have known sending/receiving
-                    # terminals (local/OHL/DUT_2.pscx:1798–1839).
+                    # The sending and receiving terminals connect the line to both circuits.
                     join(first(nets), last(nets))
                     for n in nets
                         push!(get!(attachments, n, Int[]), 0)
@@ -788,15 +803,14 @@ function _check_meter_grounding(canvas, name, modules)
                         haskey(cables, key) ? join(n, cables[key]) : (cables[key] = n)
                     end
                 end
-                # Transformer ports are distinct galvanic islands; do not
-                # connect the two windings (local/OHL/DUT_2.pscx:1707–1741).
+                # The transformer windings are separate galvanic circuits.
             end
         end
         return nothing
     end
     collect_canvas(canvas, String(name), Dict{String, String}())
-    # Canonicalize xnode bindings and ordinary branches before counting meter
-    # junctions, including chains crossing an electrical module boundary.
+    # Resolve module-port bindings and conducting branches before counting
+    # meter junctions across module connections.
     grouped = Dict{String, Vector{Int}}()
     for (n, branches) in attachments
         append!(get!(grouped, root(n), Int[]), branches)
@@ -807,9 +821,8 @@ function _check_meter_grounding(canvas, name, modules)
     anchors, sources = Set(root.(collect(anchors))), Set(root.(collect(sources)))
     bare(n) = n ∉ anchors && length(get(attachments, n, Int[])) == 2 &&
               all(!=(0), attachments[n])
-    # A source anywhere in a galvanic island anchors that island, including
-    # source-side meter chains. Ground is a boundary, not a route for joining
-    # otherwise isolated islands through their separate shunts.
+    # A source supplies the voltage reference for its connected circuit.
+    # Separate shunts to ground do not connect otherwise isolated circuits.
     adjacent = Dict{String, Vector{String}}()
     for (a, b, _, _, _) in meters
         a, b = root(a), root(b)
@@ -851,8 +864,8 @@ function _check_meter_grounding(canvas, name, modules)
     end
     anchored = union(Set(root.(collect(anchors))), Set(root.(collect(source_islands))))
     for (a, b, chain) in blocked
-        # An alternate direct/source path anchors both endpoints and makes
-        # this harmless, as on the passing small-AC/source-side constructions.
+        # A direct branch or a source connection at both endpoints supplies
+        # the voltage references needed by the ideal-meter chain.
         root(a) in anchored && root(b) in anchored && continue
         root(a) == root(b) && continue
         root(a) in anchored || root(b) in anchored || continue
@@ -864,8 +877,8 @@ function _check_meter_grounding(canvas, name, modules)
 end
 
 function _check_module_electrical_parameters(m, modules)
-    # Literal electrical values: local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:
-    # 11345–11359. Symbolic arm L/R failed station compilation (M5 round 1).
+    # PSCAD requires numeric literals for electrical parameters such as arm L/R.
+    # Symbolic values fail compilation.
     for c in m.canvas.components
         c isa ComponentPlan || continue
         any(p -> p[2] == :electrical, component_ports(c, modules)) || continue
@@ -885,8 +898,8 @@ end
 
 function check_connectivity(plan::ProjectPlan)
     modules = Dict(m.name => m for m in plan.modules)
-    # A transmission-line wrapper is a component whose first/last vertices
-    # are terminals, not an ordinary connecting wire. See OHL mapping doc.
+    # A direct transmission-line wrapper has electrical terminals at its first
+    # and last vertices and must be checked as a component.
     main = CanvasPlan(copy(plan.main.components), copy(plan.main.wires))
     for w in plan.wrappers
         w isa TLineWrapperPlan || continue # Cable wrappers have no electrical terminals.
@@ -902,8 +915,8 @@ function check_connectivity(plan::ProjectPlan)
         _check_module_electrical_parameters(m, modules)
         check_connectivity(m.canvas, m.name, modules)
     end
-    # Row definitions carry material/geometry records only, with no electrical
-    # ports or connecting wires: local/Cable/DUT_2.pscx and local/OHL/DUT_2.pscx.
+    # Line-row definitions contain material and geometry data without
+    # electrical ports or wires.
     for row in plan.lines
         if row isa CableDefinitionPlan
             seen = Set{NTuple{2, Int}}()
@@ -924,7 +937,6 @@ function emit!(state::PlanState, e::NetlistElement, context)
     throw(ArgumentError("PSCAD export of :$(e.name) ($(typeof(e.model))) is not implemented yet"))
 end
 
-# XML verification extends this guard when PythonCall is loaded.
 function check_geometry end
 
 function _check_coordinate(point, name)

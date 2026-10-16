@@ -1,11 +1,11 @@
 """
 $(TYPEDEF)
 
-Specify simulation duration, integration and output sampling, and optional
-snapshot saving for one fresh PSCAD run. Construct with keyword arguments;
-Duration, steps and frequency must be positive and finite; the source ramp must
-be nonnegative and finite for every converter. Require `sample_step >= time_step`,
-and a snapshot must satisfy `0 < snapshot_time <= simulation_time`.
+Specify duration, integration step, output interval and optional snapshot time
+for a fresh PSCAD run. Duration, steps and frequency must be positive and
+finite. The source ramp must be finite and nonnegative.
+Require `sample_step >= time_step` and, for a snapshot,
+`0 < snapshot_time <= simulation_time`.
 
 $(TYPEDFIELDS)
 """
@@ -18,11 +18,11 @@ struct SimulationSettings
     sample_step::Float64
     "Optional snapshot time \\[s\\]."
     snapshot_time::Union{Nothing, Float64}
-    "Output filename stem: 1–20 ASCII characters, starting with a letter."
+    "Output filename stem of 1–20 ASCII characters, beginning with a letter."
     output_stem::String
     "Nominal network frequency \\[Hz\\]."
     frequency::Float64
-    "Nonnegative source ramp duration \\[s\\]; zero starts at the specified voltage."
+    "Source ramp duration \\[s\\]. Zero applies the specified voltage immediately."
     source_ramp::Float64
 
     function SimulationSettings(; simulation_time = 2.0, time_step = 10e-6,
@@ -65,7 +65,7 @@ end
 """
 $(TYPEDEF)
 
-Describe a measured PSCAD channel and its network ownership.
+Describe a measured PSCAD channel and its bus or element.
 
 $(TYPEDFIELDS)
 """
@@ -84,7 +84,7 @@ struct ProbeChannel
     dim::Int
     "Physical unit recorded for the channel."
     unit::String
-    "Positive terminal current direction: `:into` or `:out`; `nothing` for other quantities."
+    "Positive current direction (`:into` or `:out`), or `nothing` for other quantities."
     orientation::Union{Nothing, Symbol}
     function ProbeChannel(name, kind, bus, element, side, dim, unit, orientation = nothing)
         if kind in (:current, :injection_current)
@@ -101,7 +101,7 @@ end
 """
 $(TYPEDEF)
 
-Retain the requested channels and optional voltage-angle reference bus.
+Store the requested channels and optional voltage-angle reference bus.
 `ProbeManifest()` constructs an empty manifest for a hand-built project.
 
 $(TYPEDFIELDS)
@@ -117,7 +117,7 @@ ProbeManifest() = ProbeManifest(ProbeChannel[], nothing)
 """
 $(TYPEDEF)
 
-Retain a PSCAD project, measurement manifest, simulation settings, and optional
+Store a PSCAD project, measurement manifest, simulation settings, and optional
 network and operating-point records. Construction does not contact the station.
 
 $(TYPEDFIELDS)
@@ -135,15 +135,29 @@ struct PSCADModel{N, O}
     settings::SimulationSettings
     "Optional operating point used to generate the project."
     operating_point::O
-    "Project provenance."
+    "Project source, package versions and export timestamp."
     provenance::NamedTuple
 end
 
 """
-    PSCADModel(path; probes = ProbeManifest(), settings = SimulationSettings())
+$(TYPEDSIGNATURES)
 
-Wrap an existing `.pscx` project. The file must exist. Network and operating-point
-records are `nothing`, and provenance is `(source = :file,)`.
+Wrap an existing PSCAD project for simulation.
+
+# Arguments
+
+- `path`: Existing `.pscx` file.
+- `probes`: Requested channels. Default: `ProbeManifest()`.
+- `settings`: Simulation settings. Default: `SimulationSettings()`.
+
+# Returns
+
+- A `PSCADModel` with an absolute project path, `nothing` for the network and
+  operating point, and `(source = :file,)` as the project source record.
+
+# Errors
+
+- Throws `ArgumentError` if the file is absent or its extension is not `.pscx`.
 """
 function PSCADModel(path::AbstractString; probes::ProbeManifest = ProbeManifest(),
         settings::SimulationSettings = SimulationSettings())
@@ -172,7 +186,7 @@ _register_backend!(PSCADRun, PSCADBackend)
 """
 $(TYPEDEF)
 
-Retain finite, ordered time-domain output and the simulation execution records.
+Store finite, ordered time-domain output and the simulation execution records.
 
 $(TYPEDFIELDS)
 """
@@ -187,7 +201,7 @@ struct PSCADResult{F} <: AbstractProblemResult
     probes::ProbeManifest
     "Resolved simulation settings."
     settings::SimulationSettings
-    "Elapsed seconds, reuse status, solver identity, settings readback and build warnings."
+    "Elapsed time \\[s\\], reuse status, solver identity, settings readback and build warnings."
     diagnostics::NamedTuple
     "Run directory, output directory, console, build-message and INF paths."
     paths::NamedTuple

@@ -1,4 +1,4 @@
-# PSCAD field names and units verified in mhi-xml 1.3.0 twm_types.py.
+# The parameter units match the PSCAD field definitions in twm_types.py.
 const _LINE_GROUND_UNITS = (; EarthForm2 = nothing, EarthForm = nothing,
     EarthForm3 = nothing, GrRho = nothing, GRRES = "ohm*m", GPERM = nothing,
     GRP = nothing)
@@ -46,12 +46,10 @@ function _line_ground_parameters(line, overrides)
     return _override_line_parameters(defaults, overrides)
 end
 
-"""
-DC line frequency/phase fit start frequency \\[Hz\\]. Cable station measurements
-recorded in `docs/src/developers/pscad_mapping.md` (Cables) found a window mean
-25% below power flow at 3 s with FS = 0.5 Hz, versus 0.67% above at 5 s with
-FS = 0.001 Hz. AC lines retain the validation start frequency of 0.5 Hz.
-"""
+# Extending the DC fit down to 0.001 Hz reduces the measured cable current
+# deviation from power flow: -25% at 3 s with FS=0.5 Hz versus +0.67% at 5 s
+# with FS=0.001 Hz. AC lines use FS=0.5 Hz.
+"DC line frequency/phase fit start frequency \\[Hz\\]."
 const DC_LINE_FIT_START_FREQUENCY = 0.001
 
 function _line_frephase_parameters(overrides, buses)
@@ -126,9 +124,8 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
                 "CoupleRef" => "0", "tname" => "tandem_segment", "sfault" => "0",
                 "linc" => pscad_value(10.0; unit = "km"), "steps" => "3"]))
     if dc
-        # PSCAD 5.1.0 master:tline_interface, NC=2/View=0: scalar ports
-        # A(-18,-18), C(-18,18), in physical conductor order. Remote wrapper
-        # vertices have no electrical connections. See the M7 mapping record.
+        # For NC=2 and View=0, tline_interface ports A(-18,-18) and C(-18,18)
+        # follow physical conductor order. Remote wrapper vertices are graphical.
         for (side, (terminal, bus)) in enumerate(zip(e.terminals, (left_bus, right_bus)))
             ix, iy = allocate_cell!(state.layout)
             interface = (ix + 144, iy + 72)

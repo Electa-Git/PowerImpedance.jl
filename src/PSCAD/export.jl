@@ -16,24 +16,27 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Build a pure Julia plan for AC/DC export, including synchronous machines.
-Emit sources, branches, shunts,
-DC references, then bus probes into separate layout cells, using node labels to join buses.
-No files are written and no power flow is solved.
+Build a PSCAD project plan for an AC/DC network, including synchronous machines.
+Place sources, branches, shunts, DC references and bus probes in separate cells.
+Node labels connect the buses. Build the plan in memory without file access
+or a power-flow solve.
 
 # Arguments
 
-- `netlist`: Materialized connectivity and optional operating-point evidence.
-- `settings`: Simulation settings; frequency must match the netlist \\[Hz\\].
-- `name`: ASCII project identifier.
-- `description`: Project description, defaulting to `name`.
-- `line_options`: Overrides keyed by PSCAD ground or frequency/phase field name.
-- `dc_reference`: `:midpoint_resistors` adds two grounding resistors at each DC
-  bus without a local source midpoint or grounded shunt; `:none` omits them.
+- `netlist`: Network connectivity and optional solved operating point.
+- `settings`: Simulation settings. Default: `SimulationSettings()`.
+  Frequency \\[Hz\\] must equal the network frequency.
+- `name`: ASCII project identifier. Default: `"network"`.
+- `description`: Project description. Default: `name`.
+- `line_options`: PSCAD ground and frequency/phase parameter overrides.
+  Default: an empty named tuple.
+- `dc_reference`: `:midpoint_resistors` (default) adds two grounding resistors
+  per DC bus without a local source midpoint or grounded shunt.
+  `:none` omits those resistors.
 
 # Returns
 
-- A `ProjectPlan` containing the Main schematic, file settings and probes.
+- A `ProjectPlan` with the Main schematic, line rows, modules, settings and probes.
 """
 function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationSettings(),
         name::AbstractString = "network", description::AbstractString = name,
@@ -92,8 +95,8 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
     end
     reference_key = netlist.operating_point.slack_bus
     if reference_key === nothing
-        # Linear NB networks still have an angle-reference channel, even though
-        # no solved operating point is available for comparison.
+        # Linear builder networks use the first AC source for the angle reference
+        # because a solved operating point is unavailable.
         source = findfirst(
             e -> e.model isa PowerImpedance.Source &&
                  any(t -> t.bus !== nothing && t.bus.domain == 1, e.terminals),
@@ -153,42 +156,47 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Export an AC/DC network to a portable, single-subsystem `.pscx` project.
-Load `PythonCall` to enable the mhi-xml writer. Validate keywords and require
-the extension before solving power flow or writing the project.
+Export an AC/DC network as a portable `.pscx` project with one subsystem.
+Use `PythonCall` to enable the `mhi-xml` writer. Check the keywords and extension
+availability before the power-flow solve or project write.
 
 # Arguments
 
-- `net`: Classic network, or a materialized `NetworkBuilder.NetworkState`.
-- `path`: New output `.pscx` path whose parent directory already exists.
-- `name`: Project identifier, defaulting to and required to equal the path stem.
-- `powerflow`: Optional classic four-tuple from `power_flow(net)`. A builder
-  state uses `NetworkBuilder.solve` and accepts only `nothing` here.
-- `settings`: Detached-run settings, default `SimulationSettings()`.
-- `line_options`: Named tuple of PSCAD ground and frequency/phase field
-  overrides, for example `(; FS = 0.5, FE = 1e6, Numf = 200, CPASS = 0)`.
-  Numeric values use each field's PSCAD units; strings retain explicit units.
-  Unknown field names throw `ArgumentError` before solving power flow.
-- `dc_reference`: `:midpoint_resistors` (default) adds two `1e7` Ω resistors
-  to ground per DC bus without a local source midpoint or grounded shunt.
-  `:none` omits these additional references.
+- `net`: Classic network or a materialized `NetworkBuilder.NetworkState`.
+- `path`: New `.pscx` filename in an existing directory.
+- `name`: Project identifier, equal to the path stem. Default: the path stem.
+- `powerflow`: Classic four-tuple returned by `power_flow(net)`, or `nothing`
+  (default). Builder states accept only `nothing` and use `NetworkBuilder.solve`.
+- `settings`: Simulation settings. Default: `SimulationSettings()`.
+- `line_options`: Named tuple of PSCAD ground and frequency/phase overrides.
+  Default: empty. An example is `(; FS = 0.5, FE = 1e6, Numf = 200, CPASS = 0)`.
+  Numbers use PSCAD field units. Strings retain explicit units.
+- `dc_reference`: `:midpoint_resistors` (default) adds two resistors of
+  `1e7` \\[Ω\\] to ground per DC bus without a local source midpoint or grounded
+  shunt. `:none` omits those resistors.
 
 # Returns
 
-- A `PSCADModel` retaining the project path, netlist, probes, settings,
-  operating point and version/time provenance. `resolved_powerflow` records
-  whether this export ran a power-flow solve.
+- A `PSCADModel` with project path, netlist, probes, settings, operating point,
+  package versions and export timestamp. `resolved_powerflow` records whether
+  this call solved power flow.
 
 # Notes
 
-Without `powerflow`, the classic method calls `power_flow(net)`, which mutates
-active-element setpoints and emits solver logs. These mutations are retained.
-Pass a previously solved tuple to avoid re-solving. The builder method calls
-`NetworkBuilder.solve`; linear networks skip power flow, use source setpoints,
-and retain no solved comparison data. This function never contacts PSCAD.
-DC source and converter `Setpoint.Vdc` use pole-to-pole kV. Without a solved
-record, each DC pole source uses `Setpoint.Vdc / 2`. With a solved record,
-each pole source uses the bus's `vm_pu * base_kV` in pole-to-ground kV.
+For a classic network, `powerflow = nothing` calls `power_flow(net)`, retaining
+its changes to active-element setpoints and its solver logs. Supply a solved
+tuple to reuse that solution. For a builder state, `NetworkBuilder.solve` skips
+power flow for linear networks, which use source setpoints and have no solved
+comparison data. Export never contacts the station.
+
+DC source and converter `Setpoint.Vdc` are pole-to-pole voltages \\[kV\\].
+Without a solved result, each pole source uses `Setpoint.Vdc / 2`.
+With a solved result, each pole source uses `vm_pu * base_kV` \\[kV\\]
+relative to ground.
+
+# Errors
+
+- Throws `ArgumentError` for unknown line fields before solving power flow.
 """
 function export_pscad(net::PowerImpedance.Network; path,
         name = splitext(basename(path))[1], powerflow = nothing,

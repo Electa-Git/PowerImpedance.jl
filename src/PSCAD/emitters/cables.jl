@@ -1,4 +1,4 @@
-# Layer slots follow the validated Cable_Coax mapping in LineCableModels.
+# Cable_Coax slots follow the radial order of the physical cable layers.
 function _cable_parameters(cable, name, position, index, frequency)
     radii = (("R1", "R2", "R3"), ("R4", "R4", "R5"),
         ("R6", "R6", "R7"), ("R8", "R8", "R9"))
@@ -46,16 +46,16 @@ function _cable_interface_parameters(name, positions)
     return params
 end
 
-# A breakout joins the scalar core labels to the existing three-phase bus.
-# The bus-side ammeter retains the array probe contract and physical phase order.
+# The breakout joins scalar core labels to the three-phase bus, so the
+# bus-side ammeter measures the phases in their physical order.
 function _cable_ac_connection!(state, bus, labels, probe, side)
     x, y = allocate_cell!(state.layout)
     point = (x + 144, y + 90)
     component!(state.main, "breakout", point)
     outer = ammeter_stub!(state.main, point, bus.name, probe; direction = -1)
     if side == 2
-        # Reverse only the meter's named-node connections. Keep the witnessed
-        # breakout geometry and every wire: side 2 is element -> bus.
+        # Exchange the meter node labels to reverse its sign and preserve the
+        # breakout wires. Side 2 measures current from element to bus.
         bus_index = findlast(c -> c.defn == "master:nodelabel" &&
                                  (c.x, c.y) == outer, state.main.components)
         inner_index = findlast(c -> c.defn == "master:nodelabel" &&

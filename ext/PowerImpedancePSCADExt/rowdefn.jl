@@ -1,8 +1,8 @@
 function row_parameter_value(parameters_type, key, value)
     kind = PythonCall.pygetattr(parameters_type, key).kind
     if PythonCall.pyisinstance(kind, PythonCall.pyimport("mhi.xml.pscad.types").Choice)
-        # The IR retains the XML code. MHI's typed setter expects its decoded
-        # choice (for example, CDataType="1" means "direct").
+        # XML choices use codes in the plan, whereas the typed setter requires
+        # decoded values: CDataType="1" selects "direct".
         return kind(value)
     end
     return value
@@ -34,7 +34,6 @@ function write_row_definition!(project, line::PSCAD.CableDefinitionPlan)
 end
 
 function write_row_parameters!(row, line)
-    # These are component properties, not component-creation methods.
     for (component, params) in ((row.ground, line.ground),
         (row.freq_phase_options, line.frephase), (row.additional_options, line.outdisp))
         parameters = component.parameters

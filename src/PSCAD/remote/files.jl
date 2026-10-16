@@ -1,4 +1,3 @@
-# Shared by the Julia package and the standalone Windows runner.
 function _output_matches(roots, filename)
     matches = String[]
     for root in unique(filter(isdir, roots))
@@ -52,10 +51,28 @@ function _inf_entries(path::AbstractString)
 end
 
 """
-Wait for one INF file and every corresponding OUT file for at most `timeout`
-\\[s\\], polling every `poll_interval` \\[s\\]. Require exactly `expected_rows`
-numeric rows after INF/OUT sizes remain unchanged across two polls. Row counting
-is outside the stability timeout.
+    _wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
+                  timeout::Real = 60, poll_interval::Real = 0.25)
+
+Wait for one INF file and all corresponding OUT files to stop changing size
+across two polls. Check row counts only after the sizes stabilize.
+
+# Arguments
+
+- `roots`: Directories to search.
+- `stem`: Output filename stem.
+- `expected_rows`: Required numeric row count per OUT file.
+- `timeout`: File stability timeout \\[s\\]. Default: `60`.
+- `poll_interval`: Time between file checks \\[s\\]. Default: `0.25`.
+
+# Returns
+
+- `inf`: INF path.
+- `outs`: Numbered OUT paths.
+
+# Notes
+
+Row counting runs outside the file stability timeout.
 """
 function _wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
         timeout::Real = 60, poll_interval::Real = 0.25)
@@ -77,7 +94,7 @@ function _wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
         observed = "INF files found: $matches; rows per file: $rows"
         if length(matches) == 1
             inf = only(matches)
-            # The INF writer may still be completing its metadata.
+            # Incomplete INF metadata can be observed while PSCAD is still writing it.
             count = try
                 length(_inf_entries(inf))
             catch error
@@ -92,7 +109,7 @@ function _wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
             state = (inf, count, filesize(inf), found, filesize.(found))
             if count > 0 && length(found) == length(outs) && state == previous &&
                state ∉ counted
-                # Count each stable state once, outside the stability timeout.
+                # Row counts run once per stable file state to avoid repeated full-file scans.
                 push!(counted, state)
                 rows = [_data_rows(path) for path in outs]
                 observed = "INF files found: $matches; OUT files found: $found; rows per file: $rows; expected $expected_rows"
@@ -118,7 +135,8 @@ function _wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
     throw(ArgumentError("PSCAD outputs did not become complete within $timeout seconds; last observed $observed"))
 end
 
-# One parameter mapping and readback contract shared with the standalone runner.
+# The package and standalone runner use the same PSCAD parameter names
+# and readback checks.
 function _project_parameters(settings::AbstractDict)
     stem = settings["output_stem"]
     return Dict{String, Any}(

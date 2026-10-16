@@ -26,8 +26,8 @@ function tlc_modulation(name, e, equilibrium, transforms, settings)
         (iszero(delay.timeDelay) || delay.padeOrderNum == delay.padeOrderDen == 3) ||
             not_exportable(e, m.mod)
         residual = _converter_export_delay(delay.timeDelay, settings.time_step; converter = e.name)
-        # Carrier rotation and initialized history use the residual together.
-        # The acquired electrical signal supplies the remaining one-step lag.
+        # Carrier rotation and initial history use the residual delay because
+        # the acquired electrical signal already includes one step of delay.
         initial = PowerImpedance.phase_compensated_dq(
             [equilibrium.outputs.mod.m_d, equilibrium.outputs.mod.m_q],
             -m.elec.ωbase * residual)
@@ -57,8 +57,8 @@ function tlc_modulation(name, e, equilibrium, transforms, settings)
         not_exportable(e, m.mod)
     end
     w = converter_parameter!(parameters, "wbase", m.elec.ωbase)
-    # Core modulation is expressed on the AC peak-voltage base, whereas the
-    # controlled source is a physical phase voltage in kV (not a duty ratio).
+    # The controlled source requires physical phase voltage in kV, whereas
+    # modulation uses the AC peak-voltage base.
     scale = converter_parameter!(parameters, "voltage_scale", m.elec.vACbase /
                                                               (2m.elec.vDCbase))
     append!(graph.nodes,
@@ -103,10 +103,8 @@ function tlc_electrical_canvas(e)
     si = tlc_si(e.model.elec)
     si.R_r >= 0 && si.L_r > 0 ||
         throw(ArgumentError("converter :$(e.name) requires R_r >= 0 and L_r > 0"))
-    # Saved VSC2L phase stage: local/TLC/Simple_2L_VSC_RL.pscx:3383–3388,
-    # 3452–3529 (sources); resistor/inductor fields at 939–950. Three instantaneous controlled ideal phase
-    # voltages (AC=0, Cntrl=1, Type=6, Grnd=1) have their negative ends at
-    # the common ground/midpoint. Retain this orientation and source mode.
+    # Ground the negative terminal of each controlled phase-voltage source
+    # to preserve the common midpoint and phase-voltage polarity.
     graph = BlockGraph()
     for (i, y) in enumerate((108, 216, 324))
         voltage = Signal("vM$i")
@@ -141,9 +139,8 @@ function tlc_electrical_canvas(e)
     stub!(canvas, (900, 216), ac_terminal; direction = -1)
     component!(canvas, "voltmetergnd", (900, 288), ["Name" => "v_abc"])
     stub!(canvas, (900, 288), ac_terminal; direction = -1)
-    # DC voltage and current-source wiring copied from the saved stage,
-    # lines 5589–5630 (source, meter and xnode bindings). The reference's two
-    # 100 uF auxiliary capacitors are absent from the Julia plant and omitted.
+    # The DC circuit omits auxiliary capacitors because the TLC electrical
+    # model contains no DC capacitance.
     push!(canvas.components,
         ComponentPlan("master:src_ccin_1",
             ["Name" => "dc_injection", "Cntrl" => "1", "Tc" => "0.0 [s]"], 1260, 180, 1))
@@ -156,11 +153,9 @@ function tlc_electrical_canvas(e)
         stub!(canvas, (1620, y), node; direction = -1)
     end
     component!(canvas, "voltmeter", (1440, 180), ["Name" => "v_dc_m"])
-    # Saved TLC start-up: local/TLC/Simple_2L_VSC_RL.pscx:5885–5888,
-    # 5912–5929. Its compare emits nominal pole-to-pole voltage until 0.2 s,
-    # then v_dc_m. The guarded v_dc feeds modulation, MEAS normalization
-    # and the DC-current denominator (5775–5806, 5825–5859). No clamp or
-    # controller reset is added; all equations recover measured Vdc on release.
+    # The nominal pole-to-pole voltage protects startup divisions until 0.2 s.
+    # The selector then supplies measured Vdc to modulation, measurement
+    # normalization and the DC-current calculation.
     clock = Signal("dc_start_clock_s")
     lower!(canvas, TimeStep(clock), (756, 360))
     lower!(
@@ -170,8 +165,7 @@ function tlc_electrical_canvas(e)
     append!(graph.nodes,
         ControlBlock[Sum(Signal.(["p1", "p2", "p3"]), [1, 1, 1], Signal("p_dc")),
             Div(Signal("p_dc"), Signal("v_dc"), Signal("i_dc_absorbed")),
-            # PSCAD 5.1 station: +0.01 kA gives +100 kV across 10000 ohm;
-            # positive command injects out of upper terminal A. Julia's
+            # A positive source command injects current out of terminal A, whereas
             # ElectricalTLC i_dc is positive for DC power absorption.
             Gain(Signal("i_dc_absorbed"), Signal("i_dc_cmd"), -1.0)])
     controls = lower!(CanvasPlan(), graph)
@@ -231,7 +225,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.TLC}, contex
     definition = ModuleDefinitionPlan(name, ModuleParameterPlan[], ports, canvas)
     push!(state.modules, definition)
     x, y = allocate_cell!(state.layout)
-    state.layout.next += 6 # Output ports extend below the ordinary cell.
+    state.layout.next += 6 # The output ports need more vertical space than an ordinary control block.
     point = (x + 144, y + 108)
     push!(state.main.components,
         ModuleInstancePlan(context.name * ":" * name, Pair{String, String}[], point..., 0))

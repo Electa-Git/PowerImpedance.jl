@@ -1,9 +1,10 @@
 """
 $(TYPEDEF)
 
-Represent a series or parallel combination of passive elements.
-`nothing` denotes an absent element. Closure fits require positive values;
-constant inputs retain their signed resistance and 50 Hz equivalent inductance.
+Represent a series or parallel R/L/C circuit.
+`nothing` denotes an absent element. Fits to impedance functions require
+positive component values. Numeric inputs preserve signed resistance and
+equivalent inductance at 50 \\[Hz\\].
 
 $(TYPEDFIELDS)
 """
@@ -106,20 +107,46 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Identify a positive canonical series or parallel R/L/C combination by sampling
-`z(im*2π*f)`. Frequencies are in \\[Hz\\]; defaults are 13 logarithmically
-spaced points from 0.1 Hz to 100 kHz. Fits use the mean real part and least
-squares on `(ω, -1/ω)`, accepting only pointwise relative impedance errors
-at most `rtol` with denominator floor `atol` \\[Ω\\]. Try the fewest elements
-first, preferring series at equal element count.
+Identify a series or parallel R/L/C circuit from samples of `z(im*2π*f)` \\[Ω\\].
+Fit the real part by its mean and the imaginary part by least squares on
+`(ω, -1/ω)`. Require positive, finite component values for impedance functions.
+Try the fewest components first, preferring series at equal component count.
 
-Return `(form::RLCForm, conductors::Vector{Int}, constant::Bool)` for a scalar
-or equal diagonal matrix. Unequal diagonal entries return a vector of these
-records, grouped by their complete sampled responses and in conductor order.
-Off-diagonal coupling is rejected. Constant numeric inputs use
-`R = real(z)`, `L = imag(z)/(2π*50)` and set `constant = true`, recording
-the 50 Hz assumption, retaining signed values. `name` identifies the element
-in a failed fit.
+# Arguments
+
+- `z`: Scalar or matrix impedance, or a function of complex frequency \\[s⁻¹\\].
+- `frequencies`: Positive sample frequencies \\[Hz\\]. Default: 13 logarithmic
+  points from 0.1 to 1e5.
+- `rtol`: Maximum relative impedance error at every sample. Default: `1e-6`.
+- `atol`: Impedance floor in the error denominator \\[Ω\\]. Default: `1e-12`.
+- `name`: Element designator for fit errors. Default: `:unnamed`.
+
+# Returns
+
+- A record `(form, conductors, constant)` for a scalar or equal diagonal matrix.
+  `form` is an `RLCForm`, `conductors` gives the conductor indices and `constant`
+  indicates numeric input. Distinct diagonal responses produce a vector of
+  records, grouped by sampled response in conductor order.
+
+# Notes
+
+For angular frequency ``ω`` \\[rad/s\\], the fitted series impedance and
+parallel admittance are
+
+```math
+Z_s = R + \\mathrm{j}ωL + \\frac{1}{\\mathrm{j}ωC},\\qquad
+Y_p = \\frac{1}{R} + \\frac{1}{\\mathrm{j}ωL} + \\mathrm{j}ωC,
+```
+
+where ``R``, ``L`` and ``C`` use \\[Ω\\], \\[H\\] and \\[F\\], respectively.
+Omit terms for absent components, and use ``Z_p = 1/Y_p`` for a parallel circuit.
+
+Numeric inputs use `R = real(z)` \\[Ω\\] and `L = imag(z)/(2π*50)` \\[H\\],
+retaining signed values and the equivalent inductance at 50 \\[Hz\\].
+
+# Errors
+
+- Throws `ArgumentError` for off-diagonal coupling or failure to fit the circuit.
 """
 function identify_rlc(z; frequencies = 10.0 .^ range(-1, 5; length = 13),
         rtol = 1e-6, atol = 1e-12, name = :unnamed)
@@ -157,9 +184,19 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Identify the supplied impedance in its original conductor coordinates \\[Ω\\].
-For transformed elements, read `element_model.value` directly: never identify
-the dq-transformed ABCD model. Default `name` to the element's designator.
+Identify impedance in its original conductor coordinates. Read
+`element_model.value` directly because a dq-transformed ABCD model does not
+represent the original conductor impedance.
+
+# Arguments
+
+- `element`: Impedance element.
+- `name`: Designator for fit errors. Default: `element.symbol`.
+- `kw`: Additional keywords for [`identify_rlc`](@ref).
+
+# Returns
+
+- The RLC record or grouped records returned by [`identify_rlc`](@ref).
 """
 function identify_rlc(element::PowerImpedance.Element{<:PowerImpedance.Impedance};
         name = element.symbol, kw...)

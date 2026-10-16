@@ -11,7 +11,7 @@ function _pscad_number(text::AbstractString)
     return parsed
 end
 
-"Relative change threshold between the two halves of a steady-state window."
+"Relative change threshold \\[dimensionless\\] between steady-state window halves."
 const STEADY_STATE_SETTLING_RTOL = 1e-3
 
 function _warn_unsettled_channel(name, first_half, second_half)
@@ -64,38 +64,46 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Extract settled channel values using the actual sample times \\[s\\] over
-the last `window_cycles` complete cycles at `result.settings.frequency` \\[Hz\\].
-Use all available complete cycles when fewer than requested are recorded.
-Group contiguous `name:1` through `name:k` channels; retain other names as scalars.
+Extract channel means and fundamental phasors over complete cycles at the end
+of a simulation. Use the actual sample times and all available complete cycles
+when the output has fewer cycles than requested. Group `name:1` through `name:k`
+channels as arrays and treat other channels as scalars.
+
+# Arguments
+
+- `result`: PSCAD output with sample times \\[s\\] and channel values.
+- `window_cycles`: Number of complete cycles to extract. Default: `10`.
+  Frequency is `result.settings.frequency` \\[Hz\\].
 
 # Returns
 
-- An ordered dictionary keyed by probe name. Scalars contain `(dim = 1, mean)`
-  in the recorded unit. Arrays contain `dim`, complex phase `phasors`, `peak`,
-  `rms`, and `angle` \\[rad\\] in the cosine reference. Three-phase arrays
-  contain positive-sequence peak/RMS magnitudes and angle; other arrays retain
-  per-component magnitudes and angles. Units follow the original channels.
+- An ordered dictionary indexed by probe name. Scalars and one-component arrays
+  contain `(dim = 1, mean)`. Larger arrays contain `dim`, complex phase `phasors`,
+  `peak`, `rms` and `angle` \\[rad\\] with a cosine reference.
+  Three-phase `peak`, `rms` and `angle` describe the
+  positive sequence. Other arrays return those values per component.
+  Magnitude units follow the recorded channels.
 
 # Notes
 
-For ``N`` samples at times ``t_n``, the peak phasor and positive sequence are
+For ``N`` samples ``x(t_n)``, with times ``t_n`` \\[s\\] and frequency ``f``
+\\[Hz\\], compute the peak phasor and positive sequence as
 
 ```math
 X = \\frac{2}{N}\\sum_n x(t_n)e^{-\\mathrm{j}2\\pi f t_n},\\qquad
 X_+ = \\frac{X_a + aX_b + a^2X_c}{3},\\quad a=e^{\\mathrm{j}2\\pi/3}.
 ```
 
-RMS magnitude is peak magnitude divided by ``\\sqrt{2}``.
-Compare scalar means or array phasor RMS magnitudes over the two halves of
-the window. Warn once per channel when the change exceeds
-`STEADY_STATE_SETTLING_RTOL = 1e-3` relative to the larger magnitude.
+RMS magnitude equals peak magnitude divided by ``\\sqrt{2}``.
+Compare scalar means or phasor RMS magnitudes between the two window halves.
+Warn once per channel when their change exceeds `STEADY_STATE_SETTLING_RTOL`
+(default `1e-3`) relative to the larger magnitude.
 
 # Errors
 
-- Throws `ArgumentError` for incomplete array groups, invalid channel data,
-  less than one full cycle, nonuniform times, or a noninteger number of samples
-  per cycle (relative tolerance `1e-9`).
+- Throws `ArgumentError` for incomplete array groups, invalid samples, less
+  than one complete cycle, nonuniform times or a noninteger sample count per
+  cycle. Time checks use relative tolerance `1e-9`.
 """
 function steady_state(result::PSCADResult; window_cycles = 10)
     window = _steady_window(result, window_cycles)
@@ -200,87 +208,98 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Compare settled AC/DC bus voltages, branch-terminal currents and
-machine/converter operating points with a retained power flow.
-Compare only the channels in `model.probes`; require solved data
-and complete three-phase AC or scalar DC measurements for those channels.
+Compare settled bus voltages, terminal currents and machine/converter operating
+points with a retained power flow. Check the requested channels in `model.probes`
+using complete three-phase AC or scalar DC measurements.
 
 # Arguments
 
-- `result`: PSCAD time-domain output in manifest units.
-- `model`: Exported model retaining netlist and operating-point evidence.
-
-# Keywords
-
-- `rtol_v`: Relative voltage tolerance, including MMC arm capacitor cycle
-  means, default `0.01`.
-- `atol_angle_deg`: Absolute relative-bus angle tolerance \\[deg\\], default `1.0`.
-- `rtol_i`: Current magnitude tolerance, default `0.02`. AC currents and
-  converter-free DC networks use relative error; converter-connected DC
-  networks use the larger of the reference and converter DC current base.
+- `result`: PSCAD output in the units recorded for each channel.
+- `model`: Exported model with netlist and solved operating point.
+- `rtol_v`: Relative voltage tolerance \\[dimensionless\\], also used for MMC
+  arm capacitor cycle means. Default: `0.01`.
+- `atol_angle_deg`: Absolute tolerance for relative bus angles \\[deg\\].
+  Default: `1.0`.
+- `rtol_i`: Current magnitude tolerance \\[dimensionless\\]. Default: `0.02`.
+  AC and DC circuits without converters use relative error. DC circuits with
+  converters use the larger of reference current and converter current base.
 
 # Returns
 
 - A `TypedTables.Table` with `quantity`, probe `name`, `pscad`, `powerflow`,
-  nonnegative `error`, and `within_tolerance` columns. Magnitudes use kV/kA,
-  powers MW/MVAr (filtered converter powers in pu), and relative magnitude errors.
-  All machine/converter power errors are normalized by the device rating \\[MVA\\],
-  so filtered converter power errors are absolute pu differences.
-  Speed uses pu and absolute error; angles use degrees and absolute wrapped errors. Omit the
-  reference bus's own angle row. A zero magnitude reference without a converter
-  DC current base uses zero error for a zero measurement and infinite error otherwise.
-  MMC `:converter_arm_voltage` rows contain capacitor cycle means and solved
-  pole-to-pole DC voltage in kV. `:converter_dc_current_identity` rows contain
-  signed DC terminal current and `3*mean(iS_z)*Sbase/vDC_base` in kA; their
-  `powerflow` column holds that measured identity reference, rather than a
-  power-flow current. Both use their MMC signal probe names.
+  nonnegative `error` and `within_tolerance`. Voltages use \\[kV\\], currents
+  \\[kA\\], powers \\[MW, MVAr\\], angles \\[deg\\], and speed and filtered
+  converter powers \\[dimensionless\\]. Magnitude errors are relative unless
+  they use a normalization base described below. Angle errors are absolute and
+  wrapped. Speed errors are absolute. Omit the angle row for the reference bus.
 
 # Notes
 
-The terminal-current reference is ``|S|/(3V_{LN})`` with power in MW/MVAr and
-phase RMS voltage in kV. Series sides use `(pf, qf)` and `(pt, qt)` respectively;
-sources use `(pg, qg)`. Shunt powers are retained from the solved bus voltage
-and the power-flow input admittance. AC angles are relative to the manifest's reference bus.
-DC bus voltage is the window mean of V_P - V_N, compared with twice the
-pole-to-ground bus voltage. DC current magnitudes use the P-pole window mean
-and the reference |P|/V_pp. Omit a DC current row when no solved terminal power
-exists (for example a source without a gendc solution record).
-For a DC network containing a TLC or MMC, current error is
-`abs(measured-reference)/max(abs(reference), elec.Sbase/elec.vDCbase)` in kA,
-using the converter's pole-to-pole DC voltage base (`elec.vDC_base` for MMC).
-A DC network is the
-connected component of nongrounded DC buses joined by an element's DC
-terminals; AC terminals and shared ground do not join networks. This base
-applies to converter terminals, DC branches and DC sources throughout that
-component. Converter-free components retain relative error. Multiple
-converters with the same current base are supported; differing bases require
-a normalization decision and raise an error.
-Machine P/Q use the three-phase fundamental power at the public bus,
-``S = \\sum_k V_k I_k^*/2``, with peak phasors in kV/kA and current directed
-from the machine to the bus. Compare with the retained `pf/qf` at that same
-end of the rt/lt branch, using `abs(measured-reference)/elec.S_base <= 0.01`.
-Reconstruct machine terminal phase RMS voltage from ``V_t = V_{bus} + ZI``,
-where ``Z = R_{export} + \\mathrm{j}2\\pi f L_{export}`` \\[Ω\\] uses the
-same formatted resistance and inductance as the emitter, and compare
-its positive-sequence magnitude with the solved terminal voltage using
-`rtol_v`. These rows use the current probe's name. Internal machine P/Q/Vt
-and initialization/field channels remain diagnostics. Speed uses the scalar
-mean and an absolute tolerance of `1e-3` pu around 1.
-TLC/MMC terminal P/Q follow the same fundamental-phasor calculation, with current
-from the converter to its AC bus and references `-pgrid/-qgrid` at side 2.
-Their errors use `elec.Sbase` and tolerance `0.01`. Internal `P_ac_f/Q_ac_f`
-means are pu on `elec.Sbase`, compared to those solved terminal powers divided
-by `Sbase` with `abs(measured_pu-reference_pu) <= 0.01`, equivalently
-`abs(diff_MW)/Sbase <= 0.01` (MVAr for Q). Julia's Q measurement uses a sine q basis:
-`Q_ac = -v_q*i_d + v_d*i_q`, equal to standard injected reactive power.
-Consequently its reference is `setpoint.Qac/Sbase`, also `-qgrid/Sbase`.
-Converter DC voltage, frequency and angle channels remain diagnostics.
-For each MMC arm capacitor probe, compare its settled cycle mean with the
-solved DC bus pole-to-pole voltage using `abs(mean-reference)/abs(reference)`
-and `rtol_v`. For each MMC `iS_z` probe (pu of `Sbase/vDC_base`), compare the
-signed DC side-1 current mean with `3*mean(iS_z)*Sbase/vDC_base` in kA, using
-`abs(diff)/max(abs(reference), Sbase/vDC_base)` and `rtol_i`. The `iS_z` mean
-itself is diagnostic and is not asserted against its solved equilibrium value.
+For AC terminal current, the reference is
+
+```math
+I_{ref} = \\frac{|S|}{3V_{LN}},
+```
+
+where ``S = P + \\mathrm{j}Q`` uses \\[MW, MVAr\\], ``V_{LN}`` is phase RMS
+voltage \\[kV\\], and ``I_{ref}`` is in \\[kA\\]. Series sides use `(pf, qf)`
+and `(pt, qt)`, respectively. Sources use `(pg, qg)`. Shunt power follows from
+input admittance and solved bus voltage. AC angles use the manifest reference bus.
+
+DC voltage is the window mean of `V_P - V_N`, compared with twice the solved
+pole-to-ground voltage. DC current magnitude is the absolute P-pole mean,
+compared with `abs(P)/V_pp`. Omit a DC current row if solved terminal power
+is absent, including a source without a `gendc` solution record.
+
+Within a connected DC circuit containing a TLC or MMC, normalize current error
+by `max(abs(reference), Sbase/vDCbase)` \\[kA\\]. The MMC field is `vDC_base`.
+The base applies to converter terminals, branches and sources in that circuit.
+DC terminals connect the circuit. AC terminals and shared ground do not.
+Multiple converters must have equal current bases. Circuits without converters
+use relative error. For a zero reference and no converter base, error is zero
+when the measurement is zero, and infinite otherwise.
+
+Machine and converter power at the public AC bus uses
+
+```math
+S = \\frac{1}{2}\\sum_k V_k I_k^*,
+```
+
+where ``V_k`` and ``I_k`` are peak phasors \\[kV, kA\\], with current directed
+from device to bus. Compare with terminal `pf/qf` for the machine or
+`-pgrid/-qgrid` at converter side 2. Normalize power error by the device rating
+(`elec.S_base` for machines, `elec.Sbase` for converters) \\[MVA\\], with tolerance
+`0.01`. Filtered converter `P_ac_f/Q_ac_f` use that rating as their per-unit base
+and an absolute error tolerance of `0.01`. The sine q basis gives
+`Q_ac = -v_q*i_d + v_d*i_q`, so its reference is `setpoint.Qac/Sbase`, equal to
+`-qgrid/Sbase`.
+
+Reconstruct the machine terminal voltage as
+
+```math
+V_t = V_{bus} + (R_{export} + \\mathrm{j}2\\pi f L_{export})I,
+```
+
+using the exported, formatted resistance \\[Ω\\], inductance \\[H\\] and
+frequency \\[Hz\\]. Compare its positive-sequence RMS magnitude with the solved
+terminal voltage using `rtol_v`. Machine power and voltage rows use the current
+probe name. Speed uses the scalar mean with absolute tolerance `1e-3` around 1.
+Internal machine power, voltage, field and initialization channels, and converter
+DC voltage, frequency and angle channels, remain diagnostic outputs.
+
+MMC `:converter_arm_voltage` rows compare capacitor cycle means with solved
+pole-to-pole DC voltage \\[kV\\] using relative error and `rtol_v`.
+For `:converter_dc_current_identity` rows, compare signed side-1 DC current with
+`3*mean(iS_z)*Sbase/vDC_base` \\[kA\\]. Normalize their difference by
+`max(abs(reference), Sbase/vDC_base)` and use `rtol_i`. These rows use MMC signal
+probe names. Their `powerflow` column contains the reference computed from
+measured `iS_z`, whose base is `Sbase/vDC_base`. Its mean is diagnostic, without
+a comparison to its solved equilibrium value.
+
+# Errors
+
+- Throws `ArgumentError` for missing solved data or required channels, invalid
+  tolerances, or unequal converter current bases within a connected DC circuit.
 """
 function compare_operating_point(result::PSCADResult, model::PSCADModel;
         rtol_v = 0.01, atol_angle_deg = 1.0, rtol_i = 0.02)
@@ -492,11 +511,17 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Read channel names in PGB index order from legacy PSCAD INF metadata.
-The first description keeps its name; later occurrences receive `group:desc`
-names as in the MHI reader. Remaining collisions receive
-`:2`, `:3`, … suffixes, retaining every scalar or array element distinctly.
-Metadata is decoded as Windows-1252.
+Read channel names in PGB index order from PSCAD INF metadata in Windows-1252.
+Keep the first description unchanged. Prefix later duplicates with `group:`
+as in the MHI reader. Append `:2`, `:3`, … to resolve further collisions.
+
+# Arguments
+
+- `path`: INF filename.
+
+# Returns
+
+- A vector of unique channel names in output order.
 """
 function parse_inf(path::AbstractString)
     entries = _inf_entries(path)
@@ -524,8 +549,8 @@ function _read_output_file(path::AbstractString, channels::Integer)
     for (line_number, line) in enumerate(eachline(path))
         fields = split(strip(line))
         isempty(fields) && continue
-        # Headers are optional. A numeric first field starts a data row, whose
-        # remaining fields must all parse rather than being silently skipped.
+        # A numeric first field identifies a data row even when headers are absent.
+        # Reject malformed fields to avoid silently discarding samples.
         first_value = try
             _pscad_number(first(fields))
         catch error
@@ -551,12 +576,26 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Read legacy PSCAD time-domain output from `dir` using filename `stem`.
-The INF defines channel order; each numbered OUT contains time \\[s\\] and at
-most ten channels. Optional headers and Fortran `D` exponents are accepted.
-Require finite values, strictly increasing time, equal row counts, and identical
-time columns across files. Return `(time, channels, inf, outs)` with channels in
-an `OrderedDict` and output paths in file-number order.
+Read PSCAD time-domain output in INF/OUT format. The INF specifies channel
+order. Each numbered OUT contains time and at most ten channels.
+Accept optional headers and Fortran `D` exponents.
+
+# Arguments
+
+- `dir`: Directory containing the output files.
+- `stem`: Output filename stem.
+
+# Returns
+
+- `time`: Strictly increasing, finite sample times \\[s\\].
+- `channels`: `OrderedDict` of finite values in INF order and recorded units.
+- `inf`: Absolute INF path.
+- `outs`: Absolute OUT paths in file-number order.
+
+# Errors
+
+- Throws `ArgumentError` for missing files, malformed data, unequal row counts
+  or different time columns across files.
 """
 function read_pscad_output(dir::AbstractString; stem::AbstractString)
     occursin(r"^[A-Za-z][A-Za-z0-9_]{0,19}$", stem) ||

@@ -1,8 +1,8 @@
 """
     PSCAD
 
-Provide interfaces for PSCAD project export and remote PSCAD execution.
-Loading this module performs no I/O and never contacts the PSCAD station.
+Export PSCAD projects and execute simulations on a configured station.
+Module loading does not contact the station or access files.
 """
 module PSCAD
 
@@ -29,18 +29,35 @@ const PSCAD_VERSION = "5.1.0"
 const PROJECT_FILE_VERSION = "5.0.2"
 
 """
-    _write_project(plan, path)
+$(TYPEDSIGNATURES)
 
-Write the project `plan` to `path` through `mhi-xml`. Implemented by the
-`PowerImpedancePSCADExt` extension, which loads with `PythonCall`.
+Write a project with `mhi-xml`. Use `PythonCall` to enable this method.
+
+# Arguments
+
+- `plan`: Project components, wires, settings and output channels.
+- `path`: Output `.pscx` filename.
+
+# Returns
+
+- `path`: Absolute project filename.
+- `mhi_xml_version`: Version of the XML writer.
 """
 function _write_project end
 
 """
-    read_project_summary(path)
+$(TYPEDSIGNATURES)
 
-Read a summary of the PSCAD project at `path` through `mhi-xml`. Implemented by
-the `PowerImpedancePSCADExt` extension, which loads with `PythonCall`.
+Read a PSCAD project summary through `mhi-xml`. This method requires `PythonCall`.
+
+# Arguments
+
+- `path`: Input `.pscx` filename.
+
+# Returns
+
+- A `ProjectSummary` with component counts, labels, output channels, line rows,
+  wrappers, module ports, settings and file version.
 """
 function read_project_summary end
 

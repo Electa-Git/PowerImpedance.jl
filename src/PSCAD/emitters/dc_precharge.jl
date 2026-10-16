@@ -1,5 +1,5 @@
-# DC islands are connected through DC branches, never through shared ground or
-# the AC side of a converter. A permanent DC source anywhere in an island wins.
+# A permanent DC source supplies its entire connected DC circuit. Shared
+# ground and converter AC terminals do not connect separate DC circuits.
 _sets_dc_voltage(::Any) = false
 _sets_dc_voltage(m::PowerImpedance.TLC) = m.outerActive isa PowerImpedance.OuterActiveVdcControl
 _sets_dc_voltage(m::PowerImpedance.MMC) = m.delta_control isa PowerImpedance.ΔdqControlGFL &&
@@ -39,17 +39,12 @@ function _dc_precharge_buses(netlist::Netlist)
 end
 
 function dc_precharge!(state::PlanState, bus::Bus, context)
-    # Source witness: local/P2P HVDC/PowerStabilityACDC_Validation.pscx:19424–19450
-    # (639.843 kV ideal DC source). Breaker witness: same file:24613–24635.
-    # Their saved instances are disabled: they validate fields/pins, not a run.
-    # Breaker command: NAME=0 closes, NAME=1 opens (Single-Phase Breaker help).
-    # The station master breaker1:5452–5665 maps this to its internal close flag;
-    # OPCUR=1 opens at arbitrary DC current, and RON=0 is supported.
-    # TimeStep/Compare reuse the exercised 0.2 s converter divisor handover.
+    # The breaker command NAME=0 closes and NAME=1 opens. OPCUR=1 permits
+    # opening at nonzero DC current, and RON=0 gives an ideal closed branch.
     state.layout.next = 6cld(state.layout.next, 6)
     x, y = allocate_cell!(state.layout)
-    # TimeStep's output stub reaches 36 pixels above the control origin.
-    # Leave one row when it would intersect wiring in the preceding row.
+    # The time-signal output stub extends 36 pixels above its origin, so
+    # an extra row prevents intersection with the preceding row's wires.
     clock_x = x + 468
     if any(state.main.wires) do wire
         a, b = wire.vertices
@@ -76,7 +71,8 @@ function dc_precharge!(state::PlanState, bus::Bus, context)
                 "AC" => "0", "Vm" => pscad_value(voltage; unit = "kV"),
                 "Tc" => "0.0 [s]", "Ph" => "0.0 [deg]",
                 "f" => pscad_value(context.settings.frequency; unit = "Hz")])
-        # Orient-0 source NA is positive. Preserve +Vpole and -Vpole to ground.
+        # The orient-0 source terminal NA is positive, giving +Vpole and -Vpole
+        # relative to ground.
         stub!(state.main, (x + 90, row), pole == "P" ? inner : nothing; direction = -1)
         stub!(state.main, (x + 162, row), pole == "P" ? nothing : inner)
         component!(state.main, "breaker1", (x + 324, row),

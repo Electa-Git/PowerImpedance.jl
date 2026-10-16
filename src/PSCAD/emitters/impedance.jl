@@ -20,7 +20,8 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Impedance}, 
         @info "PSCAD impedance :$(e.name) uses constant R and equivalent L at 50 Hz"
     form = record.form
     dc = left_bus.kind == :dc
-    # Multiplying Z by 1/2 divides R and L, and doubles C in either topology.
+    # Each DC pole has half the differential impedance, so R and L halve
+    # and C doubles in either topology.
     parts = impedance_parts(form; scale = dc ? 0.5 : 1.0)
     first_probe = current_probe!(state, e, left, context; orientation = :into)
     second_probe = right.grounded ? nothing : current_probe!(state, e, right, context; orientation = :out)
@@ -45,18 +46,16 @@ function impedance_parts(form; scale = 1.0)
     return parts
 end
 
-# One labelled circuit path per cell. Reused by winding and magnetizing passives.
 function impedance_path!(state, parts, topology, left_name, right_name, stem;
         first_probe = nothing, second_probe = nothing)
     x, y = allocate_cell!(state.layout)
-    # The station-validated ground-return meter avoids ideal-meter chains on
-    # isolated windings: local/pscad-exchange/diag/yy_named_load_return.pscx:346–373.
-    # Its orient-0 arrow still measures positive current from bus to ground.
+    # Place the ammeter in the ground return to avoid a chain of ideal meters
+    # on an isolated winding. Its orient-0 arrow measures from bus to ground.
     shunt_probe = right_name === nothing ? first_probe : nothing
     if topology == :series
         if isempty(parts)
-            # A zero series impedance is node identity. A requested ammeter
-            # supplies the ideal branch; otherwise alias the internal labels.
+            # A zero series impedance identifies the two nodes. A requested ammeter
+            # provides the ideal branch. Otherwise the labels denote the same node.
             probes = filter(!isnothing, [first_probe, second_probe])
             if isempty(probes)
                 join_node_labels!(state.main, left_name, right_name)
@@ -98,8 +97,8 @@ function impedance_path!(state, parts, topology, left_name, right_name, stem;
         second_probe === nothing ||
             output_probe!(state.main, second_probe, "branch", "kA", (x + 144, y + 162))
     else
-        # Internal labels join the parallel rows behind one total-current meter
-        # per terminal. These labels have no network-bus ownership.
+        # A single meter per terminal measures total current through the parallel
+        # branches. Internal labels connect those branches to the meter.
         inner_left = pscad_name(stem * "_parallel_1"; used = state.used)
         inner_right = pscad_name(stem * "_parallel_2"; used = state.used)
         if first_probe === nothing || shunt_probe !== nothing

@@ -161,33 +161,37 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Execute an existing PSCAD model remotely and return its legacy time-domain output.
-Each fresh call stages `generated.pscx`, a version-1 computation record, and the
-station toolkit in a persistent `run-XXXXXX` directory. A completion record is
-written atomically after settings, solver identity, output and probes are checked.
+Execute a PSCAD project on a configured station and read its INF/OUT files.
+A fresh call copies `generated.pscx`, the computation record and the runner
+files into a persistent `run-XXXXXX` directory. Write the completion record
+atomically after checking settings, solver identity, outputs and probes.
 
-# Keywords
+# Arguments
 
-- `options`: Named tuple accepting `remote` (default: `RemoteConfig()`),
-  `simulation_time`, `time_step`, `sample_step`, `snapshot_time` \\[s\\],
-  `output_stem`, `verbosity` (0–2, default 0), `work_root` (inside
-  `remote.local_root`), `resume_run_directory` (`nothing`, `:latest`, or a path),
-  `solver_identity` (the record from `PSCAD.identify(remote)`), and `timing::Bool`.
-  Simulation overrides are validated together. Unknown keys are rejected.
+- `model`: Existing PSCAD project and requested measurements.
+- `formulation`: `PSCADRun` selecting the execution backend.
+- `options`: Named tuple of computation options. Default: empty.
+  `remote` defaults to `RemoteConfig()`. The duration, integration step,
+  output interval and snapshot overrides are `simulation_time`, `time_step`,
+  `sample_step` and `snapshot_time` \\[s\\]. Other options are `output_stem`,
+  `verbosity` (0–2, default 0), `work_root` (within `remote.local_root`),
+  `resume_run_directory` (`nothing`, `:latest`, or a path), `solver_identity`
+  (the record from `PSCAD.identify(remote)`), and `timing::Bool` (default `false`).
+  Check simulation overrides together and reject unknown keys.
 
 # Returns
 
-- A `PSCADResult` with ordered channels and execution diagnostics. The retained
-  `elapsed_seconds` measures `project.run()`, excluding transfer and output waits.
-  With `timing = true`, diagnostics also retain caller `wall_seconds` for fresh
-  runs; verified reused results retain `timing = (;)`.
+- A `PSCADResult` with ordered channels and execution diagnostics.
+  `elapsed_seconds` \\[s\\] measures `project.run()`, excluding file transfer
+  and output waits. With `timing = true`, fresh runs also record caller
+  `wall_seconds` \\[s\\]; reused results have `timing = (;)`.
 
 # Notes
 
-Completed-run reuse is explicit and requires matching input, toolkit and output
-hashes plus a current station identity check. No local Python installation is
-needed. Existing projects must have their library and external-file dependencies
-available on the station; this step stages only the project and runner toolkit.
+Reuse requires an explicit `resume_run_directory`, matching hashes for inputs,
+runner files and outputs, and a check of the current station installation.
+Python runs on the station. Project libraries and external files must be
+available there, because this method copies only the project and runner files.
 """
 function compute(model::PSCADModel, formulation::PSCADRun; options::NamedTuple = (;))
     _require_backend(formulation, PSCADBackend)

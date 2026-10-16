@@ -22,7 +22,7 @@ function remote_command(::Val{:command}, config::RemoteConfig, powershell::Abstr
 end
 
 function remote_command(config::RemoteConfig, powershell::AbstractString)
-    # A caller may supply a transport method after the package was compiled.
+    # Transport methods added after compilation require the current method world.
     return Base.invokelatest(
         remote_command,
         Val(config.transport),
@@ -101,8 +101,8 @@ function _run_remote(
         wait(process)
     catch error
         interrupted = error
-        # SIGKILL (9): a transport must not keep the caller waiting in its own
-        # signal handler after timeout or interruption.
+        # SIGKILL bypasses transport signal handlers that can delay termination
+        # after timeout or interruption.
         process_running(process) && kill(process, 9)
         if error isa InterruptException
             try
@@ -203,8 +203,8 @@ function _cancel_remote(
     return nothing
 end
 
-# Keep remotely executed code paired with the loaded Julia adapter. Later
-# invocations must not pick up working-tree edits mid-run.
+# Remote sources are captured with the loaded adapter so a run cannot
+# combine that adapter with later source-file edits.
 const PSCAD_REMOTE_SOURCES = Dict(name => let
                                       path = joinpath(@__DIR__, name)
                                       Base.include_dependency(path)
@@ -216,30 +216,31 @@ for name in ("Project.toml", "Manifest.toml", "files.jl",
 """
 $(TYPEDSIGNATURES)
 
-Read the remote PSCAD installation identity without launching a simulation.
+Read the PSCAD installation identity on the station without a simulation.
+A temporary application instance reads the settings and closes without loading
+a project.
 
 # Arguments
 
-- `config`: station connection and selected PSCAD installation.
+- `config`: Station connection and selected PSCAD installation.
 
 # Returns
 
-- A string dictionary containing application and master-library paths and
-  SHA-256 digests, automation versions, and the selected Fortran compiler. A temporary application instance
-  reads the station settings and closes without loading a project.
+- A string dictionary with application and master-library paths, their SHA-256
+  digests, automation versions and the selected Fortran compiler.
 
 # Notes
 
-Passing this record as the `solver_identity` computation option requires that
-installation. Fresh computations verify identity inside their own application
-instance. Completed-run reuse verifies the current station before acceptance.
+The `solver_identity` computation option requires this installation record.
+Fresh simulations check identity in their own application instance.
+Reuse checks the current station installation against the saved record.
 """
 function identify(config::RemoteConfig)
     code = PSCAD_REMOTE_SOURCES["identity.py"] * "\nimport json\n" *
            "for key, value in identify(" * repr(config.pscad_version) * ").items():\n" *
            "    print(json.dumps(key) + ' = ' + json.dumps(value))\n"
-    # Use the existing shared work directory. Embedding a whole script inside
-    # an encoded PowerShell command exceeds Windows' command-line limit.
+    # A full script exceeds the Windows command-line limit when encoded in
+    # PowerShell, so it must run from the shared directory.
     directory = mktempdir(mkpath(config.local_root); prefix = "pscad-identity-")
     result = try
         write(joinpath(directory, "identify.py"), code)
@@ -253,7 +254,6 @@ function identify(config::RemoteConfig)
     return Dict{String, String}(validate(result, config))
 end
 
-# The solver identity that a PSCAD station reports for the requested configuration.
 function validate(result::AbstractDict, config::RemoteConfig)
     all(pair -> first(pair) isa AbstractString && last(pair) isa AbstractString, result) ||
         throw(ArgumentError("PSCAD solver identity must contain string fields"))
@@ -416,8 +416,8 @@ function _required_outputs(stem::AbstractString)
         "settings-readback.toml", "solver.toml", stem * ".inf", stem * "_01.out")
 end
 
-# Resolve existing ancestors as well as lexical paths, including destinations
-# whose parent directories have not yet been created.
+# Ancestor paths reveal symbolic links even when destination directories
+# do not yet exist.
 function _resolved_path(path::AbstractString)
     current = abspath(path)
     parts = String[]
@@ -443,9 +443,17 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Copy a station file into the caller's shared exchange directory. `local_path`
-must lie inside `config.local_root`; station paths are passed literally.
-Return `local_path` after verifying that the file arrived.
+Copy a station file into the shared exchange directory on the caller.
+
+# Arguments
+
+- `config`: Station connection and shared-directory mapping.
+- `remote_path`: Station filename, passed literally.
+- `local_path`: Destination within `config.local_root`.
+
+# Returns
+
+- `local_path`, after checking that the file arrived.
 """
 function fetch_station_file(config::RemoteConfig, remote_path::AbstractString,
         local_path::AbstractString)

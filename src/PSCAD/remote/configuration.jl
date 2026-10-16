@@ -5,20 +5,28 @@ Station connection and filesystem mapping for native PSCAD execution.
 `local_root` and `shared_root` name the same directory on the caller and station.
 `remote_root` is scratch space on the station. Construction from field values
 does not perform I/O. Construction from a TOML filename only reads that file.
-`timeout` is the remote execution limit \\[s\\], defaulting to 1800.
+The execution limit `timeout` \\[s\\] defaults to 1800.
 
 $(TYPEDFIELDS)
 """
 struct RemoteConfig
+    "Shared directory as seen by the caller."
     local_root::String
+    "Station hostname."
     host::String
+    "Shared directory as seen by the station."
     shared_root::String
+    "Scratch directory on the station."
     remote_root::String
+    "Julia executable on the station."
     julia_executable::String
+    "Python executable on the station."
     python_executable::String
+    "Selected PSCAD version."
     pscad_version::String
-    "Station-local automation port (1024–65535); `nothing` launches a private application."
+    "Station automation port (1024–65535), or `nothing` to launch a private application."
     pscad_port::Union{Nothing, Int}
+    "Connection method, such as `:ssh`, `:local`, or `:command`."
     transport::Symbol
     "Remote execution timeout \\[s\\]."
     timeout::Int
@@ -150,10 +158,17 @@ function RemoteConfig(path::AbstractString)
 end
 
 """
-    RemoteConfig()
+$(TYPEDSIGNATURES)
 
-Read the configuration file selected by `POWERIMPEDANCE_PSCAD_CONFIG`.
-Throw `ArgumentError` when the environment variable is unset or empty.
+Read the station configuration selected by `POWERIMPEDANCE_PSCAD_CONFIG`.
+
+# Returns
+
+- A `RemoteConfig` read from the selected TOML file.
+
+# Errors
+
+- Throws `ArgumentError` if the environment variable is unset or empty.
 """
 function RemoteConfig()
     path = get(ENV, "POWERIMPEDANCE_PSCAD_CONFIG", "")

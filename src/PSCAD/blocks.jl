@@ -55,7 +55,7 @@ end
 """
 $(TYPEDEF)
 
-Multiply a scalar signal by a dimensionless gain or named module parameter.
+Multiply a scalar signal by a gain or named module parameter.
 
 $(TYPEDFIELDS)
 """
@@ -64,7 +64,7 @@ struct Gain <: ControlBlock
     input::Signal
     "Output signal."
     output::Signal
-    "Multiplying gain."
+    "Gain in output units per input unit, or module parameter name."
     g::BlockValue
 end
 
@@ -103,7 +103,7 @@ struct RealPole <: ControlBlock
     input::Signal
     "Output signal."
     output::Signal
-    "Dimensionless gain or module parameter name."
+    "Gain in output units per input unit, or module parameter name."
     g::BlockValue
     "Time constant \\[s\\] or module parameter name."
     t::BlockValue
@@ -171,7 +171,7 @@ Import a module input port or parameter into its control schematic.
 $(TYPEDFIELDS)
 """
 struct Import <: ControlBlock
-    "Boundary port or parameter name."
+    "Module input port or parameter name."
     name::String
     "Local output signal."
     output::Signal
@@ -185,7 +185,7 @@ Export a local control signal through a module output port.
 $(TYPEDFIELDS)
 """
 struct Export <: ControlBlock
-    "Boundary output port name."
+    "Module output port name."
     name::String
     "Local input signal."
     input::Signal
@@ -207,7 +207,7 @@ end
 $(TYPEDEF)
 
 Produce integer 0 below a scalar threshold and 1 above it. Equality follows
-the master's `INTR=0` comparison, as in the validation start-up circuit.
+the master component's `INTR=0` comparison.
 
 $(TYPEDFIELDS)
 """
@@ -223,8 +223,8 @@ end
 """
 $(TYPEDEF)
 
-Retain control blocks in visible lowering order. Signals join blocks by name;
-blocks contain their own parameters and input/output identities.
+Store control blocks in emission order. Signal names connect the blocks,
+which store their parameters and the names of inputs and outputs.
 
 $(TYPEDFIELDS)
 """
@@ -316,11 +316,19 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Lower a scalar control graph into `canvas`, four rows per column. Columns are
-six grid units apart and rows four grid units apart for the original scalar
-blocks. Converter primitives reserve larger cells for their additional pins
-and expanded second-order sections. The default origin is `(72, 72)` pixels.
-Return the mutated canvas.
+Place a scalar control graph on a canvas, with four blocks per column.
+Basic blocks use 108-pixel column spacing and 72-pixel row spacing.
+Use larger spacing for converter blocks with extra pins or second-order sections.
+
+# Arguments
+
+- `canvas`: Schematic receiving the blocks.
+- `graph`: Blocks in emission order.
+- `origin`: First block position in pixels. Default: `(72, 72)`.
+
+# Returns
+
+- The modified `canvas`.
 """
 function lower!(canvas::CanvasPlan, graph::BlockGraph; origin = (72, 72))
     width = maximum(node -> first(block_pitch(node)), graph.nodes; init = 108)
@@ -336,12 +344,20 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Bind declared module input parameters using `master:import` components with
-only their `Name` field, including coefficients referenced by block fields.
-Reuse connected imports already present in `canvas`. Place the remaining
-imports four rows per column, six grid units apart horizontally and four
-vertically, starting at `(540, 72)` pixels or beyond a wider control graph.
-Coefficient imports need no output wire. Return the mutated canvas.
+Add `master:import` components for module input parameters, using their `Name`
+field. Reuse imports present on the canvas. PSCAD reads coefficient imports
+by name, without an output wire.
+
+# Arguments
+
+- `canvas`: Module schematic receiving the imports.
+- `parameters`: Declared module parameters.
+
+# Returns
+
+- The modified `canvas`, with new imports four per column at 108-pixel
+  horizontal and 72-pixel vertical spacing. Their first position is `(540, 72)`
+  pixels, or farther right when the control graph is wider.
 """
 function lower!(canvas::CanvasPlan, parameters::AbstractVector{<:ModuleParameterPlan})
     imported = Set(Dict(c.params)["Name"]
@@ -431,7 +447,7 @@ struct SecondOrder <: ControlBlock
     damping::BlockValue
     "Initial output."
     y0::BlockValue
-    "Initial output derivative \\[1/s\\]."
+    "Initial output derivative in output units per second."
     dy0::BlockValue
 end
 
@@ -532,7 +548,7 @@ end
 """
 $(TYPEDEF)
 
-Use the saved amplitude-invariant abc/dq module with q proportional to sine.
+Transform abc to dq with unchanged peak amplitude and q proportional to sine.
 
 $(TYPEDFIELDS)
 """
@@ -543,14 +559,14 @@ struct AbcToDq <: ControlBlock
     angle::Signal
     "Two-component dq output."
     output::Signal
-    "Qualified copied transform module."
+    "Transform module name, including the project prefix."
     definition::String
 end
 
 """
 $(TYPEDEF)
 
-Use the saved inverse dq/abc transform module.
+Transform dq to abc with the inverse transform module.
 
 $(TYPEDFIELDS)
 """
@@ -561,15 +577,12 @@ struct DqToAbc <: ControlBlock
     angle::Signal
     "Three-phase output array."
     output::Signal
-    "Qualified copied transform module."
+    "Transform module name, including the project prefix."
     definition::String
 end
 
-# Saved primitive fields and pins: local/TLC/Simple_2L_VSC_RL.pscx,
-# div 2100–2106, mult 3001–3007, integral 3530–3545, trig 2113–2122
-# (Type=1 sine, Type=2 cosine in the copied transforms), sqrt 1223–1230,
-# square 1210–1217, delay 5037–5050, merge 2164–2185 / 2214–2235,
-# tap 4498–4517. Primitive behavior remains subject to the M4 station checks.
+# The master trig component uses Type=1 for sine and Type=2 for cosine,
+# matching the q-axis sign in the abc/dq transforms.
 function binary_block!(canvas, defn, point, left, right, output)
     component!(canvas, defn, point, ["Dim" => "1", "DPath" => "1"])
     signal_stub!(canvas, (point[1] - 36, point[2]), left)
@@ -672,10 +685,8 @@ function lower!(canvas::CanvasPlan, node::Union{AbcToDq, DqToAbc}, point)
     return nothing
 end
 
-# Preserve the saved transform's pin nets, including abutments and branches,
-# while placing each block separately and replacing each net by datalabel stubs.
-# Only the copied abc/dq canvases use this lowering; ordinary plans are checked,
-# not repaired. All block fields and orientations remain identical.
+# The abc/dq transforms contain abutting pins and wire branches. Separate
+# datalabel stubs preserve those connections under the layout checks.
 function named_transform_canvas(canvas)
     for c in canvas.components, (key, value) in c.params
 
@@ -743,7 +754,6 @@ function named_transform_canvas(canvas)
     return result
 end
 
-# Canvas copied from local/TLC/Simple_2L_VSC_RL.pscx:2457 (abc2dq_1).
 function abc_to_dq_module(name)
     canvas = CanvasPlan()
     push!(canvas.components, ComponentPlan("master:import", ["Name" => "abc"], 216, 270, 0))
@@ -907,7 +917,6 @@ function abc_to_dq_module(name)
     return ModuleDefinitionPlan(name, parameters, ports, named_transform_canvas(canvas))
 end
 
-# Canvas copied from local/TLC/Simple_2L_VSC_RL.pscx:1851 (dq2abc).
 function dq_to_abc_module(name)
     canvas = CanvasPlan()
     push!(canvas.components, ComponentPlan("master:import", ["Name" => "dq"], 54, 54, 0))
@@ -1088,7 +1097,7 @@ function dq_to_abc_module(name)
     return ModuleDefinitionPlan(name, parameters, ports, named_transform_canvas(canvas))
 end
 
-# A primitive owns the space occupied by its pins and lowered subgraph.
+# Layout spacing includes pins and the components used to expand a block.
 block_pitch(::ControlBlock) = (108, 72)
 function block_pitch(::Union{Mult, Div, Integrator, Delay, Trig, Sqrt, Square,
         ArrayMerge, ArraySplit, AbcToDq, DqToAbc})

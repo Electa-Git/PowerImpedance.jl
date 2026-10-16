@@ -1,16 +1,16 @@
-# Converter equations belong to converter/common, TLC and MMC. This file only
-# assembles their supported control objects as PSCAD block diagrams.
+# The block diagrams use coefficients from converter/common, TLC and MMC
+# to preserve their control equations.
 const _CONVERTER_STARTUP_RELEASE = 0.2
 
-# One completed electrical solve feeds the following dynamics/source pass.
-# Positive model delays budget that inherent step; zero-delay models retain it.
+# The dynamics and source calculation follows the electrical solve by one
+# step. Positive model delays include that step. Zero delay retains it.
 function _converter_export_delay(delay, dt; converter = :converter)
     isfinite(dt) && dt > 0 || throw(ArgumentError("converter step must be finite and positive"))
     isfinite(delay) && delay >= 0 || throw(ArgumentError("converter delay must be finite and nonnegative"))
     iszero(delay) && return 0.0
     delay >= dt || throw(ArgumentError("positive converter delay is shorter than the EMT step; use a finer step"))
     requested = Float64(delay - dt)
-    # Residuals are nonnegative: half-step ties round upward (away from zero).
+    # Half-step ties round upward because the residual delay is nonnegative.
     realized = round(requested / dt, RoundNearestTiesUp) * dt
     if !isapprox(requested, realized; rtol = 0, atol = 8eps(max(Float64(delay), Float64(dt))))
         @warn "Converter modulation residual rounded to nearest step (half-step ties upward)" converter model_delay_s=delay step_s=dt requested_residual_s=requested realized_residual_s=realized realized_total_s=dt+realized error_s=realized-requested
@@ -18,9 +18,8 @@ function _converter_export_delay(delay, dt; converter = :converter)
     return Float64(realized)
 end
 
-# Saved time-based real selector: local/TLC/Simple_2L_VSC_RL.pscx:5912–5929.
-# Only measured DC voltage used as a divisor has a solved-value handover.
-# All feedback measurements and control-state signals remain live from t=0.
+# Only DC voltage used as a divisor starts from its solved value. Other
+# measurements and control states use feedback from t=0.
 struct _ConverterStartupHold <: ControlBlock
     clock::Signal
     measured::Signal
@@ -35,11 +34,9 @@ function lower!(canvas::CanvasPlan, node::_ConverterStartupHold, point)
             "INTR" => "0", "Dim" => "1", "conv" => "0"], node.clock, node.output)
 end
 
-# Master-library execution-phase transfers and explicit feedback state boundary.
-# force_dsout/force_dsdyn copy in the selected electrical-output/dynamics phase;
-# zminusone selects the feedback cut and initializes its real state at TIMEZERO.
-# Its input is the just-applied physical/controller state, not an already held
-# measurement; the next pass reads that state from the existing STOF history.
+# force_dsout and force_dsdyn copy values in the electrical-output and
+# dynamics phases. zminusone initializes at TIMEZERO and stores the applied
+# state in STOF so the next calculation uses the completed-solve state.
 struct _ConverterPhaseTransfer <: ControlBlock
     input::Signal
     output::Signal
@@ -66,8 +63,8 @@ function lower!(canvas::CanvasPlan, node::_ConverterStateSnapshot, point)
 end
 
 function converter_angle_snapshot!(canvas, e, equilibrium; origin)
-    # Snapshot the relative state, then use the current nominal timestamp for
-    # both acquisition and inverse rotations. Never mix old/new angle frames.
+    # Both rotations use the current nominal timestamp to keep acquisition
+    # and inverse rotation in the same angle frame.
     gfm = e.model.sync isa PowerImpedance.VSEWithDamping
     initial = gfm ? equilibrium.states.Δθ_VSM : equilibrium.states.Δθ_pll
     graph = BlockGraph(ControlBlock[
@@ -150,8 +147,8 @@ function converter_filter!(
         graph, parameters, input, output, filter::PowerImpedance.Butterworth,
         names, states, u, e)
     filter.table == PowerImpedance.BUTTERWORTH_TABLE || not_exportable(e, filter)
-    # Translate the solved realization, not the initializer's guesses. At an
-    # equilibrium every unit-DC-gain cascade section has the same output.
+    # At equilibrium, every section of a unit-DC-gain cascade has the solved
+    # output, which can differ from its initialization guess.
     x = [getproperty(states, n) for n in names]
     y0 = only(filter.C * x + filter.D * [u])
     dy0 = only(filter.C * (filter.A * x + filter.B * [u]))
@@ -243,8 +240,8 @@ function converter_measurements(name, e, equilibrium, transforms,
     outputs = [(n, 1)
                for n in ("vG_d_f", "vG_q_f", "i_d_f", "i_q_f", "v_dc_f", "P_ac_f", "Q_ac_f")]
     if m isa PowerImpedance.MMC
-        # Keep Vdc feedback, power products and voltage feedforward live.
-        # Share one protected denominator across all measured-DC divisions.
+        # A shared startup denominator protects measured-DC divisions while
+        # feedback, power products and voltage feedforward use measured values.
         push!(graph.nodes, _ConverterStartupHold(Signal("meas_start_clock_s"),
             Signal("v_dc_f"), Signal("v_dc_divisor"), measured.v_dc_f))
         push!(outputs, ("v_dc_divisor", 1))
@@ -292,8 +289,6 @@ function converter_pll(name, e, equilibrium, block = e.model.sync)
     return converter_definition(name, parameters, graph, inputs, outputs)
 end
 
-# VSM primitive witnesses: local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:
-# 69653–69864, 69925–69984. Coefficients and equations belong to synchronization.jl.
 function converter_vsm(name, e, equilibrium, block::PowerImpedance.VSEWithDamping)
     parameters = ModuleParameterPlan[]
     inputs = [("P_ac_f", 1), ("omega_pll", 1)]
@@ -326,7 +321,6 @@ function converter_vsm(name, e, equilibrium, block::PowerImpedance.VSEWithDampin
     return converter_definition(name, parameters, graph, inputs, outputs)
 end
 
-# CCVI primitives: the same FFVI.pscx, VI_VSM_CCQSEM_1:65787–66124.
 function converter_ccvi(name, e, equilibrium, block::PowerImpedance.CCVI)
     parameters = ModuleParameterPlan[]
     inputs = [(n, 1) for n in ("vG_d_f", "vG_q_f", "omega_c", "q_voltage_ref")]
@@ -464,8 +458,8 @@ function converter_reactive(name, e, equilibrium, block::PowerImpedance.OuterRea
     parameters = ModuleParameterPlan[]
     converter_parameter!(parameters, "vac_reference",
         equilibrium.setpoint_pu.v_ac * PowerImpedance.voltage_filter_ratio(e.model))
-    # VacControl: local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:8025–8215.
-    # Use the already witnessed square/sqrt voltage magnitude and split PI.
+    # VacControl measures voltage magnitude with square/sqrt blocks and
+    # uses separate proportional and integral paths.
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for n in ("vG_d_f", "vG_q_f")])
     append!(graph.nodes,
         ControlBlock[Square(Signal("vG_d_f"), Signal("vd2")),

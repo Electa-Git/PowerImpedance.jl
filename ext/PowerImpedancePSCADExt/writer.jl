@@ -59,8 +59,8 @@ function write_component!(project, canvas, component::PSCAD.ModuleInstancePlan)
 end
 
 function write_sheet_size!(canvas)
-    # Native load/build experiments (diag/relo): size 0 clamped meters at
-    # y=3168 to 3150; preset size 5 retained all origins with zero build errors.
+    # Sheet size 0 clamps a meter at y=3168 to y=3150 on load. Size 5
+    # preserves its position and wire connection.
     settings = canvas.find("paramlist")
     sizes = settings.findall("param[@name='size']")
     if PythonCall.pylen(sizes) == 0
@@ -91,7 +91,7 @@ function write_module_definition!(project, plan::PSCAD.ModuleDefinitionPlan)
     for parameter in plan.parameters
         node = write_parameter!(category, parameter)
         PythonCall.pysetattr(node, "help_mode", "Append")
-        # Scalar dimension has no parameter API option.
+        # The parameter API omits the scalar dimension attribute.
         node.set("dim", "1")
     end
     # The graphics API emits the older Port/paramlist format. PSCAD 5 uses SVG.
@@ -111,9 +111,7 @@ function write_module_definition!(project, plan::PSCAD.ModuleDefinitionPlan)
         (Symbol("font-size") => "small", Symbol("text-anchor") => "Middle")...)
     PythonCall.pysetattr(label, "text", etree.CDATA(plan.name))
     definition.replace(definition.find("graphics"), svg)
-    # Retain explicit saved canvas settings instead of relying on load defaults:
-    # local/TLC/Simple_2L_VSC_RL.pscx:2069–2083 (dq2abc), and
-    # local/SG/SG_Project.pscx:978–992 (the machine module).
+    # Explicit canvas settings preserve the module layout when PSCAD loads it.
     settings = definition.schematic.find("paramlist")
     for (key, value) in (("show_grid", "1"), ("size", "5"), ("orient", "1"),
         ("show_border", "0"), ("monitor_bus_voltage", "0"), ("show_signal", "0"),

@@ -1,4 +1,5 @@
-# Evaluate the owned blocks because MMC.state_space! returns no diagnostics.
+# Individual MMC blocks provide diagnostic outputs for the probes, which
+# MMC.state_space! does not return.
 function mmc_equilibrium_outputs(m, states, inputs, setpoint_pu)
     sig_in = PowerImpedance.input_signals(m, states, inputs)
     F = zeros(PowerImpedance.n_states(m))
@@ -76,11 +77,10 @@ function mmc_total_energy!(graph, parameters, e, equilibrium,
         append!(graph.nodes, ControlBlock[Gain(Signal("v_Ctot_" * stem), pu, invcap), Square(pu, square)])
         push!(squares, square)
     end
-    # Six-arm instantaneous energy. Its cycle mean is precisely energy.jl's
-    # seven-coordinate wΣz; the abc plant also retains its 6ω ripple.
+    # The cycle mean of the six-arm instantaneous energy equals the
+    # seven-coordinate wΣz in energy.jl. The abc plant retains its 6ω ripple.
     push!(graph.nodes, Sum(squares[1:3], [1, 1, 1], Signal("energy_u")))
     push!(graph.nodes, Sum(squares[4:6], [1, 1, 1], Signal("energy_l")))
-    # Capacitor energy and inner-current feedback both remain live from t=0.
     append!(graph.nodes,
         ControlBlock[Sum(Signal.(["energy_u", "energy_l"]), [1, 1], Signal("energy_sum")),
             Gain(Signal("energy_sum"), Signal("energy_measured"), 1 / 6),
@@ -180,8 +180,8 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
             raw, delayed = Signal.([
                 stem * "_" * axis * "_raw", stem * "_" * axis * "_delay"])
             push!(graph.nodes, Mult(Signal(ref), Signal(factor), raw))
-            # Exact delay in the global rotating coordinates, with the same
-            # explicit frame compensation as MMC/modulation.jl:63–67.
+            # Frame compensation rotates the delayed signal back into the global
+            # frame, as in MMC/modulation.jl.
             compensated = frame == 1 ?
                           PowerImpedance.phase_compensated_dq(
                 [equilibrium.outputs.mod.mΔd, equilibrium.outputs.mod.mΔq], -m.elec.ωbase *
@@ -234,8 +234,8 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
         append!(graph.nodes,
             ControlBlock[ArraySplit(Signal("mD_abc"), d, i),
                 ArraySplit(Signal("mS_abc"), s, i), Sum([s, Signal("mS_z")], [1, 1], total)])
-        # Julia mΔ includes the minus sign and factor two: the physical arm
-        # assembly vMu=vMS-vMD, vMl=vMS+vMD becomes (mΣ±mΔ)/2.
+        # The minus sign and factor two in mΔ give physical arm commands
+        # (mΣ±mΔ)/2 for vMu=vMS-vMD and vMl=vMS+vMD.
         for (arm, sign) in (("u", 1), ("l", -1))
             sum, insertion = Signal.([
                 "assembled_" * arm * "_" * phase, "m_" * arm * "_" * phase])
@@ -255,8 +255,8 @@ function mmc_arm_canvas!(canvas, si; stem = "", origin = (0, 0),
     private(n) = Signal(isempty(stem) ? n : stem * "_" * n)
     applied, measured, charging, rate, history = private.([
         "applied_insertion", "solved_current", "cap_current", "cap_rate_out", "cap_rate"])
-    # Charge uses the command actually applied before this solve and its solved
-    # current. The next dynamics pass integrates that history, not a future m.
+    # Charge uses the command applied during the completed electrical solve
+    # and its current, so integration uses the same time level for both.
     graph = BlockGraph(ControlBlock[
         _ConverterPhaseTransfer(Signal(insertion), applied, :dsout, 1),
         _ConverterPhaseTransfer(Signal(current), measured, :dsout, 1),
@@ -265,19 +265,16 @@ function mmc_arm_canvas!(canvas, si; stem = "", origin = (0, 0),
         Integrator(history, Signal(capacitor), 1.0, cap_initial, -100000.0, 100000.0),
         Mult(Signal(insertion), Signal(capacitor), private("arm_voltage"))])
     if measured_capacitor !== nothing
-        # The physical capacitor changes only in DSDYN and is held throughout
-        # the following network solve/DSOUT. Snapshot that applied state at the
-        # explicit feedback boundary: next DSDYN then sees the same capacitor
-        # level as its completed-solve arm currents, before any state advances.
-        # Capturing a previous DSOUT copy here would add another whole step.
+        # The capacitor state changes in DSDYN and is constant during the network
+        # solve and DSOUT. Its applied value aligns the next integration with the
+        # completed-solve arm currents. A DSOUT copy adds another step.
         push!(graph.nodes, _ConverterStateSnapshot(Signal(capacitor),
             Signal(measured_capacitor), cap_initial))
     end
     lower!(canvas, graph; origin = (origin[1] + 72, origin[2] + 432))
     at(x, y) = (origin[1] + x, origin[2] + y)
     label(n) = private(n).name
-    # ArmAvg_1: local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:7624–7741.
-    # Preserve source polarity, positive charging current and physical L/R.
+    # The arm source polarity makes positive current charge the capacitor.
     component!(canvas, "source_1", at(180, 108),
         ["Name" => label("arm_source"), "Type" => "6", "Grnd" => "0", "Spec" => "0",
             "Cntrl" => "1", "AC" => "0", "Tc" => "0.0 [s]"])
@@ -298,7 +295,6 @@ function mmc_arm_canvas!(canvas, si; stem = "", origin = (0, 0),
     return canvas
 end
 
-# Retain the isolated arm experiment, sharing exactly the parent-canvas physics.
 function mmc_arm(name, si, initial)
     parameters = [ModuleParameterPlan("capGain", si.N / si.C_SM, ""),
         ModuleParameterPlan("capInitial", initial, "")]
@@ -334,7 +330,7 @@ function mmc_electrical_canvas(e, equilibrium, si)
             capacitor = "v_Ctot_" * stem, cap_gain = si.N / si.C_SM, cap_initial = cap,
             measured_capacitor = "v_Cmeas_" * stem)
     end
-    # Keep the physical interface below the six exposed arm schematics.
+    # Electrical ports below the arm schematics prevent overlapping wires.
     interface = CanvasPlan()
     for (i, phase) in enumerate(("a", "b", "c"))
         y = 720 + 144 * (i - 1)
@@ -362,9 +358,8 @@ function mmc_electrical_canvas(e, equilibrium, si)
     if si.turnsRatio == 1
         join_node_labels!(interface, "transformer_ac", "network_ac")
     else
-        # YY near-ideal construction accepted in M2/M4. Every field is saved
-        # at local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:11813–11889;
-        # source/return solvability is retained through the physical arm/DC path.
+        # The near-ideal YY transformer retains an electrical return path through
+        # the converter arms and DC circuit.
         component!(interface, "xfmr-3p2w", (1116, 864),
             ["Name" => "converter_transformer",
                 "Tmva" => pscad_value(si.Sbase; unit = "MVA"),
@@ -391,8 +386,8 @@ function mmc_electrical_canvas(e, equilibrium, si)
     append!(canvas.wires, [WirePlan([(x, y + 2592) for (x, y) in w.vertices])
                            for w in interface.wires])
     merge!(canvas.aliases, interface.aliases)
-    # Use the existing arm currents for controls rather than adding another
-    # ideal DC meter in series with the Main terminal meter.
+    # Existing arm currents supply the controls without another ideal DC
+    # ammeter in series with the Main terminal meter.
     graph = BlockGraph()
     currents = Signal[]
     for phase in ("a", "b", "c")

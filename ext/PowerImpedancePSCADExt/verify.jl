@@ -57,8 +57,8 @@ function PSCAD.read_project_summary(path::AbstractString)::PSCAD.ProjectSummary
         PythonCall.pyconvert(String, root.get("version")))
 end
 
-# Reuse the plan guard on the coordinates actually serialized or saved by
-# PSCAD. In particular, a moved meter must not retain its old wire endpoint.
+# PSCAD can relocate a meter on load while its wire endpoint remains in
+# place, so connectivity checks also use the saved coordinates.
 function PSCAD.check_connectivity(path::AbstractString)
     root = PythonCall.pyimport("lxml.etree").parse(String(path)).getroot()
     summary = PSCAD.read_project_summary(path)
@@ -83,8 +83,8 @@ function PSCAD.check_connectivity(path::AbstractString)
                         for v in node.xpath("./vertex")]
             push!(canvas.wires, PSCAD.WirePlan(vertices))
         end
-        # Remote cable/line wrappers have graphical vertices only. The first
-        # and last vertices of a direct line wrapper are electrical terminals.
+        # Remote cable and line wrappers use graphical vertices. Direct line
+        # wrappers use their first and last vertices as electrical terminals.
         for node in definition.xpath("./schematic/Wire[@classid='TLine']")
             mode = PythonCall.pyconvert(String,
                 node.xpath("string(./User/paramlist/param[@name='Mode']/@value)"))

@@ -45,11 +45,9 @@ function voltage_probe!(state::PlanState, bus::Bus, labels = (bus.name,);
         row = y + 72 + 54 * (index - 1)
         name = pscad_name(voltage_probe_name(label); used = state.used)
         if at_conducting_node
-            # master:nodelabel MeasV=1 and voltmetergnd both emit EMTDC_VVDC
-            # with the electrical node and ground (saved master:246190–246203,
-            # 359606–359608). Measure on an existing conducting branch stub.
-            # The kept nt1-mvdc project relocated the separate meter by 18 px
-            # on load without moving its wire; no extra meter is placed here.
+            # Both MeasV=1 on a node label and voltmetergnd call EMTDC_VVDC.
+            # Measure at a conducting branch to avoid a separate voltage meter,
+            # which PSCAD can relocate on load while its wire remains in place.
             target = get(state.main.aliases, lowercase(label), label)
             target === nothing && throw(ArgumentError("grounded voltage tap for $label"))
             tap_index = findfirst(state.main.components) do c

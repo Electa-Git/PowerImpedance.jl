@@ -1,10 +1,8 @@
-"Near-ideal YY leakage reactance on the master transformer base \\[pu\\]."
+"Near-ideal YY leakage reactance on the master base \\[dimensionless\\]."
 const YY_LEAKAGE_PU = 1e-4
-"""
-Near-ideal YY exciting current at rated voltage \\[%\\]. Measured on PSCAD 5.1:
-1e-4 % triggers a "very small diagonal" warning at the floating star point,
-1e-3 % runs cleanly with a ratio error of 7e-10.
-"""
+# At the floating star point, 1e-4 % gives a "very small diagonal" warning.
+# A value of 1e-3 % avoids it with a measured turns-ratio error of 7e-10.
+"Near-ideal YY exciting current at rated voltage \\[%\\]."
 const YY_MAGNETIZING_CURRENT_PERCENT = 1e-3
 "Master transformer apparent-power base \\[MVA\\]."
 const TRANSFORMER_BASE_MVA = 1000

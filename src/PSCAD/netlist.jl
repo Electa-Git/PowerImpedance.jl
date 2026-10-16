@@ -15,10 +15,10 @@ end
 """
 $(TYPEDEF)
 
-Retain one bus and its optional solved voltage. AC voltage bases are phase RMS;
-DC bases are pole-to-ground. With a supplied solved power flow and input data,
-read the base from this bus's PowerModels input record through `pf_index`. All bus bases
-must agree. Without a solved result, use the network's declared voltage base.
+Store a bus and its optional solved voltage. AC bases are phase RMS \\[kV\\];
+DC bases are pole-to-ground \\[kV\\]. With a solved power flow and input data,
+`pf_index` selects the base from the PowerModels bus record. All bus bases
+must agree. Without a solution, use the declared network base.
 
 $(TYPEDFIELDS)
 """
@@ -49,13 +49,13 @@ end
 """
 $(TYPEDEF)
 
-Retain the connected pins of one element side in physical terminal order.
-A fully grounded side has no bus; unconnected pins are omitted.
+Store connected pins on one element side in physical terminal order.
+Omit unconnected pins. A fully grounded side has `bus = nothing`.
 
 $(TYPEDFIELDS)
 """
 struct Terminal
-    "Owning element designator."
+    "Element designator."
     element::Symbol
     "Element side number."
     side::Int
@@ -72,10 +72,10 @@ end
 """
 $(TYPEDEF)
 
-Retain an element, its physical model, connectivity, and operating setpoint.
-Setpoint powers are in MW/MVAr, angles in rad, AC voltages in phase peak kV,
-and DC source and converter voltages in pole-to-pole kV.
-Construction never mutates the element.
+Store an element, its physical model, connections and operating setpoint.
+Setpoint powers use \\[MW, MVAr\\], angles \\[rad\\], AC voltages phase peak
+\\[kV\\], and DC source and converter voltages pole-to-pole \\[kV\\].
+Construction leaves the element unchanged.
 
 $(TYPEDFIELDS)
 """
@@ -99,14 +99,14 @@ end
 """
 $(TYPEDEF)
 
-Retain supplied power-flow evidence without solving or modifying a network.
+Store a supplied power-flow solution without changing the network.
 With no solved result, dictionaries are empty and `slack_bus`/`bases` are
 `nothing`.
 
 $(TYPEDFIELDS)
 """
 struct OperatingPointRecord
-    "Bus voltage states `(vm_pu, va_rad)` in pu and rad, keyed by BusKey."
+    "Bus states `(vm_pu, va_rad)` in \\[dimensionless\\] and \\[rad\\], indexed by `BusKey`."
     bus_states::Dict{BusKey, NamedTuple}
     "Solved component powers \\[MW, MVAr\\] and machine terminal voltage/angle \\[kV, rad\\], keyed by designator."
     branch_flows::Dict{Symbol, NamedTuple}
@@ -114,7 +114,7 @@ struct OperatingPointRecord
     setpoints::Dict{Symbol, PowerImpedance.Setpoint}
     "AC bus of the first AC source, when a solved result exists."
     slack_bus::Union{Nothing, BusKey}
-    "Power-flow bases `(S_MVA = 1000.0, V_kV, dcpol = 2)`, or nothing."
+    "Power-flow bases `(S_MVA = 1000.0, V_kV, dcpol = 2)` in \\[MVA, kV\\], or `nothing`."
     bases::Union{Nothing, NamedTuple}
 end
 
@@ -149,8 +149,8 @@ function _check_supported_elements(elements)
     return nothing
 end
 
-# Copies of the GraphMakie projection's topology/refinement rules. Keep this
-# pure-Julia owner independent of whether the plotting extension is loaded.
+# Topology inference also runs without the plotting extension, so its
+# projection and refinement rules are implemented here.
 function _topology_role(element, connected_buses, grounded_sides)
     model = element.element_model
     PowerImpedance.is_converter(element) && return :converter
@@ -373,8 +373,8 @@ function _netlist(elements, topology, voltage_base, frequency, supplied_pf,
             flow = _branch_flow(pmtype, solution, input, pf, terminals)
             if element.element_model isa PowerImpedance.SynchronousMachine &&
                flow !== nothing
-                # The generator is attached to an intermediate terminal bus;
-                # the element's public bus is beyond its rt/lt branch.
+                # The machine's public bus lies beyond rt/lt. The power-flow generator
+                # record refers to the intermediate machine terminal bus.
                 terminal_index = string(input["gen_bus"])
                 terminal_bus = pf.result["solution"]["bus"][terminal_index]
                 terminal_base = Float64(pf.data["bus"][terminal_index]["base_kv"])
@@ -387,7 +387,7 @@ function _netlist(elements, topology, voltage_base, frequency, supplied_pf,
             end
             if element.element_model isa Union{PowerImpedance.TLC, PowerImpedance.MMC} &&
                flow !== nothing
-                # convdc pgrid/qgrid are absorbed from the AC bus; the converter's
+                # convdc defines pgrid and qgrid as power absorbed from the AC bus. The
                 # external ammeter points toward the bus. DC side 1 absorbs pdc.
                 flow = merge(flow, (; pf = flow.pdc, pt = -flow.pgrid, qt = -flow.qgrid))
             end
@@ -406,14 +406,24 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Construct an internal PSCAD netlist from a classic network and a supplied
-`(result, data, nodes2bus, elem2comp)` power-flow tuple, or `nothing`.
-Use NetworkBuilder's topology inference for connected pins; exclude the
-legacy grounded side 2 of one-port devices from topology inference and retain
-it as a ground terminal. Never solve power flow or mutate network setpoints.
-With a solved result, use the common voltage base recorded in its bus inputs;
-otherwise use `net.voltageBase[1]` \\[kV\\].
-The global network frame is 50 \\[Hz\\].
+Construct a PSCAD netlist from a classic network and supplied power-flow data.
+Use NetworkBuilder topology inference for connected pins. Store the grounded
+side 2 of one-port devices as a ground terminal, excluding it from bus inference.
+
+# Arguments
+
+- `net`: Connected classic network.
+- `pf`: `(result, data, nodes2bus, elem2comp)` power-flow tuple, or `nothing`.
+
+# Returns
+
+- A `Netlist` with physical terminal order and the supplied operating point.
+  With a solution, use the common voltage base in its bus input records.
+  Otherwise use `net.voltageBase[1]` \\[kV\\]. The network frame is 50 \\[Hz\\].
+
+# Notes
+
+Construction preserves network setpoints and does not solve power flow.
 """
 function netlist(net::PowerImpedance.Network, pf::Union{Nothing, Tuple})
     elements = NamedTuple{Tuple(keys(net.elements))}(Tuple(values(net.elements)))
@@ -448,19 +458,30 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Construct an internal PSCAD netlist directly from a NetworkBuilder topology.
-Use the supplied PowerFlowResult's operating setpoints, since `NB.solve`
-updates its returned classic network rather than `state.elements`. The internal
-`elements` argument can supply those solved elements in the declared order,
-including their retained states. Preserve the state and result. With no solved
-result, retain the declared setpoints.
-Implicit ground terminals of one-port devices use `:gnd`, as in `build_network`.
-With a supplied solved power flow and input data, take each bus's voltage base
-from its PowerModels input record through `pf_index` and require all bases to
-agree. Use that common base \\[kV\\] for the netlist and operating-point record,
-even when it differs from the declared network base. Without a solved result,
-use `state.options.voltageBase` \\[kV\\], defaulting to `NetworkBuilder.DEFAULT_VOLTAGE_BASE`.
-The global network frame is 50 \\[Hz\\].
+Construct a PSCAD netlist from a NetworkBuilder topology and supplied solution.
+Use the solution's operating setpoints because `NetworkBuilder.solve` updates
+its returned classic network separately from `state.elements`.
+
+# Arguments
+
+- `state`: Materialized builder network.
+- `pf`: `PowerFlowResult`, or `nothing` to use the declared setpoints.
+- `elements`: Elements in declaration order, including solved states when
+  available. Default: `state.elements`.
+
+# Returns
+
+- A `Netlist` preserving physical terminal order, with implicit `:gnd` terminals
+  for one-port devices. The network frame is 50 \\[Hz\\]. With a solution and
+  input data, `pf_index` selects each bus base from its PowerModels record.
+  Require a common base for the netlist and operating point. Otherwise use
+  `state.options.voltageBase` \\[kV\\], defaulting to
+  `NetworkBuilder.DEFAULT_VOLTAGE_BASE`.
+
+# Notes
+
+Construction leaves `state` and `pf` unchanged. A solved voltage base can differ
+from the declared network base.
 """
 function netlist(state::PowerImpedance.NetworkBuilder.NetworkState,
         pf::Union{Nothing, PowerImpedance.PowerFlowResult}, elements = state.elements)

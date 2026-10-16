@@ -5,7 +5,8 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Source}, con
     terminal = only(connected)
     bus = _terminal_bus(e, terminal, context)
     bus.kind == :dc && return dc_source!(state, e, terminal, bus, context)
-    # A solved bus owns the source voltage; linear NB networks retain setpoints.
+    # Solved bus voltages set source magnitudes. Linear builder networks
+    # use source setpoints because they have no solved power flow.
     magnitude, angle = if bus.vm_pu === nothing
         ismissing(e.setpoint.Vac) &&
             throw(ArgumentError("element :$(e.name) is missing setpoint.Vac"))
@@ -33,7 +34,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Source}, con
     return nothing
 end
 
-# PSCAD 5.1 station measurement: orient-0 NA (-36, 0) is positive.
+# The orient-0 source terminal NA (-36, 0) has positive polarity.
 function dc_source!(state, e, terminal, bus, context)
     magnitude = if bus.vm_pu === nothing
         ismissing(e.setpoint.Vdc) &&

@@ -197,7 +197,8 @@ function main(arguments)
         expected_identity === nothing || initial_identity == expected_identity ||
             error("PSCAD installation does not match the expected solver identity")
         phase = "project load"
-        # Even a fresh desktop start restores the user's saved workspace.
+        # PSCAD restores the saved workspace on startup, which can include a
+        # project with the same name as the staged project.
         for entry in _components(app.projects())
             _string(entry["name"]) == project_name || continue
             existing = app.project(project_name)
@@ -272,7 +273,7 @@ function main(arguments)
             try
                 _build_messages(project, build_path)
             catch
-                # The original failure and all build messages are already retained.
+                # Keep the simulation error if collection of build messages also fails.
             end
         end
         message = "PSCAD runner failed during $phase: $(sprint(showerror, error))"
@@ -280,7 +281,7 @@ function main(arguments)
         flush(console)
         throw(ErrorException(message))
     finally
-        # A failed load can still leave the staged project in the workspace.
+        # A failed load can leave the staged project open, so it needs explicit cleanup.
         if project === nothing && load_attempted
             try
                 loaded = app.project(project_name)

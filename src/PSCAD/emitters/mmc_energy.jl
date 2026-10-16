@@ -1,6 +1,5 @@
-# MMC/energy.jl:67–151 and inner_current.jl:81–104. The fixed-frame
-# integrators implement x' = u - J_frame*x, including the zero-sequence axis.
-# Every block is an existing M4/M6a primitive; no transfer-function guesses.
+# Fixed-frame integrators use x' = u - J_frame*x, including the zero-sequence
+# axis, as in MMC/energy.jl and MMC/inner_current.jl.
 function mmc_rotating_integrators!(
         graph, parameters, inputs, states, initial, frame, prefix)
     for (i, (input, state, value)) in enumerate(zip(inputs, states, initial))
@@ -135,8 +134,8 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
                 Signal("lec_" * stem * "_dq"), Signal("lec_" * stem * "_" * axis *
                                                       "_measured"), i))
     end
-    # Synchronous lifting of the scalar triplen energy into its two quadratures.
-    # Its cycle means are Julia's Zd/Zq; the abc plant retains the 6ω ripple.
+    # The triplen energy quadratures have cycle means Zd/Zq, as in Julia.
+    # The abc plant also retains its 6ω ripple.
     for (axis, kind) in (("Zd", :cos), ("Zq", :sin))
         carrier = Signal("lec_triplen_" * axis)
         append!(graph.nodes,
@@ -144,7 +143,6 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
                 Mult(Signal("lec_delta_zero"), carrier, Signal("lec_delta_" * axis *
                                                                "_measured"))])
     end
-    # All seven capacitor-energy inputs and all current feedback are live.
     for (stem, axes) in (("sum", ("d", "q", "z")),
         ("delta", ("d", "q", "Zd", "Zq")))
         for axis in axes
@@ -233,8 +231,8 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
     append!(inputs, [("v_Ctot_" * arm * "_" * phase, 1)
                      for arm in ("u", "l") for phase in ("a", "b", "c")])
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
-    # CompensatedModulation leaves Σ in the grid frame (modulation.jl:139).
-    # Its Δ refs remain on the AC voltage base, Σ refs on the DC voltage base.
+    # CompensatedModulation uses the grid frame for Σ, the AC voltage base
+    # for Δ references and the DC voltage base for Σ references.
     sigma_angle = Signal("comp_sigma_angle")
     sigma_omega = converter_parameter!(parameters, "sigmaOmega", -2m.elec.ωbase)
     append!(graph.nodes,

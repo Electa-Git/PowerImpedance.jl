@@ -1,12 +1,37 @@
 """
 $(TYPEDSIGNATURES)
 
-Recover MMC arm and reactor inductances \\[H\\], resistances \\[Ω\\], and
-submodule capacitance \\[F\\] from the constructor's per-unit parameters.
-Return `N`, `turnsRatio`, `Sbase` \\[MVA\\], `vAC_base_LL_RMS` \\[kV\\],
-`vDC_base` \\[kV\\], and `ωbase` \\[rad/s\\] with the SI circuit values.
-The DC bases are `zDC = vDC_base^2/Sbase`, `lDC = zDC/ωbase`, and
-`cDC = 1/(ωbase*zDC)`; the AC lumped impedance contains half an arm.
+Recover MMC circuit values from per-unit constructor parameters.
+Subtract half the arm impedance from the AC equivalent to recover the reactor.
+
+# Arguments
+
+- `e`: MMC electrical parameters and bases.
+
+# Returns
+
+- `L_arm`, `L_r`: Arm and reactor inductances \\[H\\].
+- `R_arm`, `R_r`: Arm and reactor resistances \\[Ω\\].
+- `C_SM`: Submodule capacitance \\[F\\].
+- `N`: Number of submodules per arm.
+- `turnsRatio`: Transformer turns ratio \\[dimensionless\\].
+- `Sbase`: Three-phase apparent-power base \\[MVA\\].
+- `vAC_base_LL_RMS`: AC line-to-line RMS voltage base \\[kV\\].
+- `vDC_base`: Pole-to-pole DC voltage base \\[kV\\].
+- `ωbase`: Angular frequency base \\[rad/s\\].
+
+# Notes
+
+The DC impedance, inductance and capacitance bases are
+
+```math
+Z_{DC} = \\frac{V_{DC}^2}{S_b},\\qquad
+L_{DC} = \\frac{Z_{DC}}{\\omega_b},\\qquad
+C_{DC} = \\frac{1}{\\omega_b Z_{DC}},
+```
+
+where ``V_{DC}`` is `vDC_base`, ``S_b`` is `Sbase` and ``\\omega_b`` is `ωbase`.
+The resulting bases use \\[Ω\\], \\[H\\] and \\[F\\], respectively.
 """
 function mmc_si(e::PowerImpedance.ElectricalMMC)
     zDC = e.vDC_base^2 / e.Sbase
@@ -24,9 +49,21 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Recover the TLC reactor `L_r` \\[H\\] and `R_r` \\[Ω\\], and return its
-`Sbase` \\[MVA\\], `vAC_base_LL_RMS` \\[kV\\], `vDC_base` \\[kV\\],
-`ωbase` \\[rad/s\\], and unchanged `l_f_pu`, `r_f_pu` \\[dimensionless\\].
+Recover TLC reactor values from the constructor's AC per-unit bases.
+
+# Arguments
+
+- `e`: TLC electrical parameters and bases.
+
+# Returns
+
+- `L_r`: Reactor inductance, `e.Lᵣ * e.lACbase` \\[H\\].
+- `R_r`: Reactor resistance, `e.Rᵣ * e.zACbase` \\[Ω\\].
+- `Sbase`: Three-phase apparent-power base \\[MVA\\].
+- `vAC_base_LL_RMS`: AC line-to-line RMS voltage base \\[kV\\].
+- `vDC_base`: Pole-to-pole DC voltage base \\[kV\\].
+- `ωbase`: Angular frequency base \\[rad/s\\].
+- `l_f_pu`, `r_f_pu`: Unchanged reactor parameters \\[dimensionless\\].
 """
 function tlc_si(e::PowerImpedance.ElectricalTLC)
     return (L_r = e.Lᵣ * e.lACbase, R_r = e.Rᵣ * e.zACbase,
@@ -37,8 +74,17 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Return the synchronous-machine equivalent-circuit fields required by PSCAD.
-All values retain the machine's per-unit bases \\[dimensionless\\].
+Map synchronous-machine equivalent-circuit parameters to PSCAD field names.
+
+# Arguments
+
+- `e`: Synchronous-machine electrical parameters.
+
+# Returns
+
+- An ordered dictionary of stator resistance, leakage reactance, magnetizing
+  reactances and rotor branch parameters on the machine's per-unit bases
+  \\[dimensionless\\].
 """
 function sm_equivalent_circuit(e::PowerImpedance.ElectricalSM)
     return OrderedDict{String, Float64}(
@@ -52,10 +98,25 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Return the transformer T-model inductances `L_p`, `L_s`, `L_m` \\[H\\],
-resistances `R_p`, `R_s`, `R_m` \\[Ω\\], capacitances `C_t`, `C_s` \\[F\\],
-turns ratio `n` \\[dimensionless\\], winding `organization`, and `ω` \\[rad/s\\].
-Reject frequency-dependent winding resistance and nonpositive turns ratios.
+Read transformer T-model circuit values and winding connections.
+
+# Arguments
+
+- `t`: Transformer model.
+
+# Returns
+
+- `L_p`, `L_s`, `L_m`: Primary, secondary and magnetizing inductances \\[H\\].
+- `R_p`, `R_s`, `R_m`: Primary, secondary and magnetizing resistances \\[Ω\\].
+- `C_t`, `C_s`: Turn-to-turn and stray capacitances \\[F\\].
+- `n`: Turns ratio \\[dimensionless\\].
+- `organization`: Winding connection.
+- `ω`: Angular frequency \\[rad/s\\].
+
+# Errors
+
+- Throws `ArgumentError` for frequency-dependent winding resistance or a
+  nonpositive or nonfinite turns ratio.
 """
 function transformer_si(t::PowerImpedance.Transformer)
     t.hasRω &&
@@ -72,10 +133,24 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Format a finite real PSCAD parameter with `sigdigits` significant digits and
-an optional ` [unit]` suffix. Use plain decimal for zero and
-`1e-4 <= abs(x) < 1e7`, otherwise uppercase `E` notation. Integer inputs
-in the decimal range retain integer notation. Reject nonfinite values.
+Format a finite real PSCAD parameter as a decimal or uppercase `E` string.
+
+# Arguments
+
+- `x`: Numeric parameter value.
+- `unit`: Optional unit suffix. Default: `nothing`.
+- `sigdigits`: Number of significant digits. Default: `9`.
+
+# Returns
+
+- A parameter string with optional ` [unit]` suffix. Use decimal notation for
+  zero and rounded magnitudes from `1e-4` up to, but excluding, `1e7`.
+  Other values use `E` notation. Integer inputs use integer notation within
+  the decimal range.
+
+# Errors
+
+- Throws `ArgumentError` for nonfinite values or nonpositive `sigdigits`.
 """
 function pscad_value(x::Real; unit = nothing, sigdigits::Integer = 9)
     isfinite(x) || throw(ArgumentError("PSCAD parameter must be finite"))

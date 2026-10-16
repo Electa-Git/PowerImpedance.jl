@@ -1,18 +1,13 @@
-"""
-Conversion from normalized AVR output to PSCAD's open-circuit Ef base.
-Julia's field voltage is `v_df = K_A*y*Rf_d/La_d`; its open-circuit terminal
-voltage is `La_d*v_df/Rf_d`, so PSCAD receives `Ef = K_A*y`. With saturation
-disabled, the settled station Ef equals Ef0 and satisfies the AVR equation.
-"""
+# Julia uses v_df=K_A*y*Rf_d/La_d and open-circuit voltage La_d*v_df/Rf_d,
+# so PSCAD requires Ef=K_A*y when saturation is disabled.
+"Scale from normalized AVR output to PSCAD open-circuit Ef \\[dimensionless\\]."
 const SM_AVR_FIELD_VOLTAGE_SCALE = 1.0
 
-"""
-PSCAD terminal iron-loss resistance \\[pu\\] for Julia's machine without a
-core-loss branch. PSCAD's default 300 pu shunt dissipates `V^2/Ri`, or
-3.33 MW at 1 pu on a 1000 MVA base; 1e6 pu reduces this to 0.001 MW.
-In the classic fixture's 10 µs, 15 s station run, changing Ri to 1e6 pu
-raised internal terminal P from 895.45 MW to 898.778 MW, confirming the loss.
-"""
+# At 1 pu on a 1000 MVA base, an iron-loss shunt of 300 pu dissipates
+# 3.33 MW. A value of 1e6 pu reduces the loss to 0.001 MW for a nearly lossless core.
+# With a 10 µs step and 15 s duration, the measured internal terminal power
+# is 895.45 MW at 300 pu and 898.778 MW at 1e6 pu.
+"Machine iron-loss resistance on its per-unit base \\[dimensionless\\]."
 const SM_IRON_LOSS_RESISTANCE_PU = 1.0e6
 
 function machine_avr(name, machine, voltage_pu, vref=machine.avr.vref_SG)
@@ -153,7 +148,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
         signal_stub!(state.main, (point[1] + dx, point[2] + dy), signal; direction)
     end
 
-    # rt/lt is a Y-equivalent branch at the same voltage level, as in Julia.
+    # The rt/lt branch uses the machine's Y-equivalent values at the same voltage.
     x, y = allocate_cell!(state.layout)
     start = (x + 90, y + 72)
     zbase = elec.Vᵃᶜ_base^2 / elec.S_base
@@ -175,7 +170,6 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     end
     output_probe!(state.main, current, "branch", "kA", (x + 144, y + 144))
 
-    # Measure the terminal space-vector magnitude before the rt/lt branch.
     vabc, va, vb, vc, va2, vb2, vc2, vsum2, vmag2, vmag, vt_meas =
         Signal.([pscad_name(e.pscad * suffix; used = state.used)
                  for suffix in ("_Vt_abc", "_Vt_a", "_Vt_b", "_Vt_c",
