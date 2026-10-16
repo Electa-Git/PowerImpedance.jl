@@ -111,6 +111,27 @@ end
     end
 end
 
+module L4Preparation
+using ..PSCADValidation: ROOT,REPOSITORY,source_record,L4_PORT_IDS
+const head=let paths=[source["path"] for source in source_record()]
+    append!(paths,["test/manual/pscad/run_l4_screens.jl","test/manual/pscad/validation/README.md",
+        "test/manual/pscad/validation/l4_translation.md","test/pscad/l4_factories_test.jl",
+        "test/pscad/l4_system_test.jl","test/pscad/l4_growth_test.jl","test/pscad/validation_test.jl",
+        "test/pscad/manual_scripts_test.jl","test/pscad/dc_precharge_test.jl","Project.toml"])
+    Dict(path=>Base.read(joinpath(REPOSITORY,path)) for path in unique(paths))
+end
+read(command::Cmd)=copy(head[replace(last(command.exec),"HEAD:"=>"")])
+read(command::Base.CmdRedirect)=read(command.cmd)
+read(path::String)=Base.read(path)
+# Use the actual functions with a simulated HEAD so local edits and station
+# settings cannot change which source checks pass or fail.
+for expression in Meta.parseall(Base.read(joinpath(ROOT,"l4_execution.jl"),String)).args
+    expression isa Expr && expression.head==:function || continue
+    name=first(expression.args).args[1]
+    name in (:require_committed_l4,:l4_selection,:prepare_l4) && Core.eval(@__MODULE__,expression)
+end
+end
+
 @testset "L4 source check and timeout refuse before writing" begin
     @test all(V.native_node_limit(id)==100 for id in ("L1-01","L2-01","L3-07"))
     @test all(V.native_node_limit(id)==200 for id in V.L4_PORT_IDS)
@@ -118,10 +139,21 @@ end
     @test_throws ArgumentError V.prepare_l4(["L4-01","L4-01"])
     @test_throws ArgumentError V.run_l4(timeout=NaN)
     @test_throws ArgumentError V.run_l4(timeout=0.)
+    @test L4Preparation.require_committed_l4()===nothing
     mktempdir() do root
         destination=joinpath(root,"unwritten")
-        @test_throws r"HEAD to contain" V.prepare_l4(["L4-01"];directory=destination)
-        @test !ispath(destination)
+        for path in keys(L4Preparation.head)
+            original=L4Preparation.head[path]
+            L4Preparation.head[path]=[original;0x00]
+            try
+                @test_throws r"HEAD to contain" L4Preparation.require_committed_l4()
+                @test_throws r"HEAD to contain" L4Preparation.prepare_l4(["L4-01"];directory=destination)
+                @test !ispath(destination)
+            finally
+                L4Preparation.head[path]=original
+            end
+            @test L4Preparation.require_committed_l4()===nothing
+        end
     end
 end
 
