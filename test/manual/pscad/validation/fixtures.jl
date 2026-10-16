@@ -1,5 +1,5 @@
 # The registry is a catalogue of frozen physical circuits, not a dispatch layer.
-# L2 TLC variants retain the M4/M5b controls; L3/L4 remain later work.
+# L2 TLC variants retain the M4/M5b controls; L3 entries are added by composed_execution.jl.
 const REGISTRY = [
     (id = "L1-01", description = "AC series/parallel RLC; RL two-source witness",
         parent = "M1 small_ac_network", factory = () -> ac_rl_network(),

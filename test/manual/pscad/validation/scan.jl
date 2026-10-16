@@ -228,7 +228,8 @@ function prepare_scan_projects(directory, list, spec, axes; prefix = "")
     baseline_path = joinpath(mkpath(joinpath(directory, baseline_axis)), name * ".pscx")
     plan, settings = scan_plan(list, spec, "baseline"; name)
     if endswith(prefix, "half_amplitude_") && !isfile(baseline_path)
-        cp(joinpath(directory, scan_prefix(spec) * "baseline", name * ".pscx"), baseline_path)
+        template = get(spec, :baseline_template, scan_prefix(spec) * "baseline")
+        cp(joinpath(directory, template, name * ".pscx"), baseline_path)
     end
     if isfile(baseline_path)
         baseline = read(baseline_path, String)
@@ -338,6 +339,7 @@ end
 
 function run_fixture(id; remote = RemoteConfig(),
         directory = joinpath(ROOT, "data", id), deadline = time()+5400)
+    startswith(id, "L3-") && return run_composed(id; remote, directory, deadline)
     record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
     verify_inputs(directory, record)
     record["fixture_id"] == id || error("fixture mismatch")

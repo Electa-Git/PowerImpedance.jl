@@ -172,7 +172,7 @@ function scan_record(spec)
         "protocol" => get(spec, :protocol, ""),
         "applicable_comparison" => spec.dimension == 3 ? "phase-domain physics" : "native dq/DC physics",
         "phase_order" => spec.dimension == 3 ? ["a", "b", "c"] : String[],
-        "SI_units" => startswith(spec.id,"L2-") ? "kV/kA: S; fixed nominal 50 Hz dq; declared external AC phase-peak voltage/current bases and total three-phase rating" :
+        "SI_units" => startswith(spec.id,"L3-") ? "phase kV/kA imply S for Y and ohm for direct Z; fixed nominal 50 Hz dq; declared aggregate bases and original individual L2 bases" : startswith(spec.id,"L2-") ? "kV/kA: S; fixed nominal 50 Hz dq; declared external AC phase-peak voltage/current bases and total three-phase rating" :
             "phase kV/kA imply S for Y and ohm for Z; phase-peak AC bases, 1000 MVA total three-phase base",
         "IEEE9_blocks" => spec.id == "L1-08" && spec.dimension == 3 ? "separate local Bus1/Bus5 3x3; full 6x6 transfer retained as evidence" : "not applicable",
         "frequencies" => spec.frequencies, "phases" => spec.phases,
@@ -204,6 +204,13 @@ function scan_record(spec)
         record["dc_clamped"]=spec.dc_clamped
         record["reference_scope"]=spec.dc_voltage_base_kV===nothing ? "native machine full AC-terminal Y converted from per-unit to SI; native rt/lt retained" : spec.dc_clamped ? "native DUT AC block with DC clamped" : "native DUT + DC resistor AC-terminal Schur reduction; remote zero-voltage reference grounded"
         record["refinement"]["selection"]="one worst-error drive axis; qualify both V/Idrive and Iconverter/Idrive, including cross-axis voltage; half-step at worst frequency plus 1000 Hz"
+    end
+    if startswith(spec.id,"L3-")
+        record["power_base_MVA"]=spec.power_base_MVA
+        record["active"]=true
+        record["dc_clamped"]=spec.dc_clamped
+        record["reference_scope"]="individual local device Y on original L2 bases; aggregate port Y and direct V/Idrive on predeclared aggregate bases"
+        record["comparison_rule"]=Dict(string(k)=>v for (k,v) in pairs(C_ACTIVE))
     end
     return record
 end

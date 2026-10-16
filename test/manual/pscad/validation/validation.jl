@@ -24,5 +24,8 @@ include("interface_step.jl")
 include("residual_step.jl")
 include("timing.jl")
 include("queue.jl")
+include("composed_network.jl")
+include("composed_measurement.jl")
+include("composed_execution.jl")
 
 end

@@ -1,7 +1,7 @@
 # Manual PSCAD physics validation
 
 L1 is closed with seven passes and one owner-explained system result. L2 starts
-with one strong-grid TLC fixture; L3 interactions and L4 systems remain later work. Tier D remains the original P2P early growth fit. Code is
+with one strong-grid TLC fixture; L3 stage A prepares two interactions; L4 systems remain later work. Tier D remains the original P2P early growth fit. Code is
 manual and private; `data/`, `Manifest*.toml` and `.CondaPkg/` are gitignored.
 No station operation occurs during preparation or offline tests.
 
@@ -1554,3 +1554,142 @@ covers ordered continuation, per-fixture outcome persistence, reinvocation,
 invalid measurements, and interrupt propagation.
 Logs are retained under `data/m9c13/`. No full `Pkg.test()`, station contact,
 `src/` changes, staging, or commits were performed.
+
+## M9d-2: Layer 3 stage A
+
+The owner approves L3-01/02/03/04/06/07/08 with the frozen
+[`M9d-1 proposal`](data/m9d1/l3-proposal.md) values. L3-05 and
+distributed-AC/converter composition are deferred. L3-07 is admitted for stage C
+on its finite native contours and located roots, with the recorded caveat:
+these checks do not enumerate the distributed cable's infinite spectrum or prove
+closure at infinity. Stage A registers and prepares **L3-01 and L3-08 only**.
+Tier B remains later work (L3b: 04/08/06); its damping metric is relative damping
+ratio zeta within 10%, with decay alpha also reported.
+
+The measurement framework recovers each device's individual Y on its original
+L2 phase-peak bases, the aggregate Y on bases declared before measurement, and
+**direct Z = V / Idrive** from recorded injection currents. Individual and
+aggregate Y use the full measured voltage matrix, not independent column
+ratios. Every required measurand has its own window, comparison, amplitude,
+step and qualification status. Full multiport matrices retain cross blocks;
+a four-coordinate synthetic case checks this extraction for stage C.
+An aggregate pass cannot cancel or rescale an individual failure.
+
+The lumped-network admission gate retains every native device state and passive
+R/L/C storage in a source-clamped KCL descriptor, checks its Schur response
+against native admittances, and combines its finite roots with the 6001-point
+native contour from 0.01 Hz to 100 kHz at Re(s)=1e-6/s. Finite roots retain the
+strict Re(lambda)<-1e-7/s rule. This is numerical lumped-network admission;
+it supplies no distributed-spectrum or exact-delay completeness claim.
+
+Zero-delay devices use exact exp(-s*h) **inside each device's modulation
+feedback**, with the existing carrier corrections. The harness then assembles
+the entire circuit and eliminates the same internal nodes as the plain native
+reference. Positive-delay devices retain their native delay model. Every
+passive value used by the composed discrete reference is read from the actual
+exported project and checked against its frozen circuit value. Modulation
+feedback is never replaced by a phase rotation of terminal Y.
+
+KCL uses every recorded device, grid and shunt branch at each measured port,
+with the exact project's orientation metadata. Every port/coordinate, coherent
+window and tone is checked on main, amplitude and half-step records. The driven
+coordinate checks the measured KCL/Idrive timing factor against
+exp(s*h)/cos(2*pi*50*h), with the existing 1e-6 relative rule; undriven
+coordinates check the KCL residual on the declared driven-current scale.
+Their expected injection is the full transported dq vector,
+`exp(s*h)*[cos(w0*h) sin(w0*h); -sin(w0*h) cos(w0*h)]*Idrive`,
+because the older abc recording also rotates in the fixed dq frame. Extending
+the driven scalar factor to an undriven coordinate leaves a spurious `w0*h`
+residual. The 1e-6 limit and all normalizations remain unchanged. Group manifests
+retain KCL summaries and every row before any invalid-result return; measurands
+and witness summaries retain `invalid_reasons`. Stored-run diagnosis and
+analysis-only results are in [`kcl-reanalysis`](data/m9d2/kcl-reanalysis/report.md).
+This timing cancels in Y; direct discrete-realization Z includes the drive's
+readout factor. Response columns include voltage and individual/aggregate
+currents on their declared bases, or voltage alone for direct Z.
+
+The residual witness subtracts the predicted composed response at each step
+only in the numerator. Its denominators remain **the measured main response**,
+with the committed 0.1 norm/0.02 entry floors and 1% limits. Main and half-step
+reproduction must also pass the existing 1% rule. The plain-model C comparison,
+raw step, residual-normalised diagnostics, KCL checks, reproduction errors,
+complex measured/predicted columns and per-frequency residuals remain visible.
+All approved A/C, conditioning, drift, departure, amplitude and step gates and
+tolerances are unchanged. Zero-delay qualification requires the discrete C
+comparison and residual witness plus every independent gate.
+
+| Fixture | Frozen circuit and measurands | Aggregate base | Current per tone (pu) | Expected station time |
+| --- | --- | --- | --- | --- |
+| L3-01 | L2-01 P-f/Q TLC + L2-03 P/Q-V TLC, separate 640 kV DC clamps; original grid R=6.019975000770435 ohm, L=0.19162175573245024 H; both 200 us delayed; individual C1/C2 Y, aggregate Y, direct Z; plain C + raw step | 200 MVA / 220 kV LL | 0.0004508893578873102 | 25–40 min |
+| L3-08 | Original L2-07 MMC/grid/DC clamp + per-phase series R=2 ohm, C=5 uF shunt; individual MMC Y, aggregate MMC+RC Y, direct Z; composed discrete C + residual step | 1000 MVA / 380 kV LL | 0.00047389717632280974 | 60–90 min including local scan |
+
+Both retain 23 coarse tones, onset 2 s, [16,24)/[24,32) s windows, 32 s main
+records, 2.5 us base / 1.25 us half step and recorder ratio 25 at both steps.
+L3-01 individual bases remain 100 MVA / 220 kV each. L3-08 individual MMC bases
+remain the original external 1000 MVA / 380 kV bases. Half amplitude is exactly
+one half. Coarse step witnesses use the selected worst-error drive and frequency
+plus 1000 Hz (750/1000 if worst is 1000), with coherent windows and the original
+16 s start. They never mix integration steps to identify a Y matrix.
+
+L3-08 additionally has a **predeclared two-axis local scan**, with its own
+baseline, amplitude witness and matching half-step baseline/axis: 39 tones at
+232–260.5 Hz and 334–361 Hz, every 1.5 Hz, each at
+5.910035278632797e-5 pu. All six local records last 32 s with the same eight-second
+windows; half-step sampling is 31.25 us. Each disjoint direct-Z peak must have
+both curves bracketed, both half-power crossings, at least five in-band points
+and six intervals across its width. The existing centre/width resonance rule
+applies only to direct Z inside either band; all point errors remain saved,
+ordinary point rules apply outside, and Y and independent gates remain mandatory.
+
+The owner reports the following **native 0.01 s builds, zero errors**, of the
+proposal exports. Every measurement build still checks its own strict <100
+live-node limit.
+
+| Fixture | Native live nodes | Stage |
+| --- | --- | --- |
+| L3-01 | 31 | A |
+| L3-02 | 77 | later |
+| L3-03 | 77 | later |
+| L3-04 | 67 | later |
+| L3-05 | 52 | deferred |
+| L3-06 | 55 | later |
+| L3-07 | 96 | C; finite-contour/root caveat retained |
+| L3-08 | 55 | A |
+
+Fresh projects, native/discrete reference tables, solved points, exported
+passives, producing-source hashes and empty native ledgers are prepared under
+`data/L3-01/` and `data/L3-08/`. No proposal export, old reference or station
+completion is adopted. Ten projects per measurement group are prepared (including an unrun measurement
+template);
+normally six run (three groups across this queue, hence eighteen native runs).
+Only V/I/drive recorders are retained in injected runs; full tier-A recorder
+evidence stays in each group's baseline. Electrical meters and topology stay intact.
+Preparation and offline checks do not contact a station.
+
+With the existing Julia 1.10.11 harness environment and station configuration,
+run from the repository root:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9d_a(timeout=10800.0)'
+```
+
+The resilient queue runs **L3-01 then L3-08**, saves each outcome immediately to
+`data/m9d2/queue.toml`, continues after fixture failures, and stops on interrupts.
+Expected total: **85–130 min**, with a shared **180 min deadline**. These are the
+approved planning estimates, not measured runtimes. A failed coarse group stops
+that fixture before its local scan. Reinvocation resumes only matching new
+completions through the existing project/input/solver hash checks; witness
+selection is saved before execution and retained on retries. Full `Pkg.test()`
+remains the owner's check.
+
+Final offline checks on **Julia 1.12.7**, using the repository Manifest and
+`OPENBLAS_NUM_THREADS=1`: **2,881/2,881 validation assertions**,
+**20,250/20,250 PSCAD suite assertions**, and **74/74 standalone name-guard
+assertions**. The new framework contributes **229 assertions**, also passing
+**229/229 on Julia 1.10.11**. Julia 1.10.11 preparation passes **77/77 source,
+artifact and definition checks**, **150/150 written-project XML checks**, and
+**119/119 recorder/reference checks**. These verify all 30 fresh projects,
+original individual and declared aggregate bases, local scan resolution,
+exported values, source/payload hashes and empty native ledgers. All 80 approved
+proposal artifacts retain their hashes. Logs, counts and final manifest digests
+are under [`data/m9d2/`](data/m9d2/). No station qualification is claimed.

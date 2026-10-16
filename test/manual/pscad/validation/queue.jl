@@ -342,3 +342,24 @@ function run_m9c13(; timeout = 14400.0)
     end
     return record
 end
+
+const M9D_A_IDS = ["L3-01", "L3-08"]
+
+function run_m9d_a(;timeout=10800.,remote=RemoteConfig())
+    isfinite(timeout)&&timeout>0 || error("timeout must be finite and positive")
+    deadline=time()+timeout;directory=mkpath(joinpath(ROOT,"data","m9d2"))
+    path=joinpath(directory,"queue.toml")
+    record=isfile(path) ? TOML.parsefile(path) : Dict{String,Any}("order"=>copy(M9D_A_IDS),"outcomes"=>Dict{String,Any}())
+    for id in M9D_A_IDS
+        try
+            result=run_composed(id;remote,deadline)
+            record["outcomes"][id]=Dict("status"=>result["status"])
+        catch failure
+            failure isa InterruptException && rethrow()
+            record["outcomes"][id]=Dict("status"=>"run_or_analysis_failed","failure"=>sprint(showerror,failure))
+            @warn "Composed fixture failed; continuing queue" fixture=id reason=sprint(showerror,failure)
+        end
+        open(io->TOML.print(io,record;sorted=true),path,"w")
+    end
+    return record
+end

@@ -179,21 +179,43 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
         # signal is invented; output_probe! owns this exact recorder geometry.
         needed = filter(c -> c.kind == :voltage && c.bus == only(spec.buses).name ||
             c.kind == :injection_current && c.element == only(spec.currents)[1], plan.probes.channels)
-        names = Set(c.name for c in needed)
-        discarded = filter(c -> c isa P.ComponentPlan && c.defn == "master:pgb" &&
-            !(Dict(c.params)["Name"] in names), plan.main.components)
-        for recorder in discarded
-            endpoint=(recorder.x,recorder.y);labelpoint=(recorder.x-36,recorder.y)
-            label=only(filter(c -> c isa P.ComponentPlan && c.defn=="master:datalabel" &&
-                (c.x,c.y)==labelpoint && Dict(c.params)["Name"]==Dict(recorder.params)["Name"],plan.main.components))
-            wire=only(filter(w -> w.vertices==[labelpoint,endpoint],plan.main.wires))
-            filter!(c -> c!==recorder && c!==label,plan.main.components)
-            filter!(w -> w!==wire,plan.main.wires)
+        retain_recorders!(plan, needed)
+    end
+    if get(spec, :recorder_scope, "") == "measurement"
+        port_buses=Set(b.name for b in spec.buses)
+        voltage_buses=copy(port_buses)
+        device_currents=Set{Tuple{String,String}}()
+        for e in list.elements
+            e.model isa Union{PowerImpedance.TLC,PowerImpedance.MMC,PowerImpedance.SynchronousMachine} || continue
+            bases=device_bases(e.model.elec)
+            push!(voltage_buses,port_probe(list,e.name,bases.ac_side).name)
+            bases.dc_voltage===nothing || push!(voltage_buses,port_probe(list,e.name,1).name)
+            push!(device_currents,(string(e.name),string(bases.ac_side)))
         end
-        filter!(c -> c.name in names, plan.probes.channels)
+        needed=filter(c->c.kind==:injection_current ||
+            c.kind==:voltage && c.bus in voltage_buses ||
+            c.kind==:current && (c.bus in port_buses || c.dim==1 || (c.element,c.side) in device_currents),
+            plan.probes.channels)
+        retain_recorders!(plan,needed)
     end
     P.check_connectivity(plan)
     return plan, settings
+end
+
+function retain_recorders!(plan, needed)
+    names = Set(c.name for c in needed)
+    discarded = filter(c -> c isa P.ComponentPlan && c.defn == "master:pgb" &&
+        !(Dict(c.params)["Name"] in names), plan.main.components)
+    for recorder in discarded
+        endpoint=(recorder.x,recorder.y);labelpoint=(recorder.x-36,recorder.y)
+        label=only(filter(c -> c isa P.ComponentPlan && c.defn=="master:datalabel" &&
+            (c.x,c.y)==labelpoint && Dict(c.params)["Name"]==Dict(recorder.params)["Name"],plan.main.components))
+        wire=only(filter(w -> w.vertices==[labelpoint,endpoint],plan.main.wires))
+        filter!(c -> c!==recorder && c!==label,plan.main.components)
+        filter!(w -> w!==wire,plan.main.wires)
+    end
+    filter!(c -> c.name in names, plan.probes.channels)
+    return nothing
 end
 
 function amplitude_values(spec, axis, port)

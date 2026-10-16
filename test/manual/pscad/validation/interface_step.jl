@@ -27,39 +27,39 @@ end
 modulation_states(m::PowerImpedance.MMC) = PowerImpedance.statenames(m.modulation)
 modulation_states(m::PowerImpedance.TLC) = PowerImpedance.statenames(m.mod)
 
+# Exact one-step modulation feedback, using the same owned carrier correction
+# and delay-state Schur replacement as interface_step_reference.
+function one_step_full_y(original,h)
+    interface_step_eligible(original.element_model) || return s->physical_y(original,s)
+    isfinite(h) && h>0 || error("interface reference requires a positive finite step")
+    e=PowerImpedance.Element(element_model=one_step_model(original.element_model,h),input_pins=original.input_pins,output_pins=original.output_pins,
+        transformation=original.transformation,setpoint=original.setpoint,limits=original.limits)
+    e.symbol=original.symbol;PowerImpedance.update!(e,original.setpoint)
+    names=PowerImpedance.statenames(e.element_model);delayed=Set(modulation_states(e.element_model))
+    d=findall(in(delayed),collect(names));r=setdiff(1:length(names),d)
+    pade=PowerImpedance.PadeDelay(timeDelay=h,padeOrderNum=3,padeOrderDen=3)
+    base=device_bases(e.element_model.elec);n=length(r)
+    function response(s)
+        gp=only(pade.C*((s*I-pade.A)\pade.B)+pade.D)
+        effect=vcat(e.A[r,d],e.C[:,d])*((s*I-e.A[d,d])\hcat(e.A[d,r],e.B[d,:]))
+        eff=[e.A[r,r] e.B[r,:];e.C[:,r] e.D]+effect*((exp(-s*h)+1)/(gp+1))
+        y=eff[n+1:end,1:n]*((s*I-eff[1:n,1:n])\eff[1:n,n+1:end])+eff[n+1:end,n+1:end]
+        return y.*base.current_outputs./base.voltage_inputs'
+    end
+    return response
+end
+
 function interface_step_reference(net, spec; dc_conductance = nothing)
     original = net.elements[:DUT]
     interface_step_eligible(original.element_model) || return nothing
     dt = spec.time_step
     isfinite(dt) && dt > 0 || error("interface reference requires a positive finite step")
-    dut = PowerImpedance.Element(element_model = one_step_model(original.element_model, dt),
-        input_pins = original.input_pins, output_pins = original.output_pins,
-        transformation = original.transformation, setpoint = original.setpoint,
-        limits = original.limits)
-    dut.symbol = original.symbol
-    PowerImpedance.update!(dut, original.setpoint)
-    names = PowerImpedance.statenames(dut.element_model)
-    delayed = Set(modulation_states(dut.element_model))
-    d = findall(in(delayed), collect(names))
-    r = setdiff(1:length(names), d)
-    # Each native delay channel has scalar Gp(s), feedthrough -1, and no
-    # connections to another delay state block. Replace Gp by exact exp(-s dt)
-    # in its Schur contribution; retain the owner's carrier rotations.
-    h = PowerImpedance.PadeDelay(timeDelay = dt, padeOrderNum = 3, padeOrderDen = 3)
-    bases = device_bases(dut.element_model.elec)
+    full_y = one_step_full_y(original, dt)
+    bases = device_bases(original.element_model.elec)
     matrices = Matrix{ComplexF64}[]
     for frequency in spec.frequencies
         s = ComplexF64(im * 2π * frequency)
-        gp = only(h.C * ((s*I-h.A) \ h.B) + h.D)
-        delayed_effect = vcat(dut.A[r,d], dut.C[:,d]) *
-            ((s*I-dut.A[d,d]) \ hcat(dut.A[d,r], dut.B[d,:]))
-        effective = [dut.A[r,r] dut.B[r,:]; dut.C[:,r] dut.D] +
-            delayed_effect * ((exp(-s*dt)+1)/(gp+1))
-        n = length(r)
-        y = effective[n+1:end,1:n] * ((s*I-effective[1:n,1:n]) \ effective[1:n,n+1:end]) +
-            effective[n+1:end,n+1:end]
-        y .*= bases.current_outputs
-        y ./= bases.voltage_inputs'
+        y = full_y(s)
         if haskey(net.elements, :DC_load)
             g = dc_conductance === nothing ?
                 PowerImpedance.get_y(net.elements[:DC_load], s)[1,1] : dc_conductance

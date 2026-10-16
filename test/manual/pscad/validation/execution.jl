@@ -1,4 +1,5 @@
 function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition = nothing)
+    startswith(id, "L3-") && return prepare_composed(id; directory)
     P._require_extension()
     entry = fixture(id)
     mkpath(directory)
