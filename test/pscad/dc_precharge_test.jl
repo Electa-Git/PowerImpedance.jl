@@ -114,4 +114,26 @@ const P = PowerImpedance.PSCAD
     @test isempty(P._dc_precharge_buses(P.Netlist(list.buses, passive,
         list.operating_point, list.voltageBase, list.frequency)))
 end
+@testset "DC pre-charge clock keeps preceding shunt recorder separate" begin
+    # A parallel shunt in column two puts its recorder across the next row's
+    # clock-label position. This is the IEEE14 LoadB3/precharge_BusDC1 collision.
+    for topology in (:series, :parallel)
+        state = P.PlanState(P.CanvasPlan(), P.AbstractLineDefinitionPlan[],
+            P.AbstractLineWrapperPlan[], P.ModuleDefinitionPlan[], P.GridLayout(1),
+            P.ProbeChannel[], P._NameReservations())
+        P.impedance_path!(state,
+            [("resistor", "R", 400.0, "ohm"), ("inductor", "L", 0.05, "H")],
+            topology, "AC", nothing, "load"; first_probe = "I_load")
+        key = P.BusKey(2, 1)
+        bus = P.Bus(key, "DC", [:dc], :dc, 400., 1., nothing, nothing)
+        context = (; settings = P.SimulationSettings(), dc_labels = Dict(key => ("DC_P", "DC_N")))
+        P.dc_precharge!(state, bus, context)
+        @test P.check_connectivity(state.main, "shunt_precharge") === nothing
+        clock = only(filter(c -> c.defn == "master:time-sig", state.main.components))
+        @test (clock.x, clock.y) == (504, topology == :parallel ? 504 : 288)
+        recorder = only(filter(c -> c.defn == "master:pgb", state.main.components))
+        @test Dict(recorder.params)["Name"] == "I_load"
+    end
+end
+
 end

@@ -363,3 +363,9 @@ function reanalyse_m9c12(ids; data_root, output_root = joinpath(ROOT, "data", "m
         for id in selected])
     return outcomes
 end
+
+# Full dq transport for a matrix identified from all measured drive coordinates.
+function injection_readout_transport(frequency,spec)
+    angle=2π*spec.frequency*spec.time_step
+    return exp(im*2π*frequency*spec.time_step).*[cos(angle) sin(angle);-sin(angle) cos(angle)]
+end

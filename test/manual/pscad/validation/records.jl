@@ -1,3 +1,5 @@
+native_node_limit(id)=startswith(id,"L4-") ? 200 : 100
+
 digest(path) = bytes2hex(open(sha256, path))
 
 function probe_record(c)
@@ -127,7 +129,7 @@ function preparation_record(entry, gate, models; directory)
             entry.physics,
         "stability" => gate, "tiers" => entry.tiers, "estimated_live_nodes" =>
             entry.estimated_nodes,
-        "live_node_limit_exclusive" => 100, "julia_version" => string(VERSION),
+        "live_node_limit_exclusive" => native_node_limit(entry.id), "julia_version" => string(VERSION),
         "export_commit" => readchomp(`git -C $REPOSITORY rev-parse HEAD`),
         "source_files" => source_record(), "pscad_version_observed" => "not_run",
         "compiler_observed" => "not_run", "model_differences" => entry.differences,

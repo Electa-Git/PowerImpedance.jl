@@ -25,6 +25,8 @@ function definitions!(bound, expression)
         else
             bind!(bound, target)
         end
+    elseif expression.head == :struct
+        bind!(bound,expression.args[2])
     elseif expression.head in
            (:toplevel, :block, :if, :elseif, :try, :const, :global, :local)
         foreach(argument -> definitions!(bound, argument), expression.args)
@@ -78,6 +80,16 @@ function unresolved_globals(expression, namespace)
             elseif head == :module
                 child = getfield(namespace, arguments[2])
                 union!(missing, unresolved_globals(last(arguments), child))
+            elseif head == :struct
+                visit(arguments[2],bound)
+                inner=union(copy(bound),Set([:new]))
+                for field in last(arguments).args
+                    if field isa Symbol || field isa Expr && field.head==:(::)
+                        annotations(field,inner)
+                    else
+                        visit(field,inner)
+                    end
+                end
             elseif head == :try
                 visit(arguments[1], bound)
                 inner = copy(bound)
@@ -308,7 +320,8 @@ end
         for source in ("[(n, side) for n in 1:2 for side in 1:n]",
             "Dict(n => side for n in 1:2, side in 1:n)",
             "[n for n in 1:2 if n > 1]", "[1,2][begin:end] .+ [3,4]",
-            "try; values = [1,2]; values[end]; catch failure; sprint(showerror, failure); end")
+            "try; values = [1,2]; values[end]; catch failure; sprint(showerror, failure); end",
+            "struct LocalRecord; value::Float64; label::String; end")
             @test isempty(unresolved_globals(Meta.parseall(source), namespace))
         end
         for (source, names) in (
@@ -321,7 +334,9 @@ end
             ("for x in 1:2; y = x; end; y", [:y]),
             ("[n + unknown for n in 1:2]", [:unknown]),
             ("[n for n in 1:2 if missing_function(n)]", [:missing_function]),
-            ("[n for n in 1:2]; n", [:n]))
+            ("[n for n in 1:2]; n", [:n]),
+            ("struct LocalRecord; value::UnknownType; end", [:UnknownType]),
+            ("struct LocalRecord; value::Float64; end; value", [:value]))
             @test unresolved_globals(Meta.parseall(source), namespace) == names
         end
     end

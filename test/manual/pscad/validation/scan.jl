@@ -341,7 +341,7 @@ function execute_axis!(record, key, model, directory, remote, deadline)
     messages = read(result.paths.build_messages, String)
     matched = match(r"The total number of live nodes: (\d+)", messages)
     live = matched === nothing ? 0 : parse(Int, matched[1])
-    0 < live < 100 || error("missing/over-budget live node count: $live")
+    0 < live < native_node_limit(record["fixture_id"]) || error("missing/over-budget live node count: $live")
     solver = result.diagnostics.solver_identity
     item = Dict("axis"=>key, "path"=>relpath(destination, directory),
         "native_run_directory"=>native,

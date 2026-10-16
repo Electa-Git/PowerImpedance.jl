@@ -48,6 +48,17 @@ function dc_precharge!(state::PlanState, bus::Bus, context)
     # TimeStep/Compare reuse the exercised 0.2 s converter divisor handover.
     state.layout.next = 6cld(state.layout.next, 6)
     x, y = allocate_cell!(state.layout)
+    # TimeStep's output stub reaches 36 pixels above the control origin.
+    # Leave one row when it would intersect wiring in the preceding row.
+    clock_x = x + 468
+    if any(state.main.wires) do wire
+        a, b = wire.vertices
+        min(a[1], b[1]) <= clock_x <= max(a[1], b[1]) &&
+            max(min(a[2], b[2]), y - 36) <= min(max(a[2], b[2]), y)
+    end
+        state.layout.next += 5
+        x, y = allocate_cell!(state.layout)
+    end
     stem = pscad_name("precharge_" * bus.name; used = state.used)
     clock = Signal(pscad_name(stem * "_clock"; used = state.used))
     opened = Signal(pscad_name(stem * "_open"; used = state.used))

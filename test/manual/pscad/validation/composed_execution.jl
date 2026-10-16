@@ -150,20 +150,21 @@ function composed_step_spec(spec,frequency; local_scan=false)
     return merge(step,(;protocol=spec.protocol,recorder_scope="measurement"))
 end
 
+composed_readout_targets(c,label)=label=="discrete" ? ["direct_Z";filter(t->startswith(t,"DC_"),composed_targets(c))] : String[]
+composed_reference_rows(c,spec,target)=startswith(target,"DC_") ? 2 : length(spec.axes)
+
+function composed_reference_transport!(refs,c,spec,label)
+    for target in composed_readout_targets(c,label), (k,f) in enumerate(spec.frequencies)
+        refs[target][:,:,k] .*= injection_readout_factor(f,spec)
+    end
+    return refs
+end
+
 function composed_reference_files!(record,c,spec,directory,forms; verify=false)
     discrete=any(interface_step_eligible(c.net.elements[n].element_model) for n in c.devices)
     for (label,h) in (discrete ? (("plain",nothing),("discrete",spec.time_step)) : (("plain",nothing),))
         refs=composed_reference(c,spec;time_step=h,forms=label=="discrete" ? forms : nothing)
-        if label=="discrete"
-            for target in filter(t->startswith(t,"DC_"),collect(keys(refs))), (k,f) in enumerate(spec.frequencies)
-                refs[target][:,:,k] .*= injection_readout_factor(f,spec)
-            end
-            # Y uses simultaneous branch I and terminal V, so timing cancels.
-            # Direct Z divides terminal V by the separately recorded drive.
-            for (k,f) in enumerate(spec.frequencies)
-                refs["direct_Z"][:,:,k] .*= injection_readout_factor(f,spec)
-            end
-        end
+        composed_reference_transport!(refs,c,spec,label)
         for (target,reference) in refs
             path=joinpath(directory,scan_prefix(spec)*label*"_"*target*"_reference.tsv")
             ts=composed_target_spec(spec,c,target)
@@ -181,7 +182,7 @@ end
 function composed_frozen_references(directory,spec,c,label)
     targets=composed_targets(c)
     return Dict(target=>read_response(joinpath(directory,scan_prefix(spec)*label*"_"*target*"_reference.tsv"),
-        length(spec.axes),spec.frequencies;rows=startswith(target,"DC_") ? 2 : length(spec.axes)) for target in targets)
+        length(spec.axes),spec.frequencies;rows=composed_reference_rows(c,spec,target)) for target in targets)
 end
 
 function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
@@ -196,22 +197,7 @@ function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
     groups=l3_specs(id,list)
     path_limits=check_prepared_run_paths(id,composed_run_axes(groups),remote)
     mkpath(directory)
-    allmodels=Pair{String,P.PSCADModel}[]
-    for group in groups
-        prefix=scan_prefix(group);check_recorder_sampling(group)
-        # Full tier-A baseline; a separate unrun measurement template keeps
-        # only V/I/drive recorders for every injected run. Electrical meters stay.
-        models=prepare_scan_projects(directory,list,group,String[];prefix,remote)
-        measured=merge(group,(;recorder_scope="measurement"))
-        append!(models,prepare_scan_projects(directory,list,measured,group.axes;prefix=prefix*"measurement_",remote))
-        append!(models,prepare_scan_projects(directory,list,merge(measured,(;tone_peak_pu=group.tone_peak_pu/2,baseline_template=prefix*"measurement_baseline")),group.axes;
-            prefix=prefix*"half_amplitude_",remote))
-        step=composed_step_spec(group,1000.;local_scan=group.protocol=="composed_local")
-        append!(models,prepare_scan_projects(directory,list,step,step.axes;prefix=step_prefix(step),remote))
-        forms=exported_composed_passives(c,first(models).second.project_path,list)
-        composed_reference_files!(nothing,c,group,directory,forms)
-        append!(allmodels,models)
-    end
+    allmodels=prepare_composed_projects(directory,list,c,groups,remote)
     record=preparation_record(entry,gate,allmodels;directory)
     record["prepared_run_paths"]=path_limits
     record["tier_c"]=scan_record(spec)
@@ -548,4 +534,24 @@ function prepare_m9d_c(;remote=nothing)
     require_committed_m9d_c()
     remote===nothing && (remote=RemoteConfig())
     return [prepare_composed(id;remote) for id in M9D_C_IDS]
+end
+
+function prepare_composed_projects(directory,list,c,groups,remote)
+    allmodels=Pair{String,P.PSCADModel}[]
+    for group in groups
+        prefix=scan_prefix(group);check_recorder_sampling(group)
+        # Full tier-A baseline; a separate unrun measurement template keeps
+        # only V/I/drive recorders for every injected run. Electrical meters stay.
+        models=prepare_scan_projects(directory,list,group,String[];prefix,remote)
+        measured=merge(group,(;recorder_scope="measurement"))
+        append!(models,prepare_scan_projects(directory,list,measured,group.axes;prefix=prefix*"measurement_",remote))
+        append!(models,prepare_scan_projects(directory,list,merge(measured,(;tone_peak_pu=group.tone_peak_pu/2,baseline_template=prefix*"measurement_baseline")),group.axes;
+            prefix=prefix*"half_amplitude_",remote))
+        step=composed_step_spec(group,1000.;local_scan=group.protocol=="composed_local")
+        append!(models,prepare_scan_projects(directory,list,step,step.axes;prefix=step_prefix(step),remote))
+        forms=exported_composed_passives(c,first(models).second.project_path,list)
+        composed_reference_files!(nothing,c,group,directory,forms)
+        append!(allmodels,models)
+    end
+    return allmodels
 end

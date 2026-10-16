@@ -67,7 +67,7 @@ function composed_nodal(c, s, functions; which = :full, forms = nothing)
             y += h * functions[name](s) * h'
         else
             h = passive_incidence(c, e)
-            yy = forms === nothing || e.element_model isa PowerImpedance.Cable ? PowerImpedance.get_y(e, ComplexF64(s)) :
+            yy = forms === nothing || !haskey(forms,name) ? PowerImpedance.get_y(e, ComplexF64(s)) :
                 composed_passive_y(e, forms[name], s)
             y += h * yy * h'
         end

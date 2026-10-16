@@ -96,6 +96,9 @@ function composed_quality(time, baseline, runs, spec, c, target; columns=eachind
         node in c.nodes && continue
         clamp=max(clamp,maximum(maximum(abs,run.clamps[name]-held)/b.dc_voltage for run in runs))
     end
+    for (name,held) in get(baseline,:source_clamps,Dict())
+        clamp=max(clamp,maximum(maximum(abs,run.source_clamps[name]-held) for run in runs))
+    end
     quality["clamped_voltage_departure_pu"]=clamp
     quality["valid"] &= clamp<=1e-6
     quality["invalid_reasons"] = [name for (name,limit) in
@@ -147,9 +150,7 @@ function composed_readout_evidence(result,baseline,model,spec,c,column;axis=spec
                 # rotates its two coordinates. The L2 driven projection gamma
                 # remains unchanged; its scalar extension to a null coordinate
                 # incorrectly leaves an O(omega0*h) residual.
-                angle=2π*spec.frequency*spec.time_step
-                rotation=[cos(angle) sin(angle);-sin(angle) cos(angle)]
-                expected=exp(im*2π*f*spec.time_step).*(rotation*ip[:,k])
+                expected=injection_readout_transport(f,spec)*ip[:,k]
                 for coord in 1:2
                     if port==driven_port && coord==driven_axis
                         check=kcl_readout_check(kp[coord,k],ip[coord,k],gamma)
@@ -250,6 +251,9 @@ function composed_score_indices(c,target)
     return isempty(rows) ? [1,2] : rows
 end
 
+composed_score_indices(c,target,spec)=startswith(target,"DC_") ? [1,2] : composed_score_indices(c,target)
+composed_score_columns(c,target,spec)=startswith(target,"DC_") ? collect(eachindex(spec.axes)) : composed_score_indices(c,target)
+
 function composed_comparison(results,models,reference,directory,spec,c;resonance_groups=Vector{Int}[])
     base=composed_samples(results["baseline"],models["baseline"],spec,c)
     all(results[axis].time==results["baseline"].time for axis in spec.axes) || error("composed scan sample times differ")
@@ -264,8 +268,8 @@ function composed_comparison(results,models,reference,directory,spec,c;resonance
                 "invalid_reasons"=>["response_extraction: "*x.reason])
             continue
         end
-        indices=startswith(target,"DC_") ? [1,2] : composed_score_indices(c,target)
-        columns=startswith(target,"DC_") ? collect(eachindex(spec.axes)) : indices
+        indices=composed_score_indices(c,target,spec)
+        columns=composed_score_columns(c,target,spec)
         normed=[scale_response(m,ts) for m in x.matrices]
         measured=sum(x.matrices)/length(x.matrices)
         scored=[m[indices,columns,:] for m in normed]

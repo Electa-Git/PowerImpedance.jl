@@ -255,8 +255,8 @@ end
 end
 
 @testset "Passive catalogue and generated source plans" begin
-    @test length(V.REGISTRY) == 32
-    @test length(unique(entry.id for entry in V.REGISTRY)) == 32
+    @test length(V.REGISTRY) == 37
+    @test length(unique(entry.id for entry in V.REGISTRY)) == 37
     for entry in filter(e->startswith(e.id,"L1-"),V.REGISTRY)
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"
@@ -3138,4 +3138,14 @@ end
         end
     end
 end
+end
+
+module PSCADL4ValidationTests
+using Test,PowerImpedance,LinearAlgebra,TOML,SHA
+include("../manual/pscad/validation/validation.jl")
+const V=PSCADValidation
+const P=PowerImpedance.PSCAD
+include("l4_factories_test.jl")
+include("l4_system_test.jl")
+include("l4_growth_test.jl")
 end

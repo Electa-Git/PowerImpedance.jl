@@ -30,5 +30,10 @@ include("composed_execution.jl")
 include("tierb.jl")
 include("tierb_offline.jl")
 include("line_chain.jl")
+include("l4_factories.jl")
+include("l4_measurement.jl")
+include("l4_screens.jl")
+include("l4_growth.jl")
+include("l4_execution.jl")
 
 end

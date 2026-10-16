@@ -771,6 +771,15 @@ input, project, runner, solver and output hashes; reuse requires all of them to 
 
 ## Known limitations
 
+Julia's fixed-frame dq reduction of an untransposed line can be non-passive. For the
+170 km IEEE9 line, the minimum Hermitian admittance is -0.005134 S in dq versus
++0.0005009 S in phase coordinates. With a 100 MVA TLC at bus 2, the dq model predicts
+a growing pair near 124.24/124.34 kHz (+2.37 s⁻¹); the phase-domain harmonic
+calculation gives -670.4 s⁻¹, converged at K=1..3. Dq-frame frequency-response and
+stability comparisons are invalid for systems with significant asymmetry in their
+untransposed lines at the frequencies of interest; compare in the phase domain
+instead.
+
 ### Line fitting and DC extrapolation
 
 Tighter `YMaxE=AMaxE=0.02 %` targets reduce fit-versus-own-constants terminal-Y

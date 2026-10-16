@@ -40,11 +40,14 @@ function current_port(project, name, spec)
             for k in 1:3])
         push!(graph.nodes, P.ArrayMerge(phases, abc))
     else
-    append!(graph.nodes,
-        P.ControlBlock[P.Gain(perturbation, d, "d_amplitude_pu"),
-            P.Gain(perturbation, q, "q_amplitude_pu"), P.ArrayMerge([d, q], dq),
-            P.Gain(clock, theta, 2π * spec.frequency), P.DqToAbc(
-                dq, theta, abc, project * ":Validation_DQ_ABC")])
+        if haskey(spec,:burst_polarization)
+            graph,d,q,clock=l4_polarized_burst_graph(spec)
+        else
+            append!(graph.nodes,P.ControlBlock[P.Gain(perturbation,d,"d_amplitude_pu"),
+                P.Gain(perturbation,q,"q_amplitude_pu")])
+        end
+        append!(graph.nodes,P.ControlBlock[P.ArrayMerge([d,q],dq),
+            P.Gain(clock,theta,2π*spec.frequency),P.DqToAbc(dq,theta,abc,project*":Validation_DQ_ABC")])
     end
     canvas = P.CanvasPlan()
     measured = P.Signal[]
@@ -183,8 +186,8 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
     end
     if get(spec, :recorder_scope, "") == "measurement"
         port_buses=Set(b.name for b in spec.buses)
-        voltage_buses=copy(port_buses)
-        device_currents=Set{Tuple{String,String}}()
+        voltage_buses=union(copy(port_buses),Set(get(spec,:recorded_voltage_buses,String[])))
+        device_currents=Set{Tuple{String,String}}(get(spec,:recorded_terminal_currents,Tuple{String,String}[]))
         for e in list.elements
             e.model isa Union{PowerImpedance.TLC,PowerImpedance.MMC,PowerImpedance.SynchronousMachine} || continue
             bases=device_bases(e.model.elec)
@@ -205,6 +208,7 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
             :machine_speed,:machine_p,:machine_q),plan.probes.channels)
         retain_recorders!(plan,needed)
     end
+    get(spec,:protocol,"")=="growth" && l4_growth_recorders!(plan,list)
     P.check_connectivity(plan)
     return plan, settings
 end
