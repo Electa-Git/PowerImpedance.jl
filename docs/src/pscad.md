@@ -1,7 +1,5 @@
 # PSCAD export and simulation
 
-Overhead-line and cable exports use `YMaxE=AMaxE=0.02%` by default (AC/DC), overridable through `line_options`; all other fitting defaults are unchanged.
-
 `export_pscad(::Network)` and `export_pscad(::NetworkBuilder.NetworkState)`
 write runnable PSCAD 5 projects from PowerImpedance networks. Load `PythonCall`
 to activate the writer; CondaPkg installs `mhi-xml` and its XML dependencies.
@@ -35,7 +33,7 @@ To reuse a classic solution, pass `powerflow = power_flow(net)` to the exporter.
 Builder export calls `NetworkBuilder.solve`; linear builder networks use source
 setpoints without solving power flow and have no solved data for comparison.
 `line_options` overrides supported ground and frequency-dependent fitting
-fields. `dc_reference = :midpoint_resistors` adds two 10 MΩ ground references
+fields. AC/DC line and cable fit targets default to `YMaxE=AMaxE=0.02%`. `dc_reference = :midpoint_resistors` adds two 10 MΩ ground references
 at DC buses without a local source midpoint or grounded shunt; use `:none`
 when those additional references are unwanted.
 
@@ -78,7 +76,7 @@ transient interactive scheduled task. An attached existing application is
 left running and its original `silence` flag is restored; an application
 started for the run is stopped afterwards. Without a port, a private PSCAD
 is launched in the caller's Windows session; SSH execution fails fast.
-Every application is silenced before settings, loading, building or running.
+The runner sets `app.silence=true` before applying settings or loading projects.
 A separate 60 s responsiveness probe precedes attachment.
 
 ## Run and retain results
@@ -97,7 +95,7 @@ as `PSCADModel("case.pscx")`; their external files and libraries must already
 be available on the station, and comparison requires an exported model with
 solved references.
 
-Every call starts a fresh run in a persistent `run-XXXXXX/` directory under
+A call starts a fresh run in a persistent `run-XXXXXX/` directory under
 `remote.local_root`, or under `work_root` within it. The supervisor copies the
 case into station scratch. `result.paths` locates output, console, build messages
 and run records; `result.diagnostics` includes settings readback, solver identity
@@ -158,7 +156,7 @@ inspect traces and build warnings before interpreting comparison rows.
 
 
 Terminal-current probe metadata records `orientation = :into` or `:out`, relative
-to the element at the named terminal. Other channels have `orientation = nothing`.
+to the element at the specified terminal. Other channels have `orientation = nothing`.
 These signs describe measured currents, independently of power direction.
 
 | Element | Positive probe current |
@@ -178,7 +176,7 @@ magnitude acceptance rows do not detect sign reversal; signed machine/converter
 power and MMC DC-current identity rows retain their existing conventions.
 
 All durations and steps in Julia are in seconds. A 10 μs integration step is
-typical; **use the validated 1 μs step for compensated MMC modulation**
+typical; **use the measured 1 μs step for compensated MMC modulation**
 (10 μs grew unstable in the recorded case). Export warns above 1 μs without
 changing the requested step. Machines use 15 s runs to settle; converter
 fixtures commonly use 10 s, or 5 s at 1 μs for compensated MMCs. Output sampling
@@ -186,10 +184,11 @@ is independent, must be at least the integration step, and 250 μs is a typical
 50 Hz comparison interval. The default source ramp is 0.05 s; any finite,
 nonnegative ramp is accepted.
 
-The measurement start-up hold keeps the DC-voltage divisor at its solved
-value for `t < 0.2 s`. Feedback remains live from the first step; converged
-controller states and delay histories are retained. This hold is a start-up
-handover, without a permanent voltage floor or changed comparison tolerance.
+The MMC startup selector fixes the measured DC-voltage divisor at its solved value
+for `t < 0.2 s`; all current and energy feedback remains live. TLC startup
+uses nominal DC voltage in its measurement, modulation and electrical power
+divisions until 0.2 s. Both retain converged controller states and delay histories.
+The selectors release to measured voltage without a permanent floor.
 
 Residual modulation delays are rounded to the nearest integration step, with
 half-step ties upward. For a positive model delay, the requested residual is
@@ -202,18 +201,18 @@ retains one inherent interface step.
 A DC island without a permanent DC voltage source is pre-charged when it contains
 at least one TLC with `OuterActiveVdcControl`, or a GFL MMC with that active
 controller. DC branches join islands; shared ground and converter AC terminals
-do not. Every bus in a qualifying island requires positive solved pole voltages.
-Two ideal DC sources hold each bus at `+vm_pu * base_kV` and its negative until
-0.2 s, then their series breakers open at arbitrary current. Sources have zero
-ramp; breakers use zero closed resistance and `1e100 ohm` open resistance
+do not. Every bus selected for pre-charge requires positive solved pole voltages.
+Temporary ideal DC sources fix each bus at `+vm_pu * base_kV` and its negative
+until their series breakers open at 0.2 s, including at nonzero current. Sources
+have zero ramp; breakers have `RON=0` and `1e100 ohm` open resistance
 (residual conductance `1e-100 S`). Feedback, gains, loads and the solved final
 operating point are retained. A source anywhere in the island suppresses this
 startup addition. Pre-charge is independent of `dc_reference`; existing final
 midpoint references remain in place.
 
-The pre-charge composite is export/XML verified offline; native release and
-startup qualification must be measured on fresh runs. The saved source/breaker
-fields, pins and release-command convention are cited in the developer mapping.
+The validation suite includes measured Vdc-controlled load cases with pre-charge.
+Inspect release and startup again after changing the circuit or settings. The
+developer mapping lists the saved source/breaker fields, pins and release command.
 
 ## Limitations
 
@@ -232,7 +231,7 @@ fields, pins and release-command convention are cited in the developer mapping.
 - An unstable Julia operating point can diverge in PSCAD. The recorded P2P
   example reproduces an unstable mode near 3.48 kHz with a growth time near
   0.7 ms; that is dynamic-validation evidence, without steady-state acceptance.
-  See the [P2P record](developers/pscad_mapping.md#P2P-dynamic-validation-record).
+  See the [P2P record](developers/pscad_mapping.md#P2P-instability).
 
 Voltage probes on temporarily pre-charged DC networks measure an existing
 conducting node label directly, using the same line-to-ground voltage function
@@ -242,3 +241,43 @@ position can change during native project loading. With `PythonCall` loaded,
 an exported project or a project saved after loading. Export performs this
 serialized check automatically; offline checks do not establish native build
 or scientific acceptance.
+
+## Abbreviations
+
+| Term | Meaning |
+|---|---|
+| API | Application programming interface |
+| XML / SVG | Extensible Markup Language / Scalable Vector Graphics |
+| UTF-16 | Unicode Transformation Format with 16-bit code units |
+| SHA-256 | Secure Hash Algorithm with a 256-bit digest |
+| AC / DC | Alternating current / direct current |
+| TLC / MMC | Two-level converter / modular multilevel converter |
+| GFL / GFM | Grid-following / grid-forming control |
+| PLL | Phase-locked loop |
+| OCC | Output-current control |
+| TEC | Total-energy control |
+| ZSCC | Zero-sequence current control |
+| CCSC / CCC | Circulating-current suppression control / circulating-current control |
+| LEC | Leg-energy control |
+| CCVI | Current-controlled virtual impedance, which maps voltage error to current references through virtual resistance and inductance |
+| VSM / VSE | Virtual synchronous machine / virtual swing equation; `VSEWithDamping` implements the synchronization equation |
+| AVR | Automatic voltage regulator |
+| PI | Proportional-integral control |
+| SCR | Short-circuit ratio: grid short-circuit apparent power divided by the declared converter MVA rating, at rated external voltage |
+| X/R | Grid reactance-to-resistance ratio at nominal frequency |
+| KCL | Kirchhoff's current law |
+| EMT | Electromagnetic transient |
+| DFT | Discrete Fourier transform |
+| RMS / LL | Root mean square / line-to-line |
+| pu / SI | Per unit on the declared base / International System of Units |
+| RL / RLC | Resistance and inductance / resistance, inductance and capacitance |
+| OHL / P2P | Overhead line / point-to-point link |
+| RC | Resistance and capacitance |
+| YY / Dyn11 | Star–star transformer / delta–star transformer with neutral and a 30 degree secondary lead |
+| IEEE9 | Institute of Electrical and Electronics Engineers nine-bus test network |
+| LTI | Linear model with coefficients constant in time |
+| abc / dq | Phase coordinates a/b/c / direct and quadrature rotating coordinates |
+| Y / Z / ABCD | Admittance / impedance / multiport voltage-current transmission matrices |
+| P/Q, P-f, Q-V | Active/reactive power regulation, active-power/frequency support, reactive-power/voltage support |
+| VAC / Vdc | AC-voltage regulation / DC-voltage regulation |
+| DSOUT / DSDYN | EMTDC electrical-output / dynamics execution phases |

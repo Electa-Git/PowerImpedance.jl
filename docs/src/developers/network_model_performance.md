@@ -33,7 +33,7 @@ axis, Julia process settings, and host were otherwise identical.
 | Relative change | +0.64% | −0.0035% |
 
 The measured time increase is below the 10% acceptance limit. Allocated bytes
-decreased by 80 bytes and therefore satisfy the 5% allocation limit.
+decreased by 80 bytes and satisfy the 5% allocation limit.
 
 These measurements describe warmed admittance evaluation on this host. CI job
 duration includes dependency loading, compilation, solver fixtures, and runner

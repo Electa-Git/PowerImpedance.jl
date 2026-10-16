@@ -1,8 +1,6 @@
 # P2P HVDC link
 This example models a point-to-point HVDC link and calculates its frequency-domain impedance. The link contains two modular multilevel converters (MMCs), an underground DC cable, two AC transmission lines, and ideal AC grids:
 
-![p2p figure](examples/pictures/P2P_HVDC.png)
-
 ## Initializing a network
 
 Create a network with the transmission-system line-to-line RMS voltage as its per-unit voltage base:
@@ -132,6 +130,4 @@ impedance_bode = bodeplot(Z_dd, omega_ac,legend="Z_dd")
 display(impedance_bode)
 ```
 
-The resulting curve shows the direct-axis impedance magnitude and phase of the P2P HVDC link:
-
-![Bode plot](examples/pictures/impedance_bode.svg)
+The plot gives the direct-axis impedance magnitude and phase of the P2P HVDC link.

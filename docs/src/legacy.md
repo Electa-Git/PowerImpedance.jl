@@ -5,7 +5,7 @@ CurrentModule = PowerImpedance
 # Classic scalar interface
 
 The `@network` DSL and scalar analysis methods remain supported. The macro now
-requires `import PowerImpedance: @network`; its network semantics are
+requires `import PowerImpedance: @network`; its network behavior is
 unchanged. These methods operate on a mutable
 `Network`, assemble ABCD or nodal matrices, and return the historical scalar
 result types.

@@ -98,8 +98,8 @@ Gridspace extends the ordinary component constructors to deterministic
 parameter sweeps and uncertainty quantification while preserving the scalar
 API. Importing `Grid` from `PowerImpedance.NetworkBuilder` and passing it as
 the first positional argument selects the lazy NetworkBuilder form. Selected
-component parameters can then receive `Grid(...)` values without qualifying
-every constructor through the `NetworkBuilder` namespace.
+component parameters can then receive `Grid(...)` values without prefixing
+every constructor with the `NetworkBuilder` namespace.
 
 The same composite grammar covers power flow, impedance, nodal admittance,
 loop gain, and small-signal stability analysis. `Combinatorial`, `LinearError`,

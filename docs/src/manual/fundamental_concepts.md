@@ -32,7 +32,7 @@ including multiterminal HVDC networks
 LyuZhangCaiMolinas2019, Harnefors2007](@cite).
 
 Useful screening requires frequency-dependent passive models together with the linearized
-dynamics of converter controls. The framework therefore combines detailed lines, cables,
+dynamics of converter controls. The framework combines detailed lines, cables,
 transformers, sources, and converter models into one multiport network representation rather
 than treating passive harmonic scans and converter dynamics separately.
 
@@ -60,14 +60,13 @@ voltages and currents at the input ports to those at the output ports.
 
 Admittance-based network models are widely used to assess harmonic stability in converter-dominated systems [LiuXieLiu2018](@cite), including voltage-source-converter high-voltage direct-current (VSC HVDC) systems [BayoSalas2018, JiTangYangLiLiu2019](@cite). ABCD-based network construction has received less attention. Bayo Salas used it to model high-frequency interactions in small networks [BayoSalas2018](@cite). Sun et al. studied interactions within converter-control bandwidths of several hundred hertz [SunWuWangDeJongBlaabjergCukCobben2018](@cite), building on the frequency-dependent overhead-line equivalent in [Wu2014](@cite).
 
-This representation allows an equivalent impedance to be constructed at an arbitrary network
-node while retaining both active and passive component dynamics. The following sections
-derive the common network operations and the component models used to assemble that
-equivalent.
+The ABCD network gives the equivalent impedance at a selected node while retaining
+passive and active component dynamics. Network interconnection and component
+models determine this equivalent.
 
 ### ABCD parameters basics
 
-The system is represented as an interconnection of components. To simplify the calculation of the transfer functions and/or input and output impedances, each component is modeled as a multiport network as depicted in Fig. 2. The input voltages and currents are vectors denoted as  $\mathbf{V}_p$  and  $\mathbf{I}_p$ , while the output voltages and currents are  $\mathbf{V}_s$  and  $\mathbf{I}_s$ . Generally, a multiport network has the same number of input and output ports, and thus, the dimensions of the vectors are the same, denoted as  $n$ .
+The system is represented as an interconnection of components. To simplify the calculation of the transfer functions and/or input and output impedances, each component is modeled as a multiport network as depicted in Fig. 2. The input voltages and currents are vectors denoted as  $\mathbf{V}_p$  and  $\mathbf{I}_p$ , while the output voltages and currents are  $\mathbf{V}_s$  and  $\mathbf{I}_s$ . Generally, a multiport network has the same number of input and output ports, and the dimensions of the vectors are the same, denoted as  $n$ .
 
 A multiport network can be represented with ABCD parameters, where each of parameters  $\mathbf{A}$ ,  $\mathbf{B}$ ,  $\mathbf{C}$  and  $\mathbf{D}$  represent  $n \times n$  matrices and
 
@@ -115,7 +114,7 @@ as
 
 $$\mathbf{Z}_p = (\mathbf{A} \times \tilde{\mathbf{Z}}_t + \mathbf{B}) \times (\mathbf{C} \times \tilde{\mathbf{Z}}_t + \mathbf{D})^{-1}.$$
 
-Similarly, by closing the input ports with a diagonal impedance  $\tilde{\mathbf{Z}}_t$ , the impedance as seen from the output ports can be estimated as:
+By closing the input ports with a diagonal impedance  $\tilde{\mathbf{Z}}_t$ , the impedance as seen from the output ports can be estimated as:
 
 $$\mathbf{Z}_s = (\tilde{\mathbf{Z}}_t \times \mathbf{C} - \mathbf{A})^{-1} \times (\tilde{\mathbf{Z}}_t \times \mathbf{D} - \mathbf{B}).$$
 
@@ -125,7 +124,7 @@ $$\mathbf{Z}_s = (\tilde{\mathbf{Z}}_t \times \mathbf{C} - \mathbf{A})^{-1} \tim
 
 ### Determination of the combined system ABCD parameters
 
-The ABCD parameters can be used to determine the impedance “visible” from the desired node or a component port. The power system may use different port orders: for example, three ports for a three-phase AC representation, two for a positive-sequence or bipolar DC representation, and one for a monopolar DC representation. To determine the impedance visible from selected nodes, a subsystem is formed recursively from the components and nodes on the paths between them. The example in Fig. 6 has two input and two output ports, represented by $V_{p1,s}$, $V_{p2,s}$, $V_{s1,s}$, and $V_{s2,s}$.
+The ABCD parameters can be used to determine the impedance “visible” from the desired node or a component port. The three-phase AC representation uses three ports. Positive-sequence and bipolar DC representations use two ports; a monopolar DC representation uses one. To determine the impedance visible from selected nodes, a subsystem is formed recursively from the components and nodes on the paths between them. The example in Fig. 6 has two input and two output ports, represented by $V_{p1,s}$, $V_{p2,s}$, $V_{s1,s}$, and $V_{s2,s}$.
 
 ![Figure 6](assets/electromagnetic_stability_simulator/figure-06.png)
 
@@ -239,7 +238,7 @@ where  $\bar{\mathbf{a}}$  denotes conjugate of the matrix  $\mathbf{a}$  and
 
 $$\begin{aligned} \mathbf{a} &= \begin{bmatrix} 1 & \exp(j\varphi) & \exp(2j\varphi) \\ j & j \exp(j\varphi) & j \exp(2j\varphi) \\ 0 & 0 & 0 \end{bmatrix}, \\ \mathbf{c} &= \begin{bmatrix} 0 & 0 & 0 \\ 0 & 0 & 0 \\ 1 & 1 & 1 \end{bmatrix}, \end{aligned}$$
 
-for  $\varphi = \frac{2\pi}{3}$ . Similarly, the Fourier transform applied to the inverse Park's transform is given by:
+for  $\varphi = \frac{2\pi}{3}$ . The Fourier transform applied to the inverse Park's transform is given by:
 
 $$\mathbf{P}_{\omega_0}^{-1}(j\omega) = \pi
 \left[
@@ -248,7 +247,7 @@ $$\mathbf{P}_{\omega_0}^{-1}(j\omega) = \pi
     + 2\mathbf{c}^{T}\delta(\omega)
 \right]$$
 
-To keep the sideband expressions readable, for any response $\mathbf{X}$ below,
+To reduce repeated terms in the sideband expressions, for any response $\mathbf{X}$ below,
 define
 
 $$\mathbf{X}_k \equiv \mathbf{X}\!\left[j(\omega + k\omega_0)\right],
@@ -277,7 +276,7 @@ $$\begin{aligned}
        \right].
 \end{aligned}$$
 
-Similarly, with $\mathbf{H}_k = \mathbf{Y}_k\mathbf{G}_k$, one can write
+With $\mathbf{H}_k = \mathbf{Y}_k\mathbf{G}_k$, one can write
 
 $$\begin{aligned}
 \mathbf{I}_{dqz}(j\omega)
@@ -444,8 +443,8 @@ $$\begin{aligned}
 
 In a coupled $dq$/DC converter model, one scalar port represents the DC-side
 connection and two coordinates represent the AC side. A bipolar DC subnetwork can
-therefore be reduced to an equivalent $1 \times 1$ monopolar representation at the
-converter boundary.
+be reduced to an equivalent $1 \times 1$ monopolar representation at the
+converter terminals.
 
 Bipolar DC components are represented by means of ABCD parameters as:
 
@@ -485,8 +484,8 @@ $$\begin{bmatrix} \tilde{\mathbf{A}} & \tilde{\mathbf{B}} \\ \tilde{\mathbf{C}} 
 ABCD parameters require equal numbers of input and output ports. For a fixed port order and current-sign convention, this representation has the following properties:
 
 - The input and output multiport impedances can be obtained directly from the terminating relations.
-- The ABCD representation remains finite for some interconnections whose impedance or admittance representation is singular. An ideal shunt connection, for example, has infinite shunt admittance but finite ABCD parameters.
-- The matrix relates port voltages and currents directly, so each block retains a defined physical dimension. Hybrid parameters mix voltage and current variables differently and are used mainly in radio-frequency and microelectronic circuit models.
+- The ABCD representation remains finite for some interconnections whose impedance or admittance representation is singular. An ideal shunt connection, has infinite shunt admittance but finite ABCD parameters.
+- Each matrix block relates a specified voltage/current pair and retains its physical dimension. Hybrid parameters mix voltage and current variables differently and are used mainly in radio-frequency and microelectronic circuit models.
 - Transformations relate the ABCD, $Z$, $Y$, $H$, and $S$ parameterizations when the matrix blocks required by each transformation are nonsingular [Reveyrand2018, Frickey1994](@cite).
 
 Impedance parameters relate the multiport voltages to the multiport currents:
@@ -557,7 +556,7 @@ $$\tilde{\mathbf{Y}} = \mathbf{Y}_{11} - \mathbf{Y}_{12} \mathbf{Y}_{22}^{-1} \m
 
 ### [Transformation between $\mathbf{Y}$ and ABCD parameters](@id transformation-y-abcd)
 
-The  $\mathbf{Y}$  matrix can be separated into submatrices belonging to input (superscript “p”), output (superscript “s”), and their interconnecting nodes as:
+Partition $\mathbf{Y}$ by input nodes (superscript “p”) and output nodes (superscript “s”). Cross blocks describe their interconnection:
 
 $$\mathbf{Y} = \begin{bmatrix} \mathbf{Y}_{pp} & \mathbf{Y}_{ps} \\ \mathbf{Y}_{sp} & \mathbf{Y}_{ss} \end{bmatrix}.$$
 
@@ -565,7 +564,7 @@ The  $\mathbf{Y}$  parameters in the previous form can be obtained from ABCD par
 
 $$\mathbf{Y} = \begin{bmatrix} \mathbf{DB}^{-1} & \mathbf{C} - \mathbf{DB}^{-1}\mathbf{A} \\ -\mathbf{B}^{-1} & \mathbf{B}^{-1}\mathbf{A} \end{bmatrix}.$$
 
-Similarly, ABCD parameters can be determined from  $\mathbf{Y}$  parameters as:
+ABCD parameters can be determined from  $\mathbf{Y}$  parameters as:
 
 $$\begin{bmatrix} \mathbf{A} & \mathbf{B} \\ \mathbf{C} & \mathbf{D} \end{bmatrix} = \begin{bmatrix} -\mathbf{Y}_{sp}^{-1} \mathbf{Y}_{ss} & -\mathbf{Y}_{sp}^{-1} \\ \mathbf{Y}_{ps} - \mathbf{Y}_{pp} \mathbf{Y}_{sp}^{-1} \mathbf{Y}_{ss} & -\mathbf{Y}_{sp}^{-1} \mathbf{Y}_{pp} \end{bmatrix}.$$
 
@@ -594,7 +593,7 @@ $$\underbrace{\left[ \begin{array}{c|c} \text{diag}_i \left\{ \sum_{j, Z_{ij} \n
 
 where matrices  $\mathbf{N}_1$  and  $\mathbf{N}_2$  consist of  $n$  rows with  $n$  columns with entries at the position  $(i, j)$  equal to  $-\frac{1}{Z_{ji}}$  and  $\frac{1}{Z_{ij}}$ , for  $Z_{ij} \neq 0$  and  $Z_{ji} \neq 0$  (where  $i$  represents row and  $j$  column in impedance matrix), respectively. The solution of the previous system is given as  $\mathbf{M}_1^{-1}\mathbf{M}_2$  if  $\mathbf{M}_1$  is invertible matrix, or by determining LU decomposition and reduced row echelon form if it is not invertible.
 
-For example, for the circuit depicted in Fig. 8, the equations would be:
+For the circuit depicted in Fig. 8, the equations would be:
 
 $$\left[ \begin{array}{cc|cc} \frac{1}{Z_{11}} + \frac{1}{Z_{12}} & 0 & -1 & 0 \\ 0 & \frac{1}{Z_{21}} + \frac{1}{Z_{22}} & 0 & -1 \\ \hline -\frac{1}{Z_{11}} & -\frac{1}{Z_{21}} & 0 & 0 \\ -\frac{1}{Z_{12}} & -\frac{1}{Z_{22}} & 0 & 0 \end{array} \right] \times \begin{bmatrix} V_{11} \\ V_{12} \\ I_{11} \\ I_{12} \end{bmatrix} = \left[ \begin{array}{cc|cc} \frac{1}{Z_{11}} & \frac{1}{Z_{12}} & 0 & 0 \\ \frac{1}{Z_{21}} & \frac{1}{Z_{22}} & 0 & 0 \\ \hline -\left(\frac{1}{Z_{11}} + \frac{1}{Z_{21}}\right) & 0 & -1 & 0 \\ 0 & -\left(\frac{1}{Z_{12}} + \frac{1}{Z_{22}}\right) & 0 & -1 \end{array} \right] \times \begin{bmatrix} V_{21} \\ V_{22} \\ I_{21} \\ I_{22} \end{bmatrix}.$$
 
@@ -718,13 +717,13 @@ $$\begin{aligned}\varphi &= \frac{360^\circ}{n_{sb}}, \\ r &= \frac{d_{sb}}{2 \s
 | $R_{g,dc}$   | DC resistance of the ground wires                                |
 | $\mu_{r,g}$  | relative permeability of the ground wire                         |
 
-The individual positions can be estimated starting from the angle  $\varphi_s = \frac{\pi}{2}$  if the number of sub-conductors is odd, or from  $\varphi_s = \frac{\pi+\varphi}{2}$  for an even number of sub-conductors, as follows:
+For an odd number of subconductors, start at $\varphi_s = \frac{\pi}{2}$. An even number uses $\varphi_s = \frac{\pi+\varphi}{2}$. The individual positions are
 
 $$\begin{aligned} x_{bc} &= x_c + r \cos(\varphi_s + k \varphi), \\ y_{bc} &= y_c + r \sin(\varphi_s + k \varphi) - \frac{2}{3} d_{sag}, \end{aligned}$$
 
 for  $k \in \{1, 2, \dots, n_{sb}\}$ . If the number of subconductors is one, its position is  $(x_c, \hat{y}_c)$ . Each conductor is characterized by the material relative permeability $\mu_r$, DC resistance $R_{dc}$, and radius $r_i$.
 
-Ground wires are modeled similarly, represented with their relative position  $(x_g, y_g)$ , radius  $r_g$ , dc resistance  $R_{g,dc}$  and relative permeability of the material  $\mu_r$ .
+Ground wires are represented with their relative position  $(x_g, y_g)$ , radius  $r_g$ , dc resistance  $R_{g,dc}$  and relative permeability of the material  $\mu_r$ .
 
 Earth parameters are given with permeability  $\mu_e$ , permittivity  $\epsilon_e$  and conductivity  $\rho_e$ .
 
@@ -771,7 +770,7 @@ from matrix  $\mathbf{P}$  with its components  $\mathbf{P}_{ij} = \frac{1}{2\pi
 
 #### Cable
 
-The cable geometry may represent underground coaxial cables directly buried in
+The cable geometry may represent underground coaxial cables placed directly in
 soil or placed inside a pipe. A coaxial cable is built from alternating conducting
 and insulating layers.
 
@@ -788,7 +787,7 @@ is its relative permeability.
 
 **Figure 13:** Coaxial cable.
 
-Two semiconducting layers may be added around the first insulation layer. The sheath may also be represented as a wire screen enclosed by an outer sheath layer. These configurations use the procedure in [Wu2014](@cite).
+The first insulation layer can have a semiconducting layer on each side. The sheath may also be represented as a wire screen enclosed by an outer sheath layer. These configurations use the procedure in [Wu2014](@cite).
 
 - Conductor surface impedance
 
@@ -869,7 +868,7 @@ then give the corresponding ABCD parameters.
 
 Cables are cross-bonded to reduce sheath circulating currents. Cross-bonding transposes the sheaths between cable sections and can be represented in the ABCD domain [Wu2014](@cite).
 
-A cross-bonded cable contains minor sections, denoted J, K, and L in Fig. 14. A major section groups a complete transposition cycle. At a major-section boundary, the conducting layers other than the cores are bonded and grounded. Kron elimination then removes the grounded-layer variables from the major-section ABCD model.
+A cross-bonded cable contains minor sections, denoted J, K, and L in Fig. 14. A major section groups a complete transposition cycle. At the end of a major section, the conducting layers other than the cores are bonded and grounded. Kron elimination then removes the grounded-layer variables from the major-section ABCD model.
 
 The procedure for determining the ABCD parameters of the whole cross-bonded cable is as follows:
 
@@ -918,7 +917,7 @@ $$\begin{bmatrix} \mathbf{A} & \mathbf{B} \\ \mathbf{C} & \mathbf{D} \end{bmatri
 Modular multilevel converters (MMCs) are widely used as voltage-source converters
 in HVDC systems. Their small-signal model must retain the impedances seen from
 the AC and DC terminals and the dynamic coupling between both sides.
-The converter is therefore represented by a multiport admittance matrix that
+The converter is represented by a multiport admittance matrix that
 connects its DC and three-phase AC terminal variables.
 
 ![Figure 15](assets/electromagnetic_stability_simulator/figure-15.png)
@@ -927,7 +926,7 @@ connects its DC and three-phase AC terminal variables.
 
 #### MMC model
 
-An MMC is depicted in Fig. 15. The variables from Fig. 15 are defined for all three phases,  $j \in \{a, b, c\}$ . The sets of submodules are represented by their averaged equivalent, and thus, the following equations for voltages and currents can be written:
+An MMC is depicted in Fig. 15. The variables from Fig. 15 are defined for all three phases,  $j \in \{a, b, c\}$ . The sets of submodules are represented by their averaged equivalent, and the following equations for voltages and currents can be written:
 
 $$\begin{aligned} v_{Mj}^{U,L} &= m_j^{U,L} v_{Cj}^{U,L}, \\ i_{Mj}^{U,L} &= m_j^{U,L} i_j^{U,L}, \end{aligned}$$
 
@@ -1027,7 +1026,7 @@ For the PI controls in the dqz frame additional equations have been developed [B
 For Δ-energy balancing, the triplen reconstruction is
 $x_\alpha=x_{Zd}\cos(3\theta)+x_{Zq}\sin(3\theta)$ and
 $x_\beta=x_{Zd}\sin(3\theta)-x_{Zq}\cos(3\theta)$. Its transformation satisfies
-$\dot T T=-3\omega_0J$, with $J=[0\ 1;-1\ 0]$. Thus the notch sections and
+$\dot T T=-3\omega_0J$, with $J=[0\ 1;-1\ 0]$. The notch sections and
 PI integrators, written as $\dot x=u-Gx$, use
 $G=\operatorname{diag}(\omega_0J,+3\omega_0J)$. This matches the triplen
 capacitor-state rotation and damps the formerly unstable 150 Hz balancing mode.
@@ -1063,7 +1062,7 @@ Also currents  $i_d^\Delta$  and  $i_q^\Delta$  are mapped to:
 
 $$\begin{bmatrix} i_d^{\Delta C} \\ i_q^{\Delta C} \end{bmatrix} = T(\theta) \begin{bmatrix} i_d^\Delta \\ i_q^\Delta \end{bmatrix}.$$
 
-Similarly:
+The current-reference transformation is:
 
 $$\begin{bmatrix} i_{d,ref}^{\Sigma C} \\ i_{q,ref}^{\Sigma C} \end{bmatrix} = T(-2\theta) \begin{bmatrix} i_{d,ref}^\Sigma \\ i_{q,ref}^\Sigma \end{bmatrix}, \quad \begin{bmatrix} i_d^{\Sigma C} \\ i_q^{\Sigma C} \end{bmatrix} = T(-2\theta) \begin{bmatrix} i_d^\Sigma \\ i_q^\Sigma \end{bmatrix}.$$
 
@@ -1113,7 +1112,7 @@ $$\begin{aligned}K_i &= L_{arm} \omega_n^2, \\ K_p &= 2\zeta\omega_n L_{arm} - R
 
 **Figure 19:** CCC implementation.
 
-**Energy control and zero current control** The energy control is built around the “zero” energy and as a result, it provides a reference value for the ‘zero’ current  $i_{z,ref}^\Sigma$ . The energy controller involves the following equations, as visible from Fig. 20a.
+**Energy control and zero current control** The energy control is built around the “zero” energy and it provides a reference value for the ‘zero’ current  $i_{z,ref}^\Sigma$ . The energy controller involves the following equations, as visible from Fig. 20a.
 
 $$\begin{aligned}
  W_z^\Sigma &= \frac{3C_{arm}}{2N} (v_{Cd}^{\Delta 2} + v_{Cq}^{\Delta 2} + v_{CZd}^{\Delta 2} + v_{CZq}^{\Delta 2} + v_{Cd}^{\Sigma 2} + v_{Cq}^{\Sigma 2} + 2v_{Cz}^{\Sigma 2}), \\
@@ -1122,7 +1121,7 @@ $$\begin{aligned}
  i_{z,ref}^\Sigma &= \frac{K_{p,ec} (W_{z,ref}^\Sigma - W_z^\Sigma) + K_{i,ec} \xi_z^\Sigma + P_{ac}}{3v_{dc}}.
  \end{aligned}$$
 
-Additionally, the zero current control (ZCC) sets the zero current to the desired value. The implementation of this control is depicted in Fig. 20b. It can work without the energy controller.
+The zero current control (ZCC) sets the zero current to the desired value. The implementation of this control is depicted in Fig. 20b. It can work without the energy controller.
 
 $$\begin{aligned}
  \frac{d\xi_z^\Sigma}{dt} &= i_{z,ref}^\Sigma - i_z^\Sigma, \\
@@ -1333,7 +1332,7 @@ For all connections presented in Fig. 25, we obtain an ABCD representation in th
 
 $$\begin{bmatrix} \mathbf{U}_o \\ \mathbf{I}_o \end{bmatrix} = \begin{bmatrix} \mathbf{I}_n & \mathbf{0}_n \\ \mathbf{Y} & \mathbf{I}_n \end{bmatrix} \begin{bmatrix} \mathbf{U}_i \\ \mathbf{I}_i \end{bmatrix}$$
 
-where $\mathbf{I}_n$ and $\mathbf{0}_n$ are the $n \times n$ identity and zero matrices. The terminal voltage and current quantities $\mathbf{U}$ and $\mathbf{I}$ are scalars for a single-phase connection and three-element vectors for a three-phase connection. For example,
+where $\mathbf{I}_n$ and $\mathbf{0}_n$ are the $n \times n$ identity and zero matrices. The terminal voltage and current quantities $\mathbf{U}$ and $\mathbf{I}$ are scalars for a single-phase connection and three-element vectors for a three-phase connection:
 
 $$\mathbf{U}_o = \begin{bmatrix} U_{Ao} \\ U_{Bo} \\ U_{Co} \end{bmatrix}$$
 
@@ -1379,8 +1378,8 @@ steady-state equivalent for the power-flow equations.
 AC and DC branches represent three-phase AC and DC connections between buses respectively. Branches are grouped inside AC or DC grids (zones). AC branches are defined with parameters described in [ZimmermanMurillo2016](@cite), while DC branches parameters are given in [Beerten2012](@cite).
 
 The AC branch model [ZimmermanMurillo2016](@cite) is depicted in Fig. 26. The
-combined AC/DC formulation also permits a shunt conductance, giving the branch
-shunt admittance $\frac{g_c}{2} + j\frac{b_c}{2}$
+combined AC/DC formulation also includes a shunt conductance. The branch
+shunt admittance is $\frac{g_c}{2} + j\frac{b_c}{2}$
 [ErgunGethVanHertem2018](@cite). The complete branch-admittance matrix is
 
 $$\mathbf{Y}_{ac} = \begin{bmatrix} (y_s + \frac{g_c}{2} + j\frac{b_c}{2}) \frac{1}{\tau^2} & -\frac{y_s}{\tau \exp(-j\theta_{shift})} \\ -\frac{y_s}{\tau \exp(j\theta_{shift})} & (y_s + \frac{g_c}{2} + j\frac{b_c}{2}) \end{bmatrix}.$$
@@ -1422,7 +1421,7 @@ When the admittance matrix has this exact branch form, the equivalent parameters
 
 $$\begin{aligned} \tau &= \sqrt{\frac{Y_{ss}}{Y_{pp}}}, \qquad \theta_{\text{shift}} = \frac{1}{2}\arg\left(\frac{Y_{ps}}{Y_{sp}}\right), \\ y_s &= -Y_{ps}\tau\exp(-j\theta_{\text{shift}}), \qquad y_c = 2(Y_{ss}-y_s), \\ r_s &= \Re\left\{\frac{1}{y_s}\right\}, \qquad x_s = \Im\left\{\frac{1}{y_s}\right\}, \\ g_c &= \Re\{y_c\}, \qquad b_c = \Im\{y_c\}. \end{aligned}$$
 
-The positive real root defines $\tau$. If the transformed admittance does not satisfy the reciprocal branch relations, reduction to this equivalent requires an explicit approximation criterion.
+Select the positive real root for $\tau$. Reduction to this equivalent requires an explicit approximation criterion when the transformed admittance does not satisfy the reciprocal branch relations.
 
 #### Transmission line
 

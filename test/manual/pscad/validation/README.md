@@ -1,1388 +1,148 @@
-# Manual PSCAD physics validation
+# Julia–PSCAD validation suite
 
-L1 is closed with seven passes and one owner-explained system result. L2 starts
-with one strong-grid TLC fixture; L3 stages A/B/C register seven interactions; L4 systems remain later work. Tier D remains the original P2P early growth fit. Code is
-manual and private; `data/`, `Manifest*.toml` and `.CondaPkg/` are gitignored.
-No station operation occurs during preparation or offline tests.
+This manual suite compares exported circuits with Julia operating points, frequency responses,
+time-domain responses and instability growth. It tests passive elements, converters, a synchronous
+machine and coupled circuits. The scripts are private test utilities. Native measurements require
+a configured Windows PSCAD station; preparation and local analysis do not contact it. The
+[abbreviations](../../../../docs/src/pscad.md#Abbreviations) are defined in the export guide.
 
-## Prepare and run
+Passing an exported-project check establishes its written structure. Passing an operating-point
+check establishes the measured equilibrium. Frequency-response and time-domain checks test their
+declared inputs, windows and model realization. A finite frequency grid does not exclude
+unresolved inter-bin resonances.
 
-Use Julia >=1.10. Resolve the **local harness Manifest with the same Julia
-version used to run it**. Remove that gitignored Manifest before changing Julia
-versions, then instantiate again from the repository root:
+## Requirements and execution
+
+Use Julia >=1.10 and the environment in this directory. Instantiate it with the same Julia version
+used for execution. Remove its ignored Manifest before changing Julia versions, then instantiate
+again from the repository root:
 
 ```sh
 julia --project=test/manual/pscad/validation -e 'using Pkg; Pkg.develop(Pkg.PackageSpec(path=pwd())); Pkg.instantiate()'
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/prepare.jl L1
 ```
 
-Preparation solves each power flow, checks passive dissipativity, writes all
-full-band and half-amplitude projects plus half-step candidates at 750/1000 Hz,
-reference tables, operating points and manifests. Existing project/output hashes
-are preserved; manifest history and source revisions document harness changes.
-A changed physical project or reference is rejected. No native data are deleted.
-
-With the existing `POWERIMPEDANCE_PSCAD_CONFIG`, **one command** visits all L1
-fixtures in order:
+The Windows station needs PSCAD 5.1.0, its licence and compiler, a logged-on desktop session, and
+the dependencies described in the [export
+guide](../../../../docs/src/pscad.md#prepare-the-windows-station). Set
+`POWERIMPEDANCE_PSCAD_CONFIG` to its configuration file. Select a key from the catalogue and
+assign it to the shell variable `fixture`. These commands prepare locally, inspect the written
+XML, then run that fixture:
 
 ```sh
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L1
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/prepare.jl "$fixture"
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/check_projects.jl "$fixture"
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl "$fixture" --timeout=5400
 ```
 
-An individual fixture ID remains selectable. All completed axis directories are
-resumable, including native runs absent from the ledger after a crash. The native
-`compute` reuse checks verify project, inputs, toolkit, outputs and current solver
-identity. Only missing runs execute. Analysis is repeated. All runs must report
-**<100 live nodes**. The all-L1 invocation shares a **5400 s wall-time budget**;
-a timeout leaves reusable completed runs and preserved failure evidence.
-
-## Layer 1 closure (M9b-1)
-
-All tier-A comparisons passed under the existing rules. C errors below are
-maximum relative Frobenius errors after recorded orientation and model
-corrections; dq projection results remain informational for asymmetric
-fixtures. Seven fixtures also passed the amplitude/step refinement gates.
-
-| Fixture | Element / physics | Domain | Tier A | C max error | Status | Key evidence |
-|---|---|---|---|---|---|---|
-| L1-01 | RL; dq coupling, loss | dq Y 2x2 | passed | 0.00131% | passed | all 24 frequencies; refinements passed |
-| L1-02 | DC RLC; charging, pole bases | differential DC Y 2x2 | passed | 0.00131% | passed | inward-current conversion; refinements passed |
-| L1-03 | AC OHL; earth return, propagation | abc Y 6x6 | passed | 0.381% | passed | later settling, tighter fit; refinements passed |
-| L1-04 | AC cable; sheath elimination, earth return | abc Y 6x6 | passed | 0.843% | passed | corrected native earth constant/depth; unchanged PSCAD project; refinements passed |
-| L1-05 | DC cable + OHL; mixed-medium/DC loss | differential DC Y 2x2 | passed | 0.303% | passed | longer settling, tighter fit and native earth correction; refinements passed |
-| L1-06 | YY; turns ratio, winding loss | dq Y 4x4 | passed | 0.0118% | passed | terminal orientation applied; refinements passed |
-| L1-07 | Dyn11; phase shift, winding loss | dq Y 4x4 | passed | 0.0122% | passed | +30 degree convention; refinements passed |
-| L1-08 | IEEE9; network resonance/reduction | abc local Z 3x3 | passed | 3.88% point error (3.35% coarse grid) | explained | resonance centre/width reproduced; remaining point failures retained |
-
-L1-08 disposition: **explained: resonance reproduced; point failures from slope
-amplification and marginal single entries**. At the 0.25 Hz refined grid, Julia
-and PSCAD centres are 316.9407 / 316.8704 Hz (0.0222%); half-power widths are
-3.29618 / 3.29380 Hz (0.0721%). All 126 in-band comparison rows pass the approved
-resonance rule. Steep shoulders just outside its band still fail the unchanged
-2% point rule (2.0–2.6%); the point profile peaks near 3.9% at resonance and is
-1.2% at ±5 Hz. Marginal single entries remain at 237, 562 and 1000 Hz. This owner
-disposition preserves failing rows and is not numerical acceptance of them.
-Resonance amplitude/step witnesses passed. Raw results and manifest history remain.
-
-Outcomes: the cable investigation identified the native earth-return constant
-`exp(gamma)=1.7811` and each cable's own self-term depth; correcting them reduced
-L1-04 C to 0.843% without changing PSCAD projects. Separately, PSCAD fit targets
-`YMaxE=AMaxE=0.02%` reduced fit-versus-own-constants terminal errors from
-4.34/2.88/4.31% to 0.84/0.49/0.35% for AC cable/DC cable/DC OHL. Constants physics
-and fit accuracy remain separate ledger items; comparison tolerances did not change.
-
-## L2-01: TLC P/Q against a strong grid
-
-The M4 case-2 current API supplies the 100 MVA, 220 kV line-line RMS, 640 kV DC
-TLC, P/Q PI controllers, PLL, OCC, measurement filters, frequency-support lag
-and 200 us Padé 3/3 modulation. Setpoints are 70 MW / 5 MVAr (0.7 / 0.05 pu).
-Its DC cable is replaced by a direct ideal DC source. The AC ideal source remains
-behind a series RL: `|Z|=60.5 ohm`, `R=6.019975 ohm`, `L=0.191621756 H`.
-SCR is exactly 8 at the 100 MVA / 220 kV rating and X/R is exactly 10.
-The solved terminal voltage is 1.0111003 pu at 0.0855993 rad; the terminal-voltage
-short-circuit ratio is 8.17859. DC power is 70.03854 MW including converter loss.
-
-Preparation runs the complete-network gate before writing projects: native
-admittances on 6001 logarithmic points from 0.01 Hz to 100 kHz, generalized
-Nyquist net 0, plus all finite poles of the source-clamped TLC + RL descriptor.
-The most positive located real part is -1.9917811 /s (0.5021 s time constant);
-next poles are -3.12835, -3.13641 and -24.39368 /s. The standalone subsystem is
-also stable. The descriptor retains grid dq dynamics and imposes terminal KCL;
-converter-only pole stability is insufficient. Native characteristic residuals
-and all poles are saved in the manifest.
-
-A shunt controlled current source adds zero current at the operating point.
-Two d/q runs measure converter current (recorded outward, converted inward)
-and the actual terminal voltage matrix; `I_converter=Y_converter*V_terminal`
-recovers the native `get_y(DUT,s)[2:3,2:3]`, with DC clamped. No network-Y subtraction
-or measured-Y inversion is used. Construction reuses `current_port`, whose
-`master:src_ccin_1` fields and current sign are from `src/PSCAD/emitters/tlc.jl`
-and the saved M4 TLC project, plus the existing `dq_to_abc_module`.
-The nominal fixed 50 Hz frame matches native TLC input coordinates.
-
-| Axes / grid | Integration / sampling | Injection / windows | Per-tone amplitude | Station estimate |
-|---|---|---|---|---|
-| d,q; 23 coherent tones 1–1000 Hz, omit 50 Hz | 2.5 us / 20 us; half step 1.25 us | onset 2 s; [8,9), [9,10) s | 5e-5 pu current (0.0186 A peak); Schroeder phases | 15–25 min; 60 min deadline |
-
-Voltage/current bases are nominal phase-peak 179.6292478 kV / 0.37113481 kA,
-100 MVA total three-phase rating. Sampling gives 47.62 samples/period at the
-1050 Hz highest sideband. The 8 s settle exceeds 15 slow-mode time constants
-from the 0.2 s DC-divisor hold, and 11.95 from tone onset. Baseline drift,
-window consistency and departures are measured, not inferred from that estimate.
-Six runs execute: baseline, d, q, one half-amplitude axis, half-step baseline
-and that axis at the worst band plus 1000 Hz. Prepared half-step candidates are
-18/1000 and 750/1000 Hz; the runner selects the new worst band from the new comparison.
-For current drive the one-axis refinements compare both `V/Idrive` and
-`Iconverter/Idrive`; a single coupled voltage axis cannot identify a Y column.
-Expected half-amplitude change is below the unchanged 2% linearity gate (an
-expectation pending station measurement). C uses the approved **5% / 3 degrees**
-active rule with unchanged floors; full-matrix conditioning and both refinement
-gates remain mandatory. Padé versus exact-delay mismatch is recorded separately.
-
-```sh
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-01 --timeout=3600
-```
-
-M9b-2 stored-run diagnosis: the 10-to-5 us witness change is 0.453% Frobenius /
-2.319% worst entry at 18 Hz, and 3.318% / 3.748% at 1000 Hz. Comparing measured
-converter current with `YJulia * Vmeasured`, the normalized directional residual
-falls from 1.270% to 0.635% at 18 Hz and 1.932% to 0.952% at 1000 Hz. A single
-5 us injected axis cannot identify a full 2x2 Y; this directional comparison
-uses its measured voltage rather than mixing it with the other 10 us run.
-The complete 10 us Y errors are 1.579% / 1.960%; 18 Hz is the worst-entry selection,
-while 1000 Hz carries the maximum Frobenius error. Profiles and component values
-are in `data/m9b2/`. Old projects, outputs and evaluations are archived at
-`data/L2-01/history/m9b1-station-run/`; no old run is eligible for reuse.
-
-M9b-3 identified the departure scope error. The former quantity was
-`max(abs((Vaxis(t)-Vbaseline(t))/Vbase))` over **every recorded time**, including
-turn-on. Both runs peak at exactly 2 s, with no difference before onset. The
-voltage jump is 1.95152 / 1.95145 kV. Halving amplitude and step together keeps
-`amplitude/dt=10 /s` unchanged; this is the inductive turn-on impulse, not an
-operating-point offset. With `Lgrid || Lfilter = 0.0750062 H` and the Schroeder
-onset current jump 0.1300815 A, the inductive companion estimate
-`2*Leq*DeltaI/dt = 1.95138 kV` agrees with the observed jump. It is consistent
-with the sampled inductive switching response; the internal block responsible
-for the subsequent first-order interface error has not been isolated.
-
-The corrected input/output departure gates take the same baseline-subtracted
-samples **only in the predeclared C windows**, [8,9) and [9,10) s. The 0.01 gate
-is unchanged, and means are retained so steady offsets still count. Whole-run
-maxima remain diagnostic fields. The current signal, voltage/current bases,
-orientation, source path and nominal frame are unchanged.
-
-| Stored run | Base step | Window input departure | C max Frobenius error | C result | Remaining qualification failures |
-|---|---|---|---|---|---|
-| 1 | 10 us | 0.000357836 pu | 1.96038% | failed, valid measurement | 18 Hz d-d entry: error 0.00187869 pu > 0.001 pu limit; step 3.31770% |
-| 2 | 5 us | 0.000180544 pu | 0.96533% | passed, valid measurement | step 1.65658% |
-
-Tier A and half-amplitude gates pass for both stored runs. Their overall status
-remains failed under the unchanged entry and step rules. Re-evaluation tables
-are retained beside the old station evaluations; no raw data are changed.
-
-| Frequency | Julia directional current residual, 10 us | 5 us | 2.5 us |
-|---|---|---|---|
-| 18 Hz | 1.27024% | 0.63489% | 0.31731% |
-| 1000 Hz | 1.93234% | 0.95194% | 0.47279% |
-
-These residuals score `norm(I-YJulia*V)/max(norm(YJulia*V),0.1)` using normalized
-current-drive response vectors and recorded inward converter currents. The
-2.5 us data contain one witness axis, so this is a directional admittance check,
-not a full 2x2 identification. Full-matrix maxima at 10 / 5 us are 1.96038 /
-0.96533%. Step-response-vector changes at 1000 Hz are 3.31770 / 1.65658% for
-10-to-5 / 5-to-2.5 us. Halving dt approximately halves both errors: documented
-**first-order converter/interface discretization error** over this band.
-
-For 1–1000 Hz, recommend **2.5 us base / 1.25 us witness** for the remaining TLC
-fixtures, and as the initial candidate for uncompensated MMC fixtures. MMC must
-qualify independently for each control mode and grid variant; TLC does not
-establish MMC convergence. Compensated MMC retains its **1 us** requirement
-(with a half-step witness). Keep all phase, complex, floor and refinement gates.
-The new L2-01 pair is predicted to give about 0.828% norm / 0.937% entry change
-under first-order scaling; actual station qualification is mandatory.
-
-New projects use amplitude 5e-5 pu, 2.5 / 1.25 us integration, and unchanged
-20 us sampling, 2 s onset and settled windows. Expected input departure is
-about 0.000181 pu, based on the measured settled response. Six fresh runs are
-estimated at **15–25 minutes** from run 2's measured 658.5 s workflow; the
-60-minute deadline remains. The full previous tree is archived at
-`data/L2-01/history/m9b2-station-run/`, including run 1's nested archive. All
-new project hashes differ. Diagnostics and convergence are under `data/m9b3/`.
-
-Offline on Julia 1.12.7 and 1.10.11: **17,467/17,467 PSCAD suite checks**
-(including 59 name-guard checks, 53 TLC/gate checks and 8 departure-scope checks), plus **819/819 XML
-checks** per version. Synthetic converter Y recovery error is 1.83e-13; the
-known unstable network is rejected. Station tier A/C/refinement remain pending.
-
-Projects/reference/manifest are under `data/L2-01/`. Existing hash-valid completed
-runs resume; no L2 station execution has occurred during preparation.
-
-## L2 batch A (M9b-4)
-
-Owner station evidence closes L2-01: tier A and refinement passed; converter admittance within 0.48% of Julia at 2.5 us. The five new fixtures are prepared; their station results are pending.
-
-| Fixture / control | SCR / X:R | Solved P / Q (MW / MVAr) | AC voltage (pu) | Gate: most positive real part (1/s) | Expected station time |
-|---|---|---|---|---|---|
-| L2-02 P-f + Q | 8 / 10 | 70.00000 / 5.00000 | 1.0111003 | passed: -1.9917811 | 15–25 min |
-| L2-03 P + Q-V | 8 / 10 | 70.00000 / -1.37412 | 1.0031871 | passed: -3.1363304 | 15–25 min |
-| L2-04 P + VAC | 8 / 10 | 70.00000 / -3.91261 | 1.0000000 | passed: -3.0903588 | 15–25 min |
-| L2-05 Vdc + Q / DC resistor | 8 / 10 | -70.03996 / 5.00000 | 0.9935849 | passed: -0.7760760 | 18–30 min |
-| L2-06 P/Q weak-grid twin | 2.5 / 10 | 70.00000 / 5.00000 | 1.0090226 | passed: -1.9714563 | 15–25 min |
-
-All retain the 100 MVA, 220 kV AC / 640 kV DC M4 TLC, PLL, OCC and averaged electrical/modulation blocks. SCR uses the rated AC voltage: strong-grid R=6.019975 ohm, L=0.191621756 H; weak-grid R=19.263920 ohm, L=0.613189618 H. X/R=10 at 50 Hz. No gains or grid strengths were tuned.
-
-M4 `tlc_network` supplies P/Q PI 0.04/40, P-f support K=5 and cutoff 2 rad/s, PLL/current-loop/filter/modulation parameters and limits. M5b mapping evidence supplies Q-V K=20/cutoff 100 rad/s and VAC PI 0/100 with **NoFilter**. Vdc PI is the M4 TLC 5/5. L2-03/04 have plain P (NoFrequencySupport); L2-05 has plain Q (NoVoltageSupport). **L2-01 already has the M4 P-f lag**, so L2-02 explicitly repeats that physics. L2-06 preserves every L2-01 controller and request.
-
-L2-05 consumes 70 MW on DC through R=640^2/70=5851.428571 ohm differential (2925.714286 ohm per pole to ground). It rectifies 70.039956 MW from AC, including loss. Native PF uses a remote ideal zero-voltage reference; the harness contracts that zero-voltage source to ground using internal Netlist/Terminal metadata. Existing `src/PSCAD/emitters/impedance.jl:emit!` supplies the grounded R/2 legs; no DC voltage-source component or auxiliary midpoint shunts are exported. This contraction is electrically exact. The AC reference is the native 3-port converter plus resistor nodal Schur reduction, **not** the converter AC block with DC clamped. The measured DUT current excludes the AC grid branch. DC voltage may respond; only the DC clamp check is inapplicable. AC departure, drive, drift and refinement thresholds remain unchanged.
-
-The complete-network gate retains all converter and RL states (and DC feedback for L2-05), native admittances on 6001 points at 0.01 Hz–100 kHz, and all finite descriptor roots. VAC has an open-subsystem integrator at zero but stable complete-network poles. The corrected Nyquist contour uses Re(s)=1e-6 1/s, its real-axis closure point, and the enclosed open-loop pole count; it requires zero closed RHP count and the unchanged strict negative complete-network root margin. Tests cover an integrator stabilized by its network, a stabilized RHP subsystem, and the known unstable pair. This fixes the earlier assumption that every standalone subsystem must itself be strictly stable.
-
-Common C settings: two nominal fixed-frame dq shunt-current drives; **2.5 us integration / 1.25 us witness**, **20 us sampling**, onset 2 s, windows **[8,9), [9,10) s**, 10 s main runs. Half-amplitude repeat: 2.5e-5 pu on one selected axis; half-step baseline plus that axis at the worst band and 1000 Hz. Nine projects per fixture are prepared; six normally run, and the runner writes an adaptive witness band when needed.
-
-Per-tone peak **5e-5 pu current = 0.01856 A**; Schroeder phases -pi*k*(k-1)/N. Bases: 179.629247804 kV AC phase peak and 0.371134809513 kA phase peak. The 23 integer coherent bins (Hz) are: 1, 2, 3, 4, 6, 7, 10, 13, 18, 24, 32, 42, 56, 75, 100, 133, 178, 237, 316, 422, 562, 750, 1000. Sampling provides 47.6 samples/period at the highest 1050 Hz sideband. Active C remains **5% complex / 3 degrees**, with the approved 0.02-entry and 0.1-Frobenius floors. No tolerance changed.
-
-Slowest decay times are 0.5021, 0.3188, 0.3236, **1.2885**, 0.5072 s. The common 8 s settle is retained as requested; it is 6.21 time constants for L2-05, and its measured baseline drift remains mandatory. Native triangle bounds on settled AC voltage/current departures are <=0.000954 pu across this batch; they are predictions, not station gate results. Each fixture still must pass the half-amplitude and half-step measurements.
-
-Resumable command (78–130 min estimate; 180 min deadline):
-
-```sh
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-02 L2-03 L2-04 L2-05 L2-06 --timeout=10800
-```
-
-Projects, native references, hashes, settings and root lists are in `data/L2-02/` through `data/L2-06/`. Completed runs resume only with matching project hashes and valid completion records. Evidence summary: `data/m9b4/summary.tsv`; native stability records: `data/m9b4/L2-0x-gate.toml`. Instantiate the gitignored harness Manifest with the Julia version used for the station command.
-
-Offline final checks on Julia 1.12.7 and 1.10.11: **17,575/17,575 PSCAD suite assertions** per version, including **59 name-guard assertions**; **1,044/1,044 XML assertions** per version. The new batch/DC-termination testset is 103/103; converter-port synthetic recovery remains 1.83e-13 normalized, and DC-terminated recovery is <=1.54e-17 S. The independent unreduced DC descriptor matches the finite-mode count and rightmost mode, with normalized pencil residual <=4.31e-18. It uses QZ beta to distinguish algebraic infinity and backward error for root consistency; no C or qualification tolerance changed. All nine prepared project hashes, retained file inventories and producing-source hashes verify for each new fixture. No station execution or src/dependency changes. Logs and checksums: `data/m9b4/`.
-
-## L2-05/06 qualification (M9b-6)
-
-Owner station evidence closes L2-02/03/04 at 2.5 us base / 1.25 us witness:
-tier A/C and refinements passed, with admittance within 0.48% of Julia.
-L2-05/06 remain pending the replacement runs below. All approved gates and
-tolerances are unchanged.
-
-L2-05 tier A and half-amplitude pass; maximum C Frobenius error is 3.280349%
-at 1000 Hz against the active 5% limit. C nevertheless fails its q-d entry at
-1000 Hz: complex error 0.0103594 pu exceeds the 0.00675522 pu entry limit,
-and magnitude error is 7.26795%; phase error 1.35183 degrees passes.
-The 2.5-to-1.25 us step witness also fails:
-
-| Frequency | Frobenius change | Maximum entry change | Step gate |
-| --- | --- | --- | --- |
-| 750 Hz | 0.740756% | 1.528204% | 1% |
-| 1000 Hz | 1.069342% | 2.168323% | 1% |
-
-Both high-frequency bands carry the entry failure; 1000 Hz carries the maximum
-norm and entry changes. The finer witness contains only one injected axis,
-so Julia agreement is diagnosed directionally using its own measured terminal
-voltage and inward converter current, not a full admittance matrix.
-The normalized residual `norm(I-YJulia*V)/max(norm(YJulia*V),0.1)` falls
-from **3.610393% to 1.784121% at 750 Hz** and **3.892244% to 1.911976% at
-1000 Hz**: the finer step moves toward Julia in both bands. This approximately
-first-order convergence does not establish the new pair's qualification.
-Per-frequency changes and directional residuals are in `data/m9b6/L2-05/`.
-
-The owner-selected new L2-05 settings are **1.25 us base / 0.625 us witness**,
-with unchanged 20 us sampling, 5e-5 pu current tones, 2 s onset and main windows
-[8,9), [9,10) s. Sampling is an integer multiple of both integration steps;
-all windows contain whole tone/frame periods and sample counts. The complete
-previous fixture is retained at `data/archive/m9b6/L2-05/`. Every new project
-hash differs; no completed old run is eligible for reuse. Native reference and
-operating-point files are preserved.
-
-L2-06 stored-run re-analysis passes tier A and C, with maximum C Frobenius
-error **0.479332%**. Half-amplitude changes are **0.0113473% Frobenius /
-0.0247406% entry**, passing the unchanged 2% gate.
-Its adaptive 75/1000 Hz witness previously used 0.1 s windows: 75 Hz completes
-7.5 cycles, so the DFT correctly rejected the bins. The window selector now
-rounds the 0.1 s minimum up to whole common periods, including the 50 Hz frame.
-The corrected windows are **[8,8.12), [8.12,8.24) s**, with 6000 samples each
-at unchanged 20 us sampling, 1.25 us integration and 5e-5 pu amplitude.
-Stored witness output ends at 8.2 s and cannot cover both corrected windows.
-Only the two 75/1000 Hz witness projects/runs are replaced; originals and the
-previous manifest are under `L2-06/history/m9b6-incoherent-witness/`.
-Main and half-amplitude projects, hashes and four completed runs are retained.
-Their offline re-analysis is recorded in `data/m9b6/L2-06/`; the fixture remains
-pending its step gate. Regression tests reproduce the incoherent bins and
-insufficient stored duration, recover the corrected tones, and check every
-selectable TLC witness band's window and sample coherence.
-
-From the repository root, with the harness environment instantiated using the
-same Julia version as the station command:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-05 L2-06 --timeout=3600
-```
-
-Allow **25–40 minutes** (60-minute shared deadline): six fresh L2-05 runs and
-two replacement L2-06 witnesses, plus retained-output loading and analysis.
-The previous workflows took 609 / 587 s; the estimate allows for doubled
-L2-05 integration work and transfer/analysis overhead. Matching completed new
-runs resume after interruption. No station operation occurs during this work.
-
-Offline on Julia **1.12.7 (repository Manifest)** and **1.10.11**:
-**17,718/17,718 PSCAD suite checks** per version, including **59 name-guard
-checks** and **123 adaptive-window regression checks**; generated-project XML
-readback passes **1,064/1,064** per version. Logs and preservation evidence are
-under `data/m9b6/`. All 194 archived L2-05 payload files verify unchanged;
-L2-06's retained projects and four completed runs verify unchanged. No `src/`
-changes or commits.
-
-## L2-05 second step refinement (M9b-7)
-
-Owner station evidence closes **L2-06: passed**, C maximum 0.479332%, with
-both refinement witnesses passing. No L2-06 rerun is requested.
-
-L2-05 at 1.25 us passes tier A and half-amplitude; maximum C Frobenius error
-is **1.611251% at 1000 Hz** against the unchanged active 5% limit. Its
-0.625 us witness changes by **0.531960% Frobenius / 1.107230% entry**.
-The entry change still exceeds the 1% gate, so the fixture remains failed.
-First-order convergence continues. Halving the pair predicts approximately
-**0.265980% norm / 0.553615% entry**; these are extrapolations, not acceptance.
-
-The owner-selected settings are now **0.625 us base / 0.3125 us witness**.
-Sampling stays **20 us**, exactly 32 / 64 integration steps. Amplitude stays
-5e-5 pu, onset 2 s, main windows [8,9), [9,10) s and duration 10 s.
-The prepared 750/1000 Hz witness retains [8,8.1), [8.1,8.2) s; each window
-has 5000 samples and whole tone/frame periods. Adaptive witnesses continue to
-use the coherent common-period selector. No controller, physical parameter,
-reference, tolerance or gate changes.
-
-The complete previous L2-05 fixture is archived at
-`data/archive/m9b7/L2-05/`. Native reference and operating-point files are
-preserved byte-for-byte. All nine new project hashes differ; the active run
-ledger is empty, and no old completed run is eligible for reuse.
-
-With the existing Julia 1.10.11 harness environment, run from the repository root:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-05 --timeout=3600
-```
-
-Allow **30–45 minutes** for six fresh runs, transfer and analysis, with a
-60-minute deadline. The previous workflow took 969.5 s (16.2 minutes), including
-584.8 s of native runs. Doubling native integration work gives approximately
-25.9 minutes before additional overhead; the estimate includes margin.
-Matching completed new runs resume after interruption. Preparation and offline
-checks never contact the station. Evidence and logs are under `data/m9b7/`.
-
-Offline checks pass on Julia **1.12.7 (repository Manifest)** and **1.10.11**:
-**17,718/17,718 PSCAD suite checks**, including **59 name-guard checks**, and
-**1,064/1,064 generated-project XML checks** per version. All 192 archived
-payload files verify unchanged. Comparison of all nine regenerated projects
-verifies that only step-dependent settings and nonsemantic XML IDs/revision
-metadata differ; physical parameters and connections are unchanged.
-No station contact, `src/` changes or commits.
-
-## L2 batch B: grid-following MMC (M9b-8)
-
-L2-01..04 and L2-06 are owner-qualified TLC results. L2-05 is running on the
-owner's station; its data and archives are untouched by this preparation.
-All six new MMC complete-network gates pass without tuning. Their station
-tier A/C and refinement results remain pending.
-
-| Fixture / control | SCR | Solved P / Q (MW / MVAr) | AC voltage (pu) | Rightmost complete-network root (1/s) | Base / witness (us) | Estimated live nodes | Expected time |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| L2-07 P/Q | 8 | 600 / 200 | 1.0289676 | passed: -10.952732 | 2.5 / 1.25 | 61 | 25–40 min |
-| L2-08 P-f + Q | 8 | 600 / 200 | 1.0289676 | passed: -1.991835 | 2.5 / 1.25 | 61 | 25–40 min |
-| L2-09 P + Q-V | 8 | 600 / 30.655855 | 1.0084672 | passed: -10.908770 | 2.5 / 1.25 | 61 | 25–40 min |
-| L2-10 P + VAC | 8 | 600 / -37.300389 | 1.0000000 | passed: -10.890785 | 2.5 / 1.25 | 61 | 25–40 min |
-| L2-11 Vdc + Q | 8 | -603.348423 / 200 | 1.0142020 | passed: -2.414274 | 1.25 / 0.625 | 65 | 35–55 min |
-| L2-12 P/Q weak-grid twin | 2.5 | 600 / 200 | 1.0730249 | passed: -10.954107 | 2.5 / 1.25 | 61 | 25–40 min |
-
-Every fixture retains the M5a/M5b `mmc_network(mode)` MMC: 1000 MVA, 333 kV
-converter winding / 380 kV external grid terminal, transformer ratio 333/380,
-800 kV DC, 400 submodules per arm, 50 mH / 1.07 ohm arms and 10 mF submodule
-capacitance. TEC (1.386/29.70), ZSCC/CCSC (0.1048/48.1914), PLL
-(0.28/12.5664), OCC (0.7691/522.7654), measurement and uncompensated modulation
-are unchanged. P/Q PI is 0.1/31.4159; DVC PI 5/15; P-f K=5, cutoff 2 rad/s;
-Q-V K=20, cutoff 100 rad/s; VAC PI 0/100 with **NoFilter**. Setpoint requests
-are 600 MW / 200 MVAr, or 800 kV / 200 MVAr for the physical DC load case.
-
-SCR is defined at the **external 380 kV / 1000 MVA rating**, not the 333 kV
-converter winding. X/R is 10 at 50 Hz. Strong-grid R=1.796042128 ohm,
-L=0.057169797 H; weak-grid R=5.747334811 ohm, L=0.182943349 H.
-The ideal source is behind that RL. L2-11 consumes 600 MW through
-R=800^2/600=1066.666667 ohm differential, implemented as two 533.333333 ohm
-pole-to-ground legs. Its PF-only remote zero-voltage reference contracts to
-ground using the existing fixture netlist conversion; no terminal DC clamp
-or auxiliary midpoint shunts are added. Its AC reference is the native full
-converter Y plus resistor nodal reduction. All other cases clamp DC at 800 kV.
-
-The complete-network gate retains every converter state, both RL dq states,
-and DC feedback where applicable. Native SI scaling, including the transformer
-cross terms and DC output, is checked against full native three-port Y.
-The existing 6001-point 0.01 Hz–100 kHz contour and all finite descriptor roots
-give zero closed RHP count for every fixture. Roots and design records are
-under `data/m9b8/`; no converter-only stability shortcut or gain adjustment is used.
-
-Common scan settings: **5e-5 pu current per tone = 0.107434 A peak**, 23 coherent
-integer tones at 1–1000 Hz excluding 50 Hz, 20 us sampling, 2 s onset, main
-windows [8,9), [9,10) s and 10 s duration. External phase-peak bases are
-310.268700753 kV / 2.148675213 kA. The shared nominal-frame shunt-current
-construction measures full 2x2 AC-port Y from the actual voltage matrix and
-inward converter currents. DC clamp normalization now uses the declared
-converter DC base (800 kV for MMC, 640 kV for TLC).
-
-Nine projects are prepared per admitted fixture; six normally execute:
-baseline, d, q, selected half-amplitude axis and a matching half-step baseline
-plus that axis. The adaptive witness selects the worst band plus 1000 Hz,
-using the existing coherent common-period windows. All approved active C
-**5% / 3 degrees**, floors, conditioning, drift, departures, drive/window and
-amplitude/step gates are unchanged. Native settled voltage/current triangle
-bounds are at most 0.001879 / 0.000371 pu; they are predictions, not station
-gate results. TLC convergence does not qualify these MMCs.
-
-With the Julia 1.10.11 harness environment, one resumable command selects all
-six admitted fixtures and shares a **300-minute deadline**:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-07 L2-08 L2-09 L2-10 L2-11 L2-12 --timeout=18000
-```
-
-Allow **160–255 minutes** overall. These planning estimates account for finer
-integration than retained 10 s / 10 us MMC runs (11.0–12.3 s native runtime),
-the larger MMC recorder payload, transfer and analysis, with TLC scan workflows
-as additional timing evidence. No new station timings have been measured.
-Retained averaged MMC builds reported 34–40 live nodes; the estimates above
-allow for grid RL, injection and metering. Actual native runs still must report
-**<100 live nodes**. Matching completed project hashes resume after interruption.
-
-Projects, operating points, references and producing-source pins are under
-`data/L2-07/` through `data/L2-12/`. Preparation creates no native run directories.
-XML verification accepts explicit fixture IDs, so the batch can be checked
-without reading the in-progress L2-05 payload. No station contact, `src/`
-changes or commits.
-
-Offline on Julia **1.12.7 (repository Manifest)** and **1.10.11**:
-**17,925/17,925 PSCAD suite checks** per version, including **207 MMC batch
-construction checks** and **59 name-guard checks**. Batch-only XML readback
-passes **270/270** per version. All 54 project hashes, 78 retained payload
-files and 49 producing-source hashes per fixture verify; native references
-pass the unchanged one-ppm identity guard. Logs and summary: `data/m9b8/`.
-
-## L2 batch C: GFM/energy MMC and machine (M9b-9)
-
-All six TLC fixtures L2-01..06 are owner-qualified at 97bdf86. Batch B is
-running on the owner's station; `data/L2-07/` through `data/L2-12/` are untouched.
-Four batch-C fixtures pass the complete-network gate without tuning and are
-prepared. Their station tier A/C and refinements remain pending. L2-17 fails
-and has no projects or native runs.
-
-| Fixture / device | SCR | Solved P / Q (MW / MVAr) | AC voltage (pu) | Gate / rightmost finite root (1/s) | Base / witness (us) | Estimated nodes | Expected time |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| L2-13 GFM, VSE/CCVI + TEC/ZSCC/CCSC | 8 | 742 / 0 | 1.0049037 | passed: -0.000628312 | 2.5 / 1.25 | 65 | 25–40 min |
-| L2-14 LEC/CCC, compensated | 8 | 742 / 0 | 1.0049037 | passed: -0.000628319 | 1 / 0.5 | 65 | 45–75 min |
-| L2-15 P/Q, disabled TEC/ZSCC, CCSC on | 8 | 100 / 100 | 1.0134393 | passed: -19.693285 | 2.5 / 1.25 | 65 | 25–40 min |
-| L2-16 machine, AVR/governor/steam turbine | 8 | 900 / 6.633245 | 0.9991198 | passed: -0.197564 | 5 / 2.5 | 45 | 45–75 min |
-| L2-17 GFM weak-grid twin | 2.5 | 742 / 0 | 0.9875930 | failed: +100.731659 +/- j359.941514 | requested 2.5 / 1.25 | 65 (not built) | skipped |
-
-L2-13/14/17 retain the M6a/M6b factories unchanged: 1060 MVA, 320/400 kV
-converter winding/external terminal, ratio 0.8 and 640 kV clamped DC. VSE
-H=5, Kd=100, Komega=10; CCVI Rv=0.01, Lv=0.25 with its 200 rad/s second-order
-filter; measurement, PLL, OCC and 200 us Padé 5/5 modulation are unchanged.
-L2-14 retains original Sigma/Delta-energy PI 0.5544/5.94, CCC and compensated
-modulation. No energy-gain scaling or replacement of its corrected triplen
-controller frame is applied. The very slow OCC filter poles (about -0.0006283/s,
-1592 s decay time) remain in the gate. The 8 s measurement candidate relies on
-the native equilibrium initialization, not full slow-filter decay; measured
-baseline drift and window consistency remain mandatory.
-
-L2-15 reuses the actual legacy-mapped P2P receiving converter `c2` through the
-existing test factory, including 1000 MVA, 333/380 kV, 640 kV DC, 30 mH arms,
-P/Q 100 MW / 100 MVAr, NoTotalEnergyControl, NoZeroSequenceCurrentControl and
-CCSC on. This clamped-DC fixture does not qualify the full P2P system.
-L2-16 retains the M3 1000 MVA / 380 kV machine, 900 MW request, original voltage
-request 1.000177992 pu, rt/lt, AVR, governor and steam-turbine parameters.
-
-All grids use X/R=10 at 50 Hz and rated external voltage for SCR. For the
-1060 MVA / 400 kV devices, strong-grid R=1.877428661 ohm, L=0.059760410 H;
-the weak twin scales these by 8/2.5. The 1000 MVA / 380 kV devices use
-R=1.796042128 ohm, L=0.057169797 H. Each AC reference measures DUT current
-alone. The native machine `get_y` is per-unit; its full 2x2 AC-terminal Y is
-converted to SI by Sbase/VLL^2 at the harness boundary, without a source change.
-No DC port, clamp gate or converter AC subblock is assumed for the machine.
-
-The singular KCL descriptor originally reported a finite 7.45e17/s quotient
-for L2-15's algebraic infinity. QZ beta now distinguishes finite poles using
-the same backward-error-scale criterion as the existing independent descriptor
-test. The unchanged strict negative finite-root margin and Nyquist rule are
-retained. Independent KCL elimination gives an ordinary state matrix and
-checks all finite-mode counts and rightmost roots, including the weak-grid
-rejection. L2-17 has two closed RHP roots at the pair shown above; its full
-located spectrum and operating point are in `data/L2-17/stability_rejected.toml`.
-
-The machine's slowest mode is -0.197563788/s (tau=5.06166 s). The next pair is
--0.472166676 +/- j8.7230884/s; governor/turbine and AVR states remain included.
-Settling starts from the existing emitter's 1 s mechanical-control transfer:
-ceil(1+12*tau)=62 s, also exceeding eight decay times from the 2 s tone onset.
-Main and witness windows are **[62,64), [64,66) s**, with 66 s runs. A 1 s
-window is mathematically coherent at 1 Hz; the chosen **2 s windows** provide
-two cycles per window and more low-frequency averaging. Longer windows are
-not required for coherence; actual drift/window gates decide qualification.
-
-Other admitted fixtures keep 2 s onset, [8,9), [9,10) s main windows and 10 s
-runs. All use 20 us sampling, the existing 23 integer tones at 1–1000 Hz
-excluding 50 Hz, 5e-5 pu current per tone and adaptive coherent witnesses.
-All active C **5% / 3 degrees**, floors, conditioning, departure, drift,
-drive/window and amplitude/step gates are unchanged. Native settled-response
-triangle bounds are at most 0.000426 pu voltage / 0.000463 pu current;
-these are predictions, not station acceptance.
-
-One resumable command selects only the four admitted fixtures:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-13 L2-14 L2-15 L2-16 --timeout=18000
-```
-
-Allow **140–230 minutes overall**, with a **300-minute shared deadline**.
-Estimates include finer compensated integration, 66 s machine traces,
-transfer and analysis; no new station timings are claimed. Estimated live
-nodes are below 100; actual native counts must still pass the existing gate.
-Nine projects per admitted fixture normally require six fresh runs and resume
-only matching completed hashes. XML checking can select L2-13..17 explicitly;
-it reports the rejected fixture without reading batch B.
-
-Projects, references, operating points and source pins are in `data/L2-13/`
-through `data/L2-16/`. Gate spectra, preparation evidence and logs are under
-`data/m9b9/`. No station contact, `src/` changes or commits.
-
-Offline on Julia **1.12.7 (repository Manifest)** and **1.10.11**:
-**18,032/18,032 PSCAD suite checks** per version, including **107 new batch-C
-checks** and **59 name-guard checks**. Batch-only XML/rejection checks pass
-**181/181** per version (180 project checks plus the explicit L2-17 rejection).
-All 36 admitted project hashes, 52 retained payload files and 53 producing-source
-hashes per fixture verify. Independent ODE reduction confirms every finite
-mode count and rightmost root; machine synthetic dq recovery passes below
-1e-9 normalized error. No gate or comparison tolerance was changed.
-
-
-## L2-07 diagnosis and L2-16 refinement (M9b-10/11)
-
-L2-07 stored-run diagnosis rejects the turns-ratio scaling hypotheses in the
-measurements, OCC, PLL, voltage feedforward and interface L/R referral. An
-**effective two-EMT-step lag in the exported Delta modulation path** reproduces
-the high-frequency discrepancy: 5 us lag at the 2.5 us base step reduces the
-133–1000 Hz residual to 0.12–0.17%; the independent 1.25 us witness fits 2.5 us
-lag. Delaying only Delta reproduces it; delaying only Sigma does not. The exact
-scheduling stages are not located because compiled EMTDC source was not retained.
-The 11.5% plateau uses the approved Frobenius floor, and the stored witness
-also fails its entry gate. Full audit and numerical evidence: `data/m9b10/`.
-
-Owner decision: **locate the source of each step from a kept build, remove
-avoidable lags, and compensate the inherent one-step lag in the exported
-modulation delay when the model has one**. MMC fixtures wait for that exporter
-change; this settings round does not implement it. L2-17 remains recorded as
-**unstable in Julia**, with roots +100.731659 +/- j359.941514 /s, and is skipped
-without tuning.
-
-Owner station evidence for L2-16: tier A and half-amplitude passed; C error is
-0.02–0.1% through 100 Hz and rises approximately with frequency squared to
-5.52348% at 1000 Hz, above the active 5% limit. The 5-to-2.5 us witness fails:
-1.61323% Frobenius / 3.54330% entry change against the unchanged 1% gate.
-This is retained as time-step evidence, not qualification.
-
-L2-16 is re-prepared at **2.5 us base / 1.25 us witness**. All runs remain
-**66 s**, with **[62,64), [64,66) s** windows, **2 s** window duration,
-**20 us** sampling, 2 s tone onset, the original 23 coherent tones and 5e-5 pu
-amplitude. Physical parameters, operating point, complete-network gate and all
-approved tolerances/refinement gates are unchanged. The entire previous tree
-is archived at `data/archive/m9b11/L2-16/`; new project hashes differ and no
-completed old run is eligible for reuse.
-
-Allow **70–90 minutes**, with a **120-minute deadline**, for six fresh runs,
-transfer and analysis. The old workflow took 47.52 minutes, including 21.94
-minutes of native runs; doubling integration work with unchanged output volume
-predicts about 69.46 minutes before margin. This is a planning estimate.
-From the repository root, with the Julia 1.10.11 harness environment:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L2-16 --timeout=7200
-```
-
-The command resumes only matching completed new-project runs. Preparation and
-offline checks perform no station operation. Evidence and logs: `data/m9b11/`.
-
-Offline on Julia **1.12.7 (repository Manifest)** and **1.10.11**:
-**18,033/18,033 PSCAD suite assertions**, **59/59 standalone name-guard
-assertions**, and **45/45 L2-16 project XML assertions** per version. Archived
-inventory hashes, all nine changed project hashes and all 53 fresh producing-source
-pins verify. Native reference and operating-point bytes are unchanged.
-
-## Converter interface compensation and re-validation (M9b-17)
-
-The owner-kept seq4b builds prove **exactly one inherent measurement-to-source
-step** for L2-07 MMC GFL, L2-01 TLC, L2-13 MMC GFM and L2-14 LEC/compensated MMC.
-All six initialized capacitor snapshots precede SIGMA/compensated MOD and are
-committed from the applied physical states after source preparation. Those
-states remain fixed through the solve/DSOUT, so their next-pass history matches
-the acquired arm currents. No extra capacitor-to-Sigma/MOD step remains; the
-owner's optional residual-lag calculation is unnecessary. Detailed native line
-references and the 57 source hashes are under `data/m9b17/`.
-
-Stage 2 exports **tau_model - dt** for positive delays with tau_model >= dt;
-shorter positive delays are rejected. Zero model delay keeps zero explicit
-transport and the unavoidable dt. Zero residual uses unity. TLC/uncompensated
-MMC update carrier rotation and equilibrium buffer initialization together;
-compensated MMC updates its abc insertion queue without a dq phase rotation.
-Controller formulas, gains, initial operating points, electrical values, probes,
-0.2 s divisor hold and every approved tolerance/gate remain unchanged.
-
-L2-01..15 are freshly prepared with the frozen settings. Entire old fixture
-folders are retained at `data/archive/m9b17/L2-xx/`, including completed runs and
-status/evidence. New ledgers are empty and old runs are not eligible for reuse.
-L2-16 remains as prepared and L2-17 remains Julia-unstable, skipped without tuning.
-
-The first queue item is `data/m9b17/timing/converter_timing.pscx`: five grounded
-source nodes, 20 ms duration, 10 us integration/sampling, with zero, one-step,
-40 us and noninteger 25 us model-delay branches. Its sampled transport comparison
-checks for an extra interface/library step, including fractional timing. A
-failure stops the queue before L2. Its 1e-6 kV timing check is an isolated
-realization check; the approved scientific fixture gates are unchanged.
-
-From the repository root with the existing station configuration:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/run_converter_validation.jl --timeout=43200
-```
-
-This one resumable queue runs the timing witness, then L2-01 through L2-15 in
-order. It shares a **12-hour deadline** and resumes only verified completed
-new-project runs. Expected total: **6–10 hours**, including witness/overhead.
-Per fixture: L2-01..04/06 15–25 min each; L2-05 30–45 min; L2-07..10/12/13/15
-25–40 min each; L2-11 35–55 min; L2-14 45–75 min. Timing witness: 2–5 min.
-Active source pins include common and energy modulation emitters.
-
-M4–M6 operating-point acceptance, 22 converter cases (the existing full command
-remains available without the selection flag):
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/acceptance.jl --converters
-```
-
-Allow **90–150 minutes** for this separate acceptance command. Both classic and
-builder cases, source-ramp variants, physical DC termination and M6b's 1 us step
-are retained. These are estimates; native timing and A/C/refinement acceptance
-are pending owner execution. No station connection occurs during preparation.
-
-## Frozen settings
-
-| Fixture | Applicable injection / response | Grid | Base / half step | Full run / windows | Original station estimate |
-|---|---|---|---|---|---|
-| L1-01 RL | d,q; Y 2x2 | 24 | 2 / 1 us | 3 s; [1,2), [2,3) | accepted evidence reused |
-| L1-02 DC RLC | differential voltage per outer port; Y 2x2 | 24 | 2 / 1 us | 3 s; [1,2), [2,3) | accepted evidence reused |
-| L1-03 AC OHL | a,b,c voltage at each port; Y 6x6 | 24 | 2 / 1 us | 3 s; [1,2), [2,3) | 11 min |
-| L1-04 AC cable | a,b,c voltage at each port; Y 6x6, corrected side-2 meter | 24 | 2 / 1 us | 3 s; [1,2), [2,3) | 11 min |
-| L1-05 DC cable + OHL | differential voltage per outer port; Y 2x2 | 24 | 2 / 1 us | 8 s; [6,7), [7,8) | 15 min |
-| L1-06 YY | d,q voltage at each port; Y 4x4 | 23 | 2 / 1 us | 3 s; [1,2), [2,3) | accepted evidence reused |
-| L1-07 Dyn11 | d,q voltage at each port; Y 4x4 | 23 | 2 / 1 us | 3 s; [1,2), [2,3) | accepted evidence reused |
-| L1-08 IEEE9 | a,b,c shunt current at Bus1 and Bus5; direct Z, separate local 3x3 blocks | 24 | 2 / 1 us | 3 s; [1,2), [2,3) | 40 min |
-
-Layer 1 uses retained, hash-verified station evidence. No layer-1 re-run is
-requested by the L2 preparation. The historical settings above describe the
-original workflow; later settling and resonance settings are recorded below.
-
-The 24-tone coherent grid is
-`[1,2,3,4,6,7,10,13,18,24,32,42,50,56,75,100,133,178,237,316,422,562,750,1000]` Hz.
-The balanced AC dq 23-tone grid omits 50 Hz, which would create an abc DC
-sideband. **abc includes 50 Hz**: its tones are physical phase frequencies, with
-no Park transformation of perturbations. Nominal voltage alone follows the fixed
-50 Hz waveform. All source ramps are zero; onset is 0.5 s. Schroeder cosine phases
-are `-pi*k*(k-1)/N` in absolute time. Sampling is 10 us: **100 samples/period at
-1000 Hz** in abc/DC (95.24 at the balanced dq highest sideband, 1050 Hz).
-The base step is below the conservative light-travel bounds: OHL 83.39 us,
-cable 166.78 us and IEEE9 253.51 us; L1-05 shortest cable bound is 83.39 us.
-Exact per-tone amplitudes, phases and bases are frozen in each manifest. Amplitudes
-are bounded from the native reference to keep estimated departure below 0.004 pu.
-
-AC voltage bases are the solved **phase-peak kV**; phase-peak current bases are
-`2000/(3*Vbase)` kA, corresponding to 1000 MVA total / 333.333 MVA per phase.
-All a/b/c coordinates at a port use that same base. DFT peak phasors are recorded
-in kV/kA, so their ratio is SI S or ohm without an extra sqrt(2) or factor of three.
-DC bases remain pole-to-pole kV and `1000/Vbase` kA.
-
-## Measurement and qualification
-
-A still calls `compare_operating_point` unchanged. C subtracts the zero-amplitude
-project with identical modules, signal paths and summing junctions. Coherent
-rectangular windows use `(2/N)*sum(x(t)*cis(-2*pi*f*t))` directly; no FFT library.
-Probe orientation comes from the exact project's metadata. Y uses inward
-terminal currents; direct network Z uses current leaving the shunt source.
-The abc scans retain every phase sample, including zero sequence. Two-port
-references call native `eval_abcd(element.element_model,j2*pi*f)` and `abcd_to_y`.
-
-IEEE9 keeps every original source, transformer, line, load and connection in
-PSCAD. Its Julia phase twin copies each physical model, setpoint and limits,
-sets `transformation=false` with three pins per terminal, and replays every
-terminal's original bus incidence for a/b/c (grounds have zero voltage).
-Preparation asserts identical model representations and exact terminal-to-bus
-mapping; tests also compare each untransformed ABCD against the original physical
-model. The IEEE9 phase reference imposes the emitted YY cores' floating-neutral KCL,
-retains external capacitor paths and includes the documented near-ideal terms.
-Native `make_y` assembles the other elements; ideal source buses are clamped.
-Six shunt-current runs recover
-the full 6x6 transfer matrix by **V=Z*I**, without inverting a measured Y. Acceptance
-scores the Bus1 and Bus5 **3x3 local blocks separately**; cross-bus entries remain
-in the measured evidence. Bus1's ideal-source Z=0 tests clamping only.
-
-Balanced elements retain native dq / differential-DC references. For each
-applicable comparison, C keeps **2% complex error**, **0.02 pu entry floor**,
-**0.1 Frobenius floor**, and **2 degrees** for reference entries >=0.02 pu.
-Input conditioning <=100, baseline drift <=1e-3, window change <=1%, drive
-magnitude error <=1%, clamped voltage departure <=1e-6 pu, and input/output
-departures <=0.01 pu remain mandatory. abc baseline drift checks both window
-means and the 50 Hz operating phasor, so zero-mean AC signals cannot hide drift.
-
-One worst-error axis repeats at half amplitude (response change <=2%). A matching
-half-step baseline plus that axis repeat at 1 us (change <=1%), using the worst
-frequency and 1000 Hz (750/1000 if worst is 1000). Only those witnesses execute.
-Two coherent windows have duration `max(0.1,1/gcd(50,frequencies))` s, starting
-no earlier than 0.8 s, or **6 s for L1-05**. Both refinements use the approved
-entry/norm floors. Fixture `passed` requires A, the applicable C and both gates;
-the asymmetric fixtures' **dq approximation** is informational and never changes
-acceptance or tolerances.
-
-L1-05's retained baseline drift was 0.0241505. A damped tail fit over 0.6–3 s
-(10 ms decimation) gives `alpha=2.1 1/s`, `beta=0.8 rad/s`, envelope time constant
-**0.476 s**, RMS current residual **4.60e-5 kA**. Chosen windows [6,7), [7,8)
-have predicted drift 9.27e-7; that extrapolation sizes the run, and the measured
-<=1e-3 gate remains authoritative. DC line/cable fit settings are unchanged.
-The fitted current asymptote is approximately 0.86126 kA versus Julia's 0.88201 kA,
-so settling alone may leave a tier-A/model discrepancy; no physics is adjusted.
-The `settled_` and `abc_` project/run keys preserve all original projects and traces.
-
-## dq approximation (informational)
-
-`transformation_dq` projects phase ABCD at s +/- j*omega0; it is exact for
-symmetric elements. The untransposed circuits retain phase couplings which a
-fixed dq LTI model omits, including +/-2*omega0 sidebands. This is a documented
-modelling property, not a pass/fail item. The retained old dq comparisons and
-sideband evidence are recorded in `dq_approximation_table` in the manifests.
-
-| Fixture | Max dq error | Sideband ratio | ABCD-first error | Phase-Y-first error |
-|---|---|---|---|---|
-| L1-03 | 0.0050220685 | 0.042917057 | 0.0050220685 | 0.00072056716 |
-| L1-04 | 0.030097387 | 0.11580194 | 0.030097387 | 0.021688525 |
-| L1-08 | 0.073918068 | 0.25714039 | 0.073918068 | 0.062930748 |
-
-The sideband ratio is the existing maximum off-grid +/-100 Hz output norm divided
-by the maximum driven-band output norm, with its 0.1-times-drive floor. For single
-elements the second ordering projects phase Y after ABCD inversion. For IEEE9 each element's projected phase Y is converted back with the native
-`y_to_abcd` (round-trip equality asserted), cached at that single frequency in
-the existing internal `Impedance` model, and reduced by native `make_z` with
-identical pins and unchanged ideal sources. This diagnostic compares element-wise
-Y projection against the native element-wise ABCD projection, without a new
-physics kernel or modifying the reference circuit used for abc acceptance. Neither ordering receives
-an acceptance status. The scans validate sampled bins; unresolved narrow
-inter-bin resonances remain a coverage limitation.
-
-Dyn11 secondary voltage leads +30 degrees. In positive-sine-q coordinates the
-rotation is `R=[cos(phi) sin(phi);-sin(phi) cos(phi)]`. Both voltage and inward
-current rotate, preserving power. Both ports here use the same global 50 Hz
-frame; the solved secondary angle enters the voltage clamp, and native `get_y`
-contains the vector-group rotation. No additional secondary rotation is applied
-only to voltage. A secondary local frame would transform the **whole** matrix
-with `T=diag(I,R)` on both row and column coordinates.
-
-## Component authority and fairness ledger
-
-| Added construction | Existing field/port authority |
-|---|---|
-| Controlled instantaneous AC voltage | `emitters/tlc.jl:tlc_electrical_canvas`, saved TLC sources 3383-3388,3452-3529 |
-| Balanced controlled DC pole voltages, Grnd=0/Cntrl=1 | `emitters/sources.jl:dc_source!`, the TLC controlled source, `plan.jl:component_ports(source_1)` |
-| Shunt controlled current, upper A positive injection | TLC canvas and saved TLC 5589-5630; station sign witness in `tlc.jl:172-175` |
-| Tone/gate/gain/sum, dq->abc, merge, taps and exports | Existing `blocks.jl:lower!`, `dq_to_abc_module`; saved TLC dq2abc 1851 |
-| Module parameters and natural/signal ports | `ModuleDefinitionPlan`, existing writer parameter/port API |
-| Breakout, xnode, ammeter, datalabel/PGB | Existing TLC/probe/impedance emitters; no new master fields |
-
-Retain raw geometry, sheath/ground elimination, rational fit settings, YY
-regularization and PF/T-model differences. The DC frequency reference includes
-the exporter's two 10 Mohm midpoint resistors as their 20 Mohm differential
-equivalent. Native `Source` ABCD equations are ideal, matching IEEE9 voltage
-clamps; `eval_y(Source)`'s numerical regularization is not substituted for them.
-Positive resistance and source/loaded termination justify the registered passive
-stability gate; no Nyquist scan or active-device inference is performed.
-
-Every kept payload file has size/SHA256 and provenance in its fixture manifest.
-The manifest excludes its own recursive hash; its size/hash are printed after
-writing. Original manifests, raw runs and unused prepared candidates are retained.
-Artifacts remain gitignored; decide on committing them from measured sizes later.
-
-## Offline checks
+`--timeout` is a finite positive workflow budget in seconds, shared across all selected fixtures.
+Multiple keys can follow `run_station.jl`. Completed native runs resume only when project, inputs,
+runner, outputs and solver identity match. An interrupted simulation restarts; completed axes
+remain reusable. Analysis runs again after reuse. Every measurement build must have fewer than 100
+live nodes, independently of the licence cap.
+
+Preparation solves power flow and checks passive dissipativity or active-network stability. It
+writes baseline, driven, half-amplitude and half-step projects with references, solved points and
+manifests. Changed physical projects/references are rejected rather than replacing retained native
+data. Coupled-circuit preparation also checks relevant harness sources against HEAD before writing
+and refuses existing fixture directories. Use a committed implementation with the corresponding
+stored-data preparation procedure.
+
+For local checks without native execution:
 
 ```sh
 julia --project=test/manual/pscad/validation -e 'using Test, PowerImpedance; include("test/pscad/runtests.jl")'
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/check_projects.jl
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/check_projects.jl "$fixture"
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/reanalyse.jl "$fixture"
 ```
 
-The suite includes full 1x1/2x2/3x3/4x4/6x6 coherent synthetic recovery to 1e-9, all probe
-constructions, DC connectivity/pole scaling, direct-Z input selection, Dyn11
-rotation of both voltage/current coordinates, refinement limits, manifest round
-trip, native completed-run reuse and the manual-script name guard. XML readback
-checks every written variant against its matching baseline and declared settings.
-
-## Probe directions and stored-data diagnosis
-
-Terminal-current metadata stores `into` / `out` relative to the element. Passive
-branches retain direction 1 → 2; Y extraction negates outward terminal currents.
-Direct Z retains outward shunt-source current as network injection. AC-cable
-side 2 now follows the branch convention; historical L1-04 runs remain recorded
-as both-inward. Every native run ledger retains its project hash and probe
-metadata, and offline analysis reads those records rather than current emitters.
-
-`reanalyse.jl L1` reads existing OUT/INF files locally, checks the saved project
-hash, uses the approved tolerances, and writes `analysis/probe-orientation/`.
-It never calls native compute. Original comparisons and native runs are retained.
-The corrected analysis is separate from current-project station status; L1-04's
-historical dq evidence remains informational; the current abc projects use the corrected cable meter.
-
-`data/orientation-regression/regression.tsv` lists every re-export comparison.
-Only L1-04's side-2 meter node-label connections change; nonsemantic XML ids and
-export revision timestamps are excluded from that comparison. Per-frequency and
-per-entry diagnosis tables are stored under each fixture's analysis directory.
-
-## Run 2 offline diagnosis (M9a5)
-
-The abc drift gate already measures **DC window means and 50 Hz phasors**, not
-instantaneous sine samples. Their separate values now appear as
-`baseline_dc_drift` and `baseline_fundamental_drift`; the 1e-3 gate is unchanged.
-Stored OHL/cable baselines have decaying DC offsets; their dq window averages
-reject these oscillatory terms after Park projection. Numerical C agreement
-alone therefore cannot clear the measurement/qualification gate.
-
-The original IEEE9 copied-model phase reference wrongly treated the YY stars
-as ground-referenced. Emitted `xfmr-3p2w` internal star points float (mapping doc
-232–237 and the emitter); the copied model/terminal hash proof did not test this
-hidden grounding. The corrected private reference imposes neutral-current KCL
-using `Q=I-11'/3` on the winding paths, preserves externally grounded Ct and
-bridging Cs paths, and includes Xl=1e-4 pu / Im1=1e-3 percent (symmetric leakage
-split). Each winding's positive/negative sequence response is unchanged exactly
-when regularization is excluded. The corrected 50 Hz Bus5 positive-sequence Z is
-4.195817+j39.754151 ohm versus native dq at s=0, 4.194747+j39.757768 ohm: 9.43e-5
-relative difference, consistent with the untransposed dq approximation.
-The corrected C maximum is 0.0318756; it still fails 2%. Original comparisons and
-the grounded reference are retained under `analysis/m9a5/`. The corrected worst
-axis/band is p2_c at 316 Hz; old p2_a, 2/1000 Hz witnesses cannot qualify that
-new selection. No additional runs occur during this diagnosis.
-
-Line-constants matrix dumps, reports and fitted models were **not collected**.
-Needed files in the completed run's `scan/generated.gf81/` build directory:
-L1-04 `line.out`, `line.clo`; L1-05 `line.out`, `line.clo`, `ohl.out`, `ohl.tlo`.
-Auxiliary `<name>_zm.out`, `_zp.out`, `_ym.out`, `_yp.out` hold per-length matrices
-in ohm/m and S/m (possibly in the constants process working directory). `.clo`
-and `.tlo` contain Fre-Phase poles/residues, constants and propagation delays
-needed to evaluate the fit at DC/50 Hz. Names/formats are verified against local
-retained PSCAD artifacts, not inferred from waveform `scan_*.out` files.
-Constants-vs-fit attribution is unresolved until those existing artifacts are
-available; native matrices and stored-trace evidence are in `analysis/m9a5/`.
-
-M9a6 offline attribution and re-run preparation:
-
-- The retained `line.out` / `ohl.out` contain full per-length phase Z/Y at 50 Hz.
-  The Fre-Phase `.clo` / `.tlo` poles, residues, real Yc constants and delayed
-  propagation groups are evaluated directly at DC, 50 Hz and the scan tones;
-  numeric results and format provenance are under `data/m9a6/`.
-- L1-03 and L1-04 now use `abc_settled`: coherent one-second windows at 5/6 s
-  and 20/21 s respectively, with 7/22 s durations. No source ramp, tone,
-  physical parameter, time step or acceptance threshold changes. Half-step
-  witnesses retain the same late settle time. Previous abc projects/runs are
-  retained under their original keys and hashes.
-- L1-08 retains all original abc axis runs. The pending witnesses are `p2_c`
-  at half amplitude on the original grid, and baseline plus `p2_c` at 1 us on
-  316/1000 Hz. The runner still chooses the worst column/band from comparison.
-- L1-05 needs no additional tier-C run: simulation follows the saved fit.
-  Its eight-second tier-A current must not be labelled the fit's DC limit:
-  the saved cable fit contains a 260 s characteristic-admittance pole and
-  its true DC limit differs substantially. No DC fitting settings changed.
-- Expected remaining station time: OHL 14 min, cable 34 min, IEEE9 6 min;
-  54 min total based on stored run times scaled by simulated duration/step,
-  with overhead allowance. The explicit multi-fixture command has a shared
-  60 min deadline and resumes only matching completed project hashes:
-
-```sh
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L1-03 L1-04 L1-08
-```
-
-The gitignored harness Manifest must be instantiated with the Julia version
-used for that command. Diagnostic build-only copies are at
-`local/pscad-exchange/diag/lc-l104/matrices/l1_04.pscx` and
-`local/pscad-exchange/diag/lc-l105/matrices/l1_05.pscx`. Only existing `Output`
-fields change from 0 to 1 (one cable / cable plus OHL); neither was built here.
-The matrices across the fit grid are needed to separate low-frequency
-constants differences from fitting error. These diagnostic builds are separate
-from the timed waveform command above.
-
-M9a9 current projects and station budgets:
-
-The default `YMaxE`/`AMaxE` is now 0.02% for all AC/DC overhead lines and cables.
-The entire previous L1-03/04/05/08 directories, including completed/incomplete
-runs, projects, manifests and comparisons, are retained at
-`data/archive/m9a9-0.2/<fixture>/`. New active projects have different hashes;
-old runs are not reused. Native references, frames, amplitudes, coherent windows
-and source paths are retained. Refinements still select the new worst axis/band.
-
-Use separate invocations. Observed old workflow times (including transfer and
-analysis) were 23 min for OHL, 36 min for cable before its half-step witnesses,
-13 min for DC, and 33 min for IEEE9. Increased fit order can add work; these
-estimates include all required refinement runs and larger deadline margins:
-
-| Fixture | Expected full workflow | Deadline | Command argument |
-|---|---:|---:|---|
-| L1-03 | 30–40 min | 60 min | `L1-03 --timeout=3600` |
-| L1-04 | 60–75 min | 120 min | `L1-04 --timeout=7200` |
-| L1-05 | 20–30 min | 60 min | `L1-05 --timeout=3600` |
-| L1-08 | 45–60 min | 90 min | `L1-08 --timeout=5400` |
-
-```sh
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L1-03 --timeout=3600
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L1-04 --timeout=7200
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L1-05 --timeout=3600
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L1-08 --timeout=5400
-```
-
-`--timeout` is a finite positive workflow budget in seconds, shared if multiple
-fixtures are requested; it is private manual-script syntax, not a package API.
-The same commands resume matching completed **new-project** runs after an
-interruption. The gitignored harness Manifest must be instantiated with the
-Julia version used. The tightened targets improve the initial tier-C band;
-the documented true-DC cable fit limitation and all acceptance gates remain.
-
-## Cable reference refresh and resolved resonances (M9a-11)
-
-`reanalyse.jl L1-04 --refresh-reference` (and `L1-05`) archives the previous
-manifest, operating point, reference and analysis, regenerates Julia's power-flow
-and admittance references, and compares the retained SI measurements. It reads
-baseline output for tier A, preserves recorded probe orientations and measured
-refinement gates, and verifies every prepared project hash before and after.
-It performs no station operation and does not regenerate native projects.
-
-A resonance qualifies only when **both** curves have a bracketed magnitude peak
-(or admittance dip), both half-power crossings, at least five samples inside,
-and at least six grid intervals across the half-power width. Magnitude is the
-local port-matrix Frobenius norm. A three-point quadratic power interpolation
-estimates the centre; linear interpolation determines the half-power crossings.
-A dip uses reciprocal admittance magnitude. Unresolved curves retain the
-ordinary complex rule and cannot qualify a resonance measurement.
-
-Inside either qualified half-power band, comparison uses centre-frequency error
-<= max(1% of Julia centre, one local grid interval) and relative half-power-width
-error <=10%. Outside both bands the original complex, magnitude and phase
-checks apply. Point errors remain recorded inside the bands as information.
-`comparison_C_qualified.tsv` records `comparison_rule` on every point; the
-manifest retains both fitted bands, resolution evidence and original complex
-results. Measurement and amplitude/time-step refinement gates still apply.
-
-L1-08 has an additional **Bus5-only**, unchanged-topology current-injection scan:
-312–322 Hz every 0.25 Hz, excluding the completed 316 Hz tone (40 extra bins).
-The completed 316 Hz local Z is merged for resonance qualification, without a
-repeat of its original injections. Three new phase injections and a matching
-zero-amplitude baseline measure local 3x3 Z directly. Coherent windows are
-[2,6) and [6,10) s (4 s each); source injection begins at 0.5 s. The normal step
-is 2 us; sampling is 64 us (48.5 samples per 322 Hz period). One phase-a
-half-amplitude repeat and a matching half-step baseline/phase-a repeat cover
-only those extra bins. Exact amplitude and hashes are in `resonance_scan`.
-Existing base-band amplitude/step witnesses are reused by project hash.
-
-Run from the repository root, with the harness environment instantiated using
-the same Julia version:
-
-```sh
-julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl L1-08 --timeout=7200
-```
-
-Allow **45–75 minutes** (120-minute deadline), including retained-output loading,
-seven new runs and refinement analysis. Completed runs resume by matching hash.
-Existing base-band failures outside the resolved resonance keep their ordinary
-rule; qualification of the 317 Hz peak alone does not waive them.
-
-Reference-only results after 4ac59bd:
-
-| Fixture | Tier A | Tier C maximum Frobenius error | Refinement | Projects |
-| --- | --- | --- | --- | --- |
-| L1-04 | 7/7 pass | 0.842910% (all 864 entries pass; maximum phase 0.97656 degrees) | Existing gates pass | All 25 hashes unchanged |
-| L1-05 | 12/12 pass | 0.303155% (all 96 entries pass; maximum phase 0.37478 degrees) | Existing gates pass | All 13 hashes unchanged |
-
-The old evaluations are under each fixture's `history/m9a11-*`; raw runs are
-shared and remain unchanged. Stored witness axes/bands stay fixed when only a
-Julia reference changes. Source pins for the remaining fixtures are refreshed
-only after their native references verify unchanged, with the prior manifest
-retained in history.
-
-IEEE9's current data also have seven failed entry rows at 237, 562 and 1000 Hz,
-outside the prepared 317 Hz band. These stay subject to the complex rule. The
-new resonance runs therefore qualify the peak method; they do not establish
-that all of L1-08 passes. Detailed reference results and those unchanged rows
-are retained in `data/m9a11/evidence.json`.
-
-## Sampling and output volume (M9a-12)
-
-New resonance plans choose the largest multiple of the integration step that
-also divides every window boundary, window duration and run duration, with at
-least 40 samples per period at the highest measured sideband. dq includes
-f+50 Hz; abc includes the measured nominal 50 Hz baseline fundamental; DC uses
-the injected band. Completed base-band projects retain their recorded sample
-intervals and hashes. Integration steps and the approved comparisons do not
-change.
-
-For the 312–322 Hz abc scan, 80 us would give only 38.8 samples per 322 Hz
-period. **64 us** meets the band and coherence constraints for both 2 us and
-1 us integration: each four-second window has **62,500 samples** and each
-10-second run has **156,251 output rows**, including both endpoints.
-
-Only **Bus5 voltage a/b/c** and **injected current a/b/c** are recorded. The
-harness removes unused Main recorder assemblies (`master:pgb` plus their
-private control label and wire, constructed by
-`src/PSCAD/emitters/probes.jl:output_probe!`). Electrical meters, connections,
-line definitions and control modules remain intact. No new master field is
-used. Base-band projects retain every tier-A channel.
-
-| Run group | Count executed | Integration step | Sample interval | OUT files/run | Rows/run | Expected OUT bytes/run |
-| --- | --- | --- | --- | --- | --- | --- |
-| Resonance baseline and a/b/c injections | 4 | 2 us | 64 us | 1 | 156,251 | 26,406,493 (~26.4 MB) |
-| Half-amplitude phase-a injection | 1 | 2 us | 64 us | 1 | 156,251 | 26,406,493 (~26.4 MB) |
-| Half-step baseline and phase-a injection | 2 | 1 us | 64 us | 1 | 156,251 | 26,406,493 (~26.4 MB) |
-
-Sizes are estimates from the retained fixed-width PSCAD OUT format: six signal
-columns plus time, 169 bytes per row including CRLF and a 74-byte header. INF,
-console/build logs and projects are additional small files. The seven expected
-OUT files total **184,845,451 bytes (~185 MB)**. The old 102-signal, eleven-file
-resonance projects would produce about 2.72 GB per run at 10 us; the failed run's
-large OUT files were not retained locally, so this old size is an estimate,
-not a measured size. Its console records 1,000,001 rows in each of eleven files.
-
-Old resonance projects/manifest are archived under `L1-08/history/`; native
-runs and failure evidence stay at their original hashes. Changed resonance
-projects must run again; completed base-band projects and witnesses resume.
-The unchanged 60-second output wait remains a separate robustness item.
-The command above has a 120-minute deadline; **45–75 minutes** is the estimate
-for the seven runs, retained base-band loading and comparison. Integration
-work is unchanged, so the output reduction does not imply the same reduction
-in simulation time.
-
-
-## M9c-2 preparation: realization comparison, settling and DC pre-charge
-
-The original active C rule (5% complex / 3 degrees), 0.02/0.1 floors,
-qualification and all quality gates are unchanged. Plain Julia C remains
-reported with its own status and controls the original fixture status. Zero-model
-modulation-delay converter fixtures additionally report **Julia + one inherent
-interface step**, using exact `exp(-s dt)` inside modulation feedback with native
-carrier corrections. This reference is frozen separately; it does not multiply
-terminal Y by a phase factor. Its rows/status and the plain status are both in
-the fixture summary. Neither reference can waive amplitude/step/window failure.
-Positive-delay models and the machine do not receive this comparison.
-
-L2-07–10 main windows are now **[16,17), [17,18) s**, duration **18 s**. Tone onset
-remains 2 s, amplitude 5e-5 pu, dt 2.5 us / witness 1.25 us and sampling 20 us.
-Sizing uses each complete-network native rightmost root, a conservative 1 pu
-transient normalized by the tone and unchanged entry floor, and target 0.1%
-(tenfold below the window gate). The slowest root is L2-08's -1.99183483/s;
-at 16 s the estimated normalized tail from onset is below 7.8e-7. The pole
-estimate does not bound residues or unmodelled sampled/transformer startup modes;
-actual window and refinement measurements still determine qualification.
-High-band witnesses start at 16 s and normally end at 16.2 s; adaptive lower
-bands retain whole common periods and may end later. No tolerances changed.
-
-L2-11 now has temporary pre-charge sources at its solved +/-400 kV DC poles,
-closed through series breakers until 0.2 s, then released with its resistor and
-Vdc controller still live. The final circuit and native reference are retained.
-The exporter rule also affects L2-05; M9c-3 archives its previous evidence under
-`data/archive/m9c3/L2-05/` and prepares fresh projects with the same frozen settings.
-The new native startup/release remains pending station execution.
-
-L2-01's finer-step variant is separate at `data/L2-01-1p25us/`: **1.25 us base /
-0.625 us witness**, 20 us sampling, original [8,9), [9,10) s windows and 10 s main
-runs. Its original 2.5 us folder and failed rows remain intact. L2-07 through
-L2-15 old trees are retained under `data/archive/m9c2/`; no old run is reused.
-New ledgers pin exporter/harness source hashes and start with no run records.
-
-The isolated timing witness is under `data/m9c2/timing/`. Fractional residuals
-round to nearest step, half-step ties upward: dt=10 us, model=25 us requests
-15 us residual and realizes 20 us, hence **30 us total** (5 us quantization
-error). Its expected response is that integer sampled shift; it is no longer
-compared to a fractional linear blend. It runs first and stops the queue if its
-unchanged voltage-error gate fails.
-
-One resumable station command (existing station configuration; Julia 1.10.11):
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c3(timeout=43200.0)'
-```
-
-Order: timing witness; L2-05; L2-01 finer-step variant;
-L2-07,08,09,10,11,12,13,14,15; M4–M6 converter acceptance (`--converters`, 22 cases).
-Expected times: witness 2–5 min; L2-05 30–45 min; finer TLC 30–45 min;
-L2-07–10 **40–65 min each**; L2-11 35–55 min; L2-12/13/15 25–40 min each;
-L2-14 45–75 min; acceptance 90–150 min. Total **467–755 min (about 8–13 hours)**.
-The shared **12-hour** deadline covers timing and L2; the final acceptance subprocess
-uses the same Julia version, active project and inherited station configuration,
-with its existing per-run timeouts. Timing/L2 resume hash-matching completed runs;
-acceptance creates fresh exports and runs on each invocation. This is preparation only;
-no new native result or passing status is claimed. All runs must report <100
-live nodes (L2-11's conservative estimate increases from 65 to 67).
-
-## M9c-6: MMC amplitude sizing and final queue
-
-The owner approved larger current-drive amplitudes for L2-07 through L2-15.
-Each amplitude targets a **0.0045 pu** maximum baseline-subtracted terminal
-voltage departure in the existing coherent main windows, predicted from the
-native Julia converter-plus-grid admittance and the unchanged Schroeder tones.
-The combined injected voltage waveform must exceed **100 V RMS** (1000 times
-0.1 V noise) on each driven axis. This is an aggregate waveform criterion;
-individual low-frequency tone responses are smaller and are tabulated separately.
-Predicted converter-current departures are checked against the unchanged 0.01
-gate. Predictions size the runs; measured departure, window, amplitude and step
-gates still decide qualification. The half-amplitude witness remains mandatory.
-
-Per-fixture settings, predictions and offline checks are in `data/m9c6/report.md`
-and `amplitudes.toml`. Complete old fixture trees are retained at
-`data/archive/m9c6/L2-07` through `L2-15`; fresh ledgers contain no old runs.
-Native references and operating points are retained byte-for-byte. Integration,
-sampling, onset, windows, durations, circuit, fitting targets and all approved
-gates remain unchanged. Main and half-step drives use the new per-fixture
-amplitude; the half-amplitude drive uses exactly half that value.
-
-From the repository root, using the existing station configuration:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c6(timeout=43200.0)'
-```
-
-Order: **L2-07, L2-08, L2-09, L2-10, L2-11, L2-12, L2-13, L2-14,
-L2-15, then M4–M6 converter acceptance (`acceptance.jl --converters`, 22 cases)**.
-The completed timing and TLC checks are omitted. Expected total **405–660 min
-(6 h 45 min–11 h)**: GFL 07–10 40–65 min each; 11 35–55 min;
-12/13/15 25–40 min each; 14 45–75 min; acceptance 90–150 min.
-The 12-hour deadline covers L2; acceptance uses its existing per-run timeouts.
-L2 resumes only hash-matching fresh runs. Acceptance creates fresh exports/runs
-on each invocation; interruption there restarts acceptance. No station contact
-occurs when loading the harness or preparing these settings.
-
-## M9c-7: crash correction and bounded settling check
-
-The conducting-label voltage emitter overwrote its pole-loop index with a
-component index, tagging both DC voltage channels as N. The signals and
-circuit are present; the fix restores the P/N metadata. L2-11's electrical
-projects and native baseline are retained, with corrected metadata and an
-archived prior manifest. L2-12–15 retain their projects/settings; only source
-pins/history are refreshed. The pre-charged M5 Vdc pair, M7 P2P classic/builder/
-overhead-line builder, L2-05 and L2-11 are checked offline for P/N pairs and DC
-operating-point comparison. No comparison gate is relaxed.
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c7(timeout=43200.0)'
-```
-
-Order: converter acceptance (`--converters`, 22 cases), L2-11,12,13,14,15,
-then one L2-07 baseline/d-axis settling experiment. Fixture exceptions record
-`run_or_analysis_failed` and their error, then continue. Acceptance failure is
-recorded in `data/m9c7/acceptance.toml` and also permits the rest of the queue.
-Interrupts still stop execution. L2 and experiment native runs resume matching
-completed projects; the acceptance subprocess creates fresh exports/runs on
-each invocation.
-
-The separate experiment at `data/m9c7/L2-07-settling` has exactly **two 60 s
-runs**, unchanged 2.5 us integration, 20 us sampling, 2 s onset, original M9c6
-amplitude and tone phases. Three late windows **[48,52), [52,56), [56,60) s**
-are compared with three early windows [8,12), [12,16), [16,20) s. Every window
-is coherent for all integer tones. Directional V/Idrive and I/Idrive, both
-adjacent norm/entry changes and baseline/departure/drive quality are retained.
-Both late pairs must meet the existing 1% window rule. This is a bounded
-settling diagnosis, with no full Y identification or fixture qualification.
-Persistence at 60 s cannot establish an asymptotic limit cycle.
-
-The M9c6 large-amplitude station result rejects M9c5's additive-noise
-explanation for the persistent window inconsistency. No further amplitude,
-controller, step or gate change is made. Expected total **215–365 min
-(3 h 35 min–6 h 5 min)**: acceptance 90–150; L2-11 20–30; L2-12/13/15 15–30 each;
-L2-14 30–50; bounded experiment 30–45. The 12-hour shared deadline starts
-after acceptance. M9c-7b verification is restricted to the PSCAD suite, name
-guard and affected XML on Julia 1.12.7; full package testing belongs to the owner.
-
-## M9c-8: fresh pending work at d942c30
-
-Passed-fixture evidence was produced with sheet size 0. The supplied d942c30
-re-export comparison of all **91 projects** changed only the canvas `size`
-attribute, **0 -> 5**. No passed fixture is re-run for this canvas change;
-its original evidence and provenance records remain as produced. Pending work
-below has fresh project/source hashes at d942c30 and empty native-run ledgers.
-No old completed run is reused.
-
-The complete former `data/m9c7/L2-07-settling/` tree, including its completed
-baseline and failed injected-run evidence, is retained at
-`data/archive/m9c7/L2-07-settling/`. The active experiment is rebuilt at the
-same path with the same two 60 s runs (baseline and `p1_d`), 2.5 us integration,
-20 us sampling, 2 s onset, amplitude and phases. Early windows start at
-8/12/16 s; late windows at 48/52/56 s; all last 4 s. Both late adjacent pairs
-still require the existing 1% norm/entry and quality rules. This remains a
-directional settling diagnosis, without fixture qualification.
-
-The fresh isolated witness is `data/m9c8/timing/`; old timing evidence remains
-at its original path. At dt=10 us, commit 425e9b0's nearest-step residual
-rounding (half-step ties upward) gives:
-
-| Case | Model delay | Realised residual | Expected total including interface |
-| --- | ---: | ---: | ---: |
-| zero | 0 us | 0 us | 10 us |
-| one | 10 us | 0 us | 10 us |
-| four | 40 us | 30 us | 40 us |
-| fractional | 25 us | 20 us | 30 us |
-
-The fractional case requests 15 us residual and has 5 us quantization error.
-The unchanged 1e-6 kV witness gate compares integer sampled shifts.
-
-L2-16's 2.5 us evidence (C 2.92%, step-witness entry change 1.81%) is retained
-in full at `data/archive/m9c8/L2-16/`. Fresh `data/L2-16/` projects use
-**1.25 us base / 0.625 us witness**, **20 us sampling** (16/32 integration
-steps), **66 s** runs and **[62,64), [64,66) s** windows. Each 2 s window
-contains 100,000 samples and whole tone/frame periods. Amplitude, onset, tones,
-physical parameters and frozen native reference/operating-point bytes remain
-unchanged. All approved tolerances and qualification gates remain fixed.
-
-From the repository root with the existing station configuration:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c8(timeout=14400.0)'
-```
-
-Order: **settling experiment -> timing witness -> L2-16**. Each item records
-failure and permits the next item to proceed; interrupts stop execution.
-Outcomes are saved after each item in `data/m9c8/manifest.toml`; detailed run
-records remain in each item's manifest. Reinvocation retries failed work and
-resumes only hash-matching completed native runs, including the witness.
-
-Allow **25–35 min** for settling (two measured ~8 min native MMC runs plus
-transfer/loading/analysis), **2–5 min** for timing and **115–150 min** for
-L2-16: **142–190 min total (about 2 h 20 min–3 h 10 min)**, with a shared
-**4-hour deadline**. The machine estimate scales the earlier measured 21.94 min
-native workload at 5 us by four and retains its ~25.6 min other work, with
-margin. These are planning estimates; no station execution is performed here.
-
-Final offline checks on **Julia 1.12.7 with the repository Manifest**:
-**18,855/18,855 PSCAD suite assertions**, **1,490/1,490 standalone validation
-assertions**, and **70/70 standalone name-guard assertions**. The suite includes
-the validation/name-guard checks and the new 8-assertion queue-continuation
-regression. Independent archive/preparation verification passed **534/534**
-checks. Successful preparation used the recorded **Julia 1.10.11 harness
-Manifest**; no full `Pkg.test()`, station contact, `src/` changes or commits.
-Final logs, hashes and preparation details are under `data/m9c8/`.
-
-
-## M9c-10: odd recorder ratio for MMC measurements
-
-Preparation now rejects every even or noninteger `sample_step / time_step`
-ratio, for every fixture, before writing projects. Windows must contain whole
-samples and tone/frame periods; recorder Nyquist must exceed four times the
-highest measured abc frequency. Already-passed fixtures and existing evidence
-and provenance remain untouched. Historical settings above describe their
-original records. Newly prepared half-step witnesses retain the odd ratio at
-their own integration step.
-
-The [M9c9 diagnosis](data/m9c9/report.md) identified EMT-Nyquist voltage chatter
-folding into the low-frequency records. The owner's direct 1 s, every-step
-L2-07 checks at `local/pscad-exchange/diag/alias/alias_{base,p1d}-report`
-confirm it: adjacent decimation offsets of injected-minus-baseline V_BUS2
-correlate **-0.999**, offsets two apart **+0.998**. Chatter is **0.74–0.85 V RMS**,
-matching **0.89/0.58 V** off-grid content in the 50 kHz records, **21 times**
-baseline, with **1.1 kV RMS** at onset and sustained chatter thereafter.
-Currents are clean. Even ratios 8/16/20 fold this term to DC; an odd ratio
-moves it to recorder Nyquist. This owner-selected recorder change leaves the
-exporter, signal processing and approved scientific gates unchanged. The
-synthetic regression includes coherent tones plus slowly modulated `(-1)^n`
-EMT chatter: ratio 8 corrupts tone phasors; ratio 25 preserves them within
-**1e-6 relative**, including a noncoherent envelope term and all offsets.
-This synthetic result does not qualify native measurements.
-
-All nine fixtures use **ratio 25**, with no alternative ratio needed:
-
-| Fixture | Integration main / witness (us) | Sampling main / witness (us) | Main duration; windows (s) | Per-tone peak current (pu) | Expected full workflow |
-| --- | --- | --- | --- | --- | --- |
-| L2-07 | 2.5 / 1.25 | 62.5 / 31.25 | 18; [16,17), [17,18) | 0.0005440688720429209 | 45–60 min |
-| L2-08 | 2.5 / 1.25 | 62.5 / 31.25 | 18; [16,17), [17,18) | 0.0005440743596753004 | 45–60 min |
-| L2-09 | 2.5 / 1.25 | 62.5 / 31.25 | 18; [16,17), [17,18) | 0.0005362934865329716 | 45–60 min |
-| L2-10 | 2.5 / 1.25 | 62.5 / 31.25 | 18; [16,17), [17,18) | 0.0005575931872666588 | 45–60 min |
-| L2-11 | 1.25 / 0.625 | 31.25 / 15.625 | 10; [8,9), [9,10) | 0.000525086145788741 | 45–60 min |
-| L2-12 | 2.5 / 1.25 | 62.5 / 31.25 | 10; [8,9), [9,10) | 0.00015106615855105086 | 25–35 min |
-| L2-13 | 2.5 / 1.25 | 62.5 / 31.25 | 10; [8,9), [9,10) | 0.0008531113277568782 | 25–35 min |
-| L2-14 | 1 / 0.5 | 25 / 12.5 | 10; [8,9), [9,10) | 0.0008553820834429869 | 55–70 min |
-| L2-15 | 2.5 / 1.25 | 62.5 / 31.25 | 10; [8,9), [9,10) | 0.0007060481370190227 | 25–35 min |
-
-Every fixture retains onset **2 s**, the exact existing 23 tones
-`[1,2,3,4,6,7,10,13,18,24,32,42,56,75,100,133,178,237,316,422,562,750,1000] Hz`,
-Schroeder phases and one-second main windows. Half-amplitude runs retain the
-same duration/windows/tones and exactly half each tabulated amplitude.
-The common 750/1000 Hz witness retains 0.1 s windows at 16/16.1 s for
-07–10 (16.2 s duration), and 8/8.1 s for 11–15 (8.2 s duration).
-Existing additional prepared bands also remain: 10 has 562/1000 Hz at
-[16,16.5), [16.5,17), duration 17 s; 13/15 have 42/1000 Hz and 14 has
-24/1000 Hz at [8,8.5), [8.5,9), duration 9 s. Each witness uses its own
-half integration step and ratio 25. Fresh measurements still select the
-worst band/axis with the existing coherent adaptive rule.
-
-One-second main windows contain **16,000/32,000 samples** (main/witness)
-for 07–10/12/13/15, **32,000/64,000** for 11 and **40,000/80,000** for 14.
-The 0.1 s witnesses contain **3,200**, **6,400** and **8,000** samples
-respectively; additional 0.5 s windows contain **16,000** (10/13/15) or
-**40,000** (14). All selectable adaptive windows have whole samples and tone
-periods. Nyquist is **8/16 kHz**, **16/32 kHz** and **20/40 kHz**, respectively,
-always above **4 × (50 + 1000) = 4,200 Hz**.
-
-Complete prior fixture folders are archived under `data/archive/m9c10/`.
-All projects and run ledgers are fresh at **adbf8c2**; no old native run is
-eligible for reuse. Plain Julia and the separate **Julia + one inherent
-interface step** reference/status remain for zero-delay MMC models (07–12).
-Positive-delay 13–15 retain their existing plain comparison. Preparation and
-offline checks perform no station operation.
-
-From the repository root with the existing Julia 1.10.11 harness environment
-and station configuration:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c10(timeout=36000.0)'
-```
-
-Order: **07, 08, 09, 10, 12, 13, 15, 11, 14**. Each fixture outcome is saved
-in `data/m9c10/manifest.toml` before advancing; a failed fixture permits the
-next one, and interrupts stop execution. Reinvocation retries failures and
-resumes only native completions verified against the new project/input/solver
-hashes. This queue contains only these nine fixtures.
-
-Allow **355–475 min (about 6–8 hours)** with a shared **10-hour deadline**.
-The estimates scale the owner's measured **~5 min for an 18 s MMC run at
-2.5 us**, plus transfer, against six normal runs (four at the main step and
-two at half step); a measured **~14 min for 60 s** supports that scale.
-The common main outputs at 62.5 us are **3.125 times smaller** than 20 us
-records. Witnesses and finer-step fixtures have different output ratios, so
-this does not imply a threefold runtime improvement. Adaptive low-frequency
-witnesses can extend the tabulated budgets. Native measurement qualification
-remains pending; all original tolerances and gates remain fixed.
-
-Final offline checks on **Julia 1.12.7 with the repository Manifest**:
-**19,596/19,596 PSCAD suite assertions**, **2,231/2,231 standalone validation
-assertions**, and **70/70 standalone name-guard assertions**. The new recorder,
-coherence/guard and queue regressions contribute **741 assertions**. Fresh
-preparation and **465/465 project XML checks** pass on **Julia 1.10.11**.
-The XML checker compares the exporter's exact decimal representation of the
-sample interval, avoiding a false binary-roundoff mismatch at 25 us; no
-scientific tolerance changes. **6,002/6,002 preservation checks** verify all
-1,811 archived files (35,035,816,987 bytes), new source/project/payload hashes,
-frozen settings, physical XML and coherence. New exports also inherit the
-existing canvas size 5; archived size-0 projects remain untouched. Plain
-references and operating points are byte-identical; two fresh interface-step
-references differ by at most 4e-18 relative from solver roundoff. Logs, detailed
-settings and verification records are under `data/m9c10/`. No full `Pkg.test()`,
-station contact, `src/` changes or commits.
-
-## M9c-12: zero-delay residual step witness
-
-L2-07..L2-12 have zero modulation delay. Their qualification uses the full
-**discrete realization**: Julia with one inherent interface step, the fixture's
-exported grid R/L and DC termination, and the injection-current readout timing.
-L2-13..L2-15 have 200 µs modulation delay and retain the raw step witness.
-The plain zero-delay comparison remains visible as realization bias; the raw
-step witness and the Julia + one-step admittance comparison remain separate.
-This decision qualifies the discrete realization, without certifying agreement
-with the zero-delay continuous model.
-
-At each integration step h and frequency s = j2πf, the reference column is
-`P_h = gamma_h * diag(Ibase/Vbase, Ibase/Vbase, 1, 1) * [v_h; i_h]`, with
-`v_h = (Y_h + inv(Zgrid)) \ e_axis`, `i_h = Y_h * v_h`, and
-`gamma_h = exp(s*h)/cos(2π*50*h)`. `Y_h` comes from
-`interface_step_reference`, retaining exact modulation feedback delay and native
-carrier corrections. Grid and termination values are read from the actual
-exported project, never refitted. L2-11 uses the sum of its two exported DC pole
-resistances for the differential load reduction; L2-12 uses its weak-grid R/L.
-Main-column and half-step reproduction errors are recorded and required to meet
-the existing 1% column-change rule, with the same 0.1 norm and 0.02 entry floors.
-
-The readout factor is checked from baseline-subtracted **recorded** inward DUT
-plus grid currents, divided by the recorded injection component on the driven
-axis. Every coherent window and driven tone is checked for each main-axis run,
-the amplitude witness, and the half-step witness. A relative discrepancy above
-1e-6 from `gamma_h` makes the residual witness `invalid_measurement`. This check
-measures timing on the recorded path; no measured columns are shifted.
-
-The residual step gate uses the **same measured main response denominators as
-the raw witness**; only the numerator removes the known one-step effect:
+`reanalyse.jl` reads retained OUT/INF and saved-project metadata. Its `--refresh-reference` option
+archives the previous Julia reference and analysis, regenerates power flow/admittance, and
+verifies unchanged project hashes. It does not run PSCAD. Retained measurements keep their
+producing probe signs.
+
+## Measurement procedure
+
+### Injection and baseline subtraction
+
+Passive two-ports use independent terminal-voltage drives to recover Y. The network impedance
+scans use shunt-current injection and recover Z directly from `V=Z*I`; they do not invert a
+measured Y. Converter and machine scans inject nominal-frame d/q shunt currents and measure both
+the actual terminal-voltage matrix and inward device-current matrix. Recover Y from the full
+voltage matrix; a single coupled voltage axis cannot identify a Y column independently.
+
+Each injection has an identical zero-amplitude baseline, including modules, signal paths and
+summing junctions. Subtract baseline samples before the DFT. Probe orientation comes from the
+saved project's metadata: negate outward terminal current for Y; retain outward source current as
+network injection for Z. Passive branch direction is side 1 inward and side 2 outward. Older cable
+projects can have both probes inward and require their recorded metadata.
+
+Coherent rectangular windows use `(2/N)*sum(x(t)*cis(-2*pi*f*t))` for peak phasors. No fitted time
+shift or window taper is applied to these frequency-response measurements. AC phasors are kV/kA,
+so their ratio is S or ohm without extra factors of three or `sqrt(2)`. Departures use
+baseline-subtracted samples in the declared windows, with means retained; whole-run turn-on maxima
+remain diagnostic.
+
+The passive grid contains 24 tones:
+`[1,2,3,4,6,7,10,13,18,24,32,42,50,56,75,100,133,178,237,316,422,562,750,1000] Hz`. Balanced dq
+omits 50 Hz, which would create an abc DC sideband. Phase-domain scans retain it because their
+tones are physical phase frequencies. Active scans use the resulting 23-tone grid. Schroeder
+cosine phases are `-pi*k*(k-1)/N` in absolute time. Passive tone onset is 0.5 s; active onset is 2
+s. Per-tone amplitudes and bases are stored before measurement.
+
+### Sampling and coherent windows
+
+New preparation requires an odd integer `sample_step/time_step`, whole samples and tone/frame
+periods in each window, and recorder Nyquist above four times the highest measured abc frequency.
+Balanced dq includes the `f+50 Hz` sideband. Ratio 25 is used by the current MMC measurements at
+both integration steps. Retained passive/TLC/machine records can use older ratios; their producing
+settings remain attached to the data and are not silently rewritten. Re-preparing such an
+even-ratio record fails the current sampling check; reuse its verified completed data or define an
+odd-ratio experiment before collecting new data.
+
+A finer integration run uses its own baseline and recorder interval. One selected axis repeats at
+half amplitude. A matching baseline and that axis repeat at half integration step on the
+worst-error frequency and 1000 Hz; when the worst is 1000 Hz, the pair is 750/1000 Hz. Adaptive
+windows contain whole common periods. Selection is saved before execution and reused on retry.
+
+### Julia references and the interface step
+
+Balanced elements use native dq/differential-DC references. Two-port references call
+`eval_abcd(element.element_model,j2*pi*f)` and `abcd_to_y`. The phase-domain references for asymmetric lines/cables and IEEE9
+include zero sequence and the physical conductor order.
+IEEE9 preserves each component and terminal-to-bus incidence, clamps ideal-source buses and
+imposes floating YY-neutral KCL. The full 6x6 transfer comes from six independent drives; Bus1 and
+Bus5 local 3x3 blocks are scored separately. Bus1's ideal-source Z=0 tests clamping.
+
+The informational `transformation_dq` projection evaluates phase ABCD at `s +/- j*omega0`.
+Untransposed circuits retain couplings and ±2ω0 sidebands that a fixed dq LTI model omits. This
+projection cannot change phase-domain comparison status. Dyn11 uses one global 50 Hz frame at both
+ports; its native Y already contains the vector-group rotation. A local secondary frame would
+transform both rows and columns with `T=diag(I,R)`.
+
+Zero-delay converters use a one-step (discrete) model with exact `exp(-s*h)` **inside modulation
+feedback**, including native carrier corrections. It does not rotate terminal Y after solving.
+Coupled references assemble the full circuit with exported grid/passive values and eliminate the
+same internal nodes. Positive-delay models and the machine retain their native references. Errors
+against the continuous model remain visible even when the one-step (discrete) model passes.
+
+For current drive at step h, the predicted column is `P_h = gamma_h * diag(Ibase/Vbase,
+Ibase/Vbase, 1, 1) * [v_h; i_h]`, where `v_h = (Y_h + inv(Zgrid)) \ e_axis`, `i_h = Y_h * v_h`,
+and `gamma_h = exp(s*h)/cos(2π*50*h)`. Exported DC resistances supply load reduction; weak-grid
+cases retain their actual grid R/L. A DC-clamped AC subblock cannot replace a
+converter-plus-DC-load reference.
+
+### KCL and readout timing
+
+Baseline-subtracted inward device plus grid currents, divided by recorded drive on its driven
+axis, must reproduce `gamma_h` within 1e-6 relative. Coupled scans include every device, grid and
+shunt branch at each port, coordinate, tone and window in main, amplitude and half-step records.
+Undriven coordinates use the full transported dq vector: `exp(s*h)*[cos(w0*h) sin(w0*h);
+-sin(w0*h) cos(w0*h)]*Idrive`. A scalar timing factor on an undriven coordinate leaves a spurious
+`w0*h` residual. Timing cancels in Y; direct Z includes injection-readout transport. No measured
+column is shifted to make this check pass.
+
+For zero-delay devices, the residual step-size check subtracts the predicted known step effect
+only in the numerator:
 
 ```text
 dR = (M_half - P_half) - (M_h - P_h)
@@ -1391,777 +151,622 @@ entry_change = maximum(abs.(dR) ./ max.(abs.(M_h), 0.02))
 passed = frobenius_change <= 0.01 && entry_change <= 0.01
 ```
 
-Band results take the maximum across frequencies. The former residual-normalised
-values remain in records and tables as `residual_normalised_frobenius` and
-`residual_normalised_entry`, strictly diagnostic and never gating. L2-12's
-weak-grid response column has norm 7.1–9.5, versus 2.0–2.6 for L2-07/08.
-Its unexplained absolute change is about 1e-3: dividing by the residual with a
-0.1 floor gives 1.06% / 5.16%, while scaling against the measured response gives
-about 0.011% Frobenius / 0.14% maximum entry. The gate therefore measures the
-unexplained change relative to the response being qualified.
-Window, quality, conditioning, amplitude (2%), operating-point, and pointwise
-comparison gates retain their approved tolerances. The discrete admittance
-comparison must pass alongside the residual witness and all independent gates.
-The manifest records `raw_step_refinement`, `residual_step_refinement`, the
-selected `step_refinement`, `tier_c_result` (plain), `interface_step_result`, and
-`comparison_summary`. Complex response/reference columns, per-frequency step
-results, reproduction errors, exported termination, and KCL factors are retained.
-
-The decided gate gives L2-07 Frobenius / maximum-entry changes of
-**0.0041% / 0.0661% at 750 Hz**, and **0.0025% / 0.0815% at 1000 Hz**.
-L2-12 gives **0.0122% / 0.0890% at 750 Hz** and **0.0111% / 0.1405% at 1000 Hz**.
-The former L2-07 residual-normalised diagnostic remains 0.0817% / 0.3322% and
-0.0658% / 0.2024%, respectively.
-Its independent full-Y window-entry failure at 42 Hz (**1.870988%**) remains
-reported and prevents qualification.
-
-Completed evidence can be reanalysed locally without native execution or station
-contact. From this worktree, using Julia 1.12.7:
-
-```julia
-include("test/manual/pscad/validation/validation.jl")
-PSCADValidation.reanalyse_m9c12(["L2-07", "L2-08"];
-    data_root = "/path/to/stored/validation/data")
-```
-
-Run Julia with `--project=test/manual/pscad/validation`. Results go to this
-worktree's `data/m9c12/<id>/`, with a root `summary.tsv`; `output_root` may select
-another directory below worktree `data/m9c12` or `/tmp`. Native outputs, projects,
-and source manifests are read only. Completion hashes and settings readback are
-verified locally. Each output manifest records the analysing commit, Julia
-version, harness source hashes, source manifest hash, and native input hashes.
-
-Stored-run re-analysis on Julia 1.12.7 (all errors below are percentages; maxima
-across each main or half-step band):
-
-| Fixture | Main reproduction F / entry | Half reproduction F / entry | Qualification |
-|---|---|---|---|
-| L2-07 | 0.01854 / 0.16645 | 0.00385 / 0.08859 | invalid_measurement |
-| L2-08 | 0.01770 / 0.17366 | 0.00386 / 0.09344 | passed |
-| L2-09 | 0.06182 / 0.14317 | 0.00354 / 0.05965 | passed |
-| L2-10 | 0.07276 / 0.29886 | 0.00462 / 0.16092 | passed |
-| L2-11 | 0.03392 / 0.52105 | 0.00316 / 0.10495 | passed |
-| L2-12 | 0.02665 / 0.44553 | 0.01236 / 0.21055 | passed |
-
-All reproduction checks pass the unchanged 1% rule. The largest KCL readout
-discrepancy is 4.94e-9 relative. Raw witnesses remain failed for all six fixtures.
-L2-07 retains its independent 42 Hz window failure. L2-08..12 qualify against
-the discrete realization. With the decided measured-response denominators,
-L2-12's residual gate is 0.01219% Frobenius / 0.14049% maximum entry across its
-band. Its residual-normalised diagnostic remains 1.05795% / 5.16170% and does
-not gate qualification. The 1% limit, floors, and all independent gates remain
-unchanged.
-Detailed comparisons and analysing source hashes are in
-[`data/m9c12/summary.tsv`](data/m9c12/summary.tsv) and the per-fixture manifests.
-
-Offline checks on Julia 1.12.7 with this worktree's repository Manifest pass:
-**2,325/2,325 validation assertions**, **19,691/19,691 PSCAD suite assertions**,
-and **71/71 standalone name-guard assertions**. The new synthetic tests contribute
-94 assertions; the new included source file adds one name-guard assertion.
-The isolated residual and qualification checks also pass 29/29 on Julia 1.10.11.
-Post-analysis verification confirms 756 native input files, all six original
-manifests, and all 65 analysing source files match their recorded hashes.
-Logs and preservation counts are retained under `data/m9c12/`. No station contact,
-`src/` changes, staging, or commits were performed.
-
-## M9c-13: predeclared 8 s zero-delay windows
-
-The owner predeclares **8 s main windows for all six zero-delay fixtures
-L2-07..L2-12**, replacing their 1 s windows before new measurements. Keep the
-first window start fixed, and accept the resulting pass/fail outcomes under the
-existing gates. **No further window changes after seeing these results.**
-This applies to the full-band main and half-amplitude runs. Step witnesses keep
-their own short coherent windows and the existing adaptive band/axis selection.
-
-The owner reports that L2-07 fails only full-Y window consistency: its 42 Hz
-d-row/q-column entry is about 0.017 pu and changes by 3.7e-4 pu between 1 s
-windows, exceeding 1% of the unchanged 0.02 pu floor. Near the 44 Hz mode,
-the Julia 2x2 input-voltage matrix has condition numbers **10.0 at 42 Hz** and
-**13.8 at 56 Hz**, versus **1.1–5 elsewhere**, amplifying small window
-differences. Every zero-delay fixture's worst window entry is at 42/56 Hz;
-the reported L2-08, L2-10 and L2-12 changes are **0.98%, 0.58% and 0.44%**.
-These observations motivate the predeclared measurement change; they do not
-establish that the new measurements pass.
-
-| Fixture | Main / witness integration (us) | Main / witness sampling (us) | Main windows (s); duration | Per-tone peak current (pu) | Expected workflow |
-| --- | --- | --- | --- | --- | --- |
-| L2-07 | 2.5 / 1.25 | 62.5 / 31.25 | [16,24), [24,32); 32 s | 0.0005440688720429209 | 21–28 min |
-| L2-08 | 2.5 / 1.25 | 62.5 / 31.25 | [16,24), [24,32); 32 s | 0.0005440743596753004 | 21–28 min |
-| L2-09 | 2.5 / 1.25 | 62.5 / 31.25 | [16,24), [24,32); 32 s | 0.0005362934865329716 | 21–28 min |
-| L2-10 | 2.5 / 1.25 | 62.5 / 31.25 | [16,24), [24,32); 32 s | 0.0005575931872666588 | 21–28 min |
-| L2-11 | 1.25 / 0.625 | 31.25 / 15.625 | [8,16), [16,24); 24 s | 0.000525086145788741 | 28–38 min |
-| L2-12 | 2.5 / 1.25 | 62.5 / 31.25 | [8,16), [16,24); 24 s | 0.00015106615855105086 | 14–19 min |
-
-Onset remains **2 s**, recorder ratio **25** at both integration steps, with
-the same 23 tones listed in M9c-10, Schroeder phases and exact amplitudes.
-Half-amplitude projects use half the tabulated amplitudes and the same 8 s
-windows. Each main window has **128,000 samples**, or **256,000 for L2-11**.
-`check_recorder_sampling` requires whole samples, tone/frame periods, odd ratio,
-and Nyquist above 4,200 Hz for main, amplitude and step projects.
-The common 750/1000 Hz witness remains at [16,16.1), [16.1,16.2) for 07–10
-and [8,8.1), [8.1,8.2) for 11/12. L2-10's additional prepared 562/1000 Hz
-witness remains at [16,16.5), [16.5,17), ending at 17 s. The main-window
-extension does not lengthen these witnesses. Physical/control parameters,
-all tolerances, and every qualification gate remain unchanged. Zero-delay
-fixtures qualify through the **M9c-12 residual step witness and discrete
-admittance comparison**, with the raw witness and plain comparison retained.
-
-Preparation at **635ef92** moves each complete old fixture folder to
-`data/archive/m9c13/<id>/` and writes fresh projects, references, manifests
-and empty run ledgers. No old native completion is reused. Official M9c-12
-re-analysis outputs remain untouched in `data/m9c12/`. Preparation and offline
-tests perform no station operation. Preservation inventories, preparation logs
-and offline checks are under `data/m9c13/`.
-
-Run from the repository root with the existing Julia 1.10.11 harness environment
-and station configuration:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9c13(timeout=14400.0)'
-```
-
-Order is **L2-07, L2-08, L2-09, L2-10, L2-11, L2-12**. Each outcome is saved
-to `data/m9c13/manifest.toml` before advancing. Failures permit the next fixture;
-interrupts stop the queue. Reinvocation retries failed fixtures and resumes only
-fresh completions verified by the existing project/input/solver hash checks.
-
-The estimate is **126–169 min total**, with a shared **4-hour deadline**.
-The owner's measured **15–20 min** per 18 s workflow at 2.5 us and ratio 25
-includes witnesses. Scaling four main-step runs and two half-step witnesses
-gives work proportional to `4*Tmain + 4*Twitness`: 136.8 step-equivalent seconds
-for the 18 s / 16.2 s reference, versus 192.8 for 07–10 (about 1.41 times),
-257.6 for finer-step 11 (1.88 times), and 128.8 for 12 (0.94 times).
-These are workflow estimates; transfer overhead and adaptive low-frequency
-witnesses can extend them. No new native result is claimed during preparation.
-
-Fresh preparation on **Julia 1.10.11** passes **285/285 project XML checks**
-and **1,434/1,434 definition, coherence and reference checks**, including every
-selectable adaptive witness frequency. The six fixtures contain 57 fresh
-projects and no native runs. Plain and interface-step references, plus operating
-points, are byte-identical to the archived versions. **5,037/5,037 preservation
-and settings checks** verify the complete 1,209-file archive, all 61 official
-M9c-12 analysis files, fresh project/payload/source hashes, and frozen physical
-settings. Project comparison accounts for freshly allocated component IDs and
-revision timestamps; only main/half-amplitude simulation durations change.
-
-Offline on **Julia 1.12.7 with the repository Manifest**, standalone validation
-passes **2,652/2,652 assertions**, the full PSCAD suite passes
-**20,018/20,018**, and the standalone name guard passes **71/71**.
-Validation and suite runs use `OPENBLAS_NUM_THREADS=1`.
-The new window and queue regressions contribute 327 assertions;
-the queue's 21 assertions also pass on **Julia 1.10.11**. The queue regression
-covers ordered continuation, per-fixture outcome persistence, reinvocation,
-invalid measurements, and interrupt propagation.
-Logs are retained under `data/m9c13/`. No full `Pkg.test()`, station contact,
-`src/` changes, staging, or commits were performed.
-
-## M9d-2: Layer 3 stage A
-
-The owner approves L3-01/02/03/04/06/07/08 with the frozen
-[`M9d-1 proposal`](data/m9d1/l3-proposal.md) values. L3-05 and
-distributed-AC/converter composition are deferred. L3-07 is admitted for stage C
-on its finite native contours and located roots, with the recorded caveat:
-these checks do not enumerate the distributed cable's infinite spectrum or prove
-closure at infinity. Stage A registers and prepares **L3-01 and L3-08 only**.
-Tier B remains later work (L3b: 04/08/06); its damping metric is relative damping
-ratio zeta within 10%, with decay alpha also reported.
-
-The measurement framework recovers each device's individual Y on its original
-L2 phase-peak bases, the aggregate Y on bases declared before measurement, and
-**direct Z = V / Idrive** from recorded injection currents. Individual and
-aggregate Y use the full measured voltage matrix, not independent column
-ratios. Every required measurand has its own window, comparison, amplitude,
-step and qualification status. Full multiport matrices retain cross blocks;
-a four-coordinate synthetic case checks this extraction for stage C.
-An aggregate pass cannot cancel or rescale an individual failure.
-
-The lumped-network admission gate retains every native device state and passive
-R/L/C storage in a source-clamped KCL descriptor, checks its Schur response
-against native admittances, and combines its finite roots with the 6001-point
-native contour from 0.01 Hz to 100 kHz at Re(s)=1e-6/s. Finite roots retain the
-strict Re(lambda)<-1e-7/s rule. This is numerical lumped-network admission;
-it supplies no distributed-spectrum or exact-delay completeness claim.
-
-Zero-delay devices use exact exp(-s*h) **inside each device's modulation
-feedback**, with the existing carrier corrections. The harness then assembles
-the entire circuit and eliminates the same internal nodes as the plain native
-reference. Positive-delay devices retain their native delay model. Every
-passive value used by the composed discrete reference is read from the actual
-exported project and checked against its frozen circuit value. Modulation
-feedback is never replaced by a phase rotation of terminal Y.
-
-KCL uses every recorded device, grid and shunt branch at each measured port,
-with the exact project's orientation metadata. Every port/coordinate, coherent
-window and tone is checked on main, amplitude and half-step records. The driven
-coordinate checks the measured KCL/Idrive timing factor against
-exp(s*h)/cos(2*pi*50*h), with the existing 1e-6 relative rule; undriven
-coordinates check the KCL residual on the declared driven-current scale.
-Their expected injection is the full transported dq vector,
-`exp(s*h)*[cos(w0*h) sin(w0*h); -sin(w0*h) cos(w0*h)]*Idrive`,
-because the older abc recording also rotates in the fixed dq frame. Extending
-the driven scalar factor to an undriven coordinate leaves a spurious `w0*h`
-residual. The 1e-6 limit and all normalizations remain unchanged. Group manifests
-retain KCL summaries and every row before any invalid-result return; measurands
-and witness summaries retain `invalid_reasons`. Stored-run diagnosis and
-analysis-only results are in [`kcl-reanalysis`](data/m9d2/kcl-reanalysis/report.md).
-This timing cancels in Y; direct discrete-realization Z includes the drive's
-readout factor. Response columns include voltage and individual/aggregate
-currents on their declared bases, or voltage alone for direct Z.
-
-The residual witness subtracts the predicted composed response at each step
-only in the numerator. Its denominators remain **the measured main response**,
-with the committed 0.1 norm/0.02 entry floors and 1% limits. Main and half-step
-reproduction must also pass the existing 1% rule. The plain-model C comparison,
-raw step, residual-normalised diagnostics, KCL checks, reproduction errors,
-complex measured/predicted columns and per-frequency residuals remain visible.
-All approved A/C, conditioning, drift, departure, amplitude and step gates and
-tolerances are unchanged. Zero-delay qualification requires the discrete C
-comparison and residual witness plus every independent gate.
-
-| Fixture | Frozen circuit and measurands | Aggregate base | Current per tone (pu) | Expected station time |
-| --- | --- | --- | --- | --- |
-| L3-01 | L2-01 P-f/Q TLC + L2-03 P/Q-V TLC, separate 640 kV DC clamps; original grid R=6.019975000770435 ohm, L=0.19162175573245024 H; both 200 us delayed; individual C1/C2 Y, aggregate Y, direct Z; plain C + raw step | 200 MVA / 220 kV LL | 0.0004508893578873102 | 25–40 min |
-| L3-08 | Original L2-07 MMC/grid/DC clamp + per-phase series R=2 ohm, C=5 uF shunt; individual MMC Y, aggregate MMC+RC Y, direct Z; composed discrete C + residual step | 1000 MVA / 380 kV LL | 0.00047389717632280974 | 60–90 min including local scan |
-
-Both retain 23 coarse tones, onset 2 s, [16,24)/[24,32) s windows, 32 s main
-records, 2.5 us base / 1.25 us half step and recorder ratio 25 at both steps.
-L3-01 individual bases remain 100 MVA / 220 kV each. L3-08 individual MMC bases
-remain the original external 1000 MVA / 380 kV bases. Half amplitude is exactly
-one half. Coarse step witnesses use the selected worst-error drive and frequency
-plus 1000 Hz (750/1000 if worst is 1000), with coherent windows and the original
-16 s start. They never mix integration steps to identify a Y matrix.
-
-L3-08 additionally has a **predeclared two-axis local scan**, with its own
-baseline, amplitude witness and matching half-step baseline/axis: 39 tones at
-232–260.5 Hz and 334–361 Hz, every 1.5 Hz, each at
-5.910035278632797e-5 pu. All six local records last 32 s with the same eight-second
-windows; half-step sampling is 31.25 us. Each disjoint direct-Z peak must have
-both curves bracketed, both half-power crossings, at least five in-band points
-and six intervals across its width. The existing centre/width resonance rule
-applies only to direct Z inside either band; all point errors remain saved,
-ordinary point rules apply outside, and Y and independent gates remain mandatory.
-
-The owner reports the following **native 0.01 s builds, zero errors**, of the
-proposal exports. Every measurement build still checks its own strict <100
-live-node limit.
-
-| Fixture | Native live nodes | Stage |
-| --- | --- | --- |
-| L3-01 | 31 | A |
-| L3-02 | 77 | later |
-| L3-03 | 77 | later |
-| L3-04 | 67 | later |
-| L3-05 | 52 | deferred |
-| L3-06 | 55 | later |
-| L3-07 | 96 | C; finite-contour/root caveat retained |
-| L3-08 | 55 | A |
-
-Fresh projects, native/discrete reference tables, solved points, exported
-passives, producing-source hashes and empty native ledgers are prepared under
-`data/L3-01/` and `data/L3-08/`. No proposal export, old reference or station
-completion is adopted. Ten projects per measurement group are prepared (including an unrun measurement
-template);
-normally six run (three groups across this queue, hence eighteen native runs).
-Only V/I/drive recorders are retained in injected runs; full tier-A recorder
-evidence stays in each group's baseline. Electrical meters and topology stay intact.
-Preparation and offline checks do not contact a station.
-
-With the existing Julia 1.10.11 harness environment and station configuration,
-run from the repository root:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9d_a(timeout=10800.0)'
-```
-
-The resilient queue runs **L3-01 then L3-08**, saves each outcome immediately to
-`data/m9d2/queue.toml`, continues after fixture failures, and stops on interrupts.
-Expected total: **85–130 min**, with a shared **180 min deadline**. These are the
-approved planning estimates, not measured runtimes. A failed coarse group stops
-that fixture before its local scan. Reinvocation resumes only matching new
-completions through the existing project/input/solver hash checks; witness
-selection is saved before execution and retained on retries. Full `Pkg.test()`
-remains the owner's check.
-
-Final offline checks on **Julia 1.12.7**, using the repository Manifest and
-`OPENBLAS_NUM_THREADS=1`: **2,881/2,881 validation assertions**,
-**20,250/20,250 PSCAD suite assertions**, and **74/74 standalone name-guard
-assertions**. The new framework contributes **229 assertions**, also passing
-**229/229 on Julia 1.10.11**. Julia 1.10.11 preparation passes **77/77 source,
-artifact and definition checks**, **150/150 written-project XML checks**, and
-**119/119 recorder/reference checks**. These verify all 30 fresh projects,
-original individual and declared aggregate bases, local scan resolution,
-exported values, source/payload hashes and empty native ledgers. All 80 approved
-proposal artifacts retain their hashes. Logs, counts and final manifest digests
-are under [`data/m9d2/`](data/m9d2/). No station qualification is claimed.
-
-
-## M9d-3: Layer 3 stage B
-
-Stage B registers the frozen **L3-02, L3-04 and L3-03** interactions, in that
-queue order. It retains stage A's complete lumped-network stability admission,
-individual device Y on original L2 bases, aggregate Y on declared bases, direct
-Z from the recorded drive, exported-passive checks, per-port KCL timing checks
-and independent measurement/witness gates. All three use the composed discrete
-reference for qualification and the residual step witness; the plain C and raw
-step results remain visible. Approved tolerances and gates are unchanged.
-
-| Fixture | Frozen circuit | Aggregate base | Coarse current/tone, pu | Recorded native live nodes | Expected station time |
-| --- | --- | --- | --- | --- | --- |
-| L3-02 | L2-07 P/Q C1 + L2-09 P/Q-V C2 on one bus; separate 800 kV clamps; original R=1.7960421283290304 ohm, L=0.05716979654497069 H grid (SCR=4 combined) | 2000 MVA / 380 kV LL | 0.000255889219949928 | 77 | 40–60 min |
-| L3-04 | L2-07 at remote end of a literal lumped pi line: series R=2 ohm, L=20 mH, C=2 uF to ground at each end; original SCR-8 grid at near end; near-end drive and port measurement; remote converter V/I retained | 1000 MVA / 380 kV LL | 0.0007118962353546502 | 67 | 60–90 min including local scan |
-| L3-03 | L2-13 GFM C1 + L2-07 GFL C2 on one 380 kV bus; separate 640/800 kV clamps; grid R=0.8718651108393352 ohm, L=0.027752328419888683 H (SCR=8 on 2060 MVA) | 2060 MVA / 380 kV LL | 0.0006924416531567809 | 77 | 40–60 min |
-
-L3-02 adds one interface step inside **both** zero-delay MMC modulation loops.
-L3-03 retains C1's original 200 us Padé 5/5 delay and adds the interface step
-**only to C2**, its zero-delay GFL. C1 retains its 1060 MVA / 400 kV external
-nameplate; no 400-to-380 kV rescaling is applied. The frozen equilibrium
-initialization is an explicit L3-03 qualification caveat: its very slow GFM
-filters are not settled by waiting twelve time constants. The eight-second
-windows do not establish generic startup settling, and measured baseline drift
-and every other gate remain mandatory. The caveat is retained in the fixture
-ledger and scan manifest.
-
-Each coarse group retains the 23 stage A tones, onset 2 s, [16,24)/[24,32) s
-windows, 32 s main records, 2.5 us base / 1.25 us half step and recorder ratio 25
-at both steps. L3-04 also has a **predeclared 43-tone local scan: 357–378 Hz every
-0.5 Hz**, at 2.4385006018880013e-5 pu per tone. Its two axes, baseline,
-half-amplitude witness and matching half-step baseline/axis all retain the same
-32 s duration and eight-second windows. This is one contiguous resonance band;
-L3-08 retains its two disjoint bands. The existing centre/width rule applies to
-direct Z only after both curves satisfy the original resolution requirements.
-Ordinary Y and all independent gates remain mandatory. Local scan definitions
-and band indices are frozen in the manifest before execution.
-
-For L3-04 the aggregate Y includes the line and both capacitors, with the remote
-node eliminated in the reference. Individual C1 Y uses its **remote terminal
-voltage and converter current**; its local departure/drift/conditioning gates
-cannot be replaced by near-end checks. Injected-run recorder pruning retains
-these remote channels and the DC clamp witnesses while preserving all electrical
-meters. Offline tests check analytic line elimination and recover independent
-synthetic near/remote responses, including a remote-only departure failure.
-
-Offline reproduction builds and solves all three networks, runs the complete
-6001-frequency stability gate, and computes plain and discrete references
-without preparation. The dense conditioning grid is the proposal's 3001
-logarithmic points from 1 to 1000 Hz plus its frozen coarse tones; the refined
-plain peak is checked at the proposal's refined frequency. Julia 1.10.11 gives:
-
-| Fixture | Rightmost Re(lambda), per s | Refined plain conditioning peak | Sampled discrete conditioning peak |
-| --- | --- | --- | --- |
-| L3-02 | -10.872237947687708 | 21.799547835064686 | 21.801587951588523 |
-| L3-04 | -10.954087715861519 | 41.05819735993361 | 34.467198177827754 |
-| L3-03 | -0.0006283185305982802 | 26.38472976239633 | 26.384932410754047 |
-
-All reproduce the frozen proposal within **1e-9 relative**; the largest relative
-root difference is 4.40e-10 for the slow L3-03 mode. L3-04's qualifying discrete
-local-Z geometry reproduces centre **366.91885337237056 Hz** and width
-**5.727917076969902 Hz**, both within 1e-9 relative. Plain geometry remains
-separate (centre 367.2291841671143 Hz, width 4.833451283563875 Hz). Numerical
-admission and reference reproduction supply no new station qualification.
-
-Preparation must run from the main repository **after this change is merged**.
-`prepare_m9d_b()` checks `composed_execution.jl`, `queue.jl`, `coverage.jl` and
-`scan.jl` byte-for-byte against `git show HEAD:<path>` before creating any output. A dirty
-or staged-only stage B implementation is refused; individual stage B preparation uses
-the same check. The worktree's uncommitted implementation therefore cannot be
-prepared. No preparation was performed here.
-
-From the main repository root, after merge and with the existing environment:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.prepare_m9d_b()'
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9d_b(timeout=14400.0)'
-```
-
-Preparation creates fresh `data/L3-02/`, `data/L3-04/` and `data/L3-03/` projects,
-references and empty native ledgers; existing fixture directories are refused.
-There are four measurement groups, ten prepared projects per group and normally
-**24 native runs**. The resilient queue records each outcome immediately in
-`data/m9d3/queue.toml`, continues after failures and stops on interrupts. A failed
-coarse group stops its fixture before a local group. All fixtures share the
-**240 min deadline**; expected total is **140–210 min**, including the declared
-L3-04 local scan. These are planning estimates. Retries retain witness selection
-and reuse only exact project/input/solver-hash matching completions.
-
-Final offline checks on **Julia 1.12.7**, with the repository Manifest and
-`OPENBLAS_NUM_THREADS=1`: **3,109/3,109 validation assertions**,
-**20,478/20,478 PSCAD suite assertions**, and **74/74 standalone name-guard
-assertions**. Stage B adds **228 assertions**. The composed A/B, queue and
-band-runner subsets also pass **457/457 on Julia 1.10.11**. The preparation source check was run
-read-only and refused the uncommitted implementation as intended. No stage B
-fixture or queue directories were created, no station was contacted, and no
-`src/` or dependency files changed.
-
-
-### Compact local witness paths and stage A continuation
-
-The owner reports L3-01 passing every measurand. L3-08's coarse and local
-comparisons pass on the discrete reference (0.01–0.19 percent errors), with both
-local resonance bands qualified. Its local half-step witness did not start:
-the frequency-list axis name exceeded the Windows path limit before the
-supervisor could launch. L3-08 remains witness-pending; this is not a failed
-native comparison or a completed qualification.
-
-`step_prefix` retains the exact existing rounded-frequency spelling when that
-label is at most 48 characters. Longer lists use
-`<first>_<last>_n<count>_<digest>`, where the digest is the first 12 hexadecimal
-SHA-256 characters of the comma-separated IEEE-754 bit strings of the exact
-ordered Float64 frequency list. Thus short coarse witnesses and their stored
-L1–L3 names are unchanged, while half-Hz frequencies remain distinguishable.
-The local half-step prefixes are:
-
-- L3-08: `composed_local_half_step_232_361_n39_0d674b400f77__`
-- L3-04: `composed_local_half_step_357_378_n43_ec5aa7b9b0a2__`
-
-Compact half-step projects also include the frequency digest in their project
-namespace/file stem, producing fresh project hashes without changing the
-circuit or measurement settings. Axis and baseline suffixes remain explicit.
-
-Preparation checks each possible run path before creating projects, including
-all possible coarse witness selections. It reserves the six-character random
-suffixes in
-`<root>/validation/<id>/<axis>-XXXXXX/run-XXXXXX/toolkit/<longest toolkit file>`.
-The longest toolkit filename is currently `supervisor.ps1`. It checks station
-scratch, the Z:-mapped share, and the caller's local root independently; any
-path above **240 UTF-16 code units** is refused. Boundary tests cover exactly
-240 and 241 for each root and verify refusal before directory writes.
-For the roots recorded by the failed run, the registered L3 maxima are:
-
-| Fixtures | Station scratch | Z:-mapped local | Caller local |
-| --- | --- | --- | --- |
-| L3-01, L3-02, L3-03 | 160 | 158 | 170 |
-| L3-04, L3-08 | 175 | 173 | 185 |
-
-`prepare_m9d_a_local_witness()` is restricted to L3-08 and uses the same committed
-source check as `prepare_m9d_b()`. It verifies retained payloads, unchanged
-sources outside the reviewed four-file harness revision, solved operating point,
-stability and both groups' frozen references. It stages fresh compact projects
-before archiving the three unused long-name local half-step project directories
-and the previous manifest under `history/local-witness-<timestamp>/`. It refuses
-any long-name project with either a run ledger entry or an unindexed completion.
-Every completed run, its project record, group results and stored selection are
-retained; the previous sources and unused project records remain in the repair
-ledger. Failed partial-run diagnostics also remain untouched.
-
-After merge, from the main repository root with the existing configured station
-environment, prepare the repair and stage B without executing native runs:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.prepare_m9d_a_local_witness(); PSCADValidation.prepare_m9d_b()'
-```
-
-Then use one resilient queue:
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9d_ab(timeout=18000.0)'
-```
-
-This runs the **L3-08 local witness first, then L3-02, L3-04, L3-03**. For L3-08,
-only the local group is revisited: exact completed main and half-amplitude
-projects resume through the existing verified-reuse path, and the two compact
-half-step runs complete the witness. The passed coarse group remains retained.
-Each fixture outcome is saved immediately to `data/m9d3-ab/queue.toml`; failures
-continue to the next fixture, interrupts stop, and all share the 300-minute
-budget. The original `run_m9d_b` queue remains available for stage B alone.
-No preparation or native execution was performed in this worktree.
-
-Path-fix verification on **Julia 1.12.7**, with `OPENBLAS_NUM_THREADS=1`:
-**3,180/3,180 validation assertions**, **20,549/20,549 PSCAD suite assertions**,
-and **74/74 name-guard assertions**. The fix adds 71 assertions; its focused
-prefix, boundary and preservation tests also pass **65/65 on Julia 1.10.11**.
-The uncommitted source guard refuses preparation as intended. These checks
-neither prepare a station fixture nor contact the station.
-
-## M9d-4: Layer 3 stage C
-
-Stage C registers **L3-07 then L3-06**. Stages A/B remain qualified by the
-owner's station results, including their residual/raw witnesses and both local
-resonance scans. Stage C preserves the approved tolerances, conditioning,
-drift, window, departure, amplitude, step and per-port KCL timing gates.
-
-| Fixture | Frozen circuit and measurement | Base and current per tone | Owner-recorded live nodes | Expected station time |
-| --- | --- | --- | --- | --- |
-| L3-07 | L2-11 Vdc/Q MMC — native distributed 25 km L1-05 DC cable — L2-07 P/Q MMC; independent SCR-8 AC grids; full 4x4 AC Y and direct Z, including every cross block, from four independent drives; both DC differential voltages and both inward cable currents retained as 2x4 drive-to-DC transfers | 1000 MVA / 380 kV LL **per AC port**; 0.0005452727356004889 pu | 96 | 105–150 min |
-| L3-06 | L2-16 synchronous machine + unchanged L2-07 MMC on one bus; SCR 8 on 2000 MVA; individual machine/MMC Y, aggregate Y and direct Z | aggregate 2000 MVA / 380 kV LL; 0.0006705809970911343 pu; individual devices keep their original 1000 MVA bases | 55 | 190–260 min |
-
-Both use the frozen 23 coarse tones, onset 2 s, **1.25 us main / 0.625 us
-witness** and recorder ratio **25 at each integration step**. L3-07 retains
-[16,24)/[24,32) s main windows and 32 s main runs. L3-06 retains
-**[64,72)/[72,80) s windows and 80 s runs**, including its half-step witness.
-Its machine SI conversion remains exactly Sbase/VLL², with native rt/lt,
-AVR, governor and steam turbine unchanged.
-
-L3-07 is **admitted by the owner on finite native contours through 1 MHz and
-located roots**, with rightmost located root about -3.0029523449 per s. This
-does not enumerate the distributed cable's infinite spectrum or prove closure
-at infinity. The manifest retains that caveat; the measurement's own drift and
-window gates guard against any unseen growing mode. The pi descriptor supplies
-root seeds only. Every final root residual, finite contour, plain C reference
-and composed discrete reference uses the native distributed cable. Unresolved
-root seeds remain counted. No pi seed is used as a C or stability reference.
-
-Each internal DC bus has two 10 Mohm pole references, giving a 20 Mohm
-differential path. **Both DC buses are pre-charged at their own solved positive
-and negative pole voltages and released at 0.2 s**. No DC clamp remains during
-measurement. The expected pole magnitudes are 400 and about 399.79443324 kV.
-The written project is checked for cable geometry/materials, grounded internal
-conductor elimination, earth, length and fitting fields, together with each
-pole-reference resistor. Both AC-port KCL checks retain every grid and device
-branch. Recorder pruning keeps both DC voltages and both cable currents.
-
-The full AC cross blocks are mandatory. **Near-zero cross entries are scored
-only against the absolute floor**, with no relative-accuracy claim. DC transfer
-witnesses use 800 kV and 1.25 kA output bases and the four recorded AC current
-drives. Their rectangular extraction, comparison, drift/departure checks,
-amplitude witness, raw step and residual step are retained independently.
-Both MMC modulation loops receive the interface step inside their feedback;
-the machine remains native. Plain-model C and raw step evidence stay visible.
-
-Offline reproduction is available without preparation:
-
-```sh
-OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/data/m9d4/verify.jl
-```
-
-It checks the frozen rightmost roots, refined plain and sampled discrete
-conditioning peaks, coarse native/discrete complex Y tables and DC coupling
-transfers within **1e-9 relative**, and evaluates every possible witness path.
-Numerical evidence and offline tests supply no new station qualification.
-
-| Fixture | Rightmost Re(lambda), per s | Refined plain conditioning peak | Sampled discrete conditioning peak |
-| --- | --- | --- | --- |
-| L3-07 | -3.002952344882158 | 20.484666001970957 | 20.485435486068162 |
-| L3-06 | -0.19784817439781693 | 42.23563695814419 | 42.23450947495567 |
-
-The largest coarse complex-Y entry relative differences from the frozen
-plain/discrete tables are 5.23e-12 (07) and 3.29e-12 (06). The 07 DC voltage
-and cable-current transfer maxima reproduce **0.17969411800266305** and
-**0.6675822073139983 pu/pu**, respectively. Logs and the offline numeric record
-are retained under [`data/m9d4/`](data/m9d4/); these local evidence files remain
-gitignored with the other manual validation data.
-
-
-**Commit first, then prepare from the main tree.** `prepare_m9d_c()` and
-individual stage C preparation compare every changed harness source against
-`git show HEAD:<path>` before creating output. Preparation refuses existing
-fixture directories. The 240-character path guard covers all four L3-07 axes
-and every possible selected coarse witness, as well as L3-06; for the retained
-roots the maximum remote/mapped-local/local lengths are **160/158/170** for
-each fixture.
-
-```sh
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.prepare_m9d_c()'
-julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9d_c(timeout=28800.0)'
-```
-
-Preparation creates fresh `data/L3-07/` and `data/L3-06/` trees, with **16 + 10
-projects** and empty native ledgers. Normally **8 + 6 native runs** execute.
-Expected total: **295–410 min**, within the queue's default shared **480 min**
-deadline. These are planning estimates. Each outcome is saved immediately to
-`data/m9d4/queue.toml`; a failure continues to the next fixture, an interrupt
-stops the queue, and resume retains the selected witness and requires exact
-project/input/solver hash matches. Every new build still enforces <100 live
-nodes. No stage C preparation, station contact or commit was performed here.
-
-Final offline checks on **Julia 1.12.7**, with the repository Manifest and
-`OPENBLAS_NUM_THREADS=1`: **3,411/3,411 validation assertions**,
-**20,780/20,780 PSCAD suite assertions**, and **74/74 standalone name-guard
-assertions**. Stage C adds **230 assertions**. The stage C core plus composed
-queue/evidence/path subsets also pass **338/338 on Julia 1.10.11**; the proposal
-reproduction passes **16/16**. Both fixtures pass passive-field verification
-through the actual XML writer. All 80 frozen proposal artifacts retain their
-hashes. Evidence and preservation records are under [`data/m9d4/`](data/m9d4/).
-No fixture preparation, station execution, `src/` changes or commits occurred.
-
-## M9d-5: L3b time-domain protocol (frozen before B data)
-
-Tier B is registered separately for **L3-08, L3-04, L3-06**, in that order. It
-requires each fixture's complete A/C result, including conditioning, window,
-amplitude and the separate **1% C residual/raw step** qualification, to have
-passed. C evidence remains in its original directory. B creates a fresh
-`L3-xx-tierb` directory and five native runs: zero-stimulus baseline, full burst,
-half-amplitude burst, half-step baseline and half-step burst. The extra
-half-amplitude zero-gain project is an unrun export template. Baselines are never
-borrowed from C: only projects with identical hashes after zeroing the injection
-instance gains can be paired, and the baseline gains must actually be zero.
-Native completion, project/settings hashes and the <100-live-node gate retain
-the existing runner's rules.
-
-| Fixture | Carrier, cycles; driven coordinate | Onset / record end, s | Ringdown fit interval, s | Burst peak current, pu | Base / half integration step, µs |
+Main and half-step reproduction each also meet the 1 % column-change rule. Raw step changes and
+residual-normalized diagnostics remain recorded. The selected denominator is the measured main
+response, not its small unexplained residual. The Y comparison with the one-step (discrete) model,
+KCL, amplitude and window checks must pass independently.
+
+## Checks and tolerances
+
+The suite reports operating-point, frequency-response, time-domain response and instability-growth
+checks. The comparison terms have these meanings:
+
+- The **continuous model** is Julia's model without the additional EMT interface
+  step. Configured converter delays remain part of that model.
+- The **one-step (discrete) model** adds exact one-step transport inside the
+  modulation feedback of each zero-delay converter, with its carrier correction.
+  Other devices and configured positive delays retain their native equations.
+- A **repeat** is a separate run with half the injection amplitude or half the
+  integration step, using the corresponding baseline and coherent windows.
+- The **raw step change** is the measured response difference between integration
+  steps, normalized by the main response and the stated floors.
+- The **residual step-size check** compares that change after subtracting the
+  change predicted by the one-step (discrete) model. It also requires the
+  independent response-reproduction and KCL/readout checks.
+
+A result passes only when its model comparison and independent measurement checks pass. Normalized
+Frobenius error divides matrix-error norm by reference norm with its floor. Entry and phase checks
+apply separately; a passing matrix norm cannot cancel a failing entry. Both norm and entry changes
+must meet the step-size limit; the catalogue reports the maximum-entry change.
+
+| Check | Limit or required condition |
+|---|---|
+| Operating point | `compare_operating_point` limits voltage error to 1 %, relative AC angle error to 1 degree and current error to 2 %. Device P/Q error divided by MVA rating is ≤0.01; speed error is ≤1e-3 pu |
+| Passive frequency response | Complex error ≤2 %; phase ≤2 degrees for reference entries ≥0.02 pu |
+| Active/coupled frequency response | Complex error ≤5 %; phase ≤3 degrees for reference entries ≥0.02 pu |
+| Error floors | 0.02 pu per entry; 0.1 for Frobenius norms |
+| Input-matrix conditioning | ≤100 |
+| Baseline drift | ≤1e-3; phase-domain checks include window means and the 50 Hz phasor |
+| Adjacent-window change | ≤1 % in required norm/entry checks |
+| Drive amplitude | Error ≤1 % |
+| Clamped voltage departure | ≤1e-6 pu, when applicable |
+| Settled input/output departure | ≤0.01 pu |
+| Half-amplitude repeat | Change ≤2 %, with the same floors |
+| Half-step repeat | Raw step change ≤1 % for the continuous model; residual step-size check ≤1 % and reproduction ≤1 % for the one-step (discrete) model |
+| KCL/readout | Driven timing discrepancy ≤1e-6 relative; undriven residual on the declared drive scale |
+| Resolved resonance | Both peaks/dips bracketed, both half-power crossings, ≥5 in-band samples and ≥6 intervals across width; centre error ≤max(1 % of Julia centre, one local interval), width error ≤10 % |
+| Lumped active-network stability | Zero closed right-half-plane count on the 6001-point 0.01 Hz–100 kHz contour at Re(s)=1e-6/s; all finite descriptor roots Re(λ)<-1e-7/s |
+| Time-domain waveform | Per signal RMS error ≤5 %, peak error ≤10 %, scalar gain error ≤5 %; half-amplitude RMS/peak/gain changes ≤2 % |
+| Ringdown mode | Frequency error ≤2 %, relative damping-ratio ζ error ≤10 %; report decay α separately |
+| Instability growth | Frequency error ≤2 %; growth-rate error ≤10 %, with 0.5/s growth-rate denominator floor |
+| Ringdown extraction | Converged interior fit, relative residual ≤0.10, relative standard errors ≤2 % frequency and ≤10 % ζ |
+| Frequency-to-time inversion | Double/quadruple padded predictions agree within 1e-4 relative norm |
+| Native measurement build | Fewer than 100 live nodes |
+
+The lumped descriptor retains every device and passive storage state and checks its Schur response
+against native admittances. Complete-network stability can include a stabilized open-subsystem
+integrator or right-half-plane pole. Converter-only poles are insufficient. Distributed cables
+require native finite-contour/root checks; these do not enumerate their infinite spectrum.
+
+The resonance rule applies only inside either resolved half-power band. Elsewhere ordinary
+complex/magnitude/phase rules apply. Point errors stay recorded inside the band. Unresolved curves
+retain the ordinary rule.
+
+## Fixture catalogue
+
+The entries report maximum normalized Frobenius errors and maximum-entry step changes as
+percentages, next to their limits. Displayed numerical values use two or three significant
+figures; exact settings and results are in each fixture's manifest. Corrected probe-orientation
+results take precedence over retained uncorrected analysis. A passing comparison with the one-step
+(discrete) model does not imply a pass with the continuous model. Native data are not distributed
+with the package.
+
+### Passive elements and network
+
+All passive main runs use 2 us integration, 10 us recording and 1 us half-step repeats. Voltage
+bases are solved phase-peak kV; current bases are `2000/(3*Vbase)` kA on 1000 MVA total. DC uses
+pole-to-pole kV and `1000/Vbase` kA.
+
+#### AC RLC, RL two-source circuit (`L1-01`)
+
+The two-source RL circuit tests dq coupling and loss through its 2x2 admittance matrix. The run
+lasts 3 s, with windows [1,2) and [2,3) s.
+
+The frequency-response check passes against the continuous model: the maximum error is 0.00131 %
+(limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. The
+balanced circuit does not test asymmetric phase couplings.
+
+#### DC two-terminal RLC (`L1-02`)
+
+The two-terminal DC RLC circuit tests charging, pole bases and current directions through its
+differential 2x2 admittance matrix. The run lasts 3 s, with windows [1,2) and [2,3) s.
+
+The frequency-response check passes against the continuous model: the maximum error is 0.00131 %
+(limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. The
+retained uncorrected current signs fail the comparison; analysis must use the corrected saved
+probe signs.
+
+#### AC overhead line, untransposed phases (`L1-03`)
+
+The untransposed overhead line tests earth return and propagation through its abc 6x6 admittance
+matrix. The run lasts 7 s, with windows [5,6) and [6,7) s.
+
+The frequency-response check passes against the continuous model: the maximum error is 0.381 %
+(limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. Early
+windows contain decaying DC offsets. The dq approximation is informational.
+
+#### AC coaxial cable, eliminated internal conductors (`L1-04`)
+
+The coaxial cable tests sheath elimination and earth return through its abc 6x6 admittance matrix.
+The run lasts 22 s, with windows [20,21) and [21,22) s.
+
+The frequency-response check passes against the continuous model: the maximum error is 0.843 %
+(limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. The
+side-2 current sign follows the producing project. Earth return uses exp(γ_E) and each cable’s own
+depth; fitting error is a separate contribution.
+
+#### DC cable and overhead line in series (`L1-05`)
+
+The series cable/overhead-line circuit tests mixed-media propagation and DC loss through its
+differential 2x2 admittance matrix. The run lasts 8 s, with windows [6,7) and [7,8) s.
+
+The frequency-response check passes against the continuous model: the maximum error is 0.303 %
+(limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. The
+cable fit has a 260 s pole. Agreement in the measured band does not constrain its true-DC
+extrapolation.
+
+#### YY transformer, loaded secondary (`L1-06`)
+
+The loaded YY transformer tests voltage ratio and winding loss through its dq 4x4 admittance
+matrix. The run lasts 3 s, with windows [1,2) and [2,3) s.
+
+The frequency-response check passes against the continuous model: the maximum error is 0.0118 %
+(limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. A
+phase reference must retain floating winding neutrals and near-ideal terms. Meter placement can
+affect the native solution.
+
+#### Dyn11 transformer, loaded secondary (`L1-07`)
+
+The loaded Dyn11 transformer tests the 30 degree secondary lead and winding loss through its dq
+4x4 admittance matrix. The run lasts 3 s, with windows [1,2) and [2,3) s.
+
+The frequency-response check passes against the continuous model: the maximum error is 0.0122 %
+(limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. The
+reference already includes the vector-group rotation; a secondary-frame change must transform
+voltage and current together.
+
+#### IEEE9, local bus impedance (`L1-08`)
+
+The IEEE9 circuit tests network reduction and resonance through separate abc 3x3 local impedance
+matrices at Bus1 and Bus5. Its coarse run lasts 3 s, with windows [1,2) and [2,3) s. The
+operating-point check, half-amplitude repeat and raw step change pass.
+
+The continuous model fails the ordinary point comparison: the coarse maximum error is 3.35 % and
+the refined maximum is 3.88 % (limit 2 %). A separate 312–322 Hz scan uses 0.25 Hz spacing, [2,6)
+and [6,10) s windows, 64 us recording and 2/1 us integration.
+
+The Julia and PSCAD resonance centres are 316.94 and 316.87 Hz. Their difference is 0.022 % (limit
+1 % or one local interval), and the widths 3.296 and 3.294 Hz differ by 0.072 % (limit 10 %). All
+126 in-band rows pass the centre/width rule. Outside that band, shoulder errors of 2.0–2.6 % still
+fail the 2 % limit; seven entry rows also fail at 237, 562 and 1000 Hz. Resonance agreement does
+not override those point failures.
+
+### Single devices against a Thevenin grid
+
+All AC grids have X/R=10 at 50 Hz. Stiff-grid SCR is 8 at rated external voltage; weak-grid SCR is
+2.5. The ideal source lies behind series R/L. TLC rating is 100 MVA, 220 kV LL RMS and 640 kV DC;
+stiff-grid R/L are 6.02 ohm/0.192 H. Weak-grid R/L are 19.3 ohm/0.613 H. TLC P/Q PI is 0.04/40,
+Vdc PI 5/5, P-f support K=5 with cutoff 2 rad/s, Q-V K=20 with cutoff 100 rad/s, VAC PI 0/100 with
+`NoFilter`, and modulation delay 200 us Padé 3/3.
+
+Grid-following MMC rating is 1000 MVA, 333/380 kV converter/external LL RMS, 800 kV DC, ratio
+333/380, 400 submodules per arm, 50 mH/1.07 ohm arms and 10 mF submodule capacitance. Stiff-grid
+R/L are 1.80 ohm/0.0572 H; weak-grid R/L are 5.75 ohm/0.183 H. P/Q PI is 0.1/31.4159, Vdc PI 5/15,
+TEC 1.386/29.70, ZSCC/CCSC 0.1048/48.1914, PLL 0.28/12.5664 and OCC 0.7691/522.7654. The standard
+MMC modulation has zero delay. Support/VAC blocks use the gains above.
+
+Each entry states main/half integration steps, main recorder interval, main windows and per-tone
+current amplitude. Half-amplitude is exactly one half; new half-step recorder intervals preserve
+ratio 25 at their own step. The original TLC frequency-support circuit already includes the P-f
+lag, so its separate P-f entry deliberately repeats that physics. Retained operating-point and
+half-amplitude checks pass for the completed single-device entries; a failing frequency-response
+check still prevents an overall pass.
+
+#### TLC, P/Q and frequency support, stiff grid (`L2-01`)
+
+The TLC connects a direct ideal DC source to the stiff AC grid with a 70 MW/5 MVAr request. It
+tests P/Q control, PLL/OCC, measurement filters and delayed modulation. The run uses 2.5 us
+integration, a 1.25 us half-step repeat and 20 us recording. It lasts 10 s, with windows [8,9) and
+[9,10) s and 5.00e-5 pu current per tone.
+
+The frequency-response check fails against the continuous model; the maximum norm error is 1.07 %
+(limit 5 %). The raw step change passes at 0.882 % (limit 1 %). At 2.5 us, the continuous model
+fails its point comparison despite a passing matrix norm; entry and phase checks remain
+independent.
+
+The finer variant uses the same key with suffix `-1p25us`, 1.25/0.625 us integration and unchanged
+recording, windows and amplitude. Its continuous model comparison passes at 0.534 % (limit 5 %),
+and its raw step change passes at 0.441 % (limit 1 %). The operating-point check and
+half-amplitude repeat also pass.
+
+#### TLC, P-f/Q, stiff grid (`L2-02`)
+
+The TLC uses the same physical controls and 70 MW/5 MVAr request as the preceding circuit. It
+tests explicit selection of P-f support. The run uses 2.5 us integration, a 1.25 us half-step
+repeat and 20 us recording. It lasts 10 s, with windows [8,9) and [9,10) s and 5.00e-5 pu current
+per tone.
+
+The frequency-response check fails against the continuous model; the maximum norm error is 1.07 %
+(limit 5 %). The raw step change passes at 0.882 % (limit 1 %). Its passing operating point and
+raw step change do not override the failed point comparison.
+
+#### TLC, P/Q-V, stiff grid (`L2-03`)
+
+The TLC supplies 70 MW with Q-V support and P control without frequency support; solved Q is -1.37
+MVAr. It tests the voltage-support lag. The run uses 2.5 us integration, a 1.25 us half-step
+repeat and 20 us recording. It lasts 10 s, with windows [8,9) and [9,10) s and 5.00e-5 pu current
+per tone.
+
+The frequency-response check passes against the continuous model; the maximum norm error is 1.07 %
+(limit 5 %). The raw step change passes at 0.896 % (limit 1 %). The DC source clamps voltage, so
+this circuit does not test DC-load feedback.
+
+#### TLC, P/VAC, stiff grid (`L2-04`)
+
+The TLC supplies 70 MW while its VAC loop holds terminal voltage at 1.00 pu; solved Q is -3.91
+MVAr. It tests VAC initialization from solved Q. The run uses 2.5 us integration, a 1.25 us
+half-step repeat and 20 us recording. It lasts 10 s, with windows [8,9) and [9,10) s and 5.00e-5
+pu current per tone.
+
+The frequency-response check passes against the continuous model; the maximum norm error is 1.05 %
+(limit 5 %). The raw step change passes at 0.901 % (limit 1 %). The VAC loop uses NoFilter;
+controller-local VAC filters remain unsupported by export.
+
+#### TLC, Vdc/Q, resistive DC load (`L2-05`)
+
+The TLC supplies a 5.85 kohm differential DC load, implemented as two 2.93 kohm pole-to-ground legs,
+and absorbs 70.0 MW from AC. It tests Vdc control with DC-load feedback. The run uses 0.625 us
+integration, a 0.3125 us half-step repeat and 20 us recording. It lasts 10 s, with windows [8,9)
+and [9,10) s and 5.00e-5 pu current per tone.
+
+The frequency-response check passes against the continuous model; the maximum norm error is 0.888
+% (limit 5 %). The raw step change passes at 0.578 % (limit 1 %). DC voltage is free after
+pre-charge releases at 0.2 s. The reference must include the resistor rather than clamp the
+converter’s DC port.
+
+At 2.5 us, the 1000 Hz q-d magnitude error is 7.27 % (limit 5 %), while the matrix error is 3.28 %
+(limit 5 %). At 1.25 us, the half-step repeat changes 0.532 % in norm and 1.11 % per entry (limit
+1 %), so it fails. The 0.625/0.3125 us result above passes.
+
+#### TLC, P/Q, weak grid (`L2-06`)
+
+The TLC uses the 70 MW/5 MVAr request against an AC grid with SCR 2.5. It tests the same controls
+against the weaker grid impedance. The run uses 2.5 us integration, a 1.25 us half-step repeat and
+20 us recording. It lasts 10 s, with windows [8,9) and [9,10) s and 5.00e-5 pu current per tone.
+
+The frequency-response check passes against the continuous model; the maximum norm error is 1.07 %
+(limit 5 %). The raw step change passes at 0.864 % (limit 1 %). Reference calculations must retain
+that weak-grid impedance.
+
+#### Grid-following MMC, P/Q, stiff grid (`L2-07`)
+
+The MMC supplies 600 MW/200 MVAr with an ideal 800 kV DC clamp. It tests TEC, ZSCC and CCSC with
+zero configured modulation delay. The run uses 2.5 us integration, a 1.25 us half-step repeat and
+62.5 us recording. It lasts 32 s, with windows [16,24) and [24,32) s and 5.44e-4 pu current per
+tone.
+
+The frequency-response check passes against the one-step (discrete) model with maximum error 0.113
+% (limit 5 %). The continuous model fails the point comparison; its maximum norm error is 5.69 %
+(limit 5 %). The raw step change fails, but the residual step-size check passes at 0.080 % (limit 1
+%). One-second windows fail near 42 Hz; the stored eight-second windows pass the independent
+window check.
+
+#### Grid-following MMC, P-f/Q, stiff grid (`L2-08`)
+
+The MMC supplies 600 MW/200 MVAr with P-f support gain 5 and cutoff 2 rad/s. It tests slow
+frequency-support dynamics with zero configured modulation delay. The run uses 2.5 us integration,
+a 1.25 us half-step repeat and 62.5 us recording. It lasts 32 s, with windows [16,24) and [24,32)
+s and 5.44e-4 pu current per tone.
+
+The frequency-response check passes against the one-step (discrete) model with maximum error 0.117
+% (limit 5 %). The continuous model fails the point comparison; its maximum norm error is 5.69 %
+(limit 5 %). The raw step change fails, but the residual step-size check passes at 0.0742 % (limit
+1 %). Pole-based settling estimates cannot replace measured adjacent-window changes.
+
+#### Grid-following MMC, P/Q-V, stiff grid (`L2-09`)
+
+The MMC supplies 600 MW with Q-V support; solved Q is 30.7 MVAr. It tests converter-side
+voltage-reference scaling through the transformer. The run uses 2.5 us integration, a 1.25 us
+half-step repeat and 62.5 us recording. It lasts 32 s, with windows [16,24) and [24,32) s and
+5.36e-4 pu current per tone.
+
+The frequency-response check passes against the one-step (discrete) model with maximum error 0.195
+% (limit 5 %). The continuous model fails the point comparison; its maximum norm error is 5.75 %
+(limit 5 %). The raw step change fails, but the residual step-size check passes at 0.0603 % (limit
+1 %). The continuous model retains a failed point comparison even when the one-step (discrete)
+model passes.
+
+#### Grid-following MMC, P/VAC, stiff grid (`L2-10`)
+
+The MMC supplies 600 MW while regulating terminal voltage at 1.00 pu; solved Q is -37.3 MVAr. It
+tests VAC control through the transformer. The run uses 2.5 us integration, a 1.25 us half-step
+repeat and 62.5 us recording. It lasts 32 s, with windows [16,24) and [24,32) s and 5.58e-4 pu
+current per tone.
+
+The frequency-response check passes against the one-step (discrete) model with maximum error 0.156
+% (limit 5 %). The continuous model fails the point comparison; its maximum norm error is 5.62 %
+(limit 5 %). The raw step change fails, but the residual step-size check passes at 0.150 % (limit 1
+%). The VAC equilibrium must use solved Q; the requested Q alone does not determine its integral
+state.
+
+#### Grid-following MMC, Vdc/Q, resistive DC load (`L2-11`)
+
+The MMC supplies a 600 MW DC load with differential resistance 1.07 kohm, implemented as two 533 ohm
+legs. It absorbs 603 MW from AC and tests DC control without a permanent voltage source. The run
+uses 1.25 us integration, a 0.625 us half-step repeat and 31.25 us recording. It lasts 24 s, with
+windows [8,16) and [16,24) s and 5.25e-4 pu current per tone.
+
+The frequency-response check passes against the one-step (discrete) model with maximum error 0.12
+% (limit 5 %). The continuous model fails the point comparison; its maximum norm error is 3.15 %
+(limit 5 %). The raw step change fails, but the residual step-size check passes at 0.0361 % (limit
+1 %). Pre-charge releases at 0.2 s. The one-step (discrete) model must include both exported pole
+resistances.
+
+#### Grid-following MMC, P/Q, weak grid (`L2-12`)
+
+The MMC supplies 600 MW/200 MVAr against an AC grid with SCR 2.5. It tests weak-grid conditioning
+and the one-step (discrete) model. The run uses 2.5 us integration, a 1.25 us half-step repeat and
+62.5 us recording. It lasts 24 s, with windows [8,16) and [16,24) s and 1.51e-4 pu current per
+tone.
+
+The frequency-response check passes against the one-step (discrete) model with maximum error 0.112
+% (limit 5 %). The continuous model fails the point comparison; its maximum norm error is 5.69 %
+(limit 5 %). The raw step change fails, but the residual step-size check passes at 0.133 % (limit
+1 %). The residual step-size check uses the measured response as its denominator; dividing by the
+small unexplained residual overstates the change.
+
+#### Grid-forming MMC, VSM and CCVI (`L2-13`)
+
+The 1060 MVA MMC connects 320/400 kV AC and 640 kV DC circuits at 742 MW/0 MVAr. Its VSM and CCVI,
+with TEC/ZSCC/CCSC and 200 us Padé 5/5 modulation, test grid-forming synchronization. The run uses
+2.5 us integration, a 1.25 us half-step repeat and 62.5 us recording. It lasts 10 s, with windows
+[8,9) and [9,10) s and 8.53e-4 pu current per tone.
+
+The frequency-response check passes against the continuous model; the maximum norm error is 0.393
+% (limit 5 %). The raw step change passes at 0.787 % (limit 1 %). The slow OCC poles have a decay
+time of about 1590 s. These records rely on solved initialization and do not establish generic
+startup settling.
+
+#### Grid-forming MMC, leg-energy control and compensated modulation (`L2-14`)
+
+The same 1060 MVA plant uses VSM/CCVI, Sigma/Delta-energy PI gains 0.5544/5.94 and CCC. It tests
+the corrected triplen frame and physical per-arm capacitor division. The run uses 1 us
+integration, a 0.5 us half-step repeat and 25 us recording. It lasts 10 s, with windows [8,9) and
+[9,10) s and 8.55e-4 pu current per tone.
+
+The frequency-response check passes against the continuous model; the maximum norm error is 0.116
+% (limit 5 %). The raw step change passes at 0.314 % (limit 1 %). The 10 us case diverges, while
+the measured 1 us case remains settled. Physical arm division retains harmonics absent from
+Julia’s truncated harmonic solve.
+
+#### MMC, P/Q with disabled total-energy and zero-sequence control (`L2-15`)
+
+The 1000 MVA MMC uses 333/380 kV AC, 640 kV DC and 30 mH arms at 100 MW/100 MVAr. It tests
+disabled TEC/ZSCC while CCSC remains enabled. The run uses 2.5 us integration, a 1.25 us half-step
+repeat and 62.5 us recording. It lasts 10 s, with windows [8,9) and [9,10) s and 7.06e-4 pu
+current per tone.
+
+The frequency-response check passes against the continuous model; the maximum norm error is 0.395
+% (limit 5 %). The raw step change passes at 0.788 % (limit 1 %). Its clamped DC circuit does not
+establish stability of the complete P2P link.
+
+#### Synchronous machine, AVR, governor and steam turbine (`L2-16`)
+
+The 1000 MVA/380 kV machine supplies 900 MW with its native rt/lt branch, AVR, governor and steam
+turbine. It tests machine admittance in SI units and slow electromechanical dynamics. The run uses
+1.25 us integration, a 0.625 us half-step repeat and 20 us recording. It lasts 66 s, with windows
+[62,64) and [64,66) s and 5.00e-5 pu current per tone.
+
+The frequency-response check passes against the continuous model; the maximum norm error is 1.49 %
+(limit 5 %). The raw step change passes at 0.895 % (limit 1 %). The slowest mode has a decay time
+of 5.06 s. At 2.5 us, the raw step change was 1.81 % (limit 1 %); the finer stored result passes.
+
+#### Grid-forming MMC, weak grid (`L2-17`)
+
+The 1060 MVA VSM/CCVI circuit at SCR 2.5 has complete-network roots +101 ± j360 /s. It fails Julia
+stability checks, so preparation stops before native projects or runs. The gains and grid strength
+remain unchanged.
+
+### Coupled circuits
+
+Individual device Y retains each device's original phase-peak bases. Aggregate Y and direct Z use
+the declared circuit base. Every measurand has independent comparison, window, amplitude, step and
+KCL checks. A passing aggregate cannot cancel an individual-device failure. The recorded matrices
+include full cross blocks.
+
+Unless stated otherwise, main runs use 2.5/1.25 us integration, ratio 25, 32 s duration and
+[16,24), [24,32) s windows. Local scans retain these windows, both drives, their own baseline and
+amplitude/half-step repeats. Reported maxima below are taken across each group's required
+measurands.
+
+#### Two TLCs, P-f/Q and P/Q-V, shared bus (`L3-01`)
+
+The TLCs share an AC bus behind a 6.02 ohm/0.192 H grid and retain separate 640 kV DC clamps.
+Their aggregate base is 200 MVA/220 kV, and each device keeps its 100 MVA base. The circuit tests
+individual/aggregate admittance and direct impedance with both 200 us delays. The coarse scan
+injects 4.51e-4 pu current per tone.
+
+The coarse frequency-response comparisons pass against the continuous model, with maximum error
+1.53 % (limit 5 %). The half-amplitude repeat and raw step change pass.
+
+Both DC voltages are clamped, so this circuit does not test DC-side coupling.
+
+#### Two grid-following MMCs, P/Q and P/Q-V, shared bus (`L3-02`)
+
+The MMCs share an AC bus behind a 1.80 ohm/0.0572 H grid and retain separate 800 kV DC clamps. The
+grid has SCR 4 on the combined 2000 MVA/380 kV base. The circuit tests interaction between two
+zero-delay converters. The coarse scan injects 2.56e-4 pu current per tone.
+
+The coarse frequency-response comparisons pass against the one-step (discrete) model, with maximum
+error 0.193 % (limit 5 %). The half-amplitude repeat and residual step-size check pass.
+
+The continuous model fails individual/aggregate admittance comparisons, although its
+direct-impedance comparison passes.
+
+#### Grid-forming and grid-following MMC, shared bus (`L3-03`)
+
+The MMCs share a bus behind a 0.872 ohm/0.0278 H grid and retain separate 640/800 kV DC clamps.
+The 2060 MVA/380 kV circuit tests mixed synchronization and model delays. The coarse scan injects
+6.92e-4 pu current per tone.
+
+The coarse frequency-response comparisons pass against the one-step (discrete) model, with maximum
+error 0.316 % (limit 5 %). The half-amplitude repeat and residual step-size check pass.
+
+The GFM retains its 1060 MVA/400 kV nameplate and 200 us delay; only the zero-delay GFL receives
+the extra interface step. The continuous model fails the GFL admittance comparison. Slow GFM
+filters rely on solved initialization.
+
+#### MMC behind a lumped pi line (`L3-04`)
+
+The MMC connects to the remote end of a pi line with series R=2 ohm, L=20 mH and C=2 uF to ground
+at each end. An SCR-8 grid supplies the near end on a 1000 MVA/380 kV base. The circuit tests
+remote device admittance, aggregate line/device admittance and direct near-port impedance. The
+coarse scan injects 7.12e-4 pu current per tone.
+
+The coarse frequency-response comparisons pass against the one-step (discrete) model, with maximum
+error 0.123 % (limit 5 %). The half-amplitude repeat and residual step-size check pass.
+
+The local frequency-response comparisons pass against the one-step (discrete) model, with maximum
+error 0.122 % (limit 5 %). The half-amplitude repeat and residual step-size check pass.
+
+Remote terminal voltage/current checks remain independent. The local scan uses 43 tones from 357
+to 378 Hz at 0.5 Hz spacing and 2.44e-5 pu per tone. The one-step (discrete) model gives a local-Z
+centre of 366.9 Hz and width 5.73 Hz; the continuous model gives 367.2 Hz and 4.83 Hz.
+
+#### TLC behind a step-up transformer and line (`L3-05`)
+
+The TLC connects to the grid through a step-up transformer and a line. This circuit is intended to
+test converter interaction with the transformer and line.
+
+The circuit is deferred because the transformer’s magnetising flux decays over about 21 s, which
+would require 390 s runs. A measured response is not yet reported.
+
+#### Synchronous machine and MMC, shared bus (`L3-06`)
+
+The machine and MMC share a bus supplied by an SCR-8 grid on a 2000 MVA/380 kV aggregate base.
+Each device keeps its 1000 MVA base. The circuit tests individual/aggregate admittance and direct
+impedance during machine/converter interaction. The coarse scan injects 6.71e-4 pu current per
+tone.
+
+The coarse frequency-response comparisons pass against the one-step (discrete) model, with maximum
+error 1.51 % (limit 5 %). The run uses 1.25/0.625 us integration, recorder ratio 25, 80 s duration
+and [64,72), [72,80) s windows. The residual step-size check is pending, so the fixture has no final
+passing result.
+
+#### Two MMCs coupled by a distributed DC cable (`L3-07`)
+
+Vdc/Q and P/Q MMCs connect through a 25 km DC cable and independent SCR-8 AC grids. Each port uses
+a 1000 MVA/380 kV base. The circuit tests the full 4x4 AC admittance/impedance matrices and two
+2x4 drive-to-DC voltage/current transfers. The coarse scan injects 5.45e-4 pu current per tone.
+
+The coarse frequency-response comparisons pass against the one-step (discrete) model, with maximum
+error 0.829 % (limit 5 %). The half-amplitude repeat and residual step-size check pass. The run
+uses 1.25/0.625 us integration and recorder ratio 25. Both DC buses release pre-charge at 0.2 s
+and retain two 10 Mohm pole references each. Native finite contours through 1 MHz locate a
+rightmost root at -3.00/s but do not enumerate the distributed infinite spectrum. Sub-floor cross
+entries receive absolute-floor checks only.
+
+#### MMC with a damped series-RC shunt (`L3-08`)
+
+The P/Q MMC retains its SCR-8 grid and DC clamp, with a series R=2 ohm/C=5 uF shunt per phase. The
+1000 MVA/380 kV circuit tests device/aggregate admittance and direct impedance at two resonances.
+The coarse scan injects 4.74e-4 pu current per tone.
+
+The coarse frequency-response comparisons pass against the one-step (discrete) model, with maximum
+error 0.118 % (limit 5 %). The half-amplitude repeat and residual step-size check pass.
+
+The local frequency-response comparisons pass against the one-step (discrete) model, with maximum
+error 0.192 % (limit 5 %). The half-amplitude repeat and residual step-size check pass.
+
+The local scan uses 39 tones at 232–260.5 Hz and 334–361 Hz, spaced by 1.5 Hz, at 5.91e-5 pu per
+tone. Both disjoint bands pass the resonance rule. Local half-step filenames need the compact
+frequency digest described below.
+
+## Time-domain response procedure
+
+The RC-shunt MMC, pi-line MMC and machine/MMC circuits have a separate burst protocol. Preparation
+requires their complete frequency-response results, including the independent 1 % raw step change
+or residual step-size check, to pass. Each burst uses five fresh native runs: baseline, full
+amplitude, half amplitude, half-step baseline and half-step burst. A baseline can pair only with a
+project whose hash matches after zeroing actual injection gains. Frequency-response baselines are
+not reused.
+
+| Circuit | Carrier / cycles; axis | Onset / end, s | Ringdown interval, s | Peak current, pu | Integration main/half, us |
 |---|---|---|---|---|---|
-| L3-08 | 245.50509 Hz, 8; d | 16 / 20 | [16.07, 16.22) | 0.001 | 2.5 / 1.25 |
-| L3-04 | 367.22563 Hz, 8; d | 16 / 20 | [16.05, 16.30) | 0.00085 | 2.5 / 1.25 |
-| L3-06 | 1.4869167 Hz, 4; d | 64 / 80 | [67, 76) | 0.0035 | 1.25 / 0.625 |
+| MMC with RC shunt | 245.5 Hz / 8; d | 16 / 20 | [16.07,16.22) | 1.00e-3 | 2.5/1.25 |
+| MMC behind pi line | 367.2 Hz / 8; d | 16 / 20 | [16.05,16.30) | 8.50e-4 | 2.5/1.25 |
+| Machine and MMC | 1.487 Hz / 4; d | 64 / 80 | [67,76) | 3.50e-3 | 1.25/0.625 |
 
-The current command is
-`a/2 * (1-cos(2π τ/T)) * cos(2π f τ)` for `0 ≤ τ ≤ T`, zero otherwise,
-where `τ=t-onset` and `T=cycles/f`. This phase-continuous Hann burst uses the
-existing dq current-port graph and phase/current measurement path. The voltage
-base is the nominal 380 kV line-to-line rating converted to phase peak; injection
-uses the existing aggregate current base (2000 MVA for 06, 1000 MVA for 04/08).
-Device-current departures retain each device's original 1000 MVA base. Offline
-sizing checks every free-node voltage and every retained branch/device current
-against 0.0045 pu V and 0.008 pu I for both integration steps.
+The command is `a/2 * (1-cos(2π τ/T)) * cos(2π f τ)` on `0 ≤ τ ≤ T`, zero otherwise, where
+`τ=t-onset`, `T=cycles/f`. This Hann burst uses the same dq current port and phase measurement
+path. Voltage base is the 380 kV nominal LL rating converted to phase peak; aggregate current
+bases apply to injection, while device departures retain their original bases.
 
-All free-node d/q voltages and individual device/passive branch d/q currents are
-scored. The common-mode fit uses the two input-port voltage coordinates and the
-two C1 AC current coordinates: near-port voltage and remote MMC current for 04,
-bus voltage and MMC current for 08, bus voltage and machine current for 06.
-Remote voltage, line/shunt/grid currents and both machine/MMC currents remain
-scored; native records also retain machine speed and active/reactive power.
-Other control-diagnostic recorders are omitted, preserving every electrical
-meter and signal graph. Completed raw records stay on disk; analysis retains
-only the baseline still needed for subtraction and the V/I arrays needed by
-the witnesses. Channel names, bases, fit indices, intervals,
-search bounds and extraction rules are frozen in the B manifest.
+Score every declared free-node d/q voltage and individual device/passive-branch current over
+[onset,end]. Fit a common complex mode across the two input-port voltage and two selected
+device-current coordinates, with independent sine/cosine amplitudes and constant/linear
+backgrounds per channel. Report frequency, `α=-Re λ`, `ζ=α/hypot(α,Im λ)`, fit residual and
+conditional standard errors. A fit at a search limit or outside the extraction checks is
+`unextractable`; invalid baseline/sampling/drive/departures give `invalid_measurement`. Keep the
+predeclared windows. Correlated EMT noise can make fit standard errors optimistic.
 
-`RMS(e)/RMS(reference) ≤ 5%`, `max|e|/max|reference| ≤ 10%` and the scalar
-least-squares gain within 5% apply separately to every predeclared signal over
-[onset, record end]. No denominator floor or fitted time shift is used. A common
-complex mode is fitted across the selected channels, with independent sine and
-cosine amplitudes and a constant plus linear background in each channel, using
-the same model for measurement and prediction. Report oscillation frequency
-`|Im λ|/(2π)`, decay `α=-Re λ`, damping ratio `ζ=α/hypot(α,Im λ)`, residual and
-conditional fit standard errors. Agreement limits remain **2% frequency and
-10% relative ζ**. Extraction rejects nonconvergence, boundary solutions,
-relative fit residual >0.10, or relative standard error >2% for frequency / >10%
-for ζ. These fixed extraction checks are not station validation and assume the
-fit residual model; correlated EMT noise can make their standard errors
-optimistic. Unresolved fits return `unextractable`; invalid baseline, sampling,
-drive or departure checks return `invalid_measurement`. Windows are never moved.
+Julia prediction uses the solved composed nodal equations and Jacobians, passive storage,
+ideal-source perturbation clamps, exact modulation-feedback transport and full injection-readout
+dq rotation. Double/quadruple padded DFT inversions check circular wraparound. Leading zero drive
+samples can be skipped with zero perturbation state. Retain all nonzero pre-onset samples. Each
+integration step is compared on its own recorder grid. Raw step changes are diagnostic; scores
+against the continuous model are reported separately. A 19 % interface-step damping change in the
+pi-line circuit cannot be described as a pass against the continuous model.
 
-Julia predictions use the composed closed-network native nodal equations and
-retained Jacobians from the same solved point. Frequency-response convolution
-retains every recorded dq injection bin, ideal-source perturbation clamps,
-passive storage and the exact `exp(-s h)` modulation feedback in zero-delay
-converters. The qualifying realization also applies the full injection-readout
-transport and dq rotation; a scalar timing factor alone is insufficient on the
-undriven coordinate. The continuous-model scores stay visible. Exponential
-weighting and fixed double/quadruple DFT padding suppress circular wraparound;
-predictions whose two inversion results disagree by >1e-4 in relative norm are
-unresolved. This is a numerical integration check, not a relaxed B tolerance.
-Exactly zero leading drive history can be skipped with a zero perturbation
-state; every nonzero sample, including pre-onset noise, remains. A plain Julia
-radix-two DFT evaluates the convolution in O(n log n) operations, without new
-dependencies. Roots are computed directly for phase accuracy; inverse channels
-share one workspace. The independent direct-sum DFT tests also check inverse
-normalization. Exact transport, readout and the frozen B tolerances are unchanged.
+The RC-shunt MMC time-domain check passes against the one-step (discrete) model. Its maximum
+per-signal RMS error is 0.664 % (limit 5 %), peak error 0.259 % (limit 10 %) and damping-ratio
+error 0.167 % (limit 10 %). The half-amplitude repeat passes. The continuous model fails the
+waveform comparison.
 
-Actual full records contain 320,001 samples (04/08) and 2,560,001 samples (06);
-the half-step records contain 640,001 and 5,120,001 samples. For the ideal
-zero-prehistory offline drive, the active records contain 64,001/128,001 and
-512,001/1,024,001 samples, respectively. The largest active native transform has
-4,194,304 points. A separate ten-channel transport check evaluates the entire
-5,120,001-sample record, including nonzero prehistory, with a 33,554,432-point
-transform. Output spectra use half storage and inverse channels are processed
-individually to limit memory. The full-record transport check evaluates both
-padding lengths while retaining the first prediction, taking 149 s with
-5.84 GiB peak resident memory. Its relative RMS and peak errors against an
-independent sample-exact delay are 8.66e-16 and 2.12e-15. This stress check
-measures the convolution workspace and transform runtime, not native network
-response evaluation.
+The pi-line MMC time-domain check passes against the one-step (discrete) model. Its maximum RMS
+error is 1.03 % (limit 5 %), peak error 0.283 % (limit 10 %) and damping-ratio error 0.0446 %
+(limit 10 %). The half-amplitude repeat passes. The continuous model fails the waveform and
+damping-ratio comparisons.
 
-Both integration steps are scored on their own native odd-ratio-25 recorder
-grids. No half-step samples are discarded. The half-amplitude response, doubled
-before comparison, must agree with the main response in normalized RMS, peak
-and scalar gain within the existing **2% amplitude limit**. Raw half-step changes
-are diagnostics, evaluated on the fine grid by interpolating the coarse trace;
-each measured trace still qualifies against its own realization. The separate
-C step gate remains mandatory through C admission. Baseline drift ≤1e-3 pu,
-terminal departures ≤0.01 pu and drive amplitude within 1% retain existing
-measurement limits. Per-signal signal-to-baseline RMS ratios are reported;
-small half-amplitude signals may remain unextractable in native data.
+The machine/MMC burst remains pending its complete frequency-response result. Offline fitted modes
+and convolution tests establish numerical self-consistency, not measured nonlinear response.
 
-Offline reproduction, with no exports or station calls:
+## Instability-growth measurement
 
-```sh
-OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, LinearAlgebra; BLAS.set_num_threads(1); include("test/manual/pscad/validation/validation.jl"); PSCADValidation.verify_tierb_offline()'
-```
+The retained P2P network contains a 25 km DC cable and 75 km DC overhead line. At its solved Julia
+point, located roots +1374/+1426 s⁻¹ have dq frequencies 3429/3527 Hz. Their abc sidebands are
+3479/3477 Hz, with growth times 0.728/0.701 ms. The 1 us integration, 50 us sampled B3 phase-a
+trace fits 3473 Hz and 0.688 ms over 0.3–1.8 ms. This reproduces the unstable mode without
+establishing a settled operating point. The early-growth trace is retained evidence, separate from
+the current coherent frequency-response protocol. The developer mapping describes the
+modulation-delay/resonance interaction and unstable reduced-delay cases.
 
-This saves predicted traces, native and exact-delay located poles, fitted modes,
-uncertainties and sizing results in `data/m9d5/`. A discrete pole is compared
-with the fitted discrete response; its difference from the continuous pole is
-also retained. In particular the L3-04 interface step changes damping by about
-19% at the base step; it must not be hidden or called a continuous-model pass.
-These are linear self-consistency calculations, not nonlinear validation.
+## Known failure modes
 
-**Commit/merge first, then prepare from the main tree after C has passed.**
-`prepare_m9d_b_tier(ids)` refuses if HEAD lacks any current B source, project
-entry, test or protocol documentation, and preflights C status for the complete
-selection before creating directories. It checks the producing native-source
-hashes, solved point, exported passives and all frozen plain/discrete C
-references. Older C harness revisions remain recorded in their original
-manifests. Do not prepare or execute from this implementation worktree.
+| Symptom | Cause | Remedy or interpretation |
+|---|---|---|
+| Inconsistent low-frequency voltage phasors despite clean currents | EMT-Nyquist voltage chatter aliases to DC at even recorder/integration ratios | Prepare an odd integer ratio at both steps and preserve coherent windows. Adjacent decimation offsets correlated -0.999, offsets two apart +0.998; 0.74–0.85 V RMS chatter persisted after onset. Ratio 25 separates it at recorder Nyquist. |
+| Zero-delay converter Y/step errors rise with frequency | One inherent electrical-measurement-to-source step | Use the one-step (discrete) model and residual step-size check, retaining continuous model errors and raw step changes and KCL readout checks. Positive delays export a rounded residual after subtracting one step. |
+| Window-entry failure near a lightly damped mode | Ill-conditioned measured voltage matrix amplifies residual drift/noise | Keep the ≤100 condition check and extend predeclared coherent windows. The stiff-grid P/Q MMC had 1.87 % window-entry change at 42 Hz against 1 %; 8 s windows resolve the stored case. Larger amplitude alone did not remove it. |
+| DFT rejects an adaptive band | Window lacks whole tone periods | A 75 Hz tone has 7.5 cycles in 0.1 s. Use whole common periods including the 50 Hz frame: [8,8.12), [8.12,8.24) s for the recorded 75/1000 Hz case, and retain enough output to cover both. |
+| Large relative error on a tiny cross entry | Reference below the entry floor | Report the 0.02 pu absolute-floor comparison. Do not claim relative accuracy for sub-floor entries or let a passing aggregate hide them. |
+| `1e99`, NaNs or rising DC startup voltage | Zero/unsettled divisor or uncharged source-free DC circuit | Inspect physical pole voltages and the divisor selector. Use the exporter’s temporary pre-charge for a source-free Vdc-controlled island; release is 0.2 s. Retain live MMC current/energy feedback. |
+| Supervisor cannot launch a long-name local half-step run | Windows path length | Use compact frequency-list prefixes and preflight every possible path. The limit is 240 UTF-16 code units, including scratch, mapped-share and caller roots plus random suffixes. |
+| Build reports only the educational node-cap error | Native electrical-node count exceeds 200 | Use a larger licence or smaller physical circuit. IEEE39 has 528 live nodes; an offline export pass is not a simulation pass. Measurement fixtures separately require <100. |
+| Native floating input or `NT_1` despite a valid written stub | Size-0 sheet clamps components on load and leaves wires behind | Export size 5 within [0,14382] coordinates. Inspect `outputs/load-relocations.txt`; check a native-saved project with `check_connectivity(path)`. |
+| Isolated YY secondary produces a zero diagonal | Consecutive ideal meters in its only grounding path | Place the shunt meter in the load ground return; retain ordered pins and passive parameters. |
+| Distributed line aborts before measurement | Travel time below integration step | Reduce the step. The exporter warns using length/speed-of-light; PSCAD uses calculated travel time. |
+| DC cable mean drifts or differs from power flow | Low-frequency fitting and long fit poles | Inspect retained line constants and fit files, then lengthen settling. A tighter in-band target does not constrain true DC. `DCenab=1` fails Yc fitting for the stored cable. |
+| Large turn-on voltage peak but small settled departure | Inductive current-drive onset | Keep whole-run maxima diagnostic and apply departure limits only in the declared windows, retaining means. Do not remove a real settled offset. |
+| Completed run has a passing norm but failed overall status | Entry, phase, window, amplitude or step check failed | Inspect every required result. The TLC P/Q and P-f records retain this distinction. |
 
-```julia
-using PowerImpedance, PythonCall
-include("test/manual/pscad/validation/validation.jl")
-PSCADValidation.prepare_m9d_b_tier(["L3-08", "L3-04"]) # after commit/merge
-# Add 06 only once its C qualification has passed:
-PSCADValidation.prepare_m9d_b_tier(["L3-06"])
-PSCADValidation.run_m9d_tierb(timeout=19800.0)
-```
+Frequency-list prefixes retain rounded spelling up to 48 characters. Longer lists use
+`<first>_<last>_n<count>_<digest>`, with the first 12 SHA-256 hexadecimal characters of the
+ordered Float64 IEEE-754 bit strings. This distinguishes half-Hz values without long paths.
+Project stems include the same digest; completed short-name runs retain their hashes.
 
-The queue persists each outcome in `data/m9d5/queue.toml`, continues after
-fixture failures and stops on interrupts. Unprepared or C-pending fixtures are
-reported without starting their B runs. Exact matching completed B runs can be
-resumed. Expected additional station time remains **20–35 min for 08,
-20–35 min for 04, and 190–260 min for 06: 230–330 min total**, including the
-five-run witnesses. These are planning estimates, not measured B runtimes.
+## Data layout and source records
 
-Offline tests use the repository's pinned Julia 1.12.7 dependency set directly;
-no additional test environment or package is needed:
+Ignored `data/<key>/manifest.toml` records the circuit, settings, bases, amplitudes, reference
+selection, source/dependency hashes, project hashes, native-run entries and comparison results.
+Project variants, native `runs/`, references and analysis tables remain alongside it. Coupled
+manifests contain coarse/local groups and independent results per measurand. Time-domain data use
+a separate directory with suffix `-tierb`; its manifest retains channels, bases, fit coordinates,
+windows and extraction checks.
 
-```sh
-l3b_julia1127=/home/amartins/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/bin/julia
-OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true "$l3b_julia1127" --startup-file=no --compiled-modules=existing --project=. -e 'using Test; @testset "Validation" begin include("test/pscad/validation_test.jl") end'
-OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true "$l3b_julia1127" --startup-file=no --compiled-modules=existing --project=. -e 'using Test; @testset "PSCAD offline suite" begin include("test/pscad/runtests.jl") end'
-OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true "$l3b_julia1127" --startup-file=no --compiled-modules=existing --project=. -e 'include("test/pscad/manual_scripts_test.jl")'
-```
+Every retained payload has size and SHA-256 plus its producing source. The manifest omits its own
+recursive hash. Archived projects and raw outputs remain attached to their original hashes,
+including failed and unused candidates. Reference refresh archives the previous manifest/reference
+without changing measured bytes. A changed project cannot reuse an older native run.
 
-The first two test commands aggregate all testsets so one failing test does not
-hide later results. `--compiled-modules=existing` avoids a local standard-library
-precompilation failure; numerical tests and tolerances stay intact. The newer
-1.10 validation environment is used for burst reproduction; it has a separate
-dependency set from the repository's pinned 1.12 tests.
+Useful result fields include `tier_c_result` for the comparison with the continuous model,
+`interface_step_result`, `comparison_summary`, `raw_step_refinement`, `residual_step_refinement`
+and `step_refinement` for the selected rule. These are literal stored field names. Corrected
+historical orientation analysis can appear under `corrected_analysis`; it must not be confused
+with an old uncorrected result retained for comparison. A top-level status can be incomplete while
+individual measured responses pass.
 
-Final code checks on Julia 1.12.7 with that pinned environment pass
-**3,549/3,549 validation assertions**, **20,920/20,920 PSCAD-suite assertions**
-and **76/76 standalone name-guard assertions**. The new B tests pass
-**138/138 on both Julia 1.10.11 and 1.12.7**; read-only admission/reference
-checks for stored 04/08 and pending-06 refusal pass **8/8**. The independent
-DC-current sizing check passes **9/9**. Both project files retain their committed
-dependency declarations. Dependency-free reproduction traces, mode differences,
-full-record memory/runtime checks and current test logs are in
-`data/m9d5-base-dft-final/`; the earlier evidence remains in `data/m9d5/`. These are offline checks;
-no B fixture was prepared and no station was contacted.
+## Troubleshooting and extending the suite
 
-Julia-only fitted modes are listed below as `(f [Hz], alpha [1/s], zeta)`.
-The full traces, conditional standard errors, residuals and located-pole
-comparisons are in `data/m9d5/offline.toml` and `mode-summary.tsv`.
+Start with the manifest status, required measurand summaries and invalid reasons. Then inspect
+`comparison_C_qualified.tsv`, per-entry results, KCL factors, window/refinement tables, build
+messages and recorded solver identity. A process failure or timeout is not a numerical comparison
+failure. Increase an execution budget only after identifying which run failed; completed matching
+axes resume.
 
-| Fixture | Continuous | Base-step interface realization | Half-step interface realization |
-|---|---|---|---|
-| L3-04 | (367.226759, 15.089751, 0.00653971) | (366.910956, 17.927942, 0.00777637) | (367.069123, 16.507040, 0.00715699) |
-| L3-08 | (245.504367, 36.007335, 0.02333639) | (245.061377, 37.766737, 0.02452021) | (245.283625, 36.886320, 0.02392724) |
-| L3-06 | (1.486918, 0.555989, 0.05940620) | (1.486918, 0.555989, 0.05940622) | (1.486918, 0.555989, 0.05940622) |
-
-All nine fits pass against their corresponding located poles: maximum relative
-frequency discrepancy 4.06e-6 and zeta discrepancy 1.89e-4. Native continuous
-and interface poles stay separate. The additional dq-vector sizing check gives
-maximum departures 0.003932 pu V and 0.007196 pu I, below 0.0045/0.008;
-the clamped MMC DC-current check remains below 0.001613 pu. These are linear
-predictions; measured noise and the native B qualifications remain pending.
-
-The dependency-free nine-fit reproduction takes **28 min 52 s** wall time on
-Julia 1.10.11, with individual prediction times **57.7–487.7 s** and peak
-resident memory **2.77 GiB**. Compared with the earlier implementation, maximum
-absolute changes in `(f, alpha, zeta)` are `(4.00e-15 Hz, 2.07e-13 1/s,
-2.32e-15)`; maximum relative changes are `(2.67e-15, 3.78e-14, 3.89e-14)`.
-These differences are well inside the unchanged B frequency and damping
-limits. All nine fits still pass their corresponding located poles. Exact
-before/after differences, timings and all nine traces are retained in
-`data/m9d5-base-dft-final/comparison.json`, `mode-summary.tsv` and `offline.toml`;
-`commands.txt`, `verification.json` and `logs/` retain the reproduction commands,
-source hashes and completed checks. The earlier modes are preserved in
-`previous-offline.toml`.
+Define a new circuit and physical bases before selecting injection amplitudes. Retain independent
+references and physical pin order. Check complete-network stability, exported passive values,
+sample coherence, path lengths and expected node count before native execution. Predict amplitude
+to size the experiment; use measured departure, drift and repeat checks to accept it. Freeze
+windows and reference selection before collecting data. Record every failed row and all model
+differences alongside passing results.

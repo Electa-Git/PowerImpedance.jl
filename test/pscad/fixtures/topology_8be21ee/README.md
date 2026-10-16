@@ -1,4 +1,4 @@
-These electrical graphs were extracted from the 14 M1–M3 fixture exports generated
+These electrical graphs were extracted from the 14 passive and machine fixture exports generated
 once from unmodified commit `8be21eecabb85d29d2896bc51562f61344338604`.
 Each TOML records that commit and the SHA-256 of its source `.pscx` file. Reference
 exports used the XML suite's 0.3 s / 50 μs / 250 μs / 0.2 s snapshot settings;
@@ -9,7 +9,7 @@ These settings do not change circuit connectivity or component parameters.
 and multi-segment paths), case-insensitive node labels, and ground. Component
 parameters and ordered electrical port numbers are retained. Coordinates,
 component ids and internal node label names are omitted from the saved graph.
-Transformer winding order and ammeter polarity therefore remain significant.
+Transformer winding order and ammeter polarity remain significant.
 Equivalent records at cable interfaces are matched by graph isomorphism.
 
 Module graphs retain xnodes and check their correspondence with electrical SVG
@@ -19,20 +19,18 @@ and its terminal attachments belong to the cable interfaces.
 
 A net requires two attached ports unless it is ground or carries a voltage
 probe (including the monitored network buses in these fixtures). Zero-attachment
-node labels are retained and rejected. The guard describes the written XML.
+node labels are retained and rejected. The check describes the written XML.
 It cannot establish that the native loader retained its contents or that a
 physically identical conductance matrix has the same numerical pivot behavior.
 
-The approved shunt-meter placement change is listed explicitly in
+The permitted shunt-meter placement change is listed explicitly in
 `../shunt_meter_moves.toml`. `shunt_meter_returns` applies exactly those named
 bus -> meter -> passive -> ground to bus -> passive -> meter -> ground moves
 to the preserved reference graphs. It checks the original ordered pins and
 passive ground connection, leaves every component parameter unchanged, and
-reports each move during XML verification. Machine graphs have no approved
-change. Unlisted topology changes, meter reversals and parameter changes fail.
+reports each move during XML verification. Machine graphs retain their original placements. Unlisted topology changes, meter reversals and parameter changes fail.
 
-`../yy_named_broken.pscx` is an exact copy of the station's failing
-`local/pscad-exchange/exports/m4-bz1oQX/transformer_yy_classic.pscx`, SHA-256
+`../yy_named_broken.pscx` retains the failing named-node YY export, SHA-256
 `9f76519581d73b96018c619ba9a0c932f642e0e1600259bcc4c62bff681791bc`. It reproduces the isolated
 secondary's ideal-meter grounding chain in offline XML checks. Historical
 abutments let PSCAD reuse the load branch's current; named stubs instantiate

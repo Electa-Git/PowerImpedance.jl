@@ -10,7 +10,7 @@ Use [Semantic Versioning](https://semver.org/):
 - Increment `MINOR` for backward-compatible functionality.
 - Increment `PATCH` for backward-compatible fixes.
 
-During initial development (`0.y.z`), the public API is not yet stable. Minor releases may therefore contain breaking changes. Describe them clearly in the changelog.
+During initial development (`0.y.z`), the public API is not yet stable. Minor releases may contain breaking changes. Describe them clearly in the changelog.
 
 ## Commit messages
 
@@ -55,13 +55,13 @@ Until formatter checks are automated, contributors should format changed Julia f
 - Type, struct, and module names use `CamelCase`.
 - Function and variable names use lowercase `snake_case`.
 - Constant names use uppercase `SNAKE_CASE`.
-- Abstract type names begin with `Abstract`, for example `AbstractElement`.
-- Type variables are a single capital letter, preferably related to the value being typed, for example `T`.
+- Abstract type names begin with `Abstract`, as in `AbstractElement`.
+- Type variables are a single capital letter, preferably related to the value being typed, such as `T`.
 - Prefer whole words over abbreviations or single letters when they make the code clearer.
-- Prefix package-internal or private names with two underscores, for example `__internal_cache`.
+- Prefix package-internal or private names with two underscores, as in `__internal_cache`.
 - Do not use Unicode in public APIs. Unicode is acceptable in internal code when it materially improves legibility.
 
-Single-letter names are appropriate for mathematical entities whose domain meaning is supplied by the caller. For example, `a` and `b` are suitable in `*(a::AbstractMatrix, b::AbstractMatrix)`.
+Single-letter names are appropriate for mathematical entities whose domain meaning is supplied by the caller. `a` and `b` are suitable in `*(a::AbstractMatrix, b::AbstractMatrix)`.
 
 An additional exception applies when an implementation directly follows a mathematical expression with physical meaning and the technical literature consistently uses a short symbol. Names such as `v` for voltage, `i` for current, and `f` for frequency are acceptable when they preserve a clear correspondence between the code and the documented equation. Use this exception locally and only where the formula makes the meaning unambiguous.
 

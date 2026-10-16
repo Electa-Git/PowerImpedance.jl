@@ -8,8 +8,8 @@
   `vdc_droop`, changing results for those formerly ignored legacy controls;
   existing constructions retain their results. Power-flow reference and slope
   use `vDCbase`, intentionally differing from the historical mapper away from
-  nominal voltage: at 672 kV with a 640 kV base, gain 5, 500 MVA and reference
-  1.05 pu, the reference is 672 rather than 705.6 kV and the slope is 3.90625
+  nominal voltage. With a 672 kV operating voltage, the 640 kV base, gain 5,
+  500 MVA rating and 1.05 pu reference give 672 rather than 705.6 kV and the slope is 3.90625
   rather than 3.720238095 MW/kV. PSCAD export is not yet supported.
 - Export passive AC/DC networks, overhead lines, cables, transformers,
   synchronous machines with AVR/governor, TLC grid-following controls and MMC
@@ -43,7 +43,8 @@
   temporary ideal sources behind breakers, released at 0.2 s.
 - Round fractional residual PSCAD modulation delays to the nearest integration
   step, with half-step ties upward and a warning when rounding changes the delay.
-- Preset PSCAD sheets to size 5, guard coordinate bounds and load relocation, and count output rows after file-size stability without a counting timeout.
+- Set PSCAD sheets to size 5 and reject coordinates outside the sheet or
+  component relocation on load. Count output rows after file sizes stabilize; row counting runs without a timeout.
 
 - Correct the Wedepohl–Wilcox cable earth-return logarithmic constant to
   `exp(γ_E) ≈ 1.781072418` in both self and mutual terms. For earth relative
@@ -58,7 +59,7 @@
 - Correct inferred transformer voltage levels for unrated transformers.
 - Set PSCAD transformer winding ratings from the solved primary voltage.
 - Correct the Δ-triplen energy-balancing frame direction, changing compensated-MMC admittances slightly and damping the previously unstable 150 Hz mode.
-- Canonicalize stored converter voltages and retry failed converter steady-state initialization with a trust-region solve, preserving successful results.
+- Normalize stored converter voltages and retry failed converter steady-state initialization with a trust-region solve, preserving successful results.
 - Derive synchronous-machine torque and effective AVR references from the power
   flow and initialize states from its phasors, changing machine equilibria,
   linearizations, admittances and PSCAD machine control parameters to reproduce
@@ -68,7 +69,7 @@
   equilibria and admittances (and power-flow inputs when a previously ignored
   reference supplies a missing setpoint); existing modular constructions retain
   their numerical results.
-- Qualify the Classic power-flow fallback model, replacing an undefined-name
+- Resolve the module name of the Classic power-flow fallback model, replacing an undefined-name
   error with the relaxed solve while preserving converged results.
 - Store solved modular MMC and TLC reactive-power setpoints in the input
   convention, correcting the Q sign read by subsequent power-flow solves while

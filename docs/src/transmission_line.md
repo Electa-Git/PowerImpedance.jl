@@ -42,7 +42,7 @@ matrices [MartinezVelasco2017](@cite).
 
 The complete matrices are retained through the line evaluation; valid mutual
 coupling is not discarded. Three-phase transformed models apply the requested
-coordinate transformation only at the component boundary.
+coordinate transformation only at the component terminals.
 
 ## Underground cables
 

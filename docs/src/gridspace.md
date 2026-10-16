@@ -101,7 +101,7 @@ remain available under `details.plot_data` even when raw problem
 and response samples are omitted. Set `return_samples=true` to retain the raw
 values used by `EmpiricalSamples`.
 
-Power flow uses the same local Monte Carlo boundary. Every PowerModels solve
+Power flow uses the same local Monte Carlo sequence. Every PowerModels solve
 receives a plain numeric network realization. When Measurements is loaded, the
 aggregate reconstructs Measurements only for solved AC and DC bus fields under
 `stats.groups[*].bus_measurements`. It never passes a nominal surrogate of the

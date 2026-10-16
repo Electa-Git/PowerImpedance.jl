@@ -12,7 +12,7 @@ base and bounded bus-voltage variables.
 The direct `NetworkState` parameterization and the preserved Classic network
 calculation both terminated with `LOCALLY_SOLVED`. Their integer bus numbers
 differ because the two representations construct buses in different orders.
-Values were therefore compared through element-to-component mappings and
+Values were compared through element-to-component mappings and
 through the complete set of physical node names assigned to each AC or DC bus.
 
 The frozen reference contains every numeric field returned in the `bus`, `gen`,

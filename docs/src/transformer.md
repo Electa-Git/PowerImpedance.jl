@@ -4,9 +4,9 @@ CurrentModule = PowerImpedance
 
 # Transformer
 
-`transformer` represents a single-phase or balanced three-phase transformer as
-a cascade of primary winding impedance, excitation branch, ideal voltage ratio,
-secondary winding impedance, and optional capacitive paths.
+`transformer` represents a single-phase or balanced three-phase transformer
+with a T-model containing primary winding impedance, excitation branch, ideal
+voltage ratio, secondary winding impedance, and optional capacitive paths.
 
 The model can be specified directly from its equivalent-circuit parameters or
 derived from open-circuit and short-circuit test data. For three phases, `n` is
@@ -28,7 +28,7 @@ V_{1,\pm} = r_\pm V_{2,\pm}, \qquad
 I_{1,\pm} = \frac{I_{2,\pm}}{\overline{r_\pm}}.
 ```
 
-Thus `N± = diag(r±, 1/conj(r±)) = exp(∓jπ/6)·diag(n, 1/n)` and
+`N± = diag(r±, 1/conj(r±)) = exp(∓jπ/6)·diag(n, 1/n)` and
 `V1·conj(I1) = V2·conj(I2)` across the ideal stage. The same rotation applies
 to the complete per-phase `:YY` model, including the capacitive paths, so that
 `ABCD± = exp(∓jπ/6)·ABCDYY`. Negative sequence has the opposite shift.
@@ -57,8 +57,7 @@ q axis, `[d,q] = [V cos θ, -V sin θ]`; with
 For power flow, the detailed ABCD model is converted to a balanced branch tap,
 series admittance, and shunt admittance. These values are identical for `:YY`
 and `:ΔY` with the same parameters. PowerModels defines the complex tap as
-`tap·exp(j·shift)` and the unloaded voltage as `V_to = V_from/t`; Dyn11 therefore
-uses `shift = -π/6` [rad]. Frequency-domain analysis retains the detailed
+`tap·exp(j·shift)` and the unloaded voltage as `V_to = V_from/t`; Dyn11 uses `shift = -π/6` [rad]. Frequency-domain analysis retains the detailed
 transformer model.
 
 See [`transformer`](@ref) for fields, units, and constructor modes.

@@ -36,7 +36,7 @@ lines, scatter markers, horizontal and vertical references, and bands.
 optional completed `PowerFlowResult`. The GraphMakie extension resolves its
 typed projection and deterministic layout once, then retains that state as a
 custom PlotBuilder primitive. Standalone `diagram` rendering and PlotBuilder
-therefore share glyphs, roles, positions, and selection behavior.
+share glyphs, roles, positions, and selection behavior.
 
 ```julia
 using NetworkLayout
