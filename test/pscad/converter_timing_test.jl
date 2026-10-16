@@ -76,10 +76,10 @@ end
             "i_u_b" => 9.0, "i_l_b" => 3.0, "i_u_c" => -4.0, "i_l_c" => 8.0))
         @test result["iS_abc"] == [5.0, 6.0, 2.0]
         @test result["i_dc_si"] == 13.0
-        # Explicit state-history cuts publish the physical capacitor level
-        # held during the preceding solve, not a prior copy of that measurement.
-        # Native seq4 showed that phase transfers alone still allow the compiler
-        # to cut selected reconstructions after SIGMA/compensated MOD.
+        # Explicit state-history cuts publish the physical capacitor level held during the
+        # preceding solve instead of a prior copy of that measurement. Phase transfers
+        # alone allow the compiler to cut selected reconstructions after SIGMA/compensated
+        # MOD.
         outputs = ["v_Cmeas_" * half * "_" * phase
             for half in ("u", "l") for phase in ("a", "b", "c")]
         cap_selectors = filter(selectors) do c

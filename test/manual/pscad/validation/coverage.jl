@@ -1,4 +1,4 @@
-# Frozen measurement definitions; native element/network owners implement physics.
+# Frozen measurement definitions use the native element/network physics.
 function port_probe(list, element, side)
     entry = only(filter(e -> e.name == element, list.elements))
     terminal = only(filter(t -> t.side == side, entry.terminals))
@@ -123,8 +123,8 @@ function scale_response(matrix, spec)
 end
 
 function band_sample_step(spec)
-    # Nominal 50 Hz remains measured for the abc baseline-drift gate. A dq
-    # tone also measures its +/- nominal-frequency sidebands.
+    # Nominal 50 Hz remains measured for the abc baseline-drift comparison. A dq tone also
+    # measures its +/- nominal-frequency sidebands.
     highest = spec.dimension == 1 ? maximum(spec.frequencies) :
         max(spec.frequency, maximum(spec.frequencies) +
             (spec.dimension == 2 ? spec.frequency : 0.0))

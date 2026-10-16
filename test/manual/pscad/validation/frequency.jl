@@ -5,17 +5,30 @@ const C_ACTIVE = merge(C_PASSIVE, (epsilon = 0.05, phase_limit_deg = 3.0))
 """
 $(TYPEDSIGNATURES)
 
-Evaluate a coherent cosine multi-tone with Schroeder phases.
+Evaluate a sum of cosines with the supplied fixed phases.
 
 # Arguments
-- `times`: absolute simulation times \\[s\\].
-- `frequencies`: distinct positive frequencies \\[Hz\\].
-- `phases`: one fixed phase per frequency \\[rad\\].
-- `amplitude`: peak amplitude of each tone, in the caller's signal unit.
-- `onset`: injection start time \\[s\\]; values below it are zero.
+
+- `times`: Absolute simulation times \\[s\\].
+- `frequencies`: Distinct positive tone frequencies \\[Hz\\].
+- `phases`: Fixed phases, one per frequency \\[rad\\].
+- `amplitude`: Peak amplitude per tone in the output signal's physical unit.
+- `onset`: Injection start time \\[s\\]. Default: `0.0`.
 
 # Returns
-- A real signal vector in the amplitude unit. Phases refer to absolute time.
+
+- Real signal vector in the amplitude unit, equal to zero before `onset`.
+
+# Notes
+
+For ``t ≥ onset``, the signal is
+
+```math
+x(t) = A \\sum_k \\cos(2\\pi f_k t + \\phi_k),
+```
+
+where ``A`` is `amplitude`, ``f_k`` is a tone frequency and ``\\phi_k`` is
+its phase. Phases refer to absolute simulation time.
 """
 function multitone(times, frequencies, phases; amplitude, onset = 0.0)
     length(frequencies) == length(phases) > 0 || throw(ArgumentError("tone dimensions"))
@@ -34,16 +47,29 @@ end
 $(TYPEDSIGNATURES)
 
 Project phase-ordered abc samples onto the fixed nominal grid frame.
-Use `d=(2/3)sum(x*cos(theta))`, `q=(2/3)sum(x*sin(theta))`, matching
-`PSCAD.abc_to_dq_module` with `qaxis=1`, not a following PLL.
+The positive-sine q convention matches `PSCAD.abc_to_dq_module` with `qaxis=1`.
 
 # Arguments
-- `times`: absolute sample times \\[s\\].
-- `abc`: sample-by-phase matrix in a common physical unit, order a/b/c.
-- `frequency`: nominal grid frequency \\[Hz\\].
+
+- `times`: Absolute sample times \\[s\\].
+- `abc`: Sample-by-phase matrix in a common physical unit, ordered a/b/c.
+- `frequency`: Nominal grid frequency \\[Hz\\]. Default: `50.0`.
 
 # Returns
-- Sample-by-(d,q) matrix in the input unit (phase-peak normalization).
+
+- Sample-by-(d,q) matrix in the input unit with phase-peak normalization.
+
+# Notes
+
+The frame follows the nominal frequency independently of the PLL:
+
+```math
+d(t) = \\frac{2}{3}\\sum_{p=1}^{3}x_p(t)\\cos\\theta_p(t),\\qquad
+q(t) = \\frac{2}{3}\\sum_{p=1}^{3}x_p(t)\\sin\\theta_p(t),
+```
+
+where ``\\theta_p(t) = 2\\pi f_0t + \\phi_p``, ``f_0`` is `frequency`
+and ``\\phi_p`` is 0, −2π/3 or 2π/3 for phases a, b or c, respectively.
 """
 function fixed_dq(times, abc; frequency = 50.0)
     size(abc) == (length(times), 3) || throw(ArgumentError("abc dimensions"))
@@ -59,22 +85,35 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Extract peak complex phasors by direct DFT at the selected coherent bins.
-Use absolute sample times and a rectangular window without the repeated endpoint.
+Extract peak complex phasors by direct DFT at coherent frequency bins.
+Use absolute sample times and a rectangular window without its repeated endpoint.
 
 # Arguments
-- `times`: uniformly increasing sample times \\[s\\].
-- `signals`: sample-by-channel real matrix in physical signal units.
-- `frequencies`: positive coherent frequencies \\[Hz\\].
-- `start`: exact left window boundary \\[s\\].
-- `duration`: window length \\[s\\].
+
+- `times`: Uniformly increasing sample times \\[s\\].
+- `signals`: Sample-by-channel real matrix in physical signal units.
+- `frequencies`: Distinct positive coherent frequencies \\[Hz\\].
+- `start`: Sampled window start \\[s\\].
+- `duration`: Window length \\[s\\].
 
 # Returns
+
 - Channel-by-frequency complex peak phasors in the input units.
 
+# Notes
+
+For each channel, the phasor at frequency ``f`` is
+
+```math
+X(f) = \\frac{2}{N}\\sum_{n=1}^{N}x(t_n)\\exp(-\\mathrm{j}2\\pi ft_n),
+```
+
+where ``N`` is the sample count in the window and ``t_n`` is absolute sample time.
+
 # Errors
-- Throw `ArgumentError` for incoherent bins, incomplete/nonuniform samples,
-  nonfinite data, or frequencies at/above Nyquist.
+
+- Throws `ArgumentError` for incoherent or duplicate bins, incomplete or nonuniform
+  samples, nonfinite data, or frequencies at or above Nyquist.
 """
 function dft_phasors(times, signals, frequencies; start, duration)
     length(times) >= 2 && size(signals, 1) == length(times) ||
@@ -115,24 +154,47 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Recover a full response matrix from one independent run per input coordinate
-and an unperturbed baseline, using actual measured input phasors.
-Voltage-to-current gives Y; current-to-voltage gives Z directly.
+Recover a response matrix from independent input-coordinate runs and an
+unperturbed baseline using measured phasors. Voltage-to-current identification
+gives Y; supplying currents as inputs and voltages as outputs gives Z directly.
 
 # Arguments
-- `times`: common absolute sample times \\[s\\].
-- `voltages`, `currents`: two sample-by-dq matrices per quantity \\[kV\\], \\[kA\\].
-- `baseline_voltage`, `baseline_current`: corresponding unperturbed matrices.
-- `frequencies`: coherent comparison frequencies \\[Hz\\].
-- `starts`, `duration`: predeclared DFT window boundaries and duration \\[s\\].
+
+- `times`: Common absolute sample times \\[s\\].
+- `voltages`: Input sample matrices, one run per input coordinate; \\[kV\\] for Y
+  or \\[kA\\] for direct Z.
+- `currents`: Corresponding output matrices; \\[kA\\] for Y or \\[kV\\] for Z.
+- `baseline_voltage`: Unperturbed input matrix in the input unit.
+- `baseline_current`: Unperturbed output matrix in the output unit.
+- `frequencies`: Coherent comparison frequencies \\[Hz\\].
+- `starts`: DFT window starts \\[s\\].
+- `duration`: Duration of each window \\[s\\].
+- `input_bases`: Row scales for input-matrix conditioning in the input unit.
+  Default: `nothing`, which uses the unscaled matrix.
 
 # Returns
-- `matrices`: vector of 2×2×frequency complex tensors \\[S\\], one per window.
-- `conditions`: injection-matrix condition numbers \\[dimensionless\\].
+
+- `matrices`: Vector of output-by-input-by-frequency tensors, one per window,
+  in \\[S\\] for Y or \\[Ω\\] for direct Z.
+- `conditions`: Window-by-frequency input-matrix condition numbers
+  \\[dimensionless\\].
 
 # Notes
-Currents point into the measured branch at the driven port; the opposite
-branch port is voltage-clamped. This measures its native `Y[1:2,1:2]` block.
+
+Subtract baseline phasors before solving at each frequency:
+
+```math
+H(f) = O(f)U(f)^{-1},
+```
+
+where columns of ``U`` and ``O`` contain measured input and output phasors
+from independent drives. For branch Y, currents point into the driven port
+and the opposite port is voltage-clamped, giving its `Y[1:2,1:2]` block.
+
+# Errors
+
+- Throws `ArgumentError` for incompatible sample dimensions or an input-matrix
+  condition number above 100, and propagates DFT sampling errors.
 """
 function extract_response(times, voltages, currents, baseline_voltage, baseline_current,
         frequencies; starts, duration, input_bases = nothing)

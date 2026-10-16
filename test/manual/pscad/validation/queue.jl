@@ -1,8 +1,8 @@
 const M9C2_IDS = ["L2-" * lpad(n, 2, '0') for n in 7:15]
 const M9C2_TLC_DIRECTORY = joinpath(ROOT, "data", "L2-01-1p25us")
 
-# Explicit local preparation only. Archive complete fixture trees, never reuse
-# an old run or overwrite the retained 2.5 us TLC evidence.
+# Local preparation archives complete fixture trees. Recorded runs and the retained 2.5 us
+# TLC measurements remain unchanged.
 function prepare_m9c2()
     archive = mkpath(joinpath(ROOT, "data", "archive", "m9c2"))
     for id in M9C2_IDS
@@ -53,8 +53,8 @@ function prepare_m9c2()
     return (; archive, timing = directory, tlc = M9C2_TLC_DIRECTORY, fixtures = copy(M9C2_IDS))
 end
 
-# This function is called only by the owner's station command. An interrupted
-# queue resumes matching completed runs through the existing native hash checks.
+# Only the manual station command calls this function. An interrupted queue resumes
+# matching completed runs through the native hash checks.
 function run_m9c2(; remote = RemoteConfig(), timeout = 43200.0)
     isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
     deadline = time() + timeout
@@ -67,8 +67,8 @@ function run_m9c2(; remote = RemoteConfig(), timeout = 43200.0)
     return nothing
 end
 
-# The acceptance script owns fresh exports and station runs. Keep its command
-# separate from inclusion so loading the harness never contacts the station.
+# The acceptance script performs fresh exports and station runs. Its command is separate
+# from inclusion; loading the harness never contacts the station.
 function converter_acceptance_command()
     project = Base.active_project()
     project === nothing && error("converter acceptance requires an active Julia project")
@@ -76,16 +76,17 @@ function converter_acceptance_command()
     return `$(Base.julia_cmd()) --project=$(dirname(project)) $script --converters`
 end
 
-# L2 resumes matching runs; acceptance always starts fresh after L2 completes.
-# Its per-run timeouts belong to the station configuration, not the L2 deadline.
+# Converter measurements resume matching runs; acceptance starts fresh runs afterward.
+# Per-run timeouts come from station configuration, independently of the
+# converter-measurement deadline.
 function run_m9c3(; timeout = 43200.0)
     run_m9c2(; timeout)
     run(converter_acceptance_command())
     return nothing
 end
 
-# The timing and TLC checks are already complete. This queue resumes only the
-# fresh MMC measurements, then starts the converter acceptance with fresh runs.
+# This queue resumes only MMC measurements, then starts converter acceptance with fresh
+# runs. Timing and TLC measurements are separate from this queue.
 function run_m9c6(; timeout = 43200.0)
     isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
     deadline = time() + timeout
@@ -137,7 +138,7 @@ function run_m9c7(; timeout = 43200.0)
     return nothing
 end
 
-# Local preparation only; old station evidence is retained in complete trees.
+# Local preparation only; retained station records remain in complete trees.
 function prepare_m9c8()
     machine = joinpath(ROOT, "data", "L2-16")
     archive = joinpath(ROOT, "data", "archive", "m9c8", "L2-16")
@@ -203,7 +204,7 @@ end
 const M9C10_IDS = ["L2-07", "L2-08", "L2-09", "L2-10", "L2-12",
     "L2-13", "L2-15", "L2-11", "L2-14"]
 
-# Fresh local exports only; complete old trees retain their original provenance.
+# Fresh local exports only; complete retained trees keep their source and input records.
 function prepare_m9c10()
     revision = readchomp(`git -C $REPOSITORY rev-parse HEAD`)
     revision == "adbf8c2e9f43eccef3d82fa37756fe942d677a93" ||
@@ -230,8 +231,8 @@ function prepare_m9c10()
             length(spec.axes), spec.frequencies)
         native_reference_check(spec, reference, old_reference)["passed"] ||
             error("native reference changed: $id")
-        # Retain every previously prepared adaptive band, with fresh projects;
-        # the next measurement still selects its own worst axis and frequency.
+        # Prepared adaptive bands retain fresh projects; each measurement selects its own
+        # worst axis and frequency.
         if haskey(prior, "step_witness_definition")
             witness = step_definition(spec, first(prior["step_witness_definition"]["frequencies"]))
             prefix = step_prefix(witness)
@@ -250,7 +251,8 @@ function prepare_m9c10()
     return copy(M9C10_IDS)
 end
 
-# Save each outcome before continuing. Native completion/hash checks own resume.
+# Each outcome is saved before continuing. Native completion/hash checks verify completed
+# runs for resumption.
 function run_m9c10(; timeout = 36000.0)
     isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
     directory = mkpath(joinpath(ROOT, "data", "m9c10"))
@@ -268,7 +270,7 @@ end
 
 const M9C13_IDS = ["L2-07", "L2-08", "L2-09", "L2-10", "L2-11", "L2-12"]
 
-# One predeclared window change; complete old trees remain read-only evidence.
+# One predeclared window change; complete retained trees remain read-only records.
 function prepare_m9c13()
     revision = readchomp(`git -C $REPOSITORY rev-parse --short=7 HEAD`)
     revision == "635ef92" || error("M9c13 preparation requires 635ef92")
@@ -305,8 +307,8 @@ function prepare_m9c13()
             length(spec.axes), spec.frequencies)
         native_reference_check(spec, reference, old_reference)["passed"] ||
             error("native reference changed: $id")
-        # Preserve all prepared witness bands, without inheriting the old
-        # measured axis/band selection or any native completion.
+        # All prepared comparison bands remain available, without reusing measured
+        # axis/band selections or native completions.
         for project in prior["projects"]
             band = match(r"half_step_(\d+)_1000__baseline$", project["axis"])
             band === nothing && continue
@@ -327,7 +329,8 @@ function prepare_m9c13()
     return copy(M9C13_IDS)
 end
 
-# The committed fixture runner owns residual qualification and verified resume.
+# The fixture runner performs residual comparisons and verifies retained runs for
+# resumption.
 function run_m9c13(; timeout = 14400.0)
     isfinite(timeout) && timeout > 0 || error("timeout must be finite and positive")
     directory = mkpath(joinpath(ROOT, "data", "m9c13"))

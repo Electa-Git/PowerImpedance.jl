@@ -15,8 +15,8 @@ function retained_point(list, name)
         parse(Int, index) == 0 &&
             (refs[(element, Symbol(quantity))] = parse(Float64, value))
     end
-    # Rebuilding supplies topology/probe ownership only. Numeric comparison
-    # references come from the archived TSV, never from the new solve.
+    # Rebuilding supplies topology and probe associations only. Numeric comparison
+    # references come from the archived TSV, never from the reconstruction's solve.
     original = list.operating_point
     buses = Dict{P.BusKey, NamedTuple}()
     for bus in list.buses

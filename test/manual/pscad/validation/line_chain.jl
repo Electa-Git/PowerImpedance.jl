@@ -3,21 +3,25 @@ const LINE_CHAIN_IDS = ("L1-03", "L1-04", "L1-05", "L1-08", "L3-07")
 """
 $(TYPEDSIGNATURES)
 
-Re-evaluate retained PSCAD response matrices against corrected line/cable
-references. Read `data_root/<id>` without changing native evidence; write only
-under this worktree's `data/line-chain` or `/tmp`. Keep recorded measurement
-bases, quality flags, witnesses and acceptance tolerances. Record source and
-input hashes because the analysing working copy can differ from its revision.
-Incomplete composed measurements are reported as pending. No native run is made.
+Re-evaluate retained PSCAD response matrices against line and cable references.
+Retain recorded measurement bases, quality flags, integration-step comparisons
+and acceptance tolerances. Stored native runs and source manifests remain unchanged.
+Record source and input hashes because the analysing files can differ from the
+recorded revision.
 
 # Arguments
-- `ids`: Fixture identifiers from `LINE_CHAIN_IDS`.
-- `data_root`: Directory containing the original fixture evidence.
-- `output_root`: Separate destination for comparisons and provenance.
+
+- `ids`: Fixture identifiers. Default: `LINE_CHAIN_IDS`.
+- `data_root`: Directory containing the stored fixture records.
+- `output_root`: Separate destination for comparisons and file hashes, restricted
+  to this worktree's `data/line-chain` or `/tmp`.
+  Default: `joinpath(ROOT, "data", "line-chain")`.
 
 # Returns
-- Dictionary of fixture analyses, including old/new maximum scaled errors.
-  These comparisons alone do not qualify a native run or refresh stability.
+
+- Dictionary of fixture analyses with stored and recalculated maximum scaled
+  errors. Incomplete measurements are pending. Native execution and stability
+  evaluation are separate from these comparisons.
 """
 function reanalyse_line_chain(ids = LINE_CHAIN_IDS; data_root,
         output_root = joinpath(ROOT, "data", "line-chain"))

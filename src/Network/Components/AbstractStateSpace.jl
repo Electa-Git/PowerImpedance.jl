@@ -165,9 +165,9 @@ Return a copy of the converged state vector retained by the core linearization.
 
 # Arguments
 
-- `elem`: state-space element owning the solved state.
-- `setpoint`: optional operating point. If supplied and no matching state is
-  retained, solve and linearize through `update(elem, setpoint)` first.
+- `elem`: State-space element with a retained solved state.
+- `setpoint`: Optional operating point. If the retained state differs or is absent,
+  solve and linearize through `update(elem, setpoint)` first.
 
 # Returns
 
@@ -176,14 +176,14 @@ Return a copy of the converged state vector retained by the core linearization.
 
 # Notes
 
-This accessor is internal. Normal core updates always solve afresh, invalidate
-the previous retained state, and retain the new vector only after successful
-linearization. Mutating the returned copy does not change the retained state.
+Core updates clear the retained vector before the solve and store a new vector
+only after successful linearization. Changes to the returned copy leave
+the retained state unchanged.
 
 # Errors
 
-- Throws `ArgumentError` without a setpoint if no state is retained for the
-  current model. With a setpoint, propagates any core solve or linearization error.
+- Throws `ArgumentError` without a setpoint when the current model lacks a retained
+  state. With a setpoint, propagates core solve or linearization errors.
 """
 function _steady_state(elem::Element{<:AbstractStateSpace})
     saved = elem._equilibrium

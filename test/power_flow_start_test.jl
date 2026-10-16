@@ -56,8 +56,9 @@ end
         @test -1000converter["pgrid"] ≈ 60.0 atol = 0.01
         @test -1000converter["qgrid"] ≈ 15.0 atol = 0.01
 
-        # Reverse the DC branch endpoints while retaining component IDs and
-        # variable names. The old point must not survive the topology change.
+        # Reversed DC branch endpoints change topology despite unchanged component IDs and
+        # variable names; a retained solution from that topology cannot supply a warm
+        # start.
         if representation === :builder
             changed, _, changed_mapping = convert(network, PI.PMACDC)
             changed_mapping = (changed_mapping, collect(network.topology.connections))

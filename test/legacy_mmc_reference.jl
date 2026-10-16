@@ -1,7 +1,6 @@
-# Load the independent historical formulas in a separate namespace. Restore
-# their generated-expression callbacks, which remain in the historical source;
-# the later nested callback refers to variables outside its scope. No equation,
-# controller parameter or historical MMC solver setting is changed here.
+# Independent MMC formulas run in a separate namespace with their generated- expression
+# callbacks. The nested callback has out-of-scope variables. Equations, controller
+# parameters and MMC solver settings remain unchanged.
 module LegacyMMCReference
 using PowerImpedance: Controller, PI_control, CCQSEM, FFVI
 using PowerImpedance.Parameters: @with_kw

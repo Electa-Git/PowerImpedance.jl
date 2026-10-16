@@ -2,9 +2,9 @@ module PSCADTopology
 using PowerImpedance
 const P = PowerImpedance.PSCAD
 
-# Electrical geometry uses the same witnessed port table as the exporter.
-# The adapter below reads serialized XML; component ids and canvas coordinates
-# do not form part of the graph's component identity.
+# Electrical geometry uses the same saved-project port table as the exporter. The adapter
+# reads serialized XML; component ids and canvas coordinates do not form part of the
+# graph's component identity.
 function electrical_graph(canvas, modules)
     parent = Dict{Tuple{Int, Int}, Tuple{Int, Int}}()
     root(p) = get!(parent, p, p) == p ? p : (parent[p] = root(parent[p]))
@@ -39,9 +39,9 @@ function electrical_graph(canvas, modules)
         append!(segments, zip(w.vertices[1:(end - 1)], w.vertices[2:end]))
     end
     for (a, b) in segments
-        # Control-only wires have no electrical port, node label or ground.
-        # A segment joining other segments is retained when their endpoints
-        # eventually meet an electrical point, as in the old bridging paths.
+        # Control-only wires have no electrical port, node label or ground. A segment
+        # joining other segments is retained when their endpoints meet an electrical
+        # point, including saved bridging paths.
         join(a, b)
         for p in points
             (a[1] == b[1] == p[1] && min(a[2], b[2]) <= p[2] <= max(a[2], b[2])) ||
@@ -61,8 +61,8 @@ function electrical_graph(canvas, modules)
     for (point, pin) in pins
         push!(get!(groups, root(point), Vector{Int}[]), collect(pin))
     end
-    # Keep unattached electrical labels as degree-zero nets; hiding them would
-    # make an isolated label invisible to the degree guard.
+    # Unattached electrical labels remain degree-zero nets; removing them would hide an
+    # isolated label from the degree test.
     for point in [first.(labels); grounds]
         get!(groups, root(point), Vector{Int}[])
     end
@@ -86,8 +86,8 @@ function check_degrees(graph, name)
     return nothing
 end
 
-# Apply only the reviewed, named shunt moves. All component parameters and
-# ordered pins remain in the independent 8be21ee reference graph.
+# Only the specified named shunt moves apply. All component parameters and ordered pins
+# remain in the independent 8be21ee reference graph.
 function shunt_meter_returns(graph, moves)
     expected = deepcopy(graph)
     components, nets = expected["components"], expected["nets"]
@@ -131,9 +131,9 @@ end
 
 component_color(c) = (c["definition"], Tuple(sort!(collect(c["parameters"]); by = first)))
 
-# Ports retain their electrical ordering, so the equivalence check preserves
-# ammeter/current-source polarity and transformer winding order. Full component
-# parameters restrict the bijection; cable interfaces can have identical fields.
+# Electrical port ordering preserves ammeter/current-source polarity and transformer
+# winding order in the equivalence test. Full component parameters restrict the bijection;
+# cable interfaces can have identical fields.
 function equivalent(a, b)
     ac, bc = component_color.(a["components"]), component_color.(b["components"])
     sort(ac; by = string) == sort(bc; by = string) || return false
@@ -202,8 +202,8 @@ function xml_graphs(root, string_value; check_named = false)
     for d in definitions
         name = string_value(d.get("name"))
         if string_value(d.get("classid")) == "RowDefn"
-            # Row geometry owns no circuit nodes. Retain every material/fitting
-            # field so electrical graph equality also protects line parameters.
+            # Row geometry supplies zero circuit nodes. Every material/fitting field
+            # remains in electrical graph equality, including line parameters.
             graphs[name] = Dict(
                 "components" => [Dict(
                      "definition" => string_value(c.get("defn")),
@@ -236,9 +236,9 @@ function xml_graphs(root, string_value; check_named = false)
                         for v in w.xpath("./vertex")]
             class = string_value(w.get("classid"))
             if class == "WireOrthogonal"
-                # Old exports contain abutments and multi-segment paths. The
-                # current WirePlan intentionally forbids the latter, so retain
-                # each old axis-aligned segment separately for graph extraction.
+                # Saved exports contain abutments and multi-segment paths. WirePlan
+                # requires two vertices; each saved axis-aligned segment is retained
+                # separately for graph extraction.
                 for (a, b) in zip(vertices[1:(end - 1)], vertices[2:end])
                     push!(wires, P.WirePlan([a, b]))
                 end
@@ -265,8 +265,9 @@ function xml_graphs(root, string_value; check_named = false)
                           for p in w.xpath("./User/paramlist/param")]
                 push!(components, P.ModuleInstancePlan(defn, params, x, y, 0))
             elseif class == "Cable"
-                # Cable interfaces own the physical terminals; wrapper vertices
-                # are graphics, not wires. Retain its length and other fields.
+                # Cable interfaces supply the physical terminals; wrapper vertices are
+                # graphics rather than wires. Wrapper length and other fields remain in
+                # the graph.
                 push!(cable_wrappers,
                     Dict("definition" => string_value(w.get("defn")),
                         "parameters" => Dict(string_value(p.get("name")) =>
@@ -281,7 +282,7 @@ function xml_graphs(root, string_value; check_named = false)
         check_named && P.check_connectivity(canvas, name, modules)
         graphs[name] = electrical_graph(canvas, modules)
         append!(graphs[name]["components"], cable_wrappers)
-        # A Natural module boundary binds to an explicit xnode, as saved in
+        # A Natural module port binds to an explicit xnode, as saved in
         # local/TLC/Simple_2L_VSC_RL.pscx:3377–3382,5604–5613.
         if haskey(modules, name)
             for port in modules[name].ports

@@ -1,4 +1,5 @@
-# L3b is a separate frozen protocol. C records remain evidence, never B baselines.
+# Time-domain comparisons use a separate frozen protocol. Frequency-response records
+# remain supporting measurements and cannot replace time-domain baselines.
 
 const M9D_TIERB_IDS = ["L3-08", "L3-04", "L3-06"]
 const B_LIMITS = (rms=.05, peak=.10, gain=.05, frequency=.02, zeta=.10)
@@ -11,8 +12,8 @@ function burst_wave(time, spec; amplitude=spec.tone_peak_pu)
     end for t in time]
 end
 
-# Clock-based phase, multiplied by a Hann envelope with both boundaries gated.
-# Only existing BlockGraph primitives and the existing current_port are used.
+# Clock-based phase is multiplied by a Hann envelope that vanishes at both endpoints. Only
+# BlockGraph primitives and current_port are used.
 function burst_graph(spec)
     graph=P.BlockGraph()
     clock,on,off,gate,t0,tau,earg,ec,one,env0,env,carg,carrier,scaled,burst=P.Signal.([
@@ -246,7 +247,8 @@ function tierb_response(c,spec; discrete=false,forms=nothing)
             y=forms===nothing ? PowerImpedance.get_y(e,ComplexF64(s)) : composed_passive_y(e,forms[name],s)
             push!(output,(y*h'*voltage)[1:2,:])
         end
-        # Same transport/readout convention as C: recorded injection lags KCL.
+        # The frequency-response transport/readout convention applies: recorded injection
+        # lags KCL.
         transfer=reduce(vcat,output)
         angle=2π*spec.frequency*spec.time_step
         rotation=[cos(angle) sin(angle);-sin(angle) cos(angle)]
@@ -333,7 +335,7 @@ function tierb_quality(time,data,c,spec)
     base=data.baseline[ix,:]./channels.bases'
     middle=length(ix)÷2
     drift=maximum(abs,vec(mean(base[1:middle,:];dims=1)-mean(base[middle+1:end,:];dims=1)))
-    # Recorded current has the previously qualified interface readout timing.
+    # Recorded current uses the measured interface readout timing.
     wave=burst_wave(time.-spec.time_step,spec).*spec.current_base_kA
     angle=2π*spec.frequency*spec.time_step
     command=hcat(wave.*cos(angle),wave.*sin(angle))
@@ -370,9 +372,9 @@ function require_tierc_passed(id;directory=joinpath(ROOT,"data",id))
     groups=get(record,"groups",Dict())
     all(get(get(groups,key,Dict()),"status","")=="passed" for key in expected) ||
         error("tier B requires all C groups and witnesses passed: $id")
-    # Native physics and shared fixture factories retain their producing C
-    # hashes. Harness revisions are checked numerically below: later C stages
-    # already changed unrelated harness code after 04/08 were measured.
+    # Native model files and shared fixture factories require the recorded
+    # frequency-response hashes, including fixtures `L3-04` and `L3-08`. Harness revisions
+    # are compared numerically.
     for source in record["source_files"]
         path=source["path"]
         startswith(path,"test/manual/pscad/validation/") && continue
@@ -413,8 +415,8 @@ function tierb_c_reference_check(c,list,directory)
 end
 
 function require_committed_tierb()
-    # Check all harness .jl files, the protocol documentation, tests and both
-    # project declarations. Missing new files in HEAD are an explicit refusal.
+    # HEAD must contain all harness .jl files, protocol documentation, tests and both
+    # project declarations; a missing file prevents preparation.
     paths=[relpath(joinpath(ROOT,f),REPOSITORY) for f in readdir(ROOT) if endswith(f,".jl")]
     append!(paths,["test/manual/pscad/validation/README.md","test/manual/pscad/validation/Project.toml",
         "test/pscad/validation_test.jl","test/pscad/tierb_test.jl","Project.toml"])
@@ -438,7 +440,8 @@ end
 function prepare_m9d_b_tier(ids=M9D_TIERB_IDS;remote=nothing)
     require_committed_tierb()
     length(ids)==length(unique(ids))&&all(in(M9D_TIERB_IDS),ids) || error("invalid tier B fixture selection")
-    # Preflight the entire selection before any creation, including C admission.
+    # The entire selection and its frequency-response results are verified before
+    # creation.
     for id in ids
         require_tierc_passed(id)
         ispath(joinpath(ROOT,"data",id*"-tierb")) && error("B directory already exists: $id")
@@ -542,7 +545,8 @@ function run_tierb(id;remote,directory=joinpath(ROOT,"data",id*"-tierb"),deadlin
             comparisons[v.key]=Dict("quality"=>quality,
                 "continuous"=>tierb_compare(timegrid,sample.signals,continuous,v.spec;valid=quality["status"]=="valid"),
                 "discrete"=>tierb_compare(timegrid,sample.signals,discrete,v.spec;valid=quality["status"]=="valid"))
-            # Every native sample in the declared B interval is retained.
+            # Every native sample in the declared time-domain comparison interval is
+            # retained.
             write_tierb_trace(joinpath(output,v.key*"_B.tsv"),timegrid,sample.drive,record["channels"],
                 ["measured"=>sample.signals,"continuous"=>continuous,"discrete"=>discrete];start=spec.injection_time)
             record["comparisons"]=comparisons;write_manifest(directory,record)

@@ -288,7 +288,7 @@ function _ohl_bundle_position(nsub::Int, dsub::Real)
     return (x_sub, y_sub)
 end
 
-"Native overhead-line tower geometry builders keyed by organization."
+"Tower geometry constructors indexed by organization."
 const _OHL_ORGANIZATIONS = (; flat = _ohl_flat, vertical = _ohl_vertical,
     delta = _ohl_delta, concentric = _ohl_concentric, offset = _ohl_concentric)
 
@@ -426,8 +426,8 @@ end
 $(TYPEDSIGNATURES)
 
 Return the receiving-to-sending ABCD matrix from series impedance Z \\[Ω/m\\]
-and shunt admittance Y \\[S/m\\]. For length l \\[m\\] and voltage propagation
-matrix Γ \\[1/m\\],
+and shunt admittance Y \\[S/m\\]. The line length is l \\[m\\].
+The matrix Γ \\[1/m\\] describes voltage propagation:
 	Γ = √ZY
 	Yᶜ = Z⁻¹γ
 	ABCD = [cosh(Γl)    Γ⁻¹sinh(Γl)Z

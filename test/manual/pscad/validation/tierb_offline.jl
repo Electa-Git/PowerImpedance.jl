@@ -1,4 +1,5 @@
-# Numerical reproduction only. No exports, C admission mutations or native runs.
+# Numerical reproduction only; exports, frequency-response records and native runs remain
+# unchanged.
 function verify_tierb_offline(;directory=joinpath(ROOT,"data","m9d5"))
     mkpath(directory)
     report=Dict{String,Any}("julia_version"=>string(VERSION),"scope"=>"Julia linear self-consistency; no station qualification",

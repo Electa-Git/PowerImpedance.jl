@@ -1,5 +1,5 @@
-# Local XML verification only; never contacts PSCAD.
-# julia --startup-file=no --project test/pscad/run_xml_tests.jl [export_directory]
+# Local XML verification only; never contacts PSCAD. `julia --startup-file=no --project
+# test/pscad/run_xml_tests.jl [export_directory]`
 using Pkg
 using Test
 
@@ -79,7 +79,7 @@ else
         @test err isa ArgumentError
         @test occursin("must join one component port and one label", sprint(showerror, err))
         @test occursin("(1026, 3168)", sprint(showerror, err))
-        # The same recorded wire was valid before the native relocation.
+        # The recorded wire remains connected when the native load is relocated.
         tree = etree.parse(fragment)
         meter = tree.xpath("//User[@id='298012955']")[0]
         meter.set("y", "3168")
@@ -259,10 +259,9 @@ else
             dc_reference = startswith(name, "mmc_vdc") ? :midpoint_resistors :
                            startswith(name, "tlc_") || startswith(name, "mmc_") ? :none :
                            :midpoint_resistors
-            # ΔY XML checks exercise the selected station realization with no
-            # legacy power-flow evidence; native comparison waits for dy-fix.
-            # At 1 us, or without compensated modulation, there must be no
-            # compensated-MMC step warning. Other existing warnings are allowed.
+            # ΔY XML uses the station winding realization without legacy power-flow data.
+            # At 1 us, or without compensated modulation, the compensated-MMC step warning
+            # is absent. Other warnings are allowed.
             logger = Test.TestLogger(min_level = Logging.Warn)
             model = with_logger(logger) do
                 startswith(name, "transformer_dy") ?
@@ -344,8 +343,8 @@ else
                     for (canvas, schematic) in canvases
                         expected = PSCADTopology.electrical_graph(schematic, modules)
                         if canvas == "Main"
-                            # Cable interfaces own the terminals. The graphical
-                            # wrapper retains its physical length and row fields.
+                            # Cable interfaces supply the terminals. The graphical wrapper
+                            # retains its physical length and row fields.
                             for wrapper in plan.wrappers
                                 @test wrapper isa P.CableWrapperPlan
                                 push!(expected["components"],
@@ -372,8 +371,8 @@ else
                                      (definition != "master:Cable_Coax" ||
                                       c["parameters"]["CABNUM"] == parameters["CABNUM"]),
                                 row["components"]))
-                            # MHI also serializes its defaults; every physical
-                            # value supplied by the plan must survive unchanged.
+                            # MHI also serializes its defaults. Every physical value
+                            # supplied by the plan must remain unchanged.
                             @test all(get(actual["parameters"], k, nothing) == v
                             for (k, v) in parameters)
                         end
@@ -387,8 +386,8 @@ else
                         expected = canvas == "Main" ?
                                    PSCADTopology.shunt_meter_returns(reference[canvas], shunt_moves[name]) :
                                    deepcopy(reference[canvas])
-                        # Preserve the historical independent graph and approve
-                        # exactly the owner-selected fitting target changes.
+                        # The independent reference graph retains all values except the
+                        # specified fitting-target changes.
                         for component in expected["components"]
                             component["definition"] == "master:Line_FrePhase_Options" || continue
                             for target in ("YMaxE", "AMaxE")
@@ -423,8 +422,8 @@ else
                     end
                 end
                 if name == "transformer_yy_classic"
-                    # The exact station failure must fail the production check,
-                    # even though its raw graph matches the old abutted export.
+                    # The broken station connection is rejected by the production check
+                    # even though its raw graph matches the abutted export.
                     saved_broken = etree.parse(joinpath(@__DIR__, "fixtures/yy_named_broken.pscx")).getroot()
                     failure = try
                         PSCADTopology.xml_graphs(saved_broken, x -> pyconvert(String, x); check_named = true)
@@ -501,8 +500,8 @@ else
                     root.xpath("count(.//User[@defn='master:pgb']/paramlist/param[@name='Name'][@value='$(channel.name)'])")) ==
                       1
             end
-            # Verify every coordinate, parameter and two-vertex wire survived
-            # Python conversion; counts alone cannot detect pixel/grid mistakes.
+            # Python conversion must retain every coordinate, parameter and two-vertex
+            # wire; counts alone cannot detect pixel/grid mistakes.
             nodes = root.xpath("./definitions/Definition[@name='Main']/schematic/User")
             for (component, node) in zip(plan.main.components, nodes)
                 @test pyconvert(String, node.get("defn")) == component.defn
@@ -555,8 +554,8 @@ else
                     @test !(lowercase(pyconvert(String, label.get("value"))) in
                             P._EMTDC_RESERVED_SIGNALS)
                 end
-                # Every emitted master field must have a saved-project witness;
-                # the fixture comments retain the exact source file and line.
+                # Emitted master fields must all have a saved-project reference; fixture
+                # comments retain the exact source file and line.
                 for definition in plan.modules, component in definition.canvas.components
 
                     component isa P.ComponentPlan || continue
@@ -659,8 +658,8 @@ else
                       6
             end
             if startswith(name, "mmc_gfm") || startswith(name, "mmc_compensated")
-                # Every new VSM/CCVI field is witnessed by the saved FFVI
-                # equation canvases. Constants/trig retain the M4 witnesses.
+                # Every VSM/CCVI field is specified by the saved FFVI equation canvases.
+                # Constants/trig use the saved primitive references.
                 for module_name in ("VSM_DUT", "CCVI_DUT", "PLL_DUT")
                     definition = only(filter(d -> d.name == module_name, plan.modules))
                     for component in definition.canvas.components
@@ -691,8 +690,8 @@ else
                 @test summary.settings["time_duration"] == "5.0"
                 @test summary.settings["time_step"] == "1.0"
                 @test summary.settings["sample_step"] == "250.0"
-                # The shared export path warns once, includes converter/step
-                # evidence, and preserves requested settings on both APIs.
+                # The shared export path produces one warning with converter/step details.
+                # Requested settings remain unchanged on both APIs.
                 mktempdir() do directory
                     for (i, requested) in enumerate((P.SimulationSettings(),
                         P.SimulationSettings(time_step = nextfloat(1e-6))))
@@ -737,8 +736,8 @@ else
                 @test pylen(sigma.xpath("./schematic/User[@defn='master:integral']")) == 24
                 @test pylen(modulation.xpath("./schematic/User[@defn='master:div']")) == 6
                 @test pylen(modulation.xpath("./schematic/User[@defn='master:tdelay']")) == 6
-                # Saved Init=0 uses a zero history; M5/M6a's already accepted
-                # Init=1 selects the solved X0 history for all six physical arms.
+                # Saved Init=0 sets history to zero; Init=1 selects the solved X0 history
+                # for all six physical arms.
                 for node in modulation.xpath("./schematic/User[@defn='master:tdelay']")
                     @test pyconvert(String, node.xpath("string(./paramlist/param[@name='Init']/@value)")) == "1"
                     # The model's 200 us budget includes the 1 us interface
@@ -802,8 +801,8 @@ else
                        for p in definition.ports]
                 reread_defn = reread.definition[definition.name]
                 @test pyconvert(Bool, reread_defn.module)
-                # Module canvas settings are explicit, with the independent
-                # saved dq2abc witness at local/TLC/Simple_2L_VSC_RL.pscx:2069–2083.
+                # Module canvas settings are explicit, with the independent saved dq2abc
+                # reference at local/TLC/Simple_2L_VSC_RL.pscx:2069–2083.
                 @test pylen(root.xpath("./definitions/Definition[@name='$(definition.name)']/schematic/paramlist")) ==
                       1
                 canvas_settings = Dict(pyconvert(String, p.get("name")) =>
@@ -1014,8 +1013,8 @@ else
         @test !isempty(models[13].operating_point.bus_states)
         @test !isempty(models[14].operating_point.bus_states)
         @test all(m -> !isempty(m.operating_point.bus_states), models[15:18])
-        # The module writer also preserves integer/text parameters and
-        # electrical ports, independently of the all-real M3 controller forms.
+        # The module writer preserves integer/text parameters and electrical ports,
+        # independently of the all-real controller forms.
         mktempdir() do temporary
             name = "typed_module"
             definition = P.ModuleDefinitionPlan("Typed",
@@ -1086,8 +1085,8 @@ else
             line = dc_state.elements.line, ac_load = dc_state.elements.ac_load)
         rows = [(; r.node, r.element, r.side, r.terminal)
                 for r in dc_state.topology.connections if r.element != :to]
-        # A second branch gives the receiving bus two owned terminals, as
-        # required by NetworkBuilder's classic-network materialization.
+        # A second branch gives the receiving bus two element terminals, as required by
+        # NetworkBuilder's classic-network materialization.
         elements = merge(elements, (; parallel = impedance(; z = s -> 400.0, pins = 1)))
         append!(rows,
             [(node = :D1, element = :parallel, side = 1, terminal = 1),
@@ -1112,8 +1111,8 @@ else
             @test !model.provenance.resolved_powerflow
             @test classic.elements[:source].setpoint === original
         end
-        # Exercise typed choice decoding and option units through the actual
-        # writer, rather than establishing override behaviour only in the IR.
+        # Typed choice decoding and option units are exercised through the actual writer
+        # as well as the intermediate representation.
         mktempdir() do temporary
             path = joinpath(temporary, "ohl_options.pscx")
             export_pscad(ohl_classic; path,

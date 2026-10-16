@@ -840,8 +840,9 @@ function accept_feasible_power_flow!(result, model)
 end
 
 function _prepare_power_flow_start!(start::_PowerFlowStart, data, mapping)
-    # Include component identities and endpoints, but leave numerical targets free
-    # to change: a previous point is only a start for the newly built constraints.
+    # Component identities and endpoints identify the topology used for a warm start.
+    # Numerical targets may change; the converged point supplies initial values for the
+    # rebuilt constraints.
     fields = ("index", "status", "gen_bus", "load_bus", "shunt_bus",
         "storage_bus", "f_bus", "t_bus", "busac_i", "busdc_i", "fbusdc", "tbusdc")
     topology = (mapping, Dict(group => Dict(id => Dict(key => component[key]

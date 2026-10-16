@@ -1,14 +1,13 @@
-# Component provenance, including every field/port used below:
+# Component fields and ports come from these saved canvases and emitters:
 # - src/PSCAD/emitters/tlc.jl:tlc_electrical_canvas: source_1 (saved
 #   local/TLC/Simple_2L_VSC_RL.pscx:3383–3388,3452–3529), breakout, xnode,
-#   electrical and scalar control stubs. No converter reactor is added here.
+#   electrical and scalar control stubs. Converter reactor count is unchanged.
 # - src/PSCAD/blocks.jl:lower!: TimeStep, Compare, Gain, Const, Sum, Trig,
-#   Mult, ArrayMerge, ArraySplit, DqToAbc. All master fields come from these
-#   existing lowerers, not from a new master-library parameter dictionary.
-# - src/PSCAD/blocks.jl:dq_to_abc_module (saved TLC dq2abc canvas at line 1851).
+#   Mult, ArrayMerge, ArraySplit, DqToAbc. These lowerers supply all master fields.
+# - src/PSCAD/blocks.jl:dq_to_abc_module: saved TLC dq2abc canvas at line 1851.
 # - src/PSCAD/plan.jl:ModuleDefinitionPlan and blocks.jl:lower!(parameters)
 #   bind named amplitude gains; ext/PowerImpedancePSCADExt/writer.jl writes
-#   their declared forms and instance values with the existing parameter API.
+#   their declared forms and instance values with the parameter API.
 # - src/PSCAD/emitters/sources.jl and probes.jl: source terminal location,
 #   retained ammeter, bus voltmeters and PGB fields.
 
@@ -102,8 +101,8 @@ function l1_plan(netlist, name, axis)
     angle_rad = deg2rad(parse(Float64, first(split(params["Ph"]))) - 90)
     push!(plan.modules, P.dq_to_abc_module("Validation_DQ_ABC"))
     push!(plan.modules, voltage_port(name, spec, peak_kV, angle_rad))
-    # The original source's sole AC terminal and all probes/wires remain at
-    # exactly the same coordinates. The new module exposes that same terminal.
+    # The source's sole AC terminal and all probes/wires retain exactly the same
+    # coordinates. The replacement module exposes that same terminal.
     plan.main.components[index] = P.ModuleInstancePlan(name * ":VoltagePort",
         ["d_amplitude_pu" => string(axis == :d ? spec.tone_peak_pu : 0.0),
             "q_amplitude_pu" => string(axis == :q ? spec.tone_peak_pu : 0.0)],

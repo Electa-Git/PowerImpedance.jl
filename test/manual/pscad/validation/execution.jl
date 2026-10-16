@@ -199,8 +199,8 @@ function budget_remote(remote, seconds)
         transport = remote.transport, command = remote.command, timeout = min(remote.timeout, seconds))
 end
 
-# The copied native completion record remains authoritative even if the harness
-# crashed before adding a run_records entry. Native compute owns integrity checks.
+# A copied native completion record is valid even when the harness crashes before adding a
+# run_records entry. Native compute verifies its integrity.
 function completed_axis_runs(directory, axis, project_sha256)
     runs = joinpath(directory, "runs")
     isdir(runs) || return String[]
@@ -247,8 +247,8 @@ function resume_axis(model, axis, directory, remote)
     return nothing
 end
 
-# Decode the channels recorded for this exact project hash, rather than using
-# the current emitter's convention for a historical native output.
+# Channels use the metadata recorded for this exact project hash. The emitter's current
+# convention cannot reinterpret retained native outputs.
 function stored_axis(record, key, list, spec, directory)
     run = last(filter(r -> r["axis"] == key, record["run_records"]))
     root = joinpath(directory, run["path"], run["native_run_directory"])
@@ -283,9 +283,9 @@ function reanalyse_fixture(id; directory = joinpath(ROOT, "data", id))
     read(joinpath(directory, "comparison_A.tsv"), String) || error("tier A rows changed")
     result = compare_frequency_runs(results, models, reference, output; spec)
     qualified = record["amplitude_refinement"]["passed"] && record["step_refinement"]["passed"]
-    # Applying the same diagonal +/-1 row matrix to both witness matrices
-    # preserves entry differences and Frobenius norms exactly. Existing witness
-    # gates and quality metrics therefore retain their measured values.
+    # Applying the same diagonal +/-1 row matrix to both comparison matrices preserves
+    # absolute entry differences and Frobenius norms exactly. The comparison limits and
+    # quality metrics retain their measured values.
     status = result["status"] == "model_mismatch" ? "model_mismatch" :
              all(rows.within_tolerance) && result["status"] == "passed" && qualified ? "passed" : "failed"
     record["corrected_analysis"] = Dict("status"=>status, "tier_c_result"=>result,

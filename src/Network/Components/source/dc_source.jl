@@ -29,13 +29,13 @@ Construct an ideal DC voltage-source element and its power-flow data.
 # Arguments
 
 - `pins`: Number of DC conductors represented on each legacy element side.
-- `setpoint`: DC operating point; `Vdc` is the pole-to-pole DC voltage
-  `\\[kV\\]`. See [`Setpoint`](@ref).
+- `setpoint`: DC operating point with pole-to-pole `Vdc` \\[kV\\].
+  See [`Setpoint`](@ref).
 - `transformation`: Whether to expose a supported transformed representation.
 - `connection`: Whether NetworkBuilder includes the element in the system.
-- `source_kwargs`: Legacy fields of the internal `Source` model. `V` is
-  the pole-to-pole DC voltage `\\[kV\\]` used to initialize the DC bus;
-  `setpoint.Vdc` controls the power-flow voltage.
+- `source_kwargs`: Fields of the internal `Source` model. Pole-to-pole `V`
+  \\[kV\\] initializes the DC bus, while `setpoint.Vdc` controls its power-flow
+  voltage.
 
 # Returns
 

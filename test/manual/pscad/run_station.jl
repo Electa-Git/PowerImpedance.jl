@@ -1,5 +1,5 @@
-# Manual M0 smoke test; never included by Pkg.test().
-# julia --project test/manual/pscad/run_station.jl [--identify]
+# Manual smoke test; never included by Pkg.test(). `julia --project
+# test/manual/pscad/run_station.jl [--identify]`
 using PowerImpedance
 const PSCAD = PowerImpedance.PSCAD
 

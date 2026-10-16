@@ -1,7 +1,7 @@
 const L3_NATIVE_NODES = Dict("L3-01"=>31,"L3-02"=>77,"L3-03"=>77,"L3-04"=>67,
     "L3-05"=>52,"L3-06"=>55,"L3-07"=>96,"L3-08"=>55)
-# Ratings are frozen independently of solved voltages and measured outcomes.
-# L3-07 declares this rating at each of its two AC ports.
+# Ratings are frozen independently of solved voltages and measured outcomes. `L3-07`
+# declares this rating at each of its two AC ports.
 const L3_AGGREGATE_BASES = Dict("L3-01"=>(power_MVA=200.,voltage_LL_kV=220.),
     "L3-02"=>(power_MVA=2000.,voltage_LL_kV=380.),
     "L3-03"=>(power_MVA=2060.,voltage_LL_kV=380.),
@@ -124,7 +124,7 @@ function l3_specs(id,list)
     return id in ("L3-04","L3-08") ? [coarse,l3_spec(id,list;local_scan=true)] : [coarse]
 end
 
-# Include every possible coarse witness selection, not only the initial template.
+# All coarse-axis and frequency selections are included, beyond the initial template.
 function composed_run_axes(specs)
     axes=String[]
     for spec in specs
@@ -191,7 +191,7 @@ function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
     remote===nothing && (remote=RemoteConfig())
     entry=fixture(id);net=entry.factory();point=power_flow(net);c=l3_circuit(id,net)
     gate=composed_stability(c);gate["status"]=="passed" || error("composed stability gate failed: $gate")
-    # Fresh preparation never adopts old runs, reference tables or proposal exports.
+    # Fresh preparation excludes retained runs, reference tables and proposal exports.
     ispath(directory) && error("fresh composed directory already exists: $directory")
     list=fixture_netlist(net,point);spec=l3_spec(id,list)
     groups=l3_specs(id,list)
@@ -345,7 +345,8 @@ function run_composed_group!(record,c,list,spec;directory,remote,deadline)
         write_manifest(directory,record)
         return group
     end
-    # Persist selection before any witness run; retries use exactly this choice.
+    # The selected axis and frequency are saved before any comparison run; retries use
+    # exactly this choice.
     chosen=get!(group,"selection",Dict("column"=>qualifying.selection.column,"frequency_Hz"=>qualifying.selection.frequency))
     column=chosen["column"];axis=spec.axes[column]
     step=composed_step_spec(spec,chosen["frequency_Hz"];local_scan)
@@ -425,8 +426,8 @@ function prepare_m9d_a()
 end
 
 
-# Preparation must identify the implementation in HEAD, not only a dirty or
-# staged working copy. Compare the stage B implementation before creating files.
+# Preparation requires the implementation in HEAD, beyond a dirty or staged working copy.
+# The time-domain implementation is compared before file creation.
 function require_committed_m9d_b()
     for file in ("composed_execution.jl","queue.jl","coverage.jl","scan.jl")
         path=relpath(joinpath(ROOT,file),REPOSITORY)
@@ -477,7 +478,7 @@ function prepare_m9d_a_local_witness(;directory=joinpath(ROOT,"data","L3-08"),re
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")))
     record["fixture_id"]=="L3-08" || error("local witness repair is restricted to L3-08")
     haskey(record,"local_witness_repair") && error("local witness already repaired")
-    # Only the reviewed harness revision may differ. Verify every retained payload.
+    # Only the recorded harness revision may differ. Retained payloads are verified.
     allowed=Set("test/manual/pscad/validation/"*file for file in ("composed_execution.jl","queue.jl","coverage.jl","scan.jl"))
     for source in record["source_files"]
         source["path"] in allowed && continue
@@ -551,8 +552,8 @@ function prepare_composed_projects(directory,list,c,groups,remote)
     allmodels=Pair{String,P.PSCADModel}[]
     for group in groups
         prefix=scan_prefix(group);check_recorder_sampling(group)
-        # Full tier-A baseline; a separate unrun measurement template keeps
-        # only V/I/drive recorders for every injected run. Electrical meters stay.
+        # The baseline records all channels. A separate unrun measurement template keeps
+        # only V/I/drive recorders for each injected run. Electrical meters remain.
         models=prepare_scan_projects(directory,list,group,String[];prefix,remote)
         measured=merge(group,(;recorder_scope="measurement"))
         append!(models,prepare_scan_projects(directory,list,measured,group.axes;prefix=prefix*"measurement_",remote))

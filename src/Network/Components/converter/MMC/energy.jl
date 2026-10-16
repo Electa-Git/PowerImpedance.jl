@@ -11,13 +11,24 @@ end
 """
 $(TYPEDEF)
 
-Regulate total arm energy and provide the zero-sequence current reference
-``i_{Σz}^{ref} = (K_p(W^{ref}-W)+ξ_W+P_f)/(3V_{dc,f})``.
-The default `ref=1` is in pu. With `power_filter=NoFilter()`, feedforward uses
-the existing filtered AC-power measurement without adding states.
-A nontrivial `power_filter` independently filters power calculated from the
-measured AC voltages and currents, rather than cascading the power measurement
-filter.
+Regulate total arm energy with a zero-sequence current reference in \\[pu\\].
+The default arm-energy reference is `ref = 1` \\[pu\\].
+With `power_filter = NoFilter()`, feedforward uses the filtered AC-power
+measurement with unchanged state count. Other filters act independently on
+measured AC voltage-current
+products to avoid cascaded power-measurement filters.
+
+# Notes
+
+The current reference is
+
+```math
+i_{Σz}^{ref} = \\frac{K_p(W^{ref}-W)+ξ_W+P_f}{3V_{dc,f}},
+```
+
+where ``W`` denotes total arm energy, ``W^{ref}`` its reference and ``ξ_W``
+the PI integral state. Filtered active power ``P_f`` and filtered DC voltage
+``V_{dc,f}`` use the converter's per-unit bases, as do the energy and PI terms.
 
 $(TYPEDFIELDS)
 """
@@ -26,7 +37,7 @@ struct TotalEnergyControl{F<:AbstractMeasurementFilter} <: AbstractEnergyControl
     pi_control::PIControl
     "Total arm-energy reference \\[pu\\]."
     ref::Float64
-    "Independent active-power feedforward filter; cutoff in \\[rad/s\\]."
+    "Independent filter for active-power feedforward. Cutoff in \\[rad/s\\]."
     power_filter::F
     # Legacy feedforward is independent even when its filter has no states.
     _independent_power::Bool

@@ -1,4 +1,4 @@
-# Isolated electrical DSOUT -> next DSDYN -> residual queue -> source witness.
+# Isolated electrical DSOUT -> next DSDYN -> residual queue -> source timing measurement.
 const TIMING_DELAYS = (("zero", 0.0), ("one", 10e-6), ("four", 40e-6), ("fractional", 25e-6))
 
 function timing_plan()

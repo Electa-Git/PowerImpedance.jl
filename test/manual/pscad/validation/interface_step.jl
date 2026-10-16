@@ -1,5 +1,5 @@
-# Discrete DUT realization reference; fixture/probe columns and their residual
-# step qualification are owned by residual_step.jl.
+# Discrete DUT realization reference; residual_step.jl defines fixture/probe columns and
+# their residual integration-step comparisons.
 zero_modulation_delay(::Any) = false
 zero_modulation_delay(::PowerImpedance.NoModulation) = true
 zero_modulation_delay(m::PowerImpedance.DelayModulation) = iszero(m.delay.timeDelay)
@@ -27,8 +27,8 @@ end
 modulation_states(m::PowerImpedance.MMC) = PowerImpedance.statenames(m.modulation)
 modulation_states(m::PowerImpedance.TLC) = PowerImpedance.statenames(m.mod)
 
-# Exact one-step modulation feedback, using the same owned carrier correction
-# and delay-state Schur replacement as interface_step_reference.
+# Exact one-step modulation feedback uses the same carrier correction and delay-state
+# Schur replacement as interface_step_reference.
 function one_step_full_y(original,h)
     interface_step_eligible(original.element_model) || return s->physical_y(original,s)
     isfinite(h) && h>0 || error("interface reference requires a positive finite step")

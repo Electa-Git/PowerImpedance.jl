@@ -147,8 +147,8 @@ end
         @test abs(flow["qt"]) < 1e-10
 
         if realistic
-            # Eliminate the excitation node to obtain the unshifted two-port,
-            # then reproduce the previous approximation for an error comparison.
+            # Eliminating the excitation node gives the unshifted two-port. Comparison
+            # with the pi approximation measures its error against that reduction.
             diagonal = 1 / zp + ym + 1 / (ratio^2 * zs)
             base_z = PowerImpedance.PowerModelsACDC._get_pu_bases(1000,
                 net.voltageBase[1])["Z"]

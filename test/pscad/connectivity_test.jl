@@ -24,10 +24,10 @@ function disconnect!(canvas, pin)
 end
 
 @testset "PSCAD input completeness and signal drivers" begin
-    # Independent pin witnesses from the original saved canvas, not from the
-    # rewiring table: local/TLC/Simple_2L_VSC_RL.pscx:2214–2238 (orient-4 N=2
-    # merge), 2937–2961 (ABC merge), 2164–2184,2384–2398 (N=3 merge/dot),
-    # and the abutted trig/sum/gain pins in the complete canvases at 1851–3234.
+    # Independent pin locations come from the saved canvas rather than the rewiring table:
+    # local/TLC/Simple_2L_VSC_RL.pscx:2214–2238 (orient-4 N=2 merge), 2937–2961 (ABC
+    # merge), 2164–2184,2384–2398 (N=3 merge/dot), and the abutted trig/sum/gain pins in
+    # the complete canvases at 1851–3234.
     merge = P.ComponentPlan("master:datamerge", ["N" => "2"], 612, 162, 4)
     @test P.component_ports(merge, Dict()) ==
           [((594, 90), :signal, :input), ((594, 108), :signal, :input),
@@ -40,10 +40,10 @@ end
     @test P.component_ports(trig, Dict()) ==
           [((288, 216), :signal, :input), ((360, 216), :signal, :output)]
 
-    # The six station messages reduce to these independently witnessed nets.
-    # The last message names the output label on the middle dot product; its
-    # reader is A2 of the three-input merge. Losing that driver must be rejected
-    # even when the label and the reader's wire remain geometrically valid.
+    # These independently recorded nets correspond to six station messages. The last
+    # message identifies the output label on the middle dot product; its reader is A2 of
+    # the three-input merge. A missing driver is rejected even when the label and reader
+    # wire remain geometrically valid.
     cases = ((:abc, (90, 702), (1224, 108), "transform_node_10"),
         (:abc, (720, 756), (1224, 324), "transform_node_16"),
         (:dq, (306, 468), (1224, 324), "transform_node_16"),
@@ -82,8 +82,8 @@ end
     P.component!(electrical, "resistor", (108, 108))
     rejects(electrical, (108, 108))
 
-    # Coefficient-only imports need no wire; the saved AVR/GOV canvases use
-    # their names in block fields. Module signal imports do have output stubs.
+    # Coefficient-only imports use names in block fields, as in saved AVR/GOV canvases.
+    # Module signal imports have wired output stubs.
     coefficients = P.CanvasPlan()
     P.component!(coefficients, "import", (108, 108), ["Name" => "gain_parameter"])
     @test P.check_connectivity(coefficients, "coefficient") === nothing
@@ -160,9 +160,9 @@ end
           [get(Dict(c.params), "Name", "") for c in collision.components]
     @test P.check_connectivity(collision, "reserved") === nothing
 
-    # The xnode remains explicitly wired, as in the saved VSC2L stage at
-    # local/TLC/Simple_2L_VSC_RL.pscx:3377–3382,5604–5613. Its internal node
-    # label deliberately differs from the module boundary name.
+    # The xnode is explicitly wired, as in the saved VSC2L canvas at
+    # local/TLC/Simple_2L_VSC_RL.pscx:3377–3382,5604–5613. Its internal node label
+    # deliberately differs from the module port name.
     boundary = P.CanvasPlan()
     P.component!(boundary, "xnode", (108, 108), ["Name" => "AC"])
     P.stub!(boundary, (108, 108), "internal_ac"; direction = -1)
@@ -254,8 +254,8 @@ end
     P.stub!(sourced, (2844, 108), "B2")
     @test P.check_connectivity(sourced, "grounded_source") === nothing
 
-    # Find source islands before collapsing a single return meter into ground;
-    # otherwise the ground boundary could hide a source behind a meter chain.
+    # Source islands are identified before a single return meter is reduced to ground;
+    # merging ground first could hide a source behind a meter chain.
     source_return = P.CanvasPlan()
     P.component!(source_return, "source_3", (108, 108), ["Grnd" => "1"])
     P.stub!(source_return, (144, 108), "source")

@@ -39,8 +39,8 @@ end
 
 function check_layout(plan, number_of_cells; empty_cells = ())
     @test P.check_connectivity(plan) === nothing
-    # Named meter stubs extend 18 pixels above the allocation origin. The
-    # ownership tiles remain 432 × 216, shifted up 18 pixels without overlap.
+    # Named meter stubs extend 18 pixels above the allocation origin. The 432 × 216
+    # placement tiles are shifted up 18 pixels without overlap.
     cell(point) = (fld(point[1] - 72, 432), fld(point[2] - 54, 216))
     owners = Set{Tuple{Int, Int}}()
     anchors = Set{Tuple{Int, Int}}()
@@ -178,8 +178,8 @@ end
     check_layout(plan, 5)
     @test counts(plan)["master:ground"] == 1
     @test counts(plan)["master:ammeter"] == 4
-    # Both parallel rows share the return node before the total-current meter;
-    # only its output is grounded, so its arrow retains bus-to-element polarity.
+    # Both parallel rows share the return node before the total-current meter. Only its
+    # output is grounded; its arrow retains bus-to-element polarity.
     shunt_parts = filter(c -> get(Dict(c.params), "Name", "") in ("load_R", "load_C"),
         plan.main.components)
     @test length(shunt_parts) == 2
@@ -219,7 +219,7 @@ end
     @test caught isa ArgumentError
     @test occursin(":line", sprint(showerror, caught))
     @test occursin("distinct per-conductor", sprint(showerror, caught))
-    # Exercise the fallback directly, independently of owned emitter methods.
+    # The fallback is exercised directly, independently of emitter methods.
     e = PowerImpedance.Element(; element_model = PowerImpedance.Cable(), input_pins = 2, output_pins = 2)
     e.symbol = :future_cable
     unsupported = P.NetlistElement(:future_cable, "future_cable", e,

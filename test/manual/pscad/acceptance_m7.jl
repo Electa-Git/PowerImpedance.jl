@@ -1,6 +1,6 @@
-# Manual M7: IEEE9 acceptance; P2P dynamic-validation and IEEE39 build records.
-# Run in a PythonCall-enabled environment with POWERIMPEDANCE_PSCAD_CONFIG set.
-# --export-only writes the projects/references without contacting the station.
+# Manual IEEE9 acceptance; P2P dynamic-validation and IEEE39 build records. Run in a
+# PythonCall-enabled environment with POWERIMPEDANCE_PSCAD_CONFIG set. `--export-only`
+# writes the projects/references without contacting the station.
 using PowerImpedance, PythonCall, LinearAlgebra, DelimitedFiles
 include("../../pscad/fixtures.jl")
 include("../../pscad/m7_networks.jl")
@@ -123,8 +123,9 @@ function run_case(case, remote)
         startswith(basename(path), "run-"),
         readdir(work_root; join = true))
     if case.status == "build-only" && result === nothing && length(runs) == 1
-        # The existing runner retains these messages even when project.run()
-        # stops at the licence check before EMTDC can run. Never use an old run.
+        # The runner retains these messages when project.run() stops at the licence check
+        # before EMTDC can run. Messages from retained runs cannot establish build or
+        # simulation success for this invocation.
         message_path = joinpath(only(runs), "outputs", "build-messages.txt")
         if isfile(message_path)
             status = build_verdict(read(message_path, String))

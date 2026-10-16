@@ -52,9 +52,9 @@ tlc2_classic_model = export_pscad(tlc2_classic;
 tlc2_builder_model = export_pscad(tlc2_state;
     path = joinpath(exports, "tlc_case2_builder.pscx"), settings = tlc_settings, dc_reference = :none)
 
-# Saved PQ settings: 10 s, 10 us integration, 250 us sampling, Tc=0.
-# The approved source_ramp=0 and 0.2 s solved-measurement hold passed station
-# round 3. Inspect R15 settling before comparing the final ten cycles.
+# Saved PQ settings use 10 s duration with 10 us integration and 250 us sampling; Tc=0. A
+# source_ramp=0 and 0.2 s solved-measurement hold apply. R15 must settle before comparison
+# of the final ten cycles.
 mmc_settings = PowerImpedance.PSCAD.SimulationSettings(simulation_time = 10.0,
     time_step = 10e-6, sample_step = 250e-6, source_ramp = 0.0)
 mmc_classic, mmc_state = PSCADFixtures.mmc_pq_network()
@@ -79,8 +79,8 @@ cases = [(classic_model, classic_model, 0.01), (builder_model, classic_model, 0.
     (mmc_classic_model, mmc_classic_model, 0.01), (
         mmc_builder_model, mmc_classic_model, 0.01)]
 
-# M5b uses the accepted MMC hold and zero ramp. Saved modes use the same
-# 10 s / 10 us / 250 us settings; P-f's 0.5 s lag gets twenty time constants.
+# The MMC modes use the same measurement hold and zero ramp. Saved settings are 10 s / 10
+# us / 250 us; P-f's 0.5 s lag gets twenty time constants.
 for (stem, fixture, reference) in (
     ("mmc_vdc", PSCADFixtures.mmc_vdc_network(), :midpoint_resistors),
     ("mmc_pf", PSCADFixtures.mmc_pf_network(), :none),
@@ -95,7 +95,7 @@ for (stem, fixture, reference) in (
     append!(cases, [(classic_mode, classic_mode, 0.01), (builder_mode, classic_mode, 0.01)])
 end
 
-# TLC VAC shares the same generator, with the accepted M4 timing and ramp.
+# TLC VAC shares the same generator, timing and ramp as the other TLC modes.
 tlc_vac = PSCADFixtures.tlc_vac_network()
 tlc_vac_classic = export_pscad(tlc_vac.classic;
     path = joinpath(exports, "tlc_vac_classic.pscx"), settings = tlc_settings, dc_reference = :none)
@@ -104,8 +104,8 @@ tlc_vac_builder = export_pscad(tlc_vac.state;
 append!(cases, [
     (tlc_vac_classic, tlc_vac_classic, 0.01), (tlc_vac_builder, tlc_vac_classic, 0.01)])
 
-# M5b round 1 also accepted both source-ramp experiments. Keep them in the
-# same station pass without changing the regular MMC/TLC fixture settings.
+# Both source-ramp experiments run in the same station pass; regular MMC/TLC fixture
+# settings remain unchanged.
 mmc_default_ramp = export_pscad(mmc_classic;
     path = joinpath(exports, "mmc_pq_default_ramp.pscx"),
     settings = PowerImpedance.PSCAD.SimulationSettings(simulation_time = 10.0,
@@ -117,7 +117,7 @@ tlc_zero_ramp = export_pscad(tlc2_classic;
 append!(cases, [
     (mmc_default_ramp, mmc_default_ramp, 0.01), (tlc_zero_ramp, tlc_zero_ramp, 0.01)])
 
-# M6a uses the MMC timing/hold, including its configured 200 us modulation delay.
+# GFM uses the MMC timing/hold, including its configured 200 us modulation delay.
 gfm = PSCADFixtures.mmc_gfm_network()
 gfm_classic_model = export_pscad(gfm.classic;
     path = joinpath(exports, "mmc_gfm_classic.pscx"), settings = mmc_settings, dc_reference = :none)
@@ -126,7 +126,7 @@ gfm_builder_model = export_pscad(gfm.state;
 append!(cases, [(gfm_classic_model, gfm_classic_model, 0.01),
     (gfm_builder_model, gfm_classic_model, 0.01)])
 
-# M6b requires the validated FFVI 1 us step; 10 us grows unstable.
+# The compensated MMC requires the FFVI 1 us step; a 10 us step is unstable.
 compensated_settings = PowerImpedance.PSCAD.SimulationSettings(simulation_time = 5.0,
     time_step = 1e-6, sample_step = 250e-6, source_ramp = 0.0)
 compensated = PSCADFixtures.mmc_compensated_network()
@@ -137,8 +137,8 @@ compensated_builder_model = export_pscad(compensated.state;
 append!(cases, [(compensated_classic_model, compensated_classic_model, 0.01),
     (compensated_builder_model, compensated_builder_model, 0.01)])
 
-# Detect the merged model by its positive-sequence transfer, without relying
-# on a commit hash. Compare against YY to remove the fixture's no-load loss angle.
+# Positive-sequence transfer identifies the Dyn11 rotation independently of a commit hash.
+# The YY comparison removes the fixture's no-load loss angle.
 dy_classic, dy_state = PSCADFixtures.transformer_network(; organization = :ΔY)
 sequence = ComplexF64[1, cis(-2π / 3), cis(2π / 3)]
 yy_abcd = PowerImpedance.eval_abcd(yy_state.elements.line.element_model, 2π * 50im)
@@ -184,8 +184,8 @@ for (model, classic_reference, rtol_v) in cases
             options = (;
                 remote, simulation_time, time_step = compensated_mmc ? 1e-6 : (machine || converter) ? 10e-6 : 50e-6,
                 sample_step = mmc ? 250e-6 : converter ? 40e-6 : machine ? 1e-3 : 250e-6, verbosity = 1))
-        # NB.solve skips power flow for this linear fixture. Both representations
-        # therefore compare against the equivalent classic circuit's solved record.
+        # NB.solve skips power flow for this linear fixture. Both representations compare
+        # against the equivalent classic circuit's solved record.
         reference = isempty(model.operating_point.bus_states) ? classic_reference : model
         comparison = compare_operating_point(result, reference; rtol_v)
         if any(bus -> bus.kind == :dc, model.netlist.buses)

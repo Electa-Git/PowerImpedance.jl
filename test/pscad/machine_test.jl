@@ -371,8 +371,8 @@ end
     z = complex(0.0026, 0.065) * 380^2 / 1000
     @test terminal_voltage - z * current ≈ 380 / sqrt(3) rtol = 1e-8
     @test flow.pf ≈ flow.pg - 3abs2(current) * real(z) rtol = 1e-8
-    # Preserve the raw solved reactive power, including its feasibility
-    # residual, rather than replacing it with an analytically balanced value.
+    # Raw solved reactive power includes its feasibility residual; an analytically
+    # balanced replacement would change this reference.
     branch_index = string(pf[4][:sg1][2])
     @test flow.qf == -Float64(pf[1]["solution"]["branch"][branch_index]["qt"]) * 1000
     @test flow.terminal_voltage_kV != only(classic_netlist.buses).vm_pu * 380 / sqrt(3)

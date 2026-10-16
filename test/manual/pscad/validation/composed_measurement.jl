@@ -1,5 +1,5 @@
-# Measurement channels are selected from the exact project's probe manifest.
-# All current sums are inward at the named bus, including passive shunts.
+# Measurement channels are selected from the exact project's probe manifest. All current
+# sums are inward at the specified bus, including passive shunts.
 function composed_current(result, model, probe)
     probe.orientation in (:into,:out) || error("missing composed current orientation")
     sign=probe.orientation==:into ? 1 : -1
@@ -90,8 +90,8 @@ function composed_quality(time, baseline, runs, spec, c, target; columns=eachind
     clamp=0.
     for (name,held) in baseline.clamps
         b=device_bases(c.net.elements[Symbol(name)].element_model.elec)
-        # Only source-clamped DC terminals have this gate. Internal DC nodes
-        # of a later coupled circuit are response witnesses, not ideal clamps.
+        # Only source-clamped DC terminals have this clamp limit. Internal DC nodes in a
+        # coupled circuit are measured responses, rather than ideal voltage clamps.
         node=c.net.elements[Symbol(name)].pins[Symbol("1.1")]
         node in c.nodes && continue
         clamp=max(clamp,maximum(maximum(abs,run.clamps[name]-held)/b.dc_voltage for run in runs))
@@ -145,10 +145,9 @@ function composed_readout_evidence(result,baseline,model,spec,c,column;axis=spec
                 driven_port=cld(column,2);driven_axis=mod1(column,2)
                 scale=spec.tone_peak_pu*spec.current_bases[column]
                 gamma=injection_readout_factor(f,spec)
-                # Recorded abc injection is one electrical step older than the
-                # branch meters. In this fixed dq frame, advancing it also
-                # rotates its two coordinates. The L2 driven projection gamma
-                # remains unchanged; its scalar extension to a null coordinate
+                # Recorded abc injection lags the branch meters by one electrical step. In
+                # the fixed dq frame, advancing it rotates both coordinates. The driven
+                # projection gamma is unchanged; its scalar extension to a null coordinate
                 # incorrectly leaves an O(omega0*h) residual.
                 expected=injection_readout_transport(f,spec)*ip[:,k]
                 for coord in 1:2

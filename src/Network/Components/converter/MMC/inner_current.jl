@@ -22,9 +22,10 @@ statenames(::ZeroSequenceCurrentControl) = (:ξ_iΣ_z,)
 $(TYPEDEF)
 
 Suppress circulating currents in the converter's negative-double-frequency
-frame. The PI errors are `ref[1] - iΣ_d_c` and `ref[2] - iΣ_q_c`;
-the voltage references retain the arm-inductance decoupling terms.
-The default `ref=(0.0, 0.0)` suppresses both currents to zero and adds no states.
+frame. The PI errors are `ref[1] - iΣ_d_c` and `ref[2] - iΣ_q_c`.
+The voltage references include the arm-inductance decoupling terms.
+The current references are constants with default `ref=(0.0, 0.0)` \\[pu\\],
+suppressing both currents to zero.
 
 $(TYPEDFIELDS)
 """

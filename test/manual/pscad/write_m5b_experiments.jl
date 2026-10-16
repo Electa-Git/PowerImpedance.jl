@@ -97,8 +97,8 @@ for (suffix, network) in (("classic", fixture.classic), ("builder", fixture.stat
     write_case("tlc_vac_" * suffix, network, TLC_SETTINGS, :none)
 end
 
-# Station round 1 accepted the PQ default ramp with the solved-measurement hold.
-# Export it directly; the regular MMC fixtures retain their zero-ramp settings.
+# The PQ default-ramp experiment uses the solved-measurement hold. Regular MMC fixtures
+# retain their zero-ramp settings.
 fixture = PSCADFixtures.mmc_pq_network()
 default_ramp = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
     sample_step = 250e-6)

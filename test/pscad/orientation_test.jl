@@ -18,8 +18,8 @@ const P=PowerImpedance.PSCAD
         (PSCADFixtures.tlc_case1_network().classic, Dict("I_DUT_1"=>:into,"I_DUT_2"=>:out)),
         (PSCADFixtures.mmc_pq_network().classic, Dict("I_DUT_1"=>:into,"I_DUT_2"=>:out))]
     for (net, expected) in fixtures
-        # Active emitter initialization needs the solved point; passive network
-        # fixtures otherwise use the same retained operating-point contract.
+        # Active emitter initialization needs the solved point; passive network fixtures
+        # use the same retained operating-point data.
         list=P.netlist(net, power_flow(net))
         plan=P.build_plan(list)
         for (name, direction) in expected
@@ -47,9 +47,9 @@ const P=PowerImpedance.PSCAD
     @test P.check_connectivity(plan)===nothing
     @test only(filter(c->c.name=="I_line_2",plan.probes.channels)).orientation==:out
 
-    # The same physical inward currents must be recovered from old both-inward
-    # cable records and the new branch-direction records. Current emitter
-    # metadata must never be substituted for the historical project metadata.
+    # Both-inward cable records and branch-direction records must yield the same physical
+    # inward currents. Each result uses its recorded project metadata, independently of
+    # the emitter's current metadata.
     times=[0.0,0.01,0.02]; logical=[1.0,2.0,3.0,4.0]
     for historical in (false,true)
         records=V.probe_record.(plan.probes.channels)

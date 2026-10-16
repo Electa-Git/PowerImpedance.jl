@@ -1,5 +1,5 @@
 # Offline runner, responsiveness-probe and lifecycle protocols. No station connection.
-# julia --project test/pscad/run_gated_tests.jl
+# `julia --project test/pscad/run_gated_tests.jl`
 using Pkg
 
 mktempdir(; prefix = "powerimpedance-pscad-protocol-") do environment

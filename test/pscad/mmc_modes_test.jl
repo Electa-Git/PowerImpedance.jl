@@ -70,8 +70,9 @@ end
                 @test Dict(p.name => p.default for p in modules[active_name].parameters)["vdcI0"] ==
                       eq.states.ξ_v_dc
             end
-            # Zero meters reach both outer loops immediately, including VAC Q
-            # and Vdc feedback; only the measured-DC divisor stays solved.
+            # Both outer loops receive meter inputs equal to zero immediately, including
+            # VAC Q and Vdc feedback; only the measured-DC divisor retains its solved
+            # value.
             if m isa PI.MMC
                 measured = evaluate(modules["MEAS_DUT"],
                     Dict{String, Any}(
@@ -109,8 +110,8 @@ end
                             for c in d.canvas.components],
                            [w.vertices for w in d.canvas.wires]) for d in plan.modules]
             end
-            # Compare the emitted PI outputs and rates with the owned equations
-            # at deliberately displaced voltage, power and frequency inputs.
+            # The emitted PI outputs and rates are compared with the native equations at
+            # deliberately displaced voltage, power and frequency inputs.
             for factor in (0.91, 1.07)
                 meas = merge(eq.outputs.meas,
                     (; vG_d_f = factor * eq.outputs.meas.vG_d_f,

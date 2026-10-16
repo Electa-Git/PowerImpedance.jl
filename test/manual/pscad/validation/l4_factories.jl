@@ -1,6 +1,6 @@
-# Frozen L4 ports of Jan Kircheis study circuits. All quantities retain source units.
-# Source and semantic translation evidence: l4_translation.md.
-# These factories do not read or execute the source repository.
+# Frozen ports of Jan Kircheis study circuits retain all source units. Source and
+# translation details: l4_translation.md. These factories do not read or execute the
+# source repository.
 
 function l4_original_p2p_network(; redesigned=false)
     net=Network()
@@ -641,9 +641,9 @@ function l4_p2p_ac_network(; unstable=false)
     return net
 end
 
-# Restores the exact commented active case; the executable source instead scans
-# a passive grid with a dummy source. T6_11 is open as selected by the owner.
-# Source wind farm: 600 MVA / 380 kV / 640 kV.
+# The active case is specified in the source comments; the executable source scans a
+# passive grid with a dummy source. T6_11 is open. Source wind farm: 600 MVA / 380 kV /
+# 640 kV.
 function l4_windfarm()
     return tlc(
         elec=PowerImpedance.ElectricalTLC(
@@ -681,7 +681,7 @@ function l4_windfarm()
     )
 end
 
-# Shared source OHL geometry; the circuit factories own each physical length.
+# Shared source OHL geometry; each circuit factory specifies its physical length.
 function l4_study_ohl(length)
     return overhead_line(
         length=length,

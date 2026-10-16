@@ -1,5 +1,6 @@
-# Owner-approved frequency/half-power-width comparison. Never infer a resolved
-# native resonance from a Julia curve alone, or from an unbracketed sparse peak.
+# Frequency and half-power width require a measured resonance bracketed by samples on both
+# sides. A Julia curve alone or an unbracketed sparse peak cannot establish a resolved
+# native resonance.
 function half_power_resonance(frequencies, response; quantity = "Z")
     length(frequencies)==length(response) >= 5 || throw(ArgumentError("resonance dimensions"))
     issorted(frequencies) && all(>(0),diff(frequencies)) || throw(ArgumentError("ordered unique frequencies required"))
@@ -81,8 +82,8 @@ function prepare_resonance_fixture(;directory=joinpath(ROOT,"data","L1-08"))
     scan_plan(list,spec,"baseline") # Validate before replacing prepared artifacts.
     previous = get(record,"resonance_scan",Dict())
     if !isempty(previous) && get(previous,"sample_step",nothing) != spec.sample_step
-        # Measurement-only revision: archive the old projects/manifest, keep
-        # native runs at their original hashes, and leave base-band files alone.
+        # A measurement-only revision archives projects/manifest, keeps native runs at
+        # their recorded hashes and leaves base-band files alone.
         for project in record["projects"]
             startswith(project["axis"],scan_prefix(spec)) || continue
             old=joinpath(directory,dirname(project["path"]))

@@ -5,10 +5,15 @@ include("ieee9_network.jl")
 """
     small_ac_network()
 
-Return `(classic, state)` representations of the same balanced 50 Hz circuit:
-a 380 kV line-to-line RMS source, a 0.19 Ω / 0.0122 H series branch and a
-400 Ω per-phase shunt load. Both use a phase RMS voltage base of `380/sqrt(3)`
-kV. Source setpoints are phase peak kV with zero cosine-reference angle.
+Return classic and builder representations of a balanced circuit at 50 \\[Hz\\].
+The source is 380 \\[kV\\] line-to-line RMS, the series branch is 0.19 \\[Ω\\]
+with 0.0122 \\[H\\], and the shunt load is 400 \\[Ω\\] per phase.
+Source setpoints use phase-peak voltage with zero cosine-reference angle.
+
+# Returns
+
+- `classic`: Classic network with phase-RMS voltage base `380/sqrt(3)` \\[kV\\].
+- `state`: Builder network with the same circuit and voltage base.
 """
 function small_ac_network()
     voltage = 380 / sqrt(3)
@@ -43,10 +48,15 @@ end
 """
     sm_network()
 
-Return classic and builder representations of `test/adm_SM_test.jl`:
-a 900 MW synchronous machine at the shared 380 kV slack bus, with its
-native rt/lt branch and default AVR, governor and steam turbine.
-The machine's requested voltage is `1.000177992` pu before power flow.
+Return classic and builder representations of the circuit in `test/adm_SM_test.jl`.
+The synchronous machine supplies 900 \\[MW\\] at a 380 \\[kV\\] slack bus,
+with the native `rt`/`lt` branch and default AVR, governor and steam turbine.
+Its requested voltage is 1.000177992 \\[pu\\] before power flow.
+
+# Returns
+
+- `classic`: Classic machine network.
+- `state`: Builder network with the same circuit.
 """
 function sm_network()
     voltage = 380 / sqrt(3)
@@ -80,9 +90,14 @@ end
 """
     passive_ohl_network()
 
-Return `(classic, state)` representations of the small AC fixture with the
-25 km `tl1` overhead line from `examples/P2P_HVDC_ALT.jl` replacing the series
-impedance. Both declare `voltageBase = 380/sqrt(3)` kV phase RMS.
+Return the small AC circuit with the `tl1` overhead line from
+`examples/P2P_HVDC_ALT.jl` replacing its series impedance.
+
+# Returns
+
+- `classic`: Classic network with a 25 \\[km\\] line and phase-RMS base
+  `380/sqrt(3)` \\[kV\\].
+- `state`: Builder network with the same circuit and voltage base.
 """
 function passive_ohl_network()
     classic, state = small_ac_network()
@@ -100,8 +115,8 @@ function passive_ohl_network()
             dᵍˢᵃᵍ = 10
         ),
         earth_parameters = (1, 1, 100), transformation = true)
-    # Retain the fixture's designator and connectivity in both representations.
-    # Each representation owns its element; solving classic may mutate setpoints.
+    # Both representations retain the fixture's designator and connectivity. Their
+    # elements are separate because solving classic may mutate setpoints.
     tl1.symbol = :line
     tl1.pins = copy(classic.elements[:line].pins)
     classic.elements[:line] = tl1
@@ -116,13 +131,27 @@ end
 """
     transformer_network(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
 
-Return classic and builder circuits with a 380/150 kV LL transformer and a
-400 Ω per-phase secondary load. Use the winding values from Transformer_test:
-Rₚ = 10 Ω, Lₚ = 0.1 H, Rₛ = 1 Ω, Lₛ = 0.05 H. The default magnetizing branch
-draws about 1 % of the load current; `Rₘ = 1e4, Lₘ = 10.0` reproduces the
-Transformer_test stress values, whose large magnetizing current exposes the
-power-flow pi-model approximation of the T-model.
-Both representations declare 380/sqrt(3) kV phase RMS as the common base.
+Return classic and builder circuits with a 380/150 \\[kV\\] line-to-line
+transformer and a 400 \\[Ω\\] per-phase secondary load.
+
+# Arguments
+
+- `organization`: Winding connection. Default: `:YY`.
+- `Rₘ`: Primary magnetizing resistance \\[Ω\\]. Default: `1e6`.
+- `Lₘ`: Primary magnetizing inductance \\[H\\]. Default: `1000.0`.
+
+# Returns
+
+- `classic`: Classic network with phase-RMS base `380/sqrt(3)` \\[kV\\].
+- `state`: Builder network with the same circuit and voltage base.
+
+# Notes
+
+Winding values from `Transformer_test.jl` are `Rₚ = 10` \\[Ω\\],
+`Lₚ = 0.1` \\[H\\], `Rₛ = 1` \\[Ω\\] and `Lₛ = 0.05` \\[H\\].
+The default magnetizing current is about 1% of load current. Values
+`Rₘ = 1e4` \\[Ω\\] and `Lₘ = 10` \\[H\\] reproduce the stress case,
+whose magnetizing current exposes the power-flow pi approximation of the T-model.
 """
 function transformer_network(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
     classic, state = small_ac_network()
@@ -143,12 +172,20 @@ end
 """
     dc_network()
 
-Return classic and builder representations of two DC voltage sources at 320
-and 318 kV pole-to-ground, joined by the differential series impedance
-2 + s*0.05 Ω. The common base is 320 kV. An independent AC slack island
-supports the classic power-flow solve; a 400 Ω AC shunt also makes that island
-materializable by NetworkBuilder. Grounded DC shunts currently become
-ordinary nonzero-voltage buses in that solver, so this fixture omits them.
+Return classic and builder representations of a DC circuit with sources at
+320 and 318 \\[kV\\] pole-to-ground and a differential series branch
+with resistance 2 \\[Ω\\] and inductance 0.05 \\[H\\].
+
+# Returns
+
+- `classic`: Classic DC network with voltage base 320 \\[kV\\].
+- `state`: Builder network with the same circuit and voltage base.
+
+# Notes
+
+An independent AC slack island supports power flow; a 400 \\[Ω\\] AC shunt
+permits builder reconstruction. Grounded DC shunts become nonzero-voltage
+buses in this solver and are omitted from the fixture.
 """
 function dc_network()
     elements = (;
@@ -186,10 +223,15 @@ end
 """
     dc_cable_network()
 
-Return the M2 DC circuit with the two-position `ugc` cable from
-`examples/P2P_HVDC_ALT.jl` as its 50 km DC branch. Layer and earth parameters
-are copied from the example (rho = 100 Ω·m); both ends retain the transformed
-differential terminal and grounded internal-conductor elimination.
+Return the DC circuit with the two-position `ugc` cable from
+`examples/P2P_HVDC_ALT.jl` as its 50 \\[km\\] branch. Cable-layer data and
+earth resistivity 100 \\[Ω·m\\] come from that example.
+Both ends use the differential transform and grounded internal-conductor elimination.
+
+# Returns
+
+- `classic`: Classic DC cable network.
+- `state`: Builder network with the same circuit.
 """
 function dc_cable_network()
     classic, state = dc_network()
@@ -217,18 +259,30 @@ end
 """
     tlc_case1_network()
 
-Return classic and builder representations with the case-1 Vdc/Q controls
-from `test/adm_TLC_test.jl`, 100 MVA / 220 kV AC / 640 kV pole-to-pole DC,
-and the test's 10 km DC cable. Include the 0.5 s voltage-support lag.
+Return classic and builder circuits with the case-1 Vdc/Q controls from
+`test/adm_TLC_test.jl`. Ratings are 100 \\[MVA\\], 220 \\[kV\\] AC and
+640 \\[kV\\] pole-to-pole DC, with a 10 \\[km\\] cable and 0.5 \\[s\\]
+voltage-support lag.
+
+# Returns
+
+- `classic`: Classic TLC network.
+- `state`: Builder network with the same circuit.
 """
 tlc_case1_network() = tlc_network(true)
 
 """
     tlc_case2_network()
 
-Return the case-2 P/Q controllers with the 0.5 s frequency-support lag.
-Use the same electrical data and 10 km DC cable as case 1, as required by
-M4; the original case-2 admittance grid connects its DC source directly.
+Return classic and builder circuits with case-2 P/Q controls and a
+0.5 \\[s\\] frequency-support lag. Use the case-1 electrical data and
+10 \\[km\\] cable to keep converter-mode comparisons on the same circuit.
+The case-2 admittance circuit in `test/adm_TLC_test.jl` connects its DC source directly.
+
+# Returns
+
+- `classic`: Classic TLC network.
+- `state`: Builder network with the same circuit.
 """
 tlc_case2_network() = tlc_network(false)
 
@@ -441,8 +495,8 @@ function mmc_network(mode)
     return (; classic, state)
 end
 
-# Current modular GFM fixture: test/adm_MMC_test.jl:58–193, build_mmc_grid().
-# Saved PSCAD primitives are cited in fixtures/mmc_gfm_saved_fragments.xml.
+# Modular GFM fixture: test/adm_MMC_test.jl:58–193, build_mmc_grid(). Saved PSCAD
+# primitives are cited in fixtures/mmc_gfm_saved_fragments.xml.
 function mmc_gfm_network()
     Pmmc, Qmmc = 0.7 * 1060, 0.0
     Vm, Vdc = 400 / sqrt(3), 640.0
@@ -578,15 +632,22 @@ end
 """
     mmc_compensated_network()
 
-Return `(classic, state)` representations of the compensated MMC validation
-network with its original Δ-energy PI gains `Kp=0.5544`, `Ki=5.94` (`k=1`).
-The plant is rated 1060 MVA, 320/400 kV line-to-line RMS and 640 kV DC.
+Return classic and builder representations of the compensated MMC circuit.
+The Δ-energy PI gains are `Kp = 0.5544`, `Ki = 5.94` with `k = 1`.
+Plant ratings are 1060 \\[MVA\\], 320/400 \\[kV\\] line-to-line RMS and
+640 \\[kV\\] DC.
 
-With the corrected +3ωbase triplen notch/PI frame, the former
-`+0.115752 ± j942.538554` \\[s⁻¹\\] pair becomes
-`-12.550944 ± j940.716108` \\[s⁻¹\\]. Apart from the deliberately slow
-stable OCC filter poles, the least-damped pair is
-`-4.873459 ± j10.339475` \\[s⁻¹\\]. No gain scaling is applied.
+# Returns
+
+- `classic`: Classic compensated MMC network.
+- `state`: Builder network with the same circuit.
+
+# Notes
+
+The +3ωbase triplen notch/PI frame gives poles
+``-12.550944 ± j940.716108`` \\[s⁻¹\\]. Excluding slow stable OCC filter poles,
+the least-damped pair is ``-4.873459 ± j10.339475`` \\[s⁻¹\\] without gain scaling.
+The opposite triplen rotation gives ``+0.115752 ± j942.538554`` \\[s⁻¹\\].
 """
 function mmc_compensated_network()
     Pmmc, Qmmc = 0.7 * 1060, 0.0

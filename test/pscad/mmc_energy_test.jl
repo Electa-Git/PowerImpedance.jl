@@ -69,10 +69,10 @@ end
             eq.setpoint_pu, m, PI.Equil())
         @test maximum(abs, residual) <= 1e-6
 
-        # Every rate, including the notch's two states and rotating PI states,
-        # is compared to the owned Julia equations at displaced states. With
-        # fundamental-only Δ capacitors, instantaneous projections equal the
-        # seven harmonic coordinates; the general cycle projection is below.
+        # Every rate, including the notch's two states and rotating PI states, is compared
+        # to the native Julia equations at displaced states. With fundamental-only Δ
+        # capacitors, instantaneous projections equal the seven harmonic coordinates. The
+        # general cycle projection is evaluated separately.
         rates = ["wsdqfirstrate1", "wsdqfirstrate2", "wszfirstrate1",
             "wsdqsecondrate1", "wsdqsecondrate2", "wszsecondrate1",
             "wsdqpirate1", "wsdqpirate2", "wszpirate1",
@@ -139,8 +139,8 @@ end
             modules["SIGMA_DUT"].ports, canvas)
         live_names = replace.(energy_names, "_measured" => "")
         def = diagnostic(measurements, [energy_names; live_names])
-        # Capacitor-derived signals and arm-current feedback are live from t=0. Direct physical
-        # projections are independent of the emitted primitive graph.
+        # Capacitor-derived signals and arm-current feedback are live from t=0. Direct
+        # physical projections are independent of the emitted primitive graph.
         phases = (0.0, -2π/3, 2π/3)
         for time in (0.0, 0.05, 0.2 - SETTINGS.time_step, 0.2)
             signals = Dict{String, Any}("iS_abc" => fill(25.0, 3),
@@ -192,8 +192,8 @@ end
         end
         @test averaged ≈ expected_energy atol=1e-6
 
-        # Current feedback uses the live grid -2ω frame from t=0. The owned
-        # rates use the protected divisor; only half-DC feedforward is live.
+        # Current feedback uses the live grid -2ω frame from t=0. The native rates use the
+        # protected divisor; only half-DC feedforward is live.
         live_states = merge(eq.states,
             (; iΣ_d = 0.11, iΣ_q = -0.07, iΣ_z = 0.24,
                 vCΣ_d = 0.0, vCΣ_q = 0.0, vCΣ_z = 1.02,
@@ -221,8 +221,8 @@ end
             end
         end
 
-        # Amauri's selected EMT law: exact pointwise arm voltage identity.
-        # Unequal capacitors prevent accidentally sharing a DC denominator.
+        # The EMT law requires exact pointwise arm voltage identity. Unequal capacitors
+        # prevent accidentally sharing a DC denominator.
         zero_model = with_modulation(m, PI.CompensatedModulation())
         zero_element = converter_element(e, zero_model)
         def = P.mmc_modulation("COMP_EQ", zero_element, eq, transforms, SETTINGS)
@@ -295,8 +295,8 @@ end
         @test third ≈ expected_third atol=1e-6
         @test all(!iszero, third)
 
-        # Same exact tdelay primitive and buffer sizing as M5/M6a. The selected
-        # physical law initializes each history from its own solved arm ratio.
+        # The exact tdelay primitive and buffer sizing apply to each physical arm. Each
+        # history is initialized from its own solved arm ratio.
         params = Dict(p.name => p.default for p in modules["MOD_DUT"].parameters)
         caps = P.mmc_arm_capacitors(eq.states, m.elec.vDC_base)
         initial_signals = merge(arm_signals(eq.states, m, 0.0),
@@ -319,8 +319,8 @@ end
             @test params[fields["X0"]] ≈ initial_outputs["m_" * stem] atol=1e-6
         end
 
-        # Use the same converter comparison rows, including six capacitor means
-        # and the already accepted VSM speed row. No insertion-index channel.
+        # Converter comparison rows include six capacitor means and the VSM speed row.
+        # Insertion indices are excluded from these channels.
         probes = P.ProbeManifest(
             filter(c -> c.element == "DUT" || c.kind == :voltage,
                 plan.probes.channels),

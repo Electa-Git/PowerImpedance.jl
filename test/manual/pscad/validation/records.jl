@@ -18,8 +18,8 @@ function recorded_probes(channels, reference_bus)
     return P.ProbeManifest(probes, reference_bus)
 end
 
-# TOML reads empty arrays as Union{}[]. These ledger fields accept appended
-# records or declared model differences, both before and after serialization.
+# TOML reads empty arrays as Union{}[]. These fields accept appended records or declared
+# model differences, both before and after serialization.
 function manifest_lists!(record)
     for field in ("run_records", "model_differences", "projects", "harness_revisions", "native_reference_checks")
         record[field] = Any[get(record, field, Any[])...]
@@ -176,12 +176,12 @@ end
 
 write_operating_point(path, model) = write_table(path, operating_point_rows(model.netlist))
 
-# Reference identity has its own enforced forward-error budget. NonlinearSolve
-# uses 1e-6 absolute/relative residual tolerances; these do NOT imply a uniform
-# forward-admittance bound for ill-conditioned realisations. Require the actual
-# difference to stay within one ppm on the declared pu bases/floors, or stop.
-# This is 20,000/50,000 times tighter than passive/active C; C always uses the
-# frozen file. Never widen this budget from the measured discrepancy.
+# NonlinearSolve uses 1e-6 absolute/relative residual tolerances, which do not imply a
+# uniform forward-admittance bound for ill-conditioned realisations. The separate
+# reference comparison requires the actual difference within one ppm on declared pu
+# bases/floors, or stops. Passive/active response tolerances are 20,000/50,000 times
+# larger and use the frozen file. The reference limit is independent of measured
+# discrepancies.
 const NATIVE_REFERENCE_LIMIT = 1e-6
 
 function native_reference_check(spec, recomputed, frozen)

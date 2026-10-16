@@ -1,5 +1,5 @@
-# Zero-delay MMC fixtures qualify the unexplained change of their complete
-# discrete response column. Positive-delay fixtures retain the raw witness.
+# Zero-delay MMC fixtures compare the unexplained change in their complete discrete
+# response column. Positive-delay fixtures retain the raw comparison.
 const M9C12_IDS = ["L2-" * lpad(n, 2, '0') for n in 7:12]
 residual_step_eligible(id, net) = id in M9C12_IDS &&
     interface_step_eligible(net.elements[:DUT].element_model)
@@ -210,8 +210,8 @@ function qualify_fixture!(record; residual = false)
     return record
 end
 
-# Completion verification is strictly local. In particular, explicit native
-# resume is not used because it also identifies the currently connected solver.
+# Completion verification is strictly local. Explicit native resume also identifies the
+# connected solver, which contacts the station.
 function m9c12_stored_axis(record, key, list, spec, directory, inputs)
     run = last(filter(r -> r["axis"] == key, record["run_records"]))
     root = joinpath(directory, run["path"], run["native_run_directory"])
@@ -224,8 +224,8 @@ function m9c12_stored_axis(record, key, list, spec, directory, inputs)
     pop!(numerical, "expected_solver", nothing)
     P._pscad_digest(numerical) == complete["input_sha256"] || error("native inputs changed")
     expected_settings = P._settings_record(scan_settings(spec))
-    # Validate through the existing numeric readback contract, which permits
-    # only its fixed floating round-off budget (not new scan settings).
+    # Numeric readback permits only the fixed floating round-off budget; scan settings
+    # remain unchanged.
     settings_check = Dict(k => Dict("requested" => v, "observed" => v)
         for (k,v) in P._project_parameters(request["settings"]))
     P._verify_settings_readback(settings_check, expected_settings)
@@ -247,11 +247,24 @@ function m9c12_stored_axis(record, key, list, spec, directory, inputs)
 end
 
 """
-    reanalyse_m9c12(ids; data_root, output_root=joinpath(ROOT, "data", "m9c12"))
+$(TYPEDSIGNATURES)
 
-Re-evaluate completed L2-07..12 native evidence locally. Read `data_root/<id>`;
-write analysis only below this worktree's `data/m9c12` or `/tmp`. Native runs and
-source manifests are never changed. Record the analysing revision and file hashes.
+Re-evaluate stored measurements for fixtures `L2-07` through `L2-12` locally.
+
+# Arguments
+
+- `ids`: Fixture identifiers.
+- `data_root`: Directory containing completed native runs and manifests.
+- `output_root`: Destination restricted to this worktree's `data/m9c12` or `/tmp`.
+  Default: `joinpath(ROOT, "data", "m9c12")`.
+
+# Returns
+
+- Dictionary of analyses with the analysing revision and file hashes.
+
+# Notes
+
+Native runs and source manifests remain unchanged.
 """
 function reanalyse_m9c12(ids; data_root, output_root = joinpath(ROOT, "data", "m9c12"))
     selected = ids isa AbstractString ? [ids] : collect(ids)

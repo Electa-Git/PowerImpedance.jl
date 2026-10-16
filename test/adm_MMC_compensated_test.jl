@@ -200,14 +200,16 @@ end
     for k in eachindex(omegas)
         for c in 1:3, r in 1:3
             @test abs(Y_MMC[k][c, r]) ≈ abs(Y_validation[k][c, r]) atol = 1e-4 rtol = 1e-2
-            # These PSCAD references predate the Δ-triplen frame correction.
-            # Guard bounds round the measured errors UP to four significant digits.
-            # Keep every other complex comparison and every magnitude tolerance.
+            # The PSCAD references use the opposite Δ-triplen rotation. Upper error bounds
+            # round measured errors UP to four significant digits. Every other complex
+            # comparison and every magnitude tolerance remain unchanged.
             if omegas[k] == 2π * 40 && c == 1 && r == 2
-                # Old/new complex errors: 9.389600e-5 / 1.147926e-4 S.
+                # Complex error with the reference triplen rotation: 9.389600e-5 S; with
+                # the native +3ωbase rotation: 1.147926e-4 S.
                 @test abs(Y_MMC[k][c, r] - Y_validation[k][c, r]) <= 1.148e-4
             elseif omegas[k] == 2π * 45 && c == 1 && r == 3
-                # Old/new complex errors: 1.536634e-4 / 1.789236e-4 S.
+                # Complex error with the reference triplen rotation: 1.536634e-4 S; with
+                # the native +3ωbase rotation: 1.789236e-4 S.
                 @test abs(Y_MMC[k][c, r] - Y_validation[k][c, r]) <= 1.790e-4
             else
                 @test Y_MMC[k][c, r] ≈ Y_validation[k][c, r] atol = 1e-4 rtol = 1e-2

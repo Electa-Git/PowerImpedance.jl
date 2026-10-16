@@ -1,5 +1,5 @@
-# Offline L4 diagnostics. Every reported number belongs to the recorded source
-# hash and line-model stage; none is a native node-count or PSCAD validation.
+# Offline system diagnostics record the source hash and line-model choice for every
+# result. Native node counts and PSCAD validation require separate runs.
 function l4_circuit(net)
     devices=sort!([name for (name,e) in net.elements if
         e.element_model isa Union{PowerImpedance.MMC,PowerImpedance.TLC}])
@@ -60,8 +60,8 @@ function l4_root_search(c,functions,initial)
         end
     end
     foreach(track,initial)
-    # A 50 Hz nominal frame separates opposite circular regions by about
-    # 100 Hz. These offsets supply guesses, never an assumed modal identity.
+    # A 50 Hz nominal frame separates opposite circular regions by about 100 Hz. These
+    # offsets give initial root guesses, without an assumed modal identity.
     omega=2c.net.elements[first(c.devices)].element_model.elec.ωbase
     growing=unique([z for (z,residual) in tracks if real(z)>0 && imag(z)>0 && residual<1e-6])
     partners=[z+im*direction*omega for z in growing for direction in (-1,1)]
@@ -123,9 +123,9 @@ function l4_stability(c; checkpoint=nothing, stage="post-line-fix")
     return l4_refine_stability(c,gate;checkpoint)
 end
 
-# Both nodal and all-device-port Schur conditioning are sampled, not maximized
-# over the continuum. Equal 380 kV AC bases at these fixtures make cond invariant
-# under their common SI-to-pu scaling. Mixed AC/DC nodal cond remains in SI.
+# Both nodal and all-device-port Schur conditioning are sampled, not maximized over the
+# continuum. Equal 380 kV AC bases leave cond unchanged under common SI-to-pu scaling.
+# Mixed AC/DC nodal cond remains in SI.
 function l4_conditioning(c;frequencies=sort!(unique([exp10.(range(0,3;length=3001));
             filter(!=(50.),l1_settings().frequencies)])), stage="post-line-fix",
         measurement_ports=[[p] for p in c.ports])

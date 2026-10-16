@@ -186,8 +186,8 @@ end
     @test builder_netlist.operating_point.setpoints[:machine] ===
           solved.powerflow.operating_point[:machine]
     @test builder_netlist.buses[2].pf_index == 2
-    # Without options.voltageBase, NetworkBuilder's power flow and materialized
-    # network share one default; the solved records own the bus bases.
+    # Without options.voltageBase, NetworkBuilder's power flow and materialized network
+    # share one default; solved records specify the bus bases.
     unspecified_base = NB.NetworkState(deepcopy(offset_state.elements), offset_state.topology, (;))
     @test !hasproperty(unspecified_base.options, :voltageBase)
     declared_default = pscad.netlist(unspecified_base, nothing)
@@ -265,8 +265,8 @@ end
     @test_throws ArgumentError pscad.netlist(dc_classic,
         (dc_result, inconsistent_dc_data, dc_mapping, dc_pf[4]))
 
-    # Supplied converter evidence uses standard PowerModels power signs and
-    # carries the solved setpoint independently of the builder's declarations.
+    # Supplied converter results use standard PowerModels power signs and provide the
+    # solved setpoint independently of builder declarations.
     conv_elements = (; converter = tlc())
     conv_rows = (
         (node = :DC, element = :converter, side = 1, terminal = 1),

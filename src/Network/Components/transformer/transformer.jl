@@ -5,11 +5,11 @@ $(TYPEDEF)
 
 Store a per-phase transformer T-model. For three phases, `n` is the
 primary-to-secondary line-to-line voltage ratio for both `:YY` and `:ΔY`.
-All equivalent-circuit parameters have the `:YY` Y-equivalent meaning:
-`Rₚ`, `Lₚ` and `Rₛ`, `Lₛ` are referred to their own winding sides;
-`Rₘ`, `Lₘ` form the primary excitation branch; `Cₜ`, `Cₛ` retain the same
-per-phase capacitive paths. Zero `Rₘ` or `Lₘ` omits that excitation term.
-`hasRω` and `k` retain the same winding-resistance scaling in both organizations.
+Equivalent-circuit parameters use the `:YY` Y-equivalent values:
+`Rₚ` and `Lₚ` use primary-side values, while `Rₛ` and `Lₛ` use secondary-side
+values. `Rₘ` and `Lₘ` form the primary excitation branch, and `Cₜ` and `Cₛ`
+specify per-phase capacitive paths. Zero `Rₘ` or `Lₘ` omits that excitation term.
+`hasRω` and `k` give the same winding-resistance scaling in both organizations.
 
 `:ΔY` denotes Dyn11 (delta primary, grounded-Y secondary): positive-sequence
 secondary voltage leads the primary by 30°, and negative sequence has the

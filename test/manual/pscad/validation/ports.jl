@@ -1,8 +1,8 @@
-# DC voltage sources: fields/NA/NB/control pins are owned by sources.jl and
-# plan.jl:component_ports; Cntrl=1 instantaneous mode is the validated TLC stage.
-# Current injection: tlc.jl:tlc_electrical_canvas and saved TLC lines 5589–5630.
-# +command injects out of upper A (the station sign witness at tlc.jl:172–175).
-# Meters, stubs, breakout and PGBs use the same existing primitive emitters.
+# DC voltage sources: sources.jl and plan.jl:component_ports define fields, NA/NB and
+# control pins; Cntrl=1 is instantaneous control. Current injection:
+# tlc.jl:tlc_electrical_canvas and saved TLC lines 5589–5630. +command injects out of
+# upper A, as measured at tlc.jl:172–175. Meters, stubs, breakout and PGBs use the same
+# primitive emitters.
 function dc_voltage_port(name, spec, nominal)
     graph, perturbation, _ = tone_graph(merge(spec, (;
         voltage_base_kV = spec.voltage_base_kV / 2)))
@@ -176,10 +176,10 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
         end
     end
     if get(spec, :protocol, "") == "abc_resonance"
-        # master:pgb is the existing output_probe! component (probes.jl:29).
-        # Remove unused recorder instances and their private label/wire,
-        # retaining all electrical meters and connections. No master field or
-        # signal is invented; output_probe! owns this exact recorder geometry.
+        # master:pgb is the output_probe! component (probes.jl:29). Unused recorder
+        # instances and their private labels/wires are removed; all electrical meters and
+        # connections remain. Master fields and signals retain the output_probe! recorder
+        # geometry.
         needed = filter(c -> c.kind == :voltage && c.bus == only(spec.buses).name ||
             c.kind == :injection_current && c.element == only(spec.currents)[1], plan.probes.channels)
         retain_recorders!(plan, needed)
@@ -202,8 +202,8 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
         retain_recorders!(plan,needed)
     end
     if get(spec, :recorder_scope, "") == "tierb"
-        # B retains all electrical V/I and the machine swing witnesses.
-        # Only recorder assemblies are pruned; meters and signal graphs stay.
+        # Time-domain records retain all electrical V/I and the machine swing signals.
+        # Only recorder assemblies are pruned; meters and signal graphs remain.
         needed=filter(c->c.kind in (:voltage,:current,:injection_current,
             :machine_speed,:machine_p,:machine_q),plan.probes.channels)
         retain_recorders!(plan,needed)

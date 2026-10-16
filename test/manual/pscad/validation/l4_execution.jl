@@ -9,8 +9,8 @@ function l4_spec(id,list)
     vb=vll*sqrt(2/3);ib=2power/(3vb);h=1.25e-6
     converter=first(e for e in list.elements if e.model isa Union{PowerImpedance.MMC,PowerImpedance.TLC})
     dcbase=device_bases(converter.model.elec).dc_voltage
-    # Record refreshed native peak bounds for these preselected amplitudes.
-    # The measured .01 pu limit is unchanged.
+    # Native peak bounds are evaluated for the preselected amplitudes; the measured limit
+    # is .01 pu.
     amplitude=id=="L4-01" ? .0002916349 : .0001
     return (id=id,quantity="Z",dimension=2,buses=[port_probe(list,p...) for p in ports],
         currents=[("injection_$j","1") for j in eachindex(ports)],axes=["p$(j)_$axis" for j in 1:2 for axis in ("d","q")],

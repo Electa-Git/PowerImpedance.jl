@@ -70,7 +70,7 @@ function applicable_scan(id, net, list; definition = nothing)
                 estimated_station_seconds = id == "L1-03" ? 840 : 2040))
         end
     elseif startswith(id,"L2-")
-        # Already frozen by the active-device measurement definition.
+        # Frozen by the active-device measurement definition.
     elseif id == "L1-05"
         spec = merge(spec, (; protocol = "settled", window_starts = (6.0, 7.0),
             simulation_time = 8.0, estimated_station_seconds = 900))
@@ -78,9 +78,9 @@ function applicable_scan(id, net, list; definition = nothing)
         spec = merge(spec, (; protocol = ""))
     end
     if definition !== nothing && get(definition, "protocol", "") == spec.protocol
-        # The prepared measurement settings are authoritative. Reuse their
-        # exact floating values instead of deriving amplitude/bases/angles anew
-        # from tiny solver or reduction round-off in a fresh process.
+        # Prepared measurement settings supply exact floating values for amplitudes, bases
+        # and angles. A fresh derivation can differ through small solver or reduction
+        # round-off in a fresh process.
         voltages = Float64.(definition["voltage_bases_kV"])
         currents = Float64.(definition["current_bases_kA"])
         buses = [P.Bus(b.key, b.name, b.nets, b.kind, b.base_kV,
@@ -122,8 +122,8 @@ function response_rows(spec, actual, reference; kwargs...)
     return comparison_rows(spec.frequencies, actual, reference; kwargs...)
 end
 
-# Diagnostic only: the existing Impedance ABCD cache holds one evaluated
-# matrix. Native conversions and native make_z retain physics and topology.
+# Diagnostic only: the Impedance ABCD cache stores one evaluated matrix. Native
+# conversions and native make_z retain physics and topology.
 function projected_admittance_z(net, list, spec, frequency)
     evaluated = deepcopy(net)
     for (name, original) in net.elements
@@ -190,14 +190,13 @@ function dq_approximation(id, net, list, directory)
         "source_directory"=>"analysis/probe-orientation")
 end
 
-# Emitted YY cores have two floating internal stars (mapping doc, transformer
-# emitter). The original phase model grounds their voltage references. For
-# IEEE9, remove each winding zero-sequence path while preserving external Ct/Cs
-# ground/bridge paths. Q = I - 11'/3 is exact elimination of the two floating
-# neutral voltages for these identical phase windings. Near-ideal Xl and Im1
-# are the existing emitter values; leakage is split symmetrically. No PSCAD
-# project, geometry or package formula changes. Native make_y owns assembly
-# of the remaining elements; ideal source buses are voltage-clamped.
+# Emitted YY cores have two floating internal stars (mapping doc, transformer emitter).
+# The phase model grounds their voltage references. For IEEE9, each winding zero-sequence
+# path is removed while external Ct/Cs ground/bridge paths remain. Q = I - 11'/3 exactly
+# eliminates the two floating neutral voltages for these identical phase windings.
+# Near-ideal Xl and Im1 use the emitter values; leakage is split symmetrically. PSCAD
+# project, geometry and package formulas remain unchanged. Native make_y assembles the
+# remaining elements; ideal source buses are voltage-clamped.
 function floating_star_network_z(net, buses, frequency)
     s = ComplexF64(im * 2π * frequency)
     inputs = [Symbol(b.name, "_", phase) for b in buses for phase in 1:3]

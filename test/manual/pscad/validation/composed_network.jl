@@ -151,8 +151,8 @@ function composed_reference(c, spec; time_step = nothing, forms = nothing)
     return Dict(name=>cat(values...;dims=3) for (name,values) in targets)
 end
 
-# Independent descriptor for native lumped networks: every converter/machine
-# state and every series/parallel RLC storage state survives the KCL assembly.
+# The independent descriptor for native lumped networks retains every converter/ machine
+# state and every series/parallel RLC storage state in the KCL assembly.
 function composed_descriptor(c)
     nv = length(c.nodes)
     blocks = Any[]

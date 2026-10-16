@@ -1,8 +1,8 @@
 function gfl_settling(gate; tone_peak_pu = 5e-5)
     decay = -gate["most_positive_located_real_per_s"]
     decay > 0 || error("settling requires stable complete-network modes")
-    # Conservative 1 pu transient, divided by the single-tone drive and the
-    # unchanged 0.02 entry floor. Target 0.1%, tenfold below the 1% window gate.
+    # A conservative 1 pu transient is divided by the single-tone drive and the 0.02 entry
+    # floor. The target is 0.1%, tenfold below the 1% window tolerance.
     target = 0.001
     decay_times = log(1 / (tone_peak_pu * 0.02 * target))
     start = ceil(max(16.0, 0.2 + decay_times/decay, 2.0 + decay_times/decay))
@@ -17,7 +17,7 @@ end
 
 const MMC_SETTLING_DIRECTORY = joinpath(ROOT, "data", "m9c7", "L2-07-settling")
 
-# Rebuild the bounded experiment from its frozen design, retaining all old runs.
+# The bounded experiment is rebuilt from its frozen design with retained runs intact.
 function prepare_settling_experiment()
     directory = MMC_SETTLING_DIRECTORY
     archive = joinpath(ROOT, "data", "archive", "m9c7", "L2-07-settling")
@@ -41,8 +41,8 @@ function prepare_settling_experiment()
     return record
 end
 
-# Diagnostic only: one baseline and one d-axis drive. No Y identification or
-# fixture qualification can be inferred from this single injected axis.
+# One baseline and one d-axis drive diagnose settling. A single injected axis is
+# insufficient for Y identification or a complete fixture comparison.
 function run_settling_experiment(; remote, deadline)
     directory = MMC_SETTLING_DIRECTORY
     record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))

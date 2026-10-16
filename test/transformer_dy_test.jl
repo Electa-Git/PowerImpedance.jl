@@ -9,8 +9,8 @@ using LinearAlgebra
     capacitive = (; Cₜ = 2e-8, Cₛ = 1e-9, hasRω = true, k = 0.7)
 
     @testset "YY and one-phase bit regression" begin
-        # Captured from the unchanged implementation using Julia 1.12.7,
-        # before this fix. Preserve arithmetic, including capacitive paths.
+        # Independent stored matrices from Julia 1.12.7 fix the reference arithmetic,
+        # including capacitive paths.
         expected = (
             ComplexF64[2.5338526666666668 - 1.051490608952202e-6im 0.45075434839033274 + 2.8321688426858493im;
                        2.5333333333333334e-5 - 0.00016127700899978728im 0.39484070877192984 - 2.1029812179044075e-7im],

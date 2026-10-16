@@ -118,7 +118,7 @@ end
     @test occursin(":line", sprint(showerror, caught))
     @test occursin("eliminate=false", sprint(showerror, caught))
     cable.eliminate = true
-    # Exercise the fourth donor slot instead of testing only the M2 layers.
+    # The fourth donor slot exercises material pairs beyond the first three layers.
     cable.conductors[:C4] = Conductor(rᵢ = 0.07256, rₒ = 0.074, ρ = 1.8e-7, μᵣ = 400.0)
     cable.insulators[:I4] = Insulator(rᵢ = 0.074, rₒ = 0.08, ϵᵣ = 4.0, μᵣ = 2.0)
     fourth = Dict(first(only(P.build_plan(P.netlist(classic, nothing)).lines).cables).params)

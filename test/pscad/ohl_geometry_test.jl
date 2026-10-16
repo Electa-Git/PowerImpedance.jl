@@ -3,8 +3,8 @@ using Test, PowerImpedance, LinearAlgebra
 const PI = PowerImpedance
 
 @testset "Lifted OHL tower geometry" begin
-    # These coordinates retain the previous local builders' physical order,
-    # including the three-phase vertical layout's first vertical offset.
+    # These coordinates retain the local builders' physical order, including the
+    # three-phase vertical layout's first vertical offset.
     cases = (
         (:flat, 2, [-5.0, 5.0], [30.0, 30.0]),
         (:flat, 3, [-10.0, 0.0, 10.0], [30.0, 30.0, 30.0]),

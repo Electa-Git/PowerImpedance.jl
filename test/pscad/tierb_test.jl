@@ -64,7 +64,7 @@ end
     time=collect(0.:.001:4.)
     spec=(;tone_peak_pu=1.,carrier_Hz=10.,burst_cycles=8,injection_time=.1)
     u=reshape(V.burst_wave(time,spec),:,1)
-    # An integer transport delay has an independent sample-exact witness.
+    # An integer transport delay has an independent sample-exact reference.
     response=s->reshape([exp(-.02s)],1,1)
     prediction=V.tierb_convolve(time,u,response)
     expected=vcat(zeros(20,1),u[1:end-20,:])

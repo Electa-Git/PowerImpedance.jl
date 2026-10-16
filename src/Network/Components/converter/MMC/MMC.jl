@@ -289,8 +289,8 @@ function _mmc_si_scale!(Y, elec::ElectricalMMC)
     Y[2:3, 1:1] .*= iACbase * elec.turnsRatio
     Y[2:3, 1:1] ./= elec.vDC_base
 
-    # Equivalent AC-current/AC-voltage scaling retains the previous rounding
-    # of the AC-AC block. The physical cross terms use the winding current base.
+    # Equivalent AC-current/AC-voltage scaling preserves the rounding of the AC-AC block.
+    # The physical cross terms use the winding current base.
     Y[2:3, 2:3] .*= iACbase
     Y[2:3, 2:3] ./= elec.vAC_base / elec.turnsRatio
     return Y

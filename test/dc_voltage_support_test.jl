@@ -126,7 +126,9 @@ end
         @test c["Pacset"] == -50.0
         @test powerbase / (640.0 * c["droop"]) ≈ 5.0 * 500.0 / dcbase
         if voltage == 672.0 && dcbase == 640.0
-            @test c["Vdcset"] * 640.0 != 705.6 # Historical operating-voltage normalization.
+            # Normalization uses the declared DC-voltage base instead of the operating
+            # voltage.
+            @test c["Vdcset"] * 640.0 != 705.6
             @test powerbase / (640.0 * c["droop"]) ≈ 3.90625
         end
         zero = OuterActivePowerControl(support = DCVoltageSupportLag())
@@ -164,8 +166,8 @@ end
         outputs = PI.state_space!(F, x, inputs, sp, m)
         equil_F = zeros(length(vector))
         PI._state_space!(equil_F, vector, collect(values(inputs)), sp, m, PI.Equil())
-        @test norm(F, Inf) <= 1e-6 # Existing equilibrium accuracy; no tolerance change.
-        @test isequal(F, equil_F) # No equation is replaced to obtain this residual.
+        @test norm(F, Inf) <= 1e-6 # The equilibrium residual tolerance is 1e-6.
+        @test isequal(F, equil_F) # The residual is evaluated with the native equations.
         @test x.ξ_vdc_supp == 0.0
         @test F[findfirst(==(:ξ_vdc_supp), PI.statenames(m))] == 0.0
         @test abs(outputs.meas.P_ac_f - sp.p_ac) <= 1e-6

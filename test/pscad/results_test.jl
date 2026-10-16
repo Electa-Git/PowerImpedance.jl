@@ -85,7 +85,7 @@ end
     empty!(channels)
     add_three_phase!(channels, "V_settling", times, 100cis(0.2))
     @test_logs P.steady_state(result)
-    # A single indexed scalar retains the same mean and warning contract.
+    # A single indexed scalar retains the same mean and warning behavior.
     empty!(channels)
     channels["I_settling:1"] = 2 .* (1 .- exp.(-times ./ 0.08))
     @test_logs (:warn,
@@ -135,8 +135,8 @@ end
     end
     failed = compare_operating_point(synthetic_result(times, doubled), model)
     @test failed.name[.!failed.within_tolerance] == ["I_line_2"]
-    # The two terminal power records must remain distinct, including receiving
-    # reactive power. These independent records deliberately differ.
+    # Both terminal power records must remain distinct, including receiving reactive
+    # power. These independent records deliberately differ.
     flows = copy(model.operating_point.branch_flows)
     flows[:line] = (pf = 120.0, qf = 30.0, pt = -90.0, qt = -40.0)
     point = P.OperatingPointRecord(model.operating_point.bus_states, flows,
@@ -308,15 +308,16 @@ end
             list.buses, [list.elements; different_base], list.operating_point,
             list.voltageBase, list.frequency)
         @test_throws ArgumentError P._dc_converter_current_bases(mixed)
-        # The two converters share their AC bus, but removing the cable
-        # leaves independent DC components with independent current bases.
+        # Both converters share their AC bus; removing the cable leaves independent DC
+        # components with independent current bases.
         separate = P.Netlist(list.buses, [disconnected.elements; different_base],
             list.operating_point, list.voltageBase, list.frequency)
         @test P._dc_converter_current_bases(separate) ==
               Dict(terminal.bus => base, remote_bus.key => 0.3125)
     end
 
-    # Converter-free DC components keep the previous relative/zero rule.
+    # Converter-free DC components use relative normalization for nonzero means and the
+    # absolute rule at zero.
     classic, _ = dc_network()
     list = P.netlist(classic, power_flow(classic))
     @test isempty(P._dc_converter_current_bases(list))
@@ -503,8 +504,8 @@ end
         @test only(filter(r -> r.quantity == quantity, rated_table)).error ≈ 0.0045
     end
 
-    # Known exported R = 0.37544 ohm and L = 0.0298765659 H. The measured
-    # bus current is in kA, so their drop reconstructs phase RMS terminal kV.
+    # Known exported R = 0.37544 ohm and L = 0.0298765659 H. Measured bus current is in
+    # kA; their voltage drop reconstructs phase RMS terminal kV.
     measured = deepcopy(channels)
     add_three_phase!(measured, "I_sg1_1", times, sqrt(2) * (2.0 - 1im))
     expected_terminal = abs(voltage + (0.37544 + 2π * 50 * 0.0298765659im) * (2.0 - 1im))

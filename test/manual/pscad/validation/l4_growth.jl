@@ -310,8 +310,8 @@ function run_l4_growth(id;directory,remote,deadline)
     reference=complex.(record["growth_reference_real_per_s"],2π.*record["growth_reference_signed_Hz"])
     length(modes)==length(reference) && all(isapprox(m.signed_root,z;rtol=1e-8) for (m,z) in zip(modes,reference)) || error("L4 growth reference changed")
     record["status"]="running";record["growth_analysis"]=Dict{String,Any}()
-    # Every invocation executes all five variants from time zero. Old output
-    # directories stay available, but they cannot supply a completed axis.
+    # Every invocation executes all five variants from time zero. Retained output
+    # directories remain available but cannot supply a completed axis.
     results=Dict{String,Any}();channels=Dict{String,Any}()
     started=time()
     try

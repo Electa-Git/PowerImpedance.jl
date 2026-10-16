@@ -112,7 +112,7 @@ end
         else
             @test m.meas.P_ac.filter isa PI.NoFilter
             @test m.meas.Q_ac.filter isa PI.NoFilter
-            @test occ.filter isa PI.NoFilter # Historical TLC occ filter fields are unused.
+            @test occ.filter isa PI.NoFilter # The TLC occ filter fields are unused.
             @test occ.activate_ω_c_multiplication
         end
         e = adapter((; dc = ctrl, vac = ctrl, Vᵈᶜ = 640.0))
@@ -391,7 +391,8 @@ end
         (; vG_d_f = 0.8, measured...), PI.SetpointPU(), conv.sync, conv)
     @test F[1] ≈ -7.0*0.1
     @test y.ω_c ≈ 1.0-0.3*0.1
-    @test !isapprox(F[1], -7.0*0.2) # Approved filtered convention, rather than historical bypass.
+    # Frequency support uses the filtered input instead of bypassing the filter.
+    @test !isapprox(F[1], -7.0*0.2)
 end
 
 @testset "Legacy TLC against independent validation data" begin

@@ -1,6 +1,6 @@
-# Complete source-referenced converter + RL network. Native Jacobian blocks own control
-# physics; native get_y owns the grid's dq signs. The descriptor imposes KCL,
-# rather than testing a converter alone. No distributed-line state truncation.
+# Complete source-referenced converter + RL network. Native Jacobian blocks compute
+# control physics; native get_y supplies the grid's dq signs. The descriptor imposes
+# network KCL without distributed-line state truncation.
 function network_poles(A, B, C, D, resistance, inductance, rotation)
     n = size(A,1)
     identity = Matrix{Float64}(I,2,2)
@@ -24,14 +24,13 @@ function network_stability(A, B, C, D, grid_y, resistance, inductance, rotation;
         for f in frequencies)...; dims=3)
     loci = PowerImpedance._trajectory_eigenvalues(loops)
     nyquist = PowerImpedance._nyquist_trial(loci,2π.*frequencies)
-    # Close the complete conjugate-frequency contour. Counting positive-band
-    # eigenlocus crossings alone misses a real-axis unstable root already
-    # present below the first sample. The native models have real coefficients
-    # and this proper TLC/RL loop has a finite high-frequency limit.
-    # VAC has an open-subsystem integrator at zero. Use an infinitesimally
-    # right-shifted complete contour, including its real-axis closure point,
-    # and count enclosed open-loop poles. Strictly stable complete-network
-    # roots are still required; this does not remove or tune a device mode.
+    # The complete conjugate-frequency contour includes real-axis unstable roots below the
+    # first positive-band sample, which positive-band eigenlocus crossings alone miss.
+    # Native models have real coefficients, and the proper TLC/RL loop has a finite
+    # high-frequency limit. VAC has an open-subsystem integrator at zero. The complete
+    # contour is shifted infinitesimally right, includes its real-axis endpoint and counts
+    # enclosed open-loop poles. Strictly stable complete-network roots are required;
+    # device modes are neither removed nor tuned.
     contour_shift=1e-6
     characteristic=[det(I + grid_y(s) \ (C*((s*I-A)\B)+D))
         for s in ComplexF64.(contour_shift .+ im*2π.*[0.;frequencies])]
@@ -69,9 +68,9 @@ function stability_gate(net, entry)
     C=dut.C .* bases.current_outputs
     D=dut.D .* bases.current_outputs ./ bases.voltage_inputs'
     if haskey(net.elements,:DC_load)
-        # Eliminate only the algebraic DC node, not converter states. KCL:
-        # (Ddc + 1/R)*vdc = -Cdc*x - Ddc,ac*vac. Aeff retains all coupled
-        # DC-control modes. Native get_y resistor owns its physical conductance.
+        # Only the algebraic DC node is eliminated, with converter states retained. KCL:
+        # (Ddc + 1/R)*vdc = -Cdc*x - Ddc,ac*vac. Aeff retains all coupled DC-control
+        # modes. The native get_y resistor supplies its physical conductance.
         g=real(PowerImpedance.get_y(net.elements[:DC_load],0.0im)[1,1])
         denom=D[1,1]+g
         A=A-B[:,1:1]*(C[1:1,:]/denom)

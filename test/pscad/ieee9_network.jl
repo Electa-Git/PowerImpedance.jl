@@ -1,10 +1,9 @@
-# Physical parameters and topology copied from local/IEEE9bus/IEEE9bus_abc.jl.
-# Old source V is phase peak: copy it directly to Setpoint.Vac, without sqrt(2).
-# The balanced circuit uses transformation=true for the supported dq power flow
-# and export. Sources retain unspecified P/Q; the classic default voltage base
-# is retained. Symbolic series impedances become functions of s.
-# Explicit-model voltage ratings are PF-bound metadata (phase RMS V), inferred
-# from the fixed source voltages and turns ratios; they do not enter eval_abcd.
+# Physical parameters and topology copied from local/IEEE9bus/IEEE9bus_abc.jl. Source V is
+# phase peak: it maps directly to Setpoint.Vac without sqrt(2). The balanced circuit uses
+# transformation=true for supported dq power flow and export. Sources retain unspecified
+# P/Q and the classic default voltage base. Symbolic series impedances become functions of
+# s. Explicit-model voltage ratings are PF-bound metadata (phase RMS V), inferred from
+# fixed source voltages and turns ratios; they do not enter eval_abcd.
 import PowerImpedance: @network
 
 function ieee9_network()
@@ -71,9 +70,12 @@ function ieee9_network()
             V₁ᵒ = 13.8e3/sqrt(3), V₂ᵒ = 230e3/sqrt(3),
             Cₜ = 7e-9, Cₛ = 12e-9, pins = 3, transformation = true)
 
-        l5 = impedance(z = s -> 1269.6 + 10.1 * s, pins = 3, transformation = true) # Nominal P 41.6667 MW, nominal Q 16.66667 MVar
-        l6 = impedance(z = s -> 1763.3 + 16.84 * s, pins = 3, transformation = true) # Nominal P 30 MW, nominal Q 10 MVar
-        l8 = impedance(z = s -> 1587.16 + 14.43 * s, pins = 3, transformation = true) # Nominal P 33.33 MW, nominal Q 11.6667 MVar
+        # Nominal P 41.6667 MW, nominal Q 16.66667 MVar
+        l5 = impedance(z = s -> 1269.6 + 10.1 * s, pins = 3, transformation = true)
+        # Nominal P 30 MW, nominal Q 10 MVar
+        l6 = impedance(z = s -> 1763.3 + 16.84 * s, pins = 3, transformation = true)
+        # Nominal P 33.33 MW, nominal Q 11.6667 MVar
+        l8 = impedance(z = s -> 1587.16 + 14.43 * s, pins = 3, transformation = true)
 
         g1[2.1] ⟷ gndD
         g1[2.2] ⟷ gndQ

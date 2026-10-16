@@ -278,7 +278,8 @@ function eval_parameters(c::Cable, s::Complex)
 		Zⁱ = s*μ/(2π) * log(rₒ/rᵢ)
 		Pⁱ = log(rₒ/rᵢ) / (2π*ϵ)
 
-		# Preserve the original outer-diagonal addition order: metal, earth, insulation.
+		# The outer-diagonal addition order is metal, earth, insulation; this order preserves
+		# floating-point rounding.
 		if i == nₗ
 			outer_insulation = Zⁱ
 		else

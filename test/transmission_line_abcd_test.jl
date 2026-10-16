@@ -53,7 +53,7 @@ end
             half.length /= 2
             half_chain = PI.eval_abcd(half, s)
             @test half_chain * half_chain ≈ chain rtol = 1e-10
-            # Both imported per-metre Z/Y paths use the same length semantics.
+            # Both imported per-metre Z/Y paths use the same physical length.
             for kind in (:PSCAD, :LCMjl)
                 imported = PI.Blackbox_line(n = n, length = model.length,
                     data_type = kind, f = [frequency / 2, frequency, 2frequency],

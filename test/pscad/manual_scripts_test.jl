@@ -159,10 +159,10 @@ function script_namespace(expression, path)
         statement isa Expr || continue
         if statement.head == :using
             for dependency in statement.args
-                # PythonCall is unused as a source of identifiers in these
-                # scripts. Leave it unloaded to preserve offline extension
-                # tests; every reference must resolve through the other imports
-                # and fixtures, so an unverified name still fails this guard.
+                # PythonCall supplies none of these scripts' identifiers and remains
+                # unloaded for offline extension tests. Every reference must resolve
+                # through the other imports and fixtures; an unresolved name fails the
+                # test.
                 dependency == Expr(:., :PythonCall) && continue
                 Core.eval(namespace, Expr(:using, dependency))
             end

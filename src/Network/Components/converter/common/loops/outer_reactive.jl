@@ -160,8 +160,8 @@ end
 
 """
 AC-voltage outer-loop controller that produces a q-axis current reference.
-The measured voltage magnitude is passed through `filter` before the PI error
-is formed. `NoFilter()` retains the zero-state magnitude measurement.
+The filter acts on measured voltage magnitude before calculation of the PI
+error. `NoFilter()` preserves the zero-state magnitude measurement.
 
 $(TYPEDEF)
 
@@ -172,7 +172,7 @@ $(TYPEDFIELDS)
 struct OuterReactiveVacControl{F<:AbstractMeasurementFilter} <: AbstractOuterReactiveControl
     "Voltage PI gains in the converter per-unit system."
     pi_ctrl::PIControl
-    "Measured voltage-magnitude filter; cutoff in \\[rad/s\\]."
+    "Filter for measured voltage magnitude. Cutoff in \\[rad/s\\]."
     filter::F
 end
 function OuterReactiveVacControl(; pi_ctrl::PIControl = PIControl(),

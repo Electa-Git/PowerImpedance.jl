@@ -12,8 +12,8 @@ using .PSCADTopology, TOML
         for (name, graph) in reference["canvases"]
             @test PSCADTopology.check_degrees(graph, name) === nothing
             @test PSCADTopology.equivalent(graph, graph)
-            # Component order and net order carry no electrical meaning. Cable
-            # interfaces also exercise bijections of equal parameter records.
+            # Component order and net order have no electrical meaning. Cable interfaces
+            # also exercise bijections of equal parameter records.
             reordered = deepcopy(graph)
             reverse!(reordered["components"])
             reverse!(reordered["nets"])

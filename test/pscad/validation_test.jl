@@ -216,7 +216,7 @@ end
     @test length(check["per_frequency"])==2
     @test V.native_reference_check(spec,reference*(1+0.5e-6),frozen)["passed"]
     @test !V.native_reference_check(spec,reference*(1+2e-6),frozen)["passed"]
-    # A structurally zero entry uses the fixed pu floor, not a raw relative error.
+    # A structurally zero entry uses the fixed pu floor for its normalized error.
     small=copy(reference);small[1,2,1]=0.5e-6*0.02
     @test V.native_reference_check(spec,small,frozen)["passed"]
     large=copy(reference);large[1,2,1]=2e-6*0.02
@@ -245,7 +245,8 @@ end
         @test length(failed["native_reference_checks"])==2
         @test !last(failed["native_reference_checks"])["passed"]
         @test V.digest(path)==hash_before
-        # Freeze first; do not bless a changed point merely because Y matched.
+        # The operating point is frozen independently of Y; matching Y alone cannot verify
+        # an unchanged point.
         rows=V.operating_point_rows(list)
         first_voltage=findfirst(r->r.quantity=="voltage_pu",rows)
         rows[first_voltage]=merge(rows[first_voltage],(value=rows[first_voltage].value+0.01,))
@@ -739,8 +740,8 @@ end
                 excitation[(3side-2):3side] = sequence
                 @test floating * excitation ≈ grounded * excitation rtol = 1e-11 atol = 1e-12
             end
-            # Only the externally grounded/bridging capacitors carry zero
-            # sequence: floating winding neutrals pass none across the core.
+            # Only the externally grounded/bridging capacitors pass zero sequence;
+            # floating winding neutrals pass none across the core.
             capacitance = s .* [(model.Cₜ+model.Cₛ)*Matrix{Float64}(I,3,3) -model.Cₛ*Matrix{Float64}(I,3,3);
                 -model.Cₛ*Matrix{Float64}(I,3,3) (model.Cₜ+model.Cₛ)*Matrix{Float64}(I,3,3)]
             excitation = [ones(3); zeros(3)]
@@ -759,7 +760,8 @@ end
         frequencies=[1.0],phases=[0.0],tone_peak_pu=0.004))
     baseline=(input=ones(length(time),1),output=ones(length(time),1),input_base=[1.0],output_base=[1.0])
     wave=reshape(V.multitone(time,spec.frequencies,spec.phases;amplitude=spec.tone_peak_pu,onset=spec.injection_time),:,1)
-    whole=copy(wave);whole[1]=0.2 # turn-on/startup evidence outside the C windows
+    # Turn-on/startup departures lie outside the settled response windows.
+    whole=copy(wave);whole[1]=0.2
     run=merge(baseline,(input=baseline.input+whole,output=baseline.output+0.4whole))
     quality=V.scan_quality(time,baseline,[run],spec)
     @test quality["valid"]
@@ -1071,7 +1073,7 @@ end
             end
         end
     end
-    # The unchanged 1e-6 pu DC clamp gate must use the MMC's 800 kV base.
+    # The 1e-6 pu DC clamp limit must use the MMC's 800 kV base.
     net=V.fixture("L2-07").factory();list=V.fixture_netlist(net,power_flow(net))
     original,_=V.applicable_scan("L2-07",net,list)
     spec=merge(original,(frequencies=[7.],window_starts=(0.,1.),window_duration=1.,))
@@ -1145,8 +1147,8 @@ end
             @test P.identify_rlc(net.elements[:DC_load];name=:DC_load).form.R≈640^2/70
         end
     end
-    # The DC load is physical, not an ideal voltage clamp. Its PF-only remote
-    # zero reference contracts to the emitter's existing grounded DC terminal.
+    # The DC load is physical, not an ideal voltage clamp. Its PF-only remote zero
+    # reference is replaced by the emitter's grounded DC terminal.
     net=V.fixture("L2-05").factory();point=power_flow(net)
     @test string(point[1]["termination_status"])=="LOCALLY_SOLVED"
     @test net.elements[:DUT].setpoint.Vdc≈640
@@ -1207,8 +1209,8 @@ end
         probe=only(filter(c->c.kind==:current && c.element=="DC_load",plan.probes.channels))
         @test probe.orientation==:into
     end
-    # Keep the 1e-6 clamp gate for source-clamped cases. A terminated converter
-    # must be free to respond on DC; AC departures and drive gates are unchanged.
+    # The 1e-6 clamp limit applies to source-clamped cases. A terminated converter must be
+    # free to respond on DC; AC departures and drive limits remain unchanged.
     short=merge(spec,(;frequencies=[7.],window_starts=(0.,1.),window_duration=1.,
         simulation_time=2.,injection_time=0.,tone_peak_pu=5e-5))
     time=collect(0.:.001:2.)
@@ -1259,7 +1261,7 @@ end
     rows = V.timing_comparison(time, channels, settings.time_step)
     @test all(row.expected_total_delay_s ≈ expected_steps[row.name]*settings.time_step for row in rows)
     @test all(row.passed for row in V.timing_comparison(time, channels, settings.time_step))
-    # Another whole step in the library/source path must stop the L2 queue.
+    # An additional whole step in the library/source path must stop the converter queue.
     channels["V_four"] = [0.0; channels["V_four"][1:end-1]]
     @test !only(filter(row -> row.name == "four", V.timing_comparison(time, channels, settings.time_step))).passed
 end
@@ -1488,7 +1490,7 @@ end
     recording_wires=Set(((c.x-36,c.y),(c.x,c.y)) for c in discarded)
     keep(c)=!(c isa V.P.ComponentPlan && (c.defn=="master:pgb" ||
         c.defn=="master:datalabel" && (c.x,c.y) in labelpoints))
-    # Only recorder assemblies change, no electrical component/connection does.
+    # Only recorder assemblies change; electrical components and connections remain fixed.
     @test repr(filter(keep,selected.main.components))==repr(filter(keep,full.main.components))
     @test repr(selected.main.wires)==repr(filter(w->Tuple(w.vertices) ∉ recording_wires,full.main.wires))
     @test repr(selected.lines)==repr(full.lines)
@@ -1661,7 +1663,7 @@ end
     phases = [0.3, -0.7, 1.2]
     times = collect((0:400024) .* dt)
     clean = V.multitone(times, frequencies, phases; amplitude = 1.0)
-    # The 1 Hz envelope overlaps a driven tone after even decimation. Its slow
+    # The 1 Hz amplitude envelope overlaps a driven tone after even decimation. Its slow
     # 0.23 Hz term is deliberately noncoherent with the one-second DFT window.
     signal = clean + [0.2 * (1 + 0.4cos(2π*t) + 0.02sin(2π*0.23t)) *
         (isodd(n) ? -1 : 1) for (n, t) in zip(0:400024, times)]
@@ -1924,9 +1926,9 @@ function abc_wave(times,dq)
         for phase in (0.,-2π/3,2π/3)]...)
 end
 
-# The electrical branch current and older injection recording are related by
-# an abc transport. Build this fixture independently of the checker: the
-# driven projection is unchanged, and the recorded null coordinate is tan(w*h).
+# The branch current and injection recording delayed by one step are related by abc
+# transport. This fixture is independent of the checker: the driven projection is
+# unchanged, and the recorded null coordinate is tan(w*h).
 function recorded_drive(drive,spec)
     out=copy(drive);t=tan(2π*spec.frequency*spec.time_step)
     for j in 1:2:length(drive)
@@ -2029,7 +2031,7 @@ end
         @test all(x["passed"] for x in comparison.kcl)
         @test all(x["max_relative_error"]<1e-8 for x in comparison.kcl)
         @test all(isempty(x["invalid_reasons"]) for x in values(comparison.comparisons))
-        # The former scalar null-coordinate check fails even with exact KCL.
+        # The scalar null-coordinate test fails even with exact KCL.
         nullrows=[r for x in comparison.kcl for r in x["rows"] if r["check"]=="transported dq KCL residual"]
         @test all(abs(complex(r["recorded_real"],r["recorded_imag"]))>1e-8 for r in nullrows)
         @test all(r["relative_error"]<1e-10 && r["limit"]==1e-6 for r in nullrows)
@@ -2330,7 +2332,7 @@ end
 
 @testset "Stage B frozen factories, numerical admission and conditioning" begin
     @test V.M9D_B_IDS==["L3-02","L3-04","L3-03"]
-    # Independent values frozen by the proposal; no preparation or native runs.
+    # Independent frozen circuit values; preparation and native runs are excluded.
     for (id,right,peak,peak_f,sampled,discrete_peak,amp) in (
             ("L3-02",-10.872237947687688,21.79954783506469,50.232250432178716,
                 21.79954608163451,21.801587951588505,.000255889219949928),
@@ -2362,7 +2364,8 @@ end
         rating=id=="L3-03" ? 2060. : 1000.
         r=380^2/rating/8/sqrt(101);l=10r/(2π*50);q=I(2)+[0. 2π*50;-2π*50 0.]
         @test grid[1:2,1:2]≈inv(r*I(2)+l*q) rtol=1e-12
-        # Reproduce the exact dense proposal grid and the refined peak height.
+        # The numerical comparison uses the exact dense reference grid and refined peak
+        # height.
         fs=sort!(unique([exp10.(range(0,3;length=3001));spec.frequencies]))
         dense_spec=merge(spec,(;frequencies=fs))
         plain=V.composed_reference(c,dense_spec)
@@ -2873,8 +2876,8 @@ const head=Dict(relpath(joinpath(ROOT,file),REPOSITORY)=>Base.read(joinpath(ROOT
         "queue.jl","coverage.jl","scan.jl","frequency.jl","records.jl","ports.jl"))
 read(command::Cmd)=copy(head[replace(last(command.exec),"HEAD:"=>"")])
 read(path::String)=Base.read(path)
-# Execute the actual preparation entry points with an in-memory HEAD snapshot;
-# no repository writes or fixture output are needed for this boundary test.
+# Preparation entry points run with an in-memory HEAD snapshot; this input validation test
+# runs without repository writes or fixture output.
 for expression in Meta.parseall(Base.read(joinpath(ROOT,"composed_execution.jl"),String)).args
     expression isa Expr && expression.head==:function || continue
     name=first(expression.args).args[1]
@@ -2995,8 +2998,8 @@ end
 
 module PSCADComposedInvalidEvidenceTests
 using Test, TOML
-# Exercise the real group runner up to its invalid-measurement return, with
-# local deterministic main results. Any attempted witness execution is an error.
+# The real group runner reaches its invalid-measurement return with local deterministic
+# main results. Any attempted comparison run is an error.
 const P=(;PSCADResult=Any,PSCADModel=Any)
 const checks=[Dict("passed"=>false,"max_relative_error"=>.01,
     "summary"=>[Dict("port"=>1,"coordinate"=>2,"max_relative_error"=>.01,"failed_rows"=>[1])],

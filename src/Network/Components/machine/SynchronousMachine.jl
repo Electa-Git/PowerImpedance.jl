@@ -89,33 +89,44 @@ initialvalues(::GovernorSM;inputs) =  NamedTuple{(:flow, :TchHP, :TreIP, :TcrLP)
 ########################### AVR #############################
 
 """
-    AVRSM(; vref_SG=1.01, T_R=0.05, T_B=1.0, T_C=0.1, T_A=0.02, K_A=200)
+$(TYPEDEF)
 
-Proportional automatic voltage regulator with a terminal-voltage measurement
-filter, lead-lag compensator and exciter lag. At equilibrium its open-circuit
-field voltage is ``E_f = K_A(v_{ref} - |V_t|)``.
+Regulate synchronous-machine terminal voltage with a measurement filter,
+lead-lag compensator and exciter lag.
 
-When a synchronous machine receives a complete power-flow operating point,
-its fixed effective reference replaces `vref_SG` in the equations:
-``v_{ref} = |V_{t,pf}| + E_{f,pf}/K_A``. The configured `vref_SG` field is
-unchanged. This conversion requires a nonzero `K_A`.
-Without that operating point, the standalone AVR and machine use
-`vref_SG`; no reference conversion or phasor initialization is performed.
+# Notes
+
+At equilibrium, the open-circuit field voltage is
+
+```math
+E_f = K_A(v_{ref} - |V_t|),
+```
+
+where ``E_f`` denotes field voltage, ``V_t`` terminal voltage and ``v_{ref}``
+its reference in \\[pu\\]. The regulator gain is ``K_A``.
+A complete machine power-flow point sets the fixed effective reference to
+``v_{ref} = |V_{t,pf}| + E_{f,pf}/K_A`` and requires nonzero `K_A`.
+The configured `vref_SG` field remains unchanged. Without a complete operating
+point, the standalone AVR and machine use `vref_SG` without reference conversion
+or phasor initialization.
 
 $(TYPEDFIELDS)
 """
 @with_kw struct AVRSM <: AbstractStateSpace
-    "Configured terminal-voltage reference \\[pu\\], superseded by the effective reference at a power-flow operating point."
+    """
+    Configured terminal-voltage reference \\[pu\\], superseded by the effective
+    reference at a power-flow operating point. Default: `1.01`.
+    """
     vref_SG :: Float64   = 1.01 # Terminal voltage magnitude reference [pu]
-    "Terminal-voltage measurement-filter time constant [s]."
+    "Terminal-voltage measurement-filter time constant \\[s\\]. Default: `0.05`."
     T_R :: Float64       = 0.05     # Terminal voltage filter time constant [s]
-    "Lead-lag denominator time constant [s]."
+    "Lead-lag denominator time constant \\[s\\]. Default: `1.0`."
     T_B :: Float64       = 1.0       # Lag time constant [s]
-    "Lead-lag numerator time constant [s]."
+    "Lead-lag numerator time constant \\[s\\]. Default: `0.1`."
     T_C :: Float64       = 0.1        # Lead time constant [s]
-    "Exciter-lag time constant [s]."
+    "Exciter-lag time constant \\[s\\]. Default: `0.02`."
     T_A :: Float64       = 0.02    # Regulator (lag) time constant [s]
-    "Regulator gain \\[pu/pu\\]."
+    "Regulator gain \\[pu/pu\\]. Default: `200`."
     K_A :: Float64       = 200      # Regulator gain [pu]
 end
 
@@ -126,37 +137,46 @@ initialvalues(::AVRSM) =  (;)
 
 ################### SYNCHRONOUS MACHINE ######################
 """
-    SynchronousMachine(elec, mech, avr, gov)
+$(TYPEDEF)
 
-Synchronous machine in the dq frame, with modified Kundur electrical equations,
-a steam turbine, governor and proportional AVR. Electrical quantities use the
-machine's three-phase `S_base` and line-to-line RMS `Vᵃᶜ_base` bases.
+Represent a synchronous machine in the dq frame with modified Kundur
+electrical equations, steam turbine, governor and proportional AVR.
+Electrical quantities use the three-phase `S_base` \\[MVA\\] and
+line-to-line RMS `Vᵃᶜ_base` \\[kV\\] bases.
 
-For a complete power-flow operating point (`Pac`, `Qac`, `Vac`, `θac`), `Pac`
-and `Qac` are generator-terminal powers while `Vac` and `θac` describe the
-receiving bus after the external `rt`/`lt` branch. The machine derives fixed
-references at synchronous speed:
+# Notes
+
+For a complete power-flow point, `Pac` and `Qac` are generator-terminal powers
+\\[MW\\] and \\[MVAr\\], while phase-peak `Vac` \\[kV\\] and `θac` \\[rad\\]
+describe the receiving bus after the external `rt`/`lt` branch.
+At synchronous speed, fixed references include armature loss and field excitation:
 
 ```math
 T_{m0} = p_{pf} + R_a |I_{pf}|^2, \\qquad
 v_{ref} = |V_{t,pf}| + E_{f,pf}/K_A.
 ```
 
-The effective AVR reference replaces `avr.vref_SG` in the equations without
-changing that configured field. States are initialized from the same power-flow
-phasors, using the high-voltage solution of the external branch. The turbine
-fractions must sum to one for `Tm0` to equal the total turbine torque.
-References remain fixed during linearization.
+Here ``p_{pf}`` denotes terminal active power, ``R_a`` armature resistance
+and ``I_{pf}`` terminal current, on machine pu bases. Terminal voltage
+``V_{t,pf}`` and field voltage ``E_{f,pf}`` also use machine pu bases.
+The AVR gain is ``K_A``.
+The effective reference replaces `avr.vref_SG` in the equations while the
+configured field remains unchanged. Initial states use the power-flow phasors
+and the high-voltage solution of the external branch. Turbine fractions must
+sum to one for `Tm0` to equal total turbine torque. References remain fixed
+during linearization.
 
-Without a complete operating point, `avr.vref_SG` remains the AVR reference and
-`Tm0 = Pac/S_base` retains the uncorrected torque convention. Initial values
-retain the synchronous-speed and governor seeds without phasor initialization.
-Constructing a machine alone does not solve a power flow or alter its references.
-A complete setpoint supplied directly to `pftoinputs` is treated as an operating
-point in the same way as a solver-provided setpoint.
+Without a complete operating point, the AVR uses `avr.vref_SG` and turbine
+torque is `Tm0 = Pac/S_base`. Initial states use synchronous-speed and governor
+seeds without phasor initialization. A complete setpoint supplied to `pftoinputs`
+gives the same reference conversion as a solver-provided point. Construction
+alone leaves references
+unchanged and requires a separate power-flow solve.
 
-The stored PSCAD admittance validation has an aggregate error below 1%; its
-largest differences occur at low frequencies.
+The PSCAD admittance comparison has aggregate error below 1%, with the
+largest differences at low frequencies.
+
+$(TYPEDFIELDS)
 """
 struct SynchronousMachine <: AbstractStateSpace
     elec::ElectricalSM

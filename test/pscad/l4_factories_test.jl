@@ -1,4 +1,4 @@
-# Included inside PSCADL4ValidationTests, which owns V and imports the test APIs.
+# Included inside PSCADL4ValidationTests, which defines V and imports the test APIs.
 @testset "L4 frozen study factories and offline power flow" begin
     @test V.L4_PORT_IDS == ["L4-01","L4-03","L4-04","L4-00D","L4-04D"]
     @test V.fixture("L4-04D").tiers == ["D"]

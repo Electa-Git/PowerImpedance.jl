@@ -68,8 +68,8 @@ end
         live_states = merge(eq.states, (; iΣ_d = 0.0, iΣ_q = 0.0, iΣ_z = 0.0,
             vCΔ_d = 0.0, vCΔ_q = 0.0, vCΔ_Zd = 0.0, vCΔ_Zq = 0.0,
             vCΣ_d = 0.0, vCΣ_q = 0.0, vCΣ_z = 1.0))
-        # The owned equation uses one Vdc. Separate its protected division
-        # from the live half-DC feedforward in the emitted realization.
+        # The native equation uses one Vdc. Its protected division and live half-DC
+        # feedforward are separate in the emitted realization.
         sigma = PI.state_space!(zeros(4), live_states,
             (; meas = merge(live_meas, (; v_dc_f = signals["v_dc_divisor"])),
                 power = (; P_ac_f = 0.0), sync = eq.outputs.sync),
@@ -632,7 +632,7 @@ end
         @test row.powerflow == 800.0
         @test !row.within_tolerance
 
-        # Recover current units from the particular MMC's electrical bases.
+        # Current units follow the MMC's electrical bases.
         m = e.model
         changed = converter_element(e,
             PI.MMC(; m.meas, m.sync, m.delta_control,

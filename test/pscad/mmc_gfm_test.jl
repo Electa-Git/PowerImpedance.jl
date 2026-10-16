@@ -42,8 +42,8 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         @test eq.outputs.sync.ω_c == eq.states.ω_VSM
         @test Dict(p.name => p.default for p in modules["VSM_DUT"].parameters)["theta0"] == eq.states.Δθ_VSM
 
-        # The parent has separate PLL/VSM frequencies and angles, and reactive
-        # voltage correction feeds CCVI before its two current references reach OCC.
+        # The parent has separate PLL/VSM frequencies and angles. Reactive voltage
+        # correction feeds CCVI, whose two current references are inputs to OCC.
         parent = modules["MMC_DUT"]
         @test any(c -> c.defn == plan.name * ":VSM_DUT", parent.canvas.components)
         @test count(c -> c.defn == "master:compare", modules["MEAS_DUT"].canvas.components) == 1
@@ -68,8 +68,8 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         @test sync["omega_c"] ≈ 1.0 atol=1e-6
         @test all(isfinite, values(occ))
 
-        # Rebuild initial coordinates from displaced states, then compare the
-        # emitted rates and outputs directly with the owned Julia equations.
+        # Initial coordinates are rebuilt from displaced states; emitted rates and outputs
+        # are compared directly with the native Julia equations.
         for (omega, pll_angle, vsm_angle, power) in ((0.97, 0.31, -0.17, 0.47), (1.04, -0.23, 0.19, 0.81))
             x = merge(eq.states, (; ω_VSM = omega, Δθ_pll = pll_angle, Δθ_VSM = vsm_angle, ξ_pll = 0.014))
             meas = merge(eq.outputs.meas, (; vG_d_f = 0.91, vG_q_f = -0.13, P_ac_f = power))
@@ -154,8 +154,8 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         @test out["drate"] ≈ F[end - 1] atol=1e-6
         @test out["qrate"] ≈ F[end] atol=1e-6
 
-        # Circulating currents are live from t=0 in the synchronization
-        # owner's frame, even when the PLL and VSM angles differ.
+        # Circulating currents are live from t=0 in the synchronization frame, even when
+        # the PLL and VSM angles differ.
         circulating = PI.frame_transform(0.11, -0.07, -2eq.states.Δθ_VSM)
         phases = (0.0, -2π/3, 2π/3)
         caps = P.mmc_arm_capacitors(eq.states, m.elec.vDC_base)
@@ -196,8 +196,8 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         channels = PI.OrderedDict("DUT_omega_c" => ones(length(times)))
         @test_throws ArgumentError compare_operating_point(synthetic_result(times, channels; probes = bad_probes), bad_model)
 
-        # Every converter row also applies to the new GFM fixture, with its
-        # solved terminal values, capacitor means and signed current identity.
+        # Every converter row applies to the GFM fixture, with its solved terminal values,
+        # capacitor means and signed current identity.
         probes = P.ProbeManifest(filter(c -> c.element == "DUT" || c.kind == :voltage,
             plan.probes.channels), plan.probes.reference_bus)
         model = PSCADModel("synthetic.pscx", "synthetic", list, probes, SETTINGS, list.operating_point, (;))

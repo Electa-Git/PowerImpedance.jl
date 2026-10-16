@@ -1,4 +1,4 @@
-# One resumable station queue: isolated timing first, then the fifteen L2 converters.
+# One resumable station queue runs isolated timing first, then the fifteen converters.
 using PowerImpedance, PythonCall
 include("validation/validation.jl")
 const V = PSCADValidation

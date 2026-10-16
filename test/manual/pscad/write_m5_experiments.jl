@@ -206,8 +206,8 @@ end
 name = "mmc_arm"
 arm = P.mmc_arm("ARM", P.mmc_si(element.model.elec), 800.0)
 canvas = P.CanvasPlan()
-# src_ccin_1 positive command injects into its first electrical terminal,
-# as measured in M4; the existing arm meter measures POS -> NEG.
+# src_ccin_1 positive command injects into its first electrical terminal; the arm meter
+# measures POS -> NEG.
 P.component!(canvas, "src_ccin_1", (180, 108), [
     "Name" => "forced_current", "Cntrl" => "1", "Tc" => "0.0 [s]"])
 P.stub!(canvas, (180, 108), "forced_positive"; direction = -1)

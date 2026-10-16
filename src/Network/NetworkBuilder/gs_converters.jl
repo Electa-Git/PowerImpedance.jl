@@ -56,8 +56,8 @@ function _check_converter_keywords(kind::AbstractString, names, modular, legacy)
     return isempty(legacy_used) ? :modular : :legacy
 end
 
-# A controller reference supplies an absent setpoint. Explicit network values
-# remain authoritative for both power flow and the dynamic equilibrium.
+# A controller reference supplies an absent setpoint. Explicit network values apply to
+# both power flow and the dynamic equilibrium.
 function _legacy_setpoint(kwargs, controls, kind::Symbol, elec, name::Symbol)
     defaults = _legacy_setpoint_defaults(kwargs)
     supplied = haskey(kwargs, :setpoint) ? kwargs.setpoint : P.Setpoint()

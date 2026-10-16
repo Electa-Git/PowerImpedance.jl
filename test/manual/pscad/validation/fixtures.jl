@@ -1,5 +1,5 @@
-# The registry is a catalogue of frozen physical circuits, not a dispatch layer.
-# L2 TLC variants retain the M4/M5b controls; L3 entries are added by composed_execution.jl.
+# The registry is a catalogue of frozen physical circuits. TLC variants retain the fixture
+# controls; composed_execution.jl adds the composed circuits.
 const REGISTRY = [
     (id = "L1-01", description = "AC series/parallel RLC; RL two-source witness",
         parent = "M1 small_ac_network", factory = () -> ac_rl_network(),
@@ -267,15 +267,15 @@ function l1_settings()
         current_base_kA = 1000sqrt(2) / (sqrt(3) * 380), station_budget_seconds = 900)
 end
 
-# M4 owned factory supplies every TLC block; only topology and Q=5 MVAr change.
+# The TLC factory supplies every block; only topology and Q=5 MVAr change.
 function tlc_strong_network(; mode = :pq, scr = 8.0)
     parent = PSCADFixtures.tlc_case2_network().classic
     net = Network()
     net.voltageBase .= parent.voltageBase
     dut = deepcopy(parent.elements[:DUT])
     m = dut.element_model
-    # M4 fixtures.jl:tlc_network owns plant/PLL/current loops and P-f gains.
-    # M5b mapping table owns Q-V 20/100 and VAC 0/100 (NoFilter).
+    # fixtures.jl:tlc_network supplies plant/PLL/current loops and P-f gains. The mode
+    # mapping supplies Q-V gains 20/100 and VAC gains 0/100 (NoFilter).
     active = mode in (:pq, :pf) ? m.outerActive :
         mode == :vdc ? PowerImpedance.OuterActiveVdcControl(
             pi_ctrl = PowerImpedance.PIControl(Kp=5.0, Ki=5.0)) :
@@ -310,9 +310,9 @@ function tlc_strong_network(; mode = :pq, scr = 8.0)
     end
     connect!(net, (:DUT,Symbol("1.1")), :DC)
     if mode == :vdc
-        # PF-only zero-voltage reference draws zero power. fixture_netlist
-        # contracts it to ground; emitters/impedance.jl:emit! supplies the
-        # existing grounded R/2 pole-resistor construction.
+        # The PF-only zero-voltage reference draws zero power. `fixture_netlist` replaces
+        # it with ground; emitters/impedance.jl:emit! supplies the grounded R/2 pole
+        # resistors.
         net.elements[:G_DC] = dc_source(setpoint=Setpoint(Vdc=0.0))
         add!(net, :DC_load, impedance(z=s->640.0^2/70.0,pins=1))
         connect!(net, (:DC_load,Symbol("1.1")), :DC)
@@ -326,13 +326,11 @@ function tlc_strong_network(; mode = :pq, scr = 8.0)
     return net
 end
 
-# PF represents a DC resistor as a two-bus branch and needs a remote 0 V
-# reference. PSCAD's existing DC-impedance emitter directly supports a grounded
-# terminal (emitters/impedance.jl:1-37), while dc_source! requires positive Vdc.
-# Collapse only that ideal zero-voltage reference to ground, preserving the
-# converter's solved point and resistor's terminal-1 power. No component or
-# PSCAD field is introduced: this is the exact same circuit with its ideal
-# zero-voltage source contracted to node identity.
+# PF represents a DC resistor as a two-bus branch with a remote 0 V reference. PSCAD's
+# DC-impedance emitter supports a grounded terminal (emitters/impedance.jl:1-37), while
+# dc_source! requires positive Vdc. Replacing only that ideal zero-voltage source with
+# ground gives the same circuit, converter solved point and resistor terminal-1 power,
+# with unchanged components and PSCAD fields.
 function fixture_netlist(net, point)
     list=P.netlist(net,point)
     haskey(net.elements,:DC_load) || return list
@@ -357,7 +355,7 @@ function fixture_netlist(net, point)
         list.voltageBase,list.frequency)
 end
 
-# M5a/M5b owns the MMC and every controller; only the terminal network changes.
+# The fixture supplies the MMC and every controller; only the terminal network changes.
 function mmc_grid_network(; mode = :pq, scr = 8.0)
     parent = PSCADFixtures.mmc_network(mode).state
     dut = deepcopy(parent.elements.DUT)

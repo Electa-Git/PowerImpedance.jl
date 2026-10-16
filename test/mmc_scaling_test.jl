@@ -2,7 +2,7 @@ using PowerImpedance
 using Test
 using LinearAlgebra
 
-# Preserve the operation order of the pre-fix conversion at fe9ee4d.
+# The independent conversion fixes operation order, including floating-point rounding.
 function mmc_scaling_before(Y, elec)
     Y = copy(Y)
     Y[1, :] .*= elec.Sbase / elec.vDC_base

@@ -67,10 +67,10 @@ function scan_quality(time, baseline, runs, spec; columns = eachindex(spec.axes)
         end
     end
     drift = max(dc_drift, fundamental_drift)
-    # The linearity gate qualifies the same settled, coherent windows as C.
-    # A sharp shunt-current turn-on into inductors produces a voltage impulse
-    # proportional to amplitude/dt; retain that full-run maximum diagnostically.
-    # Do not remove means: a steady baseline offset still counts as departure.
+    # Linearity is evaluated on the same settled, coherent windows as response error. A
+    # sharp shunt-current turn-on into inductors produces a voltage impulse proportional
+    # to amplitude/dt; the full-run maximum remains diagnostic. Means remain in the data:
+    # a steady baseline offset counts as departure.
     input_deltas = [(run.input-baseline.input) ./ baseline.input_base' for run in runs]
     output_deltas = [(run.output-baseline.output) ./ baseline.output_base' for run in runs]
     full_input_departure = maximum(maximum(abs,delta) for delta in input_deltas)
@@ -131,9 +131,9 @@ function single_response(result, baseline_result, model, spec, column)
         output = dft_phasors(result.time, run.output - baseline.output,
             spec.frequencies; start, duration = spec.window_duration)
         if get(spec,:drive,"")=="current"
-            # One current-drive witness cannot identify two Y columns when the
-            # terminal voltage couples dq. Qualify both measured V/I responses
-            # per injected current instead, preserving the ONE-axis witness.
+            # One current-drive run cannot identify two Y columns when terminal voltage
+            # couples dq. Both measured V/I responses are compared per injected current
+            # for this single-axis measurement.
             input=dft_phasors(result.time,run.drive-baseline.drive,spec.frequencies;
                 start,duration=spec.window_duration)
             output=vcat(dft_phasors(result.time,run.voltage-baseline.voltage,spec.frequencies;
@@ -201,8 +201,8 @@ function step_definition(spec, frequency)
              first(spec.window_starts) : 0.8
     start = ceil(Int, settle * common_frequency) / common_frequency
     n = length(frequencies)
-    # Preserve an odd recorder ratio at the witness's own half step. Historical
-    # even-ratio definitions retain their original sampling for stored analyses.
+    # The half-step comparison retains an odd recorder ratio. Stored even-ratio
+    # definitions retain their recorded sampling for analysis.
     sample_step = isodd(round(Int, spec.sample_step / spec.time_step)) ?
         spec.sample_step / 2 : spec.sample_step
     return merge(spec,
@@ -424,8 +424,8 @@ function run_fixture(id; remote = RemoteConfig(),
         record["tier_c_result"] = compare_frequency_runs(
             results, models, stored, comparison_directory; spec)
         record_interface_comparison!(record, net, spec, directory, comparison_directory)
-        # Reference-only revisions do not invalidate measured method witnesses.
-        # Retain their original axis/band instead of requesting another run.
+        # Reference-only revisions leave the measured integration-step comparisons valid.
+        # Their recorded axis/band is reused without another run.
         selected = haskey(record, "step_witness_definition") ?
             only(findall(==(record["step_witness_definition"]["axis"]), spec.axes)) :
             record["tier_c_result"]["worst_column"]
@@ -519,9 +519,9 @@ function refinement_rows(frequencies, actual, reference; limit, valid)
     return rows
 end
 
-# A fixed dq LTI reference predicts no +/-100 Hz conversion. Retain this check
-# for untransposed phase-domain circuits; the approved 2% complex budget and
-# 0.1 pu norm floor bound omitted coupling rather than relaxing comparisons.
+# A fixed dq LTI reference predicts zero +/-100 Hz conversion. In untransposed
+# phase-domain circuits, the 2% complex budget and 0.1 pu norm floor bound omitted
+# coupling; response tolerances remain unchanged.
 function sideband_coupling(time, baseline, runs, spec)
     spec.dimension==2 && spec.id!="L1-01" || return 0.0
     frequencies=unique(sort([abs(f+shift) for f in spec.frequencies

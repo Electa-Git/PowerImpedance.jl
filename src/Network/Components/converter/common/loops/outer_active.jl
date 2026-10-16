@@ -98,18 +98,23 @@ function state_space!(F, x, sync, block::FrequencySupportLag)
 end
 
 """
-Lagged DC-voltage support, subtracted from the active-power reference.
-The reference is the solved DC-voltage setpoint, normalized by the converter's
-declared DC-voltage base, as is the measured voltage.
-
 $(TYPEDEF)
+
+Subtract lagged DC-voltage support from the active-power reference.
+Measured voltage and the solved reference use the declared DC-voltage base.
+
+# Notes
 
 ```math
 \\dot{\\xi}_{vdc,supp}=\\omega_c[K(v_{dc,ref}-v_{dc,f})-\\xi_{vdc,supp}],
 \\qquad p_{ref,eff}=p_{ref}-\\xi_{vdc,supp}.
 ```
 
-# Fields
+Here ``v_{dc,ref}`` denotes the solved DC-voltage reference, ``v_{dc,f}``
+the filtered DC voltage and ``\\xi_{vdc,supp}`` the lag state. The effective
+active-power reference ``p_{ref,eff}`` uses the converter's pu base, as do
+voltages and the lag state. The cutoff ``\\omega_c`` has units \\[rad/s\\]
+and ``K`` is droop gain in pu power per pu voltage.
 
 $(TYPEDFIELDS)
 """
@@ -132,15 +137,27 @@ state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::AbstractFrequencySupp
     state_space!(F, x, inputs.sync, block)
 
 """
-Return the inverse DC-voltage droop slope on the power-flow system base.
-Voltage references and slopes both use the declared converter DC-voltage base.
+$(TYPEDSIGNATURES)
 
-$(SIGNATURES)
+Return the inverse DC-voltage droop slope on the power-flow system base.
+Voltage references and slopes use the declared converter DC-voltage base.
+
+# Arguments
+
+- Active-control model. The default method gives a zero-valued slope.
+- `dcbase`: DC-voltage base of the converter \\[kV\\].
+- `powerbase`: Power base of the converter \\[MVA\\].
+- `global_dict`: Power-flow system bases.
+- `data`: Power-flow converter fields.
+
+# Returns
+
+- Inverse droop slope in system pu DC voltage per pu power.
 """
 pf_dc_droop(::AbstractOuterActiveControl, dcbase, powerbase, global_dict, data) = 0.0
 
 """
-Active-power PI controller with optional frequency or DC-voltage support.
+Regulate active power with PI control and optional frequency or DC-voltage support.
 
 $(TYPEDEF)
 
@@ -204,9 +221,9 @@ end
 
 """
 DC-voltage outer-loop controller that produces a d-axis current reference.
-The measured DC voltage passes through `filter` only for this controller;
-shared measurement, modulation and energy feedforward signals are unchanged.
-`NoFilter()` retains the zero-state measurement and existing PI equations.
+Only this controller filters its measured DC voltage. Shared measurement,
+modulation and energy feedforward use their own signals.
+`NoFilter()` preserves the zero-state measurement and PI equations.
 
 $(TYPEDEF)
 
@@ -217,14 +234,23 @@ $(TYPEDFIELDS)
 struct OuterActiveVdcControl{F<:AbstractMeasurementFilter} <: AbstractOuterActiveControl
     "Voltage PI gains in the converter per-unit system."
     pi_ctrl::PIControl
-    "Local measured DC-voltage filter; cutoff in \\[rad/s\\]."
+    "Local filter for measured DC voltage. Cutoff in \\[rad/s\\]."
     filter::F
 end
 
 """
-Construct a DC-voltage PI controller with an optional local measurement filter.
+$(TYPEDSIGNATURES)
 
-$(SIGNATURES)
+Construct a DC-voltage PI controller with a local measurement filter.
+
+# Arguments
+
+- `pi_ctrl`: PI gains in the converter per-unit system. Default: `PIControl()`.
+- `filter`: Measured-voltage filter. Default: `NoFilter()`.
+
+# Returns
+
+- `OuterActiveVdcControl` with a state-space realization of the supplied filter.
 """
 function OuterActiveVdcControl(; pi_ctrl::PIControl = PIControl(),
         filter::AbstractMeasurementFilter = NoFilter())
@@ -242,9 +268,18 @@ statenames(block::OuterActiveVdcControl) =
     (filter_statenames(:v_dc_ctrl_f, block.filter)..., :ξ_v_dc)
 
 """
-Initialize local DC-voltage filter states at the solved reference \\[pu\\].
+$(TYPEDSIGNATURES)
 
-$(SIGNATURES)
+Initialize local DC-voltage filter states at the solved reference.
+
+# Arguments
+
+- `block`: DC-voltage controller with its local filter.
+- `setpoint_pu`: Converter operating point in \\[pu\\]. Default: `SetpointPU()`.
+
+# Returns
+
+- Named tuple of filter initial values in \\[pu\\].
 """
 function initialvalues(block::OuterActiveVdcControl; setpoint_pu=SetpointPU())
     return filter_initialvalues(block.filter,
