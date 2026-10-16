@@ -29,5 +29,6 @@ include("composed_measurement.jl")
 include("composed_execution.jl")
 include("tierb.jl")
 include("tierb_offline.jl")
+include("line_chain.jl")
 
 end

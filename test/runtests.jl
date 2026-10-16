@@ -37,6 +37,7 @@ end
         include("mmc_triplen_frame_test.jl")
         include("mmc_scaling_test.jl")
         include("solvers_test.jl")
+        include("transmission_line_abcd_test.jl")
         include("adm_OHL_test.jl")
         include("adm_DC_cable_test.jl")
         include("adm_TLC_test.jl")

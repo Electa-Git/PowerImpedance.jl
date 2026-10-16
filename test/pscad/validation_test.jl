@@ -3097,4 +3097,45 @@ end
         end
     end
 end
+
+@testset "Line-chain re-analysis preserves retained evidence" begin
+    mktempdir() do directory
+        data = mkpath(joinpath(directory, "evidence"))
+        fixture_dir = mkpath(joinpath(data, "L1-03"))
+        net = V.fixture("L1-03").factory()
+        list = V.fixture_netlist(net, power_flow(net))
+        spec, reference = V.applicable_scan("L1-03", net, list)
+        analysis_dir = mkpath(joinpath(fixture_dir, "analysis", spec.protocol))
+        V.write_response(joinpath(fixture_dir, V.reference_filename(spec)), 1.01reference, spec.frequencies)
+        V.write_response(joinpath(analysis_dir, "measured_S.tsv"), reference, spec.frequencies)
+        record = Dict("fixture_id" => "L1-03", "tier_c" => V.scan_record(spec),
+            "tier_c_result" => Dict("valid" => true, "model_mismatch" => ""))
+        V.write_manifest(fixture_dir, record)
+        before = Dict(file["path"] => file["sha256"] for file in V.inventory(fixture_dir))
+        manifest_hash = V.digest(joinpath(fixture_dir, "manifest.toml"))
+        output = joinpath(directory, "analysis")
+        result = V.reanalyse_line_chain("L1-03"; data_root = data, output_root = output)["L1-03"]
+        comparison = result["comparisons"]["response"]["max_errors"]
+        @test comparison["new"]["frobenius"] < 1e-10
+        @test comparison["old"]["frobenius"] > 1e-3
+        @test result["retained_inputs_unchanged"]
+        @test V.digest(joinpath(output, "L1-03", "source_manifest.toml")) == manifest_hash
+        @test result["analysis_revision"]["source_manifest_sha256"] == manifest_hash
+        @test before == Dict(file["path"] => file["sha256"] for file in V.inventory(fixture_dir))
+        @test manifest_hash == V.digest(joinpath(fixture_dir, "manifest.toml"))
+        @test_throws r"overlaps stored evidence" V.reanalyse_line_chain("L1-03";
+            data_root = data, output_root = fixture_dir)
+        symlink(fixture_dir, joinpath(directory, "link"))
+        @test_throws r"overlaps stored evidence" V.reanalyse_line_chain("L1-03";
+            data_root = data, output_root = joinpath(directory, "link"))
+        mkpath(joinpath(directory, "escaping"))
+        symlink(fixture_dir, joinpath(directory, "escaping", "L1-03"))
+        @test_throws r"escapes its allowed directory" V.reanalyse_line_chain("L1-03";
+            data_root = data, output_root = joinpath(directory, "escaping"))
+        @test_throws r"retained evidence changed" begin
+            open(io -> write(io, "\n"), joinpath(analysis_dir, "measured_S.tsv"), "a")
+            V.reanalyse_line_chain("L1-03"; data_root = data, output_root = joinpath(directory, "damaged"))
+        end
+    end
+end
 end

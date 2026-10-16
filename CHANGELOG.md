@@ -39,6 +39,10 @@
 
 ### Fixed
 
+- Correct the B and D block order in multiconductor line/cable ABCD matrices,
+  including imported Z/Y blackbox lines, to restore reciprocal terminal
+  admittances and section composition for untransposed geometries. Use concrete
+  complex matrices for blackbox evaluation on Julia 1.10.
 - Pre-charge source-free DC networks with a Vdc-controlling converter through
   temporary ideal sources behind breakers, released at 0.2 s.
 - Round fractional residual PSCAD modulation delays to the nearest integration

@@ -52,6 +52,7 @@ function source_record()
             "src/Network/Solvers/make_y.jl", "src/Network/Solvers/make_z.jl",
             "src/Network/Components/source/source.jl", "src/Network/Components/transformer/transformer.jl",
             "src/Network/Components/transmission_line/cable.jl", "src/Network/Components/transmission_line/overhead_line.jl",
+            "src/Network/Components/transmission_line/blackbox_line.jl",
             "src/Network/Components/AbstractElement.jl", "src/Network/Components/AbstractStateSpace.jl",
             "src/Network/Components/converter/common/kernels/delay.jl",
             "src/Network/Components/converter/common/loops/synchronization.jl",

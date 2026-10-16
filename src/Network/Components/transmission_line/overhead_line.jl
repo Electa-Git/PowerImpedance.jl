@@ -423,12 +423,15 @@ end
 
 
 """
-	eval_abcd(tl::Overhead_line, s :: Complex)
-Form ABCD representation from known values for Y and Z and write values in the dictionary
+$(TYPEDSIGNATURES)
+
+Return the receiving-to-sending ABCD matrix from series impedance Z \\[Ω/m\\]
+and shunt admittance Y \\[S/m\\]. For length l \\[m\\] and voltage propagation
+matrix Γ \\[1/m\\],
 	Γ = √ZY
 	Yᶜ = Z⁻¹γ
-	ABCD = [cosh(Γl)    Yᶜ⁻¹sinh(Γl)
-			Yᶜsinh(Γl)  cosh(Γl)]
+	ABCD = [cosh(Γl)    Γ⁻¹sinh(Γl)Z
+			Yᶜsinh(Γl)  Z⁻¹cosh(Γl)Z]
 """
 function eval_abcd(tl::Overhead_line, s::Complex)
 	(Z, Y) = eval_parameters(tl, s)
@@ -439,9 +442,9 @@ function eval_abcd(tl::Overhead_line, s::Complex)
 	abcd = zeros(Complex, 2n, 2n)
 
 	abcd[1:n, 1:n] = cosh(γ*tl.length)
-	abcd[1:n, (n+1):end] = inv(Yc) * sinh(γ*tl.length)
+	abcd[1:n, (n+1):end] = γ \ (sinh(γ*tl.length) * Z)
 	abcd[(n+1):end, 1:n] = Yc * sinh(γ*tl.length)
-	abcd[(n+1):end, (n+1):end] = cosh(γ*tl.length)
+	abcd[(n+1):end, (n+1):end] = Z \ (cosh(γ*tl.length) * Z)
 
 	return abcd
 end

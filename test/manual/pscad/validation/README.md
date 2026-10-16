@@ -251,7 +251,7 @@ probe signs.
 The untransposed overhead line tests earth return and propagation through its abc 6x6 admittance
 matrix. The run lasts 7 s, with windows [5,6) and [6,7) s.
 
-The frequency-response check passes against the continuous model: the maximum error is 0.381 %
+The frequency-response check passes against the continuous model: the maximum error is 0.034 %
 (limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. Early
 windows contain decaying DC offsets. The dq approximation is informational.
 
@@ -755,6 +755,31 @@ and `step_refinement` for the selected rule. These are literal stored field name
 historical orientation analysis can appear under `corrected_analysis`; it must not be confused
 with an old uncorrected result retained for comparison. A top-level status can be incomplete while
 individual measured responses pass.
+
+### Line and cable reference re-analysis
+
+Use `reanalyse_line_chain.jl` to compare stored measurements with the corrected multiconductor
+ABCD references. It selects the untransposed overhead line, coaxial cable, series DC line/cable,
+IEEE9 network and available coarse measurements of the two MMCs coupled by a distributed DC cable.
+
+```sh
+OPENBLAS_NUM_THREADS=1 julia --project=test/manual/pscad/validation \
+  test/manual/pscad/validation/reanalyse_line_chain.jl \
+  /path/to/stored/data /tmp/line-chain-analysis
+```
+
+Optional trailing fixture keys restrict the selection. The script reads extracted SI matrices,
+frozen references and recorded quality flags; it writes its results separately. It records input
+hashes, the analysing revision and source hashes, and old/new entry and Frobenius errors using the
+existing bases, floors and tolerances. It copies each input manifest and checks the hashes of every
+consumed response and project. It reports incomplete measurements as pending.
+
+For the untransposed overhead line (`L1-03`), the maximum relative Frobenius error decreases from
+0.381 % to 0.034 %. The coaxial cable and series DC circuit retain their errors; the IEEE9 coarse
+maximum changes from 3.352218 % to 3.351453 %. Continuous and discrete errors for the distributed
+DC cable are unchanged at the displayed precision. Re-analysis updates Julia references and
+comparison tables without running PSCAD, changing stored measurements or repeating resonance
+and stability checks.
 
 ## Troubleshooting and extending the suite
 

@@ -384,8 +384,8 @@ function eval_abcd(c::Cable, s::Complex)
 	abcd = zeros(Complex, 2n, 2n) #Creation of the ABCD matrix-> zeros matrix with dimension 2n*2n
 
 	abcd[1:n, 1:n] = cosh(γ*c.length) #Eq 33 pag 19 simulator_tutorial. Matrix A[n*n]=cosh(Γl)
-	abcd[1:n, (n+1):end] = Yc \ sinh(γ*c.length) #Eq 33 pag 19 simulator_tutorial. Matrix B[n*n]=Yc^-1sinh(Γl)
+	abcd[1:n, (n+1):end] = γ \ (sinh(γ*c.length) * Z) # Matrix B[n*n]=Γ^-1sinh(Γl)Z
 	abcd[(n+1):end, 1:n] = Yc * sinh(γ*c.length) #Eq 33 pag 19 simulator_tutorial. Matrix C[n*n]=Ycsinh(Γl)
-	abcd[(n+1):end, (n+1):end] = cosh(γ*c.length) #Eq 33 pag 19 simulator_tutorial. Matrix D[n*n]=cosh(Γl)
+	abcd[(n+1):end, (n+1):end] = Z \ (cosh(γ*c.length) * Z) # Matrix D[n*n]=Z^-1cosh(Γl)Z
 	return abcd
 end
