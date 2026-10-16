@@ -1,7 +1,7 @@
 # Manual PSCAD physics validation
 
 L1 is closed with seven passes and one owner-explained system result. L2 starts
-with one strong-grid TLC fixture; L3 stages A/B register five interactions; L4 systems remain later work. Tier D remains the original P2P early growth fit. Code is
+with one strong-grid TLC fixture; L3 stages A/B/C register seven interactions; L4 systems remain later work. Tier D remains the original P2P early growth fit. Code is
 manual and private; `data/`, `Manifest*.toml` and `.CondaPkg/` are gitignored.
 No station operation occurs during preparation or offline tests.
 
@@ -1871,3 +1871,104 @@ and **74/74 name-guard assertions**. The fix adds 71 assertions; its focused
 prefix, boundary and preservation tests also pass **65/65 on Julia 1.10.11**.
 The uncommitted source guard refuses preparation as intended. These checks
 neither prepare a station fixture nor contact the station.
+
+## M9d-4: Layer 3 stage C
+
+Stage C registers **L3-07 then L3-06**. Stages A/B remain qualified by the
+owner's station results, including their residual/raw witnesses and both local
+resonance scans. Stage C preserves the approved tolerances, conditioning,
+drift, window, departure, amplitude, step and per-port KCL timing gates.
+
+| Fixture | Frozen circuit and measurement | Base and current per tone | Owner-recorded live nodes | Expected station time |
+| --- | --- | --- | --- | --- |
+| L3-07 | L2-11 Vdc/Q MMC — native distributed 25 km L1-05 DC cable — L2-07 P/Q MMC; independent SCR-8 AC grids; full 4x4 AC Y and direct Z, including every cross block, from four independent drives; both DC differential voltages and both inward cable currents retained as 2x4 drive-to-DC transfers | 1000 MVA / 380 kV LL **per AC port**; 0.0005452727356004889 pu | 96 | 105–150 min |
+| L3-06 | L2-16 synchronous machine + unchanged L2-07 MMC on one bus; SCR 8 on 2000 MVA; individual machine/MMC Y, aggregate Y and direct Z | aggregate 2000 MVA / 380 kV LL; 0.0006705809970911343 pu; individual devices keep their original 1000 MVA bases | 55 | 190–260 min |
+
+Both use the frozen 23 coarse tones, onset 2 s, **1.25 us main / 0.625 us
+witness** and recorder ratio **25 at each integration step**. L3-07 retains
+[16,24)/[24,32) s main windows and 32 s main runs. L3-06 retains
+**[64,72)/[72,80) s windows and 80 s runs**, including its half-step witness.
+Its machine SI conversion remains exactly Sbase/VLL², with native rt/lt,
+AVR, governor and steam turbine unchanged.
+
+L3-07 is **admitted by the owner on finite native contours through 1 MHz and
+located roots**, with rightmost located root about -3.0029523449 per s. This
+does not enumerate the distributed cable's infinite spectrum or prove closure
+at infinity. The manifest retains that caveat; the measurement's own drift and
+window gates guard against any unseen growing mode. The pi descriptor supplies
+root seeds only. Every final root residual, finite contour, plain C reference
+and composed discrete reference uses the native distributed cable. Unresolved
+root seeds remain counted. No pi seed is used as a C or stability reference.
+
+Each internal DC bus has two 10 Mohm pole references, giving a 20 Mohm
+differential path. **Both DC buses are pre-charged at their own solved positive
+and negative pole voltages and released at 0.2 s**. No DC clamp remains during
+measurement. The expected pole magnitudes are 400 and about 399.79443324 kV.
+The written project is checked for cable geometry/materials, grounded internal
+conductor elimination, earth, length and fitting fields, together with each
+pole-reference resistor. Both AC-port KCL checks retain every grid and device
+branch. Recorder pruning keeps both DC voltages and both cable currents.
+
+The full AC cross blocks are mandatory. **Near-zero cross entries are scored
+only against the absolute floor**, with no relative-accuracy claim. DC transfer
+witnesses use 800 kV and 1.25 kA output bases and the four recorded AC current
+drives. Their rectangular extraction, comparison, drift/departure checks,
+amplitude witness, raw step and residual step are retained independently.
+Both MMC modulation loops receive the interface step inside their feedback;
+the machine remains native. Plain-model C and raw step evidence stay visible.
+
+Offline reproduction is available without preparation:
+
+```sh
+OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/data/m9d4/verify.jl
+```
+
+It checks the frozen rightmost roots, refined plain and sampled discrete
+conditioning peaks, coarse native/discrete complex Y tables and DC coupling
+transfers within **1e-9 relative**, and evaluates every possible witness path.
+Numerical evidence and offline tests supply no new station qualification.
+
+| Fixture | Rightmost Re(lambda), per s | Refined plain conditioning peak | Sampled discrete conditioning peak |
+| --- | --- | --- | --- |
+| L3-07 | -3.002952344882158 | 20.484666001970957 | 20.485435486068162 |
+| L3-06 | -0.19784817439781693 | 42.23563695814419 | 42.23450947495567 |
+
+The largest coarse complex-Y entry relative differences from the frozen
+plain/discrete tables are 5.23e-12 (07) and 3.29e-12 (06). The 07 DC voltage
+and cable-current transfer maxima reproduce **0.17969411800266305** and
+**0.6675822073139983 pu/pu**, respectively. Logs and the offline numeric record
+are retained under [`data/m9d4/`](data/m9d4/); these local evidence files remain
+gitignored with the other manual validation data.
+
+
+**Commit first, then prepare from the main tree.** `prepare_m9d_c()` and
+individual stage C preparation compare every changed harness source against
+`git show HEAD:<path>` before creating output. Preparation refuses existing
+fixture directories. The 240-character path guard covers all four L3-07 axes
+and every possible selected coarse witness, as well as L3-06; for the retained
+roots the maximum remote/mapped-local/local lengths are **160/158/170** for
+each fixture.
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.prepare_m9d_c()'
+julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, PythonCall; include("test/manual/pscad/validation/validation.jl"); PSCADValidation.run_m9d_c(timeout=28800.0)'
+```
+
+Preparation creates fresh `data/L3-07/` and `data/L3-06/` trees, with **16 + 10
+projects** and empty native ledgers. Normally **8 + 6 native runs** execute.
+Expected total: **295–410 min**, within the queue's default shared **480 min**
+deadline. These are planning estimates. Each outcome is saved immediately to
+`data/m9d4/queue.toml`; a failure continues to the next fixture, an interrupt
+stops the queue, and resume retains the selected witness and requires exact
+project/input/solver hash matches. Every new build still enforces <100 live
+nodes. No stage C preparation, station contact or commit was performed here.
+
+Final offline checks on **Julia 1.12.7**, with the repository Manifest and
+`OPENBLAS_NUM_THREADS=1`: **3,411/3,411 validation assertions**,
+**20,780/20,780 PSCAD suite assertions**, and **74/74 standalone name-guard
+assertions**. Stage C adds **230 assertions**. The stage C core plus composed
+queue/evidence/path subsets also pass **338/338 on Julia 1.10.11**; the proposal
+reproduction passes **16/16**. Both fixtures pass passive-field verification
+through the actual XML writer. All 80 frozen proposal artifacts retain their
+hashes. Evidence and preservation records are under [`data/m9d4/`](data/m9d4/).
+No fixture preparation, station execution, `src/` changes or commits occurred.

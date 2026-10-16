@@ -346,6 +346,7 @@ end
 const M9D_A_IDS = ["L3-01", "L3-08"]
 
 const M9D_B_IDS = ["L3-02", "L3-04", "L3-03"]
+const M9D_C_IDS = ["L3-07", "L3-06"]
 
 function run_composed_queue(ids,stage;timeout,remote,local_witness_first=false)
     isfinite(timeout)&&timeout>0 || error("timeout must be finite and positive")
@@ -378,4 +379,8 @@ end
 
 function run_m9d_ab(;timeout=18000.,remote=RemoteConfig())
     return run_composed_queue(["L3-08";M9D_B_IDS],"m9d3-ab";timeout,remote,local_witness_first=true)
+end
+
+function run_m9d_c(;timeout=28800.,remote=RemoteConfig())
+    return run_composed_queue(M9D_C_IDS,"m9d4";timeout,remote)
 end

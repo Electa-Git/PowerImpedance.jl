@@ -18,27 +18,52 @@ function composed_ac!(net,name,side,bus)
 end
 
 function l3_network(id)
-    id in [M9D_A_IDS;M9D_B_IDS] || error("L3 fixture is not registered: $id")
+    id in [M9D_A_IDS;M9D_B_IDS;M9D_C_IDS] || error("L3 fixture is not registered: $id")
     net=Network();tlc_pair=id=="L3-01";vll=tlc_pair ? 220. : 380.
     net.voltageBase[1]=vll/sqrt(3)
-    devices=id in ("L3-01","L3-02","L3-03") ? [:C1,:C2] : [:C1]
+    devices=id in ("L3-01","L3-02","L3-03","L3-06","L3-07") ? [:C1,:C2] : [:C1]
     for name in devices
         d=if tlc_pair
             deepcopy(tlc_strong_network(mode=name==:C1 ? :pq : :qv).elements[:DUT])
+        elseif id=="L3-06" && name==:C1
+            batch_c_device(:machine)
         elseif id=="L3-03" && name==:C1
             batch_c_device(:gfm)
         else
-            deepcopy(mmc_grid_network(mode=id=="L3-02" && name==:C2 ? :qv : :pq).elements[:DUT])
+            deepcopy(mmc_grid_network(mode=id=="L3-07" && name==:C1 ? :vdc : id=="L3-02" && name==:C2 ? :qv : :pq).elements[:DUT])
         end
         bases=device_bases(d.element_model.elec)
-        add!(net,name,d);composed_ac!(net,name,bases.ac_side,id=="L3-04" ? :Remote : :AC)
+        add!(net,name,d);composed_ac!(net,name,bases.ac_side,id=="L3-04" ? :Remote : id=="L3-07" ? name : :AC)
+        if bases.dc_voltage===nothing
+            composed_ac!(net,name,2,:gnd)
+            continue
+        elseif id=="L3-07"
+            connect!(net,(name,Symbol("1.1")),Symbol("DC_",name))
+            continue
+        end
         dc=Symbol("D_",name);bus=Symbol("DC_",name)
         add!(net,dc,dc_source(setpoint=Setpoint(Vdc=bases.dc_voltage)))
         connect!(net,(dc,Symbol("1.1")),bus);connect!(net,(dc,Symbol("2.1")),:gnd)
         connect!(net,(name,Symbol("1.1")),bus)
     end
-    rating=tlc_pair ? 100. : id=="L3-03" ? 2060. : 1000.
+    rating=tlc_pair ? 100. : id=="L3-03" ? 2060. : id=="L3-06" ? 2000. : 1000.
     r=vll^2/rating/8/sqrt(101);l=10r/(2π*50)
+    if id=="L3-07"
+        for (suffix,bus) in ((:A,:C1),(:B,:C2))
+            source=Symbol("G_",suffix);grid=Symbol("Grid_",suffix);src=Symbol("Src_",suffix)
+            add!(net,source,ac_source(pins=3,transformation=true,setpoint=Setpoint(Vac=vll*sqrt(2/3))))
+            add!(net,grid,impedance(z=s->r+l*s,pins=3,transformation=true))
+            composed_ac!(net,source,1,src);composed_ac!(net,source,2,:gnd)
+            composed_ac!(net,grid,1,bus);composed_ac!(net,grid,2,src)
+        end
+        cable=deepcopy(PSCADFixtures.dc_cable_network().classic.elements[:line])
+        cable.element_model.length=25e3
+        add!(net,:CableDC,cable)
+        connect!(net,(:CableDC,Symbol("1.1")),:DC_C1)
+        connect!(net,(:CableDC,Symbol("2.1")),:DC_C2)
+        connect!(net)
+        return net
+    end
     add!(net,:G_A,ac_source(pins=3,transformation=true,setpoint=Setpoint(Vac=vll*sqrt(2/3))))
     add!(net,:Grid_A,impedance(z=s->r+l*s,pins=3,transformation=true))
     composed_ac!(net,:G_A,1,:Src);composed_ac!(net,:G_A,2,:gnd)
@@ -60,7 +85,10 @@ end
 
 function l3_circuit(id,net)
     devices=filter(n->haskey(net.elements,n),[:C1,:C2])
-    return composed_circuit(net,devices,[:Grid_A],id=="L3-04" ? [(:Line,1)] : [(:C1,2)])
+    grids=id=="L3-07" ? [:Grid_A,:Grid_B] : [:Grid_A]
+    ports=id=="L3-07" ? [(:C1,2),(:C2,2)] : id=="L3-04" ? [(:Line,1)] :
+        [(:C1,device_bases(net.elements[:C1].element_model.elec).ac_side)]
+    return composed_circuit(net,devices,grids,ports)
 end
 
 function l3_spec(id,list; local_scan=false)
@@ -71,21 +99,24 @@ function l3_spec(id,list; local_scan=false)
     vb=vll*sqrt(2/3);ib=2sbase/(3vb)
     amp=local_scan ? (id=="L3-04" ? 2.4385006018880013e-5 : 5.910035278632797e-5) :
         id=="L3-01" ? 0.0004508893578873102 : id=="L3-02" ? 0.000255889219949928 :
-        id=="L3-03" ? 0.0006924416531567809 : id=="L3-04" ? 0.0007118962353546502 : 0.00047389717632280974
-    port=id=="L3-04" ? (:Line,1) : (:C1,2)
+        id=="L3-03" ? 0.0006924416531567809 : id=="L3-04" ? 0.0007118962353546502 : id=="L3-06" ? .0006705809970911343 :
+        id=="L3-07" ? .0005452727356004889 : 0.00047389717632280974
+    ports=id=="L3-07" ? [(:C1,2),(:C2,2)] : id=="L3-04" ? [(:Line,1)] : [(:C1,id=="L3-06" ? 1 : 2)]
+    np=2length(ports);h=id in M9D_C_IDS ? 1.25e-6 : 2.5e-6;start=id=="L3-06" ? 64. : 16.
     bands=local_scan ? (id=="L3-04" ? [collect(1:43)] : [collect(1:20),collect(21:39)]) : Vector{Int}[]
-    return (id=id,quantity="Y",dimension=2,buses=[port_probe(list,port...)],currents=[(string(port[1]),string(port[2]))],
-        axes=["p1_d","p1_q"],frequencies=fs,phases=[-π*k*(k-1)/length(fs) for k in eachindex(fs)],
+    return (id=id,quantity="Y",dimension=2,buses=[port_probe(list,p...) for p in ports],currents=[(string(p[1]),string(p[2])) for p in ports],
+        axes=["p$(j)_$axis" for j in eachindex(ports) for axis in ("d","q")],frequencies=fs,phases=[-π*k*(k-1)/length(fs) for k in eachindex(fs)],
         tone_peak_pu=amp,injection_time=2.,frequency=50.,voltage_base_kV=vb,current_base_kA=ib,
-        voltage_bases=fill(vb,2),current_bases=fill(ib,2),power_base_MVA=sbase,
-        time_step=2.5e-6,sample_step=62.5e-6,window_starts=(16.,24.),window_duration=8.,simulation_time=32.,
-        drive="current",dc_clamped=true,dc_voltage_base_kV=id=="L3-01" ? 640. : 800.,active=true,
+        voltage_bases=fill(vb,np),current_bases=fill(ib,np),power_base_MVA=sbase,
+        time_step=h,sample_step=25h,window_starts=(start,start+8),window_duration=8.,simulation_time=start+16,
+        minimum_witness_window_s=id=="L3-06" ? 2. : .1,
+        drive="current",dc_clamped=id!="L3-07",dc_reference=:midpoint_resistors,dc_voltage_base_kV=id=="L3-01" ? 640. : 800.,active=true,
         protocol=local_scan ? "composed_local" : "composed_coarse",travel_lower_bound_s=0.,
         resonance_groups=bands,
         settling=id=="L3-03" ? Dict("scope"=>"equilibrium initialization; measurement drift gates remain mandatory",
             "caveat"=>"slow initialized GFM filters: 8 s windows do not establish generic startup settling; no 400-to-380 kV nameplate rescaling") :
             Dict("scope"=>"frozen onset and coherent windows; measurement drift gates remain mandatory"),
-        estimated_station_seconds=id=="L3-01" ? 2400 : id in ("L3-02","L3-03") ? 3600 : 5400)
+        estimated_station_seconds=id=="L3-06" ? 15600 : id=="L3-07" ? 9000 : id=="L3-01" ? 2400 : id in ("L3-02","L3-03") ? 3600 : 5400)
 end
 
 function l3_specs(id,list)
@@ -111,6 +142,10 @@ end
 function composed_step_spec(spec,frequency; local_scan=false)
     local_scan && return merge(spec,(;time_step=spec.time_step/2,sample_step=spec.sample_step/2,recorder_scope="measurement"))
     step=step_definition(merge(spec,(;protocol="dq_active")),frequency)
+    if spec.id=="L3-06"
+        step=merge(step,(;window_starts=spec.window_starts,window_duration=spec.window_duration,
+            simulation_time=spec.simulation_time))
+    end
     step.window_duration<=8. || error("witness exceeds predeclared window allowance")
     return merge(step,(;protocol=spec.protocol,recorder_scope="measurement"))
 end
@@ -120,6 +155,9 @@ function composed_reference_files!(record,c,spec,directory,forms; verify=false)
     for (label,h) in (discrete ? (("plain",nothing),("discrete",spec.time_step)) : (("plain",nothing),))
         refs=composed_reference(c,spec;time_step=h,forms=label=="discrete" ? forms : nothing)
         if label=="discrete"
+            for target in filter(t->startswith(t,"DC_"),collect(keys(refs))), (k,f) in enumerate(spec.frequencies)
+                refs[target][:,:,k] .*= injection_readout_factor(f,spec)
+            end
             # Y uses simultaneous branch I and terminal V, so timing cancels.
             # Direct Z divides terminal V by the separately recorded drive.
             for (k,f) in enumerate(spec.frequencies)
@@ -130,7 +168,7 @@ function composed_reference_files!(record,c,spec,directory,forms; verify=false)
             path=joinpath(directory,scan_prefix(spec)*label*"_"*target*"_reference.tsv")
             ts=composed_target_spec(spec,c,target)
             if verify || isfile(path)
-                stored=read_response(path,length(spec.axes),spec.frequencies)
+                stored=read_response(path,length(spec.axes),spec.frequencies;rows=size(reference,1))
                 native_reference_check(ts,reference,stored)["passed"] || error("composed reference changed: $target/$label")
             else
                 write_response(path,reference,spec.frequencies;quantity=ts.quantity)
@@ -141,13 +179,14 @@ function composed_reference_files!(record,c,spec,directory,forms; verify=false)
 end
 
 function composed_frozen_references(directory,spec,c,label)
-    targets=["aggregate_Y","direct_Z",[string(n)*"_Y" for n in c.devices]...]
+    targets=composed_targets(c)
     return Dict(target=>read_response(joinpath(directory,scan_prefix(spec)*label*"_"*target*"_reference.tsv"),
-        length(spec.axes),spec.frequencies) for target in targets)
+        length(spec.axes),spec.frequencies;rows=startswith(target,"DC_") ? 2 : length(spec.axes)) for target in targets)
 end
 
 function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
     id in M9D_B_IDS && require_committed_m9d_b()
+    id in M9D_C_IDS && require_committed_m9d_c()
     remote===nothing && (remote=RemoteConfig())
     entry=fixture(id);net=entry.factory();point=power_flow(net);c=l3_circuit(id,net)
     gate=composed_stability(c);gate["status"]=="passed" || error("composed stability gate failed: $gate")
@@ -188,6 +227,14 @@ function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
         "errors"=>0,"live_nodes"=>L3_NATIVE_NODES[id],"limit_exclusive"=>100,
         "scope"=>"proposal exports; every new measurement build checks its own live count")
     record["measurement_groups"]=Dict(g.protocol=>scan_record(g) for g in groups)
+    if id=="L3-07"
+        record["distributed_admission_caveat"]=gate["root_scope"]
+        record["cross_entry_accuracy"]="near-zero cross entries are scored only against the absolute floor; no relative-accuracy claim"
+        record["dc_transfer_witnesses"]=Dict("voltage_base_kV"=>800.,"current_base_kA"=>1.25,
+            "rows"=>["CableDC side 1 inward","CableDC side 2 inward"],"drives"=>spec.axes)
+        record["precharge"]=Dict("buses"=>[b.name for b in P._dc_precharge_buses(list)],
+            "release_s"=>.2,"pole_voltage_kV"=>[b.vm_pu*b.base_kV for b in P._dc_precharge_buses(list)])
+    end
     record["qualification_reference"]=any(interface_step_eligible(net.elements[n].element_model) for n in c.devices) ? "composed_discrete_realization" : "plain_model"
     record["qualification_status"]="station_pending"
     record["fresh_generation"]="M9d fresh generation; no prior projects, references or native completions reused"
@@ -473,13 +520,32 @@ end
 
 append!(REGISTRY,[(;id,description,parent,factory=()->l3_network(id),topology,
     physics=["composed KCL","individual and aggregate admittance","direct closed-network impedance"],
-    dissipativity="complete-network descriptor and native contour required",
+    dissipativity=id=="L3-07" ? "owner-admitted finite native contour to 1 MHz and located roots; infinite spectrum unenumerated; drift/window gates mandatory" : "complete-network descriptor and native contour required",
     differences=["positive-delay native Padé versus exact transport retained; zero-delay uses composed discrete realization";
-        id=="L3-03" ? ["equilibrium-start caveat: slow initialized GFM filters; no 400-to-380 kV nameplate rescaling"] : String[]],
+        id=="L3-03" ? ["equilibrium-start caveat: slow initialized GFM filters; no 400-to-380 kV nameplate rescaling"] :
+        id=="L3-07" ? ["finite contour and located roots do not prove closure at infinity; near-zero cross entries support only absolute floor accuracy"] : String[]],
     tiers=["A","C"],estimated_nodes=L3_NATIVE_NODES[id])
     for (id,description,parent,topology) in (
         ("L3-01","TLC P-f/Q + P/Q-V shared bus","L2-01 + L2-03","two DC-clamped TLCs — shared SCR-4 grid"),
         ("L3-08","MMC with damped series-RC shunt","L2-07 + explicit R/C","DC-clamped MMC + series RC — SCR-8 grid"),
         ("L3-02","MMC P/Q + P/Q-V shared bus","L2-07 + L2-09","two DC-clamped MMCs — shared SCR-4 grid"),
         ("L3-04","MMC behind explicit lumped pi line","L2-07 + explicit R/L/C","near-end port — pi line — remote DC-clamped MMC"),
-        ("L3-03","GFM + GFL MMC shared 380 kV bus","L2-13 + L2-07","separate DC clamps — shared SCR-8 grid on 2060 MVA"))])
+        ("L3-03","GFM + GFL MMC shared 380 kV bus","L2-13 + L2-07","separate DC clamps — shared SCR-8 grid on 2060 MVA"),
+        ("L3-07","DC-coupled Vdc/Q and P/Q MMC pair","L2-11 + L2-07 + L1-05","independent SCR-8 AC grids — native distributed 25 km DC cable"),
+        ("L3-06","Synchronous machine + MMC shared bus","L2-16 + L2-07","machine and DC-clamped MMC — shared SCR-8 grid on 2000 MVA"))])
+
+function require_committed_m9d_c()
+    for file in ("composed_execution.jl","composed_network.jl","composed_measurement.jl",
+            "queue.jl","coverage.jl","scan.jl","frequency.jl","records.jl","ports.jl")
+        path=relpath(joinpath(ROOT,file),REPOSITORY)
+        committed=read(`git -C $REPOSITORY show $("HEAD:"*path)`)
+        committed==read(joinpath(ROOT,file)) || error("stage C preparation requires HEAD to contain the current validation sources: $path differs from HEAD; commit the stage C change first")
+    end
+    return nothing
+end
+
+function prepare_m9d_c(;remote=nothing)
+    require_committed_m9d_c()
+    remote===nothing && (remote=RemoteConfig())
+    return [prepare_composed(id;remote) for id in M9D_C_IDS]
+end

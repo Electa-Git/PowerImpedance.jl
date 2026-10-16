@@ -213,18 +213,18 @@ end
 
 function write_response(path, matrix, frequencies; quantity = "Y")
     rows = [(frequency_Hz = f, row = r, column = c, real = real(matrix[r, c, k]),
-                imag = imag(matrix[r, c, k]), unit = quantity == "Y" ? "S" : "ohm")
+                imag = imag(matrix[r, c, k]), unit = quantity == "Y" ? "S" : quantity == "Z" ? "ohm" : "1")
             for (k, f) in enumerate(frequencies) for c in axes(matrix, 2)
             for r in axes(matrix, 1)]
     return write_table(path, rows)
 end
 
-function read_response(path, dimension, frequencies)
-    rows = [split(line, '\t') for line in readlines(path)[2:end]]
-    length(rows) == dimension^2 * length(frequencies) || error("reference shape")
+function read_response(path, dimension, frequencies;rows=dimension)
+    entries = [split(line, '\t') for line in readlines(path)[2:end]]
+    length(entries) == rows*dimension * length(frequencies) || error("reference shape")
     return reshape(
-        [complex(parse(Float64, row[4]), parse(Float64, row[5])) for row in rows],
-        dimension, dimension, length(frequencies))
+        [complex(parse(Float64, row[4]), parse(Float64, row[5])) for row in entries],
+        rows, dimension, length(frequencies))
 end
 
 # Clone a baseline from the existing writer; change only declared instance

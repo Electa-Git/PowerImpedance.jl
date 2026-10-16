@@ -118,7 +118,7 @@ end
 
 function scale_response(matrix, spec)
     input = spec.quantity == "Y" ? spec.voltage_bases : spec.current_bases
-    output = spec.quantity == "Y" ? spec.current_bases : spec.voltage_bases
+    output = get(spec,:response_output_bases,spec.quantity == "Y" ? spec.current_bases : spec.voltage_bases)
     return matrix .* reshape(1 ./ output, :, 1, 1) .* reshape(input, 1, :, 1)
 end
 
@@ -212,6 +212,14 @@ function scan_record(spec)
         record["reference_scope"]="individual local device Y on original L2 bases; aggregate port Y and direct V/Idrive on predeclared aggregate bases"
         record["comparison_rule"]=Dict(string(k)=>v for (k,v) in pairs(C_ACTIVE))
         record["resonance_groups"]=get(spec,:resonance_groups,Vector{Int}[])
+        if spec.id=="L3-07"
+            record["reference_scope"]="full 4x4 Y and direct Z over both AC ports, including every cross block; only internal DC voltages eliminated; native distributed L1-05 cable"
+            record["dc_reference"]=string(spec.dc_reference)
+            record["dc_transfer_witnesses"]=Dict("outputs"=>["both DC differential voltages","both inward cable currents"],
+                "voltage_base_kV"=>800.,"current_base_kA"=>1.25,"independent_drives"=>spec.axes)
+            record["cross_entry_accuracy"]="near-zero cross entries are scored only against the absolute floor; no relative-accuracy claim"
+            record["distributed_admission_caveat"]="finite contour to 1 MHz and located roots only; infinite spectrum unenumerated and no closure-at-infinity proof; drift/window gates remain mandatory"
+        end
         if spec.protocol=="composed_local"
             record["refinement"]["selection"]="one worst-error drive axis; full predeclared local band at half amplitude and half step; matching half-step baseline; original eight-second windows"
         end

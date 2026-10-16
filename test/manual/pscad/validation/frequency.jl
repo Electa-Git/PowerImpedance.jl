@@ -138,7 +138,7 @@ function extract_response(times, voltages, currents, baseline_voltage, baseline_
         frequencies; starts, duration, input_bases = nothing)
     length(voltages) == length(currents) == size(baseline_voltage, 2) ||
         throw(ArgumentError("one independent run per input coordinate required"))
-    size(baseline_voltage) == size(baseline_current) &&
+    size(baseline_voltage,1) == size(baseline_current,1) &&
     size(baseline_voltage, 1) == length(times) ||
         throw(ArgumentError("baseline dimensions"))
     dimension = size(baseline_voltage, 2)
@@ -147,16 +147,16 @@ function extract_response(times, voltages, currents, baseline_voltage, baseline_
     Matrix{Float64}(undef, length(starts), length(frequencies))
     for (window, start) in enumerate(starts)
         v = zeros(ComplexF64, dimension, dimension, length(frequencies))
-        i = similar(v)
+        i = zeros(ComplexF64,size(baseline_current,2),dimension,length(frequencies))
         for axis in 1:dimension
-            size(voltages[axis]) == size(currents[axis]) == size(baseline_voltage) ||
+            size(voltages[axis]) == size(baseline_voltage) && size(currents[axis]) == size(baseline_current) ||
                 throw(ArgumentError("injection dimensions"))
             v[:, axis, :] = dft_phasors(times, voltages[axis] - baseline_voltage,
                 frequencies; start, duration)
             i[:, axis, :] = dft_phasors(times, currents[axis] - baseline_current,
                 frequencies; start, duration)
         end
-        y = similar(v)
+        y = similar(i)
         for k in eachindex(frequencies)
             conditions[window, k] = cond(input_bases === nothing ? v[:, :, k] :
                                          v[:, :, k] ./ input_bases)

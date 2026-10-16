@@ -195,7 +195,7 @@ function native_reference_check(spec, recomputed, frozen)
         "limit"=>NATIVE_REFERENCE_LIMIT,"entry_floor_pu"=>0.02,"frobenius_floor_pu"=>0.1,
         "max_entry_scaled_error"=>maximum(entries),"max_frobenius_scaled_error"=>maximum(frobenius),
         "max_absolute_pu"=>maximum(abs,delta),"max_absolute_SI"=>maximum(abs,recomputed-frozen),
-        "SI_unit"=>spec.quantity=="Y" ? "S" : "ohm",
+        "SI_unit"=>spec.quantity=="Y" ? "S" : spec.quantity=="Z" ? "ohm" : "1",
         "max_relative_nonzero_entry_error"=>maximum(abs(recomputed[i]-frozen[i])/abs(frozen[i])
             for i in eachindex(frozen) if !iszero(frozen[i]);init=0.0),
         "worst_frequency_Hz"=>spec.frequencies[worst[3]],"worst_row"=>worst[1],"worst_column"=>worst[2],

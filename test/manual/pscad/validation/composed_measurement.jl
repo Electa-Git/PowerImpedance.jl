@@ -50,10 +50,22 @@ function composed_samples(result, model, spec, c)
         poles=[only(filter(p->p.kind==:voltage && p.bus==bus && p.side==pole,model.probes.channels)) for pole in ("P","N")]
         clamps[string(name)]=result.channels[poles[1].name]-result.channels[poles[2].name]
     end
+    if haskey(c.net.elements,:CableDC)
+        outputs["DC_voltage_Z"]=hcat([clamps[string(n)] for n in c.devices]...)
+        currents=Matrix{Float64}[]
+        for side in ("1","2")
+            p=only(filter(p->p.kind==:current && p.element=="CableDC" && p.side==side,model.probes.channels))
+            p.orientation in (:into,:out) || error("missing DC cable current orientation")
+            push!(currents,reshape((p.orientation==:into ? 1 : -1).*result.channels[p.name],:,1))
+        end
+        outputs["DC_current_T"]=reduce(hcat,currents)
+    end
     return (;voltage,current,drive,drive_base=spec.current_bases,outputs,branches,clamps,device_voltages)
 end
 
 function composed_target_spec(spec,c,target)
+    target=="DC_voltage_Z" && return merge(spec,(;quantity="Z",voltage_bases=fill(800.,2),dc_clamped=false))
+    target=="DC_current_T" && return merge(spec,(;quantity="T",response_output_bases=fill(1.25,2),dc_clamped=false))
     target=="direct_Z" && return merge(spec,(;quantity="Z",dc_clamped=false))
     target=="aggregate_Y" && return merge(spec,(;dc_clamped=false))
     name=Symbol(chop(target;tail=2));b=device_bases(c.net.elements[name].element_model.elec)
@@ -63,10 +75,10 @@ end
 
 function composed_target_samples(samples,spec,target)
     voltage=haskey(samples.device_voltages,target) && length(spec.axes)==2 ? samples.device_voltages[target] : samples.voltage
-    input=spec.quantity=="Z" ? samples.drive : voltage
+    input=spec.quantity!="Y" ? samples.drive : voltage
     output=samples.outputs[target]
-    input_base=spec.quantity=="Z" ? spec.current_bases : spec.voltage_bases
-    output_base=spec.quantity=="Z" ? spec.voltage_bases : spec.current_bases
+    input_base=spec.quantity!="Y" ? spec.current_bases : spec.voltage_bases
+    output_base=get(spec,:response_output_bases,spec.quantity!="Y" ? spec.voltage_bases : spec.current_bases)
     return (;input,output,input_base,output_base,drive=samples.drive,drive_base=samples.drive_base)
 end
 
@@ -173,10 +185,11 @@ function composed_column(result,baseline,model,spec,c,column)
         run=composed_target_samples(a,ts,target);matrices=Array{ComplexF64,3}[]
         for start in spec.window_starts
             drive=dft_phasors(result.time,a.drive-b.drive,spec.frequencies;start,duration=spec.window_duration)
-            voltage=target=="direct_Z" ? a.voltage-b.voltage : run.input-base.input
-            signal=target=="direct_Z" ? voltage : hcat(voltage,run.output-base.output)
+            voltage=run.input-base.input
+            transfer=ts.quantity!="Y"
+            signal=transfer ? run.output-base.output : hcat(voltage,run.output-base.output)
             output=dft_phasors(result.time,signal,spec.frequencies;start,duration=spec.window_duration)
-            bases=target=="direct_Z" ? ts.voltage_bases : [ts.voltage_bases;ts.current_bases]
+            bases=ts.quantity!="Y" ? get(ts,:response_output_bases,ts.voltage_bases) : [ts.voltage_bases;ts.current_bases]
             response=output./drive[column:column,:] .* (spec.current_bases[column]./bases)
             push!(matrices,reshape(response,size(response,1),1,:))
         end
@@ -202,7 +215,9 @@ function composed_predicted_columns(c,spec,column,forms)
             s=im*2π*f;nodal=composed_nodal(c,s,functions;forms)
             drive=zeros(ComplexF64,length(c.nodes));drive[column]=1
             all_voltage=nodal\drive;voltage=all_voltage[1:np]
-            if target=="direct_Z"
+            if startswith(target,"DC_")
+                physical=refs[target][:,:,k]*drive[1:np]
+            elseif target=="direct_Z"
                 physical=voltage
             elseif target=="aggregate_Y"
                 physical=[voltage;refs[target][:,:,k]*voltage]
@@ -218,7 +233,7 @@ function composed_predicted_columns(c,spec,column,forms)
                     physical=[voltage;ac*local_current]
                 end
             end
-            bases=target=="direct_Z" ? ts.voltage_bases : [ts.voltage_bases;ts.current_bases]
+            bases=ts.quantity!="Y" ? get(ts,:response_output_bases,ts.voltage_bases) : [ts.voltage_bases;ts.current_bases]
             push!(cols,reshape(injection_readout_factor(f,spec).*physical.*(spec.current_bases[column]./bases),:,1))
         end
         predicted[target]=cat(cols...;dims=3)
@@ -249,10 +264,11 @@ function composed_comparison(results,models,reference,directory,spec,c;resonance
                 "invalid_reasons"=>["response_extraction: "*x.reason])
             continue
         end
-        indices=composed_score_indices(c,target)
+        indices=startswith(target,"DC_") ? [1,2] : composed_score_indices(c,target)
+        columns=startswith(target,"DC_") ? collect(eachindex(spec.axes)) : indices
         normed=[scale_response(m,ts) for m in x.matrices]
         measured=sum(x.matrices)/length(x.matrices)
-        scored=[m[indices,indices,:] for m in normed]
+        scored=[m[indices,columns,:] for m in normed]
         windows=matrix_change(scored[2],scored[1];epsilon=.01)
         quality=composed_quality(results["baseline"].time,base,runs,spec,c,target)
         quality["valid"] &= windows["passed"] && all(r["passed"] for r in kcl)
@@ -264,8 +280,8 @@ function composed_comparison(results,models,reference,directory,spec,c;resonance
         coupling=sideband_coupling(results["baseline"].time,bs,rs,ts)
         mismatch=coupling>C_PASSIVE.epsilon ? "phase-domain frequency coupling absent from native fixed-dq LTI reference" : ""
         quality["omitted_sideband_ratio"]=coupling;quality["model_mismatch"]=mismatch
-        measured_pu=scale_response(measured,ts)[indices,indices,:]
-        reference_pu=scale_response(reference[target],ts)[indices,indices,:]
+        measured_pu=scale_response(measured,ts)[indices,columns,:]
+        reference_pu=scale_response(reference[target],ts)[indices,columns,:]
         rows=response_rows(ts,measured_pu,reference_pu;active=true,valid=quality["valid"],model_mismatch=mismatch)
         resonances=Dict{String,Any}[]
         if target=="direct_Z"
@@ -282,7 +298,7 @@ function composed_comparison(results,models,reference,directory,spec,c;resonance
         quality["max_frobenius_error"]=maximum(r.frobenius_error for r in rows)
         for r in rows
             err=r.complex_error_pu/max(abs(complex(r.reference_real_pu,r.reference_imag_pu)),.02)
-            if err>worst;worst=err;selection=(column=indices[r.column],frequency=r.frequency_Hz);end
+            if err>worst;worst=err;selection=(column=columns[r.column],frequency=r.frequency_Hz);end
         end
         write_table(joinpath(directory,target*"_C.tsv"),rows)
         write_table(joinpath(directory,target*"_windows.tsv"),refinement_rows(spec.frequencies,scored[2],scored[1];limit=.01,valid=true))

@@ -106,7 +106,7 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
     # reference. Disable auxiliary midpoint shunts so the native reduction and
     # PSCAD circuit both contain exactly the stated resistor termination.
     plan = P.build_plan(list; settings, name,
-        dc_reference = get(spec,:dc_clamped,true) ? :midpoint_resistors : :none)
+        dc_reference = get(spec,:dc_reference,get(spec,:dc_clamped,true) ? :midpoint_resistors : :none))
     (spec.dimension == 2 || spec.quantity == "Y" && spec.dimension == 3) &&
         push!(plan.modules, P.dq_to_abc_module("Validation_DQ_ABC"))
     current_drive = get(spec, :drive, "") == "current" || spec.quantity == "Z"

@@ -1,5 +1,5 @@
-# Lumped composed circuits retain native device Jacobians and explicit passive
-# storage. Port coordinates lead the nodal matrix; ideal-source nodes are clamped.
+# Composed circuits retain native device Jacobians and native passive models.
+# Port coordinates lead the nodal matrix; ideal-source nodes are clamped.
 function composed_circuit(net, devices, grids, ports)
     clamped = Set{Symbol}([:gnd])
     for e in values(net.elements)
@@ -14,7 +14,15 @@ function composed_circuit(net, devices, grids, ports)
     for name in sort!(collect(keys(net.elements))), node in values(net.elements[name].pins)
         node in clamped || node in nodes || push!(nodes, node)
     end
-    return (; net, devices=collect(devices), grids=collect(grids), nodes, ports=collect(ports))
+    # Each un-clamped DC bus has the exporter's two 10 Mohm pole references.
+    dc_references=Dict{Symbol,Float64}()
+    for name in devices
+        e=net.elements[name];b=device_bases(e.element_model.elec)
+        b.dc_voltage===nothing && continue
+        node=e.pins[Symbol("1.1")]
+        node in nodes && (dc_references[node]=2P.DC_REFERENCE_RESISTANCE)
+    end
+    return (; net, devices=collect(devices), grids=collect(grids), nodes, ports=collect(ports),dc_references)
 end
 
 function composed_incidence(c, e, pins)
@@ -59,9 +67,14 @@ function composed_nodal(c, s, functions; which = :full, forms = nothing)
             y += h * functions[name](s) * h'
         else
             h = passive_incidence(c, e)
-            yy = forms === nothing ? PowerImpedance.get_y(e, ComplexF64(s)) :
+            yy = forms === nothing || e.element_model isa PowerImpedance.Cable ? PowerImpedance.get_y(e, ComplexF64(s)) :
                 composed_passive_y(e, forms[name], s)
             y += h * yy * h'
+        end
+    end
+    if which!=:active
+        for (node,resistance) in c.dc_references
+            j=only(findall(==(node),c.nodes));y[j,j]+=inv(resistance)
         end
     end
     return y
@@ -91,10 +104,7 @@ end
 
 function composed_reference(c, spec; time_step = nothing, forms = nothing)
     functions = composed_device_functions(c; time_step)
-    targets = Dict{String,Vector{Matrix{ComplexF64}}}("aggregate_Y" => [], "direct_Z" => [])
-    for name in c.devices
-        targets[string(name)*"_Y"] = Matrix{ComplexF64}[]
-    end
+    targets = Dict(name=>Matrix{ComplexF64}[] for name in composed_targets(c))
     np = 2length(c.ports)
     for f in spec.frequencies
         s = im*2π*f
@@ -113,7 +123,14 @@ function composed_reference(c, spec; time_step = nothing, forms = nothing)
             grid += h*yy*h'
         end
         push!(targets["aggregate_Y"], ((full-grid)*lift)[1:np,:])
-        push!(targets["direct_Z"], inv(composed_reduce(c,full)))
+        z=inv(composed_reduce(c,full))
+        push!(targets["direct_Z"],z)
+        if haskey(c.net.elements,:CableDC)
+            e=c.net.elements[:CableDC];h=passive_incidence(c,e)
+            dc=h'*lift*z
+            push!(targets["DC_voltage_Z"],dc)
+            push!(targets["DC_current_T"],PowerImpedance.get_y(e,ComplexF64(s))*dc)
+        end
         for name in c.devices
             h = device_incidence(c,name); b = device_bases(c.net.elements[name].element_model.elec)
             yy=functions[name](s)
@@ -192,12 +209,16 @@ function composed_descriptor(c)
     # Pure capacitors have no extra branch state: their voltage storage is nodal.
     used = [collect(1:offset);collect(vi)]
     K=K[used,used];E=E[used,used];vi=(offset+1):length(used)
+    for (node,resistance) in c.dc_references
+        j=only(findall(==(node),c.nodes));K[vi[j],vi[j]]-=inv(resistance)
+    end
     qz=schur(K,E);finite=abs.(qz.β).>100eps()*max(norm(E),1.)
     poles=sort!(qz.α[finite]./qz.β[finite];by=real,rev=true)
     return (;K,E,vi,poles)
 end
 
 function composed_stability(c; frequencies=exp10.(range(-2,5;length=6001)))
+    haskey(c.net.elements,:CableDC) && return composed_distributed_stability(c)
     pen=composed_descriptor(c);functions=composed_device_functions(c)
     residual=0.
     for s in (1.0 + 2im, 10.0 + 100im, 100.0 + 1000im)
@@ -234,6 +255,10 @@ function exported_composed_passives(c, project, list)
     for (name,e) in c.net.elements
         e.element_model isa PowerImpedance.Source && continue
         name in c.devices && continue
+        if e.element_model isa PowerImpedance.Cable
+            verify_composed_cable(project,list)
+            continue
+        end
         original=P.identify_rlc(e;name).form
         item=only(filter(x->x.name==name,list.elements))
         fields=map(((:R,"resistor","R","ohm"),(:L,"inductor","L","H"),(:C,"capacitor","C","uF"))) do (field,kind,key,unit)
@@ -247,6 +272,119 @@ function exported_composed_passives(c, project, list)
         end
         forms[name]=P.RLCForm(original.topology,fields...)
     end
+    for (node,resistance) in c.dc_references
+        e=first(filter(n->c.net.elements[n].pins[Symbol("1.1")]==node,c.devices))
+        bus=port_probe(list,e,1)
+        poles=[exported_passive(text,bus.name*"_reference_"*pole*"_R","resistor","R","ohm") for pole in ("P","N")]
+        sum(poles)==resistance || error("exported DC reference changed at $node")
+    end
     return forms
 end
 
+
+function composed_targets(c)
+    targets=["aggregate_Y","direct_Z",[string(n)*"_Y" for n in c.devices]...]
+    haskey(c.net.elements,:CableDC) && append!(targets,["DC_voltage_Z","DC_current_T"])
+    return targets
+end
+
+# Validate the actual cable definition, earth, fit settings and length against
+# a fresh native export plan. Its distributed get_y remains the sole reference.
+function verify_composed_cable(project,list)
+    plan=P.build_plan(list;name="cable_reference")
+    actual=read(project,String)
+    users=[m.match for m in eachmatch(r"<User\b[^>]*>.*?</User>"s,actual)
+        if occursin("defn=\"master:Cable_Coax\"",m.match)]
+    for row in plan.lines
+        row isa P.CableDefinitionPlan || continue
+        for component in row.cables
+            parameters=Dict(component.params)
+            number="<param name=\"CABNUM\" value=\"$(parameters["CABNUM"])\"/>"
+            block=only(filter(x->occursin(number,x),users))
+            for (key,value) in component.params
+                occursin("<param name=\"$key\" value=\"$value\"/>",block) || error("exported cable field changed: $key")
+            end
+        end
+        for (key,value) in [row.ground;row.frephase;row.outdisp]
+            occursin("<param name=\"$key\" value=\"$value\"/>",actual) || error("exported cable environment changed: $key")
+        end
+    end
+    wrapper=only(plan.wrappers)
+    block=only(m.match for m in eachmatch(r"<Wire\b[^>]*classid=\"Cable\"[^>]*>.*?</Wire>"s,actual))
+    for (key,value) in wrapper.params
+        occursin("<param name=\"$key\" value=\"$value\"/>",block) || error("exported cable wrapper changed: $key")
+    end
+    return nothing
+end
+
+# Only the low-frequency pi descriptor supplies seeds. Every final root and
+# both finite contours evaluate the native distributed cable, never this seed.
+function composed_cable_seed(c)
+    net=deepcopy(c.net);cable=pop!(net.elements,:CableDC)
+    z,y=PowerImpedance.eval_parameters(cable.element_model,ComplexF64(im*2π))
+    q=[1.,-1.];zz=only(q'*z*q)*cable.element_model.length
+    yy=only(q'*y*q)/4*cable.element_model.length
+    r=real(zz);l=imag(zz)/(2π);cap=imag(yy)/(4π)
+    a=cable.pins[Symbol("1.1")];b=cable.pins[Symbol("2.1")]
+    add!(net,:CableSeed,impedance(z=s->r+l*s,pins=1))
+    connect!(net,(:CableSeed,Symbol("1.1")),a);connect!(net,(:CableSeed,Symbol("2.1")),b)
+    for (name,node) in ((:SeedCap1,a),(:SeedCap2,b))
+        add!(net,name,impedance(z=s->inv(s*cap),pins=1))
+        connect!(net,(name,Symbol("1.1")),node);connect!(net,(name,Symbol("2.1")),:gnd)
+    end
+    return composed_descriptor(merge(c,(;net))).poles
+end
+
+function composed_refine_root(c,functions,z)
+    # Local refinement around this seed; an escaping Newton trajectory is
+    # unresolved, rather than evidence for a remote distributed-cable root.
+    seed=z;radius=max(1.,abs(seed))
+    for iteration in 1:25
+        y=composed_nodal(c,z,functions)
+        all(isfinite,y) || return z,Inf
+        f=svd(y);u=f.U[:,end];v=f.V[:,end]
+        delta=1e-4*max(1.,abs(z))
+        dy=(composed_nodal(c,z+delta,functions)-composed_nodal(c,z-delta,functions))/(2delta)
+        dz=dot(u,y*v)/dot(u,dy*v)
+        (!isfinite(dz)||abs(dz)>max(1e5,2abs(z))) && return z,Inf
+        abs(z-dz-seed)<=radius || return z,Inf
+        z-=dz
+        abs(dz)<1e-8*max(1.,abs(z)) && break
+    end
+    y=composed_nodal(c,z,functions)
+    all(isfinite,y) || return z,Inf
+    return z,minimum(svdvals(y))/max(norm(y),1e-12)
+end
+
+function composed_distributed_stability(c)
+    functions=composed_device_functions(c)
+    seeds=composed_cable_seed(c)
+    located=[composed_refine_root(c,functions,z) for z in seeds if real(z)>-1500]
+    unresolved=count(x->!(x[2]<1e-6),located)
+    filter!(x->x[2]<1e-6,located);sort!(located;by=x->real(x[1]),rev=true)
+    open_rhp=sum(count(z->real(z)>1e-6,eigvals(c.net.elements[n].A)) for n in c.devices)
+    contours=Dict{String,Any}[]
+    for fs in (exp10.(range(-2,5;length=6001)),exp10.(range(-6,6;length=12001)))
+        values=ComplexF64[];margin=Inf
+        for f in [0.;fs]
+            s=1e-6+im*2π*f
+            ret=I+composed_nodal(c,s,functions;which=:passive)\composed_nodal(c,s,functions;which=:active)
+            push!(values,det(ret));margin=min(margin,minimum(svdvals(ret)))
+        end
+        contour=[conj.(reverse(values[2:end]));values]
+        increments=[angle(contour[mod1(j+1,length(contour))]/contour[j]) for j in eachindex(contour)]
+        turns=sum(increments)/(2π);net=-round(Int,turns)
+        push!(contours,Dict("frequency_count"=>length(fs),"frequency_band_Hz"=>[first(fs),last(fs)],
+            "nyquist_net"=>net,"closed_RHP_count"=>net+open_rhp,"turns"=>turns,
+            "max_contour_phase_increment_rad"=>maximum(abs,increments),"return_difference_min"=>margin))
+    end
+    stable=!isempty(located)&&maximum(real(x[1]) for x in located)<-1e-7&&
+        all(x["closed_RHP_count"]==0&&abs(x["turns"]+x["nyquist_net"])<1e-6 for x in contours)
+    return Dict("status"=>stable ? "passed" : "failed","method"=>"owner-admitted native distributed finite contours and located roots",
+        "most_positive_located_real_per_s"=>isempty(located) ? Inf : real(first(located)[1]),
+        "poles_real_per_s"=>[real(x[1]) for x in located],"poles_imag_rad_per_s"=>[imag(x[1]) for x in located],
+        "root_residuals"=>[x[2] for x in located],"unresolved_seed_count"=>unresolved,
+        "root_search"=>"local native Newton refinement within max(1,abs(seed)) of each pi seed; non-finite or escaping tracks remain unresolved","open_RHP_count"=>open_rhp,
+        "closed_RHP_count"=>last(contours)["closed_RHP_count"],"contours"=>contours,
+        "root_scope"=>"finite contours through 1 MHz and located roots only; distributed infinite spectrum unenumerated, no closure-at-infinity proof; measured drift/window gates guard against unseen growth")
+end
