@@ -13,6 +13,7 @@
 #   retained ammeter, bus voltmeters and PGB fields.
 
 function tone_graph(settings)
+    get(settings, :stimulus, "multitone") == "hann_burst" && return burst_graph(settings)
     graph = P.BlockGraph()
     clock, enabled = P.Signal.(("validation_clock_s", "injection_enabled"))
     append!(graph.nodes, P.ControlBlock[P.TimeStep(clock),

@@ -1342,6 +1342,8 @@ end
     @test "--project=$(dirname(Base.active_project()))" in command.exec
 end
 
+include("tierb_test.jl")
+
 end
 
 module PSCADResonanceTests

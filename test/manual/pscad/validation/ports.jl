@@ -198,6 +198,13 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
             plan.probes.channels)
         retain_recorders!(plan,needed)
     end
+    if get(spec, :recorder_scope, "") == "tierb"
+        # B retains all electrical V/I and the machine swing witnesses.
+        # Only recorder assemblies are pruned; meters and signal graphs stay.
+        needed=filter(c->c.kind in (:voltage,:current,:injection_current,
+            :machine_speed,:machine_p,:machine_q),plan.probes.channels)
+        retain_recorders!(plan,needed)
+    end
     P.check_connectivity(plan)
     return plan, settings
 end

@@ -27,5 +27,7 @@ include("queue.jl")
 include("composed_network.jl")
 include("composed_measurement.jl")
 include("composed_execution.jl")
+include("tierb.jl")
+include("tierb_offline.jl")
 
 end

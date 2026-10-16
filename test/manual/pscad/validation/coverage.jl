@@ -148,12 +148,16 @@ function check_recorder_sampling(spec)
     ticks = round(Int, ratio)
     isapprox(ratio, ticks; rtol = 0, atol = 1e-9) && isodd(ticks) ||
         error("preparation requires an odd integer sample_step / time_step ratio")
-    boundaries = (spec.window_starts..., spec.window_duration, spec.simulation_time)
+    burst = get(spec, :stimulus, "multitone") == "hann_burst"
+    boundaries = burst ? (spec.injection_time, spec.ringdown..., spec.simulation_time) :
+        (spec.window_starts..., spec.window_duration, spec.simulation_time)
     all(isapprox(t / spec.sample_step, round(t / spec.sample_step); rtol = 0, atol = 1e-7)
         for t in boundaries) || error("recorder windows are not sample coherent")
-    tones = spec.dimension == 1 ? spec.frequencies : [spec.frequencies; spec.frequency]
-    all(isapprox(f * spec.window_duration, round(f * spec.window_duration); rtol = 0, atol = 1e-9)
-        for f in tones) || error("recorder windows are not tone coherent")
+    if !burst
+        tones = spec.dimension == 1 ? spec.frequencies : [spec.frequencies; spec.frequency]
+        all(isapprox(f * spec.window_duration, round(f * spec.window_duration); rtol = 0, atol = 1e-9)
+            for f in tones) || error("recorder windows are not tone coherent")
+    end
     highest = maximum(spec.frequencies) + (spec.dimension == 2 ? spec.frequency : 0.0)
     spec.dimension == 1 || (highest = max(highest, spec.frequency))
     inv(2spec.sample_step) > 4highest || error("recorder Nyquist must exceed four times the measured band")

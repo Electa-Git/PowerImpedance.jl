@@ -1972,3 +1972,196 @@ reproduction passes **16/16**. Both fixtures pass passive-field verification
 through the actual XML writer. All 80 frozen proposal artifacts retain their
 hashes. Evidence and preservation records are under [`data/m9d4/`](data/m9d4/).
 No fixture preparation, station execution, `src/` changes or commits occurred.
+
+## M9d-5: L3b time-domain protocol (frozen before B data)
+
+Tier B is registered separately for **L3-08, L3-04, L3-06**, in that order. It
+requires each fixture's complete A/C result, including conditioning, window,
+amplitude and the separate **1% C residual/raw step** qualification, to have
+passed. C evidence remains in its original directory. B creates a fresh
+`L3-xx-tierb` directory and five native runs: zero-stimulus baseline, full burst,
+half-amplitude burst, half-step baseline and half-step burst. The extra
+half-amplitude zero-gain project is an unrun export template. Baselines are never
+borrowed from C: only projects with identical hashes after zeroing the injection
+instance gains can be paired, and the baseline gains must actually be zero.
+Native completion, project/settings hashes and the <100-live-node gate retain
+the existing runner's rules.
+
+| Fixture | Carrier, cycles; driven coordinate | Onset / record end, s | Ringdown fit interval, s | Burst peak current, pu | Base / half integration step, µs |
+|---|---|---|---|---|---|
+| L3-08 | 245.50509 Hz, 8; d | 16 / 20 | [16.07, 16.22) | 0.001 | 2.5 / 1.25 |
+| L3-04 | 367.22563 Hz, 8; d | 16 / 20 | [16.05, 16.30) | 0.00085 | 2.5 / 1.25 |
+| L3-06 | 1.4869167 Hz, 4; d | 64 / 80 | [67, 76) | 0.0035 | 1.25 / 0.625 |
+
+The current command is
+`a/2 * (1-cos(2π τ/T)) * cos(2π f τ)` for `0 ≤ τ ≤ T`, zero otherwise,
+where `τ=t-onset` and `T=cycles/f`. This phase-continuous Hann burst uses the
+existing dq current-port graph and phase/current measurement path. The voltage
+base is the nominal 380 kV line-to-line rating converted to phase peak; injection
+uses the existing aggregate current base (2000 MVA for 06, 1000 MVA for 04/08).
+Device-current departures retain each device's original 1000 MVA base. Offline
+sizing checks every free-node voltage and every retained branch/device current
+against 0.0045 pu V and 0.008 pu I for both integration steps.
+
+All free-node d/q voltages and individual device/passive branch d/q currents are
+scored. The common-mode fit uses the two input-port voltage coordinates and the
+two C1 AC current coordinates: near-port voltage and remote MMC current for 04,
+bus voltage and MMC current for 08, bus voltage and machine current for 06.
+Remote voltage, line/shunt/grid currents and both machine/MMC currents remain
+scored; native records also retain machine speed and active/reactive power.
+Other control-diagnostic recorders are omitted, preserving every electrical
+meter and signal graph. Completed raw records stay on disk; analysis retains
+only the baseline still needed for subtraction and the V/I arrays needed by
+the witnesses. Channel names, bases, fit indices, intervals,
+search bounds and extraction rules are frozen in the B manifest.
+
+`RMS(e)/RMS(reference) ≤ 5%`, `max|e|/max|reference| ≤ 10%` and the scalar
+least-squares gain within 5% apply separately to every predeclared signal over
+[onset, record end]. No denominator floor or fitted time shift is used. A common
+complex mode is fitted across the selected channels, with independent sine and
+cosine amplitudes and a constant plus linear background in each channel, using
+the same model for measurement and prediction. Report oscillation frequency
+`|Im λ|/(2π)`, decay `α=-Re λ`, damping ratio `ζ=α/hypot(α,Im λ)`, residual and
+conditional fit standard errors. Agreement limits remain **2% frequency and
+10% relative ζ**. Extraction rejects nonconvergence, boundary solutions,
+relative fit residual >0.10, or relative standard error >2% for frequency / >10%
+for ζ. These fixed extraction checks are not station validation and assume the
+fit residual model; correlated EMT noise can make their standard errors
+optimistic. Unresolved fits return `unextractable`; invalid baseline, sampling,
+drive or departure checks return `invalid_measurement`. Windows are never moved.
+
+Julia predictions use the composed closed-network native nodal equations and
+retained Jacobians from the same solved point. Frequency-response convolution
+retains every recorded dq injection bin, ideal-source perturbation clamps,
+passive storage and the exact `exp(-s h)` modulation feedback in zero-delay
+converters. The qualifying realization also applies the full injection-readout
+transport and dq rotation; a scalar timing factor alone is insufficient on the
+undriven coordinate. The continuous-model scores stay visible. Exponential
+weighting and fixed double/quadruple DFT padding suppress circular wraparound;
+predictions whose two inversion results disagree by >1e-4 in relative norm are
+unresolved. This is a numerical integration check, not a relaxed B tolerance.
+Exactly zero leading drive history can be skipped with a zero perturbation
+state; every nonzero sample, including pre-onset noise, remains. A plain Julia
+radix-two DFT evaluates the convolution in O(n log n) operations, without new
+dependencies. Roots are computed directly for phase accuracy; inverse channels
+share one workspace. The independent direct-sum DFT tests also check inverse
+normalization. Exact transport, readout and the frozen B tolerances are unchanged.
+
+Actual full records contain 320,001 samples (04/08) and 2,560,001 samples (06);
+the half-step records contain 640,001 and 5,120,001 samples. For the ideal
+zero-prehistory offline drive, the active records contain 64,001/128,001 and
+512,001/1,024,001 samples, respectively. The largest active native transform has
+4,194,304 points. A separate ten-channel transport check evaluates the entire
+5,120,001-sample record, including nonzero prehistory, with a 33,554,432-point
+transform. Output spectra use half storage and inverse channels are processed
+individually to limit memory. The full-record transport check evaluates both
+padding lengths while retaining the first prediction, taking 149 s with
+5.84 GiB peak resident memory. Its relative RMS and peak errors against an
+independent sample-exact delay are 8.66e-16 and 2.12e-15. This stress check
+measures the convolution workspace and transform runtime, not native network
+response evaluation.
+
+Both integration steps are scored on their own native odd-ratio-25 recorder
+grids. No half-step samples are discarded. The half-amplitude response, doubled
+before comparison, must agree with the main response in normalized RMS, peak
+and scalar gain within the existing **2% amplitude limit**. Raw half-step changes
+are diagnostics, evaluated on the fine grid by interpolating the coarse trace;
+each measured trace still qualifies against its own realization. The separate
+C step gate remains mandatory through C admission. Baseline drift ≤1e-3 pu,
+terminal departures ≤0.01 pu and drive amplitude within 1% retain existing
+measurement limits. Per-signal signal-to-baseline RMS ratios are reported;
+small half-amplitude signals may remain unextractable in native data.
+
+Offline reproduction, with no exports or station calls:
+
+```sh
+OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true julia +1.10.11 --project=test/manual/pscad/validation -e 'using PowerImpedance, LinearAlgebra; BLAS.set_num_threads(1); include("test/manual/pscad/validation/validation.jl"); PSCADValidation.verify_tierb_offline()'
+```
+
+This saves predicted traces, native and exact-delay located poles, fitted modes,
+uncertainties and sizing results in `data/m9d5/`. A discrete pole is compared
+with the fitted discrete response; its difference from the continuous pole is
+also retained. In particular the L3-04 interface step changes damping by about
+19% at the base step; it must not be hidden or called a continuous-model pass.
+These are linear self-consistency calculations, not nonlinear validation.
+
+**Commit/merge first, then prepare from the main tree after C has passed.**
+`prepare_m9d_b_tier(ids)` refuses if HEAD lacks any current B source, project
+entry, test or protocol documentation, and preflights C status for the complete
+selection before creating directories. It checks the producing native-source
+hashes, solved point, exported passives and all frozen plain/discrete C
+references. Older C harness revisions remain recorded in their original
+manifests. Do not prepare or execute from this implementation worktree.
+
+```julia
+using PowerImpedance, PythonCall
+include("test/manual/pscad/validation/validation.jl")
+PSCADValidation.prepare_m9d_b_tier(["L3-08", "L3-04"]) # after commit/merge
+# Add 06 only once its C qualification has passed:
+PSCADValidation.prepare_m9d_b_tier(["L3-06"])
+PSCADValidation.run_m9d_tierb(timeout=19800.0)
+```
+
+The queue persists each outcome in `data/m9d5/queue.toml`, continues after
+fixture failures and stops on interrupts. Unprepared or C-pending fixtures are
+reported without starting their B runs. Exact matching completed B runs can be
+resumed. Expected additional station time remains **20–35 min for 08,
+20–35 min for 04, and 190–260 min for 06: 230–330 min total**, including the
+five-run witnesses. These are planning estimates, not measured B runtimes.
+
+Offline tests use the repository's pinned Julia 1.12.7 dependency set directly;
+no additional test environment or package is needed:
+
+```sh
+l3b_julia1127=/home/amartins/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/bin/julia
+OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true "$l3b_julia1127" --startup-file=no --compiled-modules=existing --project=. -e 'using Test; @testset "Validation" begin include("test/pscad/validation_test.jl") end'
+OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true "$l3b_julia1127" --startup-file=no --compiled-modules=existing --project=. -e 'using Test; @testset "PSCAD offline suite" begin include("test/pscad/runtests.jl") end'
+OPENBLAS_NUM_THREADS=1 JULIA_CONDAPKG_OFFLINE=true "$l3b_julia1127" --startup-file=no --compiled-modules=existing --project=. -e 'include("test/pscad/manual_scripts_test.jl")'
+```
+
+The first two test commands aggregate all testsets so one failing test does not
+hide later results. `--compiled-modules=existing` avoids a local standard-library
+precompilation failure; numerical tests and tolerances stay intact. The newer
+1.10 validation environment is used for burst reproduction; it has a separate
+dependency set from the repository's pinned 1.12 tests.
+
+Final code checks on Julia 1.12.7 with that pinned environment pass
+**3,549/3,549 validation assertions**, **20,920/20,920 PSCAD-suite assertions**
+and **76/76 standalone name-guard assertions**. The new B tests pass
+**138/138 on both Julia 1.10.11 and 1.12.7**; read-only admission/reference
+checks for stored 04/08 and pending-06 refusal pass **8/8**. The independent
+DC-current sizing check passes **9/9**. Both project files retain their committed
+dependency declarations. Dependency-free reproduction traces, mode differences,
+full-record memory/runtime checks and current test logs are in
+`data/m9d5-base-dft-final/`; the earlier evidence remains in `data/m9d5/`. These are offline checks;
+no B fixture was prepared and no station was contacted.
+
+Julia-only fitted modes are listed below as `(f [Hz], alpha [1/s], zeta)`.
+The full traces, conditional standard errors, residuals and located-pole
+comparisons are in `data/m9d5/offline.toml` and `mode-summary.tsv`.
+
+| Fixture | Continuous | Base-step interface realization | Half-step interface realization |
+|---|---|---|---|
+| L3-04 | (367.226759, 15.089751, 0.00653971) | (366.910956, 17.927942, 0.00777637) | (367.069123, 16.507040, 0.00715699) |
+| L3-08 | (245.504367, 36.007335, 0.02333639) | (245.061377, 37.766737, 0.02452021) | (245.283625, 36.886320, 0.02392724) |
+| L3-06 | (1.486918, 0.555989, 0.05940620) | (1.486918, 0.555989, 0.05940622) | (1.486918, 0.555989, 0.05940622) |
+
+All nine fits pass against their corresponding located poles: maximum relative
+frequency discrepancy 4.06e-6 and zeta discrepancy 1.89e-4. Native continuous
+and interface poles stay separate. The additional dq-vector sizing check gives
+maximum departures 0.003932 pu V and 0.007196 pu I, below 0.0045/0.008;
+the clamped MMC DC-current check remains below 0.001613 pu. These are linear
+predictions; measured noise and the native B qualifications remain pending.
+
+The dependency-free nine-fit reproduction takes **28 min 52 s** wall time on
+Julia 1.10.11, with individual prediction times **57.7–487.7 s** and peak
+resident memory **2.77 GiB**. Compared with the earlier implementation, maximum
+absolute changes in `(f, alpha, zeta)` are `(4.00e-15 Hz, 2.07e-13 1/s,
+2.32e-15)`; maximum relative changes are `(2.67e-15, 3.78e-14, 3.89e-14)`.
+These differences are well inside the unchanged B frequency and damping
+limits. All nine fits still pass their corresponding located poles. Exact
+before/after differences, timings and all nine traces are retained in
+`data/m9d5-base-dft-final/comparison.json`, `mode-summary.tsv` and `offline.toml`;
+`commands.txt`, `verification.json` and `logs/` retain the reproduction commands,
+source hashes and completed checks. The earlier modes are preserved in
+`previous-offline.toml`.
