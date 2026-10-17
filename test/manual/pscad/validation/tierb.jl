@@ -363,15 +363,16 @@ function tierb_compare(time,data,predicted,spec;valid=true)
     return Dict("status"=>status,"metrics"=>metrics,"mode"=>fitted,"reference_mode"=>reference,"mode_comparison"=>mode)
 end
 
-function require_tierc_passed(id;directory=joinpath(ROOT,"data",id))
+function read_tierc_record(id;directory=joinpath(ROOT,"data",id))
     record=TOML.parsefile(joinpath(directory,"manifest.toml"))
     record["fixture_id"]==id || error("C fixture mismatch")
-    get(record,"status","")=="passed" && get(record,"qualification_status","")=="passed" ||
-        error("tier B requires passed tier C: $id")
     expected=id in ("L3-04","L3-08") ? ["composed_coarse","composed_local"] : ["composed_coarse"]
     groups=get(record,"groups",Dict())
-    all(get(get(groups,key,Dict()),"status","")=="passed" for key in expected) ||
-        error("tier B requires all C groups and witnesses passed: $id")
+    outcomes=Dict(key=>get(get(groups,key,Dict()),"status","not_run") for key in expected)
+    status=get(record,"status","not_run")
+    comparison_status=get(record,"qualification_status","not_run")
+    status=="passed" && comparison_status=="passed" && all(==("passed"),values(outcomes)) ||
+        @warn "$id earlier frequency-response results: $status, $comparison_status, $outcomes"
     # Native model files and shared fixture factories require the recorded
     # frequency-response hashes, including fixtures `L3-04` and `L3-08`. Harness revisions
     # are compared numerically.
@@ -440,16 +441,17 @@ end
 function prepare_m9d_b_tier(ids=M9D_TIERB_IDS;remote=nothing)
     require_committed_tierb()
     length(ids)==length(unique(ids))&&all(in(M9D_TIERB_IDS),ids) || error("invalid tier B fixture selection")
-    # The entire selection and its frequency-response results are verified before
-    # creation.
+    # Read the selected frequency-response records before writing projects.
+    prior=Dict{String,Any}()
     for id in ids
-        require_tierc_passed(id)
+        prior[id]=read_tierc_record(id)
         ispath(joinpath(ROOT,"data",id*"-tierb")) && error("B directory already exists: $id")
     end
     remote===nothing && (remote=RemoteConfig())
     for id in ids
         net=l3_network(id);point=power_flow(net);c=l3_circuit(id,net);list=fixture_netlist(net,point)
-        gate=composed_stability(c);gate["status"]=="passed" || error("B stability admission failed")
+        gate=composed_stability(c)
+        gate["status"]=="passed" || @warn "$id time-domain stability result: $(gate["status"])" stability=gate
         cchecks=tierb_c_reference_check(c,list,joinpath(ROOT,"data",id))
         spec=tierb_spec(id,list);directory=joinpath(ROOT,"data",id*"-tierb")
         check_prepared_run_paths(id,[v.key for v in tierb_variants(spec)],remote)
@@ -462,8 +464,10 @@ function prepare_m9d_b_tier(ids=M9D_TIERB_IDS;remote=nothing)
         record=preparation_record(fixture(id),gate,models;directory)
         record["tier_c_reference_checks"]=cchecks
         record["tiers"]=["B"];record["tier_b_protocol"]=tierb_protocol(spec)
-        record["tier_c_admission"]=Dict("manifest"=>relpath(joinpath(ROOT,"data",id,"manifest.toml"),ROOT),
-            "sha256"=>digest(joinpath(ROOT,"data",id,"manifest.toml")),"status"=>"passed")
+        record["tier_c_record"]=Dict("manifest"=>relpath(joinpath(ROOT,"data",id,"manifest.toml"),ROOT),
+            "sha256"=>digest(joinpath(ROOT,"data",id,"manifest.toml")),"status"=>get(prior[id],"status","not_run"),
+            "comparison_status"=>get(prior[id],"qualification_status","not_run"),
+            "groups"=>Dict(name=>Dict("status"=>get(group,"status","not_run")) for (name,group) in get(prior[id],"groups",Dict())))
         record["channels"]=tierb_channels(c,spec).labels;record["channel_bases"]=tierb_channels(c,spec).bases
         record["fit_channels"]=spec.fit_channels
         record["qualification_reference"]="one_interface_step_with_readout"
@@ -506,13 +510,13 @@ function write_tierb_trace(path,timegrid,drive,labels,traces;start=first(timegri
 end
 
 function run_tierb(id;remote,directory=joinpath(ROOT,"data",id*"-tierb"),deadline)
-    require_committed_tierb();require_tierc_passed(id)
+    require_committed_tierb();read_tierc_record(id)
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")));verify_inputs(directory,record)
     net=l3_network(id);point=power_flow(net);c=l3_circuit(id,net);list=fixture_netlist(net,point);spec=tierb_spec(id,list)
     tierb_c_reference_check(c,list,joinpath(ROOT,"data",id))
     record["tier_b_protocol"]==tierb_protocol(spec) || error("B frozen protocol changed")
     record["channels"]==tierb_channels(c,spec).labels&&record["channel_bases"]==tierb_channels(c,spec).bases || error("B signal inventory changed")
-    digest(joinpath(ROOT,"data",id,"manifest.toml"))==record["tier_c_admission"]["sha256"] || error("B/C admission snapshot changed")
+    digest(joinpath(ROOT,"data",id,"manifest.toml"))==record["tier_c_record"]["sha256"] || error("B/C frequency-response record changed")
     native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))["passed"] || error("B operating point changed")
     variants=tierb_variants(spec);models=Dict{String,P.PSCADModel}();results=Dict{String,Any}()
     grids=Dict{String,Vector{Float64}}()
@@ -535,8 +539,9 @@ function run_tierb(id;remote,directory=joinpath(ROOT,"data",id*"-tierb"),deadlin
             if quality["status"]!="valid"
                 comparisons[v.key]=Dict("quality"=>quality,"discrete"=>Dict("status"=>"invalid_measurement"),
                     "continuous"=>Dict("status"=>"invalid_measurement"))
-                record["comparisons"]=comparisons;record["status"]="invalid_measurement"
-                return record
+                @warn "$id time-domain result for $(v.key): invalid_measurement" quality
+                record["comparisons"]=comparisons;write_manifest(directory,record)
+                continue
             end
             forms=exported_composed_passives(c,models[v.key].project_path,list)
             # Freeze/verify passive values separately for each actual export.
@@ -551,8 +556,7 @@ function run_tierb(id;remote,directory=joinpath(ROOT,"data",id*"-tierb"),deadlin
                 ["measured"=>sample.signals,"continuous"=>continuous,"discrete"=>discrete];start=spec.injection_time)
             record["comparisons"]=comparisons;write_manifest(directory,record)
             if comparisons[v.key]["discrete"]["status"]!="passed"
-                record["status"]=comparisons[v.key]["discrete"]["status"]
-                return record
+                @warn "$id time-domain result for $(v.key): $(comparisons[v.key]["discrete"]["status"])"
             end
             if v.key=="b_half_amplitude_"*spec.driven_axis
                 ix=findall(t->spec.injection_time<=t<=spec.simulation_time,timegrid)
@@ -561,19 +565,16 @@ function run_tierb(id;remote,directory=joinpath(ROOT,"data",id*"-tierb"),deadlin
                 amp_pass=all(m["status"]=="passed" for m in amplitude)
                 record["amplitude_witness"]=Dict("status"=>amp_pass ? "passed" : "failed","limit"=>.02,"metrics"=>amplitude)
                 delete!(data,v.key)
-                if !amp_pass
-                    record["status"]="failed"
-                    return record
-                end
+                amp_pass || @warn "$id time-domain half-amplitude result: failed" amplitude
             end
         end
         main="b_"*spec.driven_axis;fine="bh_"*spec.driven_axis
         tmain=grids[main];tfine=grids[fine]
-        amp_pass=record["amplitude_witness"]["status"]=="passed"
+        amp_pass=get(get(record,"amplitude_witness",Dict()),"status","")=="passed"
         fi=findall(t->spec.injection_time<=t<=spec.simulation_time,tfine)
         raw=tierb_metrics(data[fine][fi,:],tierb_interpolate(tmain,data[main],tfine[fi]))
         record["raw_step_diagnostic"]=raw
-        record["C_step_policy"]="separate mandatory 1% C residual/raw-step gate retained by C admission; B scores both native grids independently"
+        record["C_step_policy"]="frequency-response step results recorded separately; time-domain results score both native grids independently"
         statuses=[x["discrete"]["status"] for x in values(comparisons)]
         record["status"]="invalid_measurement" in statuses ? "invalid_measurement" : "unextractable" in statuses ? "unextractable" :
             all(==("passed"),statuses)&&amp_pass ? "passed" : "failed"

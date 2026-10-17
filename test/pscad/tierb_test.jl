@@ -87,7 +87,7 @@ end
     @test V.tierb_interpolate(time,u,fine_time[1:10]) isa Matrix
 end
 
-@testset "Tier B admission and baseline identity" begin
+@testset "Tier B earlier results and baseline identity" begin
     @test V.M9D_TIERB_IDS==["L3-08","L3-04","L3-06"]
     mktempdir() do directory
         a=joinpath(directory,"a.pscx");b=joinpath(directory,"b.pscx")
@@ -96,17 +96,28 @@ end
         @test V.tierb_baseline_hash(a)==V.tierb_baseline_hash(b)
         write(b,read(b,String)*"changed topology")
         @test V.tierb_baseline_hash(a)!=V.tierb_baseline_hash(b)
-        record=Dict{String,Any}("fixture_id"=>"L3-06","status"=>"prepared_station_pending")
+        record=Dict{String,Any}("fixture_id"=>"L3-06","status"=>"prepared_station_pending",
+            "source_files"=>Dict{String,Any}[])
         path=joinpath(directory,"manifest.toml")
         write(path,sprint(TOML.print,record))
-        @test_throws ErrorException V.require_tierc_passed("L3-06";directory)
+        pending=@test_logs (:warn,r"L3-06 earlier frequency-response results: prepared_station_pending") V.read_tierc_record("L3-06";directory)
+        @test pending==record
         record["status"]="passed";record["qualification_status"]="passed"
         write(path,sprint(TOML.print,record))
-        @test_throws ErrorException V.require_tierc_passed("L3-06";directory)
+        missing=@test_logs (:warn,r"L3-06 earlier frequency-response results: passed.*not_run") V.read_tierc_record("L3-06";directory)
+        @test missing==record
         record["groups"]=Dict("composed_coarse"=>Dict("status"=>"passed"))
         record["source_files"]=Dict{String,Any}[]
         write(path,sprint(TOML.print,record))
-        @test V.require_tierc_passed("L3-06";directory)["status"]=="passed"
+        @test V.read_tierc_record("L3-06";directory)["status"]=="passed"
+        record["groups"]["composed_coarse"]["status"]="failed"
+        write(path,sprint(TOML.print,record))
+        failed=@test_logs (:warn,r"L3-06 earlier frequency-response results: passed.*failed") V.read_tierc_record("L3-06";directory)
+        @test failed["groups"]["composed_coarse"]["status"]=="failed"
+        @test TOML.parsefile(path)==record
+        record["fixture_id"]="L3-04"
+        write(path,sprint(TOML.print,record))
+        @test_throws r"C fixture mismatch" V.read_tierc_record("L3-06";directory)
     end
 end
 

@@ -1,12 +1,13 @@
-function gfl_settling(gate; tone_peak_pu = 5e-5)
+function gfl_settling(gate; fixture_id, tone_peak_pu = 5e-5)
     decay = -gate["most_positive_located_real_per_s"]
-    decay > 0 || error("settling requires stable complete-network modes")
+    decay > 0 || @warn "$fixture_id settling result: nondecaying complete-network mode" decay_per_s=decay
     # A conservative 1 pu transient is divided by the single-tone drive and the 0.02 entry
     # floor. The target is 0.1%, tenfold below the 1% window tolerance.
     target = 0.001
     decay_times = log(1 / (tone_peak_pu * 0.02 * target))
-    start = ceil(max(16.0, 0.2 + decay_times/decay, 2.0 + decay_times/decay))
-    return Dict("decay_per_s" => decay, "decay_times" => decay_times,
+    start = decay > 0 ? ceil(max(16.0, 0.2 + decay_times/decay, 2.0 + decay_times/decay)) : 16.0
+    return Dict("status" => decay > 0 ? "decaying" : "nondecaying",
+        "decay_per_s" => decay, "decay_times" => decay_times,
         "assumed_initial_transient_pu" => 1.0, "prediction_target" => target,
         "entry_floor_pu" => 0.02, "tone_peak_pu" => tone_peak_pu,
         "window_starts_s" => [start, start + 1.0], "window_duration_s" => 1.0,

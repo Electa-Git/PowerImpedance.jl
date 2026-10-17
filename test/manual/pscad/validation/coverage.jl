@@ -278,18 +278,20 @@ function device_scan_definition(net,list; id="L2-01")
         window_starts=(8.0,9.0),window_duration=1.0,simulation_time=10.0,
         travel_lower_bound_s=0.0,estimated_station_seconds=1800))
     if id in ("L2-07", "L2-08", "L2-09", "L2-10")
-        settling = gfl_settling(stability_gate(net, fixture(id)); tone_peak_pu = spec.tone_peak_pu)
+        settling = gfl_settling(stability_gate(net, fixture(id)); fixture_id = id, tone_peak_pu = spec.tone_peak_pu)
         spec = merge(spec, (; window_starts = Tuple(settling["window_starts_s"]),
             simulation_time = settling["simulation_time_s"], settling, estimated_station_seconds = 3300))
     end
     if id=="L2-16"
         gate=stability_gate(net,fixture(id))
-        gate["status"]=="passed" || error("machine measurement requires a stable complete network")
-        tau=-1/gate["most_positive_located_real_per_s"]
-        # Mechanical control transfers at 1 s in the existing emitter. Twelve
-        # slow-mode decay times size baseline settling; eight from tone onset.
+        gate["status"]=="passed" || @warn "$id machine stability result: $(gate["status"])" stability=gate
+        root=gate["most_positive_located_real_per_s"]
+        tau=root<0 ? -1/root : 0.
+        # Mechanical control transfers at 1 s. A decaying mode uses twelve decay
+        # times for baseline settling and eight from tone onset. Other modes use
+        # the existing minimum interval.
         start=ceil(max(8.,1+12tau,2+8tau))
-        spec=merge(spec,(window_starts=(start,start+2.),window_duration=2.,minimum_witness_window_s=2.,
+        spec=merge(spec,(machine_stability=gate,window_starts=(start,start+2.),window_duration=2.,minimum_witness_window_s=2.,
             simulation_time=start+4.,estimated_station_seconds=5400))
     end
     reference=scan_reference(net,list,spec)

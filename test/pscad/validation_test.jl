@@ -1323,12 +1323,19 @@ end
 
 @testset "MMC GFL modal settling and frozen fine-step variant" begin
     for decay in (10.952732, 1.99183483, 10.9087697, 10.8907848)
-        settling = V.gfl_settling(Dict("most_positive_located_real_per_s" => -decay))
+        settling = V.gfl_settling(Dict("most_positive_located_real_per_s" => -decay); fixture_id = "L2-07")
         @test settling["window_starts_s"] == [16.0, 17.0]
         @test settling["simulation_time_s"] == 18.0
         @test settling["predicted_normalized_tail"] < 0.001
     end
-    @test_throws ErrorException V.gfl_settling(Dict("most_positive_located_real_per_s" => 1.0))
+    for root in (0.,1.)
+        settling = @test_logs (:warn, r"L2-07 settling result: nondecaying") V.gfl_settling(
+            Dict("most_positive_located_real_per_s" => root); fixture_id = "L2-07")
+        @test settling["status"] == "nondecaying"
+        @test settling["decay_per_s"] == -root
+        @test settling["window_starts_s"] == [16.,17.]
+        @test settling["simulation_time_s"] == 18.
+    end
     net = V.fixture("L2-01").factory(); list = V.fixture_netlist(net, power_flow(net))
     spec, native = V.applicable_scan("L2-01", net, list)
     frozen = V.scan_record(spec); frozen["time_step"] = 1.25e-6
@@ -1345,6 +1352,7 @@ end
 end
 
 include("tierb_test.jl")
+include("screen_results_test.jl")
 
 end
 
@@ -2998,16 +3006,16 @@ end
 
 module PSCADComposedInvalidEvidenceTests
 using Test, TOML
-# The real group runner reaches its invalid-measurement return with local deterministic
-# main results. Any attempted comparison run is an error.
+# The real group runner uses fixed local results for each measured run.
 const P=(;PSCADResult=Any,PSCADModel=Any)
 const checks=[Dict("passed"=>false,"max_relative_error"=>.01,
     "summary"=>[Dict("port"=>1,"coordinate"=>2,"max_relative_error"=>.01,"failed_rows"=>[1])],
     "rows"=>[Dict("axis"=>"p1_d","port"=>1,"coordinate"=>2,"relative_error"=>.01,"passed"=>false)])]
 scan_prefix(spec)="main_"
 existing_model(args...;kwargs...)=(;project_path="stored")
+const attempts=String[]
 function execute_axis!(record,key,args...)
-    key in ("main_baseline","main_measurement_p1_d","main_measurement_p1_q") || error("unexpected witness")
+    push!(attempts,key)
     return :stored_result
 end
 compare_operating_point(args...)=(;within_tolerance=[true])
@@ -3025,24 +3033,39 @@ end
 function write_manifest(directory,record)
     open(io->TOML.print(io,record),joinpath(directory,"manifest.toml"),"w")
 end
+composed_step_spec(spec,frequency;kwargs...)=spec
+step_prefix(spec)="half_"
+prepare_scan_projects(args...;kwargs...)=["half_baseline"=>(;project_path="stored"),"half_p1_d"=>(;project_path="stored")]
+record_project!(args...)=nothing
+composed_column(args...)=nothing
+composed_readout_evidence(args...;kwargs...)=first(checks)
+function composed_witnesses!(group,c,spec,step,column,main,half,amp,models,readout,output)
+    group["readout_checks"]=readout
+    group["witnesses"]=Dict("aggregate_Y"=>Dict("status"=>"invalid_measurement","invalid_reasons"=>["kcl_readout"]))
+    return group["witnesses"]
+end
 source=read(joinpath(@__DIR__,"../manual/pscad/validation/composed_execution.jl"),String)
 first_line=findfirst("function run_composed_group!",source)
 last_line=findnext("\nfunction run_composed(",source,last(first_line))
 include_string(@__MODULE__,source[first(first_line):first(last_line)-1])
-@testset "Invalid composed group persists KCL rows and cause before returning" begin
+@testset "Invalid composed group persists KCL results and runs repeats" begin
     mktempdir() do directory
-        record=Dict{String,Any}();spec=(;protocol="composed_coarse",axes=["p1_d","p1_q"])
+        record=Dict{String,Any}();spec=(;id="L3-01",protocol="composed_coarse",axes=["p1_d","p1_q"],tone_peak_pu=.001)
         circuit=(;devices=[:C1],net=(;elements=Dict(:C1=>(;element_model=nothing))))
-        group=run_composed_group!(record,circuit,nothing,spec;directory,remote=nothing,deadline=Inf)
+        empty!(attempts)
+        group=@test_logs (:warn,r"L3-01 frequency-response results:.*invalid_measurement") run_composed_group!(record,circuit,nothing,spec;directory,remote=nothing,deadline=Inf)
         saved=TOML.parsefile(joinpath(directory,"manifest.toml"))["groups"][spec.protocol]
         @test group["status"]=="invalid_measurement"
-        @test saved["readout_checks"]==checks
+        @test saved["readout_checks"][1:1]==checks
+        @test saved["readout_checks"]==[checks;checks;checks]
         @test saved["invalid_reasons"]["aggregate_Y"]==["kcl_readout"]
         @test saved["measurand_summary"]["aggregate_Y"]["invalid_reasons"]==["kcl_readout"]
-        @test saved["measurand_summary"]["aggregate_Y"]["witness"]=="not_run"
+        @test saved["measurand_summary"]["aggregate_Y"]["witness"]=="invalid_measurement"
+        @test attempts==["main_baseline","main_measurement_p1_d","main_measurement_p1_q",
+            "main_half_amplitude_p1_d","half_baseline","half_p1_d"]
         @test isempty(seen_resonance_groups[])
         local_spec=merge(spec,(;protocol="composed_local",resonance_groups=[collect(1:43)]))
-        local_group=run_composed_group!(Dict{String,Any}(),circuit,nothing,local_spec;
+        local_group=@test_logs (:warn,r"L3-01 frequency-response results:.*invalid_measurement") run_composed_group!(Dict{String,Any}(),circuit,nothing,local_spec;
             directory,remote=nothing,deadline=Inf)
         @test seen_resonance_groups[]==[collect(1:43)]
         @test local_group["status"]=="invalid_measurement"

@@ -12,7 +12,7 @@ function prepare_m9c2()
         prior = TOML.parsefile(joinpath(directory, "manifest.toml"))
         definition = deepcopy(prior["tier_c"])
         if id in ("L2-07", "L2-08", "L2-09", "L2-10")
-            settling = gfl_settling(prior["stability"]; tone_peak_pu = definition["tone_peak_pu"])
+            settling = gfl_settling(prior["stability"]; fixture_id = id, tone_peak_pu = definition["tone_peak_pu"])
             definition["window_starts"] = settling["window_starts_s"]
             definition["simulation_time"] = settling["simulation_time_s"]
             definition["estimated_station_seconds"] = 3300

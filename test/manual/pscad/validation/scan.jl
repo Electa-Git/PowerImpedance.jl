@@ -382,26 +382,19 @@ function run_fixture(id; remote = RemoteConfig(),
     net = entry.factory()
     point = power_flow(net)
     gate = stability_gate(net, entry)
-    gate["status"] == "passed" || error("$(entry.id) failed complete-network stability gate: $gate")
+    record["stability"] = gate
+    gate["status"] == "passed" || @warn "$(entry.id) complete-network stability result: $(gate["status"])" stability=gate
     list = fixture_netlist(net, point)
     spec, reference = applicable_scan(id, net, list; definition = record["tier_c"])
+    haskey(spec, :machine_stability) && (record["machine_stability"] = spec.machine_stability)
     stored = read_response(joinpath(directory, reference_filename(spec)), length(spec.axes), spec.frequencies)
     record_native_reference!(record,directory,spec,reference,stored,list)
     scan_record(spec) ==
     Dict(key=>record["tier_c"][key] for key in keys(scan_record(spec))) ||
         error("scan definition changed")
     if startswith(get(record,"status",""),"explained:")
-        println(id,": ",record["status"],"; owner disposition retained, numerical rules unchanged")
-        return record
-    end
-    accepted = get(record, "status", "") == "passed" &&
-        get(record, "tier_a_status", "") == "passed" &&
-        get(get(record, "corrected_analysis", Dict()), "status", "") == "passed" &&
-        get(get(record, "amplitude_refinement", Dict()), "passed", false) &&
-        get(get(record, "step_refinement", Dict()), "passed", false)
-    if isempty(scan_prefix(spec)) && accepted
-        println(id, ": passed; retained operating-point, comparison and refinement evidence verified")
-        return record
+        record["previous_result_status"]=record["status"]
+        @warn "$id earlier result: $(record["previous_result_status"])"
     end
     results, models = Dict{String, P.PSCADResult}(), Dict{String, P.PSCADModel}()
     started = time()

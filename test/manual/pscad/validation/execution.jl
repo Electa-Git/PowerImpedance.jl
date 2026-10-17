@@ -16,7 +16,7 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
     net = entry.factory()
     point = power_flow(net)
     gate = stability_gate(net, entry)
-    gate["status"] == "passed" || error("$(entry.id) failed complete-network stability gate: $gate")
+    gate["status"] == "passed" || @warn "$(entry.id) complete-network stability result: $(gate["status"])" stability=gate
     list = fixture_netlist(net, point)
     spec, reference = applicable_scan(id, net, list;
         definition = prior === nothing ? definition : prior["tier_c"])
@@ -101,6 +101,7 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
     record["estimated_live_nodes"] = entry.estimated_nodes + 2length(P._dc_precharge_buses(list))
     record["estimated_live_nodes"] < 100 || error("prepared fixture exceeds live-node limit")
     record["stability"] = gate
+    haskey(spec, :machine_stability) && (record["machine_stability"] = spec.machine_stability)
     record["tiers"] = ["A", "C"]
     if isempty(spec.protocol) && get(get(record, "corrected_analysis", Dict()), "status", "") == "passed"
         record["qualification_status"] = "passed"

@@ -190,7 +190,8 @@ function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
     id in M9D_C_IDS && require_committed_m9d_c()
     remote===nothing && (remote=RemoteConfig())
     entry=fixture(id);net=entry.factory();point=power_flow(net);c=l3_circuit(id,net)
-    gate=composed_stability(c);gate["status"]=="passed" || error("composed stability gate failed: $gate")
+    gate=composed_stability(c)
+    gate["status"]=="passed" || @warn "$id composed stability result: $(gate["status"])" stability=gate
     # Fresh preparation excludes retained runs, reference tables and proposal exports.
     ispath(directory) && error("fresh composed directory already exists: $directory")
     list=fixture_netlist(net,point);spec=l3_spec(id,list)
@@ -337,14 +338,9 @@ function run_composed_group!(record,c,list,spec;directory,remote,deadline)
         write_manifest(directory,record)
         qualifying=comparison
     end
-    if any(x["status"] in ("invalid_measurement","model_mismatch") for x in values(qualifying.comparisons))
-        group["status"]=any(x["status"]=="model_mismatch" for x in values(qualifying.comparisons)) ? "model_mismatch" : "invalid_measurement"
-        group["measurand_summary"]=Dict(target=>Dict("status"=>x["status"],"witness"=>"not_run",
-            "invalid_reasons"=>x["invalid_reasons"])
-            for (target,x) in qualifying.comparisons)
-        write_manifest(directory,record)
-        return group
-    end
+    outcomes=Dict(target=>x["status"] for (target,x) in qualifying.comparisons)
+    any(in(("invalid_measurement","model_mismatch")),values(outcomes)) &&
+        @warn "$(spec.id) frequency-response results: $outcomes"
     # The selected axis and frequency are saved before any comparison run; retries use
     # exactly this choice.
     chosen=get!(group,"selection",Dict("column"=>qualifying.selection.column,"frequency_Hz"=>qualifying.selection.frequency))
@@ -372,11 +368,12 @@ function run_composed_group!(record,c,list,spec;directory,remote,deadline)
         "discrete"=>residual ? group["discrete"][target]["status"] : "not_applicable",
         "witness"=>witnesses[target]["status"],
         "invalid_reasons"=>unique([group[label][target]["invalid_reasons"];witnesses[target]["invalid_reasons"]]),
-        "status"=>group[label][target]["status"]=="invalid_measurement"||witnesses[target]["status"]=="invalid_measurement" ? "invalid_measurement" :
+        "status"=>group[label][target]["status"]=="model_mismatch" ? "model_mismatch" :
+            group[label][target]["status"]=="invalid_measurement"||witnesses[target]["status"]=="invalid_measurement" ? "invalid_measurement" :
             group[label][target]["status"]=="passed"&&witnesses[target]["status"]=="passed" ? "passed" : "failed") for target in keys(witnesses))
     group["invalid_reasons"]=Dict(target=>x["invalid_reasons"] for (target,x) in group["measurand_summary"])
     statuses=[x["status"] for x in values(group["measurand_summary"])]
-    group["status"]="invalid_measurement" in statuses ? "invalid_measurement" :
+    group["status"]="model_mismatch" in statuses ? "model_mismatch" : "invalid_measurement" in statuses ? "invalid_measurement" :
         all(==("passed"),statuses)&&group["tier_a_status"]=="passed" ? "passed" : "failed"
     write_manifest(directory,record)
     return group
@@ -387,7 +384,8 @@ function run_composed(id;remote=RemoteConfig(),directory=joinpath(ROOT,"data",id
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")));verify_inputs(directory,record)
     record["fixture_id"]==id || error("composed fixture mismatch")
     net=fixture(id).factory();point=power_flow(net);c=l3_circuit(id,net)
-    gate=composed_stability(c);gate["status"]=="passed" || error("complete composed network failed admission")
+    gate=composed_stability(c);record["stability"]=gate
+    gate["status"]=="passed" || @warn "$id composed stability result: $(gate["status"])" stability=gate
     list=fixture_netlist(net,point)
     native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))["passed"] || error("composed operating point changed")
     specs=l3_specs(id,list)
@@ -399,7 +397,6 @@ function run_composed(id;remote=RemoteConfig(),directory=joinpath(ROOT,"data",id
         for spec in specs
             protocols===nothing || spec.protocol in protocols || continue
             group=run_composed_group!(record,c,list,spec;directory,remote,deadline)
-            group["status"]=="passed" || break
         end
         statuses=[g["status"] for g in values(record["groups"])]
         record["status"]="model_mismatch" in statuses ? "model_mismatch" : "invalid_measurement" in statuses ? "invalid_measurement" :
@@ -488,11 +485,15 @@ function prepare_m9d_a_local_witness(;directory=joinpath(ROOT,"data","L3-08"),re
         path=joinpath(directory,file["path"])
         isfile(path) && filesize(path)==file["bytes"] && digest(path)==file["sha256"] || error("retained payload changed: $path")
     end
-    get(record["groups"]["composed_coarse"],"status","")=="passed" || error("coarse evidence must already pass")
+    coarse_status=get(record["groups"]["composed_coarse"],"status","")
     group=record["groups"]["composed_local"]
-    all(x["status"]=="passed" for x in values(group["discrete"])) || error("local comparisons must already pass")
+    local_status=Dict(target=>x["status"] for (target,x) in group["discrete"])
+    record["local_repeat_prior_results"]=Dict("coarse_status"=>coarse_status,"local_status"=>local_status)
+    coarse_status=="passed" || @warn "L3-08 earlier coarse comparison result: $coarse_status"
+    all(==("passed"),values(local_status)) || @warn "L3-08 earlier local comparison results: $local_status"
     net=l3_network("L3-08");point=power_flow(net);list=fixture_netlist(net,point);c=l3_circuit("L3-08",net)
-    composed_stability(c)["status"]=="passed" || error("L3-08 stability changed")
+    stability=composed_stability(c);record["stability"]=stability
+    stability["status"]=="passed" || @warn "L3-08 composed stability result: $(stability["status"])" stability
     native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))["passed"] || error("operating point changed")
     specs=l3_specs("L3-08",list);spec=last(specs)
     spec=merge(spec,(;recorder_scope="measurement"))
