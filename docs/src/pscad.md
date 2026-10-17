@@ -219,7 +219,7 @@ developer mapping lists the saved source/breaker fields, pins and release comman
 - The educational licence permits 200 electrical nodes and one subsystem.
   Licence-blocked cases can be **export verified** when offline checks pass and
   a fresh station build reports only the node-cap error, with zero warnings.
-  The recorded IEEE39 builds meet that criterion; they have no simulation acceptance.
+  The recorded IEEE39 builds have 528 live nodes. The complete IEEE14 circuit has 216 live nodes.
 - A distributed line or cable cannot run when its travel time is shorter than
   one integration step. Export warns conservatively using length divided by the
   speed of light; PSCAD uses its calculated travel time. Reduce the step or
@@ -233,11 +233,10 @@ developer mapping lists the saved source/breaker fields, pins and release comman
   `transposition = :ideal` maps to `Transp = 1`, but PSCAD 5.1 runs with this flag exit
   abnormally at termination in the validation measurement projects, so it is not a working
   PSCAD route.
-- The P2P example diverges in PSCAD at its unstable Julia operating point, with a growing
-  mode near 3.48 kHz and a growth time near 0.70 ms, consistent with Julia's located roots.
-  Fresh-start fits are not valid linear measurements because AC line energisation exceeds
-  the 0.01 pu departure limit. Early-window measurement requires snapshot restarts at the
-  operating point. See the [P2P record](developers/pscad_mapping.md#P2P-instability).
+- An unstable Julia operating point diverges in PSCAD. The P2P example reproduces the predicted
+  mode near 3.48 kHz, within 2 % in frequency. Its growth rate cannot be fitted from a fresh start
+  because AC line energisation makes the record nonlinear. See the
+  [P2P record](developers/pscad_mapping.md#P2P-instability).
 
 Voltage probes on temporarily pre-charged DC networks measure an existing
 conducting node label directly, using the same line-to-ground voltage function

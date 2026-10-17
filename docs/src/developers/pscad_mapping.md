@@ -776,7 +776,8 @@ Julia's fixed-frame dq reduction of an untransposed line can be non-passive. For
 170 km IEEE9 line, the minimum Hermitian admittance is -0.005134 S in dq versus
 +0.0005009 S in phase coordinates. With a 100 MVA TLC at bus 2, the dq model predicts
 a growing pair near 124.24/124.34 kHz (+2.37 s⁻¹); the phase-domain harmonic
-calculation gives -670.4 s⁻¹, converged at K=1..3. Dq-frame frequency-response and
+calculation gives -670.4 s⁻¹, converged at K=1..3. The IEEE9 circuit with a TLC was not run
+in PSCAD. Dq-frame frequency-response and
 stability comparisons are invalid for systems with significant asymmetry in their
 untransposed lines at the frequencies of interest; compare in the phase domain
 instead.
@@ -835,22 +836,33 @@ Reduce the integration step or explicitly change physical section length.
 The recorded educational licence permits 200 electrical nodes and one
 subsystem. IEEE9 uses 78 live nodes. IEEE39 classic/builder use 528 and build
 with only the node-cap error, zero warnings. Their exports pass offline checks;
-no simulation result exists under that licence. Bus conductor counts exclude
+they were not run in PSCAD under that licence. Bus conductor counts exclude
 internal component nodes and do not predict licence usage.
 
 ### P2P instability
 
-The 25 km cable plus 75 km DC OHL system is unstable at its Julia operating
-point. Located roots are +1374/+1426 s⁻¹ at
-3429/3527 Hz dq; abc sidebands are 3479/3477 Hz, with
-0.728/0.701 ms growth times. The recorded PSCAD trace fits 3473 Hz and
-0.688 ms over 0.3–1.8 ms, an interval chosen after inspecting the record.
-Fresh-start early-window fits are invalid because line energisation produces 11.5 pu
-peak departure against the 0.01 pu limit. Differential modulation-delay states account
-for 98.81–98.84 % of explicit converter-state participation; distributed-line states are excluded.
+PSCAD reproduces the instability Julia predicts for the original P2P. Julia locates two growing
+modes at signed abc frequencies +3478.5 Hz with growth 1374 s⁻¹ and -3476.6 Hz with growth
+1426 s⁻¹. The fresh-start record at 1.0 us fits a growing mode at +3543 Hz and 1630 s⁻¹ over
+0.3–1.8 ms. Frequency is 1.9 % and growth is 19 % above Julia's +3478.5 Hz mode. The second
+mode is not resolved; its fit is at -4122 Hz.
 
-The 200 us delay interacts with the roughly 3 kHz OHL resonance. The builder
-screen gives converter `c1` the AC interface of converter `c2`: 333 kV, ratio 333/380,
+The record is nonlinear in that interval. AC line energisation from the uncharged start gives
+11.5 pu peak departure and arm insertion indices outside [0,1]. The harness status is
+`invalid_measurement`, and the growth rate is not determined to 10 %.
+A separate phase-a trace at 1 us fits 3473 Hz and a 0.688 ms growth time (1453 s⁻¹) over
+0.3–1.8 ms. That interval was chosen after inspecting the record.
+
+For the P2P with AC grids without its 80 km line, Julia's +160.6 Hz mode at 55.0 s⁻¹ completes
+0.24 cycles in the 1.5 ms fit interval. Its 2 ms records cannot show that mode.
+EMTDC steps of 0.2 and 0.25 us fail at the converter-transformer star point. Steps of 0.5 and
+1.0 us run.
+
+The 200 us modulation delay interacts with the roughly 3 kHz overhead-line resonance.
+Differential modulation-delay states account for 98.81–98.84 % of explicit converter-state
+participation, with distributed-line states excluded.
+
+The builder screen gives converter `c1` the AC interface of converter `c2`: 333 kV, ratio 333/380,
 `Lᵣ=0.0461 H`, `Rᵣ=0.4103 Ω`. With both converter delays varied and
 Padé orders fixed at 5/5, every candidate is unstable on the 0.01 Hz–100 kHz
 complete-network scan:
@@ -862,8 +874,14 @@ complete-network scan:
 | 50 us | +264 | 15059 | 2 |
 
 These delay changes do not produce a stable example.
-The separate IEEE14 hybrid also has positive roots +72.8 s⁻¹ at
-29.7 Hz and +20.5 s⁻¹ at 82.8 Hz; it has no native validation.
+
+The separate IEEE14 hybrid has positive roots +72.8 s⁻¹ at
+29.7 Hz and +20.5 s⁻¹ at 82.8 Hz. The hybrid has no recorded PSCAD run. The complete IEEE14 circuit has
+216 live nodes, above the educational licence's 200-node limit, and was not run in PSCAD.
+
+The weak-grid grid-forming MMC at SCR 2.5 has Julia complete-network roots +101 ± j360 s⁻¹.
+The circuit was not run in PSCAD. Screen results are recorded with each fixture and reported during
+preparation.
 
 ### Operating-point results and their scope
 
