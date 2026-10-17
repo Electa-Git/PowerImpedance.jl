@@ -1,15 +1,11 @@
-@testset "L4 P6 selected physical data" begin
+@testset "L4 redesigned P2P physical data" begin
     p6=V.fixture("L4-01").factory()
     original=V.fixture("L4-00D").factory()
     @test length(p6.elements)==10
     @test length(original.elements)==8
     @test p6.elements[:ugc].element_model.length==25e3
     @test p6.elements[:ohl].element_model.length==75e3
-    @test all(p6.elements[name].element_model.transposition==:ideal for name in (:tl1,:tl78))
-    @test p6.elements[:ohl].element_model.transposition==:none
-    @test all(e.element_model.transposition==:none for e in values(original.elements)
-        if e.element_model isa Overhead_line)
-    for id in ("L4-04","L4-04D")
+    for id in V.L4_PORT_IDS
         @test all(e.element_model.transposition==:none for e in values(V.fixture(id).factory().elements)
             if e.element_model isa Overhead_line)
     end

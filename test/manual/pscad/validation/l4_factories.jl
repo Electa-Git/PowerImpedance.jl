@@ -46,8 +46,7 @@ function l4_original_p2p_network(; redesigned=false)
             yᵇᶜ=18.,Δyᵇᶜ=0.,Δxᵇᶜ=7.3,Δ̃xᵇᶜ=0.,dˢᵇ=0.,dˢᵃᵍ=6.),
         groundwires=Groundwires(nᵍ=2,Rᵍᵈᶜ=.92,rᵍ=.0062,Δxᵍ=7.3,Δyᵍ=7.,dᵍˢᵃᵍ=6.),
         earth_parameters=(1,1,100),transformation=true))
-    transposition=redesigned ? :ideal : :none
-    add!(net,:tl1,l4_study_ohl(25e3;transposition));add!(net,:tl78,l4_study_ohl(90e3;transposition))
+    add!(net,:tl1,l4_study_ohl(25e3));add!(net,:tl78,l4_study_ohl(90e3))
     for (name,side,bus) in ((:c1,2,:B3),(:tl1,2,:B3),(:tl1,1,:B2),(:g4,1,redesigned ? :G4 : :B2),
             (:g4,2,:gnd),(:c2,2,:B6),(:tl78,1,:B6),(:tl78,2,:B7),(:g1,1,redesigned ? :G1 : :B7),(:g1,2,:gnd))
         composed_ac!(net,name,side,bus)
