@@ -104,6 +104,17 @@ variables:
     JULIA_NUM_PRECOMPILE_TASKS: "1"
 
 
+.makie_preferences:
+  script:
+    - |
+      # Makie's precompile workload alone exceeds the runner's memory limit
+      # (OOMKilled); skip it for the environment that the job instantiates.
+      for package in Makie CairoMakie WGLMakie GraphMakie; do
+        printf '[%s]\nprecompile_workload = false\n\n' "$package"
+      done > "$MAKIE_PROJECT/LocalPreferences.toml"
+      cat "$MAKIE_PROJECT/LocalPreferences.toml"
+
+
 .julia_formatter_resources:
   variables:
     KUBERNETES_CPU_REQUEST: "1"
@@ -232,6 +243,8 @@ extension_tests:
 
 plotting_tests:
   extends: [.julia_heavy_resources, .julia_plotting_precompile]
+  variables:
+    MAKIE_PROJECT: "integration/plotting/headless"
   image: julia:1.12.6-bookworm
   stage: test
   timeout: 1h
@@ -248,6 +261,7 @@ plotting_tests:
     - apt-get install -y --no-install-recommends git ca-certificates
     - rm -rf /var/lib/apt/lists/*
   script:
+    - !reference [.makie_preferences, script]
     - julia --version
     - |
       julia --project=integration/plotting/headless --startup-file=no -e '
@@ -314,6 +328,8 @@ formatter:
 
 docs_check:
   extends: [.julia_heavy_resources, .julia_plotting_precompile]
+  variables:
+    MAKIE_PROJECT: "docs"
   image: julia:1.12.6-bookworm
   stage: docs
   needs:
@@ -331,6 +347,7 @@ docs_check:
     - apt-get install -y --no-install-recommends git ca-certificates
     - rm -rf /var/lib/apt/lists/*
   script:
+    - !reference [.makie_preferences, script]
     - julia --version
     - git --version
     - |
@@ -628,6 +645,8 @@ github_release_coverage:
 
 pages:
   extends: [.julia_heavy_resources, .julia_plotting_precompile]
+  variables:
+    MAKIE_PROJECT: "docs"
   image: julia:1.12.6-bookworm
   stage: deploy
   cache:
@@ -642,6 +661,7 @@ pages:
     - apt-get install -y --no-install-recommends git ca-certificates openssh-client
     - rm -rf /var/lib/apt/lists/*
   script:
+    - !reference [.makie_preferences, script]
     - julia --version
     - git --version
     - |
