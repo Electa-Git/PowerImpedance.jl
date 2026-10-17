@@ -186,7 +186,10 @@ runpy.run_path = lambda path: {"identify": lambda version, app: dict(IDENTITY)}
 function runner_arguments(directory, output; verbosity = "0", snapshot = false,
         port = 0, owned = true, remote_root = directory)
     project = joinpath(directory, "generated.pscx")
-    write(project, "fixture")
+    # The runner parses component positions before and after loading the project.
+    write(project, """<project name="generated"><definitions><Definition name="Main">
+        <schematic><User id="1" x="36" y="72" defn="fixture"/></schematic>
+        </Definition></definitions></project>""")
     settings = Dict{String, Any}("time_duration" => 0.0005, "time_step_us" => 50.0,
         "sample_step_us" => 250.0, "output_stem" => "fixture", "plot_type" => "OUT")
     snapshot && (settings["snapshot_time"] = 0.00025)
