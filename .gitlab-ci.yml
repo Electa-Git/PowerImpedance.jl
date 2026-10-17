@@ -174,7 +174,9 @@ extension_tests:
     policy: pull-push
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends git ca-certificates python3
+    # The PSCAD runner protocol tests load PythonCall against the system Python,
+    # as a station does; PythonCall needs its shared library, not only the interpreter.
+    - apt-get install -y --no-install-recommends git ca-certificates python3 libpython3-dev
     - rm -rf /var/lib/apt/lists/*
   script:
     - julia --version
