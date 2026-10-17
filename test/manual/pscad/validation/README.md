@@ -50,11 +50,12 @@ stored-data preparation procedure.
 For local checks without native execution:
 
 ```sh
-julia --project=test/manual/pscad/validation -e 'using Test, PowerImpedance; include("test/pscad/runtests.jl")'
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/runtests.jl
 julia --project=test/manual/pscad/validation test/manual/pscad/validation/check_projects.jl "$fixture"
 julia --project=test/manual/pscad/validation test/manual/pscad/validation/reanalyse.jl "$fixture"
 ```
 
+`runtests.jl` runs the harness's own tests; they are not part of the package's `Pkg.test()`.
 `reanalyse.jl` reads retained OUT/INF and saved-project metadata. Its `--refresh-reference` option
 archives the previous Julia reference and analysis, regenerates power flow/admittance, and
 verifies unchanged project hashes. It does not run PSCAD. Retained measurements keep their

@@ -188,7 +188,8 @@ end
         source = read(path, String)
         expression = Meta.parseall(source; filename = path)
         namespace = if dirname(path) == validation_directory &&
-                       basename(path) ∉ ("prepare.jl", "run_station.jl", "check_projects.jl", "reanalyse.jl")
+                       basename(path) ∉ ("prepare.jl", "run_station.jl", "check_projects.jl", "reanalyse.jl",
+                           "runtests.jl")
             basename(path) == "validation.jl" ? validation_parent :
             getfield(validation_parent, :PSCADValidation)
         else
