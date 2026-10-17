@@ -1,5 +1,8 @@
 abstract type Transmission_line <: AbstractLinFreqDomain end
 
+# Vacuum electric permittivity [F/m], CODATA 2018 recommended value.
+const _VACUUM_PERMITTIVITY = 8.8541878128e-12
+
 function eval_y(tl :: Transmission_line, s :: Complex)
     return abcd_to_y(eval_abcd(tl, s))
 end

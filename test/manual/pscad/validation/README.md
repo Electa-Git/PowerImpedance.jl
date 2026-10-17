@@ -704,9 +704,8 @@ The ±100 Hz image response at c2 reaches 0.50 of the driven response. Blocks dr
 at c2 have 14–21 % Frobenius error, while c1's own impedance agrees within 0.46 %.
 Every operating-point comparison passes. The untransposed coarse group takes 5537 s of station time.
 
-A transposed variant was built; its 25 km line's series impedance agrees with PSCAD's to
-7–8 digits, and PSCAD's shunt admittance is 0.047 % higher from the vacuum-permittivity
-difference (8.854e-12 F/m versus 8.85e-12 F/m).
+A transposed variant was built. At 50 Hz, its 25 km line differs from PSCAD's line
+constants by 7.05e-9 (Z11), 2.29e-8 (Z12), 1.09e-9 (Y11) and 7.71e-10 (Y12) in relative terms.
 EMTDC's abnormal exit at the end of every tested 0.15–32 s measurement run with `Transp = 1`
 prevents measurement despite complete physical outputs; the same project with `Transp = 0`
 ends cleanly.

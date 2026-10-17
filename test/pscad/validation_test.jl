@@ -2616,12 +2616,12 @@ end
 @testset "Stage C frozen factories, native roots, conditioning and DC transfers" begin
     @test V.M9D_C_IDS==["L3-07","L3-06"]
     for id in V.M9D_C_IDS
-        frozen=id=="L3-07" ? Dict("root_real"=>-3.002952344882286,"tone_peak_pu"=>.0005452727356004889,
-            "cond_max"=>20.484651090529557,"cond_refined_f_Hz"=>50.24031352250781,"cond_refined_max"=>20.484666001971004,
-            "discrete_reference"=>Dict("cond_sampled_max"=>20.48543548606819),
-            "wide_contour"=>Dict("return_difference_min"=>.22959219198348105),
-            "DC_transfer"=>Dict("cross_AC_Y_min_pu"=>9.426890937311435e-7,"cross_AC_Y_max_pu"=>.5293441421102023,
-                "max_DC_voltage_transfer_pu"=>.1796941180026974,"max_DC_cable_current_transfer_pu"=>.6675822073141264)) :
+        frozen=id=="L3-07" ? Dict("root_real"=>-3.002953582085381,"tone_peak_pu"=>.0005452727356004889,
+            "cond_max"=>20.48465099589538,"cond_refined_f_Hz"=>50.24031352250781,"cond_refined_max"=>20.484665907148244,
+            "discrete_reference"=>Dict("cond_sampled_max"=>20.485435391837672),
+            "wide_contour"=>Dict("return_difference_min"=>.22964052923058956),
+            "DC_transfer"=>Dict("cross_AC_Y_min_pu"=>9.426894106683335e-7,"cross_AC_Y_max_pu"=>.5293432037413576,
+                "max_DC_voltage_transfer_pu"=>.17969480879566307,"max_DC_cable_current_transfer_pu"=>.6676848137514596)) :
             Dict("root_real"=>-.19784817439781593,"tone_peak_pu"=>.0006705809970911343,
                 "cond_max"=>42.233865753530495,"cond_refined_f_Hz"=>49.996516662233596,"cond_refined_max"=>42.23563695814419,
                 "discrete_reference"=>Dict("cond_sampled_max"=>42.23450947495588))

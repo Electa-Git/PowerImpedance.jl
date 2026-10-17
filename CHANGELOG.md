@@ -42,6 +42,8 @@
 
 ### Fixed
 
+- Overhead-line and cable parameters use CODATA 2018 vacuum permittivity,
+  8.8541878128e-12 F/m. Capacitances increase by about 0.0473 %.
 - Correct the B and D block order in multiconductor line/cable ABCD matrices,
   including imported Z/Y blackbox lines, to restore reciprocal terminal
   admittances and section composition for untransposed geometries. Use concrete

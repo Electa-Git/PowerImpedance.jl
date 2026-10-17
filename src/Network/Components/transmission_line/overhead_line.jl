@@ -338,7 +338,7 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 	# ---------- constants ----------
 	(μᵣ_earth, ϵᵣ_earth, ρ_earth) = tl.earth_parameters
 	μ₀ = 4π * 1e-7
-	ϵ₀ = 8.85e-12
+	ϵ₀ = _VACUUM_PERMITTIVITY
 	μ_earth = μᵣ_earth * μ₀
 	ϵ_earth = ϵᵣ_earth * ϵ₀
 	σ_earth = 1 / ρ_earth

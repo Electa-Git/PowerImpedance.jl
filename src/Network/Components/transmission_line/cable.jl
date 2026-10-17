@@ -216,7 +216,7 @@ function eval_parameters(c::Cable, s::Complex)
 	(μᵣᵍ, ϵᵣᵍ, ρᵍ) = c.earth_parameters
 
 	μ₀ = 4π*1e-7
-	ϵ₀ = 8.85e-12
+	ϵ₀ = _VACUUM_PERMITTIVITY
 	μᵍ = μᵣᵍ * μ₀
 	# ϵᵍ = ϵᵣᵍ * ϵ₀   # not used in the original assembly
 	# σᵍ = 1/ρᵍ        # not used in the original assembly
