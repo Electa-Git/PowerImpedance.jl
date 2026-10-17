@@ -43,15 +43,15 @@ end
 
 function applicable_scan(id, net, list; definition = nothing)
     spec, reference = scan_definition(id, net, list)
-    if id in ("L1-03", "L1-04", "L1-08")
-        frequencies = l1_settings().frequencies # phase tones have no shifted DC sideband
+    if id in ("ac_ohl_untransposed", "ac_cable_coaxial", "ieee9_bus_impedance")
+        frequencies = passive_settings().frequencies # phase tones have no shifted DC sideband
         spec = merge(spec, (; dimension = 3,
             axes = ["p$(port)_$(phase)" for port in eachindex(spec.buses) for phase in ("a", "b", "c")],
             frequencies, phases = [-π*k*(k-1)/length(frequencies) for k in eachindex(frequencies)],
             voltage_bases = repeat(spec.voltage_bases[1:2:end]; inner = 3),
             current_bases = repeat(spec.current_bases[1:2:end]; inner = 3),
-            protocol = "abc", estimated_station_seconds = id == "L1-08" ? 2400 : 660))
-        if id == "L1-08"
+            protocol = "abc", estimated_station_seconds = id == "ieee9_bus_impedance" ? 2400 : 660))
+        if id == "ieee9_bus_impedance"
             twin = phase_twin(net, list)
             reference = cat((phase_network_z(twin, spec.buses, f; floating_stars = true) for f in frequencies)...; dims = 3)
         else
@@ -61,17 +61,17 @@ function applicable_scan(id, net, list; definition = nothing)
         end
         bound = maximum(sum(abs.(scale_response(reference, spec)); dims = 3))
         spec = merge(spec, (; tone_peak_pu = min(5e-5, 0.004/max(bound, 1.0))))
-        if id in ("L1-03", "L1-04")
+        if id in ("ac_ohl_untransposed", "ac_cable_coaxial")
             # Measured cold-start DC-offset time constants: 0.6 s / 3.5 s.
             # Retain the source path and tones; only delay coherent windows.
-            start = id == "L1-03" ? 5.0 : 20.0
+            start = id == "ac_ohl_untransposed" ? 5.0 : 20.0
             spec = merge(spec, (; protocol = "abc_settled",
                 window_starts = (start, start + 1.0), simulation_time = start + 2.0,
-                estimated_station_seconds = id == "L1-03" ? 840 : 2040))
+                estimated_station_seconds = id == "ac_ohl_untransposed" ? 840 : 2040))
         end
-    elseif startswith(id,"L2-")
+    elseif fixture(id).category == :device
         # Frozen by the active-device measurement definition.
-    elseif id == "L1-05"
+    elseif id == "dc_cable_ohl"
         spec = merge(spec, (; protocol = "settled", window_starts = (6.0, 7.0),
             simulation_time = 8.0, estimated_station_seconds = 900))
     else
@@ -108,7 +108,7 @@ reference_filename(spec) = scan_prefix(spec) * "reference.tsv"
 # IEEE9 acceptance concerns each local 3x3 impedance. Cross-bus transfer is
 # retained as evidence but cannot dilute either local block's Frobenius error.
 function response_rows(spec, actual, reference; kwargs...)
-    if spec.id == "L1-08" && spec.dimension == 3
+    if spec.id == "ieee9_bus_impedance" && spec.dimension == 3
         rows = NamedTuple[]
         for port in eachindex(spec.buses)
             indices = (3port-2):3port
@@ -152,7 +152,7 @@ function dq_approximation(id, net, list, directory)
     end
     measured = read_response(joinpath(analysis, spec.quantity == "Y" ? "measured_S.tsv" : "measured_ohm.tsv"),
         length(spec.axes), spec.frequencies)
-    if id == "L1-08"
+    if id == "ieee9_bus_impedance"
         alternative = cat((projected_admittance_z(net, list, spec, f)
             for f in spec.frequencies)...; dims = 3)
         order = "native network reduction of projected element ABCD versus projected element phase Y; ideal sources unchanged"
@@ -168,7 +168,7 @@ function dq_approximation(id, net, list, directory)
     base_rows = comparison_rows(spec.frequencies, scale_response(measured, spec), scale_response(native, spec))
     alt_rows = comparison_rows(spec.frequencies, scale_response(measured, spec), scale_response(alternative, spec))
     record = TOML.parsefile(joinpath(directory, "manifest.toml"))
-    sideband = record["corrected_analysis"]["tier_c_result"]["omitted_sideband_ratio"]
+    sideband = record["corrected_analysis"]["frequency_response_result"]["omitted_sideband_ratio"]
     output = mkpath(joinpath(directory, "analysis", "dq-approximation"))
     write_table(joinpath(output, "per-frequency.tsv"),
         [(frequency_Hz = f, label = "dq approximation",

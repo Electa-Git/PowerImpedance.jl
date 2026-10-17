@@ -1,4 +1,4 @@
-native_node_limit(id)=startswith(id,"L4-") ? 200 : 100
+native_node_limit(id)=fixture(id).category == :system ? 200 : 100
 
 digest(path) = bytes2hex(open(sha256, path))
 
@@ -41,7 +41,7 @@ end
 function write_reference(path, reference)
     rows = [(frequency_Hz = f, row = r, column = c,
                 real_S = real(reference[r, c, k]), imag_S = imag(reference[r, c, k]))
-            for (k, f) in enumerate(l1_settings().frequencies) for c in 1:2 for r in 1:2]
+            for (k, f) in enumerate(passive_settings().frequencies) for c in 1:2 for r in 1:2]
     return write_table(path, rows)
 end
 
@@ -69,7 +69,7 @@ function source_record()
             "src/PSCAD/emitters/impedance.jl", "ext/PowerImpedancePSCADExt/writer.jl"])
     append!(paths, ["src/Network/Components/converter/MMC/" * file for file in
         ("MMC.jl", "electrical.jl", "modulation.jl", "inner_current.jl", "energy.jl")])
-    append!(paths, ["test/pscad/m7_networks.jl", "examples/P2P_HVDC_ALT.jl",
+    append!(paths, ["test/pscad/networks.jl", "examples/P2P_HVDC_ALT.jl",
         "src/Network/NetworkBuilder/gs_converters.jl", "src/Network/Components/machine/SynchronousMachine.jl"])
     return [Dict("path" => path, "sha256" => digest(joinpath(REPOSITORY, path)))
             for path in paths]
@@ -124,19 +124,19 @@ end
 function preparation_record(entry, gate, models; directory)
     return manifest_lists!(Dict{String, Any}(
         "schema_version" => 1, "fixture_id" => entry.id,
-        "fixture_version" => 1, "layer" => first(split(entry.id,'-')), "description" => entry.description,
+        "fixture_version" => 1, "category" => string(entry.category), "description" => entry.description,
         "parent_fixture" => entry.parent, "topology" => entry.topology, "physics" =>
             entry.physics,
-        "stability" => gate, "tiers" => entry.tiers, "estimated_live_nodes" =>
+        "stability" => gate, "measurements" => entry.measurements, "estimated_live_nodes" =>
             entry.estimated_nodes,
         "live_node_limit_exclusive" => native_node_limit(entry.id), "julia_version" => string(VERSION),
         "export_commit" => readchomp(`git -C $REPOSITORY rev-parse HEAD`),
         "source_files" => source_record(), "pscad_version_observed" => "not_run",
         "compiler_observed" => "not_run", "model_differences" => entry.differences,
-        "status" => "prepared_station_pending", "tier_a_tolerances" => "existing compare_operating_point defaults",
-        "tier_b_tolerances" => Dict("rms" => 0.05, "peak" => 0.1, "gain" => 0.05,
+        "status" => "prepared_station_pending", "operating_point_tolerances" => "existing compare_operating_point defaults",
+        "time_domain_tolerances" => Dict("rms" => 0.05, "peak" => 0.1, "gain" => 0.05,
             "modal_frequency" => 0.02, "damping" => 0.1),
-        "tier_d_tolerances" =>
+        "growth_tolerances" =>
             Dict("frequency" => 0.02, "growth" => 0.1, "growth_floor_per_s" => 0.5),
         "projects" =>
             [Dict("axis" => axis, "path" => relpath(model.project_path, directory),

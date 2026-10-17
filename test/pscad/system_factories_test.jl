@@ -1,9 +1,9 @@
-# Included inside PSCADL4ValidationTests, which defines V and imports the test APIs.
-@testset "L4 frozen study factories and offline power flow" begin
-    @test V.L4_PORT_IDS == ["L4-01","L4-03","L4-04","L4-00D","L4-04D"]
-    @test V.fixture("L4-04D").tiers == ["D"]
-    @test_throws ArgumentError V.fixture("L4-missing")
-    ieee=V.l4_ieee14_network()
+# Included inside PSCADSystemValidationTests, which defines V and imports the test APIs.
+@testset "Frozen system factories and offline power flow" begin
+    @test V.SYSTEM_PORT_IDS == ["p2p_redesigned","ieee14","p2p_ac_grids","p2p_original","p2p_ac_single_line"]
+    @test V.fixture("p2p_ac_single_line").measurements == ["growth"]
+    @test_throws ArgumentError V.fixture("unknown_system")
+    ieee=V.system_ieee14_network()
     @test sort!([n for n in keys(ieee.elements) if startswith(string(n),"Load")]) ==
         [:LoadB2,:LoadB3,:LoadB4,:LoadB5,:LoadB6]
     @test ieee.elements[:MMC1].setpoint.Pac == -1000
@@ -33,7 +33,7 @@
         # Physical scalar impedance remains independently evaluable.
         @test ieee.elements[name].element_model.value(s)[1,1] ≈ expected
     end
-    stable=V.l4_p2p_ac_network();unstable=V.l4_p2p_ac_network(unstable=true)
+    stable=V.system_p2p_ac_network();unstable=V.system_p2p_ac_network(unstable=true)
     @test haskey(stable.elements,:tl67_2)
     @test !haskey(unstable.elements,:tl67_2)
     @test stable.elements[:tl67_2].element_model.length == 80e3
@@ -47,10 +47,10 @@
         @test c2.sigma_control.zscc isa PowerImpedance.NoZeroSequenceCurrentControl
         @test iszero(c2.modulation.delay1.timeDelay)
     end
-    fresh=V.l4_ieee14_network()
+    fresh=V.system_ieee14_network()
     @test fresh !== ieee && fresh.elements[:MMC1] !== ieee.elements[:MMC1]
     # Full solves, not isolated controller construction, exercise each factory.
-    for (id,net) in zip(("L4-03","L4-04","L4-04D"),(ieee,stable,unstable))
+    for (id,net) in zip(("ieee14","p2p_ac_grids","p2p_ac_single_line"),(ieee,stable,unstable))
         @testset "$id complete power flow" begin
             point=power_flow(net)
             result=first(point)

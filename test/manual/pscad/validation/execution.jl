@@ -1,5 +1,5 @@
 function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition = nothing)
-    startswith(id, "L3-") && return prepare_composed(id; directory)
+    fixture(id).category == :coupled && return prepare_composed(id; directory)
     P._require_extension()
     entry = fixture(id)
     mkpath(directory)
@@ -19,12 +19,12 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
     gate["status"] == "passed" || @warn "$(entry.id) complete-network stability result: $(gate["status"])" stability=gate
     list = fixture_netlist(net, point)
     spec, reference = applicable_scan(id, net, list;
-        definition = prior === nothing ? definition : prior["tier_c"])
+        definition = prior === nothing ? definition : prior["frequency_response"])
     check_recorder_sampling(spec)
     if prior !== nothing
         history = mkpath(joinpath(directory, "history"))
         cp(path,
-            joinpath(history, "manifest-before-m9a4-" *
+            joinpath(history, "manifest-before-phase_reanalysis-" *
                               Dates.format(now(UTC), "yyyymmddTHHMMSS") * ".toml"))
     end
     spec.travel_lower_bound_s == 0 || spec.time_step < spec.travel_lower_bound_s ||
@@ -59,27 +59,27 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
         record = prior
         get!(record, "preparation_source_files", deepcopy(record["source_files"]))
         push!(record["harness_revisions"],
-            Dict("purpose"=>"M9a4 phase-domain physics and DC settling",
+            Dict("purpose"=>"phase reanalysis phase-domain physics and DC settling",
                 "previous_source_files"=>record["source_files"]))
         record["source_files"] = source_record()
         for (axis, model) in models
             record_project!(record, axis, model, directory)
         end
     end
-    if get(get(record, "tier_c", Dict()), "protocol", "") != spec.protocol && !isempty(spec.protocol)
-        record["previous_tier_c"] = deepcopy(get(record, "tier_c", Dict()))
-        record["previous_tier_c_result"] = deepcopy(get(record, "tier_c_result", Dict()))
-        for field in ("step_witness_definition", "tier_c_result", "amplitude_refinement", "step_refinement")
+    if get(get(record, "frequency_response", Dict()), "protocol", "") != spec.protocol && !isempty(spec.protocol)
+        record["previous_frequency_response"] = deepcopy(get(record, "frequency_response", Dict()))
+        record["previous_frequency_response_result"] = deepcopy(get(record, "frequency_response_result", Dict()))
+        for field in ("step_witness_definition", "frequency_response_result", "amplitude_refinement", "step_refinement")
             haskey(record, field) && (record["previous_" * field] = pop!(record, field))
         end
     end
-    record["tier_c"] = merge(get(record, "tier_c", Dict{String, Any}()), scan_record(spec))
+    record["frequency_response"] = merge(get(record, "frequency_response", Dict{String, Any}()), scan_record(spec))
     if spec.dimension == 3
         record["dq_approximation_table"] = [dq_approximation(id, net, list, directory)]
-        record["phase_reference_provenance"] = id == "L1-08" ?
+        record["phase_reference_provenance"] = id == "ieee9_bus_impedance" ?
             "transformation=false twin: identical copied physical models and replayed a/b/c terminal bus incidence; native make_z ideal-source equations; local Bus1/Bus5 3x3 blocks" :
             "native eval_abcd(element.element_model,s), then abcd_to_y; into-element terminal currents; a/b/c phase order"
-    elseif id == "L1-05"
+    elseif id == "dc_cable_ohl"
         record["settling"] = Dict("observed_envelope_time_constant_s"=>1/2.1,
             "tail_fit_interval_s"=>[0.6, 3.0], "decay_per_s"=>2.1,
             "oscillation_rad_per_s"=>0.8, "current_fit_rms_kA"=>4.601940024186259e-5,
@@ -102,7 +102,7 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
     record["estimated_live_nodes"] < 100 || error("prepared fixture exceeds live-node limit")
     record["stability"] = gate
     haskey(spec, :machine_stability) && (record["machine_stability"] = spec.machine_stability)
-    record["tiers"] = ["A", "C"]
+    record["measurements"] = ["operating_point", "frequency_response"]
     if isempty(spec.protocol) && get(get(record, "corrected_analysis", Dict()), "status", "") == "passed"
         record["qualification_status"] = "passed"
         record["status"] = "passed"
@@ -136,7 +136,7 @@ end
 
 function compare_frequency_runs(results, models, reference, directory; spec = nothing)
     if spec === nothing
-        spec, _ = scan_definition("L1-01", ac_rl_network(), models["baseline"].netlist)
+        spec, _ = scan_definition("passive_ac_rlc", ac_rl_network(), models["baseline"].netlist)
     end
     baseline = scan_samples(results["baseline"], models["baseline"], spec)
     all(results[axis].time == results["baseline"].time for axis in spec.axes) ||
@@ -150,7 +150,7 @@ function compare_frequency_runs(results, models, reference, directory; spec = no
     change = matrix_change(normalized[2], normalized[1]; epsilon = 0.01)
     quality = scan_quality(results["baseline"].time, baseline, injected, spec)
     quality["valid"] &= change["passed"]
-    if spec.id == "L1-01"
+    if spec.id == "passive_ac_rlc"
         held = branch_samples(results["baseline"], models["baseline"]).clamped_voltage
         departure = maximum(maximum(abs, branch_samples(results[axis], models[axis]).clamped_voltage -
                                          held) for axis in spec.axes) /
@@ -159,12 +159,12 @@ function compare_frequency_runs(results, models, reference, directory; spec = no
         quality["valid"] &= departure <= 1e-6
     end
     coupling = sideband_coupling(results["baseline"].time, baseline, injected, spec)
-    mismatch = coupling > C_PASSIVE.epsilon ?
+    mismatch = coupling > PASSIVE_FREQUENCY_LIMITS.epsilon ?
                "phase-domain frequency coupling absent from native fixed-dq LTI reference" :
                ""
     rows = response_rows(spec, scale_response(measured, spec),
         scale_response(reference, spec); active = get(spec,:active,false), valid = quality["valid"], model_mismatch = mismatch)
-    write_table(joinpath(directory, "comparison_C.tsv"), rows)
+    write_table(joinpath(directory, "comparison_frequency_response.tsv"), rows)
     write_response(
         joinpath(directory, spec.quantity == "Y" ? "measured_S.tsv" : "measured_ohm.tsv"),
         measured, spec.frequencies; quantity = spec.quantity)
@@ -172,7 +172,7 @@ function compare_frequency_runs(results, models, reference, directory; spec = no
                     max(abs(complex(row.reference_real_pu, row.reference_imag_pu)), 0.02)
                     for row in rows])
     quality["omitted_sideband_ratio"] = coupling
-    quality["model_mismatch"] = coupling > C_PASSIVE.epsilon ?
+    quality["model_mismatch"] = coupling > PASSIVE_FREQUENCY_LIMITS.epsilon ?
                                 "phase-domain frequency coupling absent from native fixed-dq LTI reference" :
                                 ""
     quality["status"] = !isempty(quality["model_mismatch"]) ? "model_mismatch" :
@@ -202,12 +202,13 @@ end
 
 # A copied native completion record is valid even when the harness crashes before adding a
 # run_records entry. Native compute verifies its integrity.
-function completed_axis_runs(directory, axis, project_sha256)
+function completed_axis_runs(directory, axis, project_sha256; recorded_paths=String[])
     runs = joinpath(directory, "runs")
     isdir(runs) || return String[]
     candidates = String[]
     for work_root in readdir(runs; join = true)
-        isdir(work_root) && startswith(basename(work_root), axis * "-") || continue
+        isdir(work_root) && (startswith(basename(work_root), axis * "-") ||
+            relpath(work_root,directory) in recorded_paths) || continue
         for root in readdir(work_root; join = true)
             isdir(root) && startswith(basename(root), "run-") &&
             isfile(joinpath(root, "complete.toml")) &&
@@ -227,8 +228,8 @@ function completed_axis_runs(directory, axis, project_sha256)
     return sort!(candidates; by = root -> mtime(joinpath(root, "complete.toml")), rev = true)
 end
 
-function resume_axis(model, axis, directory, remote)
-    for root in completed_axis_runs(directory, axis, digest(model.project_path))
+function resume_axis(model, axis, directory, remote; recorded_paths=String[])
+    for root in completed_axis_runs(directory, axis, digest(model.project_path); recorded_paths)
         result = try
             compute(model, PSCADRun(); options = (
                 remote, resume_run_directory = root, verbosity = 1))
@@ -268,20 +269,22 @@ end
 function reanalyse_fixture(id; directory = joinpath(ROOT, "data", id))
     record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
     net = fixture(id).factory()
-    list = P.netlist(net, power_flow(net))
-    spec, _ = scan_definition(id, net, list)
-    reference = read_response(joinpath(directory, "reference.tsv"), length(spec.axes), spec.frequencies)
+    list = fixture_netlist(net, power_flow(net))
+    spec, _ = applicable_scan(id, net, list; definition = record["frequency_response"])
+    reference = read_response(joinpath(directory, reference_filename(spec)), length(spec.axes), spec.frequencies)
     models, results = Dict{String, P.PSCADModel}(), Dict{String, P.PSCADResult}()
     for key in ["baseline"; spec.axes]
-        models[key], results[key] = stored_axis(record, key, list, spec, directory)
+        models[key], results[key] = stored_axis(record, scan_prefix(spec)*key, list, spec, directory)
     end
     output = mkpath(joinpath(directory, "analysis", "probe-orientation"))
     rows = compare_operating_point(results["baseline"], models["baseline"])
-    write_table(joinpath(output, "comparison_A.tsv"), rows)
+    write_table(joinpath(output, "comparison_operating_point.tsv"), rows)
     # Signed and magnitude acceptance rows are evaluated from unchanged raw
     # channels; orientation metadata is used only by the Y/Z extraction.
-    read(joinpath(output, "comparison_A.tsv"), String) ==
-    read(joinpath(directory, "comparison_A.tsv"), String) || error("tier A rows changed")
+    comparison = isempty(scan_prefix(spec)) ? joinpath(directory,"comparison_operating_point.tsv") :
+                 joinpath(directory,"analysis",spec.protocol,"comparison_operating_point.tsv")
+    read(joinpath(output, "comparison_operating_point.tsv"), String) ==
+    read(comparison, String) || error("operating point rows changed")
     result = compare_frequency_runs(results, models, reference, output; spec)
     qualified = record["amplitude_refinement"]["passed"] && record["step_refinement"]["passed"]
     # Applying the same diagonal +/-1 row matrix to both comparison matrices preserves
@@ -289,8 +292,8 @@ function reanalyse_fixture(id; directory = joinpath(ROOT, "data", id))
     # quality metrics retain their measured values.
     status = result["status"] == "model_mismatch" ? "model_mismatch" :
              all(rows.within_tolerance) && result["status"] == "passed" && qualified ? "passed" : "failed"
-    record["corrected_analysis"] = Dict("status"=>status, "tier_c_result"=>result,
-        "directory"=>relpath(output, directory), "tier_a_rows_unchanged"=>true,
+    record["corrected_analysis"] = Dict("status"=>status, "frequency_response_result"=>result,
+        "directory"=>relpath(output, directory), "operating_point_rows_unchanged"=>true,
         "witness_gates_unchanged"=>true,
         "provenance"=>"raw station outputs; saved project hash and recorded probe orientations")
     record["source_files"] = source_record()
@@ -302,14 +305,14 @@ end
 # Change only Julia's evaluation of a retained measurement; the native project,
 # probes, drive, bases and refinement comparisons remain the recorded ones.
 function refresh_references(id; directory = joinpath(ROOT, "data", id))
-    id in ("L1-04", "L1-05") || error("reference refresh is restricted to the corrected cable fixtures")
+    id in ("ac_cable_coaxial", "dc_cable_ohl") || error("reference refresh is restricted to the corrected cable fixtures")
     record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
     stamp = Dates.format(now(UTC), "yyyymmddTHHMMSS")
-    history = mkpath(joinpath(directory, "history", "m9a11-" * stamp))
-    for file in ("manifest.toml", "operating_point.tsv", reference_filename((; protocol=record["tier_c"]["protocol"])))
+    history = mkpath(joinpath(directory, "history", "reference_refresh-" * stamp))
+    for file in ("manifest.toml", "operating_point.tsv", reference_filename((; protocol=record["frequency_response"]["protocol"])))
         cp(joinpath(directory,file),joinpath(history,file))
     end
-    analysis = joinpath(directory,"analysis", isempty(record["tier_c"]["protocol"]) ? "dq" : record["tier_c"]["protocol"])
+    analysis = joinpath(directory,"analysis", isempty(record["frequency_response"]["protocol"]) ? "dq" : record["frequency_response"]["protocol"])
     measured_path = joinpath(analysis, "measured_S.tsv")
     saved = only(filter(f -> f["path"] == relpath(measured_path, directory), record["files"]))
     digest(measured_path) == saved["sha256"] || error("retained measured matrix changed")
@@ -317,35 +320,35 @@ function refresh_references(id; directory = joinpath(ROOT, "data", id))
     projects = Dict(p["path"]=>p["sha256"] for p in record["projects"])
     all(digest(joinpath(directory,path))==hash for (path,hash) in projects) || error("project hash changed")
     net = fixture(id).factory(); list = P.netlist(net,power_flow(net))
-    spec, reference = applicable_scan(id,net,list;definition=record["tier_c"])
+    spec, reference = applicable_scan(id,net,list;definition=record["frequency_response"])
     model, result = stored_axis(record,scan_prefix(spec)*"baseline",list,spec,directory)
     rows_a = compare_operating_point(result,model)
-    write_table(joinpath(analysis,"comparison_A.tsv"),rows_a)
+    write_table(joinpath(analysis,"comparison_operating_point.tsv"),rows_a)
     write_operating_point(joinpath(directory,"operating_point.tsv"),model)
     write_response(joinpath(directory,reference_filename(spec)),reference,spec.frequencies;quantity=spec.quantity)
     measured = read_response(measured_path,length(spec.axes),spec.frequencies)
-    quality = deepcopy(record["tier_c_result"])
+    quality = deepcopy(record["frequency_response_result"])
     rows = response_rows(spec,scale_response(measured,spec),scale_response(reference,spec);
         valid=quality["valid"],model_mismatch=quality["model_mismatch"])
-    write_table(joinpath(analysis,"comparison_C.tsv"),rows)
+    write_table(joinpath(analysis,"comparison_frequency_response.tsv"),rows)
     quality["max_frobenius_error"] = maximum(r.frobenius_error for r in rows)
     quality["status"] = !isempty(quality["model_mismatch"]) ? "model_mismatch" :
         !quality["valid"] ? "invalid_measurement" : all(r.within_tolerance for r in rows) ? "passed" : "failed"
     worst = argmax([r.complex_error_pu/max(abs(complex(r.reference_real_pu,r.reference_imag_pu)),.02) for r in rows])
     quality["worst_column"] = rows[worst].column; quality["worst_frequency_Hz"] = rows[worst].frequency_Hz
-    record["tier_a_status"] = all(rows_a.within_tolerance) ? "passed" : "failed"
-    record["tier_c_result"] = quality
+    record["operating_point_status"] = all(rows_a.within_tolerance) ? "passed" : "failed"
+    record["frequency_response_result"] = quality
     qualified = record["amplitude_refinement"]["passed"] && record["step_refinement"]["passed"]
-    record["status"] = record["tier_a_status"]==quality["status"]=="passed" && qualified ? "passed" : "failed"
-    push!(record["harness_revisions"],Dict("purpose"=>"M9a11 corrected cable Julia references only",
+    record["status"] = record["operating_point_status"]==quality["status"]=="passed" && qualified ? "passed" : "failed"
+    push!(record["harness_revisions"],Dict("purpose"=>"reference refresh corrected cable Julia references only",
         "history"=>relpath(history,directory),"reference_commit"=>readchomp(`git -C $REPOSITORY rev-parse HEAD`),
         "old_source_files"=>record["source_files"],"projects_unchanged"=>true,
-        "measurement"=>"retained extracted SI matrices and original quality gates; baseline raw output for tier A",
+        "measurement"=>"retained extracted SI matrices and original quality gates; baseline raw output for operating point",
         "refinements"=>"reference-independent measured half-amplitude and half-step gates retained"))
     record["source_files"] = source_record()
-    record["corrected_analysis"] = Dict("status"=>record["status"],"tier_c_result"=>quality)
+    record["corrected_analysis"] = Dict("status"=>record["status"],"frequency_response_result"=>quality)
     all(digest(joinpath(directory,path))==hash for (path,hash) in projects) || error("project hash changed")
     write_manifest(directory,record)
-    println(id,": A=",record["tier_a_status"]," C=",quality["status"]," max_F=",quality["max_frobenius_error"])
+    println(id,": operating_point=",record["operating_point_status"]," frequency_response=",quality["status"]," max_F=",quality["max_frobenius_error"])
     return record
 end

@@ -252,7 +252,7 @@ end
                     wait(child)
                     @test child.exitcode == 1
                 end
-            elseif basename(path) == "acceptance_m7.jl"
+            elseif basename(path) == "acceptance_networks.jl"
                 # Evaluate only the message classifier, never exports or runs.
                 definition = only(filter(
                     statement -> statement isa Expr &&
@@ -264,7 +264,7 @@ end
                 licence = "error\tbuild\t\tThe current license is limited to a maximum of 200 electrical nodes. This project contains 528 electrical nodes.\n"
                 normal = "normal\tbuild\t\tThe total number of live nodes: 528\n"
                 summary = "normal\tbuild\t\t======== Build: 1 errors, 0 warnings ========\n"
-                @testset "M7 licence build verdict" begin
+                @testset "network licence build verdict" begin
                     @test verdict(normal * licence * summary) ==
                           "export verified (licence-blocked)"
                     @test verdict(licence * normal * summary) ==

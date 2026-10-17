@@ -1,8 +1,8 @@
 # Frozen ports of Jan Kircheis study circuits retain all source units. Source and
-# translation details: l4_translation.md. These factories do not read or execute the
+# translation details: system_model_translation.md. These factories do not read or execute the
 # source repository.
 
-function l4_original_p2p_network(; redesigned=false)
+function system_original_p2p_network(; redesigned=false)
     net=Network()
     net.voltageBase[1]=380/sqrt(3)
     for name in (:g1,:g4)
@@ -46,7 +46,7 @@ function l4_original_p2p_network(; redesigned=false)
             yᵇᶜ=18.,Δyᵇᶜ=0.,Δxᵇᶜ=7.3,Δ̃xᵇᶜ=0.,dˢᵇ=0.,dˢᵃᵍ=6.),
         groundwires=Groundwires(nᵍ=2,Rᵍᵈᶜ=.92,rᵍ=.0062,Δxᵍ=7.3,Δyᵍ=7.,dᵍˢᵃᵍ=6.),
         earth_parameters=(1,1,100),transformation=true))
-    add!(net,:tl1,l4_study_ohl(25e3));add!(net,:tl78,l4_study_ohl(90e3))
+    add!(net,:tl1,system_study_ohl(25e3));add!(net,:tl78,system_study_ohl(90e3))
     for (name,side,bus) in ((:c1,2,:B3),(:tl1,2,:B3),(:tl1,1,:B2),(:g4,1,redesigned ? :G4 : :B2),
             (:g4,2,:gnd),(:c2,2,:B6),(:tl78,1,:B6),(:tl78,2,:B7),(:g1,1,redesigned ? :G1 : :B7),(:g1,2,:gnd))
         composed_ac!(net,name,side,bus)
@@ -65,23 +65,23 @@ function l4_original_p2p_network(; redesigned=false)
     return net
 end
 
-function l4_ieee14_network()
+function system_ieee14_network()
     P_MMC1=-1000
     Q_MMC1= 0
     P_MMC2=-1000
     Q_MMC2=0
     Q_MMC3=0.0
     Q_MMC4=0.0
-    R_B2=l4_shunt_parameter(72.333,380,"R")
-    L_B2=l4_shunt_parameter(42.333,380,"L")
-    R_B5=l4_shunt_parameter(25.333,380,"R")
-    L_B5=l4_shunt_parameter(05.333,380,"L")
-    R_B3=l4_shunt_parameter(314,380,"R")
-    L_B3=l4_shunt_parameter(63.333,380,"L")
-    R_B4=l4_shunt_parameter(159.333,380,"R")
-    C_B4=l4_shunt_parameter(13.000,380,"C")
-    R_B6=l4_shunt_parameter(37.333,380,"R")
-    L_B6=l4_shunt_parameter(25.0,380,"L")
+    R_B2=system_shunt_parameter(72.333,380,"R")
+    L_B2=system_shunt_parameter(42.333,380,"L")
+    R_B5=system_shunt_parameter(25.333,380,"R")
+    L_B5=system_shunt_parameter(05.333,380,"L")
+    R_B3=system_shunt_parameter(314,380,"R")
+    L_B3=system_shunt_parameter(63.333,380,"L")
+    R_B4=system_shunt_parameter(159.333,380,"R")
+    C_B4=system_shunt_parameter(13.000,380,"C")
+    R_B6=system_shunt_parameter(37.333,380,"R")
+    L_B6=system_shunt_parameter(25.0,380,"L")
     Vm=380/sqrt(3)
     net=Network()
     net.voltageBase[1]=Vm
@@ -344,25 +344,25 @@ function l4_ieee14_network()
             limits=PowerImpedance.Limits(P_min=-1500, P_max=1500, Q_min=-500, Q_max=500)
         )
     )
-    add!(net,:WF1,l4_windfarm())
-    add!(net,:WF2,l4_windfarm())
-    add!(net,:WF3,l4_windfarm())
-    add!(net,:T1_2,l4_study_ohl(100e3))
-    add!(net,:T1_5,l4_study_ohl(100e3))
-    add!(net,:T2_5,l4_study_ohl(100e3))
-    add!(net,:T4_5,l4_study_ohl(100e3))
-    add!(net,:T2_4,l4_study_ohl(100e3))
-    add!(net,:T2_3,l4_study_ohl(100e3))
-    add!(net,:T3_4,l4_study_ohl(100e3))
-    add!(net,:T12_13,l4_study_ohl(100e3))
-    add!(net,:T6_12,l4_study_ohl(100e3))
-    add!(net,:T6_13,l4_study_ohl(20e3))
-    add!(net,:T6_11,l4_study_ohl(5e3))
-    add!(net,:T10_11,l4_study_ohl(5e3))
-    add!(net,:T13_14,l4_study_ohl(20e3))
-    add!(net,:T9_14,l4_study_ohl(20e3))
-    add!(net,:T9_10,l4_study_ohl(5e3))
-    add!(net,:T7_9,l4_study_ohl(5e3))
+    add!(net,:WF1,system_windfarm())
+    add!(net,:WF2,system_windfarm())
+    add!(net,:WF3,system_windfarm())
+    add!(net,:T1_2,system_study_ohl(100e3))
+    add!(net,:T1_5,system_study_ohl(100e3))
+    add!(net,:T2_5,system_study_ohl(100e3))
+    add!(net,:T4_5,system_study_ohl(100e3))
+    add!(net,:T2_4,system_study_ohl(100e3))
+    add!(net,:T2_3,system_study_ohl(100e3))
+    add!(net,:T3_4,system_study_ohl(100e3))
+    add!(net,:T12_13,system_study_ohl(100e3))
+    add!(net,:T6_12,system_study_ohl(100e3))
+    add!(net,:T6_13,system_study_ohl(20e3))
+    add!(net,:T6_11,system_study_ohl(5e3))
+    add!(net,:T10_11,system_study_ohl(5e3))
+    add!(net,:T13_14,system_study_ohl(20e3))
+    add!(net,:T9_14,system_study_ohl(20e3))
+    add!(net,:T9_10,system_study_ohl(5e3))
+    add!(net,:T7_9,system_study_ohl(5e3))
     add!(
         net,
         :CableDC23,
@@ -453,14 +453,14 @@ function l4_ieee14_network()
 end
 
 # Source calc_RLC: S is one-phase power, V is line-to-line RMS kV.
-function l4_shunt_parameter(S,V,component)
+function system_shunt_parameter(S,V,component)
     component == "R" && return V^2/(3S)
     component == "L" && return V^2/(3S*2π*50)
     component == "C" && return 3S/(V^2*2π*50)
     error("unknown shunt component $component")
 end
 
-function l4_p2p_ac_network(; unstable=false)
+function system_p2p_ac_network(; unstable=false)
     transmissionVoltage=380/sqrt(3)
     pHVDC1=600; qC1=0; qC2=300
     net=Network()
@@ -602,10 +602,10 @@ function l4_p2p_ac_network(; unstable=false)
             transformation = true
         )
     )
-    add!(net,:tl1,l4_study_ohl(25e3))
-    add!(net,:tl2,l4_study_ohl(25e3))
-    add!(net,:tl3,l4_study_ohl(50e3))
-    add!(net,:tl67,l4_study_ohl(90e3))
+    add!(net,:tl1,system_study_ohl(25e3))
+    add!(net,:tl2,system_study_ohl(25e3))
+    add!(net,:tl3,system_study_ohl(50e3))
+    add!(net,:tl67,system_study_ohl(90e3))
     connect!(net,(:g3,Symbol("1.1")), (:Zg3,Symbol("1.1")), :Bg3d)
     connect!(net,(:g3,Symbol("1.2")), (:Zg3,Symbol("1.2")), :Bg3q)
     connect!(net,(:g2,Symbol("1.1")), (:Zg2,Symbol("1.1")), :Bg2d)
@@ -632,7 +632,7 @@ function l4_p2p_ac_network(; unstable=false)
     connect!(net,(:g1,Symbol("2.2")), :gndq)
     connect!(net)
     if !unstable
-        add!(net,:tl67_2,l4_study_ohl(80e3))
+        add!(net,:tl67_2,system_study_ohl(80e3))
         for (pin,bus) in (("1.1",:B6d),("1.2",:B6q),("2.1",:B7d),("2.2",:B7q))
             connect!(net,(:tl67_2,Symbol(pin)),bus)
         end
@@ -644,7 +644,7 @@ end
 # The active case is specified in the source comments; the executable source scans a
 # passive grid with a dummy source. T6_11 is open. Source wind farm: 600 MVA / 380 kV /
 # 640 kV.
-function l4_windfarm()
+function system_windfarm()
     return tlc(
         elec=PowerImpedance.ElectricalTLC(
             Lᵣ=0.08*(380^2/600)/2/pi/50,
@@ -682,7 +682,7 @@ function l4_windfarm()
 end
 
 # Shared source OHL geometry; each circuit factory specifies its physical length.
-function l4_study_ohl(length;transposition=:none)
+function system_study_ohl(length;transposition=:none)
     return overhead_line(
         length=length,
         transposition=transposition,
@@ -712,15 +712,15 @@ function l4_study_ohl(length;transposition=:none)
     )
 end
 
-for (id,description,parent,tiers,factory) in (
-    ("L4-01","P6 redesigned P2P at 100 MW","local P2P; selected P6 parameters",["A","C"],()->l4_original_p2p_network(redesigned=true)),
-    ("L4-03","IEEE14 stable baseline","IEEE14bus/IEEE14bus.jl",["A","C"],l4_ieee14_network),
-    ("L4-04","P2P with AC grids and both lines","P2P_HVDC/P2P_HVDC_AC_grid.jl",["A","C"],l4_p2p_ac_network),
-    ("L4-00D","Original P2P early instability","local P2P",["D"],l4_original_p2p_network),
-    ("L4-04D","P2P with the 80 km line disconnected","P2P_HVDC/P2P_HVDC_AC_grid.jl",["D"],()->l4_p2p_ac_network(unstable=true)))
-    push!(REGISTRY,(;id,description,parent,factory,topology=description,
+for (id,description,parent,measurements,factory) in (
+    ("p2p_redesigned","Redesigned P2P at 100 MW","local P2P; selected redesigned parameters",["operating_point", "frequency_response"],()->system_original_p2p_network(redesigned=true)),
+    ("ieee14","IEEE14 stable baseline","IEEE14bus/IEEE14bus.jl",["operating_point", "frequency_response"],system_ieee14_network),
+    ("p2p_ac_grids","P2P with AC grids and both lines","P2P_HVDC/P2P_HVDC_AC_grid.jl",["operating_point", "frequency_response"],system_p2p_ac_network),
+    ("p2p_original","Original P2P early instability","local P2P",["growth"],system_original_p2p_network),
+    ("p2p_ac_single_line","P2P with the 80 km line disconnected","P2P_HVDC/P2P_HVDC_AC_grid.jl",["growth"],()->system_p2p_ac_network(unstable=true)))
+    push!(REGISTRY,(;id,category=:system,description,parent,factory,topology=description,
         physics=["complete AC/DC network interaction"],
         dissipativity="finite distributed-network contours and located roots; infinite spectrum unenumerated",
-        differences=["See l4_translation.md"],tiers,estimated_nodes=-1))
+        differences=["See system_model_translation.md"],measurements,estimated_nodes=-1))
 end
-const L4_PORT_IDS = [entry.id for entry in REGISTRY if startswith(entry.id,"L4-")]
+const SYSTEM_PORT_IDS = [entry.id for entry in REGISTRY if entry.category == :system]

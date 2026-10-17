@@ -84,9 +84,9 @@ function voltage_port(project, settings, peak_kV, angle_rad; name = "VoltagePort
     return P.ModuleDefinitionPlan(name, parameters, ports, canvas)
 end
 
-function l1_plan(netlist, name, axis)
+function passive_plan(netlist, name, axis)
     axis in (:baseline, :d, :q) || throw(ArgumentError("unknown injection axis"))
-    spec = l1_settings()
+    spec = passive_settings()
     settings = P.SimulationSettings(simulation_time = spec.simulation_time,
         time_step = spec.time_step, sample_step = spec.sample_step,
         frequency = spec.frequency, source_ramp = 0.0, output_stem = "scan")
@@ -123,13 +123,13 @@ function injection_project(baseline::String, axis)
     end
     axis == :baseline && return baseline
     before = "<param name=\"$(axis)_amplitude_pu\" value=\"0.0\"/>"
-    after = "<param name=\"$(axis)_amplitude_pu\" value=\"$(l1_settings().tone_peak_pu)\"/>"
+    after = "<param name=\"$(axis)_amplitude_pu\" value=\"$(passive_settings().tone_peak_pu)\"/>"
     return replace(baseline, before => after; count = 1)
 end
 
 function reference_admittance(net)
     return cat(
         (PowerImpedance.get_y(net.elements[:branch], ComplexF64(im * 2π * f))[1:2, 1:2]
-        for f in l1_settings().frequencies)...;
+        for f in passive_settings().frequencies)...;
         dims = 3)
 end

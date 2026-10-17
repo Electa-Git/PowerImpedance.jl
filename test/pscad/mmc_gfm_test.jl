@@ -10,7 +10,7 @@ const P = PI.PSCAD
 const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
     sample_step = 250e-6, source_ramp = 0.0)
 
-@testset "M6a GFM MMC plans and equations" begin
+@testset "GFM MMC plans and equations" begin
     fixture = PSCADFixtures.mmc_gfm_network()
     for network in (fixture.classic, fixture.state)
         pf = network isa Network ? power_flow(network) : NetworkBuilder.solve(network).powerflow

@@ -23,7 +23,7 @@ function arm_signals(x, m, angle)
     for (phase, voltage) in zip(("a", "b", "c"), values))
 end
 
-@testset "M6b LEC, CCC and physical compensated modulation" begin
+@testset "compensated MMC LEC, CCC and physical compensated modulation" begin
     fixture = PSCADFixtures.mmc_compensated_network()
     for network in (fixture.classic, fixture.state)
         pf = network isa Network ? power_flow(network) :

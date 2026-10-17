@@ -5,23 +5,23 @@ using PowerImpedance: RemoteConfig
 const NativePSCAD=parentmodule(@__MODULE__).P
 const P=(;_require_extension=()->nothing,_dc_precharge_buses=list->[],
     PSCADModel=NativePSCAD.PSCADModel,PSCADResult=NativePSCAD.PSCADResult)
-const M9D_B_IDS=String[]
-const M9D_C_IDS=String[]
-const L3_NATIVE_NODES=Dict("L3-01"=>31,"L3-08"=>55)
+const COUPLED_LINE_CONVERTER_IDS=String[]
+const MACHINE_DC_COUPLING_IDS=String[]
+const COUPLED_NATIVE_NODES=Dict("two_tlc_shared_bus"=>31,"mmc_rc_shunt"=>55)
 const attempts=String[]
 const coarse_status=Ref("model_mismatch")
 const screen=Dict{String,Any}("status"=>"failed","most_positive_located_real_per_s"=>10.,"root_scope"=>"test roots")
 const sensitivity=[Dict("passed"=>false,"native_real_per_s"=>10.)]
-fixture(id)=(;id,factory=()->(;elements=Dict()),estimated_nodes=1,description="test circuit",
-    parent="",topology="test",physics=String[],tiers=["C"],differences=String[])
+fixture(id)=(;id,category=parentmodule(@__MODULE__).V.fixture(id).category,factory=()->(;elements=Dict()),estimated_nodes=1,description="test circuit",
+    parent="",topology="test",physics=String[],measurements=["frequency_response"],differences=String[])
 power_flow(net)=nothing
 fixture_netlist(net,point)=(;buses=[])
 stability_gate(net,entry)=copy(screen)
 composed_stability(c)=copy(screen)
-l4_stability(c)=copy(screen)
-l3_network(id)=fixture(id).factory()
-l3_circuit(id,net)=(;net,devices=Symbol[])
-l4_system(id,net)=l3_circuit(id,net)
+system_stability(c)=copy(screen)
+coupled_network(id)=fixture(id).factory()
+coupled_circuit(id,net)=(;net,devices=Symbol[])
+complete_system(id,net)=coupled_circuit(id,net)
 function test_spec(id;protocol="composed_coarse")
     return (;id,protocol,quantity="Y",axes=["p1_d"],frequencies=[1.],dimension=2,time_step=1e-6,sample_step=5e-6,
         tone_peak_pu=1e-7,driven_axis="p1_d",travel_lower_bound_s=0.,power_base_MVA=1.,
@@ -29,13 +29,13 @@ function test_spec(id;protocol="composed_coarse")
 end
 function applicable_scan(id,net,list;definition=nothing)
     spec=test_spec(id)
-    id=="L2-16" && (spec=merge(spec,(;machine_stability=copy(screen))))
+    id=="synchronous_machine" && (spec=merge(spec,(;machine_stability=copy(screen))))
     return spec,zeros(ComplexF64,1,1,1)
 end
-l3_spec(id,list)=test_spec(id)
-l3_specs(id,list)=[test_spec(id),test_spec(id;protocol="composed_local")]
-l4_spec(id,list)=test_spec(id)
-l4_sizing(c,spec)=Dict("passed"=>true)
+coupled_spec(id,list)=test_spec(id)
+coupled_specs(id,list)=[test_spec(id),test_spec(id;protocol="composed_local")]
+system_spec(id,list)=test_spec(id)
+system_sizing(c,spec)=Dict("passed"=>true)
 scan_record(spec)=Dict("protocol"=>spec.protocol,"frequencies"=>spec.frequencies,"axes"=>spec.axes)
 scan_prefix(spec)=spec.protocol*"_"
 step_prefix(spec)="step_"
@@ -56,7 +56,7 @@ exported_composed_passives(args...)=Dict()
 composed_reference_files!(args...;kwargs...)=nothing
 native_operating_point_check(args...)=Dict("passed"=>true)
 verify_inputs(args...)=nothing
-require_committed_m9d_b()=nothing
+require_committed_coupled_line_converter()=nothing
 function prepare_scan_projects(directory,list,spec,axes;prefix="",kwargs...)
     return [begin
         key=prefix*axis
@@ -87,15 +87,15 @@ function replace_local_witness_projects!(record,directory,models,prefix)
     record["local_repeat_prepared"]=true
     return record
 end
-l4_growth_reference(c)=[(;root=10. + im,signed_root=10. + im),(;root=11. + im,signed_root=11. - im)]
-l4_growth_sensitivity(c,modes)=deepcopy(sensitivity)
-l4_growth_spec(id,list,modes)=test_spec(id)
-using ..PSCADValidation: l4_growth_variants, L4_GROWTH_WINDOW, L4_GROWTH_STEPS
+system_growth_reference(c)=[(;root=10. + im,signed_root=10. + im),(;root=11. + im,signed_root=11. - im)]
+system_growth_sensitivity(c,modes)=deepcopy(sensitivity)
+system_growth_spec(id,list,modes)=test_spec(id)
+using ..PSCADValidation: system_growth_variants, GROWTH_WINDOW, GROWTH_STEPS
 # Execute the current entry points with local project writers and fixed screen results.
 for (file,names) in (("execution.jl",(:prepare_fixture,)),("scan.jl",(:run_fixture,)),
-        ("composed_execution.jl",(:prepare_composed,:run_composed,:prepare_m9d_a_local_witness)),
-        ("l4_execution.jl",(:l4_system_setup,:prepare_l4_system)),
-        ("l4_growth.jl",(:l4_growth_setup,:prepare_l4_growth)))
+        ("composed_execution.jl",(:prepare_composed,:run_composed,:prepare_shunt_local_witness)),
+        ("systems.jl",(:system_setup,:prepare_system)),
+        ("growth.jl",(:system_growth_setup,:prepare_system_growth)))
     for expression in Meta.parseall(read(joinpath(ROOT,file),String)).args
         expression isa Expr && expression.head==:function || continue
         first(expression.args).args[1] in names && Core.eval(@__MODULE__,expression)
@@ -106,36 +106,36 @@ end
 @testset "Screen results are recorded while preparation and execution proceed" begin
     S=RecordedScreens
     mktempdir() do root
-        directory=joinpath(root,"L2-17")
-        models=@test_logs (:warn,r"L2-17 complete-network stability result: failed") S.prepare_fixture("L2-17";directory)
+        directory=joinpath(root,"mmc_gfm_weak_grid")
+        models=@test_logs (:warn,r"mmc_gfm_weak_grid complete-network stability result: failed") S.prepare_fixture("mmc_gfm_weak_grid";directory)
         @test !isempty(models) && all(isfile(m.second.project_path) for m in models)
         record=TOML.parsefile(joinpath(directory,"manifest.toml"))
         @test record["stability"]==S.screen
         @test record["status"]=="prepared_station_pending"
         empty!(S.attempts)
-        @test_logs (:warn,r"L2-17 complete-network stability result: failed") begin
-            @test_throws r"local execution reached" S.run_fixture("L2-17";directory,remote=:offline)
+        @test_logs (:warn,r"mmc_gfm_weak_grid complete-network stability result: failed") begin
+            @test_throws r"local execution reached" S.run_fixture("mmc_gfm_weak_grid";directory,remote=:offline)
         end
         @test S.attempts==["composed_coarse_baseline"]
         @test TOML.parsefile(joinpath(directory,"manifest.toml"))["stability"]==S.screen
         record=TOML.parsefile(joinpath(directory,"manifest.toml"))
         record["status"]="explained: recorded deviation"
         S.write_manifest(directory,record);empty!(S.attempts)
-        @test_logs (:warn,r"L2-17 complete-network stability result: failed") (:warn,r"L2-17 earlier result: explained:") begin
-            @test_throws r"local execution reached" S.run_fixture("L2-17";directory,remote=:offline)
+        @test_logs (:warn,r"mmc_gfm_weak_grid complete-network stability result: failed") (:warn,r"mmc_gfm_weak_grid earlier result: explained:") begin
+            @test_throws r"local execution reached" S.run_fixture("mmc_gfm_weak_grid";directory,remote=:offline)
         end
         @test S.attempts==["composed_coarse_baseline"]
         @test TOML.parsefile(joinpath(directory,"manifest.toml"))["previous_result_status"]=="explained: recorded deviation"
 
-        directory=joinpath(root,"L2-16")
-        @test_logs (:warn,r"L2-16 complete-network stability result: failed") S.prepare_fixture("L2-16";directory)
+        directory=joinpath(root,"synchronous_machine")
+        @test_logs (:warn,r"synchronous_machine complete-network stability result: failed") S.prepare_fixture("synchronous_machine";directory)
         record=TOML.parsefile(joinpath(directory,"manifest.toml"))
         @test record["machine_stability"]==S.screen
-        @test !haskey(record["tier_c"],"machine_stability")
+        @test !haskey(record["frequency_response"],"machine_stability")
         S.screen["most_positive_located_real_per_s"]=20.;empty!(S.attempts)
         try
-            @test_logs (:warn,r"L2-16 complete-network stability result: failed") begin
-                @test_throws r"local execution reached" S.run_fixture("L2-16";directory,remote=:offline)
+            @test_logs (:warn,r"synchronous_machine complete-network stability result: failed") begin
+                @test_throws r"local execution reached" S.run_fixture("synchronous_machine";directory,remote=:offline)
             end
             @test S.attempts==["composed_coarse_baseline"]
             @test TOML.parsefile(joinpath(directory,"manifest.toml"))["machine_stability"]==S.screen
@@ -143,33 +143,33 @@ end
             S.screen["most_positive_located_real_per_s"]=10.
         end
 
-        directory=joinpath(root,"L3-01")
-        models=@test_logs (:warn,r"L3-01 composed stability result: failed") S.prepare_composed("L3-01";directory,remote=:offline)
+        directory=joinpath(root,"two_tlc_shared_bus")
+        models=@test_logs (:warn,r"two_tlc_shared_bus composed stability result: failed") S.prepare_composed("two_tlc_shared_bus";directory,remote=:offline)
         @test !isempty(models)
         record=TOML.parsefile(joinpath(directory,"manifest.toml"))
         @test record["stability"]==S.screen
         @test record["status"]=="prepared_station_pending"
         empty!(S.attempts)
-        record=@test_logs (:warn,r"L3-01 composed stability result: failed") S.run_composed("L3-01";directory,remote=:offline)
+        record=@test_logs (:warn,r"two_tlc_shared_bus composed stability result: failed") S.run_composed("two_tlc_shared_bus";directory,remote=:offline)
         @test S.attempts==["composed_coarse","composed_local"]
         @test record["stability"]==S.screen
         @test record["groups"]["composed_local"]["status"]=="passed"
         @test record["status"]=="model_mismatch"
         S.coarse_status[]="passed";empty!(S.attempts)
-        record=@test_logs (:warn,r"L3-01 composed stability result: failed") S.run_composed("L3-01";directory,remote=:offline)
+        record=@test_logs (:warn,r"two_tlc_shared_bus composed stability result: failed") S.run_composed("two_tlc_shared_bus";directory,remote=:offline)
         @test S.attempts==["composed_coarse","composed_local"]
         @test record["status"]=="passed"
         S.coarse_status[]="model_mismatch"
 
-        directory=joinpath(root,"L3-08")
-        @test_logs (:warn,r"L3-08 composed stability result: failed") S.prepare_composed("L3-08";directory,remote=:offline)
+        directory=joinpath(root,"mmc_rc_shunt")
+        @test_logs (:warn,r"mmc_rc_shunt composed stability result: failed") S.prepare_composed("mmc_rc_shunt";directory,remote=:offline)
         record=TOML.parsefile(joinpath(directory,"manifest.toml"))
         record["groups"]=Dict("composed_coarse"=>Dict("status"=>"failed"),
             "composed_local"=>Dict("discrete"=>Dict("DUT"=>Dict("status"=>"invalid_measurement")),
                 "selection"=>Dict("frequency_Hz"=>1.)))
         S.write_manifest(directory,record)
-        record=@test_logs (:warn,r"L3-08 earlier coarse comparison result: failed") (:warn,r"L3-08 earlier local comparison results:.*invalid_measurement") (:warn,r"L3-08 composed stability result: failed") begin
-            S.prepare_m9d_a_local_witness(;directory,remote=:offline)
+        record=@test_logs (:warn,r"mmc_rc_shunt earlier coarse comparison result: failed") (:warn,r"mmc_rc_shunt earlier local comparison results:.*invalid_measurement") (:warn,r"mmc_rc_shunt composed stability result: failed") begin
+            S.prepare_shunt_local_witness(;directory,remote=:offline)
         end
         @test record["local_repeat_prepared"]
         @test record["status"]=="local_witness_pending"
@@ -177,16 +177,16 @@ end
         @test record["local_repeat_prior_results"]["local_status"]["DUT"]=="invalid_measurement"
         @test record["stability"]==S.screen
 
-        setup=@test_logs (:warn,r"L4-01 complete-network finite screen result: failed") S.l4_system_setup("L4-01")
-        directory=joinpath(root,"L4-01")
-        @test !isempty(S.prepare_l4_system(setup;directory,remote=:offline))
+        setup=@test_logs (:warn,r"p2p_redesigned complete-network finite screen result: failed") S.system_setup("p2p_redesigned")
+        directory=joinpath(root,"p2p_redesigned")
+        @test !isempty(S.prepare_system(setup;directory,remote=:offline))
         record=TOML.parsefile(joinpath(directory,"manifest.toml"))
         @test record["stability"]==S.screen
         @test record["status"]=="prepared_station_pending"
 
-        setup=@test_logs (:warn,r"L4-00D growth sensitivity result: outside limits") S.l4_growth_setup("L4-00D")
-        directory=joinpath(root,"L4-00D")
-        @test !isempty(S.prepare_l4_growth(setup;directory,remote=:offline))
+        setup=@test_logs (:warn,r"p2p_original growth sensitivity result: outside limits") S.system_growth_setup("p2p_original")
+        directory=joinpath(root,"p2p_original")
+        @test !isempty(S.prepare_system_growth(setup;directory,remote=:offline))
         record=TOML.parsefile(joinpath(directory,"manifest.toml"))
         @test record["growth_sensitivity"]==S.sensitivity
         @test record["status"]=="prepared_station_pending"
@@ -194,7 +194,7 @@ end
 end
 
 module MachineScreen
-using ..PSCADValidation: ROOT, device_bases, port_probe, l1_settings, scan_reference, fixture
+using ..PSCADValidation: ROOT, device_bases, port_probe, passive_settings, scan_reference, fixture
 const root=Ref(0.)
 stability_gate(net,entry)=Dict("status"=>"failed","most_positive_located_real_per_s"=>root[])
 for expression in Meta.parseall(read(joinpath(ROOT,"coverage.jl"),String)).args
@@ -204,10 +204,10 @@ end
 end
 
 @testset "Machine preparation records growing and zero-real-part roots" begin
-    net=V.fixture("L2-16").factory();point=power_flow(net);list=V.fixture_netlist(net,point)
+    net=V.fixture("synchronous_machine").factory();point=power_flow(net);list=V.fixture_netlist(net,point)
     for root in (0.,1.)
         MachineScreen.root[]=root
-        spec,reference=@test_logs (:warn,r"L2-16 machine stability result: failed") MachineScreen.device_scan_definition(net,list;id="L2-16")
+        spec,reference=@test_logs (:warn,r"synchronous_machine machine stability result: failed") MachineScreen.device_scan_definition(net,list;id="synchronous_machine")
         record=V.scan_record(spec)
         @test spec.machine_stability["status"]=="failed"
         @test spec.machine_stability["most_positive_located_real_per_s"]==root
@@ -220,72 +220,72 @@ end
 
 module EarlierTimeDomainResults
 using TOML
-using ..PSCADValidation: tierb_variants, tierb_metrics, tierb_interpolate
-using ..RecordedScreens: fixture, l3_network, power_flow, l3_circuit, fixture_netlist,
+using ..PSCADValidation: time_domain_variants, time_domain_metrics, time_domain_interpolate
+using ..RecordedScreens: fixture, coupled_network, power_flow, coupled_circuit, fixture_netlist,
     composed_stability, check_prepared_run_paths, prepare_scan_projects, preparation_record,
     write_operating_point, write_manifest, manifest_lists!, digest, existing_model,
     native_operating_point_check, verify_inputs, exported_composed_passives, test_spec, NativePSCAD
 const P=NativePSCAD
 const ROOT=mktempdir()
 const REPOSITORY=parentmodule(@__MODULE__).V.REPOSITORY
-const M9D_TIERB_IDS=["L3-06"]
+const TIME_DOMAIN_IDS=["machine_mmc_shared_bus"]
 const attempts=String[]
 const quality_status=Ref("valid")
 const comparison_status=Ref("passed")
 const amplitude_scale=Ref(.5)
-require_committed_tierb()=nothing
-tierb_c_reference_check(args...)=Dict("passed"=>true)
-tierb_spec(id,list)=merge(test_spec(id),(;fit_channels=[1],injection_time=0.,simulation_time=1.))
-tierb_protocol(spec)=Dict("axis"=>spec.driven_axis)
-tierb_channels(c,spec)=(;labels=["V"],bases=[1.])
+require_committed_time_domain()=nothing
+time_domain_frequency_reference_check(args...)=Dict("passed"=>true)
+time_domain_spec(id,list)=merge(test_spec(id),(;fit_channels=[1],injection_time=0.,simulation_time=1.))
+time_domain_protocol(spec)=Dict("axis"=>spec.driven_axis)
+time_domain_channels(c,spec)=(;labels=["V"],bases=[1.])
 function execute_axis!(record,key,model,directory,remote,deadline)
     push!(attempts,key)
     return (;time=[0.,1.],key)
 end
-function tierb_subtract(result,base,model,basemodel,c)
-    scale=startswith(result.key,"b_half_amplitude_") ? amplitude_scale[] : 1.
+function time_domain_subtract(result,base,model,basemodel,c)
+    scale=startswith(result.key,"time_domain_half_amplitude_") ? amplitude_scale[] : 1.
     return (;signals=fill(scale,2,1),drive=ones(2,1))
 end
-tierb_quality(args...)=Dict("status"=>quality_status[])
-tierb_prediction(c,spec,timegrid,drive;kwargs...)=ones(2,1)
-tierb_compare(args...;kwargs...)=Dict("status"=>comparison_status[])
-write_tierb_trace(path,args...;kwargs...)=write(path,"local time-domain samples")
-for expression in Meta.parseall(read(joinpath(parentmodule(@__MODULE__).V.ROOT,"tierb.jl"),String)).args
+time_domain_quality(args...)=Dict("status"=>quality_status[])
+time_domain_prediction(c,spec,timegrid,drive;kwargs...)=ones(2,1)
+time_domain_compare(args...;kwargs...)=Dict("status"=>comparison_status[])
+write_time_domain_trace(path,args...;kwargs...)=write(path,"local time-domain samples")
+for expression in Meta.parseall(read(joinpath(parentmodule(@__MODULE__).V.ROOT,"time_domain.jl"),String)).args
     expression isa Expr && expression.head==:function || continue
-    first(expression.args).args[1] in (:read_tierc_record,:prepare_m9d_b_tier,:run_tierb) && Core.eval(@__MODULE__,expression)
+    first(expression.args).args[1] in (:read_frequency_response_record,:prepare_time_domain,:run_time_domain) && Core.eval(@__MODULE__,expression)
 end
 end
 
 @testset "Time-domain preparation records earlier results and runs every variant" begin
     B=EarlierTimeDomainResults
-    id="L3-06";directory=joinpath(B.ROOT,"data",id*"-tierb")
+    id="machine_mmc_shared_bus";directory=joinpath(B.ROOT,"data",id*"_time_domain")
     cdir=mkpath(joinpath(B.ROOT,"data",id))
     prior=Dict("fixture_id"=>id,"status"=>"failed","qualification_status"=>"failed",
         "groups"=>Dict("composed_coarse"=>Dict("status"=>"failed")),"source_files"=>[])
     write(joinpath(cdir,"manifest.toml"),sprint(TOML.print,prior))
-    @test_logs (:warn,r"L3-06 earlier frequency-response results: failed") (:warn,r"L3-06 time-domain stability result: failed") begin
-        @test B.prepare_m9d_b_tier([id];remote=:offline)==[id]
+    @test_logs (:warn,r"machine_mmc_shared_bus earlier frequency-response results: failed") (:warn,r"machine_mmc_shared_bus time-domain stability result: failed") begin
+        @test B.prepare_time_domain([id];remote=:offline)==[id]
     end
     record=TOML.parsefile(joinpath(directory,"manifest.toml"))
     @test record["status"]=="prepared_station_pending"
     @test record["stability"]["status"]=="failed"
-    @test record["tier_c_record"]["status"]=="failed"
-    @test record["tier_c_record"]["groups"]==prior["groups"]
-    expected=["b_baseline","b_p1_d","b_half_amplitude_p1_d","bh_baseline","bh_p1_d"]
+    @test record["frequency_response_record"]["status"]=="failed"
+    @test record["frequency_response_record"]["groups"]==prior["groups"]
+    expected=["time_domain_baseline","time_domain_p1_d","time_domain_half_amplitude_p1_d","time_domain_half_step_baseline","time_domain_half_step_p1_d"]
     for (quality,comparison,scale,status) in (("invalid_measurement","passed",.5,"invalid_measurement"),
             ("valid","failed",.5,"failed"),("valid","passed",.8,"failed"),("valid","passed",.5,"passed"))
         B.quality_status[]=quality;B.comparison_status[]=comparison;B.amplitude_scale[]=scale
         empty!(B.attempts)
-        patterns=Any[(:warn,r"L3-06 earlier frequency-response results: failed")]
+        patterns=Any[(:warn,r"machine_mmc_shared_bus earlier frequency-response results: failed")]
         if quality!="valid"
-            append!(patterns,[(:warn,Regex("L3-06 time-domain result for $key: invalid_measurement"))
+            append!(patterns,[(:warn,Regex("machine_mmc_shared_bus time-domain result for $key: invalid_measurement"))
                 for key in expected[[2,3,5]]])
         elseif comparison!="passed"
-            append!(patterns,[(:warn,Regex("L3-06 time-domain result for $key: failed")) for key in expected[[2,3,5]]])
+            append!(patterns,[(:warn,Regex("machine_mmc_shared_bus time-domain result for $key: failed")) for key in expected[[2,3,5]]])
         elseif scale!=.5
-            push!(patterns,(:warn,r"L3-06 time-domain half-amplitude result: failed"))
+            push!(patterns,(:warn,r"machine_mmc_shared_bus time-domain half-amplitude result: failed"))
         end
-        record=@test_logs patterns... B.run_tierb(id;directory,remote=:offline,deadline=time()+60)
+        record=@test_logs patterns... B.run_time_domain(id;directory,remote=:offline,deadline=time()+60)
         @test B.attempts==expected
         @test record["status"]==status
         @test length(record["comparisons"])==3
@@ -331,10 +331,10 @@ end
     for status in ("invalid_measurement","model_mismatch")
         C.measured_status[]=status;empty!(C.attempts)
         mktempdir() do directory
-            spec=C.test_spec("L3-01")
+            spec=C.test_spec("two_tlc_shared_bus")
             record=Dict{String,Any}("fixture_id"=>spec.id)
             c=(;devices=Symbol[])
-            group=@test_logs (:warn,Regex("L3-01 frequency-response results:.*$status")) C.run_composed_group!(
+            group=@test_logs (:warn,Regex("two_tlc_shared_bus frequency-response results:.*$status")) C.run_composed_group!(
                 record,c,nothing,spec;directory,remote=:offline,deadline=time()+60)
             @test length(C.attempts)==5
             @test C.attempts[3:5]==["composed_coarse_half_amplitude_p1_d","step_baseline","step_p1_d"]

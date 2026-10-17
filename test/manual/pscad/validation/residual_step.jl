@@ -1,7 +1,7 @@
 # Zero-delay MMC fixtures compare the unexplained change in their complete discrete
 # response column. Positive-delay fixtures retain the raw comparison.
-const M9C12_IDS = ["L2-" * lpad(n, 2, '0') for n in 7:12]
-residual_step_eligible(id, net) = id in M9C12_IDS &&
+const RESIDUAL_STEP_IDS = ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid"]
+residual_step_eligible(id, net) = id in RESIDUAL_STEP_IDS &&
     interface_step_eligible(net.elements[:DUT].element_model)
 
 # Read the exact scalar fields emitted in these fixtures, including units.
@@ -189,7 +189,7 @@ function record_step_witness!(record, net, spec, step_spec, column,
 end
 
 function qualify_fixture!(record; residual = false)
-    quality = record["tier_c_result"]
+    quality = record["frequency_response_result"]
     comparison = residual ? record["interface_step_result"] : quality
     amp, step = record["amplitude_refinement"], record["step_refinement"]
     valid = quality["valid"] && get(amp, "valid", false) && get(step, "valid", false)
@@ -197,7 +197,7 @@ function qualify_fixture!(record; residual = false)
     record["qualification_status"] = !valid ? "invalid_measurement" : qualified ? "passed" : "failed"
     record["status"] = !isempty(quality["model_mismatch"]) ? "model_mismatch" :
         !valid ? "invalid_measurement" :
-        record["tier_a_status"] == "passed" && comparison["status"] == "passed" && qualified ? "passed" : "failed"
+        record["operating_point_status"] == "passed" && comparison["status"] == "passed" && qualified ? "passed" : "failed"
     record["comparison_summary"] = Dict{String, Any}("plain_model" => quality["status"],
         "one_step_realization" => get(get(record, "interface_step_result", Dict()), "status", "not_applicable"),
         "raw_step" => get(get(record, "raw_step_refinement", step), "status", step["passed"] ? "passed" : "failed"),
@@ -212,7 +212,7 @@ end
 
 # Completion verification is strictly local. Explicit native resume also identifies the
 # connected solver, which contacts the station.
-function m9c12_stored_axis(record, key, list, spec, directory, inputs)
+function residual_stored_axis(record, key, list, spec, directory, inputs)
     run = last(filter(r -> r["axis"] == key, record["run_records"]))
     root = joinpath(directory, run["path"], run["native_run_directory"])
     complete_path = joinpath(root, "complete.toml")
@@ -249,14 +249,14 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Re-evaluate stored measurements for fixtures `L2-07` through `L2-12` locally.
+Re-evaluate stored measurements for fixtures `mmc_pq` through `mmc_pq_weak_grid` locally.
 
 # Arguments
 
 - `ids`: Fixture identifiers.
 - `data_root`: Directory containing completed native runs and manifests.
-- `output_root`: Destination restricted to this worktree's `data/m9c12` or `/tmp`.
-  Default: `joinpath(ROOT, "data", "m9c12")`.
+- `output_root`: Destination restricted to this worktree's `data/residual_step_analysis` or `/tmp`.
+  Default: `joinpath(ROOT, "data", "residual_step_analysis")`.
 
 # Returns
 
@@ -266,18 +266,18 @@ Re-evaluate stored measurements for fixtures `L2-07` through `L2-12` locally.
 
 Native runs and source manifests remain unchanged.
 """
-function reanalyse_m9c12(ids; data_root, output_root = joinpath(ROOT, "data", "m9c12"))
+function reanalyse_residual_step(ids; data_root, output_root = joinpath(ROOT, "data", "residual_step_analysis"))
     selected = ids isa AbstractString ? [ids] : collect(ids)
-    !isempty(selected) && all(in(M9C12_IDS), selected) || error("M9c12 requires L2-07..12")
+    !isempty(selected) && all(in(RESIDUAL_STEP_IDS), selected) || error("residual-step requires zero-delay MMC fixtures")
     destination = abspath(output_root)
     ancestor = destination
     while !ispath(ancestor)
         ancestor = dirname(ancestor)
     end
     resolved = normpath(joinpath(realpath(ancestor), relpath(destination, ancestor)))
-    allowed = (joinpath(realpath(ROOT), "data", "m9c12"), realpath("/tmp"))
+    allowed = (joinpath(realpath(ROOT), "data", "residual_step_analysis"), realpath("/tmp"))
     any(root -> resolved == root || startswith(resolved, root * "/"), allowed) ||
-        error("analysis output must be under worktree data/m9c12 or /tmp")
+        error("analysis output must be under worktree data/residual_step_analysis or /tmp")
     outcomes = Dict{String, Any}()
     for id in selected
         directory = abspath(joinpath(data_root, id))
@@ -290,7 +290,7 @@ function reanalyse_m9c12(ids; data_root, output_root = joinpath(ROOT, "data", "m
         record = deepcopy(original)
         record["native_evidence_directory"] = directory
         mkpath(output)
-        record["analysis_revision"] = Dict("purpose" => "M9c12 residual step witness",
+        record["analysis_revision"] = Dict("purpose" => "residual step-size witness",
             "commit" => readchomp(`git -C $REPOSITORY rev-parse HEAD`),
             "julia_version" => string(VERSION), "source_files" => source_record(),
             "environment_project_sha256" => digest(Base.active_project()),
@@ -301,7 +301,7 @@ function reanalyse_m9c12(ids; data_root, output_root = joinpath(ROOT, "data", "m
         net = fixture(id).factory()
         list = fixture_netlist(net, power_flow(net))
         residual_step_eligible(id, net) || error("fixture no longer has zero modulation delay")
-        spec, reference = applicable_scan(id, net, list; definition = record["tier_c"])
+        spec, reference = applicable_scan(id, net, list; definition = record["frequency_response"])
         frozen = read_response(joinpath(directory, reference_filename(spec)), length(spec.axes), spec.frequencies)
         check = native_reference_check(spec, reference, frozen)
         check["passed"] || error("plain reference changed beyond identity budget")
@@ -310,12 +310,12 @@ function reanalyse_m9c12(ids; data_root, output_root = joinpath(ROOT, "data", "m
         record["analysis_native_reference_check"] = check
         models, results = Dict{String, P.PSCADModel}(), Dict{String, P.PSCADResult}()
         for key in ["baseline"; spec.axes]
-            models[key], results[key] = m9c12_stored_axis(record, scan_prefix(spec)*key, list, spec, directory, inputs)
+            models[key], results[key] = residual_stored_axis(record, scan_prefix(spec)*key, list, spec, directory, inputs)
         end
         rows_a = compare_operating_point(results["baseline"], models["baseline"])
-        write_table(joinpath(output, "comparison_A.tsv"), rows_a)
-        record["tier_a_status"] = all(rows_a.within_tolerance) ? "passed" : "failed"
-        record["tier_c_result"] = compare_frequency_runs(results, models, frozen, output; spec)
+        write_table(joinpath(output, "comparison_operating_point.tsv"), rows_a)
+        record["operating_point_status"] = all(rows_a.within_tolerance) ? "passed" : "failed"
+        record["frequency_response_result"] = compare_frequency_runs(results, models, frozen, output; spec)
         record_interface_comparison!(record, net, spec, directory, output)
         axis = record["step_witness_definition"]["axis"]
         column = only(findall(==(axis), spec.axes))
@@ -324,7 +324,7 @@ function reanalyse_m9c12(ids; data_root, output_root = joinpath(ROOT, "data", "m
                   for (index,key) in enumerate(spec.axes)]
         half_spec = merge(spec, (; tone_peak_pu = spec.tone_peak_pu / 2))
         half_key = scan_prefix(spec) * "half_amplitude_" * axis
-        half_model, half_result = m9c12_stored_axis(record, half_key, list, half_spec, directory, inputs)
+        half_model, half_result = residual_stored_axis(record, half_key, list, half_spec, directory, inputs)
         half, half_quality = single_response(half_result, results["baseline"], half_model, half_spec, column)
         amp = matrix_change(half, main; epsilon = 0.02)
         amp["valid"] = main_quality["valid"] && half_quality["valid"]
@@ -338,8 +338,8 @@ function reanalyse_m9c12(ids; data_root, output_root = joinpath(ROOT, "data", "m
         step_spec = step_definition(spec, first(record["step_witness_definition"]["frequencies"]))
         scan_record(step_spec) == Dict(k => record["step_witness_definition"][k] for k in keys(scan_record(step_spec))) ||
             error("stored step definition differs")
-        step_model, step_baseline = m9c12_stored_axis(record, step_prefix(step_spec)*"baseline", list, step_spec, directory, inputs)
-        step_model, step_result = m9c12_stored_axis(record, step_prefix(step_spec)*axis, list, step_spec, directory, inputs)
+        step_model, step_baseline = residual_stored_axis(record, step_prefix(step_spec)*"baseline", list, step_spec, directory, inputs)
+        step_model, step_result = residual_stored_axis(record, step_prefix(step_spec)*axis, list, step_spec, directory, inputs)
         half, half_quality = single_response(step_result, step_baseline, step_model, step_spec, column)
         push!(checks, readout_evidence(step_result, step_baseline, step_model, step_spec, column;
             axis = step_prefix(step_spec)*axis))
@@ -357,9 +357,9 @@ function reanalyse_m9c12(ids; data_root, output_root = joinpath(ROOT, "data", "m
         GC.gc()
     end
     write_table(joinpath(destination, "summary.tsv"), [
-        (fixture = id, status = outcomes[id]["status"], plain = outcomes[id]["tier_c_result"]["status"],
+        (fixture = id, status = outcomes[id]["status"], plain = outcomes[id]["frequency_response_result"]["status"],
             one_step = outcomes[id]["interface_step_result"]["status"],
-            plain_F = outcomes[id]["tier_c_result"]["max_frobenius_error"],
+            plain_F = outcomes[id]["frequency_response_result"]["max_frobenius_error"],
             one_step_F = outcomes[id]["interface_step_result"]["max_frobenius_error"],
             raw_F = outcomes[id]["raw_step_refinement"]["frobenius_change"],
             raw_entry = outcomes[id]["raw_step_refinement"]["entry_change"],

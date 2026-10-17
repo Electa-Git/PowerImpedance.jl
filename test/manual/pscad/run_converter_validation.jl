@@ -10,6 +10,6 @@ isfinite(seconds) && seconds > 0 || error("timeout must be finite and positive")
 deadline = time() + seconds
 remote = RemoteConfig()
 V.run_timing(remote, deadline)
-for n in 1:15
-    V.run_fixture("L2-"*lpad(n, 2, '0'); deadline)
+for id in ["tlc_pq_freq_support", "tlc_pf_q", "tlc_p_qv", "tlc_p_vac", "tlc_vdc_q", "tlc_pq_weak_grid", "mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid", "mmc_gfm_vsm", "mmc_gfm_lec_compensated", "mmc_pq_no_energy_control"]
+    V.run_fixture(id; deadline)
 end

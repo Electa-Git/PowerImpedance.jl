@@ -1,15 +1,15 @@
-const L4_GROWTH_WINDOW=(.0003,.0018)
-const L4_GROWTH_LIMITS=(frequency=.02,growth=.10,growth_floor=.5)
-const L4_GROWTH_STEPS=(main=1e-6,half=.5e-6)
+const GROWTH_WINDOW=(.0003,.0018)
+const GROWTH_LIMITS=(frequency=.02,growth=.10,growth_floor=.5)
+const GROWTH_STEPS=(main=1e-6,half=.5e-6)
 
-function l4_space_vector(abc)
+function system_space_vector(abc)
     size(abc,2)==3 || throw(ArgumentError("three physical phases are required"))
     return (2/3).*(abc[:,1]+cis(2π/3).*abc[:,2]+cis(-2π/3).*abc[:,3])
 end
 
 # Signed circular modes retain their opposite carrier companions. The fixed
 # background spans a constant, a linear trend, and both nominal carriers.
-function l4_growth_basis(t,p,signs)
+function system_growth_basis(t,p,signs)
     n=length(signs);alpha=exp.(p[1:n]);frequency=signs.*exp.(p[n+1:2n])
     waves=Vector{ComplexF64}[]
     for j in 1:n
@@ -21,9 +21,9 @@ function l4_growth_basis(t,p,signs)
     return x./sqrt.(sum(abs2,x;dims=1))
 end
 
-function l4_growth_fit(time,signals,seeds;window=L4_GROWTH_WINDOW)
+function system_growth_fit(time,signals,seeds;window=GROWTH_WINDOW)
     try
-        tierb_grid(time,signals)
+        time_domain_grid(time,signals)
         n=length(seeds)
         n>0 && all(z->real(z)>0 && !iszero(imag(z)),seeds) || throw(ArgumentError("growing signed mode seeds required"))
         first(time)<=window[1] && last(time)>=window[2] || return Dict("status"=>"unextractable","reason"=>"incomplete fixed interval")
@@ -40,7 +40,7 @@ function l4_growth_fit(time,signals,seeds;window=L4_GROWTH_WINDOW)
         lower=seed.+log.([fill(.05,n);fill(.5,n)])
         upper=seed.+log.([fill(20.,n);fill(1.5,n)])
         function projected_basis(p)
-            x=l4_growth_basis(t,p,signs)[:,1:2n]
+            x=system_growth_basis(t,p,signs)[:,1:2n]
             return x-nuisance*(nuisance'*x)
         end
         function model(_,p)
@@ -74,7 +74,7 @@ function l4_growth_fit(time,signals,seeds;window=L4_GROWTH_WINDOW)
     end
 end
 
-function l4_growth_comparison(fit,reference)
+function system_growth_comparison(fit,reference)
     get(fit,"status","")=="extracted" || return Dict("status"=>"unextractable")
     length(fit["modes"])==length(reference) || return Dict("status"=>"unextractable")
     rows=Dict{String,Any}[]
@@ -82,17 +82,17 @@ function l4_growth_comparison(fit,reference)
         frequency=imag(root)/(2π);growth=real(root)
         df=abs(mode["signed_frequency_Hz"]-frequency)/abs(frequency)
         da=abs(mode["growth_per_s"]-growth)
-        limit=max(L4_GROWTH_LIMITS.growth*abs(growth),L4_GROWTH_LIMITS.growth_floor)
+        limit=max(GROWTH_LIMITS.growth*abs(growth),GROWTH_LIMITS.growth_floor)
         push!(rows,Dict("frequency_relative_error"=>df,"growth_error_per_s"=>da,
-            "growth_limit_per_s"=>limit,"passed"=>df<=L4_GROWTH_LIMITS.frequency && da<=limit))
+            "growth_limit_per_s"=>limit,"passed"=>df<=GROWTH_LIMITS.frequency && da<=limit))
     end
     return Dict("status"=>all(r["passed"] for r in rows) ? "passed" : "failed","modes"=>rows)
 end
 
-function l4_growth_reference(c)
+function system_growth_reference(c)
     functions=composed_device_functions(c)
-    initial=filter(z->real(z)>-1500,l4_line_seeds(c))
-    _,tracks,_=l4_root_search(c,functions,initial)
+    initial=filter(z->real(z)>-1500,system_line_seeds(c))
+    _,tracks,_=system_root_search(c,functions,initial)
     located=Tuple{ComplexF64,Float64}[]
     for (root,residual) in tracks
         real(root)>0 && imag(root)>0 && residual<1e-6 || continue
@@ -114,20 +114,20 @@ function l4_growth_reference(c)
     return [modes[direction] for direction in sort!(collect(keys(modes));rev=true)]
 end
 
-function l4_growth_spec(id,list,modes)
-    base=l4_spec(id=="L4-00D" ? "L4-01" : "L4-04",list)
+function system_growth_spec(id,list,modes)
+    base=system_spec(id=="p2p_original" ? "p2p_redesigned" : "p2p_ac_grids",list)
     dominant=modes[argmax(real(m.root) for m in modes)]
-    carrier=id=="L4-04D" ? 3526.5564 : abs(imag(dominant.root))/(2π)
+    carrier=id=="p2p_ac_single_line" ? 3526.5564 : abs(imag(dominant.root))/(2π)
     return merge(base,(;id,stimulus="hann_burst",protocol="growth",frequencies=[carrier],
         phases=[0.],carrier_Hz=carrier,burst_cycles=1,
         burst_polarization=dominant.polarization,injection_time=0.,tone_peak_pu=1e-7,
-        ringdown=L4_GROWTH_WINDOW,simulation_time=.002,time_step=L4_GROWTH_STEPS.main,sample_step=5e-6,
+        ringdown=GROWTH_WINDOW,simulation_time=.002,time_step=GROWTH_STEPS.main,sample_step=5e-6,
         window_starts=(.0003,.00105),window_duration=.00075,driven_axis="p1_d",recorder_scope="",
         estimated_station_seconds=1200))
 end
 
-function l4_growth_variants(spec)
-    half=merge(spec,(;time_step=L4_GROWTH_STEPS.half,sample_step=2.5e-6))
+function system_growth_variants(spec)
+    half=merge(spec,(;time_step=GROWTH_STEPS.half,sample_step=2.5e-6))
     amplitude=merge(spec,(;tone_peak_pu=spec.tone_peak_pu/2,baseline_template="g_baseline"))
     return [(key="g_baseline",spec=spec,axis="baseline",prefix="g_"),
         (key="g_"*spec.driven_axis,spec=spec,axis=spec.driven_axis,prefix="g_"),
@@ -136,7 +136,7 @@ function l4_growth_variants(spec)
         (key="gh_"*spec.driven_axis,spec=half,axis=spec.driven_axis,prefix="gh_")]
 end
 
-function l4_polarized_burst_graph(spec)
+function system_polarized_burst_graph(spec)
     graph=P.BlockGraph()
     clock,t0,tau,arg,cosine,one,envelope0,envelope,on,off,enabled=P.Signal.([
         "growth_clock","growth_onset","growth_time","growth_envelope_arg","growth_envelope_cos",
@@ -161,7 +161,7 @@ function l4_polarized_burst_graph(spec)
     return graph,outputs[1],outputs[2],clock
 end
 
-function l4_exact_modulation_y(e)
+function system_exact_modulation_y(e)
     m=e.element_model;names=PowerImpedance.statenames(m)
     delayed=Set(PowerImpedance.statenames(m.modulation))
     d=findall(in(delayed),collect(names));r=setdiff(1:length(names),d)
@@ -178,15 +178,15 @@ function l4_exact_modulation_y(e)
     return response
 end
 
-function l4_growth_sensitivity(c,modes)
+function system_growth_sensitivity(c,modes)
     functions=composed_device_functions(c)
     list=fixture_netlist(c.net,nothing)
     dc=Set(node for bus in list.buses if bus.kind==:dc for node in bus.nets)
-    early=L4System(c.net,c.devices,c.grids,filter(!in(dc),c.nodes),c.ports,Dict{Symbol,Float64}(),c.measurands)
-    exact=Dict(n=>l4_exact_modulation_y(c.net.elements[n]) for n in c.devices)
+    early=CompleteSystem(c.net,c.devices,c.grids,filter(!in(dc),c.nodes),c.ports,Dict{Symbol,Float64}(),c.measurands)
+    exact=Dict(n=>system_exact_modulation_y(c.net.elements[n]) for n in c.devices)
     discrete=any(interface_step_eligible(c.net.elements[n].element_model) for n in c.devices)
-    main_functions=discrete ? composed_device_functions(c;time_step=L4_GROWTH_STEPS.main) : functions
-    half_functions=discrete ? composed_device_functions(c;time_step=L4_GROWTH_STEPS.half) : functions
+    main_functions=discrete ? composed_device_functions(c;time_step=GROWTH_STEPS.main) : functions
+    half_functions=discrete ? composed_device_functions(c;time_step=GROWTH_STEPS.half) : functions
     return [begin
         precharged,pr=composed_refine_root(early,functions,m.root)
         exact_root,er=composed_refine_root(c,exact,m.root)
@@ -194,9 +194,9 @@ function l4_growth_sensitivity(c,modes)
         half_root,hr=composed_refine_root(c,half_functions,m.root)
         main_early,mer=composed_refine_root(early,main_functions,m.root)
         half_early,her=composed_refine_root(early,half_functions,m.root)
-        growth_limit=max(L4_GROWTH_LIMITS.growth*real(m.root),L4_GROWTH_LIMITS.growth_floor)
+        growth_limit=max(GROWTH_LIMITS.growth*real(m.root),GROWTH_LIMITS.growth_floor)
         inside(z,r)=r<1e-6 && abs(real(z)-real(m.root))<=growth_limit &&
-            abs(imag(z)-imag(m.root))/abs(imag(m.signed_root))<=L4_GROWTH_LIMITS.frequency
+            abs(imag(z)-imag(m.root))/abs(imag(m.signed_root))<=GROWTH_LIMITS.frequency
         Dict("native_real_per_s"=>real(m.root),"native_dq_Hz"=>imag(m.root)/(2π),
             "signed_abc_Hz"=>imag(m.signed_root)/(2π),"circular_amplitude_ratio"=>m.circular_ratio,
             "precharged_growth_per_s"=>real(precharged),"precharged_dq_Hz"=>imag(precharged)/(2π),
@@ -210,34 +210,34 @@ function l4_growth_sensitivity(c,modes)
     end for m in modes]
 end
 
-function l4_growth_setup(id)
-    entry=fixture(id);net=entry.factory();point=power_flow(net);c=l4_system(id,net)
-    modes=l4_growth_reference(c)
-    id=="L4-00D" && length(modes)!=2 && error("both original P2P circular modes must be located")
-    sensitivity=l4_growth_sensitivity(c,modes)
+function system_growth_setup(id)
+    entry=fixture(id);net=entry.factory();point=power_flow(net);c=complete_system(id,net)
+    modes=system_growth_reference(c)
+    id=="p2p_original" && length(modes)!=2 && error("both original P2P circular modes must be located")
+    sensitivity=system_growth_sensitivity(c,modes)
     all(r["passed"] for r in sensitivity) || @warn "$id growth sensitivity result: outside limits" sensitivity
-    list=fixture_netlist(net,point);spec=l4_growth_spec(id,list,modes)
+    list=fixture_netlist(net,point);spec=system_growth_spec(id,list,modes)
     return (;entry,net,point,c,modes,sensitivity,list,spec)
 end
 
-function prepare_l4_growth(setup;directory,remote)
+function prepare_system_growth(setup;directory,remote)
     (;entry,modes,sensitivity,list,spec)=setup
     id=entry.id
-    ispath(directory) && error("fresh L4 growth directory already exists: $directory")
-    paths=check_prepared_run_paths(id,[v.key for v in l4_growth_variants(spec)],remote)
+    ispath(directory) && error("fresh system growth directory already exists: $directory")
+    paths=check_prepared_run_paths(id,[v.key for v in system_growth_variants(spec)],remote)
     mkpath(directory)
     models=prepare_scan_projects(directory,list,spec,[spec.driven_axis];prefix="g_",remote)
     amp=merge(spec,(;tone_peak_pu=spec.tone_peak_pu/2,baseline_template="g_baseline"))
     append!(models,filter(x->x.first!="g_half_amplitude_baseline",prepare_scan_projects(directory,list,amp,[spec.driven_axis];prefix="g_half_amplitude_",remote)))
-    half=merge(spec,(;time_step=L4_GROWTH_STEPS.half,sample_step=2.5e-6))
+    half=merge(spec,(;time_step=GROWTH_STEPS.half,sample_step=2.5e-6))
     append!(models,prepare_scan_projects(directory,list,half,[spec.driven_axis];prefix="gh_",remote))
     roots=[m.signed_root for m in modes]
     record=preparation_record(entry,Dict("status"=>"deliberately_unstable"),models;directory)
     record["required_subsystems"]=1
     record["prepared_run_paths"]=paths;record["growth_reference_real_per_s"]=real.(roots)
     record["growth_reference_signed_Hz"]=imag.(roots)./(2π)
-    record["growth_sensitivity"]=sensitivity;record["fixed_fit_interval_s"]=collect(L4_GROWTH_WINDOW)
-    record["growth_protocol"]=Dict("time_step_s"=>L4_GROWTH_STEPS.main,"half_time_step_s"=>L4_GROWTH_STEPS.half,
+    record["growth_sensitivity"]=sensitivity;record["fixed_fit_interval_s"]=collect(GROWTH_WINDOW)
+    record["growth_protocol"]=Dict("time_step_s"=>GROWTH_STEPS.main,"half_time_step_s"=>GROWTH_STEPS.half,
         "sample_step_s"=>5e-6,"half_sample_step_s"=>2.5e-6,"amplitude_pu"=>spec.tone_peak_pu,
         "carrier_Hz"=>spec.carrier_Hz,"polarization_real"=>real.(spec.burst_polarization),
         "polarization_imag"=>imag.(spec.burst_polarization),"fit"=>"signed circular modes and their carrier companions; fixed nominal background",
@@ -247,8 +247,8 @@ function prepare_l4_growth(setup;directory,remote)
     return models
 end
 
-function execute_l4_growth!(record,key,model,directory,remote,deadline)
-    remaining=floor(Int,deadline-time());remaining>0 || error("L4 growth runtime budget exhausted")
+function execute_system_growth!(record,key,model,directory,remote,deadline)
+    remaining=floor(Int,deadline-time());remaining>0 || error("system growth runtime budget exhausted")
     parent=mkpath(joinpath(remote.local_root,"validation",record["fixture_id"]))
     work=mktempdir(parent;prefix=key*"-",cleanup=false)
     destination=joinpath(directory,"runs",basename(work));mkpath(dirname(destination))
@@ -269,7 +269,7 @@ function execute_l4_growth!(record,key,model,directory,remote,deadline)
     return result
 end
 
-function l4_growth_channels(result,model,c)
+function system_growth_channels(result,model,c)
     columns=Vector{ComplexF64}[];labels=String[];bases=Float64[];reference=ComplexF64[]
     for name in c.devices
         b=device_bases(c.net.elements[name].element_model.elec)
@@ -284,15 +284,15 @@ function l4_growth_channels(result,model,c)
         i0=complex(output[2],-output[3])*b.ac_current
         for (probe,kind,base,nominal) in ((voltage,"V",b.ac_voltage,v0),(current,"I",b.ac_current,i0))
             sign=kind=="I" && probe.orientation==:out ? -1 : 1
-            push!(columns,sign.*l4_space_vector(probe_samples(result,probe)))
+            push!(columns,sign.*system_space_vector(probe_samples(result,probe)))
             push!(labels,"$kind:$name");push!(bases,base);push!(reference,nominal)
         end
     end
     return (;signals=reduce(hcat,columns),labels,bases,reference)
 end
 
-function l4_growth_quality(time,channels,spec)
-    ix=findall(t->L4_GROWTH_WINDOW[1]<=t<L4_GROWTH_WINDOW[2],time)
+function system_growth_quality(time,channels,spec)
+    ix=findall(t->GROWTH_WINDOW[1]<=t<GROWTH_WINDOW[2],time)
     isempty(ix) && return Dict("passed"=>false,"reason"=>"missing fixed interval")
     carrier=cis.(2π*spec.frequency.*time)
     # Native solved terminal values fix the carrier independently of startup
@@ -302,33 +302,33 @@ function l4_growth_quality(time,channels,spec)
         "limit_pu"=>.01,"scope"=>"all selected AC V/I space vectors; native solved carrier retained")
 end
 
-function run_l4_growth(id;directory,remote,deadline)
+function run_system_growth(id;directory,remote,deadline)
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")));verify_inputs(directory,record)
-    record["fixture_id"]==id || error("L4 growth fixture differs")
-    net=fixture(id).factory();point=power_flow(net);c=l4_system(id,net)
-    modes=l4_growth_reference(c);list=fixture_netlist(net,point);spec=l4_growth_spec(id,list,modes)
-    native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))["passed"] || error("L4 growth operating point changed")
+    record["fixture_id"]==id || error("system growth fixture differs")
+    net=fixture(id).factory();point=power_flow(net);c=complete_system(id,net)
+    modes=system_growth_reference(c);list=fixture_netlist(net,point);spec=system_growth_spec(id,list,modes)
+    native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))["passed"] || error("system growth operating point changed")
     reference=complex.(record["growth_reference_real_per_s"],2π.*record["growth_reference_signed_Hz"])
-    length(modes)==length(reference) && all(isapprox(m.signed_root,z;rtol=1e-8) for (m,z) in zip(modes,reference)) || error("L4 growth reference changed")
+    length(modes)==length(reference) && all(isapprox(m.signed_root,z;rtol=1e-8) for (m,z) in zip(modes,reference)) || error("system growth reference changed")
     record["status"]="running";record["growth_analysis"]=Dict{String,Any}()
     # Every invocation executes all five variants from time zero. Retained output
     # directories remain available but cannot supply a completed axis.
     results=Dict{String,Any}();channels=Dict{String,Any}()
     started=time()
     try
-        for variant in l4_growth_variants(spec)
-            time()<deadline || error("L4 growth runtime budget exhausted")
+        for variant in system_growth_variants(spec)
+            time()<deadline || error("system growth runtime budget exhausted")
             model=existing_model(record,variant.key,list,variant.spec,directory;prefix=variant.prefix)
-            result=execute_l4_growth!(record,variant.key,model,directory,remote,deadline)
-            data=l4_growth_channels(result,model,c)
+            result=execute_system_growth!(record,variant.key,model,directory,remote,deadline)
+            data=system_growth_channels(result,model,c)
             results[variant.key]=result;channels[variant.key]=data
-            fit=l4_growth_fit(result.time,data.signals,reference)
-            quality=l4_growth_quality(result.time,data,variant.spec)
-            quality["internal"]=l4_growth_internal_quality(result,model)
+            fit=system_growth_fit(result.time,data.signals,reference)
+            quality=system_growth_quality(result.time,data,variant.spec)
+            quality["internal"]=system_growth_internal_quality(result,model)
             quality["passed"] &= quality["internal"]["passed"]
-            subwindows=[l4_growth_fit(result.time,data.signals,reference;window=w) for w in ((.0003,.0015),(.0006,.0018))]
-            per_channel=[l4_growth_fit(result.time,data.signals[:,j:j],reference) for j in axes(data.signals,2)]
-            record["growth_analysis"][variant.key]=Dict("fit"=>fit,"comparison"=>l4_growth_comparison(fit,reference),
+            subwindows=[system_growth_fit(result.time,data.signals,reference;window=w) for w in ((.0003,.0015),(.0006,.0018))]
+            per_channel=[system_growth_fit(result.time,data.signals[:,j:j],reference) for j in axes(data.signals,2)]
+            record["growth_analysis"][variant.key]=Dict("fit"=>fit,"comparison"=>system_growth_comparison(fit,reference),
                 "quality"=>quality,"subwindows"=>subwindows,"per_channel_fit"=>per_channel,"channels"=>data.labels)
             write_manifest(directory,record)
         end
@@ -336,7 +336,7 @@ function run_l4_growth(id;directory,remote,deadline)
         halfamp=channels["g_half_amplitude_"*spec.driven_axis].signals-channels["g_baseline"].signals
         half=channels["gh_"*spec.driven_axis].signals-channels["gh_baseline"].signals
         t=results["g_baseline"].time;th=results["gh_baseline"].time
-        ix=findall(x->L4_GROWTH_WINDOW[1]<=x<L4_GROWTH_WINDOW[2],t)
+        ix=findall(x->GROWTH_WINDOW[1]<=x<GROWTH_WINDOW[2],t)
         matching=[only(findall(x->isapprox(x,time;atol=1e-12,rtol=0),th)) for time in t[ix]]
         scaled=main[ix,:]./channels["g_baseline"].bases'
         amplitude=matrix_change(reshape(2halfamp[ix,:]./channels["g_baseline"].bases',length(ix),size(main,2),1),
@@ -358,7 +358,7 @@ function run_l4_growth(id;directory,remote,deadline)
     return record
 end
 
-function l4_growth_recorders!(plan,list)
+function system_growth_recorders!(plan,list)
     x=maximum(c.x for c in plan.main.components)+216
     commands=unique([Dict(c.params)["NAME"] for c in plan.main.components if
         c isa P.ComponentPlan && c.defn=="master:breaker1" && startswith(get(Dict(c.params),"NAME",""),"precharge_")])
@@ -380,8 +380,8 @@ function l4_growth_recorders!(plan,list)
     return nothing
 end
 
-function l4_growth_internal_quality(result,model)
-    ix=findall(t->L4_GROWTH_WINDOW[1]<=t<L4_GROWTH_WINDOW[2],result.time)
+function system_growth_internal_quality(result,model)
+    ix=findall(t->GROWTH_WINDOW[1]<=t<GROWTH_WINDOW[2],result.time)
     isempty(ix) && return Dict("passed"=>false,"reason"=>"missing fixed interval")
     commands=filter(p->p.kind==:precharge_command,model.probes.channels)
     modulation=filter(p->p.element=="c1" && startswith(p.name,"m_") && p.unit=="pu",model.probes.channels)

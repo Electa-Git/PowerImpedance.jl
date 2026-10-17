@@ -149,7 +149,7 @@ function single_response(result, baseline_result, model, spec, column)
     change = matrix_change(matrices[2], matrices[1]; epsilon = 0.01)
     quality["window_change"] = change["frobenius_change"]
     quality["valid"] &= change["passed"]
-    if spec.id == "L1-01"
+    if spec.id == "passive_ac_rlc"
         departure = maximum(abs,
             branch_samples(result, model).clamped_voltage -
             branch_samples(baseline_result, model).clamped_voltage) / spec.voltage_bases[1]
@@ -313,11 +313,12 @@ end
 
 function execute_axis!(record, key, model, directory, remote, deadline)
     remaining = floor(Int, deadline-time())
-    remaining > 0 || error("L1 station runtime budget exhausted")
-    result = resume_axis(model, key, directory, budget_remote(remote, remaining))
+    remaining > 0 || error("fixture station runtime budget exhausted")
+    recorded_paths = [run["path"] for run in record["run_records"] if run["axis"] == key]
+    result = resume_axis(model, key, directory, budget_remote(remote, remaining); recorded_paths)
     if result === nothing
         remaining = floor(Int, deadline-time())
-        remaining > 0 || error("L1 station runtime budget exhausted")
+        remaining > 0 || error("fixture station runtime budget exhausted")
         println("Running ", record["fixture_id"], " ",
             key, "; remaining budget [s]=", remaining)
         parent = mkpath(joinpath(remote.local_root, "validation", record["fixture_id"]))
@@ -374,7 +375,7 @@ end
 
 function run_fixture(id; remote = RemoteConfig(),
         directory = joinpath(ROOT, "data", id), deadline = time()+5400)
-    startswith(id, "L3-") && return run_composed(id; remote, directory, deadline)
+    fixture(id).category == :coupled && return run_composed(id; remote, directory, deadline)
     record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
     verify_inputs(directory, record)
     record["fixture_id"] == id || error("fixture mismatch")
@@ -385,12 +386,12 @@ function run_fixture(id; remote = RemoteConfig(),
     record["stability"] = gate
     gate["status"] == "passed" || @warn "$(entry.id) complete-network stability result: $(gate["status"])" stability=gate
     list = fixture_netlist(net, point)
-    spec, reference = applicable_scan(id, net, list; definition = record["tier_c"])
+    spec, reference = applicable_scan(id, net, list; definition = record["frequency_response"])
     haskey(spec, :machine_stability) && (record["machine_stability"] = spec.machine_stability)
     stored = read_response(joinpath(directory, reference_filename(spec)), length(spec.axes), spec.frequencies)
     record_native_reference!(record,directory,spec,reference,stored,list)
     scan_record(spec) ==
-    Dict(key=>record["tier_c"][key] for key in keys(scan_record(spec))) ||
+    Dict(key=>record["frequency_response"][key] for key in keys(scan_record(spec))) ||
         error("scan definition changed")
     if startswith(get(record,"status",""),"explained:")
         record["previous_result_status"]=record["status"]
@@ -409,19 +410,19 @@ function run_fixture(id; remote = RemoteConfig(),
             models[key], results[key] = model, result
             if key == "baseline"
                 rows = compare_operating_point(result, model)
-                write_table(joinpath(comparison_directory, "comparison_A.tsv"), rows)
-                record["tier_a_status"] = all(rows.within_tolerance) ? "passed" : "failed"
+                write_table(joinpath(comparison_directory, "comparison_operating_point.tsv"), rows)
+                record["operating_point_status"] = all(rows.within_tolerance) ? "passed" : "failed"
                 write_manifest(directory, record)
             end
         end
-        record["tier_c_result"] = compare_frequency_runs(
+        record["frequency_response_result"] = compare_frequency_runs(
             results, models, stored, comparison_directory; spec)
         record_interface_comparison!(record, net, spec, directory, comparison_directory)
         # Reference-only revisions leave the measured integration-step comparisons valid.
         # Their recorded axis/band is reused without another run.
         selected = haskey(record, "step_witness_definition") ?
             only(findall(==(record["step_witness_definition"]["axis"]), spec.axes)) :
-            record["tier_c_result"]["worst_column"]
+            record["frequency_response_result"]["worst_column"]
         axis = spec.axes[selected]
         half_spec = merge(spec, (tone_peak_pu = spec.tone_peak_pu/2,))
         half_key = scan_prefix(spec) * "half_amplitude_" * axis
@@ -442,7 +443,7 @@ function run_fixture(id; remote = RemoteConfig(),
         write_manifest(directory, record)
         witness_frequency = haskey(record, "step_witness_definition") ?
             first(record["step_witness_definition"]["frequencies"]) :
-            record["tier_c_result"]["worst_frequency_Hz"]
+            record["frequency_response_result"]["worst_frequency_Hz"]
         step_spec = step_definition(spec, witness_frequency)
         if !haskey(record, "step_witness_definition")
             record["step_witness_definition"] = merge(scan_record(step_spec), Dict("axis"=>axis))
@@ -495,8 +496,8 @@ function run_fixture(id; remote = RemoteConfig(),
     return record
 end
 
-function run_l1(; remote = RemoteConfig(), deadline = time()+5400)
-    records = [run_fixture(entry.id; remote, deadline) for entry in REGISTRY if startswith(entry.id,"L1-")]
+function run_passive(; remote = RemoteConfig(), deadline = time()+5400)
+    records = [run_fixture(entry.id; remote, deadline) for entry in REGISTRY if entry.category == :passive]
     return records
 end
 
@@ -516,7 +517,7 @@ end
 # phase-domain circuits, the 2% complex budget and 0.1 pu norm floor bound omitted
 # coupling; response tolerances remain unchanged.
 function sideband_coupling(time, baseline, runs, spec)
-    spec.dimension==2 && spec.id!="L1-01" || return 0.0
+    spec.dimension==2 && spec.id!="passive_ac_rlc" || return 0.0
     frequencies=unique(sort([abs(f+shift) for f in spec.frequencies
                              for shift in (-100.0, 100.0)
                              if abs(f+shift)>0 && !(abs(f+shift) in spec.frequencies)]))

@@ -3,8 +3,9 @@ using PowerImpedance, TOML
 include("validation.jl")
 refresh = "--refresh-reference" in ARGS
 fixtures = filter(!=("--refresh-reference"), ARGS)
-length(fixtures) == 1 || error("usage: reanalyse.jl <fixture|L1> [--refresh-reference]")
-ids = only(fixtures) == "L1" ? [entry.id for entry in PSCADValidation.REGISTRY] : fixtures
+length(fixtures) == 1 || error("usage: reanalyse.jl <fixture|passive> [--refresh-reference]")
+ids = only(fixtures) == "passive" ?
+      [entry.id for entry in PSCADValidation.REGISTRY if entry.category == :passive] : fixtures
 for id in ids
     if refresh
         PSCADValidation.refresh_references(id)

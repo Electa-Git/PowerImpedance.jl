@@ -15,7 +15,7 @@ function diagnostic(definition, names)
     return P.ModuleDefinitionPlan(definition.name, definition.parameters, definition.ports, canvas)
 end
 
-@testset "M5b MMC modes and TLC VAC" begin
+@testset "converter-control MMC modes and TLC VAC" begin
     for factory in (PSCADFixtures.mmc_vdc_network, PSCADFixtures.mmc_pf_network,
         PSCADFixtures.mmc_qv_network, PSCADFixtures.mmc_vac_network, PSCADFixtures.tlc_vac_network)
         fixture = factory()

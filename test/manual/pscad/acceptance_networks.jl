@@ -3,9 +3,9 @@
 # writes the projects/references without contacting the station.
 using PowerImpedance, PythonCall, LinearAlgebra, DelimitedFiles
 include("../../pscad/fixtures.jl")
-include("../../pscad/m7_networks.jl")
+include("../../pscad/networks.jl")
 const P = PowerImpedance.PSCAD
-const OUTPUT = mkpath("/tmp/pscad-m7")
+const OUTPUT = mkpath("/tmp/pscad-network-acceptance")
 const IEEE9_SETTINGS = P.SimulationSettings(simulation_time = 3.0,
     time_step = 10e-6, sample_step = 100e-6)
 const RECORD_SETTINGS = P.SimulationSettings(simulation_time = 25.0,
@@ -62,7 +62,7 @@ function export_case(name, network; settings = RECORD_SETTINGS,
     model = Base.invokelatest(export_pscad, network; path, settings)
     elapsed = (time_ns() - started) * 1e-9
     write_reference(model)
-    counts = PSCADM7Networks.inventory(model.netlist)
+    counts = PSCADNetworks.inventory(model.netlist)
     println(name, ": ", counts)
     return (; model, counts, export_seconds = elapsed, status, reason)
 end
@@ -94,7 +94,7 @@ function run_case(case, remote)
     started = time_ns()
     result, rows, detail = nothing, [], ""
     status = case.status == "build-only" ? "fail" : "run_failed"
-    work_root = mkpath(joinpath(remote.local_root, "m7", model.project_name))
+    work_root = mkpath(joinpath(remote.local_root, "network-acceptance", model.project_name))
     previous_runs = Set(readdir(work_root; join = true))
     try
         result = compute(model, PSCADRun(); options = (; remote,
@@ -140,7 +140,7 @@ end
 
 function native_dimensions(case, remote)
     name = case.model.project_name
-    directory = joinpath(remote.local_root, "m7", name)
+    directory = joinpath(remote.local_root, "network-acceptance", name)
     runs = filter(path -> isdir(path) && startswith(basename(path), "run-"),
         readdir(directory; join = true))
     isempty(runs) && return (missing, missing, missing, missing)
@@ -171,22 +171,22 @@ end
 cases = [
     export_case("ieee9_classic", PSCADFixtures.ieee9_network();
         settings = IEEE9_SETTINGS, status = "acceptance", reason = "network-scale AC case"),
-    export_case("p2p_builder", PSCADM7Networks.p2p_builder(0.25);
+    export_case("p2p_builder", PSCADNetworks.p2p_builder(0.25);
         reason = "dynamic validation only; unstable in Julia, no operating-point acceptance")]
 
 # The gitignored model is deliberately loaded only by this manual script.
 local_path = joinpath(pkgdir(PowerImpedance), "local", "P2P_HVDC.jl")
 local_status = "absent"
 if isfile(local_path)
-    namespace = PSCADM7Networks.load_through(local_path, :net)
+    namespace = PSCADNetworks.load_through(local_path, :net)
     push!(cases, export_case("p2p_classic", Base.invokelatest(getproperty, namespace, :net);
         reason = "dynamic validation only; unstable in Julia, no operating-point acceptance"))
     local_status = "present; 25 km cable + 75 km DC overhead line"
 end
-push!(cases, export_case("ieee39_classic", PSCADM7Networks.ieee39_classic();
+push!(cases, export_case("ieee39_classic", PSCADNetworks.ieee39_classic();
     status = "build-only",
     reason = "licence: node cap; 528 live nodes exceeds EDUCATIONAL 200"))
-push!(cases, export_case("ieee39_builder", PSCADM7Networks.ieee39_builder();
+push!(cases, export_case("ieee39_builder", PSCADNetworks.ieee39_builder();
     status = "build-only",
     reason = "licence: node cap; 528 live nodes exceeds EDUCATIONAL 200"))
 
@@ -202,7 +202,7 @@ open(joinpath(OUTPUT, "inventory.tsv"), "w") do io
 end
 
 write(joinpath(OUTPUT, "README.md"), """
-# M7 closing exports
+# network closing exports
 
 Only ieee9_classic is run and compared by this script. It uses 3 s / 10 us /
 100 us at 50 Hz, default 0.05 s source ramp and the final ten cycles (2.8,3.0] s.
@@ -316,5 +316,5 @@ if !("--export-only" in ARGS)
             println(io, join((case.model.project_name, native_dimensions(case, remote)...), '\t'))
         end
     end
-    accepted[] || error("M7 native acceptance failed; see /tmp/pscad-m7/runs.tsv")
+    accepted[] || error("network native acceptance failed; see /tmp/pscad-network-acceptance/runs.tsv")
 end

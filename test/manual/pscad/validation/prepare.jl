@@ -4,10 +4,10 @@ include("validation.jl")
 resonance = "--resonance" in ARGS
 fixtures = filter(!=("--resonance"), ARGS)
 length(fixtures) == 1 || error("usage: prepare.jl <fixture> [--resonance]")
-for id in (only(fixtures) == "L1" ? [entry.id for entry in PSCADValidation.REGISTRY if startswith(entry.id,"L1-")] :
+for id in (only(fixtures) == "passive" ? [entry.id for entry in PSCADValidation.REGISTRY if entry.category == :passive] :
            [only(fixtures)])
     if resonance
-        id == "L1-08" || error("resonance preparation is restricted to L1-08")
+        id == "ieee9_bus_impedance" || error("resonance preparation is restricted to ieee9_bus_impedance")
         PSCADValidation.prepare_resonance_fixture()
     else
         PSCADValidation.prepare_fixture(id)

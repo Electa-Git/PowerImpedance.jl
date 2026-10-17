@@ -1,4 +1,4 @@
-module PSCADM7Networks
+module PSCADNetworks
 using PowerImpedance, LinearAlgebra, Test
 const P = PowerImpedance.PSCAD
 const NB = PowerImpedance.NetworkBuilder

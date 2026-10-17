@@ -1,142 +1,142 @@
 # The registry is a catalogue of frozen physical circuits. TLC variants retain the fixture
 # controls; composed_execution.jl adds the composed circuits.
 const REGISTRY = [
-    (id = "L1-01", description = "AC series/parallel RLC; RL two-source witness",
-        parent = "M1 small_ac_network", factory = () -> ac_rl_network(),
+    (id = "passive_ac_rlc", category = :passive, description = "AC series/parallel RLC; RL two-source witness",
+        parent = "small_ac_network", factory = () -> ac_rl_network(),
         topology = "ideal AC source — RL branch — ideal AC source",
         physics = ["R/L energy and loss", "dq coupling", "clamped two-port reduction"],
         dissipativity = "R=20 Ω damps every branch-current mode; both port voltages are prescribed",
-        differences = String[], tiers = ["A", "C"], estimated_nodes = 30),
-    (id = "L1-02", description = "DC two-terminal RLC",
-        parent = "M2 dc_network", factory = () -> dc_rlc_network(),
+        differences = String[], measurements = ["operating_point", "frequency_response"], estimated_nodes = 30),
+    (id = "passive_dc_rlc", category = :passive, description = "DC two-terminal RLC",
+        parent = "dc_network", factory = () -> dc_rlc_network(),
         topology = "two DC sources — differential RL and parallel RC sections; AC slack island",
         physics = ["pole scaling", "DC loss", "capacitive charging"],
         dissipativity = "positive series and parallel resistance; no isolated lossless storage",
         differences = ["DM midpoint references: two 10 MΩ pole shunts, 20 MΩ differential path"],
-        tiers = ["A", "C"], estimated_nodes = 32),
-    (id = "L1-03", description = "AC overhead line",
-        parent = "M1 passive_ohl_network", factory = () -> PSCADFixtures.passive_ohl_network().classic,
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 32),
+    (id = "ac_ohl_untransposed", category = :passive, description = "AC overhead line",
+        parent = "passive_ohl_network", factory = () -> PSCADFixtures.passive_ohl_network().classic,
         topology = "AC source — 25 km OHL — resistive load",
         physics = ["earth return", "propagation", "phase ordering"],
         dissipativity = "positive conductor/earth loss and resistive termination",
         differences = ["PSCAD rational line/earth fit versus native evaluation; retain fit settings/results"],
-        tiers = ["A", "C"], estimated_nodes = 36),
-    (id = "L1-04", description = "AC coaxial cable",
-        parent = "M2 dc_cable_network geometry + M1 AC topology", factory = () -> ac_cable_network(),
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 36),
+    (id = "ac_cable_coaxial", category = :passive, description = "AC coaxial cable",
+        parent = "dc_cable_network geometry + AC topology", factory = () -> ac_cable_network(),
         topology = "AC source — three underground coaxial cores — resistive load",
         physics = ["dielectric charging", "eliminated sheaths", "AC core ordering"],
         dissipativity = "positive conductor/earth loss and resistive termination",
-        differences = ["PSCAD rational cable/earth fit and grounded conductor elimination; quantify before C"],
-        tiers = ["A", "C"], estimated_nodes = 40),
-    (id = "L1-05", description = "DC cable + DC overhead line",
-        parent = "M2 dc_cable_network + M7 dc_ohl_test geometry", factory = () -> dc_mixed_network(),
+        differences = ["PSCAD rational cable/earth fit and grounded conductor elimination; quantify before frequency-response measurement"],
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 40),
+    (id = "dc_cable_ohl", category = :passive, description = "DC cable + DC overhead line",
+        parent = "dc_cable_network + dc_ohl_test geometry", factory = () -> dc_mixed_network(),
         topology = "DC source — 25 km cable — 75 km DC OHL — DC source; AC slack island",
         physics = ["mixed-medium reflection", "DC fit", "differential order"],
         dissipativity = "positive conductor/earth loss in both source-terminated sections",
         differences = [
             "DC line/cable fits start at 0.001 Hz, DCenab=0; DC and broadband errors require measurement",
             "DM midpoint references: two 10 MΩ pole shunts, 20 MΩ differential path"],
-        tiers = ["A", "C"], estimated_nodes = 40),
-    (id = "L1-06", description = "YY transformer",
-        parent = "M1 transformer_network", factory = () -> PSCADFixtures.transformer_network().classic,
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 40),
+    (id = "transformer_yy", category = :passive, description = "YY transformer",
+        parent = "transformer_network", factory = () -> PSCADFixtures.transformer_network().classic,
         topology = "AC source — YY T model — resistive load",
         physics = ["turns ratio", "magnetizing current", "T-model response"],
         dissipativity = "positive winding/magnetizing resistance and resistive load",
         differences = ["YY leakage 1e-4 pu and excitation 1e-3 percent",
-            "power-flow approximation versus explicit T model"], tiers = ["A", "C"], estimated_nodes = 48),
-    (id = "L1-07", description = "Dyn11 transformer",
-        parent = "M2 transformer_network(:ΔY)",
+            "power-flow approximation versus explicit T model"], measurements = ["operating_point", "frequency_response"], estimated_nodes = 48),
+    (id = "transformer_dyn11", category = :passive, description = "Dyn11 transformer",
+        parent = "transformer_network(:ΔY)",
         factory = () -> PSCADFixtures.transformer_network(organization = :ΔY).classic,
         topology = "AC source — Dyn11 T model — resistive load",
         physics = ["+30 degree secondary shift", "turns ratio", "winding loss"],
         dissipativity = "positive winding/magnetizing resistance and resistive load",
         differences = ["power-flow approximation versus explicit Dyn11 T model"],
-        tiers = ["A", "C"], estimated_nodes = 48),
-    (id = "L1-08", description = "IEEE9 passive system anchor",
-        parent = "M7 ieee9_network", factory = PSCADFixtures.ieee9_network,
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 48),
+    (id = "ieee9_bus_impedance", category = :passive, description = "IEEE9 passive system anchor",
+        parent = "ieee9_network", factory = PSCADFixtures.ieee9_network,
         topology = "3 ideal AC sources, 3 YY transformers, 6 OHL, 3 impedance loads",
         physics = ["network assembly", "multi-bus reduction", "voltage levels"],
         dissipativity = "lossy lines and resistive loads terminate the lossless transformer storage",
         differences = ["YY winding regularization", "rational line/earth fits",
             "power-flow approximation versus explicit transformer T/capacitance model"],
-        tiers = ["A", "C"], estimated_nodes = 78),
-    (id = "L2-01", description = "TLC P/Q, PLL/OCC against SCR 8 Thevenin grid",
-        parent = "M4 tlc_case2_network controls and electrical parameters",
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 78),
+    (id = "tlc_pq_freq_support", category = :device, description = "TLC P/Q, PLL/OCC against SCR 8 Thevenin grid",
+        parent = "TLC tlc_case2_network controls and electrical parameters",
         factory = () -> tlc_strong_network(),
         topology = "AC source — series RL — TLC AC; ideal DC source clamps TLC DC",
         physics = ["PLL/grid interaction", "P/Q outer and current inner loops", "clamped-DC AC admittance"],
         dissipativity = "complete-network Nyquist and located roots required; no passive shortcut",
-        differences = ["M4 Padé 3/3 200 us modulation delay versus PSCAD exact delay; quantify phase in band",
-            "averaged TLC; limits retained at M4 values; ideal DC source; no DC cable"],
-        tiers = ["A", "C"], estimated_nodes = 45),
-    (id = "L2-02", description = "TLC P-f/Q, SCR 8 / X/R 10",
-        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        differences = ["TLC Padé 3/3 200 us modulation delay versus PSCAD exact delay; quantify phase in band",
+            "averaged TLC; limits retained at TLC values; ideal DC source; no DC cable"],
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 45),
+    (id = "tlc_pf_q", category = :device, description = "TLC P-f/Q, SCR 8 / X/R 10",
+        parent = "TLC electrical/inner/PLL parameters; converter-control shared outer-loop gains",
         factory = () -> tlc_strong_network(mode = :pf, scr = 8.0),
         topology = "AC source — RL — TLC; ideal DC source",
         physics = ["frequency support lag", "PLL/grid interaction", "terminated AC-port admittance"],
         dissipativity = "complete-network Nyquist and all finite descriptor roots required",
-        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "L2-01 already contains the same M4 frequency support lag; explicit mode witness"],
-        tiers = ["A", "C"], estimated_nodes = 45),
-    (id = "L2-03", description = "TLC P/Q-V, SCR 8 / X/R 10",
-        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        differences = ["TLC Padé 3/3 200 us modulation versus PSCAD exact delay", "tlc_pq_freq_support already contains the same TLC frequency support lag; explicit mode witness"],
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 45),
+    (id = "tlc_p_qv", category = :device, description = "TLC P/Q-V, SCR 8 / X/R 10",
+        parent = "TLC electrical/inner/PLL parameters; converter-control shared outer-loop gains",
         factory = () -> tlc_strong_network(mode = :qv, scr = 8.0),
         topology = "AC source — RL — TLC; ideal DC source",
         physics = ["voltage support lag/droop", "PLL/grid interaction", "terminated AC-port admittance"],
         dissipativity = "complete-network Nyquist and all finite descriptor roots required",
-        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "Q-V K=20, omega_c=100 rad/s; P has no frequency support"],
-        tiers = ["A", "C"], estimated_nodes = 45),
-    (id = "L2-04", description = "TLC P/VAC, SCR 8 / X/R 10",
-        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        differences = ["TLC Padé 3/3 200 us modulation versus PSCAD exact delay", "Q-V K=20, omega_c=100 rad/s; P has no frequency support"],
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 45),
+    (id = "tlc_p_vac", category = :device, description = "TLC P/VAC, SCR 8 / X/R 10",
+        parent = "TLC electrical/inner/PLL parameters; converter-control shared outer-loop gains",
         factory = () -> tlc_strong_network(mode = :vac, scr = 8.0),
         topology = "AC source — RL — TLC; ideal DC source",
         physics = ["AC voltage regulation", "PLL/grid interaction", "terminated AC-port admittance"],
         dissipativity = "complete-network Nyquist and all finite descriptor roots required",
-        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "VAC NoFilter, Kp=0, Ki=100; P has no frequency support"],
-        tiers = ["A", "C"], estimated_nodes = 45),
-    (id = "L2-05", description = "TLC Vdc/Q with resistive DC load, SCR 8 / X/R 10",
-        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        differences = ["TLC Padé 3/3 200 us modulation versus PSCAD exact delay", "VAC NoFilter, Kp=0, Ki=100; P has no frequency support"],
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 45),
+    (id = "tlc_vdc_q", category = :device, description = "TLC Vdc/Q with resistive DC load, SCR 8 / X/R 10",
+        parent = "TLC electrical/inner/PLL parameters; converter-control shared outer-loop gains",
         factory = () -> tlc_strong_network(mode = :vdc, scr = 8.0),
         topology = "AC source — RL — TLC; DC — resistor — zero-voltage reference",
         physics = ["DC voltage regulation and AC/DC feedback", "PLL/grid interaction", "terminated AC-port admittance"],
         dissipativity = "complete-network Nyquist and all finite descriptor roots required",
-        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "DC load 640^2/70 ohm; remote zero-voltage reference is a short, not a clamp at the converter"],
-        tiers = ["A", "C"], estimated_nodes = 49),
-    (id = "L2-06", description = "TLC P/Q weak-grid twin, SCR 2.5 / X/R 10",
-        parent = "M4 TLC electrical/inner/PLL parameters; M5b shared outer-loop gains",
+        differences = ["TLC Padé 3/3 200 us modulation versus PSCAD exact delay", "DC load 640^2/70 ohm; remote zero-voltage reference is a short, not a clamp at the converter"],
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 49),
+    (id = "tlc_pq_weak_grid", category = :device, description = "TLC P/Q weak-grid twin, SCR 2.5 / X/R 10",
+        parent = "TLC electrical/inner/PLL parameters; converter-control shared outer-loop gains",
         factory = () -> tlc_strong_network(mode = :pq, scr = 2.5),
         topology = "AC source — RL — TLC; ideal DC source",
         physics = ["weak-grid PLL/controller coupling", "PLL/grid interaction", "terminated AC-port admittance"],
         dissipativity = "complete-network Nyquist and all finite descriptor roots required",
-        differences = ["M4 Padé 3/3 200 us modulation versus PSCAD exact delay", "Identical M4 controls and requests to L2-01, including its P-f lag"],
-        tiers = ["A", "C"], estimated_nodes = 45),
-    [(id = id, description = "MMC $(label), SCR $(scr) / X/R 10",
-        parent = "M5a/M5b mmc_network parameters and controls",
+        differences = ["TLC Padé 3/3 200 us modulation versus PSCAD exact delay", "Identical TLC controls and requests to tlc_pq_freq_support, including its P-f lag"],
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 45),
+    [(id = id, category = :device, description = "MMC $(label), SCR $(scr) / X/R 10",
+        parent = "MMC mmc_network parameters and controls",
         factory = () -> mmc_grid_network(; mode, scr),
         topology = mode == :vdc ? "AC source — RL — MMC; physical DC resistor to ground" :
             "AC source — RL — MMC; ideal DC source",
         physics = ["PLL/grid interaction", "TEC/ZSCC/CCSC", "terminated AC-port admittance"],
         dissipativity = "complete-network Nyquist and all finite descriptor roots required",
-        differences = ["averaged MMC with uncompensated modulation; M5a/M5b parameters unchanged",
+        differences = ["averaged MMC with uncompensated modulation; MMC parameters unchanged",
             "Thevenin SCR at external 380 kV / 1000 MVA; transformer ratio 333/380 retained"],
-        tiers = ["A", "C"], estimated_nodes = mode == :vdc ? 65 : 61)
-     for (id, mode, label, scr) in (("L2-07", :pq, "P/Q", 8.0),
-         ("L2-08", :pf, "P-f/Q", 8.0), ("L2-09", :qv, "P/Q-V", 8.0),
-         ("L2-10", :vac, "P/VAC", 8.0), ("L2-11", :vdc, "Vdc/Q", 8.0),
-         ("L2-12", :pq, "P/Q weak-grid twin", 2.5))]...,
-    [(id=id, description=label, parent=parent,
-        factory=()->batch_c_network(kind; scr),
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = mode == :vdc ? 65 : 61)
+     for (id, mode, label, scr) in (("mmc_pq", :pq, "P/Q", 8.0),
+         ("mmc_pf_q", :pf, "P-f/Q", 8.0), ("mmc_p_qv", :qv, "P/Q-V", 8.0),
+         ("mmc_p_vac", :vac, "P/VAC", 8.0), ("mmc_vdc_q", :vdc, "Vdc/Q", 8.0),
+         ("mmc_pq_weak_grid", :pq, "P/Q weak-grid twin", 2.5))]...,
+    [(id=id, category=:device, description=label, parent=parent,
+        factory=()->active_device_network(kind; scr),
         topology=kind==:machine ? "AC source — RL — synchronous machine with native rt/lt" :
             "AC source — RL — MMC; ideal DC source",
         physics=["complete-network active-device dynamics", "AC-terminal dq admittance"],
         dissipativity="complete-network Nyquist and all finite descriptor roots required",
         differences=kind==:machine ? ["native machine Y is per-unit; explicit SI boundary conversion", "existing PSCAD machine iron-loss and initialization conventions"] :
             ["200 us Padé 5/5 modulation versus native PSCAD delay; controls and electrical parameters unchanged"],
-        tiers=["A","C"], estimated_nodes=kind==:machine ? 45 : 65)
-     for (id,kind,label,parent,scr) in (("L2-13",:gfm,"GFM MMC, SCR 8","M6a mmc_gfm_network",8.),
-         ("L2-14",:compensated,"LEC/CCC compensated MMC","M6b mmc_compensated_network",8.),
-         ("L2-15",:disabled,"P/Q MMC with disabled TEC/ZSCC","legacy-mapped P2P receiving MMC c2",8.),
-         ("L2-16",:machine,"Synchronous machine with AVR/governor/turbine","M3 sm_network",8.),
-         ("L2-17",:gfm,"GFM MMC weak-grid twin","M6a mmc_gfm_network",2.5))]...
+        measurements=["operating_point", "frequency_response"], estimated_nodes=kind==:machine ? 45 : 65)
+     for (id,kind,label,parent,scr) in (("mmc_gfm_vsm",:gfm,"GFM MMC, SCR 8","GFM MMC mmc_gfm_network",8.),
+         ("mmc_gfm_lec_compensated",:compensated,"LEC/CCC compensated MMC","compensated MMC mmc_compensated_network",8.),
+         ("mmc_pq_no_energy_control",:disabled,"P/Q MMC with disabled TEC/ZSCC","legacy-mapped P2P receiving MMC c2",8.),
+         ("synchronous_machine",:machine,"Synchronous machine with AVR/governor/turbine","machine sm_network",8.),
+         ("mmc_gfm_weak_grid",:gfm,"GFM MMC weak-grid twin","GFM MMC mmc_gfm_network",2.5))]...
 ]
 
 function fixture(id)
@@ -255,7 +255,7 @@ function passive_gate(net, entry)
         "scope" => "registered source-terminated passive topology; no active-device inference")
 end
 
-function l1_settings()
+function passive_settings()
     frequencies = unique(sort!([round.(Int, exp10.(range(0, 3; length = 25))); 50]))
     n = length(frequencies)
     phases = [-π * k * (k - 1) / n for k in 1:n]
@@ -394,16 +394,16 @@ function mmc_grid_network(; mode = :pq, scr = 8.0)
     return net
 end
 
-function batch_c_device(kind)
+function active_device(kind)
     kind==:gfm && return deepcopy(PSCADFixtures.mmc_gfm_network().state.elements.DUT)
     kind==:compensated && return deepcopy(PSCADFixtures.mmc_compensated_network().state.elements.DUT)
-    kind==:disabled && return deepcopy(PSCADM7Networks.p2p_builder(1.).elements.c2)
+    kind==:disabled && return deepcopy(PSCADNetworks.p2p_builder(1.).elements.c2)
     kind==:machine && return deepcopy(PSCADFixtures.sm_network().state.elements.sg1)
-    throw(ArgumentError("unknown batch C device $kind"))
+    throw(ArgumentError("unknown active device $kind"))
 end
 
-function batch_c_network(kind; scr=8.)
-    dut=batch_c_device(kind)
+function active_device_network(kind; scr=8.)
+    dut=active_device(kind)
     bases=device_bases(dut.element_model.elec)
     net=Network();net.voltageBase[1]=bases.ac_voltage/sqrt(2)
     add!(net,:DUT,dut)

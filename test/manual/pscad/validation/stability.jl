@@ -56,8 +56,8 @@ function network_stability(A, B, C, D, grid_y, resistance, inductance, rotation;
 end
 
 function stability_gate(net, entry)
-    startswith(entry.id,"L1-") && return passive_gate(net,entry)
-    startswith(entry.id,"L2-") || error("no complete-network gate for $(entry.id)")
+    entry.category == :passive && return passive_gate(net,entry)
+    entry.category == :device || error("no complete-network gate for $(entry.id)")
     dut=net.elements[:DUT]
     bases=device_bases(dut.element_model.elec)
     form=P.identify_rlc(net.elements[:Grid]; name=:Grid).form

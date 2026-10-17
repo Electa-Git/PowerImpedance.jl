@@ -37,7 +37,7 @@ else
     mhixml = pyimport("mhi.xml.pscad")
     include("fixtures.jl")
     include("topology.jl")
-    include("m7_networks.jl")
+    include("networks.jl")
     using TOML
     P = PowerImpedance.PSCAD
     runner = Module(:GeometryRunner)
@@ -435,7 +435,7 @@ else
                     @test occursin("isolated part", sprint(showerror, failure))
                     @test occursin("I_load_1", sprint(showerror, failure))
                     @test occursin("I_line_2", sprint(showerror, failure))
-                    println("Rejected saved m4-bz1oQX YY: ", sprint(showerror, failure))
+                    println("Rejected saved tlc-bz1oQX YY: ", sprint(showerror, failure))
                     direction = PSCADTopology.shunt_meter_direction(graphs["Main"], "I_load_1", "load_R")
                     @test direction == 1
                     measured = direction .* complex.(
@@ -1133,8 +1133,8 @@ else
             end
         end
     end
-    @testset "M7 IEEE9 XML" begin
-        path = joinpath(only(ARGS), "m7_ieee9.pscx")
+    @testset "network IEEE9 XML" begin
+        path = joinpath(only(ARGS), "network_ieee9.pscx")
         model = export_pscad(PSCADFixtures.ieee9_network(); path,
             settings = P.SimulationSettings(simulation_time = 3.0))
         root = etree.parse(path).getroot()
@@ -1143,7 +1143,7 @@ else
         @test summary.settings["time_step"] == "10.0"
         @test summary.settings["sample_step"] == "100.0"
         @test length(model.netlist.buses) == 9
-        @test PSCADM7Networks.inventory(model.netlist).subsystems == 6
+        @test PSCADNetworks.inventory(model.netlist).subsystems == 6
         for (name, voltage) in (("g1", "16.5 [kV]"), ("g2", "18.0 [kV]"),
             ("g3", "13.8 [kV]"))
             source = only(root.xpath(".//User[@defn='master:source_3'][paramlist/param[@name='Name'][@value='$name']]"))
@@ -1164,9 +1164,9 @@ else
             PSCADTopology.check_degrees(graph, name)
         end
     end
-    @testset "M7 legacy MMC and two-pole overhead line XML" begin
-        state = PSCADM7Networks.p2p_builder(1.0)
-        path = joinpath(only(ARGS), "m7_p2p.pscx")
+    @testset "network legacy MMC and two-pole overhead line XML" begin
+        state = PSCADNetworks.p2p_builder(1.0)
+        path = joinpath(only(ARGS), "network_p2p.pscx")
         settings = P.SimulationSettings(simulation_time = 25.0,
             time_step = 10e-6, sample_step = 250e-6, source_ramp = 0.0)
         model = export_pscad(state; path, settings)
@@ -1194,7 +1194,7 @@ else
         ports = [(parse(Int, pyconvert(String, p.get("x"))),
             parse(Int, pyconvert(String, p.get("y")))) for p in witness.xpath("./svg/port")]
         @test ports == [(-18, -18), (-18, 18)]
-        @test PSCADM7Networks.inventory(model.netlist).subsystems == 5
+        @test PSCADNetworks.inventory(model.netlist).subsystems == 5
         for e in model.netlist.elements
             e.model isa PowerImpedance.MMC || continue
             @test e.model.sigma_control.tec isa NoTotalEnergyControl

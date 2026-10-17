@@ -72,12 +72,12 @@ function resonance_spec(net,list,base)
     return merge(spec,(;tone_peak_pu=min(base.tone_peak_pu,.002/max(bound,1.)))),reference
 end
 
-function prepare_resonance_fixture(;directory=joinpath(ROOT,"data","L1-08"))
+function prepare_resonance_fixture(;directory=joinpath(ROOT,"data","ieee9_bus_impedance"))
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")))
     history=mkpath(joinpath(directory,"history","resonance-"*Dates.format(now(UTC),"yyyymmddTHHMMSS")))
     cp(joinpath(directory,"manifest.toml"),joinpath(history,"manifest.toml"))
-    net=fixture("L1-08").factory();list=P.netlist(net,power_flow(net))
-    base,_=applicable_scan("L1-08",net,list;definition=record["tier_c"])
+    net=fixture("ieee9_bus_impedance").factory();list=P.netlist(net,power_flow(net))
+    base,_=applicable_scan("ieee9_bus_impedance",net,list;definition=record["frequency_response"])
     spec,reference=resonance_spec(net,list,base)
     scan_plan(list,spec,"baseline") # Validate before replacing prepared artifacts.
     previous = get(record,"resonance_scan",Dict())
@@ -165,21 +165,21 @@ function run_resonance!(record,net,list,base;directory,remote,deadline)
     measured=cat((f==316. ? old[4:6,4:6,old_k] : fine[:,:,only(findall(==(f),spec.frequencies))] for f in frequencies)...;dims=3)
     expected=cat((f==316. ? old_reference[4:6,4:6,old_k] : stored[:,:,only(findall(==(f),spec.frequencies))] for f in frequencies)...;dims=3)
     rule=resonance_qualification(frequencies,measured,expected)
-    valid=quality["valid"] && record["tier_c_result"]["valid"]
+    valid=quality["valid"] && record["frequency_response_result"]["valid"]
     fine_rows=comparison_rows(frequencies,scale_response(measured,spec),scale_response(expected,spec);valid)
     fine_rows=resonance_judged_rows(fine_rows,rule;valid)
-    write_table(joinpath(output,"comparison_C_qualified.tsv"),fine_rows)
-    old_rows=response_rows(base,scale_response(old,base),scale_response(old_reference,base);valid=record["tier_c_result"]["valid"])
+    write_table(joinpath(output,"comparison_frequency_response_qualified.tsv"),fine_rows)
+    old_rows=response_rows(base,scale_response(old,base),scale_response(old_reference,base);valid=record["frequency_response_result"]["valid"])
     rows=[r.row>3 && r.column>3 ? only(resonance_judged_rows([r],rule;valid)) : merge(r,(;comparison_rule="complex")) for r in old_rows]
-    write_table(joinpath(directory,"analysis",base.protocol,"comparison_C_qualified.tsv"),rows)
+    write_table(joinpath(directory,"analysis",base.protocol,"comparison_frequency_response_qualified.tsv"),rows)
     passed=rule["resolved"] && all(r.within_tolerance for r in fine_rows) && all(r.within_tolerance for r in rows)
     record["resonance_evaluation"]=Dict("qualification"=>rule,"measurement_quality"=>quality,"amplitude_refinement"=>amp,
         "step_refinement"=>step,"status"=>passed ? "passed" : "failed",
-        "base_complex_result"=>deepcopy(record["tier_c_result"]),"frequency_points_Hz"=>frequencies)
-    record["tier_c_result"] = merge(record["tier_c_result"], Dict("status"=>
+        "base_complex_result"=>deepcopy(record["frequency_response_result"]),"frequency_points_Hz"=>frequencies)
+    record["frequency_response_result"] = merge(record["frequency_response_result"], Dict("status"=>
         !valid ? "invalid_measurement" : passed ? "passed" : "failed",
         "resonance_resolved"=>rule["resolved"], "resonance_rule_applied"=>rule["resolved"]))
-    record["status"]=passed && amp["passed"] && step["passed"] && record["tier_a_status"]=="passed" &&
+    record["status"]=passed && amp["passed"] && step["passed"] && record["operating_point_status"]=="passed" &&
         record["amplitude_refinement"]["passed"] && record["step_refinement"]["passed"] ? "passed" : "failed"
     write_manifest(directory,record)
     return record

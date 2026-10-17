@@ -1,4 +1,4 @@
-<SavedMasterDefinitions source="PSCAD master library, kept M7 build">
+<SavedMasterDefinitions source="PSCAD master library, kept network build">
   <Definition classid="UserCmpDefn" name="force_dsdyn" url="" view="false" instances="0" date="0" crc="47662438" id="837548069" group="Miscellaneous">
     <form name="Force to DSDyn" w="280" h="420" splitter="70" commentlines="4">
       <category name="Configuration" visible="true">

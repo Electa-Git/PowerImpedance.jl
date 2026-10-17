@@ -43,11 +43,11 @@ function timing_plan()
     return plan, settings
 end
 
-function prepare_timing(directory = joinpath(ROOT, "data", "m9c2", "timing"))
+function prepare_timing(directory = joinpath(ROOT, "data", "converter_sampling", "timing"))
     plan, settings = timing_plan()
     path = joinpath(mkpath(directory), plan.name*".pscx")
     isfile(path) || P._write_project(plan, path)
-    record = Dict{String, Any}("fixture_id"=>"M9c2-Timing", "source_files"=>source_record(),
+    record = Dict{String, Any}("fixture_id"=>"interface_timing", "source_files"=>source_record(),
         "expected_total_delays_s" => Dict("zero" => 10e-6, "one" => 10e-6,
             "four" => 40e-6, "fractional" => 30e-6),
         "rounding" => "nearest residual step; half-step ties upward (425e9b0)",
@@ -73,7 +73,7 @@ function timing_comparison(time, channels, dt)
     return rows
 end
 
-function run_timing(remote, deadline; directory = joinpath(ROOT, "data", "m9c2", "timing"))
+function run_timing(remote, deadline; directory = joinpath(ROOT, "data", "converter_sampling", "timing"))
     model, directory = prepare_timing(directory)
     record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
     record["source_files"] == source_record() || error("timing witness source hashes changed")

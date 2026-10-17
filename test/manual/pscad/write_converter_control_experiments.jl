@@ -3,7 +3,7 @@ using PowerImpedance, PythonCall, LinearAlgebra
 include("../../pscad/fixtures.jl")
 include("../../pscad/topology.jl")
 const P = PowerImpedance.PSCAD
-const EXPERIMENTS = mkpath("/tmp/pscad-m5b-experiments")
+const EXPERIMENTS = mkpath("/tmp/pscad-converter-control-experiments")
 const MMC_SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
     sample_step = 250e-6, source_ramp = 0.0)
 const TLC_SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
@@ -110,12 +110,12 @@ write_case("tlc_case2_zero_ramp", fixture.classic, zero_ramp, :none)
 
 write(joinpath(EXPERIMENTS, "README.md"),
     """
-# M5b station experiments
+# converter-control station experiments
 
 Ten normal exports cover MMC Vdc, P-f, Q-V, VAC and TLC VAC in classic and NetworkBuilder
 representations. MMC runs use 10 s, 10 us integration, 250 us sampling, source ramp zero,
 fresh start and the accepted 0.2 s solved-measurement hold. TLC VAC uses the
-M4 10 s / 10 us / 40 us settings and 0.05 s source ramp.
+TLC 10 s / 10 us / 40 us settings and 0.05 s source ramp.
 Namespaces, project canvas settings and output settings come directly from the
 exporter. Build and run each project under its own filename without renaming
 its namespace or changing output filenames. No native run is claimed here.
@@ -135,7 +135,7 @@ cycles [9.8,10.0] s using the existing acceptance policy.
   it supplies the DC side instead of imposing another DC-voltage target.
   The existing exporter supplies 1e7 ohm pole references per DC bus;
   their placement differs from the saved project's single ground return. Compare both converters and cable current.
-* mmc_pf_classic/builder: existing 600 MW/200 MVAr PQ plant, plus the M4 TLC
+* mmc_pf_classic/builder: existing 600 MW/200 MVAr PQ plant, plus the TLC
   frequency-support lag Kω=5, ωc=2 rad/s. At nominal frequency support is zero.
 * mmc_qv_classic/builder: saved voltage lag K=20, ωc=100 rad/s and source
   R=0.01 ohm as an explicit series resistor. References use the measured
@@ -143,8 +143,8 @@ cycles [9.8,10.0] s using the existing acceptance policy.
 * mmc_vac_classic/builder: saved VAC PI Kp=0, Ki=100 and validation script's
   explicit 0.1 H AC grid reactor. The solved Q and ξ_v_ac are in the TSV.
 * tlc_vac_classic/builder: same VAC generator and saved 0/100 gains,
-  on the M4 TLC plant with a 0.1 H grid reactor separating its controlled
-  AC bus from the source. The usual M4 DC start-up selector is unchanged.
+  on the TLC plant with a 0.1 H grid reactor separating its controlled
+  AC bus from the source. The usual TLC DC start-up selector is unchanged.
 * mmc_pq_default_ramp: the existing PQ fixture with default 0.05 s source
   ramp, now exported directly through the normal exporter. Compared with
   zero ramp, only Main's three source Tc fields change. Arm source commands
@@ -168,27 +168,27 @@ Provenance: local/GFL-MMC/DVC-Mode/GFL_MMC_Validation.pscx:2020–2045,
 2565–2573 and DC_Voltage_Control.jl:62–104,126–133; Q-V_Droop saved module
 621–644, droop11992–11998 and source687–710; VAC_Control saved PI11936–11941,
 VacControl8025–8215 and VAC_Control.jl:104–116. P-f support gains come from
-local/TLC/Simple_2L_VSC_RL.pscx:876–877 (5, 0.5 s) and the accepted M4 TLC fixture, not a saved
+local/TLC/Simple_2L_VSC_RL.pscx:876–877 (5, 0.5 s) and the accepted TLC fixture, not a saved
 MMC P-f mode. The common MMC plant and explicit differences are recorded in
-M5a and M5b sections of docs/src/developers/pscad_mapping.md.
+MMC and converter-control sections of docs/src/developers/pscad_mapping.md.
 
 DVC's saved current source (0.7527 kA, 0.05 s ramp) is replaced by the script's
 remote PQ converter/cable; its saved 1 ohm feed resistor is omitted and
 the existing exporter supplies pole references. No source current ramp is inferred. The script's
 legacy constructors are rebuilt directly with the modular API. All MMC modes
-retain the M5a full Σ additions (TEC 1.386/29.70 and ZSCC0.1048/48.1914),
+retain the MMC full Σ additions (TEC 1.386/29.70 and ZSCC0.1048/48.1914),
 NoFilter, zero modulation delay, exact ratio, converged capacitor voltages,
 and the accepted near-ideal transformer construction. PQ/P-f omit saved
 source resistance; Q-V retains its scalar R, and VAC uses the script's reactor
 rather than inferring a source impedance from its saved source's Type=4 fields.
 Q-V references also follow the solved Julia voltage/Q, rather than the saved
 fixed 1 pu/200 MVAr requests. Both representations retain their own solved TSVs.
-Q-V/VAC remote DC systems are reduced to the same ideal DC source as M5a,
+Q-V/VAC remote DC systems are reduced to the same ideal DC source as MMC,
 omitting saved 0.05 ohm DC source resistance. The Vdc droop API gap and the
 legacy Σ adapter defect remain deferred. All twelve station round-1 projects
 passed the operating-point comparisons against their own reference TSVs.
-Use test/manual/pscad/compare_m5b_results.jl with the CSV files in
-/tmp/pscad-m5b-results/ to reproduce the detailed 252 comparison rows and
-summary in /tmp/pscad-m5b-comparison/. The developer doc records the measured
+Use test/manual/pscad/compare_converter_control_results.jl with the CSV files in
+/tmp/pscad-converter-control-results/ to reproduce the detailed 252 comparison rows and
+summary in /tmp/pscad-converter-control-comparison/. The developer doc records the measured
 errors and the Q-V/VAC solved-point differences.
 """)

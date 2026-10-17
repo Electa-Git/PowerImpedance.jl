@@ -2,9 +2,9 @@
 using PowerImpedance, DelimitedFiles, LinearAlgebra
 include("../../pscad/fixtures.jl")
 const P = PowerImpedance.PSCAD
-const INPUTS = "/tmp/pscad-m5b-results"
-const REFERENCES = "/tmp/pscad-m5b-experiments"
-const REPORT = mkpath("/tmp/pscad-m5b-comparison")
+const INPUTS = "/tmp/pscad-converter-control-results"
+const REFERENCES = "/tmp/pscad-converter-control-experiments"
+const REPORT = mkpath("/tmp/pscad-converter-control-comparison")
 BLAS.set_num_threads(1)
 
 function retained_point(list, name)
@@ -103,4 +103,4 @@ open(joinpath(REPORT, "summary.tsv"), "w") do io
     end
 end
 
-all(row.pass for row in summary) || error("M5b station operating-point comparison failed")
+all(row.pass for row in summary) || error("converter-control station operating-point comparison failed")

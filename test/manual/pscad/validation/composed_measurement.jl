@@ -162,7 +162,7 @@ function composed_readout_evidence(result,baseline,model,spec,c,column;axis=spec
                         "kcl_real"=>real(kp[coord,k]),"kcl_imag"=>imag(kp[coord,k]),
                         "recorded_real"=>real(ip[coord,k]),"recorded_imag"=>imag(ip[coord,k]),
                         "timed_expected_real"=>real(expected[coord]),"timed_expected_imag"=>imag(expected[coord]),
-                        "check"=>port==driven_port && coord==driven_axis ? "L2 driven timing ratio" : "transported dq KCL residual",
+                        "check"=>port==driven_port && coord==driven_axis ? "single-device driven timing ratio" : "transported dq KCL residual",
                         "normalization_kA"=>port==driven_port && coord==driven_axis ? abs(gamma*ip[coord,k]) : scale)))
                 end
             end
@@ -281,7 +281,7 @@ function composed_comparison(results,models,reference,directory,spec,c;resonance
         bs=composed_target_samples(base,ts,target)
         rs=[composed_target_samples(run,ts,target) for run in runs]
         coupling=sideband_coupling(results["baseline"].time,bs,rs,ts)
-        mismatch=coupling>C_PASSIVE.epsilon ? "phase-domain frequency coupling absent from native fixed-dq LTI reference" : ""
+        mismatch=coupling>PASSIVE_FREQUENCY_LIMITS.epsilon ? "phase-domain frequency coupling absent from native fixed-dq LTI reference" : ""
         quality["omitted_sideband_ratio"]=coupling;quality["model_mismatch"]=mismatch
         measured_pu=scale_response(measured,ts)[indices,columns,:]
         reference_pu=scale_response(reference[target],ts)[indices,columns,:]
@@ -303,7 +303,7 @@ function composed_comparison(results,models,reference,directory,spec,c;resonance
             err=r.complex_error_pu/max(abs(complex(r.reference_real_pu,r.reference_imag_pu)),.02)
             if err>worst;worst=err;selection=(column=columns[r.column],frequency=r.frequency_Hz);end
         end
-        write_table(joinpath(directory,target*"_C.tsv"),rows)
+        write_table(joinpath(directory,target*"_frequency_response.tsv"),rows)
         write_table(joinpath(directory,target*"_windows.tsv"),refinement_rows(spec.frequencies,scored[2],scored[1];limit=.01,valid=true))
         write_response(joinpath(directory,target*"_measured.tsv"),measured,spec.frequencies;quantity=ts.quantity)
         comparisons[target]=quality

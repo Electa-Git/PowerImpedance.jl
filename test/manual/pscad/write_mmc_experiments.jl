@@ -3,7 +3,7 @@ using PowerImpedance, PythonCall
 include("../../pscad/fixtures.jl")
 include("../../pscad/topology.jl")
 const P = PowerImpedance.PSCAD
-const EXPERIMENTS = mkpath("/tmp/pscad-m5-experiments")
+const EXPERIMENTS = mkpath("/tmp/pscad-mmc-experiments")
 const SETTINGS = P.SimulationSettings(simulation_time = 10.0,
     time_step = 10e-6, sample_step = 250e-6, source_ramp = 0.0)
 
@@ -236,7 +236,7 @@ Current station status: the earlier four isolated experiments passed. The
 unheld full PQ projects failed start-up in round 2. Both revised PQ projects
 passed station round 3 with the approved 0.2 s solved-measurement hold.
 
-Generate these files with `test/manual/pscad/write_m5_experiments.jl` in a Julia
+Generate these files with `test/manual/pscad/write_mmc_experiments.jl` in a Julia
 project containing PowerImpedance and PythonCall. Run each project as written,
 in its own fresh station run. Preserve the filename stem, project namespace,
 module qualifications, and output settings (`pi.out`); do not rename a namespace.
@@ -245,7 +245,7 @@ Use the existing RemoteConfig and compute interfaces, for example:
 
     using PowerImpedance, PythonCall
     remote = RemoteConfig()
-    result = compute(PSCADModel("/tmp/pscad-m5-experiments/mmc_r12.pscx"),
+    result = compute(PSCADModel("/tmp/pscad-mmc-experiments/mmc_r12.pscx"),
         PSCADRun(); options = (; remote, simulation_time = 0.1,
             time_step = 10e-6, sample_step = 10e-6, verbosity = 1))
 
@@ -330,7 +330,7 @@ full recovered reactor values.
 
 Existing comparison policy: network/internal P/Q absolute error <=0.01 pu
 of 1000 MVA, and converter-connected DC currents use
-abs(diff)/max(abs(ref),1000/800) with rtol_i. Approved M5 station checks reuse
+abs(diff)/max(abs(ref),1000/800) with rtol_i. Approved MMC station checks reuse
 rtol_v=0.01 for capacitor cycle means versus solved Vdc and rtol_i=0.02 for
 idc=3*iS_z. The comparison quantities are :converter_arm_voltage and
 :converter_dc_current_identity, named by each capacitor probe and DUT_iS_z.
@@ -339,7 +339,7 @@ matches the saved MMC source timing. No new tolerance or public keyword is intro
 
 Station round 1 (PSCAD 5.1.0): mmc_r12, mmc_delay and mmc_sigma built and
 ran for 0.1 s with 10 us sampling. Each CSV contains 10001 samples. The
-CSVs in /tmp/pscad-m5-results were evaluated over the complete run against
+CSVs in /tmp/pscad-mmc-results were evaluated over the complete run against
 the equations above and the reference TSVs, without changing predictions.
 
 | Experiment/channel | Outcome | Maximum absolute deviation |
@@ -384,7 +384,7 @@ supplied for a whole-run maximum deviation.
 
 Both full PQ projects build without errors or ITRIANG but FAIL start-up:
 their module channels are NaN from 250 us. The classic raw files in
-/tmp/pscad-m5-results/pq_round2 contain 40001 samples over 10 s; 21 of 25
+/tmp/pscad-mmc-results/pq_round2 contain 40001 samples over 10 s; 21 of 25
 channels are non-finite at all 40000 samples after zero. The AC bus voltages
 and negative DC pole remain finite. Initial P_ac_f/Q_ac_f/v_dc_f/iS_z are
 0/0/0/0 versus solved 0.6/0.2/1/0.20127207609887254 pu. Initial omega_c
@@ -457,7 +457,7 @@ ITRIANG occurred. Station-reported results:
 | I_DUT_1 | 0.753663 kA | 3*DUT_iS_z*1.25 kA to 1e-6 kA |
 | DC current versus power flow | 0.753663 kA | 603.41 MW / 800 kV; -0.08 % |
 
-The detailed audits are in /tmp/pscad-m5-results:
+The detailed audits are in /tmp/pscad-mmc-results:
 round2_pq_channel_audit.tsv, round2_saved_startup_audit.tsv,
 round2_measurement_initialization.tsv and round2_butterworth_initialization.tsv.
 """)

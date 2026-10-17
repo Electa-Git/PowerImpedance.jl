@@ -4,10 +4,10 @@ include("validation/validation.jl")
 const V=PSCADValidation
 const P=PowerImpedance.PSCAD
 
-function run_l4_screens(;directory=get(ENV,"M9E2_DATA",joinpath(V.ROOT,"data","m9e2")),
-        exports=get(ENV,"M9E2_EXPORTS","/tmp/l4_exports"),ids=V.L4_PORT_IDS)
+function run_system_screens(;directory=get(ENV,"SYSTEM_SCREEN_DATA",joinpath(V.ROOT,"data","system_screens")),
+        exports=get(ENV,"SYSTEM_SCREEN_EXPORTS","/tmp/system_exports"),ids=V.SYSTEM_PORT_IDS)
     mkpath(directory);mkpath(exports)
-    summary=Dict{String,Any}("stage"=>"post-line-fix","julia_version"=>string(VERSION),
+    summary=Dict{String,Any}("analysis_scope"=>"post-line-fix","julia_version"=>string(VERSION),
         "created_utc"=>string(now(UTC)),"worktree"=>V.REPOSITORY,
         "commit"=>readchomp(`git -C $(V.REPOSITORY) rev-parse HEAD`),
         "source_files"=>V.source_record(),"runner_sha256"=>V.digest(@__FILE__),
@@ -16,12 +16,12 @@ function run_l4_screens(;directory=get(ENV,"M9E2_DATA",joinpath(V.ROOT,"data","m
     for id in ids
         println("Screening $id");flush(stdout)
         evidence=mkpath(joinpath(directory,id))
-        record=Dict{String,Any}("stage"=>"post-line-fix","blockers"=>String[])
+        record=Dict{String,Any}("analysis_scope"=>"post-line-fix","blockers"=>String[])
         summary["results"][id]=record
         activity="construction"
         try
             net=V.fixture(id).factory()
-            static=V.PSCADM7Networks.inventory(P.netlist(net,nothing))
+            static=V.PSCADNetworks.inventory(P.netlist(net,nothing))
             record["inventory"]=Dict(string(k)=>v for (k,v) in pairs(static))
             record["inventory"]["static_electrical_partitions"]=pop!(record["inventory"],"subsystems")
             activity="power flow"
@@ -40,7 +40,7 @@ function run_l4_screens(;directory=get(ENV,"M9E2_DATA",joinpath(V.ROOT,"data","m
                 settings=P.SimulationSettings(simulation_time=.01,time_step=2.5e-6,
                     sample_step=62.5e-6,output_stem="build")
                 name=lowercase(replace(id,"-"=>"_"));path=joinpath(exports,name*".pscx")
-                base=V.l4_spec(id=="L4-00D" ? "L4-01" : id=="L4-04D" ? "L4-04" : id,list)
+                base=V.system_spec(id=="p2p_original" ? "p2p_redesigned" : id=="p2p_ac_single_line" ? "p2p_ac_grids" : id,list)
                 short=merge(base,(;id,simulation_time=.01,time_step=2.5e-6,sample_step=62.5e-6))
                 plan,settings=V.scan_plan(list,short,"baseline";name)
                 output=P._write_project(plan,path)
@@ -57,9 +57,9 @@ function run_l4_screens(;directory=get(ENV,"M9E2_DATA",joinpath(V.ROOT,"data","m
                 push!(record["blockers"],"export: "*sprint(showerror,failure))
             end
             activity="complete-network assembly"
-            circuit=V.l4_system(id,net)
+            circuit=V.complete_system(id,net)
             try
-                rows,conditioning=V.l4_conditioning(circuit)
+                rows,conditioning=V.system_conditioning(circuit)
                 V.write_table(joinpath(evidence,"conditioning.tsv"),rows)
                 record["conditioning"]=conditioning
             catch failure
@@ -67,7 +67,7 @@ function run_l4_screens(;directory=get(ENV,"M9E2_DATA",joinpath(V.ROOT,"data","m
                 push!(record["blockers"],"conditioning: "*sprint(showerror,failure))
             end
             try
-                record["stability"]=V.l4_stability(circuit;checkpoint=joinpath(evidence,"stability.toml"))
+                record["stability"]=V.system_stability(circuit;checkpoint=joinpath(evidence,"stability.toml"))
             catch failure
                 failure isa InterruptException && rethrow()
                 checkpoint=joinpath(evidence,"stability.toml")
@@ -87,5 +87,5 @@ end
 
 if abspath(PROGRAM_FILE)==@__FILE__
     BLAS.set_num_threads(1)
-    run_l4_screens(;ids=isempty(ARGS) ? V.L4_PORT_IDS : ARGS)
+    run_system_screens(;ids=isempty(ARGS) ? V.SYSTEM_PORT_IDS : ARGS)
 end

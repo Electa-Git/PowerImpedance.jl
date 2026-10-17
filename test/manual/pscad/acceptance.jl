@@ -6,7 +6,7 @@ include("../../pscad/fixtures.jl")
 
 remote = RemoteConfig()
 exports = mktempdir(mkpath(joinpath(remote.local_root, "exports"));
-    prefix = "m4-", cleanup = false)
+    prefix = "tlc-", cleanup = false)
 classic, state = PSCADFixtures.small_ac_network()
 classic_model = export_pscad(classic; path = joinpath(exports, "small_ac_classic.pscx"))
 builder_model = export_pscad(state; path = joinpath(exports, "small_ac_builder.pscx"))

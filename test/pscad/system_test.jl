@@ -1,16 +1,16 @@
-@testset "L4 redesigned P2P physical data" begin
-    p6=V.fixture("L4-01").factory()
-    original=V.fixture("L4-00D").factory()
-    @test length(p6.elements)==10
+@testset "complete systems redesigned P2P physical data" begin
+    redesigned=V.fixture("p2p_redesigned").factory()
+    original=V.fixture("p2p_original").factory()
+    @test length(redesigned.elements)==10
     @test length(original.elements)==8
-    @test p6.elements[:ugc].element_model.length==25e3
-    @test p6.elements[:ohl].element_model.length==75e3
-    for id in V.L4_PORT_IDS
+    @test redesigned.elements[:ugc].element_model.length==25e3
+    @test redesigned.elements[:ohl].element_model.length==75e3
+    for id in V.SYSTEM_PORT_IDS
         @test all(e.element_model.transposition==:none for e in values(V.fixture(id).factory().elements)
             if e.element_model isa Overhead_line)
     end
     for name in (:c1,:c2)
-        m=p6.elements[name].element_model
+        m=redesigned.elements[name].element_model
         @test m.elec.turnsRatio==333/380
         @test m.elec.Rₑ*m.elec.zAC_base-m.elec.Rₐᵣₘ*(640^2/1000)/2 ≈ 1.10889
         @test m.modulation.delay1.timeDelay==25e-6
@@ -22,11 +22,11 @@
     end
 end
 
-@testset "L4 direct system transfers use native incidence and units" begin
-    for id in ("L4-01","L4-04")
+@testset "System transfer matrices use native incidence and units" begin
+    for id in ("p2p_redesigned","p2p_ac_grids")
         net=V.fixture(id).factory();point=power_flow(net)
-        c=V.l4_system(id,net);list=V.fixture_netlist(net,point)
-        spec=merge(V.l4_spec(id,list),(;frequencies=[7.,137.],phases=[0.,0.]))
+        c=V.complete_system(id,net);list=V.fixture_netlist(net,point)
+        spec=merge(V.system_spec(id,list),(;frequencies=[7.,137.],phases=[0.,0.]))
         @test length(c.ports)==2
         @test length(c.nodes)>4
         @test all(n ∉ c.nodes for n in values(net.elements[:g1].pins))
@@ -64,7 +64,7 @@ end
         for target in keys(refs)
             @test length(V.composed_target_spec(spec,c,target).response_output_bases)==size(refs[target],1)
         end
-        if id=="L4-04"
+        if id=="p2p_ac_grids"
             discrete=V.composed_reference(c,spec;time_step=spec.time_step)
             @test norm(discrete["direct_Z"]-refs["direct_Z"])>1e-9
         end
@@ -95,11 +95,11 @@ end
                 end
             end
         end
-        carriers=V.l4_growth_channels((;time,channels),(;netlist=list,probes=plan.probes),c)
+        carriers=V.system_growth_channels((;time,channels),(;netlist=list,probes=plan.probes),c)
         @test length(carriers.reference)==2length(c.devices)
         # Power-flow summaries and nonlinear solved currents have different
         # numerical residuals. Compare on the existing physical scale.
-        @test V.l4_growth_quality(time,carriers,spec)["passed"]
+        @test V.system_growth_quality(time,carriers,spec)["passed"]
         mktempdir() do directory
             V.composed_reference_files!(nothing,c,spec,directory,Dict{Symbol,P.RLCForm}())
             stored=V.composed_frozen_references(directory,spec,c,"plain")
@@ -115,12 +115,12 @@ end
     end
 end
 
-module L4Preparation
-using ..PSCADValidation: ROOT,REPOSITORY,source_record,L4_PORT_IDS
+module SystemPreparation
+using ..PSCADValidation: ROOT,REPOSITORY,source_record,SYSTEM_PORT_IDS
 const head=let paths=[source["path"] for source in source_record()]
-    append!(paths,["test/manual/pscad/run_l4_screens.jl","test/manual/pscad/validation/README.md",
-        "test/manual/pscad/validation/l4_translation.md","test/pscad/l4_factories_test.jl",
-        "test/pscad/l4_system_test.jl","test/pscad/l4_growth_test.jl","test/pscad/validation_test.jl",
+    append!(paths,["test/manual/pscad/run_system_screens.jl","test/manual/pscad/validation/README.md",
+        "test/manual/pscad/validation/system_model_translation.md","test/pscad/system_factories_test.jl",
+        "test/pscad/system_test.jl","test/pscad/growth_test.jl","test/pscad/validation_test.jl",
         "test/pscad/manual_scripts_test.jl","test/pscad/dc_precharge_test.jl","Project.toml"])
     Dict(path=>Base.read(joinpath(REPOSITORY,path)) for path in unique(paths))
 end
@@ -129,42 +129,42 @@ read(command::Base.CmdRedirect)=read(command.cmd)
 read(path::String)=Base.read(path)
 # Use the actual functions with a simulated HEAD so local edits and station
 # settings cannot change which source checks pass or fail.
-for expression in Meta.parseall(Base.read(joinpath(ROOT,"l4_execution.jl"),String)).args
+for expression in Meta.parseall(Base.read(joinpath(ROOT,"systems.jl"),String)).args
     expression isa Expr && expression.head==:function || continue
     name=first(expression.args).args[1]
-    name in (:require_committed_l4,:l4_selection,:prepare_l4) && Core.eval(@__MODULE__,expression)
+    name in (:require_committed_systems,:system_selection,:prepare_systems) && Core.eval(@__MODULE__,expression)
 end
 end
 
-@testset "L4 source check and timeout refuse before writing" begin
-    @test all(V.native_node_limit(id)==100 for id in ("L1-01","L2-01","L3-07"))
-    @test all(V.native_node_limit(id)==200 for id in V.L4_PORT_IDS)
-    @test_throws ArgumentError V.prepare_l4(["L4-missing"])
-    @test_throws ArgumentError V.prepare_l4(["L4-01","L4-01"])
-    @test_throws ArgumentError V.run_l4(timeout=NaN)
-    @test_throws ArgumentError V.run_l4(timeout=0.)
-    @test L4Preparation.require_committed_l4()===nothing
+@testset "System preparation checks sources and timeout before writing" begin
+    @test all(V.native_node_limit(id)==100 for id in ("passive_ac_rlc","tlc_pq_freq_support","two_mmc_dc_cable"))
+    @test all(V.native_node_limit(id)==200 for id in V.SYSTEM_PORT_IDS)
+    @test_throws ArgumentError V.prepare_systems(["unknown_system"])
+    @test_throws ArgumentError V.prepare_systems(["p2p_redesigned","p2p_redesigned"])
+    @test_throws ArgumentError V.run_systems(timeout=NaN)
+    @test_throws ArgumentError V.run_systems(timeout=0.)
+    @test SystemPreparation.require_committed_systems()===nothing
     mktempdir() do root
         destination=joinpath(root,"unwritten")
-        for path in keys(L4Preparation.head)
-            original=L4Preparation.head[path]
-            L4Preparation.head[path]=[original;0x00]
+        for path in keys(SystemPreparation.head)
+            original=SystemPreparation.head[path]
+            SystemPreparation.head[path]=[original;0x00]
             try
-                @test_throws r"HEAD to contain" L4Preparation.require_committed_l4()
-                @test_throws r"HEAD to contain" L4Preparation.prepare_l4(["L4-01"];directory=destination)
+                @test_throws r"HEAD to contain" SystemPreparation.require_committed_systems()
+                @test_throws r"HEAD to contain" SystemPreparation.prepare_systems(["p2p_redesigned"];directory=destination)
                 @test !ispath(destination)
             finally
-                L4Preparation.head[path]=original
+                SystemPreparation.head[path]=original
             end
-            @test L4Preparation.require_committed_l4()===nothing
+            @test SystemPreparation.require_committed_systems()===nothing
         end
     end
 end
 
 @testset "Original P2P opposite circular roots" begin
-    net=V.fixture("L4-00D").factory();power_flow(net)
-    c=V.l4_system("L4-00D",net);functions=V.composed_device_functions(c)
-    modes=V.l4_growth_reference(c)
+    net=V.fixture("p2p_original").factory();power_flow(net)
+    c=V.complete_system("p2p_original",net);functions=V.composed_device_functions(c)
+    modes=V.system_growth_reference(c)
     @test length(modes)==2
     @test sign.(imag.([m.signed_root for m in modes]))==[1.,-1.]
     # Independent starting values from the original analytical study exercise

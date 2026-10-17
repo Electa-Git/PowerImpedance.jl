@@ -9,10 +9,10 @@ seconds = isempty(timeouts) ? (length(fixtures) > 1 ? 3600.0 : 5400.0) :
           parse(Float64, last(split(only(timeouts), '='; limit = 2)))
 isfinite(seconds) && seconds > 0 || error("timeout must be finite and positive")
 deadline = time() + seconds
-if fixtures == ["L1"]
-    PSCADValidation.run_l1(; deadline)
+if fixtures == ["passive"]
+    PSCADValidation.run_passive(; deadline)
 else
-    "L1" in fixtures && error("L1 must be the only fixture argument")
+    "passive" in fixtures && error("passive must be the only fixture argument")
     for id in fixtures
         PSCADValidation.run_fixture(id; deadline)
     end

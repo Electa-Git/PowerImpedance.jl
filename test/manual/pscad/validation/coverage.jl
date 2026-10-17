@@ -6,18 +6,18 @@ function port_probe(list, element, side)
 end
 
 function scan_definition(id, net, list)
-    startswith(id,"L2-") && return device_scan_definition(net,list; id)
-    old = l1_settings()
-    if id == "L1-01"
+    fixture(id).category == :device && return device_scan_definition(net,list; id)
+    old = passive_settings()
+    if id == "passive_ac_rlc"
         buses = [port_probe(list, :branch, 1)]
         currents = [("branch", "1")]
         quantity, dimension = "Y", 2
-    elseif id in ("L1-02", "L1-05")
-        last_element = id == "L1-02" ? :rc : :ohl
+    elseif id in ("passive_dc_rlc", "dc_cable_ohl")
+        last_element = id == "passive_dc_rlc" ? :rc : :ohl
         buses = [port_probe(list, :line, 1), port_probe(list, last_element, 2)]
         currents = [("line", "1"), (string(last_element), "2")]
         quantity, dimension = "Y", 1
-    elseif id == "L1-08"
+    elseif id == "ieee9_bus_impedance"
         buses = [port_probe(list, :g1, 1), port_probe(list, :l5, 1)]
         currents = [("injection_1", "1"), ("injection_2", "1")]
         quantity, dimension = "Z", 2
@@ -26,16 +26,16 @@ function scan_definition(id, net, list)
         currents = [("line", "1"), ("line", "2")]
         quantity, dimension = "Y", 2
     end
-    frequencies = id == "L1-01" || dimension == 1 ? old.frequencies :
+    frequencies = id == "passive_ac_rlc" || dimension == 1 ? old.frequencies :
                   filter(!=(50.0), old.frequencies)
     # AC 50 Hz dq has an abc DC sideband. It is outside the AC line fit and
     # excites slow transformer flux offsets; exclude it before observing EMT.
-    axes = id == "L1-01" ? ["d", "q"] :
+    axes = id == "passive_ac_rlc" ? ["d", "q"] :
            ["p$(port)_$(axis)" for port in eachindex(buses)
             for axis in (dimension == 1 ? ("dc",) : ("d", "q"))]
     voltages = [dimension == 1 ? 2b.base_kV * something(b.vm_pu, 1.0) :
                 sqrt(2) * b.base_kV * something(b.vm_pu, 1.0) for b in buses]
-    id == "L1-01" && (voltages[1] = old.voltage_base_kV)
+    id == "passive_ac_rlc" && (voltages[1] = old.voltage_base_kV)
     currents_base = [dimension == 1 ? 1000 / v : 2000 / (3v) for v in voltages]
     vbase = repeat(voltages; inner = dimension)
     ibase = repeat(currents_base; inner = dimension)
@@ -49,31 +49,30 @@ function scan_definition(id, net, list)
             phases = [-π * k * (k - 1) / length(frequencies)
                       for k in eachindex(frequencies)],
             voltage_bases = vbase, current_bases = ibase, travel_lower_bound_s = travel,
-            estimated_station_seconds = (300, 360, 540, 540, 480, 540, 540, 1080)[parse(
-                Int, id[(end - 1):end])]))
+            estimated_station_seconds = Dict("passive_ac_rlc" => 300, "passive_dc_rlc" => 360, "ac_ohl_untransposed" => 540, "ac_cable_coaxial" => 540, "dc_cable_ohl" => 480, "transformer_yy" => 540, "transformer_dyn11" => 540, "ieee9_bus_impedance" => 1080)[id]))
     reference = scan_reference(net, list, spec)
     normalized = scale_response(reference, spec)
     bound = maximum(sum(abs.(normalized); dims = 3))
-    amplitude = id == "L1-01" ? old.tone_peak_pu :
+    amplitude = id == "passive_ac_rlc" ? old.tone_peak_pu :
                 min(old.tone_peak_pu, 0.004 / max(bound, 1.0))
     return merge(spec, (; tone_peak_pu = amplitude)), reference
 end
 
 function scan_reference(net, list, spec)
-    if startswith(spec.id,"L2-")
+    if fixture(spec.id).category == :device
         return cat((device_port_y(net, ComplexF64(im*2π*f))
             for f in spec.frequencies)...; dims=3)
-    elseif spec.id == "L1-01"
+    elseif spec.id == "passive_ac_rlc"
         return cat(
             (PowerImpedance.get_y(net.elements[:branch], ComplexF64(im * 2π * f))[1:2, 1:2]
             for f in spec.frequencies)...;
             dims = 3)
-    elseif spec.id in ("L1-03", "L1-04", "L1-06", "L1-07")
+    elseif spec.id in ("ac_ohl_untransposed", "ac_cable_coaxial", "transformer_yy", "transformer_dyn11")
         return cat(
             (PowerImpedance.get_y(net.elements[:line], ComplexF64(im * 2π * f))
             for f in spec.frequencies)...;
             dims = 3)
-    elseif spec.id == "L1-08"
+    elseif spec.id == "ieee9_bus_impedance"
         inputs = reduce(vcat, [b.nets for b in spec.buses])
         nodes = unique([n for e in values(net.elements) for n in values(e.pins)])
         grounds = filter(n -> occursin("gnd", string(n)), nodes)
@@ -85,7 +84,7 @@ function scan_reference(net, list, spec)
                  ComplexF64(im * 2π * f)) for f in spec.frequencies)...;
             dims = 3)
     end
-    elements = spec.id == "L1-02" ? [:line, :rc] : [:line, :ohl]
+    elements = spec.id == "passive_dc_rlc" ? [:line, :rc] : [:line, :ohl]
     # Match the exporter's two pole-to-ground references at ungrounded internal
     # DC buses. Their differential equivalent is 2*DC_REFERENCE_RESISTANCE.
     frequency_net = deepcopy(net)
@@ -176,9 +175,9 @@ function scan_record(spec)
         "protocol" => get(spec, :protocol, ""),
         "applicable_comparison" => spec.dimension == 3 ? "phase-domain physics" : "native dq/DC physics",
         "phase_order" => spec.dimension == 3 ? ["a", "b", "c"] : String[],
-        "SI_units" => startswith(spec.id,"L3-") ? "phase kV/kA imply S for Y and ohm for direct Z; fixed nominal 50 Hz dq; declared aggregate bases and original individual L2 bases" : startswith(spec.id,"L2-") ? "kV/kA: S; fixed nominal 50 Hz dq; declared external AC phase-peak voltage/current bases and total three-phase rating" :
+        "SI_units" => fixture(spec.id).category == :coupled ? "phase kV/kA imply S for Y and ohm for direct Z; fixed nominal 50 Hz dq; declared aggregate bases and original individual single-device bases" : fixture(spec.id).category == :device ? "kV/kA: S; fixed nominal 50 Hz dq; declared external AC phase-peak voltage/current bases and total three-phase rating" :
             "phase kV/kA imply S for Y and ohm for Z; phase-peak AC bases, 1000 MVA total three-phase base",
-        "IEEE9_blocks" => spec.id == "L1-08" && spec.dimension == 3 ? "separate local Bus1/Bus5 3x3; full 6x6 transfer retained as evidence" : "not applicable",
+        "IEEE9_blocks" => spec.id == "ieee9_bus_impedance" && spec.dimension == 3 ? "separate local Bus1/Bus5 3x3; full 6x6 transfer retained as evidence" : "not applicable",
         "frequencies" => spec.frequencies, "phases" => spec.phases,
         "tone_peak_pu" => spec.tone_peak_pu, "injection_time" => spec.injection_time,
         "window_starts" => collect(spec.window_starts), "window_duration" =>
@@ -198,9 +197,9 @@ function scan_record(spec)
                     "one worst-error column; half-step baseline plus column at worst frequency and 1000 Hz; retain predeclared coherent windows",
                 "amplitude_scale" => 0.5, "half_step_s" => spec.time_step/2),
         "excluded_ac_frequency_Hz" =>
-            spec.dimension == 2 && spec.id != "L1-01" ? [50.0] : Float64[])
+            spec.dimension == 2 && spec.id != "passive_ac_rlc" ? [50.0] : Float64[])
     haskey(spec, :settling) && (record["settling"] = spec.settling)
-    if startswith(spec.id,"L2-")
+    if fixture(spec.id).category == :device
         record["drive"]="shunt current at converter AC terminal; measured voltage matrix is the Y input"
         spec.dc_voltage_base_kV===nothing || (record["dc_voltage_base_kV"]=spec.dc_voltage_base_kV)
         record["power_base_MVA"]=spec.power_base_MVA
@@ -209,15 +208,15 @@ function scan_record(spec)
         record["reference_scope"]=spec.dc_voltage_base_kV===nothing ? "native machine full AC-terminal Y converted from per-unit to SI; native rt/lt retained" : spec.dc_clamped ? "native DUT AC block with DC clamped" : "native DUT + DC resistor AC-terminal Schur reduction; remote zero-voltage reference grounded"
         record["refinement"]["selection"]="one worst-error drive axis; qualify both V/Idrive and Iconverter/Idrive, including cross-axis voltage; half-step at worst frequency plus 1000 Hz"
     end
-    if startswith(spec.id,"L3-")
+    if fixture(spec.id).category == :coupled
         record["power_base_MVA"]=spec.power_base_MVA
         record["active"]=true
         record["dc_clamped"]=spec.dc_clamped
-        record["reference_scope"]="individual local device Y on original L2 bases; aggregate port Y and direct V/Idrive on predeclared aggregate bases"
-        record["comparison_rule"]=Dict(string(k)=>v for (k,v) in pairs(C_ACTIVE))
+        record["reference_scope"]="individual local device Y on original single-device bases; aggregate port Y and direct V/Idrive on predeclared aggregate bases"
+        record["comparison_rule"]=Dict(string(k)=>v for (k,v) in pairs(ACTIVE_FREQUENCY_LIMITS))
         record["resonance_groups"]=get(spec,:resonance_groups,Vector{Int}[])
-        if spec.id=="L3-07"
-            record["reference_scope"]="full 4x4 Y and direct Z over both AC ports, including every cross block; only internal DC voltages eliminated; native distributed L1-05 cable"
+        if spec.id=="two_mmc_dc_cable"
+            record["reference_scope"]="full 4x4 Y and direct Z over both AC ports, including every cross block; only internal DC voltages eliminated; native distributed dc_cable_ohl cable"
             record["dc_reference"]=string(spec.dc_reference)
             record["dc_transfer_witnesses"]=Dict("outputs"=>["both DC differential voltages","both inward cable currents"],
                 "voltage_base_kV"=>800.,"current_base_kA"=>1.25,"independent_drives"=>spec.axes)
@@ -262,8 +261,8 @@ function physical_y(dut::PowerImpedance.Element{<:PowerImpedance.SynchronousMach
     return PowerImpedance.get_y(dut,s)*(e.S_base/e.Vᵃᶜ_base^2)
 end
 
-function device_scan_definition(net,list; id="L2-01")
-    old=l1_settings()
+function device_scan_definition(net,list; id="tlc_pq_freq_support")
+    old=passive_settings()
     elec=net.elements[:DUT].element_model.elec
     bases=device_bases(elec)
     bus=port_probe(list,:DUT,bases.ac_side)
@@ -274,15 +273,15 @@ function device_scan_definition(net,list; id="L2-01")
         voltage_bases=fill(bases.ac_voltage,2),current_bases=fill(bases.ac_current,2),
         dc_voltage_base_kV=bases.dc_voltage, power_base_MVA=bases.power,
         drive="current", dc_clamped=bases.dc_voltage!==nothing && !haskey(net.elements,:DC_load), active=true,protocol="dq_active", tone_peak_pu=5e-5,
-        time_step=id=="L2-05" ? 0.625e-6 : id=="L2-11" ? 1.25e-6 : id=="L2-14" ? 1e-6 : 2.5e-6,sample_step=20e-6,injection_time=2.0,
+        time_step=id=="tlc_vdc_q" ? 0.625e-6 : id=="mmc_vdc_q" ? 1.25e-6 : id=="mmc_gfm_lec_compensated" ? 1e-6 : 2.5e-6,sample_step=20e-6,injection_time=2.0,
         window_starts=(8.0,9.0),window_duration=1.0,simulation_time=10.0,
         travel_lower_bound_s=0.0,estimated_station_seconds=1800))
-    if id in ("L2-07", "L2-08", "L2-09", "L2-10")
+    if id in ("mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac")
         settling = gfl_settling(stability_gate(net, fixture(id)); fixture_id = id, tone_peak_pu = spec.tone_peak_pu)
         spec = merge(spec, (; window_starts = Tuple(settling["window_starts_s"]),
             simulation_time = settling["simulation_time_s"], settling, estimated_station_seconds = 3300))
     end
-    if id=="L2-16"
+    if id=="synchronous_machine"
         gate=stability_gate(net,fixture(id))
         gate["status"]=="passed" || @warn "$id machine stability result: $(gate["status"])" stability=gate
         root=gate["most_positive_located_real_per_s"]

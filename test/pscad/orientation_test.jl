@@ -11,7 +11,7 @@ const P=PowerImpedance.PSCAD
         (passive_ohl_network().classic, Dict("I_line_1"=>:into, "I_line_2"=>:out)),
         (dc_network().classic, Dict("I_from_1"=>:into, "I_to_1"=>:into, "I_line_1"=>:into, "I_line_2"=>:out)),
         (dc_cable_network().classic, Dict("I_line_1"=>:into, "I_line_2"=>:out)),
-        (V.fixture("L1-05").factory(), Dict("I_line_1"=>:into, "I_line_2"=>:out, "I_ohl_1"=>:into, "I_ohl_2"=>:out)),
+        (V.fixture("dc_cable_ohl").factory(), Dict("I_line_1"=>:into, "I_line_2"=>:out, "I_ohl_1"=>:into, "I_ohl_2"=>:out)),
         (transformer_network().classic, Dict("I_line_1"=>:into,"I_line_2"=>:out)),
         (transformer_network(;organization=:ΔY).classic, Dict("I_line_1"=>:into,"I_line_2"=>:out)),
         (sm_network().classic, Dict("I_sg1_1"=>:out,"I_g2_1"=>:out)),
@@ -33,9 +33,9 @@ const P=PowerImpedance.PSCAD
     @test_throws ArgumentError P.ProbeChannel("I",:current,"B","line","1",3,"kA")
     @test_throws ArgumentError P.ProbeChannel("I",:current,"B","line","1",3,"kA",:unknown)
     @test_throws ArgumentError P.ProbeChannel("V",:voltage,"B",nothing,nothing,3,"kV",:into)
-    net=V.fixture("L1-04").factory()
+    net=V.fixture("ac_cable_coaxial").factory()
     list=P.netlist(net, power_flow(net))
-    spec,_=V.scan_definition("L1-04",net,list)
+    spec,_=V.scan_definition("ac_cable_coaxial",net,list)
     plan,settings=V.scan_plan(list,spec,"baseline")
     meter=only(filter(c->c isa P.ComponentPlan && c.defn=="master:ammeter" &&
                          Dict(c.params)["Name"]=="I_line_2",plan.main.components))

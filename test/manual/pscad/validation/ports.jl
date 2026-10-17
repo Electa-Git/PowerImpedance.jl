@@ -41,7 +41,7 @@ function current_port(project, name, spec)
         push!(graph.nodes, P.ArrayMerge(phases, abc))
     else
         if haskey(spec,:burst_polarization)
-            graph,d,q,clock=l4_polarized_burst_graph(spec)
+            graph,d,q,clock=system_polarized_burst_graph(spec)
         else
             append!(graph.nodes,P.ControlBlock[P.Gain(perturbation,d,"d_amplitude_pu"),
                 P.Gain(perturbation,q,"q_amplitude_pu")])
@@ -86,7 +86,7 @@ end
 function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_')))
     axis == "baseline" || axis in spec.axes || error("unknown scan axis $axis")
     settings = scan_settings(spec)
-    if spec.id == "L1-01"
+    if spec.id == "passive_ac_rlc"
         # Preserve the proven graph, fields, source replacement and probe map.
         plan = P.build_plan(list; settings, name, dc_reference = :none)
         index = only(findall(
@@ -201,14 +201,14 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
             plan.probes.channels)
         retain_recorders!(plan,needed)
     end
-    if get(spec, :recorder_scope, "") == "tierb"
+    if get(spec, :recorder_scope, "") == "time_domain"
         # Time-domain records retain all electrical V/I and the machine swing signals.
         # Only recorder assemblies are pruned; meters and signal graphs remain.
         needed=filter(c->c.kind in (:voltage,:current,:injection_current,
             :machine_speed,:machine_p,:machine_q),plan.probes.channels)
         retain_recorders!(plan,needed)
     end
-    get(spec,:protocol,"")=="growth" && l4_growth_recorders!(plan,list)
+    get(spec,:protocol,"")=="growth" && system_growth_recorders!(plan,list)
     P.check_connectivity(plan)
     return plan, settings
 end
@@ -238,7 +238,7 @@ function amplitude_values(spec, axis, port)
         return ["$(phase)_amplitude_pu" => string(axis == names[k] ? spec.tone_peak_pu : 0.0)
             for (k, phase) in enumerate(("a", "b", "c"))]
     end
-    names = spec.id == "L1-01" ? ["d", "q"] : spec.axes[(2port - 1):2port]
+    names = spec.id == "passive_ac_rlc" ? ["d", "q"] : spec.axes[(2port - 1):2port]
     return ["d_amplitude_pu" => string(axis == names[1] ? spec.tone_peak_pu : 0.0),
         "q_amplitude_pu" => string(axis == names[2] ? spec.tone_peak_pu : 0.0)]
 end

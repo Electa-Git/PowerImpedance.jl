@@ -13,9 +13,8 @@ const P = PowerImpedance.PSCAD
             continue
         end
         record = TOML.parsefile(joinpath(directory, "manifest.toml"))
-        baseline = read(
-            joinpath(directory, only(filter(p->p["axis"]==(isempty(get(record["tier_c"], "protocol", "")) ? "baseline" : record["tier_c"]["protocol"] * "_baseline"), record["projects"]))["path"]),
-            String)
+        protocol = get(get(record,"frequency_response",Dict()),"protocol","")
+        baseline_key = isempty(protocol) ? "baseline" : protocol * "_baseline"
         for project in record["projects"]
             path = joinpath(directory, project["path"])
             summary = P.read_project_summary(path)
@@ -35,13 +34,16 @@ const P = PowerImpedance.PSCAD
             normalized = replace(actual,
                 r"(<param name=\"(?:[abcdq]_amplitude_pu|amplitude_pu)\" value=\")[^\"]+(\"/>)"=>s"\g<1>0.0\g<2>")
             baseline_axis = get(project, "baseline_axis", "")
-            matching_baseline = !isempty(baseline_axis) ? read(joinpath(directory, baseline_axis,
-                lowercase(replace(entry.id, '-'=>'_')) * ".pscx"), String) :
-                                startswith(project["axis"], "half_step_") ?
-                                read(
-                joinpath(directory, first(split(project["axis"], "__")) * "__baseline",
-                    lowercase(replace(entry.id, '-'=>'_')) * ".pscx"),
-                String) : baseline
+            key = !isempty(baseline_axis) ? baseline_axis :
+                  startswith(project["axis"], "half_step_") ?
+                  first(split(project["axis"], "__")) * "__baseline" : baseline_key
+            matching = filter(p->p["axis"]==key,record["projects"])
+            # Half-amplitude baseline copies can be retained beside the driven
+            # project without a separate project entry.
+            baseline_path = isempty(matching) ? get(project,"baseline_path",
+                joinpath(dirname(dirname(project["path"])),key,basename(project["path"]))) :
+                only(matching)["path"]
+            matching_baseline = read(joinpath(directory,baseline_path),String)
             @test normalized == matching_baseline
         end
     end

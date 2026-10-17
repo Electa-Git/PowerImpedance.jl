@@ -1,6 +1,6 @@
-const C_PASSIVE = (epsilon = 0.02, entry_floor_pu = 0.02,
+const PASSIVE_FREQUENCY_LIMITS = (epsilon = 0.02, entry_floor_pu = 0.02,
     frobenius_floor_pu = 0.1, phase_limit_deg = 2.0)
-const C_ACTIVE = merge(C_PASSIVE, (epsilon = 0.05, phase_limit_deg = 3.0))
+const ACTIVE_FREQUENCY_LIMITS = merge(PASSIVE_FREQUENCY_LIMITS, (epsilon = 0.05, phase_limit_deg = 3.0))
 
 """
 $(TYPEDSIGNATURES)
@@ -238,7 +238,7 @@ function comparison_rows(frequencies, measured, reference; active = false,
         throw(ArgumentError("comparison dimensions"))
     all(isfinite, measured) && all(isfinite, reference) ||
         throw(ArgumentError("nonfinite matrices"))
-    rule = active ? C_ACTIVE : C_PASSIVE
+    rule = active ? ACTIVE_FREQUENCY_LIMITS : PASSIVE_FREQUENCY_LIMITS
     epsilon, phase_limit = rule.epsilon, rule.phase_limit_deg
     rows = NamedTuple[]
     for k in eachindex(frequencies)

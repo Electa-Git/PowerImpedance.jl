@@ -1,6 +1,6 @@
 # Offline system diagnostics record the source hash and line-model choice for every
 # result. Native node counts and PSCAD validation require separate runs.
-function l4_circuit(net)
+function system_circuit(net)
     devices=sort!([name for (name,e) in net.elements if
         e.element_model isa Union{PowerImpedance.MMC,PowerImpedance.TLC}])
     ports=[(name,device_bases(net.elements[name].element_model.elec).ac_side) for name in devices]
@@ -19,7 +19,7 @@ end
 # Positive-sequence AC pi sections at 50 Hz and differential DC pi sections at
 # 1 Hz provide seeds only. Final residuals and contours use native get_y on the
 # entire distributed network. No seed approximation is exported.
-function l4_line_seeds(c)
+function system_line_seeds(c)
     net=deepcopy(c.net)
     for name in sort!(collect(keys(c.net.elements)))
         e=c.net.elements[name];m=e.element_model
@@ -41,7 +41,7 @@ function l4_line_seeds(c)
             net.elements[Symbol(name,"_seed_cap_",side)]=shunt
         end
     end
-    seeds=l4_taylor_seeds(c)
+    seeds=system_taylor_seeds(c)
     if !any(e.element_model isa PowerImpedance.Transformer for e in values(net.elements))
         lumped=composed_circuit(net,c.devices,c.grids,c.ports)
         append!(seeds,composed_descriptor(merge(lumped,(;dc_references=c.dc_references))).poles)
@@ -49,7 +49,7 @@ function l4_line_seeds(c)
     return seeds
 end
 
-function l4_root_search(c,functions,initial)
+function system_root_search(c,functions,initial)
     selected=copy(initial);tracks=Tuple{ComplexF64,Float64}[];errors=String[]
     function track(seed)
         try
@@ -69,16 +69,16 @@ function l4_root_search(c,functions,initial)
     return selected,tracks,errors
 end
 
-function l4_stability(c; checkpoint=nothing, stage="post-line-fix")
+function system_stability(c; checkpoint=nothing, analysis_scope="post-line-fix")
     functions=composed_device_functions(c)
-    seeds=l4_line_seeds(c)
+    seeds=system_line_seeds(c)
     initial=filter(z->real(z)>-1500,seeds)
-    selected,tracks,track_errors=l4_root_search(c,functions,initial)
+    selected,tracks,track_errors=system_root_search(c,functions,initial)
     located=filter(x->x[2]<1e-6,tracks)
     sort!(located;by=x->real(x[1]),rev=true)
     # Keep converged tracks, including duplicates, so seed coverage is explicit.
     gate=Dict{String,Any}(
-        "stage"=>stage, "status"=>"incomplete",
+        "analysis_scope"=>analysis_scope, "status"=>"incomplete",
         "method"=>"complete-network native distributed finite contours and locally located roots",
         "seed_count"=>length(seeds)+length(selected)-length(initial),"selected_seed_count"=>length(selected),"native_taylor_seeded"=>true,
         "unresolved_seed_count"=>length(tracks)-length(located),
@@ -90,7 +90,7 @@ function l4_stability(c; checkpoint=nothing, stage="post-line-fix")
         "track_real_per_s"=>[real(x[1]) for x in tracks],
         "track_imag_rad_per_s"=>[imag(x[1]) for x in tracks],
         "track_residuals"=>[x[2] for x in tracks],"track_errors"=>track_errors,
-        "root_scope"=>"finite contours through 1 MHz and locally located roots only; distributed infinite spectrum unenumerated; no infinite-frequency proof, as in L3-07",
+        "root_scope"=>"finite contours through 1 MHz and locally located roots only; distributed infinite spectrum unenumerated; no infinite-frequency proof, as in two_mmc_dc_cable",
         "root_search"=>"native Newton refinement within max(1,abs(seed)) of pi and local native Taylor seeds with Re > -1500/s, followed by nominal-frame circular offsets; unresolved tracks remain unresolved",
         "contours"=>Dict{String,Any}[])
     isempty(located) || (gate["most_positive_located_real_per_s"]=real(first(located)[1]))
@@ -120,14 +120,14 @@ function l4_stability(c; checkpoint=nothing, stage="post-line-fix")
             "max_contour_phase_increment_rad"=>maximum(abs,increments),"return_difference_min"=>margin))
         checkpoint===nothing || open(io->TOML.print(io,gate;sorted=true),checkpoint,"w")
     end
-    return l4_refine_stability(c,gate;checkpoint)
+    return system_refine_stability(c,gate;checkpoint)
 end
 
 # Both nodal and all-device-port Schur conditioning are sampled, not maximized over the
 # continuum. Equal 380 kV AC bases leave cond unchanged under common SI-to-pu scaling.
 # Mixed AC/DC nodal cond remains in SI.
-function l4_conditioning(c;frequencies=sort!(unique([exp10.(range(0,3;length=3001));
-            filter(!=(50.),l1_settings().frequencies)])), stage="post-line-fix",
+function system_conditioning(c;frequencies=sort!(unique([exp10.(range(0,3;length=3001));
+            filter(!=(50.),passive_settings().frequencies)])), analysis_scope="post-line-fix",
         measurement_ports=[[p] for p in c.ports])
     functions=composed_device_functions(c)
     rows=NamedTuple[]
@@ -160,7 +160,7 @@ function l4_conditioning(c;frequencies=sort!(unique([exp10.(range(0,3;length=300
             nodal_sigma_min_S=minimum(svdvals(full)),port_sigma_min_S=minimum(svdvals(reduced))))
     end
     peak=rows[argmax(getproperty.(rows,:port_condition))]
-    return rows,Dict("stage"=>stage,"frequency_count"=>length(frequencies),
+    return rows,Dict("analysis_scope"=>analysis_scope,"frequency_count"=>length(frequencies),
         "band_Hz"=>[first(frequencies),last(frequencies)],"port_dimension"=>2length(c.ports),
         "ports"=>[string(name)*":"*string(side) for (name,side) in c.ports],
         "measurement_port_sets"=>measurements,"peak_singular_directions"=>peak_directions,
@@ -172,7 +172,7 @@ end
 
 # A local Taylor pencil supplies additional seeds for transformer networks.
 # Final roots always use native distributed elements and converter responses.
-function l4_taylor_seeds(c)
+function system_taylor_seeds(c)
     functions=composed_device_functions(c)
     s0=ComplexF64(1e-3);delta=1e-4
     y0=composed_nodal(c,s0,functions;which=:passive)
@@ -195,7 +195,7 @@ end
 # Unit determinant phases avoid overflow; local magnitude curvature and midpoint
 # phases trigger subdivision. Located-mode and nominal-carrier regions are
 # explicitly sampled before subdivision to expose narrow turns.
-function l4_finite_contour(c,functions,frequencies,roots;shift=1e-6,maxdepth=12)
+function system_finite_contour(c,functions,frequencies,roots;shift=1e-6,maxdepth=12)
     fs=Float64[0.;frequencies]
     append!(fs,exp10.(range(-12,log10(first(frequencies));length=121)))
     for root in roots
@@ -252,20 +252,20 @@ function l4_finite_contour(c,functions,frequencies,roots;shift=1e-6,maxdepth=12)
         "scope"=>"finite determinant polygon; distributed infinite spectrum unenumerated")
 end
 
-function l4_refine_stability(c,record;checkpoint=nothing)
+function system_refine_stability(c,record;checkpoint=nothing)
     functions=composed_device_functions(c)
     roots=complex.(record["poles_real_per_s"],record["poles_imag_rad_per_s"])
     record["raw_contours"]=get(record,"raw_contours",record["contours"])
     record["contours"]=Dict{String,Any}[]
     for fs in (exp10.(range(-2,5;length=6001)),exp10.(range(-6,6;length=12001)))
-        push!(record["contours"],l4_finite_contour(c,functions,fs,roots))
+        push!(record["contours"],system_finite_contour(c,functions,fs,roots))
         checkpoint===nothing || open(io->TOML.print(io,record;sorted=true),checkpoint,"w")
     end
     # A positive finite count with no growing located root supplies additional
     # guesses at the measured minimum separation, followed by circular offsets.
     if !any(real.(roots).>0) && any(x["closed_RHP_count"]>0 for x in record["contours"])
         initial=[ComplexF64(1+2π*im*x["minimum_frequency_Hz"]) for x in record["contours"] if x["closed_RHP_count"]>0]
-        selected,tracks,errors=l4_root_search(c,functions,initial)
+        selected,tracks,errors=system_root_search(c,functions,initial)
         append!(record["seed_real_per_s"],real.(selected));append!(record["seed_imag_rad_per_s"],imag.(selected))
         append!(record["track_real_per_s"],[real(x[1]) for x in tracks])
         append!(record["track_imag_rad_per_s"],[imag(x[1]) for x in tracks])

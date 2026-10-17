@@ -37,8 +37,8 @@ julia --project=test/manual/pscad/validation test/manual/pscad/validation/run_st
 `--timeout` is a finite positive workflow budget in seconds, shared across all selected fixtures.
 Multiple keys can follow `run_station.jl`. Completed native runs resume only when project, inputs,
 runner, outputs and solver identity match. An interrupted simulation restarts; completed axes
-remain reusable. Analysis runs again after reuse. L1–L3 measurement builds must have fewer than 100
-live nodes. L4 builds use fewer than 200 live nodes and one subsystem.
+remain reusable. Analysis runs again after reuse. Measurements of passive elements, single devices
+and coupled circuits must build with fewer than 100 live nodes. Complete-system builds use fewer than 200 live nodes and one subsystem.
 
 Preparation solves power flow and computes passive dissipativity or active-network stability.
 The screen result is recorded with the fixture and reported. Preparation writes baseline, driven,
@@ -208,7 +208,7 @@ must meet the step-size limit; the catalogue reports the maximum-entry change.
 | Instability growth | Frequency error must be ≤2 %, growth error ≤`max(0.10*abs(Re(λ)),0.5/s)` and departure ≤0.01 pu in the fixed fit interval. |
 | Ringdown extraction | Converged interior fit, relative residual ≤0.10, relative standard errors ≤2 % frequency and ≤10 % ζ |
 | Frequency-to-time inversion | Double/quadruple padded predictions agree within 1e-4 relative norm |
-| Native measurement build | L1–L3: fewer than 100 live nodes; L4: fewer than 200, one subsystem |
+| Native measurement build | passive elements, single devices and coupled circuits: fewer than 100 live nodes. Complete systems: fewer than 200, one subsystem |
 
 The lumped descriptor retains every device and passive storage state and checks its Schur response
 against native admittances. Complete-network stability can include a stabilized open-subsystem
@@ -234,7 +234,7 @@ All passive main runs use 2 us integration, 10 us recording and 1 us half-step r
 bases are solved phase-peak kV; current bases are `2000/(3*Vbase)` kA on 1000 MVA total. DC uses
 pole-to-pole kV and `1000/Vbase` kA.
 
-#### AC RLC, RL two-source circuit (`L1-01`)
+#### AC RLC, RL two-source circuit (`passive_ac_rlc`)
 
 The two-source RL circuit tests dq coupling and loss through its 2x2 admittance matrix. The run
 lasts 3 s, with windows [1,2) and [2,3) s.
@@ -243,7 +243,7 @@ The frequency-response check passes against the continuous model: the maximum er
 (limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. The
 balanced circuit does not test asymmetric phase couplings.
 
-#### DC two-terminal RLC (`L1-02`)
+#### DC two-terminal RLC (`passive_dc_rlc`)
 
 The two-terminal DC RLC circuit tests charging, pole bases and current directions through its
 differential 2x2 admittance matrix. The run lasts 3 s, with windows [1,2) and [2,3) s.
@@ -253,7 +253,7 @@ The frequency-response check passes against the continuous model: the maximum er
 retained uncorrected current signs fail the comparison; analysis must use the corrected saved
 probe signs.
 
-#### AC overhead line, untransposed phases (`L1-03`)
+#### AC overhead line, untransposed phases (`ac_ohl_untransposed`)
 
 The untransposed overhead line tests earth return and propagation through its abc 6x6 admittance
 matrix. The run lasts 7 s, with windows [5,6) and [6,7) s.
@@ -262,7 +262,7 @@ The frequency-response check passes against the continuous model: the maximum er
 (limit 2 %). The operating-point check, half-amplitude repeat and raw step change also pass. Early
 windows contain decaying DC offsets. The dq approximation is informational.
 
-#### AC coaxial cable, eliminated internal conductors (`L1-04`)
+#### AC coaxial cable, eliminated internal conductors (`ac_cable_coaxial`)
 
 The coaxial cable tests sheath elimination and earth return through its abc 6x6 admittance matrix.
 The run lasts 22 s, with windows [20,21) and [21,22) s.
@@ -272,7 +272,7 @@ The frequency-response check passes against the continuous model: the maximum er
 side-2 current sign follows the producing project. Earth return uses exp(γ_E) and each cable’s own
 depth; fitting error is a separate contribution.
 
-#### DC cable and overhead line in series (`L1-05`)
+#### DC cable and overhead line in series (`dc_cable_ohl`)
 
 The series cable/overhead-line circuit tests mixed-media propagation and DC loss through its
 differential 2x2 admittance matrix. The run lasts 8 s, with windows [6,7) and [7,8) s.
@@ -282,7 +282,7 @@ The frequency-response check passes against the continuous model: the maximum er
 cable fit has a 260 s pole. Agreement in the measured band does not constrain its true-DC
 extrapolation.
 
-#### YY transformer, loaded secondary (`L1-06`)
+#### YY transformer, loaded secondary (`transformer_yy`)
 
 The loaded YY transformer tests voltage ratio and winding loss through its dq 4x4 admittance
 matrix. The run lasts 3 s, with windows [1,2) and [2,3) s.
@@ -292,7 +292,7 @@ The frequency-response check passes against the continuous model: the maximum er
 phase reference must retain floating winding neutrals and near-ideal terms. Meter placement can
 affect the native solution.
 
-#### Dyn11 transformer, loaded secondary (`L1-07`)
+#### Dyn11 transformer, loaded secondary (`transformer_dyn11`)
 
 The loaded Dyn11 transformer tests the 30 degree secondary lead and winding loss through its dq
 4x4 admittance matrix. The run lasts 3 s, with windows [1,2) and [2,3) s.
@@ -302,7 +302,7 @@ The frequency-response check passes against the continuous model: the maximum er
 reference already includes the vector-group rotation; a secondary-frame change must transform
 voltage and current together.
 
-#### IEEE9, local bus impedance (`L1-08`)
+#### IEEE9, local bus impedance (`ieee9_bus_impedance`)
 
 The IEEE9 circuit tests network reduction and resonance through separate abc 3x3 local impedance
 matrices at Bus1 and Bus5. Its coarse run lasts 3 s, with windows [1,2) and [2,3) s. The
@@ -339,7 +339,7 @@ lag, so its separate P-f entry deliberately repeats that physics. Retained opera
 half-amplitude checks pass for the completed single-device entries; a failing frequency-response
 check still prevents an overall pass.
 
-#### TLC, P/Q and frequency support, stiff grid (`L2-01`)
+#### TLC, P/Q and frequency support, stiff grid (`tlc_pq_freq_support`)
 
 The TLC connects a direct ideal DC source to the stiff AC grid with a 70 MW/5 MVAr request. It
 tests P/Q control, PLL/OCC, measurement filters and delayed modulation. The run uses 2.5 us
@@ -356,7 +356,7 @@ recording, windows and amplitude. Its continuous model comparison passes at 0.53
 and its raw step change passes at 0.441 % (limit 1 %). The operating-point check and
 half-amplitude repeat also pass.
 
-#### TLC, P-f/Q, stiff grid (`L2-02`)
+#### TLC, P-f/Q, stiff grid (`tlc_pf_q`)
 
 The TLC uses the same physical controls and 70 MW/5 MVAr request as the preceding circuit. It
 tests explicit selection of P-f support. The run uses 2.5 us integration, a 1.25 us half-step
@@ -367,7 +367,7 @@ The frequency-response check fails against the continuous model; the maximum nor
 (limit 5 %). The raw step change passes at 0.882 % (limit 1 %). Its passing operating point and
 raw step change do not override the failed point comparison.
 
-#### TLC, P/Q-V, stiff grid (`L2-03`)
+#### TLC, P/Q-V, stiff grid (`tlc_p_qv`)
 
 The TLC supplies 70 MW with Q-V support and P control without frequency support; solved Q is -1.37
 MVAr. It tests the voltage-support lag. The run uses 2.5 us integration, a 1.25 us half-step
@@ -378,7 +378,7 @@ The frequency-response check passes against the continuous model; the maximum no
 (limit 5 %). The raw step change passes at 0.896 % (limit 1 %). The DC source clamps voltage, so
 this circuit does not test DC-load feedback.
 
-#### TLC, P/VAC, stiff grid (`L2-04`)
+#### TLC, P/VAC, stiff grid (`tlc_p_vac`)
 
 The TLC supplies 70 MW while its VAC loop holds terminal voltage at 1.00 pu; solved Q is -3.91
 MVAr. It tests VAC initialization from solved Q. The run uses 2.5 us integration, a 1.25 us
@@ -389,7 +389,7 @@ The frequency-response check passes against the continuous model; the maximum no
 (limit 5 %). The raw step change passes at 0.901 % (limit 1 %). The VAC loop uses NoFilter;
 controller-local VAC filters remain unsupported by export.
 
-#### TLC, Vdc/Q, resistive DC load (`L2-05`)
+#### TLC, Vdc/Q, resistive DC load (`tlc_vdc_q`)
 
 The TLC supplies a 5.85 kohm differential DC load, implemented as two 2.93 kohm pole-to-ground legs,
 and absorbs 70.0 MW from AC. It tests Vdc control with DC-load feedback. The run uses 0.625 us
@@ -405,7 +405,7 @@ At 2.5 us, the 1000 Hz q-d magnitude error is 7.27 % (limit 5 %), while the matr
 (limit 5 %). At 1.25 us, the half-step repeat changes 0.532 % in norm and 1.11 % per entry (limit
 1 %), so it fails. The 0.625/0.3125 us result above passes.
 
-#### TLC, P/Q, weak grid (`L2-06`)
+#### TLC, P/Q, weak grid (`tlc_pq_weak_grid`)
 
 The TLC uses the 70 MW/5 MVAr request against an AC grid with SCR 2.5. It tests the same controls
 against the weaker grid impedance. The run uses 2.5 us integration, a 1.25 us half-step repeat and
@@ -415,7 +415,7 @@ The frequency-response check passes against the continuous model; the maximum no
 (limit 5 %). The raw step change passes at 0.864 % (limit 1 %). Reference calculations must retain
 that weak-grid impedance.
 
-#### Grid-following MMC, P/Q, stiff grid (`L2-07`)
+#### Grid-following MMC, P/Q, stiff grid (`mmc_pq`)
 
 The MMC supplies 600 MW/200 MVAr with an ideal 800 kV DC clamp. It tests TEC, ZSCC and CCSC with
 zero configured modulation delay. The run uses 2.5 us integration, a 1.25 us half-step repeat and
@@ -428,7 +428,7 @@ The frequency-response check passes against the one-step (discrete) model with m
 %). One-second windows fail near 42 Hz; the stored eight-second windows pass the independent
 window check.
 
-#### Grid-following MMC, P-f/Q, stiff grid (`L2-08`)
+#### Grid-following MMC, P-f/Q, stiff grid (`mmc_pf_q`)
 
 The MMC supplies 600 MW/200 MVAr with P-f support gain 5 and cutoff 2 rad/s. It tests slow
 frequency-support dynamics with zero configured modulation delay. The run uses 2.5 us integration,
@@ -440,7 +440,7 @@ The frequency-response check passes against the one-step (discrete) model with m
 (limit 5 %). The raw step change fails, but the residual step-size check passes at 0.0742 % (limit
 1 %). Pole-based settling estimates cannot replace measured adjacent-window changes.
 
-#### Grid-following MMC, P/Q-V, stiff grid (`L2-09`)
+#### Grid-following MMC, P/Q-V, stiff grid (`mmc_p_qv`)
 
 The MMC supplies 600 MW with Q-V support; solved Q is 30.7 MVAr. It tests converter-side
 voltage-reference scaling through the transformer. The run uses 2.5 us integration, a 1.25 us
@@ -453,7 +453,7 @@ The frequency-response check passes against the one-step (discrete) model with m
 1 %). The continuous model retains a failed point comparison even when the one-step (discrete)
 model passes.
 
-#### Grid-following MMC, P/VAC, stiff grid (`L2-10`)
+#### Grid-following MMC, P/VAC, stiff grid (`mmc_p_vac`)
 
 The MMC supplies 600 MW while regulating terminal voltage at 1.00 pu; solved Q is -37.3 MVAr. It
 tests VAC control through the transformer. The run uses 2.5 us integration, a 1.25 us half-step
@@ -466,7 +466,7 @@ The frequency-response check passes against the one-step (discrete) model with m
 %). The VAC equilibrium must use solved Q; the requested Q alone does not determine its integral
 state.
 
-#### Grid-following MMC, Vdc/Q, resistive DC load (`L2-11`)
+#### Grid-following MMC, Vdc/Q, resistive DC load (`mmc_vdc_q`)
 
 The MMC supplies a 600 MW DC load with differential resistance 1.07 kohm, implemented as two 533 ohm
 legs. It absorbs 603 MW from AC and tests DC control without a permanent voltage source. The run
@@ -479,7 +479,7 @@ The frequency-response check passes against the one-step (discrete) model with m
 1 %). Pre-charge releases at 0.2 s. The one-step (discrete) model must include both exported pole
 resistances.
 
-#### Grid-following MMC, P/Q, weak grid (`L2-12`)
+#### Grid-following MMC, P/Q, weak grid (`mmc_pq_weak_grid`)
 
 The MMC supplies 600 MW/200 MVAr against an AC grid with SCR 2.5. It tests weak-grid conditioning
 and the one-step (discrete) model. The run uses 2.5 us integration, a 1.25 us half-step repeat and
@@ -492,7 +492,7 @@ The frequency-response check passes against the one-step (discrete) model with m
 1 %). The residual step-size check uses the measured response as its denominator; dividing by the
 small unexplained residual overstates the change.
 
-#### Grid-forming MMC, VSM and CCVI (`L2-13`)
+#### Grid-forming MMC, VSM and CCVI (`mmc_gfm_vsm`)
 
 The 1060 MVA MMC connects 320/400 kV AC and 640 kV DC circuits at 742 MW/0 MVAr. Its VSM and CCVI,
 with TEC/ZSCC/CCSC and 200 us Padé 5/5 modulation, test grid-forming synchronization. The run uses
@@ -504,7 +504,7 @@ The frequency-response check passes against the continuous model; the maximum no
 time of about 1590 s. These records rely on solved initialization and do not establish generic
 startup settling.
 
-#### Grid-forming MMC, leg-energy control and compensated modulation (`L2-14`)
+#### Grid-forming MMC, leg-energy control and compensated modulation (`mmc_gfm_lec_compensated`)
 
 The same 1060 MVA plant uses VSM/CCVI, Sigma/Delta-energy PI gains 0.5544/5.94 and CCC. It tests
 the corrected triplen frame and physical per-arm capacitor division. The run uses 1 us
@@ -516,7 +516,7 @@ The frequency-response check passes against the continuous model; the maximum no
 the measured 1 us case remains settled. Physical arm division retains harmonics absent from
 Julia’s truncated harmonic solve.
 
-#### MMC, P/Q with disabled total-energy and zero-sequence control (`L2-15`)
+#### MMC, P/Q with disabled total-energy and zero-sequence control (`mmc_pq_no_energy_control`)
 
 The 1000 MVA MMC uses 333/380 kV AC, 640 kV DC and 30 mH arms at 100 MW/100 MVAr. It tests
 disabled TEC/ZSCC while CCSC remains enabled. The run uses 2.5 us integration, a 1.25 us half-step
@@ -527,7 +527,7 @@ The frequency-response check passes against the continuous model; the maximum no
 % (limit 5 %). The raw step change passes at 0.788 % (limit 1 %). Its clamped DC circuit does not
 establish stability of the complete P2P link.
 
-#### Synchronous machine, AVR, governor and steam turbine (`L2-16`)
+#### Synchronous machine, AVR, governor and steam turbine (`synchronous_machine`)
 
 The 1000 MVA/380 kV machine supplies 900 MW with its native rt/lt branch, AVR, governor and steam
 turbine. It tests machine admittance in SI units and slow electromechanical dynamics. The run uses
@@ -538,7 +538,7 @@ The frequency-response check passes against the continuous model; the maximum no
 (limit 5 %). The raw step change passes at 0.895 % (limit 1 %). The slowest mode has a decay time
 of 5.06 s. At 2.5 us, the raw step change was 1.81 % (limit 1 %); the finer stored result passes.
 
-#### Grid-forming MMC, weak grid (`L2-17`)
+#### Grid-forming MMC, weak grid (`mmc_gfm_weak_grid`)
 
 Julia's complete-network roots for the 1060 MVA VSM/CCVI circuit at SCR 2.5 are
 +101 ± j360 s⁻¹. The circuit was not run in PSCAD. The screen result is recorded with the fixture and
@@ -556,7 +556,7 @@ Unless stated otherwise, main runs use 2.5/1.25 us integration, ratio 25, 32 s d
 amplitude/half-step repeats. Reported maxima below are taken across each group's required
 measurands.
 
-#### Two TLCs, P-f/Q and P/Q-V, shared bus (`L3-01`)
+#### Two TLCs, P-f/Q and P/Q-V, shared bus (`two_tlc_shared_bus`)
 
 The TLCs share an AC bus behind a 6.02 ohm/0.192 H grid and retain separate 640 kV DC clamps.
 Their aggregate base is 200 MVA/220 kV, and each device keeps its 100 MVA base. The circuit tests
@@ -568,7 +568,7 @@ The coarse frequency-response comparisons pass against the continuous model, wit
 
 Both DC voltages are clamped, so this circuit does not test DC-side coupling.
 
-#### Two grid-following MMCs, P/Q and P/Q-V, shared bus (`L3-02`)
+#### Two grid-following MMCs, P/Q and P/Q-V, shared bus (`two_mmc_shared_bus`)
 
 The MMCs share an AC bus behind a 1.80 ohm/0.0572 H grid and retain separate 800 kV DC clamps. The
 grid has SCR 4 on the combined 2000 MVA/380 kV base. The circuit tests interaction between two
@@ -580,7 +580,7 @@ error 0.193 % (limit 5 %). The half-amplitude repeat and residual step-size chec
 The continuous model fails individual/aggregate admittance comparisons, although its
 direct-impedance comparison passes.
 
-#### Grid-forming and grid-following MMC, shared bus (`L3-03`)
+#### Grid-forming and grid-following MMC, shared bus (`mmc_gfm_gfl_shared_bus`)
 
 The MMCs share a bus behind a 0.872 ohm/0.0278 H grid and retain separate 640/800 kV DC clamps.
 The 2060 MVA/380 kV circuit tests mixed synchronization and model delays. The coarse scan injects
@@ -593,7 +593,7 @@ The GFM retains its 1060 MVA/400 kV nameplate and 200 us delay; only the zero-de
 the extra interface step. The continuous model fails the GFL admittance comparison. Slow GFM
 filters rely on solved initialization.
 
-#### MMC behind a lumped pi line (`L3-04`)
+#### MMC behind a lumped pi line (`mmc_pi_line`)
 
 The MMC connects to the remote end of a pi line with series R=2 ohm, L=20 mH and C=2 uF to ground
 at each end. An SCR-8 grid supplies the near end on a 1000 MVA/380 kV base. The circuit tests
@@ -610,7 +610,7 @@ Remote terminal voltage/current checks remain independent. The local scan uses 4
 to 378 Hz at 0.5 Hz spacing and 2.44e-5 pu per tone. The one-step (discrete) model gives a local-Z
 centre of 366.9 Hz and width 5.73 Hz; the continuous model gives 367.2 Hz and 4.83 Hz.
 
-#### TLC behind a step-up transformer and line (`L3-05`)
+#### TLC behind a step-up transformer and line (`tlc_transformer_line`)
 
 The TLC connects to the grid through a step-up transformer and a line. This circuit is intended to
 test converter interaction with the transformer and line.
@@ -618,7 +618,7 @@ test converter interaction with the transformer and line.
 The recorded transformer magnetising-flux decay time is about 21 s, with a proposed run duration
 of 390 s. The circuit was not run in PSCAD.
 
-#### Synchronous machine and MMC, shared bus (`L3-06`)
+#### Synchronous machine and MMC, shared bus (`machine_mmc_shared_bus`)
 
 The machine and MMC share a bus supplied by an SCR-8 grid on a 2000 MVA/380 kV aggregate base.
 Each device keeps its 1000 MVA base. The circuit tests individual/aggregate admittance and direct
@@ -639,10 +639,10 @@ results; both norm and entry changes must be at most 1 %.
 
 The half-amplitude repeats pass. The fixture fails the step-size limit, with valid measured
 columns. The recorded integration steps are 1.25/0.625 us. The standalone machine passed at 0.90 %. A finer repeat would require 80 s runs at 0.3125 us.
-The re-analysis record and per-block columns are under `data/L3-06/`; native evidence is retained
+The re-analysis record and per-block columns are under `data/machine_mmc_shared_bus/`. Native evidence is retained
 separately.
 
-#### Two MMCs coupled by a distributed DC cable (`L3-07`)
+#### Two MMCs coupled by a distributed DC cable (`two_mmc_dc_cable`)
 
 Vdc/Q and P/Q MMCs connect through a 25 km DC cable and independent SCR-8 AC grids. Each port uses
 a 1000 MVA/380 kV base. The circuit tests the full 4x4 AC admittance/impedance matrices and two
@@ -655,7 +655,7 @@ and retain two 10 Mohm pole references each. Native finite contours through 1 MH
 rightmost root at -3.00/s but do not enumerate the distributed infinite spectrum. Sub-floor cross
 entries receive absolute-floor checks only.
 
-#### MMC with a damped series-RC shunt (`L3-08`)
+#### MMC with a damped series-RC shunt (`mmc_rc_shunt`)
 
 The P/Q MMC retains its SCR-8 grid and DC clamp, with a series R=2 ohm/C=5 uF shunt per phase. The
 1000 MVA/380 kV circuit tests device/aggregate admittance and direct impedance at two resonances.
@@ -688,7 +688,7 @@ integration. Half-step repeats use 0.625 us integration. Both use recorder ratio
 The limits are 5 % complex error and 3 degrees phase error, with independent measurement checks.
 Zero-delay devices use the complete one-step (discrete) network reference.
 
-#### Redesigned P2P at 100 MW (`L4-01`)
+#### Redesigned P2P at 100 MW (`p2p_redesigned`)
 
 The redesigned P2P has two 1000 MVA MMCs, a 25 km cable/75 km DC overhead link and AC overhead lines
 `tl1` (25 km) and `tl78` (90 km), both untransposed.
@@ -708,7 +708,7 @@ constants by 7.05e-9 (Z11), 2.29e-8 (Z12), 1.09e-9 (Y11) and 7.71e-10 (Y12) in r
 EMTDC exits abnormally at the end of every recorded 0.15–32 s measurement run with `Transp = 1`.
 The physical outputs are complete. The same project with `Transp = 0` ends cleanly.
 
-#### IEEE14 (`L4-03`)
+#### IEEE14 (`ieee14`)
 
 The complete Jan Kircheis circuit has four MMCs, three wind farms, sixteen overhead lines,
 two DC cables and five active shunt loads. It uses the standard WF1 PLL, 250 us MMC2 delay
@@ -719,7 +719,7 @@ contour requires refinement between 0 and 0.010 Hz to resolve a full determinant
 its positive-frequency branch. The distributed infinite spectrum remains unenumerated.
 The circuit has 216 live nodes, above the educational licence's 200-node limit, and was not run in PSCAD.
 
-#### P2P with AC grids (`L4-04`)
+#### P2P with AC grids (`p2p_ac_grids`)
 
 The Cigre 2026 circuit uses untransposed 80 km and 90 km parallel AC lines, a 600 MW request
 and a 300 MVAr receiving request. Converter initial phase-RMS voltages are 220 kV. Ports use
@@ -730,7 +730,7 @@ Every operating-point quantity meets its limit except c2's arm-capacitor voltage
 Baseline negative-sequence current is 1.35 % at c2 and 1.3–1.9 % in the line pair.
 The c2 bus has 0.61 % negative-sequence voltage. Its 100 Hz P/Q ripple is 0.60 % and 1.4 %
 of nominal. The ±100 Hz image ratio is 0.32–0.59. The same kind of MMC pair on balanced
-SCR-8 Thevenin grids without AC lines (`L3-07`), coupled by a 25 km DC cable, shows a
+SCR-8 Thevenin grids without AC lines (`two_mmc_dc_cable`), coupled by a 25 km DC cable, shows a
 ±100 Hz image ratio of 0.0019. Blocks driven at c2 have about 49 % error,
 while c1's own impedance agrees within 0.40 %. The status is `model_mismatch`.
 The half-amplitude and half-step variants were not run in PSCAD. The coarse group takes 8794 s of station time.
@@ -740,8 +740,8 @@ Prepare and run the two systems from the validation environment:
 ```julia
 using PythonCall
 include("test/manual/pscad/validation/validation.jl")
-PSCADValidation.prepare_l4(["L4-01", "L4-04"])
-PSCADValidation.run_l4(; ids=["L4-01", "L4-04"], timeout=100800.)
+PSCADValidation.prepare_systems(["p2p_redesigned", "p2p_ac_grids"])
+PSCADValidation.run_systems(; ids=["p2p_redesigned", "p2p_ac_grids"], timeout=100800.)
 ```
 
 Preparation rejects changed required files and existing output directories. Finite stability
@@ -839,8 +839,8 @@ in the fit interval. Convergence and uncertainty checks apply independently.
 Reported results include confidence intervals, residuals, fit condition and per-channel fits.
 
 ```julia
-PSCADValidation.prepare_l4(["L4-00D", "L4-04D"])
-PSCADValidation.run_l4(; ids=["L4-00D", "L4-04D"], timeout=2400.)
+PSCADValidation.prepare_systems(["p2p_original", "p2p_ac_single_line"])
+PSCADValidation.run_systems(; ids=["p2p_original", "p2p_ac_single_line"], timeout=2400.)
 ```
 
 ## Known failure modes
@@ -854,13 +854,13 @@ PSCADValidation.run_l4(; ids=["L4-00D", "L4-04D"], timeout=2400.)
 | Original P2P has a growing oscillation in PSCAD. | Julia predicts growing modes at +3478.5 and -3476.6 Hz. | The fresh-start fit gives +3543 Hz and 1630 s⁻¹. Its nonlinear interval has 11.5 pu peak departure; the growth rate is not determined to 10 %. |
 | Inconsistent low-frequency voltage phasors despite clean currents | EMT-Nyquist voltage chatter aliases to DC at even recorder/integration ratios | Prepare an odd integer ratio at both steps and preserve coherent windows. Adjacent decimation offsets correlated -0.999, offsets two apart +0.998; 0.74–0.85 V RMS chatter persisted after onset. Ratio 25 separates it at recorder Nyquist. |
 | Zero-delay converter Y/step errors rise with frequency | One inherent electrical-measurement-to-source step | Use the one-step (discrete) model and residual step-size check, retaining continuous model errors and raw step changes and KCL readout checks. Positive delays export a rounded residual after subtracting one step. |
-| Machine step change exceeds 1 % in the shared machine/MMC circuit | The recorded integration steps are 1.25/0.625 us. | The machine column in `L3-06` is valid but fails the raw entry-change limit at 1.117 %; aggregate Y also fails at 1.34 %. The standalone machine passed at 0.90 %. A finer repeat requires 80 s runs at 0.3125 us. Apply the residual rule only to eligible blocks. |
+| Machine step change exceeds 1 % in the shared machine/MMC circuit | The recorded integration steps are 1.25/0.625 us. | The machine column in `machine_mmc_shared_bus` is valid but fails the raw entry-change limit at 1.117 %. Aggregate Y also fails at 1.34 %. The standalone machine passed at 0.90 %. A finer repeat requires 80 s runs at 0.3125 us. Apply the residual rule only to eligible blocks. |
 | Window-entry failure near a lightly damped mode | The measured voltage-matrix condition limit is 100. | Keep the ≤100 condition check and extend predeclared coherent windows. The stiff-grid P/Q MMC had 1.87 % window-entry change at 42 Hz against 1 %; 8 s windows resolve the stored case. Larger amplitude alone did not remove it. |
 | DFT rejects an adaptive band | Window lacks whole tone periods | A 75 Hz tone has 7.5 cycles in 0.1 s. Use whole common periods including the 50 Hz frame: [8,8.12), [8.12,8.24) s for the recorded 75/1000 Hz case, and retain enough output to cover both. |
 | Large relative error on a tiny cross entry | Reference below the entry floor | Report the 0.02 pu absolute-floor comparison. Do not claim relative accuracy for sub-floor entries or let a passing aggregate hide them. |
 | `1e99`, NaNs or rising DC startup voltage | Zero/unsettled divisor or uncharged source-free DC circuit | Inspect physical pole voltages and the divisor selector. Use the exporter’s temporary pre-charge for a source-free Vdc-controlled island; release is 0.2 s. Retain live MMC current/energy feedback. |
 | Supervisor cannot launch a long-name local half-step run | Windows path length | Use compact frequency-list prefixes and preflight every possible path. The limit is 240 UTF-16 code units, including scratch, mapped-share and caller roots plus random suffixes. |
-| Build reports only the educational node-cap error | Native electrical-node count exceeds 200 | Use a larger licence or smaller physical circuit. IEEE39 has 528 live nodes and was not run in PSCAD. Its offline export checks pass. L1–L3 measurements require <100; L4 requires <200 and one subsystem. |
+| Build reports only the educational node-cap error | Native electrical-node count exceeds 200 | Use a larger licence or smaller physical circuit. IEEE39 has 528 live nodes and was not run in PSCAD. Its offline export checks pass. Measurements of passive elements, single devices and coupled circuits require <100. Complete systems require <200 and one subsystem. |
 | Native floating input or `NT_1` despite a valid written stub | Size-0 sheet clamps components on load and leaves wires behind | Export size 5 within [0,14382] coordinates. Inspect `outputs/load-relocations.txt`; check a native-saved project with `check_connectivity(path)`. |
 | Isolated YY secondary produces a zero diagonal | Consecutive ideal meters in its only grounding path | Place the shunt meter in the load ground return; retain ordered pins and passive parameters. |
 | Distributed line aborts before measurement | Travel time below integration step | Reduce the step. The exporter warns using length/speed-of-light; PSCAD uses calculated travel time. |
@@ -879,7 +879,7 @@ Ignored `data/<key>/manifest.toml` records the circuit, settings, bases, amplitu
 selection, source/dependency hashes, project hashes, native-run entries and comparison results.
 Project variants, native `runs/`, references and analysis tables remain alongside it. Coupled
 manifests contain coarse/local groups and independent results per measurand. Time-domain data use
-a separate directory with suffix `-tierb`; its manifest retains channels, bases, fit coordinates,
+a separate directory with suffix `_time_domain`. Its manifest retains channels, bases, fit coordinates,
 windows and extraction checks.
 
 Every retained payload has size and SHA-256 plus its producing source. The manifest omits its own
@@ -887,7 +887,7 @@ recursive hash. Archived projects and raw outputs remain attached to their origi
 including failed and unused candidates. Reference refresh archives the previous manifest/reference
 without changing measured bytes. A changed project cannot reuse an older native run.
 
-Useful result fields include `tier_c_result` for the comparison with the continuous model,
+Useful result fields include `frequency_response_result` for the comparison with the continuous model,
 `interface_step_result`, `comparison_summary`, `raw_step_refinement`, `residual_step_refinement`
 and `step_refinement` for the selected rule. These are literal stored field names. Corrected
 historical orientation analysis can appear under `corrected_analysis`; it must not be confused
@@ -912,7 +912,7 @@ hashes, the analysing revision and source hashes, and old/new entry and Frobeniu
 existing bases, floors and tolerances. It copies each input manifest and checks the hashes of every
 consumed response and project. It reports incomplete measurements as pending.
 
-For the untransposed overhead line (`L1-03`), the maximum relative Frobenius error decreases from
+For the untransposed overhead line (`ac_ohl_untransposed`), the maximum relative Frobenius error decreases from
 0.381 % to 0.034 %. The coaxial cable and series DC circuit retain their errors; the IEEE9 coarse
 maximum changes from 3.352218 % to 3.351453 %. Continuous and discrete errors for the distributed
 DC cable are unchanged at the displayed precision. Re-analysis updates Julia references and
@@ -922,7 +922,7 @@ and stability checks.
 ## Troubleshooting and extending the suite
 
 Start with the manifest status, required measurand summaries and invalid reasons. Then inspect
-`comparison_C_qualified.tsv`, per-entry results, KCL factors, window/refinement tables, build
+`comparison_frequency_response_qualified.tsv`, per-entry results, KCL factors, window and refinement tables, build
 messages and recorded solver identity. A process failure or timeout is not a numerical comparison
 failure. Increase an execution budget only after identifying which run failed; completed matching
 axes resume.

@@ -16,24 +16,24 @@ function gfl_settling(gate; fixture_id, tone_peak_pu = 5e-5)
         "scope" => "native pole envelope sizing; sampled/unmodelled modes and residues unbounded; actual unchanged gates mandatory")
 end
 
-const MMC_SETTLING_DIRECTORY = joinpath(ROOT, "data", "m9c7", "L2-07-settling")
+const MMC_SETTLING_DIRECTORY = joinpath(ROOT, "data", "converter_settling_acceptance", "mmc_pq_settling")
 
 # The bounded experiment is rebuilt from its frozen design with retained runs intact.
 function prepare_settling_experiment()
     directory = MMC_SETTLING_DIRECTORY
-    archive = joinpath(ROOT, "data", "archive", "m9c7", "L2-07-settling")
+    archive = joinpath(ROOT, "data", "archive", "converter_settling_acceptance", "mmc_pq_settling")
     ispath(archive) && error("archive already exists: $archive")
     prior = TOML.parsefile(joinpath(directory, "manifest.toml"))
-    definition = deepcopy(prior["tier_c"])
+    definition = deepcopy(prior["frequency_response"])
     mkpath(dirname(archive))
     mv(directory, archive)
     mkpath(directory)
-    net = fixture("L2-07").factory()
+    net = fixture("mmc_pq").factory()
     list = fixture_netlist(net, power_flow(net))
-    spec, reference = applicable_scan("L2-07", net, list; definition)
+    spec, reference = applicable_scan("mmc_pq", net, list; definition)
     models = prepare_scan_projects(directory, list, spec, ["p1_d"]; prefix = scan_prefix(spec))
-    record = preparation_record(fixture("L2-07"), prior["stability"], models; directory)
-    record["tier_c"] = scan_record(spec)
+    record = preparation_record(fixture("mmc_pq"), prior["stability"], models; directory)
+    record["frequency_response"] = scan_record(spec)
     record["status"] = "diagnostic_prepared"
     record["experiment"] = prior["experiment"]
     record["archive_directory"] = relpath(archive, ROOT)
@@ -49,9 +49,9 @@ function run_settling_experiment(; remote, deadline)
     record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
     try
         verify_inputs(directory, record)
-        net = fixture("L2-07").factory()
+        net = fixture("mmc_pq").factory()
         list = fixture_netlist(net, power_flow(net))
-        spec, _ = applicable_scan("L2-07", net, list; definition = record["tier_c"])
+        spec, _ = applicable_scan("mmc_pq", net, list; definition = record["frequency_response"])
         results, models = Dict{String, P.PSCADResult}(), Dict{String, P.PSCADModel}()
         for axis in ("baseline", "p1_d")
             key = scan_prefix(spec) * axis

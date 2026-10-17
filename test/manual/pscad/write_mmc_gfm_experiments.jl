@@ -3,7 +3,7 @@ using PowerImpedance, PythonCall, LinearAlgebra
 include("../../pscad/fixtures.jl")
 include("../../pscad/topology.jl")
 const P = PowerImpedance.PSCAD
-const EXPERIMENTS = mkpath("/tmp/pscad-m6a")
+const EXPERIMENTS = mkpath("/tmp/pscad-mmc-gfm")
 const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
     sample_step = 250e-6, source_ramp = 0.0)
 BLAS.set_num_threads(1)
@@ -86,7 +86,7 @@ end
 
 write(joinpath(EXPERIMENTS, "README.md"),
     """
-# M6a grid-forming MMC
+# GFM MMC grid-forming MMC
 
 mmc_gfm_classic.pscx and mmc_gfm_builder.pscx mirror test/adm_MMC_test.jl's
 build_mmc_grid(): 1060 MVA, 320/400 kV LL RMS transformer, 640 kV DC,
@@ -97,7 +97,7 @@ FFVI direct voltage path is not substituted for Julia's CCVI/OCC cascade.
 Saved evidence: local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:65168–66145
 (CCVI), 67793–68955 (PLL), 68956–70164 (VSM), 57638–58619 (filters).
 The current exporter uses its accepted near-ideal YY transformer and exact
-200 us dq delays with the existing phase compensation, as documented in M4/M5.
+200 us dq delays with the existing phase compensation, as documented in TLC/MMC.
 Exact delay and Julia's Pade(5,5) differ away from steady state.
 
 Build/run under the written filename/namespace: 10 s, 10 us integration,

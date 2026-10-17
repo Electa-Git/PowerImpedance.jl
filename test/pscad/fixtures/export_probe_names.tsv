@@ -214,7 +214,7 @@ mmc_pq_builder	I_G_DC_1
 mmc_pq_builder	V_AC
 mmc_pq_builder	V_DC_N
 mmc_pq_builder	V_DC_P
-# M5b fixtures retain the existing terminal and converter probe templates.
+# converter-control fixtures retain the existing terminal and converter probe templates.
 mmc_pf_builder	DUT_P_ac_f
 mmc_pf_builder	DUT_Q_ac_f
 mmc_pf_builder	DUT_iS_z
@@ -455,7 +455,7 @@ tlc_vac_classic	V_DC1_N
 tlc_vac_classic	V_DC1_P
 tlc_vac_classic	V_DC2_N
 tlc_vac_classic	V_DC2_P
-# M5b round-1 ramp cases use the unchanged PQ and TLC case-2 probes.
+# Source-ramp fixtures use the existing PQ and TLC case-2 probes.
 mmc_pq_default_ramp	DUT_P_ac_f
 mmc_pq_default_ramp	DUT_Q_ac_f
 mmc_pq_default_ramp	DUT_iS_z

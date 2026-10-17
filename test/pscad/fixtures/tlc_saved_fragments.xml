@@ -1457,7 +1457,7 @@
       <param name="Name" value=""/>
     </paramlist>
   </User>
-  <!-- local/pscad-exchange/run-SXXijr/generated.pscx:136–140, M3 station case -->
+  <!-- local/pscad-exchange/run-SXXijr/generated.pscx:136–140, machine station case -->
   <User classid="UserCmp" id="747959782" x="252" y="126" w="18" h="18" z="-1" orient="0" defn="master:nodelabel" link="-1" q="4" disable="false">
     <paramlist name="" link="-1" crc="0">
       <param name="Name" value="Bus2"/>

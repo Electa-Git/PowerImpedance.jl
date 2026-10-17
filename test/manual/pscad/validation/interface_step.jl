@@ -91,8 +91,8 @@ function record_interface_comparison!(record, net, spec, directory, comparison_d
     stored = read_response(path, length(spec.axes), spec.frequencies)
     native_reference_check(spec, reference, stored)["passed"] || error("interface-step reference changed")
     measured = read_response(joinpath(comparison_directory, "measured_S.tsv"), length(spec.axes), spec.frequencies)
-    rows, result = interface_step_comparison(spec, measured, stored, record["tier_c_result"])
-    write_table(joinpath(comparison_directory, "comparison_C_interface_step.tsv"), rows)
+    rows, result = interface_step_comparison(spec, measured, stored, record["frequency_response_result"])
+    write_table(joinpath(comparison_directory, "comparison_frequency_response_interface_step.tsv"), rows)
     record["interface_step_result"] = result
     return result
 end

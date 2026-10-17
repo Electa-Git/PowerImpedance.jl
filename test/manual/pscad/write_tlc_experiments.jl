@@ -2,7 +2,7 @@
 using PowerImpedance, PythonCall
 include("../../pscad/fixtures.jl")
 const P = PowerImpedance.PSCAD
-const EXPERIMENTS = mkpath("/tmp/pscad-m4-experiments")
+const EXPERIMENTS = mkpath("/tmp/pscad-tlc-experiments")
 const SETTINGS = P.SimulationSettings(simulation_time = 10.0,
     time_step = 10e-6, sample_step = 40e-6)
 

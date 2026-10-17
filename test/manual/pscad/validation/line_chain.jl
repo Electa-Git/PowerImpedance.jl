@@ -1,4 +1,4 @@
-const LINE_CHAIN_IDS = ("L1-03", "L1-04", "L1-05", "L1-08", "L3-07")
+const LINE_CHAIN_IDS = ("ac_ohl_untransposed", "ac_cable_coaxial", "dc_cable_ohl", "ieee9_bus_impedance", "two_mmc_dc_cable")
 
 """
 $(TYPEDSIGNATURES)
@@ -14,8 +14,8 @@ recorded revision.
 - `ids`: Fixture identifiers. Default: `LINE_CHAIN_IDS`.
 - `data_root`: Directory containing the stored fixture records.
 - `output_root`: Separate destination for comparisons and file hashes, restricted
-  to this worktree's `data/line-chain` or `/tmp`.
-  Default: `joinpath(ROOT, "data", "line-chain")`.
+  to this worktree's `data/line_chain_analysis` or `/tmp`.
+  Default: `joinpath(ROOT, "data", "line_chain_analysis")`.
 
 # Returns
 
@@ -24,7 +24,7 @@ recorded revision.
   evaluation are separate from these comparisons.
 """
 function reanalyse_line_chain(ids = LINE_CHAIN_IDS; data_root,
-        output_root = joinpath(ROOT, "data", "line-chain"))
+        output_root = joinpath(ROOT, "data", "line_chain_analysis"))
     selected = ids isa AbstractString ? [ids] : collect(ids)
     !isempty(selected) && all(in(LINE_CHAIN_IDS), selected) || error("unknown line-chain fixture")
     # Resolve existing ancestors as well as the leaf: a symlink must not turn
@@ -39,8 +39,8 @@ function reanalyse_line_chain(ids = LINE_CHAIN_IDS; data_root,
     end
     inside(path, root) = path == root || startswith(path, root * "/")
     destination = resolved(output_root)
-    allowed = (joinpath(realpath(ROOT), "data", "line-chain"), realpath("/tmp"))
-    any(root -> inside(destination, root), allowed) || error("analysis output must be under worktree data/line-chain or /tmp")
+    allowed = (joinpath(realpath(ROOT), "data", "line_chain_analysis"), realpath("/tmp"))
+    any(root -> inside(destination, root), allowed) || error("analysis output must be under worktree data/line_chain_analysis or /tmp")
     evidence = realpath(data_root)
     (inside(destination, evidence) || inside(evidence, destination)) && error("output overlaps stored evidence")
     outcomes = Dict{String, Any}()
@@ -73,9 +73,9 @@ function reanalyse_line_chain(ids = LINE_CHAIN_IDS; data_root,
         net = fixture(id).factory()
         list = fixture_netlist(net, power_flow(net))
         targets = Dict{String, Any}()
-        if id == "L3-07"
-            c = l3_circuit(id, net)
-            spec = l3_spec(id, list)
+        if id == "two_mmc_dc_cable"
+            c = coupled_circuit(id, net)
+            spec = coupled_spec(id, list)
             definition = original["measurement_groups"][spec.protocol]
             spec = merge(spec, (; voltage_bases = Float64.(definition["voltage_bases_kV"]),
                 current_bases = Float64.(definition["current_bases_kA"]),
@@ -108,12 +108,12 @@ function reanalyse_line_chain(ids = LINE_CHAIN_IDS; data_root,
                 end
             end
         else
-            spec, reference = applicable_scan(id, net, list; definition = original["tier_c"])
+            spec, reference = applicable_scan(id, net, list; definition = original["frequency_response"])
             measured_path = joinpath(directory, "analysis", spec.protocol,
                 spec.quantity == "Y" ? "measured_S.tsv" : "measured_ohm.tsv")
             targets["response"] = (; spec, reference,
                 frozen_path = joinpath(directory, reference_filename(spec)), measured_path,
-                quality = original["tier_c_result"], indices = collect(eachindex(spec.axes)), columns = collect(eachindex(spec.axes)))
+                quality = original["frequency_response_result"], indices = collect(eachindex(spec.axes)), columns = collect(eachindex(spec.axes)))
         end
         comparisons = Dict{String, Any}()
         for (target, data) in targets
@@ -127,7 +127,7 @@ function reanalyse_line_chain(ids = LINE_CHAIN_IDS; data_root,
                 active = get(spec, :active, false), valid = quality["valid"],
                 model_mismatch = quality["model_mismatch"]) for (label, ref) in (("old", frozen), ("new", reference)))
             for (label, entries) in rows
-                write_table(joinpath(output, target*"_"*label*"_C.tsv"), entries)
+                write_table(joinpath(output, target*"_"*label*"_frequency_response.tsv"), entries)
             end
             write_response(joinpath(output, target*"_reference.tsv"), reference, spec.frequencies; quantity = spec.quantity)
             comparisons[target] = Dict("retained_quality" => quality,

@@ -82,6 +82,9 @@ end
         @test V.completed_axis_runs(directory, "baseline", V.digest(project)) == [root]
         @test isempty(V.completed_axis_runs(directory, "d", V.digest(project)))
         @test isempty(V.completed_axis_runs(directory, "baseline", repeat("0", 64)))
+        recorded_paths = [relpath(dirname(root),directory)]
+        @test V.completed_axis_runs(directory, "time_domain_baseline", V.digest(project); recorded_paths) == [root]
+        @test isempty(V.completed_axis_runs(directory, "time_domain_baseline", repeat("0",64); recorded_paths))
         @test !isfile(joinpath(directory, "manifest.toml"))
         before = [(file["path"], file["sha256"]) for file in V.inventory(directory)]
         RESUME_IDENTIFICATIONS[] = 0
@@ -118,7 +121,7 @@ function phase_wave(time, dq)
 end
 
 @testset "Coherent multi-tone and fixed frame" begin
-    spec = V.l1_settings()
+    spec = V.passive_settings()
     time = collect(0.0:spec.sample_step:3.0)
     tone = V.multitone(time, spec.frequencies, spec.phases;
         amplitude = spec.tone_peak_pu, onset = spec.injection_time)
@@ -226,7 +229,7 @@ end
     invalid=copy(reference);invalid[1]=NaN
     @test_throws ArgumentError V.native_reference_check(spec,invalid,frozen)
     net=V.ac_rl_network();list=P.netlist(net,power_flow(net))
-    actual_spec,actual_reference=V.applicable_scan("L1-01",net,list)
+    actual_spec,actual_reference=V.applicable_scan("passive_ac_rlc",net,list)
     mktempdir() do dir
         path=joinpath(dir,V.reference_filename(actual_spec))
         V.write_response(path,actual_reference,actual_spec.frequencies)
@@ -258,17 +261,17 @@ end
 @testset "Passive catalogue and generated source plans" begin
     @test length(V.REGISTRY) == 37
     @test length(unique(entry.id for entry in V.REGISTRY)) == 37
-    for entry in filter(e->startswith(e.id,"L1-"),V.REGISTRY)
+    for entry in filter(e->e.category == :passive,V.REGISTRY)
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"
-        powerflow = entry.id == "L1-08" ? power_flow(net) : nothing
+        powerflow = entry.id == "ieee9_bus_impedance" ? power_flow(net) : nothing
         @test P.check_connectivity(P.build_plan(P.netlist(net, powerflow))) === nothing
     end
     net = V.ac_rl_network()
     list = P.netlist(net, power_flow(net))
-    baseline, _ = V.l1_plan(list, "l1_01", :baseline)
+    baseline, _ = V.passive_plan(list, "passive_ac_rlc", :baseline)
     for axis in (:baseline, :d, :q)
-        plan, settings = V.l1_plan(list, "l1_01", axis)
+        plan, settings = V.passive_plan(list, "passive_ac_rlc", axis)
         @test P.check_connectivity(plan) === nothing
         @test length(plan.modules) == 2
         @test count(c -> c.defn == "master:source_3", plan.main.components) == 1
@@ -284,8 +287,8 @@ end
         for c in sums)
         instance = only(filter(c -> c isa P.ModuleInstancePlan, plan.main.components))
         @test Dict(instance.params) == Dict(
-            "d_amplitude_pu" => string(axis == :d ? V.l1_settings().tone_peak_pu : 0.0),
-            "q_amplitude_pu" => string(axis == :q ? V.l1_settings().tone_peak_pu : 0.0))
+            "d_amplitude_pu" => string(axis == :d ? V.passive_settings().tone_peak_pu : 0.0),
+            "q_amplitude_pu" => string(axis == :q ? V.passive_settings().tone_peak_pu : 0.0))
         # The amplitude values are the sole construction difference.
         @test repr(plan.modules) == repr(baseline.modules)
         index = only(findall(c -> c isa P.ModuleInstancePlan, plan.main.components))
@@ -293,10 +296,10 @@ end
         @test repr(plan) == repr(baseline)
         @test settings.time_step == 2e-6
     end
-    @test_throws ArgumentError V.l1_plan(list, "l1_01", :unknown)
+    @test_throws ArgumentError V.passive_plan(list, "passive_ac_rlc", :unknown)
     # Independent physical RL dq law in the positive-sine q convention.
     native = V.reference_admittance(net)
-    for (k, f) in enumerate(V.l1_settings().frequencies)
+    for (k, f) in enumerate(V.passive_settings().frequencies)
         z = [20 + im*2π*f*0.05 2π*50*0.05; -2π*50*0.05 20 + im*2π*f*0.05]
         @test native[:, :, k] ≈ inv(z) atol = 1e-12
     end
@@ -308,7 +311,7 @@ end
     @test V.injection_project(template, :baseline) == template
     for axis in (:d, :q)
         injected = V.injection_project(template, axis)
-        changed = "<param name=\"$(axis)_amplitude_pu\" value=\"$(V.l1_settings().tone_peak_pu)\"/>"
+        changed = "<param name=\"$(axis)_amplitude_pu\" value=\"$(V.passive_settings().tone_peak_pu)\"/>"
         original = "<param name=\"$(axis)_amplitude_pu\" value=\"0.0\"/>"
         @test length(findall(changed, injected)) == 1
         @test replace(injected, changed => original; count = 1) == template
@@ -318,10 +321,10 @@ end
     @test_throws ErrorException V.injection_project("<project/>", :baseline)
 end
 
-@testset "L1-01 native reference through measurement and file output" begin
+@testset "passive_ac_rlc native reference through measurement and file output" begin
     net = V.ac_rl_network()
     list = P.netlist(net, power_flow(net))
-    spec = V.l1_settings()
+    spec = V.passive_settings()
     time = collect(0.0:spec.sample_step:spec.simulation_time)
     a = net.elements[:grid_a].setpoint
     b = net.elements[:grid_b].setpoint
@@ -332,8 +335,8 @@ end
     reference = V.reference_admittance(net)
     models, results = Dict{String, P.PSCADModel}(), Dict{String, P.PSCADResult}()
     for (axis_index, axis) in enumerate(("baseline", "d", "q"))
-        name = "l1_01_" * axis
-        plan, settings = V.l1_plan(list, name, Symbol(axis))
+        name = "passive_ac_rlc_" * axis
+        plan, settings = V.passive_plan(list, name, Symbol(axis))
         models[axis] = P.PSCADModel("synthetic.pscx", name, list, plan.probes, settings,
             list.operating_point, (source = :synthetic,))
         va = repeat(permutedims(voltage_a), length(time), 1)
@@ -366,12 +369,12 @@ end
         outcome = V.compare_frequency_runs(results, models, reference, directory)
         @test outcome["status"] == "passed"
         @test outcome["max_frobenius_error"] < 1e-9
-        @test isfile(joinpath(directory, "comparison_C.tsv"))
-        @test length(readlines(joinpath(directory, "comparison_C.tsv"))) ==
+        @test isfile(joinpath(directory, "comparison_frequency_response.tsv"))
+        @test length(readlines(joinpath(directory, "comparison_frequency_response.tsv"))) ==
               1 + 4length(spec.frequencies)
         files = V.inventory(directory)
         @test all(file["bytes"] > 0 && length(file["sha256"]) == 64 for file in files)
-        @info "L1-01 synthetic pipeline" max_frobenius_error = outcome["max_frobenius_error"]
+        @info "passive_ac_rlc synthetic pipeline" max_frobenius_error = outcome["max_frobenius_error"]
     end
 end
 @testset "General DC/AC/network matrix recovery and refinement gates" begin
@@ -411,7 +414,7 @@ end
         @test V.matrix_change(known*1.019, known; epsilon = 0.02)["passed"]
         @test !V.matrix_change(known*1.021, known; epsilon = 0.02)["passed"]
     end
-    spec=V.l1_settings()
+    spec=V.passive_settings()
     for f in (1.0, 237.0, 750.0, 1000.0)
         refined=V.step_definition(spec, f)
         @test refined.time_step==1e-6
@@ -421,8 +424,8 @@ end
     end
 end
 
-@testset "Every L1 port construction and native reduction" begin
-    for entry in filter(e->startswith(e.id,"L1-"),V.REGISTRY)
+@testset "Every passive-element port construction and native reduction" begin
+    for entry in filter(e->e.category == :passive,V.REGISTRY)
         net=entry.factory()
         list=P.netlist(net, power_flow(net))
         spec, reference=V.scan_definition(entry.id, net, list)
@@ -431,14 +434,14 @@ end
             length(spec.axes), length(spec.axes), length(spec.frequencies))
         @test spec.travel_lower_bound_s==0 || spec.time_step<spec.travel_lower_bound_s
         @test inv(spec.sample_step*(maximum(spec.frequencies)+50))>=40
-        if entry.id in ("L1-02", "L1-05")
+        if entry.id in ("passive_dc_rlc", "dc_cable_ohl")
             @test net.elements[:line].pins[Symbol("2.1")] ==
-                  net.elements[entry.id == "L1-02" ? :rc : :ohl].pins[Symbol("1.1")]
+                  net.elements[entry.id == "passive_dc_rlc" ? :rc : :ohl].pins[Symbol("1.1")]
             @test net.elements[:to].pins[Symbol("1.1")] ==
-                  net.elements[entry.id == "L1-02" ? :rc : :ohl].pins[Symbol("2.1")]
+                  net.elements[entry.id == "passive_dc_rlc" ? :rc : :ohl].pins[Symbol("2.1")]
             @test net.elements[:to].pins[Symbol("1.1")] !=
                   net.elements[:line].pins[Symbol("2.1")]
-        elseif entry.id=="L1-08"
+        elseif entry.id=="ieee9_bus_impedance"
             @test maximum(abs, reference[1:2, :, :])<1e-10
             @test maximum(abs, reference[:, 1:2, :])<1e-10
             @test maximum(abs, reference[3:4, 3:4, :])>0.1
@@ -525,7 +528,7 @@ end
 end
 
 @testset "Lowered tone graph agrees with independent multi-tone samples" begin
-    spec=V.l1_settings()
+    spec=V.passive_settings()
     graph, signal, _=V.tone_graph(spec)
     times=[0.1, 0.6, 1.017, 2.049]
     expected=V.multitone(times, spec.frequencies, spec.phases;
@@ -559,13 +562,13 @@ end
 end
 @testset "abc port construction, phase twin, extraction and local Z acceptance" begin
     synthetic_maximum = 0.0
-    for id in ("L1-03", "L1-04", "L1-08")
+    for id in ("ac_ohl_untransposed", "ac_cable_coaxial", "ieee9_bus_impedance")
         net = V.fixture(id).factory()
         list = P.netlist(net, power_flow(net))
         spec, native = V.applicable_scan(id, net, list)
         @test spec.dimension == 3
-        if id in ("L1-03", "L1-04")
-            start = id == "L1-03" ? 5.0 : 20.0
+        if id in ("ac_ohl_untransposed", "ac_cable_coaxial")
+            start = id == "ac_ohl_untransposed" ? 5.0 : 20.0
             @test spec.protocol == "abc_settled"
             @test spec.window_starts == (start, start + 1.0)
             @test spec.simulation_time == start + 2.0
@@ -578,7 +581,7 @@ end
         @test size(native) == (6, 6, 24)
         @test all(isfinite, native)
         @test spec.sample_step*maximum(spec.frequencies) <= 1/40
-        if id == "L1-08"
+        if id == "ieee9_bus_impedance"
             twin = V.phase_twin(net, list)
             @test all(!e.transformation && e.input_pins == e.output_pins == 3 for e in values(twin.elements))
             for (name, element) in net.elements
@@ -682,7 +685,7 @@ end
             @test outcome["status"] == "passed"
             @test outcome["max_frobenius_error"] < 1e-9
             synthetic_maximum = max(synthetic_maximum, outcome["max_frobenius_error"])
-            @test length(readlines(joinpath(directory, "comparison_C.tsv"))) ==
+            @test length(readlines(joinpath(directory, "comparison_frequency_response.tsv"))) ==
                 1+(spec.quantity == "Y" ? 36 : 18)*length(frequencies)
             column = 4
             actual, quality = V.single_response(results[spec.axes[column]], results["baseline"],
@@ -699,8 +702,8 @@ end
         end
     end
     @info "abc full-probe synthetic recovery" maximum_frobenius_error = synthetic_maximum
-    net = V.fixture("L1-05").factory()
-    spec, reference = V.applicable_scan("L1-05", net, P.netlist(net, power_flow(net)))
+    net = V.fixture("dc_cable_ohl").factory()
+    spec, reference = V.applicable_scan("dc_cable_ohl", net, P.netlist(net, power_flow(net)))
     @test spec.window_starts == (6.0, 7.0)
     @test spec.simulation_time == 8.0
     @test V.step_definition(spec, 1000.0).window_starts == (6.0, 6.1)
@@ -710,7 +713,7 @@ end
 @testset "Steady abc drift and floating YY neutral constraints" begin
     time = collect(0.0:1e-4:3.0)
     signal = hcat(cos.(2π*50 .* time), sin.(2π*50 .* time), cos.(2π*50 .* time .+ 0.2)) .+ 0.01
-    spec = merge(V.l1_settings(), (; dimension = 3, axes = ["a", "b", "c"], quantity = "Y"))
+    spec = merge(V.passive_settings(), (; dimension = 3, axes = ["a", "b", "c"], quantity = "Y"))
     base = (input = signal, output = signal, input_base = ones(3), output_base = ones(3))
     drive = V.multitone(time, spec.frequencies, spec.phases; amplitude = spec.tone_peak_pu, onset = 0.5)
     runs = [merge(base, (; input = signal + drive * [Float64(j == k) for j in 1:3]',
@@ -722,7 +725,7 @@ end
     bad_runs = [merge(bad, (; input = decaying + drive * [Float64(j == k) for j in 1:3]',
         output = decaying + drive * ones(3)')) for k in 1:3]
     @test V.scan_quality(time, bad, bad_runs, spec)["baseline_dc_drift"] > 1e-3
-    net = V.fixture("L1-08").factory()
+    net = V.fixture("ieee9_bus_impedance").factory()
     list = V.P.netlist(net, power_flow(net))
     twin = V.phase_twin(net, list)
     a = cis(2π / 3)
@@ -756,7 +759,7 @@ end
 
 @testset "Perturbation departure uses declared windows and retains steady offsets" begin
     time=collect(0.0:1e-4:3.0)
-    spec=merge(V.l1_settings(),(;dimension=1,axes=["dc"],quantity="Y",
+    spec=merge(V.passive_settings(),(;dimension=1,axes=["dc"],quantity="Y",
         frequencies=[1.0],phases=[0.0],tone_peak_pu=0.004))
     baseline=(input=ones(length(time),1),output=ones(length(time),1),input_base=[1.0],output_base=[1.0])
     wave=reshape(V.multitone(time,spec.frequencies,spec.phases;amplitude=spec.tone_peak_pu,onset=spec.injection_time),:,1)
@@ -803,11 +806,11 @@ end
 end
 
 @testset "TLC port current drive, native reference and synthetic dq recovery" begin
-    net=V.fixture("L2-01").factory(); point=power_flow(net)
-    gate=V.stability_gate(net,V.fixture("L2-01"))
+    net=V.fixture("tlc_pq_freq_support").factory(); point=power_flow(net)
+    gate=V.stability_gate(net,V.fixture("tlc_pq_freq_support"))
     @test gate["status"]=="passed"
     @test gate["most_positive_located_real_per_s"]≈-1.991781088 rtol=1e-6
-    list=P.netlist(net,point); original,reference=V.applicable_scan("L2-01",net,list)
+    list=P.netlist(net,point); original,reference=V.applicable_scan("tlc_pq_freq_support",net,list)
     @test reference[:,:,1]≈PowerImpedance.get_y(net.elements[:DUT],2π*im)[2:3,2:3]
     @test original.drive=="current" && original.active
     @test original.time_step==2.5e-6 && original.tone_peak_pu==5e-5
@@ -892,10 +895,10 @@ end
     end
 end
 
-@testset "Batch C device ports and finite complete-network roots" begin
-    for (id,kind,scr) in (("L2-13",:gfm,8.),("L2-14",:compensated,8.),
-        ("L2-15",:disabled,8.),("L2-16",:machine,8.),("L2-17",:gfm,2.5))
-        parent=V.batch_c_device(kind);net=V.fixture(id).factory();dut=net.elements[:DUT]
+@testset "Active device ports and finite complete-network roots" begin
+    for (id,kind,scr) in (("mmc_gfm_vsm",:gfm,8.),("mmc_gfm_lec_compensated",:compensated,8.),
+        ("mmc_pq_no_energy_control",:disabled,8.),("synchronous_machine",:machine,8.),("mmc_gfm_weak_grid",:gfm,2.5))
+        parent=V.active_device(kind);net=V.fixture(id).factory();dut=net.elements[:DUT]
         @test repr(parent.element_model)==repr(dut.element_model)
         @test parent.setpoint==dut.setpoint
         point=power_flow(net);list=V.fixture_netlist(net,point)
@@ -915,7 +918,7 @@ end
         gate=V.stability_gate(net,V.fixture(id))
         @test length(gate["poles_real_per_s"])==size(dut.A,1)
         @test gate["most_positive_located_real_per_s"]≈maximum(real,poles) rtol=1e-3 atol=1e-8
-        if id=="L2-17"
+        if id=="mmc_gfm_weak_grid"
             @test maximum(real,poles)>0
             @test gate["status"]=="failed" && gate["nyquist_closed_RHP_count"]==2
             @test count(>(0),gate["poles_real_per_s"])==2
@@ -957,8 +960,8 @@ end
 end
 
 @testset "Machine current-drive dq recovery without a DC port" begin
-    net=V.fixture("L2-16").factory();list=V.fixture_netlist(net,power_flow(net))
-    original,_=V.applicable_scan("L2-16",net,list)
+    net=V.fixture("synchronous_machine").factory();list=V.fixture_netlist(net,power_flow(net))
+    original,_=V.applicable_scan("synchronous_machine",net,list)
     spec=merge(original,(frequencies=[1.,75.,1000.],phases=zeros(3),
         window_starts=(0.,2.),simulation_time=4.,injection_time=0.))
     time=collect(0.:spec.sample_step:4.)
@@ -1002,9 +1005,9 @@ end
     end
 end
 
-@testset "MMC batch B: owned controls, terminal bases and DC feedback" begin
-    for (id,mode,scr) in (("L2-07",:pq,8.),("L2-08",:pf,8.),("L2-09",:qv,8.),
-        ("L2-10",:vac,8.),("L2-11",:vdc,8.),("L2-12",:pq,2.5))
+@testset "MMC controls: owned controls, terminal bases and DC feedback" begin
+    for (id,mode,scr) in (("mmc_pq",:pq,8.),("mmc_pf_q",:pf,8.),("mmc_p_qv",:qv,8.),
+        ("mmc_p_vac",:vac,8.),("mmc_vdc_q",:vdc,8.),("mmc_pq_weak_grid",:pq,2.5))
         net=V.fixture(id).factory()
         parent=V.PSCADFixtures.mmc_network(mode).state.elements.DUT
         dut=net.elements[:DUT];m=dut.element_model
@@ -1074,8 +1077,8 @@ end
         end
     end
     # The 1e-6 pu DC clamp limit must use the MMC's 800 kV base.
-    net=V.fixture("L2-07").factory();list=V.fixture_netlist(net,power_flow(net))
-    original,_=V.applicable_scan("L2-07",net,list)
+    net=V.fixture("mmc_pq").factory();list=V.fixture_netlist(net,power_flow(net))
+    original,_=V.applicable_scan("mmc_pq",net,list)
     spec=merge(original,(frequencies=[7.],window_starts=(0.,1.),window_duration=1.,))
     time=collect(0.:.001:2.);wave=cos.(2π*7*time)
     baseline=(input=zeros(length(time),2),output=zeros(length(time),2),
@@ -1088,7 +1091,7 @@ end
 end
 
 @testset "Adaptive witness windows contain whole tone and frame periods" begin
-    spec = merge(V.l1_settings(), (protocol = "dq_active", time_step = 2.5e-6,
+    spec = merge(V.passive_settings(), (protocol = "dq_active", time_step = 2.5e-6,
         sample_step = 20e-6, window_starts = (8.0, 9.0)))
     old_time = collect(0.0:spec.sample_step:8.2)
     old_signal = reshape(cos.(2π * 75 .* old_time), :, 1)
@@ -1122,8 +1125,8 @@ end
     end
 end
 
-@testset "TLC batch controls, grid and physical DC termination" begin
-    for (id,scr) in (("L2-02",8.0),("L2-03",8.0),("L2-04",8.0),("L2-05",8.0),("L2-06",2.5))
+@testset "TLC controls, grid and physical DC termination" begin
+    for (id,scr) in (("tlc_pf_q",8.0),("tlc_p_qv",8.0),("tlc_p_vac",8.0),("tlc_vdc_q",8.0),("tlc_pq_weak_grid",2.5))
         net=V.fixture(id).factory()
         form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
         @test 220^2/100/hypot(form.R,2π*50*form.L)≈scr
@@ -1131,13 +1134,13 @@ end
         m=net.elements[:DUT].element_model
         @test m.innerVoltage isa PowerImpedance.NoInnerVoltageControl
         @test m.sync isa PowerImpedance.PLLSynchronization
-        if id in ("L2-02","L2-06")
+        if id in ("tlc_pf_q","tlc_pq_weak_grid")
             @test m.outerActive.support isa PowerImpedance.FrequencySupportLag
             @test m.outerActive.support.Kω==5 && m.outerActive.support.ωc==2
-        elseif id=="L2-03"
+        elseif id=="tlc_p_qv"
             @test m.outerActive.support isa PowerImpedance.NoFrequencySupport
             @test m.outerReactive.support.K==20 && m.outerReactive.support.ωc==100
-        elseif id=="L2-04"
+        elseif id=="tlc_p_vac"
             @test m.outerReactive.filter isa PowerImpedance.NoFilter
             @test m.outerReactive.pi_ctrl.Kp==0 && m.outerReactive.pi_ctrl.Ki==100
         else
@@ -1149,7 +1152,7 @@ end
     end
     # The DC load is physical, not an ideal voltage clamp. Its PF-only remote zero
     # reference is replaced by the emitter's grounded DC terminal.
-    net=V.fixture("L2-05").factory();point=power_flow(net)
+    net=V.fixture("tlc_vdc_q").factory();point=power_flow(net)
     @test string(point[1]["termination_status"])=="LOCALLY_SOLVED"
     @test net.elements[:DUT].setpoint.Vdc≈640
     @test net.elements[:DUT].setpoint.Pdc≈-70
@@ -1157,7 +1160,7 @@ end
     @test all(e.name!=:G_DC for e in list.elements)
     load=only(filter(e->e.name==:DC_load,list.elements))
     @test load.terminals[2].grounded && load.terminals[2].bus===nothing
-    spec,reference=V.applicable_scan("L2-05",net,list)
+    spec,reference=V.applicable_scan("tlc_vdc_q",net,list)
     @test !spec.dc_clamped && spec.active && spec.drive=="current"
     @test spec.time_step==0.625e-6 && spec.window_starts==(8.,9.)
     @test V.step_definition(spec,18.0).time_step==0.3125e-6
@@ -1188,7 +1191,7 @@ end
     # rather than treating that quotient as a located dynamic mode.
     finite=abs.(pencil.β) .> 100eps(Float64)*max(norm(storage),1.0)
     poles=pencil.α[finite]./pencil.β[finite]
-    gate=V.stability_gate(net,V.fixture("L2-05"))
+    gate=V.stability_gate(net,V.fixture("tlc_vdc_q"))
     @test length(poles)==length(gate["poles_real_per_s"])
     # A singular descriptor's forward eigenvalue error depends on conditioning.
     # Check the same rightmost finite mode and its pencil backward error;
@@ -1267,17 +1270,17 @@ end
 end
 
 @testset "One-step realization reference keeps the native comparison separate" begin
-    for id in ("L2-07", "L2-11", "L2-14", "L2-01", "L2-05")
+    for id in ("mmc_pq", "mmc_vdc_q", "mmc_gfm_lec_compensated", "tlc_pq_freq_support", "tlc_vdc_q")
         net = V.fixture(id).factory(); list = V.fixture_netlist(net, power_flow(net))
         spec, native = V.applicable_scan(id, net, list)
-        if id == "L2-14"
+        if id == "mmc_gfm_lec_compensated"
             el = net.elements[:DUT]; m = el.element_model
             @test !V.interface_step_eligible(m) # existing fixture has positive delay
             el.element_model = MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
                 CompensatedModulation(), m.elec)
             PowerImpedance.update!(el, el.setpoint)
         end
-        if id == "L2-05"
+        if id == "tlc_vdc_q"
             el = net.elements[:DUT]; m = el.element_model
             net.elements[:DUT] = PowerImpedance.Element(element_model =
                 TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
@@ -1291,7 +1294,7 @@ end
         original = deepcopy(net.elements[:DUT].A)
         realization = V.interface_step_reference(net, short)
         @test net.elements[:DUT].A == original
-        if id == "L2-01"
+        if id == "tlc_pq_freq_support"
             @test realization === nothing # positive 200 us model delay
             continue
         end
@@ -1323,35 +1326,35 @@ end
 
 @testset "MMC GFL modal settling and frozen fine-step variant" begin
     for decay in (10.952732, 1.99183483, 10.9087697, 10.8907848)
-        settling = V.gfl_settling(Dict("most_positive_located_real_per_s" => -decay); fixture_id = "L2-07")
+        settling = V.gfl_settling(Dict("most_positive_located_real_per_s" => -decay); fixture_id = "mmc_pq")
         @test settling["window_starts_s"] == [16.0, 17.0]
         @test settling["simulation_time_s"] == 18.0
         @test settling["predicted_normalized_tail"] < 0.001
     end
     for root in (0.,1.)
-        settling = @test_logs (:warn, r"L2-07 settling result: nondecaying") V.gfl_settling(
-            Dict("most_positive_located_real_per_s" => root); fixture_id = "L2-07")
+        settling = @test_logs (:warn, r"mmc_pq settling result: nondecaying") V.gfl_settling(
+            Dict("most_positive_located_real_per_s" => root); fixture_id = "mmc_pq")
         @test settling["status"] == "nondecaying"
         @test settling["decay_per_s"] == -root
         @test settling["window_starts_s"] == [16.,17.]
         @test settling["simulation_time_s"] == 18.
     end
-    net = V.fixture("L2-01").factory(); list = V.fixture_netlist(net, power_flow(net))
-    spec, native = V.applicable_scan("L2-01", net, list)
+    net = V.fixture("tlc_pq_freq_support").factory(); list = V.fixture_netlist(net, power_flow(net))
+    spec, native = V.applicable_scan("tlc_pq_freq_support", net, list)
     frozen = V.scan_record(spec); frozen["time_step"] = 1.25e-6
-    fine, reference = V.applicable_scan("L2-01", net, list; definition = frozen)
+    fine, reference = V.applicable_scan("tlc_pq_freq_support", net, list; definition = frozen)
     @test spec.time_step == 2.5e-6 && fine.time_step == 1.25e-6
     @test V.step_definition(fine, 18.0).time_step == 0.625e-6
     @test fine.window_starts == spec.window_starts && reference == native
-    @test V.M9C2_TLC_DIRECTORY != joinpath(V.ROOT, "data", "L2-01")
-    @test V.M9C2_IDS == ["L2-" * lpad(i, 2, '0') for i in 7:15]
+    @test V.TLC_FINE_STEP_DIRECTORY != joinpath(V.ROOT, "data", "tlc_pq_freq_support")
+    @test V.MMC_SAMPLING_IDS == ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid", "mmc_gfm_vsm", "mmc_gfm_lec_compensated", "mmc_pq_no_energy_control"]
     command = V.converter_acceptance_command()
     @test command.exec[end] == "--converters"
     @test command.exec[end - 1] == joinpath(V.REPOSITORY, "test/manual/pscad/acceptance.jl")
     @test "--project=$(dirname(Base.active_project()))" in command.exec
 end
 
-include("tierb_test.jl")
+include("time_domain_test.jl")
 include("screen_results_test.jl")
 
 end
@@ -1419,8 +1422,8 @@ using Test,PowerImpedance
 include("../manual/pscad/validation/validation.jl")
 const V=PSCADValidation
 @testset "Bus5 extra-bin construction and retained half-step model" begin
-    net=V.fixture("L1-08").factory();list=V.P.netlist(net,power_flow(net))
-    base,_=V.applicable_scan("L1-08",net,list)
+    net=V.fixture("ieee9_bus_impedance").factory();list=V.P.netlist(net,power_flow(net))
+    base,_=V.applicable_scan("ieee9_bus_impedance",net,list)
     spec,reference=V.resonance_spec(net,list,base)
     @test length(spec.buses)==1 && only(spec.buses).name=="Bus5"
     @test spec.currents==[("injection_1","1")]
@@ -1488,8 +1491,8 @@ end
     @test all(maximum(abs,m[:,:,k]-y)<1e-9 for m in extracted.matrices for k in eachindex(f))
 end
 @testset "Resonance recorder selection leaves the circuit intact" begin
-    net=V.fixture("L1-08").factory();list=V.P.netlist(net,power_flow(net))
-    base,_=V.applicable_scan("L1-08",net,list);spec,_=V.resonance_spec(net,list,base)
+    net=V.fixture("ieee9_bus_impedance").factory();list=V.P.netlist(net,power_flow(net))
+    base,_=V.applicable_scan("ieee9_bus_impedance",net,list);spec,_=V.resonance_spec(net,list,base)
     selected,_=V.scan_plan(list,spec,"p1_a")
     full,_=V.scan_plan(list,merge(spec,(;protocol="abc_resonance_all_probes")),"p1_a")
     discarded=filter(c->c isa V.P.ComponentPlan && c.defn=="master:pgb" &&
@@ -1562,7 +1565,7 @@ end
 end
 end
 
-module PSCADM9c8QueueTests
+module PSCADMachineTimingSettlingQueueTests
 using Test
 # Isolated orchestration doubles never load or contact a station.
 module Queue
@@ -1585,14 +1588,14 @@ end
 include("../manual/pscad/validation/queue.jl")
 end
 @testset "Pending queue continues after settling and timing failures" begin
-    @test_throws ErrorException Queue.run_m9c8(timeout = 0)
+    @test_throws ErrorException Queue.run_machine_timing_settling(timeout = 0)
     @test isempty(Queue.calls)
-    record = @test_logs (:warn, r"Settling experiment failed") (:warn, r"Timing witness failed") Queue.run_m9c8(timeout = 1)
-    @test Queue.calls == ["settling", "timing", "L2-16"]
+    record = @test_logs (:warn, r"Settling experiment failed") (:warn, r"Timing witness failed") Queue.run_machine_timing_settling(timeout = 1)
+    @test Queue.calls == ["settling", "timing", "synchronous_machine"]
     @test record["settling"]["status"] == "run_or_analysis_failed"
     @test record["timing"]["status"] == "run_or_analysis_failed"
     @test occursin("offline timing failure", record["timing"]["failure"])
-    @test record["L2-16"]["status"] == "prepared_station_pending"
+    @test record["synchronous_machine"]["status"] == "prepared_station_pending"
     rm(Queue.ROOT; recursive = true)
 end
 end
@@ -1603,7 +1606,7 @@ include("../manual/pscad/validation/validation.jl")
 const V = PSCADValidation
 
 @testset "Odd recorder ratio preparation and coherent half-step witnesses" begin
-    spec = merge(V.l1_settings(), (; dimension = 2, protocol = "dq_active",
+    spec = merge(V.passive_settings(), (; dimension = 2, protocol = "dq_active",
         frequencies = [1.0, 7.0, 1000.0], time_step = 2.5e-6,
         sample_step = 25 * 2.5e-6, window_starts = (16.0, 17.0),
         window_duration = 1.0, simulation_time = 18.0))
@@ -1627,7 +1630,7 @@ const V = PSCADValidation
         dt = n == 11 ? 1.25e-6 : n == 14 ? 1e-6 : 2.5e-6
         starts = n <= 10 ? (16.0, 17.0) : (8.0, 9.0)
         main = merge(spec, (; time_step = dt, sample_step = 25dt,
-            frequencies = filter(!=(50.0), V.l1_settings().frequencies),
+            frequencies = filter(!=(50.0), V.passive_settings().frequencies),
             window_starts = starts, simulation_time = last(starts) + 1))
         @test V.check_recorder_sampling(main) == 25
         @test inv(2main.sample_step) > 4 * 1050
@@ -1641,18 +1644,18 @@ const V = PSCADValidation
 end
 
 @testset "Eight-second zero-delay windows retain short coherent witnesses" begin
-    for id in V.M9C13_IDS
-        dt = id == "L2-11" ? 1.25e-6 : 2.5e-6
-        start = id in ("L2-11", "L2-12") ? 8.0 : 16.0
-        old = merge(V.l1_settings(), (; id, dimension = 2, protocol = "dq_active",
-            frequencies = filter(!=(50.0), V.l1_settings().frequencies),
+    for id in V.MMC_COHERENT_WINDOW_IDS
+        dt = id == "mmc_vdc_q" ? 1.25e-6 : 2.5e-6
+        start = id in ("mmc_vdc_q", "mmc_pq_weak_grid") ? 8.0 : 16.0
+        old = merge(V.passive_settings(), (; id, dimension = 2, protocol = "dq_active",
+            frequencies = filter(!=(50.0), V.passive_settings().frequencies),
             time_step = dt, sample_step = 25dt, window_starts = (start, start + 1),
             window_duration = 1.0, simulation_time = start + 2))
         main = merge(old, (; window_starts = (start, start + 8),
             window_duration = 8.0, simulation_time = start + 16))
         @test V.check_recorder_sampling(main) == 25
         @test main.simulation_time == (start == 16 ? 32.0 : 24.0)
-        @test round(Int, main.window_duration / main.sample_step) == (id == "L2-11" ? 256000 : 128000)
+        @test round(Int, main.window_duration / main.sample_step) == (id == "mmc_vdc_q" ? 256000 : 128000)
         for frequency in main.frequencies
             witness = V.step_definition(main, frequency)
             previous = V.step_definition(old, frequency)
@@ -1694,7 +1697,7 @@ end
 end
 end
 
-module PSCADM9c10QueueTests
+module PSCADMMCStepRefinementQueueTests
 using Test, TOML
 module Queue
 const ROOT = mktempdir()
@@ -1705,32 +1708,32 @@ write_manifest(directory, record) = open(io -> TOML.print(io, record), joinpath(
 using TOML
 function run_fixture(id; kwargs...)
     push!(calls, id)
-    id == "L2-07" && error("offline fixture failure")
+    id == "mmc_pq" && error("offline fixture failure")
     return Dict("status" => "completed")
 end
 include("../manual/pscad/validation/queue.jl")
 end
 @testset "MMC queue preserves order and continues after a fixture failure" begin
     for timeout in (0.0, -1.0, Inf, NaN)
-        @test_throws ErrorException Queue.run_m9c10(; timeout)
+        @test_throws ErrorException Queue.run_mmc_step_refinement(; timeout)
     end
     @test isempty(Queue.calls)
-    directory = mkpath(joinpath(Queue.ROOT, "data", "L2-07"))
-    write(joinpath(directory, "manifest.toml"), "fixture_id = \"L2-07\"\n")
-    record = @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_m9c10(timeout = 1)
-    @test Queue.calls == ["L2-07", "L2-08", "L2-09", "L2-10", "L2-12", "L2-13", "L2-15", "L2-11", "L2-14"]
-    @test record["L2-07"]["status"] == "run_or_analysis_failed"
-    @test occursin("offline fixture failure", record["L2-07"]["failure"])
+    directory = mkpath(joinpath(Queue.ROOT, "data", "mmc_pq"))
+    write(joinpath(directory, "manifest.toml"), "fixture_id = \"mmc_pq\"\n")
+    record = @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_mmc_step_refinement(timeout = 1)
+    @test Queue.calls == ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_pq_weak_grid", "mmc_gfm_vsm", "mmc_pq_no_energy_control", "mmc_vdc_q", "mmc_gfm_lec_compensated"]
+    @test record["mmc_pq"]["status"] == "run_or_analysis_failed"
+    @test occursin("offline fixture failure", record["mmc_pq"]["failure"])
     @test all(record[id]["status"] == "completed" for id in Queue.calls[2:end])
-    @test TOML.parsefile(joinpath(Queue.ROOT, "data", "m9c10", "manifest.toml")) == record
+    @test TOML.parsefile(joinpath(Queue.ROOT, "data", "mmc_step_refinement", "manifest.toml")) == record
     empty!(Queue.calls)
-    @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_m9c10(timeout = 1)
+    @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_mmc_step_refinement(timeout = 1)
     @test length(Queue.calls) == 9
     rm(Queue.ROOT; recursive = true)
 end
 end
 
-module PSCADM9c13QueueTests
+module PSCADMMCCoherentWindowQueueTests
 using Test, TOML
 module Queue
 using TOML
@@ -1743,38 +1746,38 @@ write_manifest(directory, record) = open(io -> TOML.print(io, record), joinpath(
 function run_fixture(id; directory, remote, deadline)
     isfinite(deadline) || error("missing queue deadline")
     if !isempty(calls)
-        saved = TOML.parsefile(joinpath(ROOT, "data", "m9c13", "manifest.toml"))
+        saved = TOML.parsefile(joinpath(ROOT, "data", "mmc_coherent_windows", "manifest.toml"))
         haskey(saved, last(calls)) || error("previous outcome not saved before advancing")
     end
     push!(calls, id)
     interrupt[] && throw(InterruptException())
-    id == "L2-07" && error("offline fixture failure")
-    return Dict("status" => id == "L2-09" ? "invalid_measurement" : "passed")
+    id == "mmc_pq" && error("offline fixture failure")
+    return Dict("status" => id == "mmc_p_qv" ? "invalid_measurement" : "passed")
 end
 include("../manual/pscad/validation/queue.jl")
 end
 @testset "Eight-second queue records failures, resumes and stops on interrupt" begin
     for timeout in (0.0, -1.0, Inf, NaN)
-        @test_throws ErrorException Queue.run_m9c13(; timeout)
+        @test_throws ErrorException Queue.run_mmc_coherent_windows(; timeout)
     end
     @test isempty(Queue.calls)
-    directory = mkpath(joinpath(Queue.ROOT, "data", "L2-07"))
-    write(joinpath(directory, "manifest.toml"), "fixture_id = \"L2-07\"\n")
-    expected = ["L2-07", "L2-08", "L2-09", "L2-10", "L2-11", "L2-12"]
+    directory = mkpath(joinpath(Queue.ROOT, "data", "mmc_pq"))
+    write(joinpath(directory, "manifest.toml"), "fixture_id = \"mmc_pq\"\n")
+    expected = ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid"]
     for attempt in 1:2
         empty!(Queue.calls)
-        record = @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_m9c13(timeout = 1)
+        record = @test_logs (:warn, r"Fixture failed; continuing queue") Queue.run_mmc_coherent_windows(timeout = 1)
         @test Queue.calls == expected
-        @test record["L2-07"]["status"] == "run_or_analysis_failed"
-        @test occursin("offline fixture failure", record["L2-07"]["failure"])
-        @test record["L2-09"]["status"] == "invalid_measurement"
+        @test record["mmc_pq"]["status"] == "run_or_analysis_failed"
+        @test occursin("offline fixture failure", record["mmc_pq"]["failure"])
+        @test record["mmc_p_qv"]["status"] == "invalid_measurement"
         @test all(record[id]["status"] == "passed" for id in expected[[2, 4, 5, 6]])
-        @test TOML.parsefile(joinpath(Queue.ROOT, "data", "m9c13", "manifest.toml")) == record
+        @test TOML.parsefile(joinpath(Queue.ROOT, "data", "mmc_coherent_windows", "manifest.toml")) == record
     end
     empty!(Queue.calls)
     Queue.interrupt[] = true
-    @test_throws InterruptException Queue.run_m9c13(timeout = 1)
-    @test Queue.calls == ["L2-07"]
+    @test_throws InterruptException Queue.run_mmc_coherent_windows(timeout = 1)
+    @test Queue.calls == ["mmc_pq"]
     rm(Queue.ROOT; recursive = true)
 end
 end
@@ -1846,11 +1849,10 @@ end
 end
 
 @testset "Exported termination and all affected converter topologies" begin
-    for n in 7:15
-        id = "L2-" * lpad(n, 2, '0')
+    for id in ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid", "mmc_gfm_vsm", "mmc_gfm_lec_compensated", "mmc_pq_no_energy_control"]
         net = V.fixture(id).factory()
-        @test V.residual_step_eligible(id, net) == (n <= 12)
-        n <= 12 || continue
+        @test V.residual_step_eligible(id, net) == (id in ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid"])
+        id in ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid"] || continue
         list = V.fixture_netlist(net, power_flow(net))
         spec, _ = V.applicable_scan(id, net, list)
         short = merge(spec, (; frequencies = [750.0, 1000.0], phases = [0.0, -π]))
@@ -1864,7 +1866,7 @@ end
             path = joinpath(directory, "fixture.pscx")
             write(path, text)
             termination = V.exported_termination(net, path)
-            @test (termination.dc_resistance === nothing) == (n != 11)
+            @test (termination.dc_resistance === nothing) == (id != "mmc_vdc_q")
             prediction = V.discrete_response_column(net, short, 2, termination)
             @test size(prediction) == (4, 1, 2)
             @test all(isfinite, prediction)
@@ -1886,8 +1888,8 @@ end
 
 @testset "Qualification uses the fixture's selected reference and step rule" begin
     function record()
-        Dict{String, Any}("tier_a_status" => "passed",
-            "tier_c_result" => Dict("valid" => true, "status" => "failed", "model_mismatch" => ""),
+        Dict{String, Any}("operating_point_status" => "passed",
+            "frequency_response_result" => Dict("valid" => true, "status" => "failed", "model_mismatch" => ""),
             "interface_step_result" => Dict("status" => "passed"),
             "amplitude_refinement" => Dict("valid" => true, "passed" => true),
             "raw_step_refinement" => Dict("valid" => true, "passed" => false, "status" => "failed"),
@@ -1899,10 +1901,10 @@ end
     @test r["comparison_summary"]["plain_model"] == "failed"
     @test r["comparison_summary"]["raw_step"] == "failed"
     @test V.qualify_fixture!(r; residual = false)["status"] == "failed"
-    r["tier_c_result"]["status"] = "passed"
+    r["frequency_response_result"]["status"] = "passed"
     r["step_refinement"] = r["raw_step_refinement"]
     @test V.qualify_fixture!(r; residual = false)["status"] == "failed"
-    r = record(); r["tier_c_result"]["valid"] = false
+    r = record(); r["frequency_response_result"]["valid"] = false
     @test V.qualify_fixture!(r; residual = true)["status"] == "invalid_measurement"
     for gate in ("amplitude_refinement", "step_refinement")
         r = record(); r[gate]["passed"] = false
@@ -1912,14 +1914,14 @@ end
     end
     r = record(); r["interface_step_result"]["status"] = "failed"
     @test V.qualify_fixture!(r; residual = true)["status"] == "failed"
-    r = record(); r["tier_a_status"] = "failed"
+    r = record(); r["operating_point_status"] = "failed"
     @test V.qualify_fixture!(r; residual = true)["status"] == "failed"
-    r = record(); r["tier_c_result"]["status"] = "passed"
+    r = record(); r["frequency_response_result"]["status"] = "passed"
     @test V.qualify_fixture!(r; residual = false)["status"] == "passed"
-    r = record(); r["tier_c_result"]["model_mismatch"] = "declared mismatch"
+    r = record(); r["frequency_response_result"]["model_mismatch"] = "declared mismatch"
     @test V.qualify_fixture!(r; residual = true)["status"] == "model_mismatch"
-    @test_throws ErrorException V.reanalyse_m9c12(["L2-13"]; data_root = "/tmp")
-    @test_throws ErrorException V.reanalyse_m9c12(["L2-07"]; data_root = "/tmp", output_root = "/")
+    @test_throws ErrorException V.reanalyse_residual_step(["mmc_gfm_vsm"]; data_root = "/tmp")
+    @test_throws ErrorException V.reanalyse_residual_step(["mmc_pq"]; data_root = "/tmp", output_root = "/")
 end
 end
 
@@ -1953,11 +1955,11 @@ end
 # Independent synthetic terminal models. The extra RC branch makes omitting a
 # shunt from either aggregate Y or recorded KCL observably wrong.
 function two_device_bus()
-    net=V.l3_network("L3-01")
+    net=V.coupled_network("two_tlc_shared_bus")
     add!(net,:Filter,impedance(z=s->2.0+inv(5e-6*s),pins=3,transformation=true))
     V.composed_ac!(net,:Filter,1,:AC);V.composed_ac!(net,:Filter,2,:gnd);connect!(net)
-    point=power_flow(net);list=V.fixture_netlist(net,point);c=V.l3_circuit("L3-01",net)
-    spec=merge(V.l3_spec("L3-01",list),(;frequencies=[7.,137.],phases=[0.,-π],
+    point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit("two_tlc_shared_bus",net)
+    spec=merge(V.coupled_spec("two_tlc_shared_bus",list),(;frequencies=[7.,137.],phases=[0.,-π],
         window_starts=(1.,2.),window_duration=1.,simulation_time=3.,injection_time=0.,tone_peak_pu=1e-4))
     scale=spec.current_bases[1]/spec.voltage_bases[1]
     y1=ComplexF64[.35+.1im .06-.02im;-.04+.03im .28-.08im]*scale
@@ -2089,9 +2091,9 @@ end
 
 @testset "Heterogeneous devices retain original bases beside the aggregate rating" begin
     net=Network()
-    add!(net,:C1,V.batch_c_device(:gfm))
+    add!(net,:C1,V.active_device(:gfm))
     add!(net,:C2,deepcopy(V.mmc_grid_network(mode=:pq).elements[:DUT]))
-    bases=V.L3_AGGREGATE_BASES["L3-03"]
+    bases=V.COUPLED_AGGREGATE_BASES["mmc_gfm_gfl_shared_bus"]
     vb=bases.voltage_LL_kV*sqrt(2/3);ib=2bases.power_MVA/(3vb)
     spec=(;quantity="Y",axes=["p1_d","p1_q"],voltage_bases=fill(vb,2),current_bases=fill(ib,2))
     circuit=(;net)
@@ -2132,7 +2134,7 @@ end
     end
     # Exercise the composed recorder path too, including KCL at the undriven
     # port. Coupling is specified independently by the known full matrix above.
-    spec=(;id="L3-07",quantity="Y",dimension=2,axes=["p1_d","p1_q","p2_d","p2_q"],
+    spec=(;id="two_mmc_dc_cable",quantity="Y",dimension=2,axes=["p1_d","p1_q","p2_d","p2_q"],
         buses=[(;name="A"),(;name="B")],frequencies=fs,phases=zeros(2),frequency=50.,time_step=2.5e-6,
         voltage_bases=ones(4),current_bases=ones(4),tone_peak_pu=1e-4,drive="current",window_starts=(1.,2.),window_duration=1.)
     probes=P.ProbeChannel[]
@@ -2182,24 +2184,24 @@ function passive_project(plan,path)
     return path
 end
 
-@testset "Frozen L3 registration, complete-network gate and composed residual reference" begin
-    @test V.M9D_A_IDS==["L3-01","L3-08"]
-    @test sort!([e.id for e in V.REGISTRY if startswith(e.id,"L3-")])==sort([V.M9D_A_IDS;V.M9D_B_IDS;V.M9D_C_IDS])
-    @test V.L3_NATIVE_NODES==Dict("L3-01"=>31,"L3-02"=>77,"L3-03"=>77,"L3-04"=>67,
-        "L3-05"=>52,"L3-06"=>55,"L3-07"=>96,"L3-08"=>55)
-    for (id,right,amp) in (("L3-01",-1.9916375342503203,.0004508893578873102),
-            ("L3-08",-10.953699604677505,.00047389717632280974))
-        net=V.l3_network(id);point=power_flow(net);list=V.fixture_netlist(net,point);c=V.l3_circuit(id,net)
+@testset "Frozen coupled circuits registration, complete-network gate and composed residual reference" begin
+    @test V.SHARED_BUS_SHUNT_IDS==["two_tlc_shared_bus","mmc_rc_shunt"]
+    @test sort!([e.id for e in V.REGISTRY if e.category == :coupled])==sort([V.SHARED_BUS_SHUNT_IDS;V.COUPLED_LINE_CONVERTER_IDS;V.MACHINE_DC_COUPLING_IDS])
+    @test V.COUPLED_NATIVE_NODES==Dict("two_tlc_shared_bus"=>31,"two_mmc_shared_bus"=>77,"mmc_gfm_gfl_shared_bus"=>77,"mmc_pi_line"=>67,
+        "tlc_transformer_line"=>52,"machine_mmc_shared_bus"=>55,"two_mmc_dc_cable"=>96,"mmc_rc_shunt"=>55)
+    for (id,right,amp) in (("two_tlc_shared_bus",-1.9916375342503203,.0004508893578873102),
+            ("mmc_rc_shunt",-10.953699604677505,.00047389717632280974))
+        net=V.coupled_network(id);point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit(id,net)
         gate=V.composed_stability(c)
         @test gate["status"]=="passed"
         @test gate["most_positive_located_real_per_s"]≈right rtol=1e-5
         @test gate["descriptor_native_residual"]<1e-10
         @test gate["closed_RHP_count"]==0
-        spec=V.l3_spec(id,list)
+        spec=V.coupled_spec(id,list)
         @test spec.tone_peak_pu==amp
         @test spec.window_starts==(16.,24.) && spec.window_duration==8. && spec.simulation_time==32.
         @test V.check_recorder_sampling(spec)==25
-        @test spec.power_base_MVA==(id=="L3-01" ? 200. : 1000.)
+        @test spec.power_base_MVA==(id=="two_tlc_shared_bus" ? 200. : 1000.)
         @test V.composed_step_spec(spec,7.).window_starts==(16.,17.)
         plan,_=V.scan_plan(list,spec,"baseline")
         @test P.check_connectivity(plan)===nothing
@@ -2216,7 +2218,7 @@ end
         @test passives(measured_plan.main)==passives(plan.main)
         plain=V.composed_reference(c,spec)
         @test size(plain["aggregate_Y"])==(2,2,23)
-        if id=="L3-01"
+        if id=="two_tlc_shared_bus"
             @test plain["aggregate_Y"]≈plain["C1_Y"]+plain["C2_Y"]
             for name in c.devices
                 @test !V.interface_step_eligible(net.elements[name].element_model)
@@ -2228,7 +2230,7 @@ end
             @test V.composed_stability(c)["status"]=="failed"
             continue
         end
-        local_spec=V.l3_spec(id,list;local_scan=true)
+        local_spec=V.coupled_spec(id,list;local_scan=true)
         @test local_spec.frequencies==[collect(232.:1.5:260.5);collect(334.:1.5:361.)]
         @test local_spec.tone_peak_pu==5.910035278632797e-5
         @test length(local_spec.frequencies)==39
@@ -2290,7 +2292,7 @@ end
 
 
 @testset "Internal lumped nodes use the same reduction and local device voltage" begin
-    parent=V.l3_network("L3-08");net=Network();net.voltageBase[1]=380/sqrt(3)
+    parent=V.coupled_network("mmc_rc_shunt");net=Network();net.voltageBase[1]=380/sqrt(3)
     for name in (:C1,:G_A,:Grid_A,:D_C1)
         add!(net,name,deepcopy(parent.elements[name]))
     end
@@ -2310,7 +2312,7 @@ end
     gate=V.composed_stability(c)
     @test gate["status"]=="passed" && gate["descriptor_native_residual"]<1e-10
     @test gate["most_positive_located_real_per_s"]≈-10.9540877 rtol=1e-6
-    spec=merge(V.l3_spec("L3-08",list),(;buses=[V.port_probe(list,:Line,1)],frequencies=[237.,367.],phases=[0.,-π]))
+    spec=merge(V.coupled_spec("mmc_rc_shunt",list),(;buses=[V.port_probe(list,:Line,1)],frequencies=[237.,367.],phases=[0.,-π]))
     plan,_=V.scan_plan(list,spec,"baseline")
     mktempdir() do directory
         project=passive_project(plan,joinpath(directory,"pi.pscx"))
@@ -2338,25 +2340,25 @@ end
 end
 
 
-@testset "Stage B frozen factories, numerical admission and conditioning" begin
-    @test V.M9D_B_IDS==["L3-02","L3-04","L3-03"]
+@testset "coupled line/converter frozen factories, numerical admission and conditioning" begin
+    @test V.COUPLED_LINE_CONVERTER_IDS==["two_mmc_shared_bus","mmc_pi_line","mmc_gfm_gfl_shared_bus"]
     # Independent frozen circuit values; preparation and native runs are excluded.
     for (id,right,peak,peak_f,sampled,discrete_peak,amp) in (
-            ("L3-02",-10.872237947687688,21.79954783506469,50.232250432178716,
+            ("two_mmc_shared_bus",-10.872237947687688,21.79954783506469,50.232250432178716,
                 21.79954608163451,21.801587951588505,.000255889219949928),
-            ("L3-04",-10.954087715861549,41.05819735993356,367.28750909034244,
+            ("mmc_pi_line",-10.954087715861549,41.05819735993356,367.28750909034244,
                 41.05810094572044,34.467198177827676,.0007118962353546502),
-            ("L3-03",-.0006283185308747,26.3847297623963,50.49689963194021,
+            ("mmc_gfm_gfl_shared_bus",-.0006283185308747,26.3847297623963,50.49689963194021,
                 26.38423668513727,26.38493241075408,.0006924416531567809))
-        net=V.fixture(id).factory();point=power_flow(net);list=V.fixture_netlist(net,point);c=V.l3_circuit(id,net)
-        spec=V.l3_spec(id,list);gate=V.composed_stability(c)
+        net=V.fixture(id).factory();point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit(id,net)
+        spec=V.coupled_spec(id,list);gate=V.composed_stability(c)
         @test gate["status"]=="passed"
         @test gate["most_positive_located_real_per_s"]≈right rtol=1e-9
         j=argmax(gate["poles_real_per_s"])
-        if id=="L3-03"
+        if id=="mmc_gfm_gfl_shared_bus"
             @test abs(gate["poles_imag_rad_per_s"][j])<1e-12
         else
-            @test abs(gate["poles_imag_rad_per_s"][j])≈(id=="L3-02" ? 18.51585338533926 : 18.562915099914086) rtol=1e-9
+            @test abs(gate["poles_imag_rad_per_s"][j])≈(id=="two_mmc_shared_bus" ? 18.51585338533926 : 18.562915099914086) rtol=1e-9
         end
         @test gate["closed_RHP_count"]==0
         @test gate["descriptor_native_residual"]<1e-10
@@ -2365,11 +2367,11 @@ end
         @test spec.window_starts==(16.,24.) && spec.window_duration==8. && spec.simulation_time==32.
         @test V.check_recorder_sampling(spec)==25
         @test V.check_recorder_sampling(V.composed_step_spec(spec,7.))==25
-        @test V.L3_NATIVE_NODES[id]==(id=="L3-04" ? 67 : 77)
+        @test V.COUPLED_NATIVE_NODES[id]==(id=="mmc_pi_line" ? 67 : 77)
         @test net.voltageBase[1]==380/sqrt(3)
-        @test spec.power_base_MVA==(id=="L3-02" ? 2000. : id=="L3-03" ? 2060. : 1000.)
+        @test spec.power_base_MVA==(id=="two_mmc_shared_bus" ? 2000. : id=="mmc_gfm_gfl_shared_bus" ? 2060. : 1000.)
         grid=PowerImpedance.get_y(net.elements[:Grid_A],ComplexF64(1.))
-        rating=id=="L3-03" ? 2060. : 1000.
+        rating=id=="mmc_gfm_gfl_shared_bus" ? 2060. : 1000.
         r=380^2/rating/8/sqrt(101);l=10r/(2π*50);q=I(2)+[0. 2π*50;-2π*50 0.]
         @test grid[1:2,1:2]≈inv(r*I(2)+l*q) rtol=1e-12
         # The numerical comparison uses the exact dense reference grid and refined peak
@@ -2404,7 +2406,7 @@ end
             for name in c.devices
                 e=net.elements[name];b=V.device_bases(e.element_model.elec)
                 changed=V.interface_step_eligible(e.element_model)
-                @test changed==(id!="L3-03" || name==:C2)
+                @test changed==(id!="mmc_gfm_gfl_shared_bus" || name==:C2)
                 for f in (7.,137.,750.)
                     s=ComplexF64(im*2π*f)
                     if changed
@@ -2418,7 +2420,7 @@ end
                     end
                 end
             end
-            if id!="L3-04"
+            if id!="mmc_pi_line"
                 refs=V.composed_reference(c,spec;time_step=spec.time_step,forms)
                 @test refs["aggregate_Y"]≈refs["C1_Y"]+refs["C2_Y"] rtol=1e-12
                 for (k,f) in enumerate(spec.frequencies)
@@ -2431,7 +2433,7 @@ end
                 @test forms[:Cnear].C≈2e-6 && forms[:Cfar].C≈2e-6
                 @test only(spec.buses).name==V.port_probe(list,:Line,1).name
                 @test only(spec.buses).name!=V.port_probe(list,:C1,2).name
-                local_spec=V.l3_spec(id,list;local_scan=true)
+                local_spec=V.coupled_spec(id,list;local_scan=true)
                 @test local_spec.frequencies==collect(357.:.5:378.)
                 @test local_spec.tone_peak_pu==2.4385006018880013e-5
                 @test local_spec.resonance_groups==[collect(1:43)]
@@ -2445,7 +2447,7 @@ end
                 @test resolution["resolved"]
                 @test resolution["centre_Hz"]≈366.9188533723705 rtol=1e-9
                 @test resolution["width_Hz"]≈5.727917076969845 rtol=1e-9
-                @test length(V.l3_specs(id,list))==2
+                @test length(V.coupled_specs(id,list))==2
             end
             step=V.composed_step_spec(spec,750.)
             pred=V.composed_predicted_columns(c,spec,1,forms)
@@ -2457,7 +2459,7 @@ end
                 (main=model,half=model),[Dict("passed"=>true)],directory)
             @test all(w["status"]=="passed" for w in values(witness))
             for (target,w) in witness
-                plain=id=="L3-03" && target=="C1_Y"
+                plain=id=="mmc_gfm_gfl_shared_bus" && target=="C1_Y"
                 @test w["step_reference"]==(plain ? "raw" : "composed_residual")
                 @test !isempty(w["step_reference_reason"])
                 if plain
@@ -2467,7 +2469,7 @@ end
                 end
             end
         end
-        if id=="L3-03"
+        if id=="mmc_gfm_gfl_shared_bus"
             @test occursin("equilibrium",spec.settling["scope"])
             @test occursin("400-to-380",only(filter(x->occursin("equilibrium",x),V.fixture(id).differences)))
             b=V.device_bases(net.elements[:C1].element_model.elec)
@@ -2478,8 +2480,8 @@ end
 end
 
 @testset "Composed machine and zero-delay converter use separate step rules" begin
-    net=V.l3_network("L3-06");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.l3_circuit("L3-06",net)
-    spec=merge(V.l3_spec("L3-06",list),(;frequencies=[750.,1000.],phases=[0.,-π]))
+    net=V.coupled_network("machine_mmc_shared_bus");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit("machine_mmc_shared_bus",net)
+    spec=merge(V.coupled_spec("machine_mmc_shared_bus",list),(;frequencies=[750.,1000.],phases=[0.,-π]))
     step=V.composed_step_spec(spec,1000.)
     plan,_=V.scan_plan(list,spec,"baseline")
     mktempdir() do directory
@@ -2534,8 +2536,8 @@ end
 end
 
 @testset "Near-end scan retains remote converter V/I and local departure gates" begin
-    net=V.l3_network("L3-04");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.l3_circuit("L3-04",net)
-    spec=merge(V.l3_spec("L3-04",list),(;frequencies=[7.,137.],phases=[0.,-π],
+    net=V.coupled_network("mmc_pi_line");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit("mmc_pi_line",net)
+    spec=merge(V.coupled_spec("mmc_pi_line",list),(;frequencies=[7.,137.],phases=[0.,-π],
         window_starts=(1.,2.),window_duration=1.,simulation_time=3.,injection_time=0.,
         tone_peak_pu=1e-4,recorder_scope="measurement"))
     scale=spec.current_bases[1]/spec.voltage_bases[1]
@@ -2621,10 +2623,10 @@ function composed_project_xml(plan,path)
     return path
 end
 
-@testset "Stage C frozen factories, native roots, conditioning and DC transfers" begin
-    @test V.M9D_C_IDS==["L3-07","L3-06"]
-    for id in V.M9D_C_IDS
-        frozen=id=="L3-07" ? Dict("root_real"=>-3.002953582085381,"tone_peak_pu"=>.0005452727356004889,
+@testset "machine/DC coupling frozen factories, native roots, conditioning and DC transfers" begin
+    @test V.MACHINE_DC_COUPLING_IDS==["two_mmc_dc_cable","machine_mmc_shared_bus"]
+    for id in V.MACHINE_DC_COUPLING_IDS
+        frozen=id=="two_mmc_dc_cable" ? Dict("root_real"=>-3.002953582085381,"tone_peak_pu"=>.0005452727356004889,
             "cond_max"=>20.48465099589538,"cond_refined_f_Hz"=>50.24031352250781,"cond_refined_max"=>20.484665907148244,
             "discrete_reference"=>Dict("cond_sampled_max"=>20.485435391837672),
             "wide_contour"=>Dict("return_difference_min"=>.22964052923058956),
@@ -2634,21 +2636,21 @@ end
                 "cond_max"=>42.233865753530495,"cond_refined_f_Hz"=>49.996516662233596,"cond_refined_max"=>42.23563695814419,
                 "discrete_reference"=>Dict("cond_sampled_max"=>42.23450947495588))
         net=V.fixture(id).factory();point=power_flow(net);list=V.fixture_netlist(net,point)
-        c=V.l3_circuit(id,net);spec=V.l3_spec(id,list);gate=V.composed_stability(c)
+        c=V.coupled_circuit(id,net);spec=V.coupled_spec(id,list);gate=V.composed_stability(c)
         @test gate["status"]=="passed"
         @test gate["most_positive_located_real_per_s"]≈frozen["root_real"] rtol=1e-9
         @test gate["closed_RHP_count"]==0
-        @test V.L3_NATIVE_NODES[id]==(id=="L3-07" ? 96 : 55)
+        @test V.COUPLED_NATIVE_NODES[id]==(id=="two_mmc_dc_cable" ? 96 : 55)
         @test spec.time_step==1.25e-6 && spec.sample_step==31.25e-6
         @test V.check_recorder_sampling(spec)==25
         @test spec.tone_peak_pu==frozen["tone_peak_pu"]
-        @test spec.window_starts==(id=="L3-06" ? (64.,72.) : (16.,24.))
-        @test spec.simulation_time==(id=="L3-06" ? 80. : 32.)
+        @test spec.window_starts==(id=="machine_mmc_shared_bus" ? (64.,72.) : (16.,24.))
+        @test spec.simulation_time==(id=="machine_mmc_shared_bus" ? 80. : 32.)
         step=V.composed_step_spec(spec,7.)
         @test step.time_step==.625e-6 && V.check_recorder_sampling(step)==25
         @test first(step.window_starts)>=first(spec.window_starts)
-        @test step.window_duration>=(id=="L3-06" ? 2. : .1)
-        if id=="L3-06"
+        @test step.window_duration>=(id=="machine_mmc_shared_bus" ? 2. : .1)
+        if id=="machine_mmc_shared_bus"
             @test step.window_starts==(64.,72.) && step.window_duration==8. && step.simulation_time==80.
         end
         fs=sort!(unique([exp10.(range(0,3;length=3001));spec.frequencies]))
@@ -2668,7 +2670,7 @@ end
         refs=V.composed_reference(c,spec)
         @test Set(keys(refs))==Set(V.composed_targets(c))
         @test refs["aggregate_Y"]≈refs["C1_Y"]+refs["C2_Y"] rtol=1e-10
-        if id=="L3-07"
+        if id=="two_mmc_dc_cable"
             @test length(c.nodes)==6 && length(c.ports)==2 && length(spec.axes)==4
             @test length(c.dc_references)==2 && all(==(2e7),values(c.dc_references))
             @test length(P._dc_precharge_buses(list))==2
@@ -2731,7 +2733,7 @@ end
         mktempdir() do directory
             project=composed_project_xml(plan,joinpath(directory,"actual.pscx"))
             forms=V.exported_composed_passives(c,project,list)
-            @test length(forms)==(id=="L3-07" ? 2 : 1)
+            @test length(forms)==(id=="two_mmc_dc_cable" ? 2 : 1)
             V.composed_reference_files!(nothing,c,spec,directory,forms)
             @test V.composed_reference_files!(nothing,c,spec,directory,forms;verify=true)===nothing
             stored=V.composed_frozen_references(directory,spec,c,"discrete")
@@ -2748,7 +2750,7 @@ end
                 witnesses=V.composed_witnesses!(group,c,spec,step,column,main,half,main,
                     (main=model,half=model),[Dict("passed"=>true)],directory)
                 @test all(w["status"]=="passed" for w in values(witnesses))
-                if id=="L3-07"
+                if id=="two_mmc_dc_cable"
                     @test size(pred["DC_voltage_Z"])==(2,1,23)
                     @test size(pred["DC_current_T"])==(2,1,23)
                     bad=copy(half);m=copy(half["DC_voltage_Z"].matrix);m[1,1,1]+=.01
@@ -2759,7 +2761,7 @@ end
                     @test failed["aggregate_Y"]["status"]=="passed"
                 end
             end
-            if id=="L3-07"
+            if id=="two_mmc_dc_cable"
                 original=read(project,String)
                 for (from,to) in (("value=\"25.0 [km]\"","value=\"24.0 [km]\""),
                         ("value=\"0.02622 [m]\"","value=\"0.02623 [m]\""),
@@ -2837,8 +2839,8 @@ function dc_pair_synthetic(net,list,c,spec,axis;bad_port=false,dc_drift=false)
 end
 
 @testset "DC pair full recorder extraction, rectangular transfers and independent gates" begin
-    net=V.l3_network("L3-07");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.l3_circuit("L3-07",net)
-    spec=merge(V.l3_spec("L3-07",list),(;frequencies=[7.,137.],phases=[0.,-π],
+    net=V.coupled_network("two_mmc_dc_cable");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit("two_mmc_dc_cable",net)
+    spec=merge(V.coupled_spec("two_mmc_dc_cable",list),(;frequencies=[7.,137.],phases=[0.,-π],
         window_starts=(1.,2.),window_duration=1.,simulation_time=3.,injection_time=0.,tone_peak_pu=1e-4))
     models=Dict{String,P.PSCADModel}();results=Dict{String,P.PSCADResult}();refs=nothing
     for axis in ["baseline";spec.axes]
@@ -2874,11 +2876,11 @@ end
     end
 end
 
-module StageCPreparation
+module MachineDCCouplingPreparation
 const ROOT=normpath(joinpath(@__DIR__,"../manual/pscad/validation"))
 const REPOSITORY=normpath(joinpath(ROOT,"../../../.."))
-const M9D_C_IDS=["L3-07","L3-06"]
-const M9D_B_IDS=String[]
+const MACHINE_DC_COUPLING_IDS=["two_mmc_dc_cable","machine_mmc_shared_bus"]
+const COUPLED_LINE_CONVERTER_IDS=String[]
 const head=Dict(relpath(joinpath(ROOT,file),REPOSITORY)=>Base.read(joinpath(ROOT,file))
     for file in ("composed_execution.jl","composed_network.jl","composed_measurement.jl",
         "queue.jl","coverage.jl","scan.jl","frequency.jl","records.jl","ports.jl"))
@@ -2889,31 +2891,31 @@ read(path::String)=Base.read(path)
 for expression in Meta.parseall(Base.read(joinpath(ROOT,"composed_execution.jl"),String)).args
     expression isa Expr && expression.head==:function || continue
     name=first(expression.args).args[1]
-    name in (:require_committed_m9d_c,:prepare_m9d_c,:prepare_composed) && Core.eval(@__MODULE__,expression)
+    name in (:require_committed_machine_dc_coupling,:prepare_machine_dc_coupling,:prepare_composed) && Core.eval(@__MODULE__,expression)
 end
 end
 
-@testset "Stage C preparation checks every source in HEAD before writing" begin
-    @test StageCPreparation.require_committed_m9d_c()===nothing
+@testset "machine/DC coupling preparation checks every source in HEAD before writing" begin
+    @test MachineDCCouplingPreparation.require_committed_machine_dc_coupling()===nothing
     mktempdir() do directory
-        for path in keys(StageCPreparation.head)
-            original=StageCPreparation.head[path]
-            StageCPreparation.head[path]=UInt8[0]
-            @test_throws ErrorException StageCPreparation.require_committed_m9d_c()
-            for id in V.M9D_C_IDS
+        for path in keys(MachineDCCouplingPreparation.head)
+            original=MachineDCCouplingPreparation.head[path]
+            MachineDCCouplingPreparation.head[path]=UInt8[0]
+            @test_throws ErrorException MachineDCCouplingPreparation.require_committed_machine_dc_coupling()
+            for id in V.MACHINE_DC_COUPLING_IDS
                 output=joinpath(directory,id)
-                @test_throws ErrorException StageCPreparation.prepare_composed(id;directory=output)
+                @test_throws ErrorException MachineDCCouplingPreparation.prepare_composed(id;directory=output)
                 @test !ispath(output)
             end
-            @test_throws ErrorException StageCPreparation.prepare_m9d_c()
-            StageCPreparation.head[path]=original
+            @test_throws ErrorException MachineDCCouplingPreparation.prepare_machine_dc_coupling()
+            MachineDCCouplingPreparation.head[path]=original
         end
     end
 end
 
 end
 
-module PSCADM9dAQueueTests
+module PSCADSharedBusShuntQueueTests
 using Test, TOML
 module Queue
 using TOML
@@ -2927,78 +2929,78 @@ RemoteConfig()=nothing
 function run_composed(id;remote,deadline,protocols=nothing)
     push!(calls,id);push!(deadlines,deadline);push!(protocols_seen,protocols)
     interrupt[] && throw(InterruptException())
-    (id in ("L3-01","L3-02") || fail_dc[] && id=="L3-07") && error("offline fixture failure")
-    return Dict("status"=>id=="L3-04" ? "failed" : "passed")
+    (id in ("two_tlc_shared_bus","two_mmc_shared_bus") || fail_dc[] && id=="two_mmc_dc_cable") && error("offline fixture failure")
+    return Dict("status"=>id=="mmc_pi_line" ? "failed" : "passed")
 end
 include("../manual/pscad/validation/queue.jl")
 end
-@testset "Stage A queue records failures and continues in frozen order" begin
+@testset "shared-bus/shunt queue records failures and continues in frozen order" begin
     for timeout in (0.,-1.,Inf,NaN)
-        @test_throws ErrorException Queue.run_m9d_a(;timeout)
+        @test_throws ErrorException Queue.run_shared_bus_shunt(;timeout)
     end
     @test isempty(Queue.calls)
-    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_m9d_a(timeout=1.)
-    @test Queue.calls==["L3-01","L3-08"]
-    @test record["outcomes"]["L3-01"]["status"]=="run_or_analysis_failed"
-    @test record["outcomes"]["L3-08"]["status"]=="passed"
-    @test TOML.parsefile(joinpath(Queue.ROOT,"data","m9d2","queue.toml"))==record
+    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_shared_bus_shunt(timeout=1.)
+    @test Queue.calls==["two_tlc_shared_bus","mmc_rc_shunt"]
+    @test record["outcomes"]["two_tlc_shared_bus"]["status"]=="run_or_analysis_failed"
+    @test record["outcomes"]["mmc_rc_shunt"]["status"]=="passed"
+    @test TOML.parsefile(joinpath(Queue.ROOT,"data","shared_bus_shunt_queue","queue.toml"))==record
     empty!(Queue.calls);Queue.interrupt[]=true
-    @test_throws InterruptException Queue.run_m9d_a(timeout=1.)
-    @test Queue.calls==["L3-01"]
+    @test_throws InterruptException Queue.run_shared_bus_shunt(timeout=1.)
+    @test Queue.calls==["two_tlc_shared_bus"]
     rm(Queue.ROOT;recursive=true)
 end
-@testset "Stage B queue persists outcomes, continues in order and stops on interrupt" begin
+@testset "coupled line/converter queue persists outcomes, continues in order and stops on interrupt" begin
     empty!(Queue.calls);empty!(Queue.deadlines);Queue.interrupt[]=false
     for timeout in (0.,-1.,Inf,NaN)
-        @test_throws ErrorException Queue.run_m9d_b(;timeout)
+        @test_throws ErrorException Queue.run_coupled_line_converter(;timeout)
     end
     @test isempty(Queue.calls)
-    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_m9d_b(timeout=10.)
-    @test Queue.calls==["L3-02","L3-04","L3-03"]
+    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_coupled_line_converter(timeout=10.)
+    @test Queue.calls==["two_mmc_shared_bus","mmc_pi_line","mmc_gfm_gfl_shared_bus"]
     @test length(unique(Queue.deadlines))==1
     @test record["order"]==Queue.calls
-    @test record["outcomes"]["L3-02"]["status"]=="run_or_analysis_failed"
-    @test record["outcomes"]["L3-04"]["status"]=="failed"
-    @test record["outcomes"]["L3-03"]["status"]=="passed"
-    path=joinpath(Queue.ROOT,"data","m9d3","queue.toml")
+    @test record["outcomes"]["two_mmc_shared_bus"]["status"]=="run_or_analysis_failed"
+    @test record["outcomes"]["mmc_pi_line"]["status"]=="failed"
+    @test record["outcomes"]["mmc_gfm_gfl_shared_bus"]["status"]=="passed"
+    path=joinpath(Queue.ROOT,"data","coupled_line_converter_queue","queue.toml")
     @test TOML.parsefile(path)==record
     empty!(Queue.calls);Queue.interrupt[]=true
-    @test_throws InterruptException Queue.run_m9d_b(timeout=1.)
-    @test Queue.calls==["L3-02"]
+    @test_throws InterruptException Queue.run_coupled_line_converter(timeout=1.)
+    @test Queue.calls==["two_mmc_shared_bus"]
     @test TOML.parsefile(path)==record
     rm(Queue.ROOT;recursive=true)
 end
 
 
-@testset "Stage C queue persists a failed first fixture and runs the machine last" begin
+@testset "machine/DC coupling queue persists a failed first fixture and runs the machine last" begin
     empty!(Queue.calls);empty!(Queue.deadlines);Queue.interrupt[]=false
     for timeout in (0.,-1.,Inf,NaN)
-        @test_throws ErrorException Queue.run_m9d_c(;timeout)
+        @test_throws ErrorException Queue.run_machine_dc_coupling(;timeout)
     end
     @test isempty(Queue.calls)
     Queue.fail_dc[]=true
-    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_m9d_c(timeout=10.)
-    @test Queue.calls==["L3-07","L3-06"] && length(unique(Queue.deadlines))==1
-    @test record["outcomes"]["L3-07"]["status"]=="run_or_analysis_failed"
-    @test record["outcomes"]["L3-06"]["status"]=="passed"
-    path=joinpath(Queue.ROOT,"data","m9d4","queue.toml")
+    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_machine_dc_coupling(timeout=10.)
+    @test Queue.calls==["two_mmc_dc_cable","machine_mmc_shared_bus"] && length(unique(Queue.deadlines))==1
+    @test record["outcomes"]["two_mmc_dc_cable"]["status"]=="run_or_analysis_failed"
+    @test record["outcomes"]["machine_mmc_shared_bus"]["status"]=="passed"
+    path=joinpath(Queue.ROOT,"data","machine_dc_coupling_queue","queue.toml")
     @test TOML.parsefile(path)==record
     empty!(Queue.calls);Queue.interrupt[]=true
-    @test_throws InterruptException Queue.run_m9d_c(timeout=1.)
-    @test Queue.calls==["L3-07"] && TOML.parsefile(path)==record
+    @test_throws InterruptException Queue.run_machine_dc_coupling(timeout=1.)
+    @test Queue.calls==["two_mmc_dc_cable"] && TOML.parsefile(path)==record
     Queue.interrupt[]=false
     Queue.fail_dc[]=false
     rm(Queue.ROOT;recursive=true)
 end
 
-@testset "Combined queue starts with the L3-08 local witness only" begin
+@testset "Combined queue starts with the mmc_rc_shunt local witness only" begin
     empty!(Queue.calls);empty!(Queue.protocols_seen);Queue.interrupt[]=false
-    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_m9d_ab(timeout=10.)
-    @test Queue.calls==["L3-08","L3-02","L3-04","L3-03"]
+    record=@test_logs (:warn,r"Composed fixture failed; continuing queue") Queue.run_coupled_local_witness(timeout=10.)
+    @test Queue.calls==["mmc_rc_shunt","two_mmc_shared_bus","mmc_pi_line","mmc_gfm_gfl_shared_bus"]
     @test Queue.protocols_seen==[["composed_local"],nothing,nothing,nothing]
-    @test record["outcomes"]["L3-08"]["status"]=="passed"
-    @test record["outcomes"]["L3-02"]["status"]=="run_or_analysis_failed"
-    @test record["outcomes"]["L3-03"]["status"]=="passed"
+    @test record["outcomes"]["mmc_rc_shunt"]["status"]=="passed"
+    @test record["outcomes"]["two_mmc_shared_bus"]["status"]=="run_or_analysis_failed"
+    @test record["outcomes"]["mmc_gfm_gfl_shared_bus"]["status"]=="passed"
     rm(Queue.ROOT;recursive=true)
 end
 
@@ -3050,10 +3052,10 @@ last_line=findnext("\nfunction run_composed(",source,last(first_line))
 include_string(@__MODULE__,source[first(first_line):first(last_line)-1])
 @testset "Invalid composed group persists KCL results and runs repeats" begin
     mktempdir() do directory
-        record=Dict{String,Any}();spec=(;id="L3-01",protocol="composed_coarse",axes=["p1_d","p1_q"],tone_peak_pu=.001)
+        record=Dict{String,Any}();spec=(;id="two_tlc_shared_bus",protocol="composed_coarse",axes=["p1_d","p1_q"],tone_peak_pu=.001)
         circuit=(;devices=[:C1],net=(;elements=Dict(:C1=>(;element_model=nothing))))
         empty!(attempts)
-        group=@test_logs (:warn,r"L3-01 frequency-response results:.*invalid_measurement") run_composed_group!(record,circuit,nothing,spec;directory,remote=nothing,deadline=Inf)
+        group=@test_logs (:warn,r"two_tlc_shared_bus frequency-response results:.*invalid_measurement") run_composed_group!(record,circuit,nothing,spec;directory,remote=nothing,deadline=Inf)
         saved=TOML.parsefile(joinpath(directory,"manifest.toml"))["groups"][spec.protocol]
         @test group["status"]=="invalid_measurement"
         @test saved["readout_checks"][1:1]==checks
@@ -3065,7 +3067,7 @@ include_string(@__MODULE__,source[first(first_line):first(last_line)-1])
             "main_half_amplitude_p1_d","half_baseline","half_p1_d"]
         @test isempty(seen_resonance_groups[])
         local_spec=merge(spec,(;protocol="composed_local",resonance_groups=[collect(1:43)]))
-        local_group=@test_logs (:warn,r"L3-01 frequency-response results:.*invalid_measurement") run_composed_group!(Dict{String,Any}(),circuit,nothing,local_spec;
+        local_group=@test_logs (:warn,r"two_tlc_shared_bus frequency-response results:.*invalid_measurement") run_composed_group!(Dict{String,Any}(),circuit,nothing,local_spec;
             directory,remote=nothing,deadline=Inf)
         @test seen_resonance_groups[]==[collect(1:43)]
         @test local_group["status"]=="invalid_measurement"
@@ -3099,30 +3101,30 @@ end
     remote=(;remote_root=raw"C:\Users\Amauri\AppData\Local\PowerImpedance\PSCAD\Remote",
         shared_root=raw"Z:\Documents\KUL\PowerImpedance.jl\local\pscad-exchange",
         local_root="/home/amartins/Documents/KUL/PowerImpedance.jl/local/pscad-exchange")
-    for id in [V.M9D_A_IDS;V.M9D_B_IDS;V.M9D_C_IDS]
+    for id in [V.SHARED_BUS_SHUNT_IDS;V.COUPLED_LINE_CONVERTER_IDS;V.MACHINE_DC_COUPLING_IDS]
         spec=(;id,frequencies=[1.,7.,750.,1000.],protocol="composed_coarse",axes=["p1_d","p1_q"],
             time_step=2.5e-6,sample_step=62.5e-6,window_duration=8.,window_starts=(16.,24.),simulation_time=32.)
         specs=[spec]
-        if id in ("L3-04","L3-08")
-            fs=id=="L3-04" ? collect(357.:.5:378.) : [collect(232.:1.5:260.5);collect(334.:1.5:361.)]
+        if id in ("mmc_pi_line","mmc_rc_shunt")
+            fs=id=="mmc_pi_line" ? collect(357.:.5:378.) : [collect(232.:1.5:260.5);collect(334.:1.5:361.)]
             push!(specs,merge(spec,(;protocol="composed_local",frequencies=fs)))
         end
         paths=V.check_prepared_run_paths(id,V.composed_run_axes(specs),remote)
-        @test paths["remote"]["length"]==(id in ("L3-04","L3-08") ? 175 : 160)
-        @test paths["mapped_local"]["length"]==(id in ("L3-04","L3-08") ? 173 : 158)
-        @test paths["local"]["length"]==(id in ("L3-04","L3-08") ? 185 : 170)
+        @test paths["remote"]["length"]==(id in ("mmc_pi_line","mmc_rc_shunt") ? 175 : 160) + length(id) - 5
+        @test paths["mapped_local"]["length"]==(id in ("mmc_pi_line","mmc_rc_shunt") ? 173 : 158) + length(id) - 5
+        @test paths["local"]["length"]==(id in ("mmc_pi_line","mmc_rc_shunt") ? 185 : 170) + length(id) - 5
         @test all(endswith(item["path"],raw"\run-XXXXXX\toolkit\supervisor.ps1") for item in values(paths))
     end
     axes=["compact_baseline"]
-    lengths=V.prepared_run_paths("L3-08",axes,remote)
+    lengths=V.prepared_run_paths("mmc_rc_shunt",axes,remote)
     for (field,label) in ((:remote_root,"remote"),(:shared_root,"mapped_local"),(:local_root,"local"))
         root=getproperty(remote,field)*repeat("x",240-lengths[label]["length"])
         boundary=merge(remote,NamedTuple{(field,)}((root,)))
-        @test V.check_prepared_run_paths("L3-08",axes,boundary)[label]["length"]==240
+        @test V.check_prepared_run_paths("mmc_rc_shunt",axes,boundary)[label]["length"]==240
         too_long=merge(remote,NamedTuple{(field,)}((root*"x",)))
-        @test_throws r"exceeds 240 characters" V.check_prepared_run_paths("L3-08",axes,too_long)
+        @test_throws r"exceeds 240 characters" V.check_prepared_run_paths("mmc_rc_shunt",axes,too_long)
         mktempdir() do directory
-            spec=merge(V.l1_settings(),(;id="L3-08",dimension=2,protocol="composed_local",
+            spec=merge(V.passive_settings(),(;id="mmc_rc_shunt",dimension=2,protocol="composed_local",
                 time_step=2.5e-6,sample_step=62.5e-6,frequencies=[7.,1000.]))
             @test_throws r"exceeds 240 characters" V.prepare_scan_projects(directory,nothing,spec,String[];
                 prefix="compact_",remote=merge(too_long,(;remote_root=repeat("x",250))))
@@ -3139,12 +3141,12 @@ end
             projects=Dict{String,Any}[];models=Pair{String,P.PSCADModel}[]
             settings=P.SimulationSettings();probes=P.ProbeManifest()
             for axis in ("baseline","p1_d","p1_q")
-                old=joinpath(mkpath(joinpath(directory,old_prefix*axis)),"l3_08.pscx")
+                old=joinpath(mkpath(joinpath(directory,old_prefix*axis)),"mmc_rc_shunt.pscx")
                 write(old,"old local witness $axis")
                 push!(projects,Dict("axis"=>old_prefix*axis,"path"=>relpath(old,directory),"sha256"=>V.digest(old)))
-                key=compact*axis;path=joinpath(mkpath(joinpath(staging,key)),"l3_08_0d674b400f77.pscx")
+                key=compact*axis;path=joinpath(mkpath(joinpath(staging,key)),"mmc_rc_shunt_0d674b400f77.pscx")
                 write(path,"compact namespace local witness $axis")
-                model=P.PSCADModel(path,"l3_08_0d674b400f77",nothing,probes,settings,nothing,
+                model=P.PSCADModel(path,"mmc_rc_shunt_0d674b400f77",nothing,probes,settings,nothing,
                     (;source=:validation,mhi_xml_version="offline",baseline_axis=compact*"baseline"))
                 push!(models,key=>model)
             end
@@ -3191,51 +3193,51 @@ end
 @testset "Line-chain re-analysis preserves retained evidence" begin
     mktempdir() do directory
         data = mkpath(joinpath(directory, "evidence"))
-        fixture_dir = mkpath(joinpath(data, "L1-03"))
-        net = V.fixture("L1-03").factory()
+        fixture_dir = mkpath(joinpath(data, "ac_ohl_untransposed"))
+        net = V.fixture("ac_ohl_untransposed").factory()
         list = V.fixture_netlist(net, power_flow(net))
-        spec, reference = V.applicable_scan("L1-03", net, list)
+        spec, reference = V.applicable_scan("ac_ohl_untransposed", net, list)
         analysis_dir = mkpath(joinpath(fixture_dir, "analysis", spec.protocol))
         V.write_response(joinpath(fixture_dir, V.reference_filename(spec)), 1.01reference, spec.frequencies)
         V.write_response(joinpath(analysis_dir, "measured_S.tsv"), reference, spec.frequencies)
-        record = Dict("fixture_id" => "L1-03", "tier_c" => V.scan_record(spec),
-            "tier_c_result" => Dict("valid" => true, "model_mismatch" => ""))
+        record = Dict("fixture_id" => "ac_ohl_untransposed", "frequency_response" => V.scan_record(spec),
+            "frequency_response_result" => Dict("valid" => true, "model_mismatch" => ""))
         V.write_manifest(fixture_dir, record)
         before = Dict(file["path"] => file["sha256"] for file in V.inventory(fixture_dir))
         manifest_hash = V.digest(joinpath(fixture_dir, "manifest.toml"))
         output = joinpath(directory, "analysis")
-        result = V.reanalyse_line_chain("L1-03"; data_root = data, output_root = output)["L1-03"]
+        result = V.reanalyse_line_chain("ac_ohl_untransposed"; data_root = data, output_root = output)["ac_ohl_untransposed"]
         comparison = result["comparisons"]["response"]["max_errors"]
         @test comparison["new"]["frobenius"] < 1e-10
         @test comparison["old"]["frobenius"] > 1e-3
         @test result["retained_inputs_unchanged"]
-        @test V.digest(joinpath(output, "L1-03", "source_manifest.toml")) == manifest_hash
+        @test V.digest(joinpath(output, "ac_ohl_untransposed", "source_manifest.toml")) == manifest_hash
         @test result["analysis_revision"]["source_manifest_sha256"] == manifest_hash
         @test before == Dict(file["path"] => file["sha256"] for file in V.inventory(fixture_dir))
         @test manifest_hash == V.digest(joinpath(fixture_dir, "manifest.toml"))
-        @test_throws r"overlaps stored evidence" V.reanalyse_line_chain("L1-03";
+        @test_throws r"overlaps stored evidence" V.reanalyse_line_chain("ac_ohl_untransposed";
             data_root = data, output_root = fixture_dir)
         symlink(fixture_dir, joinpath(directory, "link"))
-        @test_throws r"overlaps stored evidence" V.reanalyse_line_chain("L1-03";
+        @test_throws r"overlaps stored evidence" V.reanalyse_line_chain("ac_ohl_untransposed";
             data_root = data, output_root = joinpath(directory, "link"))
         mkpath(joinpath(directory, "escaping"))
-        symlink(fixture_dir, joinpath(directory, "escaping", "L1-03"))
-        @test_throws r"escapes its allowed directory" V.reanalyse_line_chain("L1-03";
+        symlink(fixture_dir, joinpath(directory, "escaping", "ac_ohl_untransposed"))
+        @test_throws r"escapes its allowed directory" V.reanalyse_line_chain("ac_ohl_untransposed";
             data_root = data, output_root = joinpath(directory, "escaping"))
         @test_throws r"retained evidence changed" begin
             open(io -> write(io, "\n"), joinpath(analysis_dir, "measured_S.tsv"), "a")
-            V.reanalyse_line_chain("L1-03"; data_root = data, output_root = joinpath(directory, "damaged"))
+            V.reanalyse_line_chain("ac_ohl_untransposed"; data_root = data, output_root = joinpath(directory, "damaged"))
         end
     end
 end
 end
 
-module PSCADL4ValidationTests
+module PSCADSystemValidationTests
 using Test,PowerImpedance,LinearAlgebra,TOML,SHA
 include("../manual/pscad/validation/validation.jl")
 const V=PSCADValidation
 const P=PowerImpedance.PSCAD
-include("l4_factories_test.jl")
-include("l4_system_test.jl")
-include("l4_growth_test.jl")
+include("system_factories_test.jl")
+include("system_test.jl")
+include("growth_test.jl")
 end

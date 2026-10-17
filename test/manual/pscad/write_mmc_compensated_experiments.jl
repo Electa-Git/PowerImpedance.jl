@@ -3,10 +3,10 @@ using PowerImpedance, PythonCall, LinearAlgebra
 include("../../pscad/fixtures.jl")
 include("../../pscad/topology.jl")
 const P = PowerImpedance.PSCAD
-const EXPERIMENTS = mkpath("/tmp/pscad-m6b")
+const EXPERIMENTS = mkpath("/tmp/pscad-mmc-compensated")
 const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
     sample_step = 250e-6, source_ramp = 0.0)
-const M6B_SETTINGS = P.SimulationSettings(simulation_time = 5.0, time_step = 1e-6,
+const COMPENSATED_SETTINGS = P.SimulationSettings(simulation_time = 5.0, time_step = 1e-6,
     sample_step = 250e-6, source_ramp = 0.0)
 BLAS.set_num_threads(1)
 
@@ -83,10 +83,10 @@ end
 
 fixture = PSCADFixtures.mmc_compensated_network()
 for (suffix, network) in (("classic", fixture.classic), ("builder", fixture.state))
-    write_case("mmc_compensated_" * suffix, network, M6B_SETTINGS, :none)
+    write_case("mmc_compensated_" * suffix, network, COMPENSATED_SETTINGS, :none)
 end
 
-const M5_RECHECK = mkpath(joinpath(EXPERIMENTS, "m5-recheck"))
+const MMC_RECHECK = mkpath(joinpath(EXPERIMENTS, "mmc-recheck"))
 for (stem, factory, reference) in (("mmc_pq", PSCADFixtures.mmc_pq_network, :none),
     ("mmc_pf", PSCADFixtures.mmc_pf_network, :none),
     ("mmc_qv", PSCADFixtures.mmc_qv_network, :none),
@@ -94,12 +94,12 @@ for (stem, factory, reference) in (("mmc_pq", PSCADFixtures.mmc_pq_network, :non
     ("mmc_vdc", PSCADFixtures.mmc_vdc_network, :midpoint_resistors))
     fixture = factory()
     for (suffix, network) in (("classic", fixture.classic), ("builder", fixture.state))
-        write_case(stem * "_" * suffix, network, SETTINGS, reference, M5_RECHECK)
+        write_case(stem * "_" * suffix, network, SETTINGS, reference, MMC_RECHECK)
     end
 end
 
-write(joinpath(M5_RECHECK, "README.md"), """
-# M5 MMC recheck after the DC-divisor-only start-up correction
+write(joinpath(MMC_RECHECK, "README.md"), """
+# MMC recheck after the DC-divisor-only start-up correction
 
 Ten projects cover pq, pf, qv, vac and vdc, each classic and builder.
 Each uses 10 s duration, 10 us integration, 250 us sampling, zero source ramp
@@ -123,7 +123,7 @@ DUT and SEND references. These revised projects have not been run in PSCAD.
 
 write(joinpath(EXPERIMENTS, "README.md"),
     """
-# M6b energy-controlled MMC with physical compensated modulation
+# compensated MMC energy-controlled MMC with physical compensated modulation
 
 mmc_compensated_classic.pscx and mmc_compensated_builder.pscx mirror
 build_mmc_grid() in test/adm_MMC_compensated_test.jl: 1060 MVA,
@@ -188,6 +188,6 @@ and became non-finite at 2.88 s. At the validated FFVI 1 us step it settled
 from 1 s through 4.8 s: P=0.7000000, Q about 1e-7, omega=1,
 iS_z=0.233935 (reference 0.233948), all six capacitor means 639.4-639.5 kV
 with constant 77.9 kV ripple. Export warns above 1 us without changing
-the selected step or the global default. Ten revised M5 MMC
-projects and their own references are in m5-recheck/ for the same station checks.
+the selected step or the global default. Ten revised MMC
+projects and their own references are in mmc-recheck/ for the same station checks.
 """)
