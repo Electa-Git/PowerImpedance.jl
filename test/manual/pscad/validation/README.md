@@ -1,7 +1,7 @@
 # Julia–PSCAD validation suite
 
-This manual suite compares exported circuits with Julia operating points, frequency responses,
-time-domain responses and instability growth. It tests passive elements, converters, a synchronous
+This manual suite checks exported circuits against Julia operating points, frequency responses,
+time-domain responses and instability growth. It covers passive elements, converters, a synchronous
 machine and coupled circuits. The scripts are private test utilities. Native measurements require
 a configured Windows PSCAD station; preparation and local analysis do not contact it. The
 [abbreviations](../../../../docs/src/pscad.md#Abbreviations) are defined in the export guide.
@@ -205,7 +205,7 @@ must meet the step-size limit; the catalogue reports the maximum-entry change.
 | Lumped active-network stability | Zero closed right-half-plane count on the 6001-point 0.01 Hz–100 kHz contour at Re(s)=1e-6/s; all finite descriptor roots Re(λ)<-1e-7/s |
 | Time-domain waveform | Per signal RMS error ≤5 %, peak error ≤10 %, scalar gain error ≤5 %; half-amplitude RMS/peak/gain changes ≤2 % |
 | Ringdown mode | Frequency error ≤2 %, relative damping-ratio ζ error ≤10 %; report decay α separately |
-| Instability growth | Frequency error ≤2 %; growth error ≤`max(0.10*abs(Re(λ)),0.5/s)` |
+| Instability growth | Frequency error must be ≤2 %, growth error ≤`max(0.10*abs(Re(λ)),0.5/s)` and departure ≤0.01 pu in the fixed fit interval. |
 | Ringdown extraction | Converged interior fit, relative residual ≤0.10, relative standard errors ≤2 % frequency and ≤10 % ζ |
 | Frequency-to-time inversion | Double/quadruple padded predictions agree within 1e-4 relative norm |
 | Native measurement build | L1–L3: fewer than 100 live nodes; L4: fewer than 200, one subsystem |
@@ -674,72 +674,81 @@ frequency digest described below.
 
 ### Complete systems
 
+The redesigned P2P passes its operating-point comparison. The P2P with AC grids fails only
+its c2 arm-capacitor voltage sums, with 1.1–1.3 % error against 1 %. Untransposed AC lines
+limit both impedance comparisons. IEEE14 is not measured because its native build has
+216 live nodes. No system-level impedance comparison passes.
+
 System scans inject four independent currents, `[p1_d,p1_q,p2_d,p2_q]`, to measure direct
 network Z. The full 4x4 matrix, both local 2x2 blocks and both cross blocks are scored separately.
 Each converter AC/DC current transfer uses its own current base. DC bus voltages and line/cable
 terminal currents are also compared with each drive. The remaining devices stay connected.
 
-Coarse scans use the 23 active tones, onset 2 s, windows [16,24) and [24,32) s, 1.25 us integration
-and 31.25 us recording. Half-step repeats use 0.625 us integration and 15.625 us recording. The
-active 5 % complex/3 degree limits and the existing quality checks apply. Zero-delay devices use
-the complete one-step (discrete) network reference; continuous-model errors remain reported.
-Untransposed phase couplings can invalidate a fixed-dq comparison and remain explicit in analysis.
+Coarse scans use 23 active tones, onset 2.0 s, windows [16,24) and [24,32) s and 1.25 us
+integration. Half-step repeats use 0.625 us integration. Both use recorder ratio 25.
+The limits are 5 % complex error and 3 degrees phase error, with independent measurement checks.
+Zero-delay devices use the complete one-step (discrete) network reference.
 
 #### Redesigned P2P at 100 MW (`L4-01`)
 
-P6 retains two 1000 MVA MMCs, the 25 km cable/75 km DC overhead link and both AC overhead lines.
-Each AC grid has SCR 8 and X/R 10. Both converter transformers use 333/380, modulation delay is
-25 us, OCC PI is 0.25/100, voltage feedforward is filtered at 500 Hz, and voltage measurement at
-2 kHz. The receiving request is 100 MW. Ports are the two converter AC buses, each on 380 kV LL
-and 1000 MVA. The current per tone is 0.0002916349 pu before the half-amplitude repeat.
+The redesigned P2P has two 1000 MVA MMCs, a 25 km cable/75 km DC overhead link and AC overhead lines
+`tl1` (25 km) and `tl78` (90 km), both untransposed.
+Each grid has SCR 8 and X/R 10. Both converter transformers use 333/380, with 25 us modulation
+delay, OCC PI 0.25/100, 500 Hz voltage feedforward filtering and 2.0 kHz voltage measurement.
+The receiving request is 100 MW. Ports use 380 kV LL and 1000 MVA bases, with 2.916e-4 pu
+current per tone. The native build has 100 live nodes.
 
-#### IEEE14 from the stable study file (`L4-03`)
+With untransposed flat lines, c2 behind 90 km carries 2.7 % negative-sequence current and its bus
+has 0.32 % negative-sequence voltage. The c1 current behind 25 km has 0.68 % negative sequence.
+The ±100 Hz image response at c2 reaches 0.50 of the driven response. Blocks driven or measured
+at c2 have 14–21 % Frobenius error, while c1's own impedance agrees within 0.46 %.
+Every operating-point comparison passes. The untransposed coarse group takes 5537 s of station time.
 
-The complete Jan Kircheis circuit retains four MMCs, three wind farms, sixteen overhead lines,
-two DC cables and five active shunt loads. The selected baseline restores the documented standard
-WF1 PLL, uses the documented stable 250 us MMC2 delay, and corrects both cable jacket radii to
-61.2 mm. Other source parameters remain fixed. Measurement ports are MMC1 and MMC4 AC, on 380 kV
-LL and 1000 MVA; all seven converter current transfers remain separate. Numerical screen results
-and the finite-contour investigation are recorded with the offline data. Frequency refinement
-resolves the initial disagreement to zero on both finite contours, without parameter changes.
-The initial 100 kHz contour missed one full determinant-phase turn on its positive-frequency
-branch between 0 and 0.01 Hz. Refining that corner resolves the missing turn.
-Preparation requires a favorable finite screen; a solved power flow alone is insufficient.
+A transposed variant was built; its 25 km line's series impedance agrees with PSCAD's to
+7–8 digits, and PSCAD's shunt admittance is 0.047 % higher from the vacuum-permittivity
+difference (8.854e-12 F/m versus 8.85e-12 F/m).
+EMTDC's abnormal exit at the end of every tested 0.15–32 s measurement run with `Transp = 1`
+prevents measurement despite complete physical outputs; the same project with `Transp = 0`
+ends cleanly.
+
+#### IEEE14 (`L4-03`)
+
+The complete Jan Kircheis circuit has four MMCs, three wind farms, sixteen overhead lines,
+two DC cables and five active shunt loads. It uses the standard WF1 PLL, 250 us MMC2 delay
+and 61.2 mm cable jacket radii. Ports are MMC1 and MMC4 AC, on 380 kV LL and 1000 MVA bases.
+All seven converter current transfers remain separate. Export and offline screen results are
+retained. Both refined finite contours have zero closed right-half-plane counts. The 100 kHz
+contour requires refinement between 0 and 0.010 Hz to resolve a full determinant-phase turn on
+its positive-frequency branch. The distributed infinite spectrum remains unenumerated.
+The circuit is not measured because its 216 live nodes exceed the educational licence's 200-node limit.
 
 #### P2P with AC grids (`L4-04`)
 
-The Cigre 2026 study circuit retains its stable two-line topology, including the 90 km and 80 km
-parallel branches, 600 MW request and 300 MVAr receiving request. Both converter initial phase-RMS
-voltages are 220 kV. Ports are the two converter AC buses, on 380 kV LL and 1000 MVA. The original
-zero-delay devices use the one-step (discrete) reference. The current per tone is 0.0001 pu.
+The Cigre 2026 circuit uses untransposed 80 km and 90 km parallel AC lines, a 600 MW request
+and a 300 MVAr receiving request. Converter initial phase-RMS voltages are 220 kV. Ports use
+380 kV LL and 1000 MVA bases, with 1.0e-4 pu current per tone and the one-step (discrete) reference.
+Every operating-point quantity meets its limit except c2's arm-capacitor voltage sums:
+788.3–789.9 kV in PSCAD versus 798.6 kV in Julia, a 1.1–1.3 % error against 1 %.
 
-Short 0.01 s projects include both zero-amplitude current ports and full metering, with sheet size
-5. Native live-node build counts must precede long measurements; static bus counts serve only to
-describe the exported topology. Complete-network screens use the corrected distributed-line equations; their finite
-contours and located roots leave the infinite spectrum unenumerated.
+Baseline negative-sequence current is 1.35 % at c2 and 1.3–1.9 % in the line pair.
+The c2 bus has 0.61 % negative-sequence voltage. Its 100 Hz P/Q ripple is 0.60 % and 1.4 %
+of nominal. The ±100 Hz image ratio is 0.32–0.59. The same kind of MMC pair on balanced
+SCR-8 Thevenin grids without AC lines (`L3-07`), coupled by a 25 km DC cable, shows a
+±100 Hz image ratio of 0.0019. Blocks driven at c2 have about 49 % error,
+while c1's own impedance agrees within 0.40 %. The status is `model_mismatch`.
+Half-amplitude and half-step runs are not executed with this status. The coarse group takes 8794 s of station time.
 
-After the implementation is committed or merged, prepare selected systems and run the resilient
-queue from the validation environment:
+Prepare and run the two systems from the validation environment:
 
 ```julia
 using PythonCall
 include("test/manual/pscad/validation/validation.jl")
-PSCADValidation.prepare_l4(["L4-01", "L4-03", "L4-04"])
-PSCADValidation.run_l4(; timeout=100800.)
+PSCADValidation.prepare_l4(["L4-01", "L4-04"])
+PSCADValidation.run_l4(; ids=["L4-01", "L4-04"], timeout=100800.)
 ```
 
-Preparation refuses when HEAD differs from its required sources, documentation or tests. It also
-refuses an existing output directory or a failed finite stability screen. Predicted peak bounds
-are saved for review; measured excursions retain the 0.01 pu limit. This working copy is not
-prepared. By default the queue selects registered fixtures with prepared manifests. Each fixture
-failure is saved before the queue continues within its shared timeout. Operating points and system frequency responses have no
-native result yet.
-
-Each coarse system group uses eight runs. Estimated station time is 90–180 min for P6,
-240–600 min for IEEE14 and 90–180 min for
-P2P with AC grids. Each five-run growth group is estimated at 10–20 min. These estimates scale
-the existing MMC workflow by run duration and integration step; network and output costs are
-unmeasured.
+Preparation rejects changed required files, existing output directories and failed finite stability
+screens. Measured excursions must be ≤0.01 pu. The queue saves failures and continues within its timeout.
 
 ## Time-domain response procedure
 
@@ -792,43 +801,42 @@ and convolution tests establish numerical self-consistency, not measured nonline
 
 ## Instability-growth measurement
 
-The retained P2P network contains a 25 km DC cable and 75 km DC overhead line. At its solved Julia
-point, located roots +1374/+1426 s⁻¹ have dq frequencies 3429/3527 Hz. Their abc sidebands are
-3479/3477 Hz, with growth times 0.728/0.701 ms. The 1 us integration, 50 us sampled B3 phase-a
-trace fits 3473 Hz and 0.688 ms over 0.3–1.8 ms. This reproduces the unstable mode without
-establishing a settled operating point. The early-growth trace is retained evidence, separate from
-the current coherent frequency-response protocol. The developer mapping describes the
-modulation-delay/resonance interaction and unstable reduced-delay cases.
+The fixed-interval fresh-start procedure for the original P2P (`L4-00D`) and P2P with its 80 km
+AC line removed (`L4-04D`) does not yield a valid linear growth measurement. Runs use 1.0/0.5 us
+integration. EMTDC stops at 0.20 and 0.25 us with a zero diagonal at the star point of the MMC's
+ungrounded YY converter transformer. Steps of 0.50 and 1.0 us run.
 
-The new fixed-interval procedure applies to the original P2P (`L4-00D`) and the P2P with AC grids
-with its 80 km line removed (`L4-04D`). Both start from fresh solved initial values. They use
-0.002 s runs, 1.0/0.5 us integration and 5/2.5 us recording. EMTDC finds a zero diagonal at the star
-point of the ungrounded YY converter transformer below 0.5 us. A one-cycle Hann burst begins at zero,
-at 1e-7 pu, with dq polarization from the located native mode. The disconnected-line case keeps
-the original P2P's 3526.5564 Hz burst carrier so forcing ends before the fit. DC precharge remains active during
-the fixed [0.3,1.8) ms fit. Full-network roots remain the targets; precharged, exact-delay and applicable one-step
-sensitivities must fit within the unchanged frequency/growth limits before preparation.
+A fresh PSCAD start energises the uncharged AC lines. In the original P2P, c1's bus space vector
+rises from 2.3 kV at t = 0 s to 689 kV (about 2.2 pu) at 0.10 ms. Its upper-arm insertion index
+ranges from -3.3 to 1.1. Peak departure in the fixed [0.3,1.8) ms fit interval is 11.5 pu,
+against a 0.01 pu limit. Unforced, burst and half-amplitude records give the same fit:
+the 1.0e-7 pu burst has no measurable effect. The fitted growing mode is 3543 Hz and 1630 s⁻¹,
+versus Julia's 3479 Hz and 1374/1426 s⁻¹, with a 58 % relative residual.
+The result is `invalid_measurement`.
 
-The disconnected-line case has a located 160.63 Hz physical mode growing at 55.01/s. The fixed
-interval contains only 0.241 cycles. Its fit can remain unextractable under the unchanged interval
-and accuracy limits. DC precharge shifts its continuous-model growth to 59.95/s, about 9 %.
+For the disconnected-line circuit, the located mode is 160.6 Hz with growth 55.0 s⁻¹.
+It completes 0.24 cycles and grows by about 9.0 % in the interval. The fit is `unextractable`,
+and peak departure is 2.2 pu. An early-window linear growth measurement requires a start at
+the operating point, which PSCAD provides only through snapshot restarts.
 
-All three phases form complex Clarke vectors for both converter AC voltages and currents. The
-fit retains signed circular modes, their opposite carrier companions and fixed constant, linear
-and ±50 Hz backgrounds. Independent complex channel amplitudes are solved at each nonlinear
-frequency/growth iterate. Broad search ranges permit a wrong result to fail. Report frequency,
-positive growth `Re(λ)`, confidence intervals, residuals and fit condition. Intervals are
-conditional on the fitted model; correlated EMT noise can increase uncertainty. A fit outside its
-convergence or uncertainty checks is unextractable. The [0.3,1.5) and [0.6,1.8) ms fits are
-diagnostics; they cannot replace the primary interval.
+The supporting B3 phase-a trace, recorded at 1.0 us integration and 50 us sampling, fits
+3473 Hz and a 0.688 ms growth time (1453 s⁻¹) over 0.3–1.8 ms.
+The interval was chosen after inspecting the record.
 
-Each resolved mode requires frequency error ≤2 % and growth error ≤`max(0.10*abs(Re(λ)),0.5/s)`.
-Independent runs comprise unforced, burst, half-amplitude burst, half-step unforced and
-half-step burst. The fit uses each physical trace directly; an unforced growing trace is not
-subtracted before fitting. The amplitude comparison uses the separately retained unforced trace.
-Small excursions, closed precharge commands and arm insertion fractions within [0,1] are required
-in the fixed interval. Arm currents are retained in kA. Raw step changes and per-channel fits remain
-reported. Each invocation executes five fresh runs and retains earlier output directories.
+The implemented procedure uses five independent fresh 2.0 ms runs: unforced, burst,
+half-amplitude burst, half-step unforced and half-step burst. Recording steps are 5.0/2.5 us.
+A one-cycle Hann burst starts at zero with 1.0e-7 pu amplitude and the located mode's dq
+polarization. The disconnected-line circuit uses a 3527 Hz carrier so forcing ends before the fit.
+DC precharge remains active during the fixed fit interval.
+
+Complex Clarke vectors from both converter AC voltages and currents are fitted directly,
+without subtracting the unforced trace. The model includes signed circular modes, opposite
+carrier companions and constant, linear and ±50 Hz backgrounds, with independent complex
+channel amplitudes. The [0.3,1.5) and [0.6,1.8) ms fits are diagnostics only.
+Frequency error must be ≤2 % and growth error ≤`max(0.10*abs(Re(λ)),0.5/s)`.
+Departure must be ≤0.01 pu, precharge commands closed and arm insertion fractions within [0,1]
+in the fit interval. Convergence and uncertainty checks apply independently.
+Reported results include confidence intervals, residuals, fit condition and per-channel fits.
 
 ```julia
 PSCADValidation.prepare_l4(["L4-00D", "L4-04D"])
@@ -840,6 +848,10 @@ PSCADValidation.run_l4(; ids=["L4-00D", "L4-04D"], timeout=2400.)
 | Symptom | Cause | Remedy or interpretation |
 |---|---|---|
 | Growing modes from fixed-frame dq line reduction | Julia's fixed-frame dq reduction of an untransposed line can be non-passive. For the 170 km IEEE9 line, the minimum Hermitian admittance is -0.005134 S in dq versus +0.0005009 S in phase coordinates. With a 100 MVA TLC at bus 2, the dq model predicts a growing pair near 124.24/124.34 kHz (+2.37 s⁻¹); the phase-domain harmonic calculation gives -670.4 s⁻¹, converged at K=1..3. | Dq-frame frequency-response and stability comparisons are invalid for systems with significant asymmetry in their untransposed lines at the frequencies of interest; compare in the phase domain instead. |
+| ±100 Hz image coupling occurs at a converter behind untransposed AC lines. | Steady negative-sequence unbalance makes the operating point periodic in dq. | Compare in the phase domain; ideal transposition triggers an EMTDC termination fault in these PSCAD projects. |
+| EMTDC exits abnormally at the end of runs with `Transp = 1`. | PSCAD has a fault with ideally transposed lines in these projects; outputs are complete. | The exporter has no remedy; use untransposed lines or another line representation for PSCAD runs. |
+| EMTDC reports a zero diagonal at a converter-transformer star point at small steps. | The MMC converter transformer has an ungrounded YY star. | Use an integration step of 0.50 us or larger. |
+| An unstable network cannot be measured from a fresh start. | Uncharged AC lines energise at t = 0 s. | An early-window linear growth fit requires snapshot restarts at the operating point. |
 | Inconsistent low-frequency voltage phasors despite clean currents | EMT-Nyquist voltage chatter aliases to DC at even recorder/integration ratios | Prepare an odd integer ratio at both steps and preserve coherent windows. Adjacent decimation offsets correlated -0.999, offsets two apart +0.998; 0.74–0.85 V RMS chatter persisted after onset. Ratio 25 separates it at recorder Nyquist. |
 | Zero-delay converter Y/step errors rise with frequency | One inherent electrical-measurement-to-source step | Use the one-step (discrete) model and residual step-size check, retaining continuous model errors and raw step changes and KCL readout checks. Positive delays export a rounded residual after subtracting one step. |
 | Machine step change exceeds 1 % in the shared machine/MMC circuit | PSCAD machine discretisation is at the step-size edge at 1.25/0.625 us | The machine column in `L3-06` is valid but fails the raw entry-change limit at 1.117 %; aggregate Y also fails at 1.34 %. The standalone machine passed at 0.90 %. A finer repeat requires 80 s runs at 0.3125 us. Apply the residual rule only to eligible blocks. |

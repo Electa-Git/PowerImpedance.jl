@@ -228,10 +228,16 @@ developer mapping lists the saved source/breaker fields, pins and release comman
   exportable. Cable `eliminate = false` requires unsupported exposed
   sheath/armour interfaces. AC phase counts other than three and DC line
   conductor counts other than two are unsupported.
-- An unstable Julia operating point can diverge in PSCAD. The recorded P2P
-  example reproduces an unstable mode near 3.48 kHz with a growth time near
-  0.7 ms; that is dynamic-validation evidence, without steady-state acceptance.
-  See the [P2P record](developers/pscad_mapping.md#P2P-instability).
+- Untransposed AC lines can produce negative-sequence unbalance and ±100 Hz image coupling,
+  invalidating fixed-frame dq comparisons; compare in the phase domain. The option
+  `transposition = :ideal` maps to `Transp = 1`, but PSCAD 5.1 runs with this flag exit
+  abnormally at termination in the validation measurement projects, so it is not a working
+  PSCAD route.
+- The P2P example diverges in PSCAD at its unstable Julia operating point, with a growing
+  mode near 3.48 kHz and a growth time near 0.70 ms, consistent with Julia's located roots.
+  Fresh-start fits are not valid linear measurements because AC line energisation exceeds
+  the 0.01 pu departure limit. Early-window measurement requires snapshot restarts at the
+  operating point. See the [P2P record](developers/pscad_mapping.md#P2P-instability).
 
 Voltage probes on temporarily pre-charged DC networks measure an existing
 conducting node label directly, using the same line-to-ground voltage function

@@ -35,7 +35,7 @@ Other phase counts are not implemented yet.
 |---|---|---|
 | `conductors.organization` / `positions` | `XC1..3`, `YC1..3` | m; tower bundle centres in native physical order |
 | `conductors.nᵇ` | tower `Nc`, wrapper `Dim` | 3 phases after ground-wire elimination |
-| `transposition` | `Transp` | `transposition = :ideal` maps to `Transp = 1`. The default `:none` maps to `0` |
+| `transposition` | `Transp` | `transposition = :ideal` maps to `Transp = 1`. The default `:none` maps to `0`. EMTDC exits abnormally at termination with `Transp = 1` in the PSCAD 5.1 validation measurement projects, despite complete physical outputs. |
 | `conductors.rᶜ` | `RadiusC` | m |
 | `conductors.Rᵈᶜ` | `DCResC` | ohm/km per subconductor |
 | `conductors.μᵣᶜ` | `PERMC` | relative permeability |
@@ -781,6 +781,16 @@ stability comparisons are invalid for systems with significant asymmetry in thei
 untransposed lines at the frequencies of interest; compare in the phase domain
 instead.
 
+Untransposed AC lines produce steady negative-sequence unbalance and ±100 Hz image coupling
+that a fixed-frame dq LTI comparison omits. With untransposed flat lines, the redesigned P2P's
+c2 current has 2.7 % negative sequence and its bus voltage has 0.32 % negative sequence;
+the image ratio reaches 0.50 and response errors are 14–21 %. The P2P circuit with AC grids
+has 1.35 % negative-sequence current and 0.61 % negative-sequence bus voltage at c2,
+image ratios of 0.32–0.59 and about 49 % response error.
+The redesigned P2P uses untransposed lines; compare in the phase domain. Ideal transposition
+remains available, but EMTDC exits abnormally at termination in these PSCAD projects with
+`Transp = 1`, so it does not provide a working PSCAD measurement.
+
 ### Line fitting and DC extrapolation
 
 Tighter `YMaxE=AMaxE=0.02 %` targets reduce fit-versus-own-constants terminal-Y
@@ -834,9 +844,10 @@ The 25 km cable plus 75 km DC OHL system is unstable at its Julia operating
 point. Located roots are +1374/+1426 s⁻¹ at
 3429/3527 Hz dq; abc sidebands are 3479/3477 Hz, with
 0.728/0.701 ms growth times. The recorded PSCAD trace fits 3473 Hz and
-0.688 ms over 0.3–1.8 ms. This measures instability growth, without a
-steady-state pass. Differential modulation-delay states account for 98.81–98.84%
-of explicit converter-state participation; distributed-line states are excluded.
+0.688 ms over 0.3–1.8 ms, an interval chosen after inspecting the record.
+Fresh-start early-window fits are invalid because line energisation produces 11.5 pu
+peak departure against the 0.01 pu limit. Differential modulation-delay states account
+for 98.81–98.84 % of explicit converter-state participation; distributed-line states are excluded.
 
 The 200 us delay interacts with the roughly 3 kHz OHL resonance. The builder
 screen gives converter `c1` the AC interface of converter `c2`: 333 kV, ratio 333/380,
