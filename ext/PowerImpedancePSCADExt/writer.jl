@@ -123,10 +123,32 @@ function write_module_definition!(project, plan::PSCAD.ModuleDefinitionPlan)
     return nothing
 end
 
+# mhi-xml stores the creating user's login name, read with os.getlogin(). That call
+# fails in processes without a login session (containers, services, CI jobs); the
+# account name from getpass is used for that one call instead.
+function _create_project_file(path::String)
+    os = PythonCall.pyimport("os")
+    has_login = try
+        os.getlogin()
+        true
+    catch failure
+        failure isa PythonCall.PyException || rethrow()
+        false
+    end
+    has_login && return _mhi_xml().ProjectFile.create(path)
+    getlogin = os.getlogin
+    PythonCall.pysetattr(os, "getlogin", PythonCall.pyimport("getpass").getuser)
+    try
+        return _mhi_xml().ProjectFile.create(path)
+    finally
+        PythonCall.pysetattr(os, "getlogin", getlogin)
+    end
+end
+
 function PSCAD._write_project(plan::PSCAD.ProjectPlan,
         path::AbstractString)::NamedTuple{(:path, :mhi_xml_version), Tuple{String, String}}
     PSCAD.check_connectivity(plan)
-    project = _mhi_xml().ProjectFile.create(String(path))
+    project = _create_project_file(String(path))
     main = project.canvas("Main")
     parameters = project.parameters
     for (key, value) in plan.settings.params

@@ -43,6 +43,27 @@ else
     runner = Module(:GeometryRunner)
     Core.eval(runner, :(include(path) = Base.include($runner, path)))
     Base.include(runner, joinpath(@__DIR__, "../../src/PSCAD/remote/runner.jl"))
+    @testset "Export without a login session" begin
+        # os.getlogin raises OSError in processes without a login session.
+        os = pyimport("os")
+        getlogin = os.getlogin
+        pyexec("def _no_login():\n    raise OSError(6, 'No such device or address')", Main)
+        no_login = pyeval("_no_login", Main)
+        os.getlogin = no_login
+        try
+            mktempdir() do directory
+                classic, _ = PSCADFixtures.small_ac_network()
+                path = joinpath(directory, "no_login.pscx")
+                export_pscad(classic; path, settings = P.SimulationSettings(
+                    simulation_time = 0.1, time_step = 50e-6, sample_step = 250e-6))
+                @test isfile(path)
+                @test pyconvert(String, etree.parse(path).getroot().get("name")) == "no_login"
+            end
+            @test pyis(os.getlogin, no_login)
+        finally
+            os.getlogin = getlogin
+        end
+    end
     @testset "Sheet size, coordinate bounds and load relocation" begin
         mktempdir() do directory
             path = joinpath(directory, "geometry.pscx")
