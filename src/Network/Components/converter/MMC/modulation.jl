@@ -149,7 +149,14 @@ function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
                         -vCΔ_q          vCΔ_d           -2 * vCΔ_Zq             vCΣ_q               -vCΣ_d              0          -2 * vCΣ_z]
     
     # For optimization, the matrix VΣΔ_CmdqZ could be inversed or factorized (symbolically) beforehand. But is it needed/better?
-    (mΣd, mΣq, mΣz, mΔd, mΔq, mΔZd, mΔZq) = VΣΔ_CmdqZ \ [vMΣ_d_ref; vMΣ_q_ref; vMΣ_z_ref; vMΔ_d_ref; vMΔ_q_ref; 0; 0] # vΔZdq are set to zero by controller, but mΔZdq can be different from zero
+    references = [vMΣ_d_ref; vMΣ_q_ref; vMΣ_z_ref; vMΔ_d_ref; vMΔ_q_ref; 0; 0] # vΔZdq are set to zero by controller, but mΔZdq can be different from zero
+    # A singular capacitor-voltage matrix has no insertion indices. NaN marks the
+    # point as invalid, so a steady-state solver rejects the iterate instead of
+    # aborting; regular points use the same LU solve as `\`.
+    factorization = LinearAlgebra.lu(VΣΔ_CmdqZ; check = false)
+    insertion = LinearAlgebra.issuccess(factorization) ? factorization \ references :
+                fill(oftype(first(references), NaN), length(references))
+    (mΣd, mΣq, mΣz, mΔd, mΔq, mΔZd, mΔZq) = insertion
 
     # Pade delays
     y, i = state_space_block!(F, x, (mΔd, mΔq), b.delay1, conv, 1)
