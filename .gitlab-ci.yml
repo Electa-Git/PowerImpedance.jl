@@ -97,6 +97,13 @@ variables:
     KUBERNETES_MEMORY_REQUEST: "8Gi"
 
 
+.julia_plotting_precompile:
+  # Makie and its extensions each need most of the job's memory while they
+  # precompile; two parallel precompile workers exceed the runner's limit.
+  variables:
+    JULIA_NUM_PRECOMPILE_TASKS: "1"
+
+
 .julia_formatter_resources:
   variables:
     KUBERNETES_CPU_REQUEST: "1"
@@ -224,7 +231,7 @@ extension_tests:
 
 
 plotting_tests:
-  extends: .julia_heavy_resources
+  extends: [.julia_heavy_resources, .julia_plotting_precompile]
   image: julia:1.12.6-bookworm
   stage: test
   timeout: 1h
@@ -306,7 +313,7 @@ formatter:
 
 
 docs_check:
-  extends: .julia_heavy_resources
+  extends: [.julia_heavy_resources, .julia_plotting_precompile]
   image: julia:1.12.6-bookworm
   stage: docs
   needs:
@@ -620,7 +627,7 @@ github_release_coverage:
 # ---------------------------------------------------------------------------
 
 pages:
-  extends: .julia_heavy_resources
+  extends: [.julia_heavy_resources, .julia_plotting_precompile]
   image: julia:1.12.6-bookworm
   stage: deploy
   cache:
