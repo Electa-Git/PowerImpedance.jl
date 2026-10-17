@@ -35,6 +35,7 @@ Other phase counts are not implemented yet.
 |---|---|---|
 | `conductors.organization` / `positions` | `XC1..3`, `YC1..3` | m; tower bundle centres in native physical order |
 | `conductors.nᵇ` | tower `Nc`, wrapper `Dim` | 3 phases after ground-wire elimination |
+| `transposition` | `Transp` | `transposition = :ideal` maps to `Transp = 1`. The default `:none` maps to `0` |
 | `conductors.rᶜ` | `RadiusC` | m |
 | `conductors.Rᵈᶜ` | `DCResC` | ohm/km per subconductor |
 | `conductors.μᵣᶜ` | `PERMC` | relative permeability |
@@ -52,7 +53,7 @@ Other phase counts are not implemented yet.
 | `earth_parameters = (μᵣ, ϵᵣ, ρ)` | `GPERM`, `GRP`, `GRRES` | relative permeability, relative permittivity, ohm*m |
 | `length / 1e3` | wrapper `Length` | km |
 | `settings.frequency` | wrapper `Freq`, display `DataF` | Hz |
-| Native untransposed solid conductors | `Transp=0`, `Hollow=0`, `CDataType=1`, `GDataType=1` | direct material data |
+| Native solid conductors | `Hollow=0`, `CDataType=1`, `GDataType=1` | direct material data |
 | Three-phase single-line wiring | wrapper `Mode=1`, `Dim=3` | first vertex sends, last receives |
 
 Julia and PSCAD both subtract two thirds of conductor sag during evaluation.

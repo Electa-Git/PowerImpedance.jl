@@ -65,6 +65,14 @@ $(TYPEDFIELDS)
 	positions::Tuple{Vector{Union{Int, Float64}}, Vector{Union{Int, Float64}}} = ([], [])    # add absolute positions manually
 end
 
+function _ohl_transposition(transposition, phases::Int)
+    transposition === :none || transposition === :ideal ||
+        throw(ArgumentError("Overhead-line transposition must be :none or :ideal."))
+    transposition == :ideal && phases != 3 &&
+        throw(ArgumentError("Ideal transposition requires exactly three phase bundles."))
+    return nothing
+end
+
 """
 $(TYPEDEF)
 
@@ -82,16 +90,19 @@ $(TYPEDFIELDS)
 	groundwires::Groundwires = Groundwires()
 	"Earth relative permeability, relative permittivity, and resistivity `\\[Ω·m\\]`."
 	earth_parameters::NTuple{N, Union{Int, Float64}} where N = (1, 1, 1) # (μᵣ_earth, ϵᵣ_earth, ρ_earth) in units ([], [], [Ωm])
+	"Phase transposition, `:none` or `:ideal` (three phase bundles only). Default: `:none`."
+	transposition::Symbol = :none
 
-
-
-
+	function Overhead_line(length, conductors, groundwires, earth_parameters, transposition)
+		_ohl_transposition(transposition, conductors.nᵇ)
+		return new(length, conductors, groundwires, earth_parameters, transposition)
+	end
 end
 
 """
     overhead_line(; length=0, conductors=Conductors(),
                   groundwires=Groundwires(), earth_parameters=(1, 1, 1),
-                  transformation=false, connection=true)
+                  transposition=:none, transformation=false, connection=true)
 
 Construct a frequency-dependent overhead transmission-line element.
 
@@ -102,6 +113,8 @@ Construct a frequency-dependent overhead transmission-line element.
 - `groundwires`: Optional ground-wire geometry and material data.
 - `earth_parameters`: Earth relative permeability `\\[dimensionless\\]`,
   relative permittivity `\\[dimensionless\\]`, and resistivity `\\[Ω·m\\]`.
+- `transposition`: Phase transposition, `:none` (default) or `:ideal` for
+  exactly three phase bundles.
 - `transformation`: Whether to expose a supported transformed representation.
 - `connection`: Whether NetworkBuilder includes the element in the system.
 
@@ -115,11 +128,16 @@ Construct a frequency-dependent overhead transmission-line element.
 `:vertical`, `:delta`, `:offset`, and `:concentric` organizations. Frequency
 evaluation retains the complete self and mutual series-impedance and shunt-
 admittance matrices.
+Ideal transposition averages the reduced series impedance and potential
+coefficients over equal lengths in the three cyclic phase positions, with
+sections short relative to the wavelength.
 
 # Errors
 
 - Throws `ArgumentError` for an unknown keyword or an unsupported conductor
   organization/order during parameter evaluation.
+- Throws `ArgumentError` for an unsupported transposition or ideal
+  transposition with a phase-bundle count other than three.
 
 # Examples
 
@@ -142,10 +160,13 @@ line = overhead_line(
 """
 function overhead_line(; args...)
 	tl = Overhead_line()
+	transposition = :none
 	transformation = false
 	connection = true
 	for (key, val) in pairs(args)
-		if in(key, propertynames(tl))
+		if key == :transposition
+			transposition = val
+		elseif in(key, propertynames(tl))
 			setfield!(tl, key, val)
 		elseif key == :transformation
 			transformation = val
@@ -155,6 +176,8 @@ function overhead_line(; args...)
 			throw(ArgumentError("Unknown property $(key) of the overhead line."))
 		end
 	end
+	_ohl_transposition(transposition, tl.conductors.nᵇ)
+	tl.transposition = transposition
 
 	# No P/Z assembly here anymore (no symbolics).
 	# P and Z fields remain in the struct (architecture unchanged), but are unused.
@@ -311,6 +334,7 @@ function _ohl_groundwire_coordinates(tl::Overhead_line)
 end
 
 function eval_parameters(tl::Overhead_line, s::Complex)
+	_ohl_transposition(tl.transposition, tl.conductors.nᵇ)
 	# ---------- constants ----------
 	(μᵣ_earth, ϵᵣ_earth, ρ_earth) = tl.earth_parameters
 	μ₀ = 4π * 1e-7
@@ -413,6 +437,11 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 		cond_noElim = [(i-1)*tl.conductors.nˢᵇ + 1 for i in 1:tl.conductors.nᵇ]
 		Z = PowerImpedance.kron(Z, cond_noElim)
 		P = PowerImpedance.kron(P, cond_noElim)
+	end
+
+	if tl.transposition == :ideal
+		Z = (Z + Z[[2, 3, 1], [2, 3, 1]] + Z[[3, 1, 2], [3, 1, 2]]) / 3
+		P = (P + P[[2, 3, 1], [2, 3, 1]] + P[[3, 1, 2], [3, 1, 2]]) / 3
 	end
 
 	# ---------- invert P to get Y ----------

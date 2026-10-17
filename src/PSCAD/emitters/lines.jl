@@ -92,7 +92,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
     xg, yg = PowerImpedance._ohl_groundwire_coordinates(tl)
     row = pscad_name(e.pscad * "_row"; used = state.used)
     tower = [
-        "TName" => row, "Transp" => pscad_value(0),
+        "TName" => row, "Transp" => pscad_value(tl.transposition == :ideal ? 1 : 0),
         "CDataType" => pscad_value(1), "Hollow" => pscad_value(0),
         "RadiusC" => pscad_value(c.rᶜ; unit = "m"),
         "DCResC" => pscad_value(c.Rᵈᶜ; unit = "ohm/km"),

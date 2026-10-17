@@ -4,6 +4,9 @@
 
 ### Added
 
+- `overhead_line(; transposition = :ideal)` models an ideally transposed
+  three-phase line by averaging the series impedance and potential coefficients
+  over the three phase positions. PSCAD exports set `Transp = 1` for these lines.
 - Add `DCVoltageSupportLag` for MMC/TLC active-power control and map legacy
   `vdc_droop`, changing results for those formerly ignored legacy controls;
   existing constructions retain their results. Power-flow reference and slope

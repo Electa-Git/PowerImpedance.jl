@@ -5,6 +5,14 @@
     @test length(original.elements)==8
     @test p6.elements[:ugc].element_model.length==25e3
     @test p6.elements[:ohl].element_model.length==75e3
+    @test all(p6.elements[name].element_model.transposition==:ideal for name in (:tl1,:tl78))
+    @test p6.elements[:ohl].element_model.transposition==:none
+    @test all(e.element_model.transposition==:none for e in values(original.elements)
+        if e.element_model isa Overhead_line)
+    for id in ("L4-04","L4-04D")
+        @test all(e.element_model.transposition==:none for e in values(V.fixture(id).factory().elements)
+            if e.element_model isa Overhead_line)
+    end
     for name in (:c1,:c2)
         m=p6.elements[name].element_model
         @test m.elec.turnsRatio==333/380

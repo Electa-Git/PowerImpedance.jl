@@ -28,6 +28,100 @@ function old_chain(Z, Y, length)
     return [a yc \ h; yc * h a]
 end
 
+include("data/ohl_untransposed_reference.jl")
+
+function overhead_models()
+    ac = first(line_models())
+    bundled = deepcopy(ac)
+    bundled.conductors.nˢᵇ = 2
+    bundled.conductors.dˢᵇ = 0.45
+    dc = overhead_line(length = 75e3,
+        conductors = Conductors(organization = :flat, nᵇ = 2, nˢᵇ = 1,
+            Rᵈᶜ = 0.0266, rᶜ = 0.0224, yᵇᶜ = 18.0, Δxᵇᶜ = 7.3, dˢᵃᵍ = 6.0),
+        groundwires = Groundwires(nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
+            Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0),
+        earth_parameters = (1, 1, 100)).element_model
+    dc_bundle = deepcopy(dc)
+    dc_bundle.conductors.nˢᵇ = 2
+    dc_bundle.conductors.dˢᵇ = 0.45
+    dc_bundle.conductors.Rᵈᶜ = 0.0598
+    dc_bundle.conductors.rᶜ = 30.42e-3 / 2
+    return (ac, bundled, dc, dc_bundle)
+end
+
+@testset "Overhead-line transposition" begin
+    @testset "Untransposed parameter preservation" begin
+        for model in overhead_models(), frequency in (1.0, 50.0, 137.0, 1e3, 1e4, 1e6)
+            s = ComplexF64(2π * frequency * im)
+            @test model.transposition == :none
+            Z, Y = PI.eval_parameters(model, s)
+            Z0, Y0 = untransposed_reference(model, s)
+            @test isequal(Z, Z0)
+            @test isequal(Y, Y0)
+            explicit = deepcopy(model)
+            explicit.transposition = :none
+            @test isequal(PI.eval_parameters(explicit, s), (Z, Y))
+        end
+    end
+    @testset "Cyclic phase averages and sequence decoupling" begin
+        R = [0.0 1 0; 0 0 1; 1 0 0]
+        q = ComplexF64[1, cis(-2π / 3), cis(2π / 3)]
+        sequence = [ones(ComplexF64, 3) q conj(q)] / sqrt(3)
+        for model in overhead_models()[1:2], frequency in (1.0, 50.0, 137.0, 1e3, 1e4, 1e6)
+            s = ComplexF64(2π * frequency * im)
+            Z0, Y0 = untransposed_reference(model, s)
+            # Recover reduced potential coefficients before averaging. Averaging
+            # Y instead would give different positive-sequence capacitance.
+            P0 = inv((Y0 - model.conductors.gᶜ * I) / s)
+            Zt = (Z0 + R * Z0 * R' + R^2 * Z0 * (R^2)') / 3
+            Pt = (P0 + R * P0 * R' + R^2 * P0 * (R^2)') / 3
+            Yt = s * inv(Pt) + model.conductors.gᶜ * I
+            transposed = deepcopy(model)
+            transposed.transposition = :ideal
+            Z, Y = PI.eval_parameters(transposed, s)
+            @test Z ≈ Zt rtol = 1e-13
+            @test Y ≈ Yt rtol = 1e-13
+            for M in (Z, Y)
+                @test diag(M) ≈ fill(M[1, 1], 3) rtol = 1e-13
+                @test [M[i, j] for i in 1:3 for j in 1:3 if i != j] ≈
+                    fill(M[1, 2], 6) rtol = 1e-13
+                transformed = sequence' * M * sequence
+                @test norm(transformed - Diagonal(diag(transformed))) <= 1e-13norm(M)
+            end
+            @test dot(q, Z * q) / 3 ≈ dot(q, Zt * q) / 3 rtol = 1e-13
+            @test dot(q, Y * q) / 3 ≈ dot(q, Yt * q) / 3 rtol = 1e-13
+            zero = zeros(ComplexF64, 3, 3)
+            forward = exp(transposed.length * [zero -Zt; -Yt zero])
+            signs = Diagonal([ones(3); -ones(3)])
+            reference = signs * forward * signs
+            chain = PI.eval_abcd(transposed, s)
+            for rows in (1:3, 4:6), columns in (1:3, 4:6)
+                @test chain[rows, columns] ≈ reference[rows, columns] rtol = 1e-10
+            end
+        end
+    end
+    @testset "Transposition input validation" begin
+        @test overhead_line(conductors = Conductors(nᵇ = 3),
+            transposition = :ideal).element_model.transposition == :ideal
+        for value in (:unknown, :Ideal, Symbol(), "ideal", 1, nothing, missing)
+            @test_throws ArgumentError overhead_line(transposition = value)
+            @test_throws ArgumentError Overhead_line(transposition = value)
+        end
+        for n in (1, 2, 4, 6)
+            @test_throws ArgumentError overhead_line(conductors = Conductors(nᵇ = n),
+                transposition = :ideal)
+            @test_throws ArgumentError Overhead_line(conductors = Conductors(nᵇ = n),
+                transposition = :ideal)
+        end
+        mutated = first(overhead_models())
+        mutated.transposition = :unknown
+        @test_throws ArgumentError PI.eval_parameters(mutated, ComplexF64(50im))
+        mutated.transposition = :ideal
+        mutated.conductors.nᵇ = 2
+        @test_throws ArgumentError PI.eval_parameters(mutated, ComplexF64(50im))
+    end
+end
+
 @testset "Multiconductor chain matrices" begin
     for model in line_models(), frequency in (1.0, 50.0, 1e3, 1e4, 1e5, 1e6)
         @testset "$(nameof(typeof(model))), $frequency Hz" begin

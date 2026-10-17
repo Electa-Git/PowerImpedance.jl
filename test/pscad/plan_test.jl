@@ -4,6 +4,16 @@ using ..PSCADFixtures: small_ac_network, passive_ohl_network, transformer_networ
                        dc_network
 const P = PowerImpedance.PSCAD
 
+@testset "PSCAD overhead-line transposition" begin
+    classic, _ = passive_ohl_network()
+    model = classic.elements[:line].element_model
+    for (transposition, expected) in ((:none, "0"), (:ideal, "1"))
+        model.transposition = transposition
+        plan = P.build_plan(P.netlist(classic, nothing))
+        @test Dict(only(plan.lines).tower)["Transp"] == expected
+    end
+end
+
 @testset "PSCAD short overhead line warning" begin
     classic, _ = passive_ohl_network()
     classic.elements[:line].element_model.length = 100.0
