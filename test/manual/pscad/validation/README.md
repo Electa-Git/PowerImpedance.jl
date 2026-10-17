@@ -802,7 +802,8 @@ modulation-delay/resonance interaction and unstable reduced-delay cases.
 
 The new fixed-interval procedure applies to the original P2P (`L4-00D`) and the P2P with AC grids
 with its 80 km line removed (`L4-04D`). Both start from fresh solved initial values. They use
-0.002 s runs, 0.2/0.1 us integration and 5/2.5 us recording. A one-cycle Hann burst begins at zero,
+0.002 s runs, 1.0/0.5 us integration and 5/2.5 us recording. EMTDC finds a zero diagonal at the star
+point of the ungrounded YY converter transformer below 0.5 us. A one-cycle Hann burst begins at zero,
 at 1e-7 pu, with dq polarization from the located native mode. The disconnected-line case keeps
 the original P2P's 3526.5564 Hz burst carrier so forcing ends before the fit. DC precharge remains active during
 the fixed [0.3,1.8) ms fit. Full-network roots remain the targets; precharged, exact-delay and applicable one-step

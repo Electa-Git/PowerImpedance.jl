@@ -34,11 +34,15 @@
     @test V.l4_growth_fit(irregular,data,seeds)["status"]=="unextractable"
     abc=hcat([cos.(2π*3478 .*time .+phase) for phase in (0.,-2π/3,2π/3)]...)
     @test V.l4_space_vector(abc) ≈ cis.(2π*3478 .*time)
-    spec=(time_step=.2e-6,sample_step=5e-6,tone_peak_pu=1e-7,driven_axis="p1_d")
+    spec=(time_step=1e-6,sample_step=5e-6,tone_peak_pu=1e-7,driven_axis="p1_d")
     variants=V.l4_growth_variants(spec)
     @test length(variants)==5
-    @test variants[4].spec.time_step==.1e-6
+    @test variants[4].spec.time_step==.5e-6
     @test variants[4].spec.sample_step==2.5e-6
+    @test all(variants) do variant
+        ratio=variant.spec.sample_step/variant.spec.time_step
+        isapprox(ratio,round(ratio)) && isodd(round(Int,ratio))
+    end
     @test variants[3].spec.tone_peak_pu==5e-8
     probes=P.ProbeChannel[P.ProbeChannel("precharge_dc_open",:precharge_command,nothing,nothing,nothing,1,"pu")]
     append!(probes,[P.ProbeChannel("m_$(half)_$phase",:converter_diagnostic,nothing,"c1","2",1,"pu")

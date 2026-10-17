@@ -1,5 +1,6 @@
 const L4_GROWTH_WINDOW=(.0003,.0018)
 const L4_GROWTH_LIMITS=(frequency=.02,growth=.10,growth_floor=.5)
+const L4_GROWTH_STEPS=(main=1e-6,half=.5e-6)
 
 function l4_space_vector(abc)
     size(abc,2)==3 || throw(ArgumentError("three physical phases are required"))
@@ -120,13 +121,13 @@ function l4_growth_spec(id,list,modes)
     return merge(base,(;id,stimulus="hann_burst",protocol="growth",frequencies=[carrier],
         phases=[0.],carrier_Hz=carrier,burst_cycles=1,
         burst_polarization=dominant.polarization,injection_time=0.,tone_peak_pu=1e-7,
-        ringdown=L4_GROWTH_WINDOW,simulation_time=.002,time_step=.2e-6,sample_step=5e-6,
+        ringdown=L4_GROWTH_WINDOW,simulation_time=.002,time_step=L4_GROWTH_STEPS.main,sample_step=5e-6,
         window_starts=(.0003,.00105),window_duration=.00075,driven_axis="p1_d",recorder_scope="",
         estimated_station_seconds=1200))
 end
 
 function l4_growth_variants(spec)
-    half=merge(spec,(;time_step=.1e-6,sample_step=2.5e-6))
+    half=merge(spec,(;time_step=L4_GROWTH_STEPS.half,sample_step=2.5e-6))
     amplitude=merge(spec,(;tone_peak_pu=spec.tone_peak_pu/2,baseline_template="g_baseline"))
     return [(key="g_baseline",spec=spec,axis="baseline",prefix="g_"),
         (key="g_"*spec.driven_axis,spec=spec,axis=spec.driven_axis,prefix="g_"),
@@ -184,8 +185,8 @@ function l4_growth_sensitivity(c,modes)
     early=L4System(c.net,c.devices,c.grids,filter(!in(dc),c.nodes),c.ports,Dict{Symbol,Float64}(),c.measurands)
     exact=Dict(n=>l4_exact_modulation_y(c.net.elements[n]) for n in c.devices)
     discrete=any(interface_step_eligible(c.net.elements[n].element_model) for n in c.devices)
-    main_functions=discrete ? composed_device_functions(c;time_step=.2e-6) : functions
-    half_functions=discrete ? composed_device_functions(c;time_step=.1e-6) : functions
+    main_functions=discrete ? composed_device_functions(c;time_step=L4_GROWTH_STEPS.main) : functions
+    half_functions=discrete ? composed_device_functions(c;time_step=L4_GROWTH_STEPS.half) : functions
     return [begin
         precharged,pr=composed_refine_root(early,functions,m.root)
         exact_root,er=composed_refine_root(c,exact,m.root)
@@ -228,7 +229,7 @@ function prepare_l4_growth(setup;directory,remote)
     models=prepare_scan_projects(directory,list,spec,[spec.driven_axis];prefix="g_",remote)
     amp=merge(spec,(;tone_peak_pu=spec.tone_peak_pu/2,baseline_template="g_baseline"))
     append!(models,filter(x->x.first!="g_half_amplitude_baseline",prepare_scan_projects(directory,list,amp,[spec.driven_axis];prefix="g_half_amplitude_",remote)))
-    half=merge(spec,(;time_step=.1e-6,sample_step=2.5e-6))
+    half=merge(spec,(;time_step=L4_GROWTH_STEPS.half,sample_step=2.5e-6))
     append!(models,prepare_scan_projects(directory,list,half,[spec.driven_axis];prefix="gh_",remote))
     roots=[m.signed_root for m in modes]
     record=preparation_record(entry,Dict("status"=>"deliberately_unstable"),models;directory)
@@ -236,7 +237,7 @@ function prepare_l4_growth(setup;directory,remote)
     record["prepared_run_paths"]=paths;record["growth_reference_real_per_s"]=real.(roots)
     record["growth_reference_signed_Hz"]=imag.(roots)./(2π)
     record["growth_sensitivity"]=sensitivity;record["fixed_fit_interval_s"]=collect(L4_GROWTH_WINDOW)
-    record["growth_protocol"]=Dict("time_step_s"=>.2e-6,"half_time_step_s"=>.1e-6,
+    record["growth_protocol"]=Dict("time_step_s"=>L4_GROWTH_STEPS.main,"half_time_step_s"=>L4_GROWTH_STEPS.half,
         "sample_step_s"=>5e-6,"half_sample_step_s"=>2.5e-6,"amplitude_pu"=>spec.tone_peak_pu,
         "carrier_Hz"=>spec.carrier_Hz,"polarization_real"=>real.(spec.burst_polarization),
         "polarization_imag"=>imag.(spec.burst_polarization),"fit"=>"signed circular modes and their carrier companions; fixed nominal background",
