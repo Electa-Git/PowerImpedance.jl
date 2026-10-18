@@ -359,3 +359,12 @@ if !running_in_ci()
 end
 
 @info "Finished docs build."
+
+# Makie frees every root scene in a task started by the scene's finalizer. When
+# such a task first runs during process exit, Julia compiles its code while the
+# runtime shuts down, which crashed the CI documentation build with signal 11.
+# Collect the scenes now, so these tasks run while the session is fully active.
+GC.gc(true)
+sleep(1)
+GC.gc(true)
+sleep(1)
