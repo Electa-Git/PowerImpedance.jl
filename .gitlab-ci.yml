@@ -108,11 +108,13 @@ variables:
   script:
     - |
       # Makie's precompile workload alone exceeds the runner's memory limit
-      # (OOMKilled); skip it for the environment that the job instantiates.
-      for package in Makie CairoMakie WGLMakie GraphMakie; do
-        printf '[%s]\nprecompile_workload = false\n\n' "$package"
-      done > "$MAKIE_PROJECT/LocalPreferences.toml"
-      cat "$MAKIE_PROJECT/LocalPreferences.toml"
+      # (OOMKilled); skip it for every environment that the job loads.
+      for project in $MAKIE_PROJECT; do
+        for package in Makie CairoMakie WGLMakie GraphMakie; do
+          printf '[%s]\nprecompile_workload = false\n\n' "$package"
+        done > "$project/LocalPreferences.toml"
+        echo "$project/LocalPreferences.toml:"; cat "$project/LocalPreferences.toml"
+      done
 
 
 .julia_formatter_resources:
@@ -646,7 +648,7 @@ github_release_coverage:
 pages:
   extends: [.julia_heavy_resources, .julia_plotting_precompile]
   variables:
-    MAKIE_PROJECT: "docs"
+    MAKIE_PROJECT: "docs docs/statistics"
   image: julia:1.12.6-bookworm
   stage: deploy
   cache:
