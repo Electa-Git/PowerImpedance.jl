@@ -120,6 +120,7 @@ end
         @test !haskey(input["settings"], "snapshot_time")
         @test Set(keys(input["toolkit"])) == Set(keys(P.PSCAD_REMOTE_SOURCES))
         @test !haskey(input, "pscad_port")
+        @test !haskey(input, "resources")
         complete = TOML.parsefile(joinpath(source, "complete.toml"))
         @test complete["schema_version"] == 1
         @test complete["observed_solver"] == IDENTITY
@@ -239,6 +240,60 @@ end
         finally
             MODE[] = :success
         end
+    end
+end
+
+@testset "Z-tool offline staging and completed-run resources" begin
+    MODE[] = :success
+    mktempdir() do root
+        project = joinpath(root, "scanned.pscx")
+        write(project, "<project fixture=\"offline\"/>")
+        library = joinpath(root, "Z_tool.pslx")
+        cp(joinpath(@__DIR__, "fixtures/ztool/Z_tool.pslx"), library)
+        settings = P.SimulationSettings(simulation_time = 0.0005,
+            sample_step = 0.00025, time_step = 0.00005, frequency = 60.0)
+        export_tables = mkpath(joinpath(root, "Scan_options"))
+        for suffix in ("", string.(1:8)...)
+            write(joinpath(export_tables, "frequencies$suffix.txt"), "sweep-owned data")
+        end
+        model = PSCADModel(project; settings, ztool_library = library)
+        remote = RemoteConfig("fixture", root, "unused", "julia", "python";
+            local_root = root, transport = :fixture)
+        options = (; remote, work_root = joinpath(root, "runs"))
+        result = compute(model, PSCADRun(); options)
+        directory = result.paths.run_directory
+        input = TOML.parsefile(joinpath(directory, "computation.toml"))
+        table_names = ["Scan_options/frequencies.txt";
+            ["Scan_options/frequencies$i.txt" for i in 1:8]]
+        @test Set(keys(input["resources"])) == Set(["Z_tool.pslx", "generated.pswx", table_names...])
+        @test readdir(joinpath(directory, "Scan_options")) == basename.(table_names)
+        for (index, name) in enumerate(table_names)
+            header = index == 1 ? "! This file stores the frequency sweep values in Hz " :
+                     "! This file stores the multi-frequency sweep values in Hz "
+            expected = header * "\n1\t60.0\n2\t60.0\nENDFILE:"
+            @test read(joinpath(directory, name)) == collect(codeunits(expected))
+            @test input["resources"][name] == bytes2hex(sha256(expected))
+            @test read(joinpath(root, name), String) == "sweep-owned data"
+        end
+        @test read(joinpath(directory, "Z_tool.pslx")) == read(library)
+        @test read(joinpath(directory, "generated.pswx"), String) ==
+              P._ztool_workspace("generated", "generated.pscx")
+        for (name, digest) in input["resources"]
+            @test P._file_digest(joinpath(directory, name)) == digest
+        end
+        reuse = merge(options, (; resume_run_directory = directory))
+        @test compute(model, PSCADRun(); options = reuse).diagnostics.reused
+        for name in keys(input["resources"])
+            path = joinpath(directory, name)
+            original = read(path)
+            write(path, "changed resource")
+            @test_throws r"resource changed" compute(model, PSCADRun(); options = reuse)
+            write(path, original)
+        end
+        write(library, "changed source")
+        launches = LAUNCHES[]
+        @test_throws r"model library changed" compute(model, PSCADRun(); options)
+        @test LAUNCHES[] == launches
     end
 end
 end

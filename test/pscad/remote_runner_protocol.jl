@@ -95,8 +95,13 @@ class Application:
         self.quit_calls = 0
         self.settings_calls = 0
         self.loaded_path = None
+        self.loaded_paths = []
+        self.library = None
         self.other = Project("user_project", os.path.join(os.environ["PI_RUNNER_TEMP"], "user.pscx"))
         mode = os.environ.get("PI_RUNNER_MODE")
+        if mode in ("existing_library", "foreign_library"):
+            filename = "Z_tool.pslx" if mode == "existing_library" else "other.pslx"
+            self.library = Project("Z_tool", os.path.join(os.environ["PI_RUNNER_SCRATCH"], filename))
         self.existing = None
         if mode in ("stale", "foreign"):
             directory = os.environ["PI_RUNNER_SCRATCH"] if mode == "stale" else os.environ["PI_RUNNER_SCRATCH"] + "-foreign"
@@ -119,6 +124,12 @@ class Application:
         return os.environ.get("PI_RUNNER_MODE") != "license"
 
     def load(self, path):
+        self.loaded_paths.append(path)
+        if path.endswith(".pslx"):
+            self.library = Project("Z_tool", path)
+            if os.environ.get("PI_RUNNER_MODE") == "library_load_error":
+                raise RuntimeError("synthetic library load failure")
+            return
         self.silence_at_load = self.silence
         if not self.silence:
             raise RuntimeError("modal dialog would block")
@@ -128,6 +139,8 @@ class Application:
             raise RuntimeError("synthetic partial load failure")
 
     def project(self, name):
+        if name == "Z_tool" and self.library is not None:
+            return self.library
         if name == "user_project":
             return self.other
         if self.existing is not None and not self.existing.unloaded and name == "generated":
@@ -145,6 +158,8 @@ class Application:
             entries.append({"name": "generated", "type": "Case", "description": "Existing case"})
         if self.loaded_path is not None and not self._project.unloaded:
             entries.append({"name": "generated", "type": "Case", "description": "Our case"})
+        if self.library is not None and not self.library.unloaded:
+            entries.append({"name": "Z_tool", "type": "Library", "description": "Scan library"})
         return entries
 
     def settings(self):
@@ -403,6 +418,43 @@ end
         open(io -> TOML.print(io, input), input_path, "w")
         @test_throws ErrorException main(arguments)
         @test occursin("version-1", read(joinpath(output, "pscad-console.txt"), String))
+    end
+end
+
+@testset "Z-tool library loads before the project" begin
+    for mode in ("success", "library_load_error", "bad_library_hash", "existing_library", "foreign_library")
+        mktempdir() do root
+            arguments = runner_arguments(root, joinpath(root, "outputs"); port = 54330, owned = false)
+            library = joinpath(root, "Z_tool.pslx")
+            cp(joinpath(@__DIR__, "fixtures/ztool/Z_tool.pslx"), library)
+            write(joinpath(root, "other.pslx"), "different loaded library")
+            write(joinpath(root, "generated.pswx"), "<workspace/>")
+            input_path = joinpath(root, "computation.toml")
+            input = TOML.parsefile(input_path)
+            input["resources"] = Dict("Z_tool.pslx" =>
+                (mode == "bad_library_hash" ? "0"^64 : bytes2hex(open(sha256, library))))
+            open(io -> TOML.print(io, input), input_path, "w")
+            mock_environment(root; mode) do
+                if mode in ("success", "existing_library")
+                    @test main(arguments) === nothing
+                    @test pyconvert(Vector{String}, pyeval("LAST_APP.loaded_paths", @__MODULE__)) ==
+                          (mode == "success" ? [library, first(arguments)] : [first(arguments)])
+                    @test pyconvert(Bool, pyeval("LAST_APP._project.unloaded", @__MODULE__))
+                else
+                    @test_throws ErrorException main(arguments)
+                end
+                if mode in ("success", "library_load_error")
+                    @test pyconvert(Bool, pyeval("LAST_APP.library.unloaded", @__MODULE__))
+                elseif mode == "bad_library_hash"
+                    @test isempty(pyconvert(Vector{String}, pyeval("LAST_APP.loaded_paths", @__MODULE__)))
+                else
+                    @test !pyconvert(Bool, pyeval("LAST_APP.library.unloaded", @__MODULE__))
+                end
+                @test !pyconvert(Bool, pyeval("LAST_APP.silence", @__MODULE__))
+                @test pyconvert(Int, pyeval("LAST_APP.quit_calls", @__MODULE__)) == 0
+                @test !pyconvert(Bool, pyeval("LAST_APP.other.unloaded", @__MODULE__))
+            end
+        end
     end
 end
 end

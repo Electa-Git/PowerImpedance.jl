@@ -90,6 +90,11 @@ function _verified_completed_run(options, signature)
             throw(ArgumentError("PSCAD completed-run numerical input integrity check failed: $candidate"))
         _file_digest(joinpath(candidate, "generated.pscx")) == stored["project_sha256"] ||
             throw(ArgumentError("PSCAD completed-run project changed: $candidate"))
+        for (name, digest) in get(stored, "resources", Dict())
+            path = joinpath(candidate, name)
+            isfile(path) && _file_digest(path) == digest ||
+                throw(ArgumentError("PSCAD completed-run resource changed: $path"))
+        end
         for (name, digest) in stored["toolkit"]
             path = joinpath(candidate, "toolkit", name)
             isfile(path) && _file_digest(path) == digest ||
@@ -203,6 +208,18 @@ function compute(model::PSCADModel, formulation::PSCADRun; options::NamedTuple =
         "probes" => Dict("names" => [channel.name for channel in model.probes.channels]),
         "toolkit" => Dict(name => bytes2hex(sha256(source))
         for (name, source) in PSCAD_REMOTE_SOURCES))
+    if model.ztool_library !== nothing
+        library = model.ztool_library
+        isfile(library.path) && _file_digest(library.path) == library.sha256 ||
+            throw(ArgumentError("Z-tool model library changed: $(library.path)"))
+        workspace = _ztool_workspace("generated", "generated.pscx")
+        input["resources"] = Dict("Z_tool.pslx" => library.sha256,
+            "generated.pswx" => bytes2hex(sha256(workspace)))
+        frequency_tables = _ztool_frequency_tables(resolved.settings.frequency)
+        for (name, contents) in frequency_tables
+            input["resources"][name] = bytes2hex(sha256(contents))
+        end
+    end
     signature = _pscad_digest(input)
     resolved.solver_identity === nothing ||
         (input["expected_solver"] = resolved.solver_identity)
@@ -217,6 +234,15 @@ function compute(model::PSCADModel, formulation::PSCADRun; options::NamedTuple =
         cp(model.project_path, staged)
         _file_digest(staged) == input["project_sha256"] ||
             throw(ArgumentError("PSCAD project changed during staging: $(model.project_path)"))
+        if model.ztool_library !== nothing
+            cp(model.ztool_library.path, joinpath(root, "Z_tool.pslx"))
+            write(joinpath(root, "generated.pswx"), _ztool_workspace("generated", "generated.pscx"))
+            _write_ztool_frequency_tables(root, frequency_tables)
+            for (name, digest) in input["resources"]
+                _file_digest(joinpath(root, name)) == digest ||
+                    throw(ArgumentError("PSCAD resource changed during staging: $name"))
+            end
+        end
         open(io -> TOML.print(io, input; sorted = true), joinpath(root, "computation.toml"), "w")
         resolved.verbosity >= 1 && @info "Executing PSCAD project" run_directory = root
         run_remote_pscad(resolved.remote, staged, joinpath(root, "outputs");

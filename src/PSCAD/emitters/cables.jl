@@ -48,11 +48,11 @@ end
 
 # The breakout joins scalar core labels to the three-phase bus, so the
 # bus-side ammeter measures the phases in their physical order.
-function _cable_ac_connection!(state, bus, labels, probe, side)
+function _cable_ac_connection!(state, bus_label, labels, probe, side)
     x, y = allocate_cell!(state.layout)
     point = (x + 144, y + 90)
     component!(state.main, "breakout", point)
-    outer = ammeter_stub!(state.main, point, bus.name, probe; direction = -1)
+    outer = ammeter_stub!(state.main, point, bus_label, probe; direction = -1)
     if side == 2
         # Exchange the meter node labels to reverse its sign and preserve the
         # breakout wires. Side 2 measures current from element to bus.
@@ -130,7 +130,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Cable}, cont
                 _cable_interface_parameters(e.pscad, positions), interface..., side == 1 ?
                                                                                0 : 4))
         probe = current_probe!(state, e, terminal, context; orientation = side == 1 ? :into : :out)
-        labels = dc ? context.dc_labels[bus.key] :
+        labels = dc ? _terminal_labels(e, terminal, context) :
                  [pscad_name(e.pscad * "_$(side)_" * phase; used = state.used)
                   for phase in ("A", "B", "C")]
         for (i, label) in enumerate(labels)
@@ -144,7 +144,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Cable}, cont
         if dc
             output_probe!(state.main, probe, "branch", "kA", (x + 144, y + 180))
         else
-            _cable_ac_connection!(state, bus, labels, probe, side)
+            _cable_ac_connection!(state, only(_terminal_labels(e, terminal, context)), labels, probe, side)
         end
     end
     return nothing

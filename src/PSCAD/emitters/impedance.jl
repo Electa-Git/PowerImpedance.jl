@@ -25,9 +25,9 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Impedance}, 
     parts = impedance_parts(form; scale = dc ? 0.5 : 1.0)
     first_probe = current_probe!(state, e, left, context; orientation = :into)
     second_probe = right.grounded ? nothing : current_probe!(state, e, right, context; orientation = :out)
-    left_labels = dc ? context.dc_labels[left_bus.key] : (left_bus.name,)
+    left_labels = _terminal_labels(e, left, context)
     right_labels = right.grounded ? ntuple(_ -> nothing, length(left_labels)) :
-                   dc ? context.dc_labels[right_bus.key] : (right_bus.name,)
+                   _terminal_labels(e, right, context)
     for index in eachindex(left_labels)
         stem = dc ? e.pscad * (index == 1 ? "_P" : "_N") : e.pscad
         impedance_path!(

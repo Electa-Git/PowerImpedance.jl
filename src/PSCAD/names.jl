@@ -52,6 +52,10 @@ function Base.push!(used::_NameReservations, name::AbstractString)
     get!(used.names, lowercase(name), String(name))
     return used
 end
+function Base.delete!(used::_NameReservations, name::AbstractString)
+    delete!(used.names, lowercase(name))
+    return used
+end
 
 """
 $(TYPEDSIGNATURES)

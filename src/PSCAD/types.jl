@@ -137,7 +137,15 @@ struct PSCADModel{N, O}
     operating_point::O
     "Project source, package versions and export timestamp."
     provenance::NamedTuple
+    "Optional Z-tool library path and SHA-256."
+    ztool_library::Union{Nothing, NamedTuple{(:path, :sha256), Tuple{String, String}}}
+    "Optional workspace listing the Z-tool library before the project."
+    workspace_path::Union{Nothing, String}
 end
+
+PSCADModel(path, name, netlist, probes, settings, operating_point, provenance) =
+    PSCADModel(path, name, netlist, probes, settings, operating_point, provenance,
+        nothing, nothing)
 
 """
 $(TYPEDSIGNATURES)
@@ -149,6 +157,8 @@ Wrap an existing PSCAD project for simulation.
 - `path`: Existing `.pscx` file.
 - `probes`: Requested channels. Default: `ProbeManifest()`.
 - `settings`: Simulation settings. Default: `SimulationSettings()`.
+- `ztool_library`: Optional local Z-tool library used by this project. Its
+  path and SHA-256 are stored for simulation staging. Default: `nothing`.
 
 # Returns
 
@@ -160,12 +170,15 @@ Wrap an existing PSCAD project for simulation.
 - Throws `ArgumentError` if the file is absent or its extension is not `.pscx`.
 """
 function PSCADModel(path::AbstractString; probes::ProbeManifest = ProbeManifest(),
-        settings::SimulationSettings = SimulationSettings())
+        settings::SimulationSettings = SimulationSettings(), ztool_library = nothing)
     isfile(path) || throw(ArgumentError("PSCAD project file does not exist: $path"))
     endswith(lowercase(path), ".pscx") ||
         throw(ArgumentError("PSCAD project must end in .pscx: $path"))
+    library = ztool_library === nothing ? nothing : _ztool_library(ztool_library)
+    workspace = splitext(abspath(path))[1] * ".pswx"
     return PSCADModel(abspath(path), _remote_project_name(path), nothing,
-        probes, settings, nothing, (source = :file,))
+        probes, settings, nothing, (source = :file,), library,
+        library !== nothing && isfile(workspace) ? workspace : nothing)
 end
 
 """

@@ -4,6 +4,9 @@
 
 ### Added
 
+- `ZToolProbe` adds Z-tool AC and DC scans in series at an element terminal or
+  as an open shunt at a bus. Exports with probes include the checked v0.1.52
+  library and workspace, and runs load the library before the project.
 - `overhead_line(; transposition = :ideal)` models an ideally transposed
   three-phase line by averaging the series impedance and potential coefficients
   over the three phase positions. PSCAD exports set `Transp = 1` for these lines.

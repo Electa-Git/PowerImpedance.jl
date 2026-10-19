@@ -184,7 +184,7 @@ include("ScientificStability.jl")
 include("Compute.jl")
 include("PSCAD/PSCAD.jl")
 using .PSCAD: PSCADModel, PSCADRun, PSCADResult, RemoteConfig, read_pscad_output,
-              export_pscad, compare_operating_point
+              export_pscad, compare_operating_point, ZToolProbe
 export PSCADModel, PSCADRun, PSCADResult, RemoteConfig, read_pscad_output,
-       export_pscad, compare_operating_point
+       export_pscad, compare_operating_point, ZToolProbe
 include("StabilityPlotRecipes.jl")

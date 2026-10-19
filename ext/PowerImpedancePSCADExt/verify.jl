@@ -73,7 +73,8 @@ function PSCAD.check_connectivity(path::AbstractString)
             params = [text(p, "name") => text(p, "value")
                       for p in node.xpath("./paramlist/param")]
             defn = text(node, "defn")
-            constructor = startswith(defn, "master:") ? PSCAD.ComponentPlan : PSCAD.ModuleInstancePlan
+            constructor = startswith(defn, "master:") || startswith(defn, "Z_tool:") ?
+                          PSCAD.ComponentPlan : PSCAD.ModuleInstancePlan
             push!(canvas.components, constructor(defn, params,
                 integer(node, "x"), integer(node, "y"), integer(node, "orient")))
         end
@@ -125,6 +126,14 @@ function PSCAD.check_geometry(path::AbstractString)
                 PythonCall.pyis(node.get("x"), PythonCall.pybuiltins.None) && continue
                 x, y = integer(node, "x"), integer(node, "y")
                 PSCAD._check_coordinate((x, y), name)
+                defn = PythonCall.pyconvert(String, node.get("defn", ""))
+                if defn in ("Z_tool:ACscan", "Z_tool:DCscan")
+                    component = PSCAD.ComponentPlan(defn, Pair{String, String}[],
+                        x, y, integer(node, "orient"))
+                    for (point, _, _) in PSCAD.component_ports(component, Dict())
+                        PSCAD._check_coordinate(point, name)
+                    end
+                end
                 for vertex in node.findall("vertex")
                     PSCAD._check_coordinate((x + integer(vertex, "x"),
                         y + integer(vertex, "y")), name)

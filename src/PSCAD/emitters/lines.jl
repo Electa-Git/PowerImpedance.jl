@@ -135,7 +135,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
                     ["Name" => e.pscad, "NC" => "2", "View" => "0", "send_recv" => "0",
                         "dim_s" => "0", "dim_r" => "0"], interface..., side == 1 ? 0 : 4))
             probe = current_probe!(state, e, terminal, context; orientation = side == 1 ? :into : :out)
-            positive, negative = context.dc_labels[bus.key]
+            positive, negative = _terminal_labels(e, terminal, context)
             ammeter_stub!(state.main, (interface[1] + 18direction, interface[2] - 18),
                 positive, probe; direction)
             stub!(state.main, (interface[1] + 18direction, interface[2] + 18),
@@ -146,9 +146,9 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
     end
     first_probe = current_probe!(state, e, left, context; orientation = :into)
     second_probe = current_probe!(state, e, right, context; orientation = :out)
-    ammeter_stub!(state.main, (wx - 54, wy + 18), left_bus.name, first_probe;
+    ammeter_stub!(state.main, (wx - 54, wy + 18), only(_terminal_labels(e, left, context)), first_probe;
         direction = -1)
-    ammeter_stub!(state.main, (wx + 54, wy + 72), right_bus.name, second_probe)
+    ammeter_stub!(state.main, (wx + 54, wy + 72), only(_terminal_labels(e, right, context)), second_probe)
     output_probe!(state.main, first_probe, "branch", "kA", (xcell + 144, ycell + 144))
     output_probe!(state.main, second_probe, "branch", "kA", (xcell + 144, ycell + 180))
     return nothing

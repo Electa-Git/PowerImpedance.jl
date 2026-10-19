@@ -29,7 +29,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Source}, con
             "Ph" => pscad_value(rad2deg(angle) + 90; unit = "deg"),
             "Tc" => pscad_value(settings.source_ramp; unit = "s")])
     name = current_probe!(state, e, terminal, context; orientation = :out)
-    ammeter_stub!(state.main, (x + 108, y + 54), bus.name, name)
+    ammeter_stub!(state.main, (x + 108, y + 54), only(_terminal_labels(e, terminal, context)), name)
     output_probe!(state.main, name, "branch", "kA", (x + 144, y + 126))
     return nothing
 end
@@ -46,7 +46,7 @@ function dc_source!(state, e, terminal, bus, context)
     isfinite(magnitude) && magnitude > 0 ||
         throw(ArgumentError("element :$(e.name) requires positive pole-to-ground Vdc"))
     x, y = allocate_cell!(state.layout)
-    labels = context.dc_labels[bus.key]
+    labels = _terminal_labels(e, terminal, context)
     probe = current_probe!(state, e, terminal, context; orientation = :into)
     for (index, pole) in enumerate(("P", "N"))
         row = y + 54 + 72 * (index - 1)

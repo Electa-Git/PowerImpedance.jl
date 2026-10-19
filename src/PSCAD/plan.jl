@@ -442,7 +442,12 @@ function component_ports(c::ComponentPlan, modules)
     d = c.defn
     electrical = true
     directions = Symbol[]
-    offsets = if d in ("master:nodelabel", "master:datalabel", "master:ground")
+    offsets = if d in ("Z_tool:ACscan", "Z_tool:DCscan")
+        pins = d == "Z_tool:ACscan" ? [(-54, 0), (54, 0)] :
+               [(-36, 0), (36, 0), (0, 36)]
+        return _placed_ports(c, pins, fill(:electrical, length(pins)),
+            [:electrical, :optional_electrical, fill(:electrical, length(pins) - 2)...])
+    elseif d in ("master:nodelabel", "master:datalabel", "master:ground")
         NTuple{2, Int}[]
     elseif d in ("master:resistor", "master:inductor", "master:capacitor", "master:ammeter")
         [(0, 0), (36, 0)]
@@ -757,7 +762,7 @@ function _check_meter_grounding(canvas, name, modules)
                     for (point, kind) in component_ports(c, modules)
                     if kind == :electrical]
             isempty(pins) && continue
-            nets = [stubs[p] for p in pins]
+            nets = [get(stubs, p, scope * ":open:$p") for p in pins]
             if c isa ModuleInstancePlan
                 definition = modules[last(split(c.defn, ':'))]
                 if isempty(definition.canvas.components)
@@ -775,9 +780,9 @@ function _check_meter_grounding(canvas, name, modules)
             end
             c.defn in ("master:voltmeter", "master:voltmetergnd", "master:xnode") &&
                 continue
-            if c.defn == "master:ammeter"
+            if c.defn in ("master:ammeter", "Z_tool:ACscan", "Z_tool:DCscan")
                 push!(meters, (nets[1], nets[2], Dict(c.params)["Name"], scope, pins[1]))
-                for n in nets
+                for n in nets[1:2]
                     push!(get!(attachments, n, Int[]), length(meters))
                 end
             else

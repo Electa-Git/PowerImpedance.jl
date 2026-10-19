@@ -33,6 +33,8 @@ or a power-flow solve.
 - `dc_reference`: `:midpoint_resistors` (default) adds two grounding resistors
   per DC bus without a local source midpoint or grounded shunt.
   `:none` omits those resistors.
+- `ztool_probes`: Export-only scan requests. Default: an empty vector.
+  An unsolved bus requires an explicit `ZToolProbe` voltage in \\[kV\\].
 
 # Returns
 
@@ -40,7 +42,7 @@ or a power-flow solve.
 """
 function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationSettings(),
         name::AbstractString = "network", description::AbstractString = name,
-        line_options = (;), dc_reference = :midpoint_resistors)
+        line_options = (;), dc_reference = :midpoint_resistors, ztool_probes = ZToolProbe[])
     dc_reference in (:midpoint_resistors, :none) ||
         throw(ArgumentError("dc_reference must be :midpoint_resistors or :none"))
     overrides = _line_options(line_options)
@@ -53,11 +55,31 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
     dc_labels = Dict(bus.key => (pscad_name(bus.name * "_P"; used),
                          pscad_name(bus.name * "_N"; used))
     for bus in netlist.buses if bus.kind == :dc)
+    scans = _resolve_ztool_probes(netlist, ztool_probes)
+    # Keep generated terminal labels distinct from every requested scan name.
+    # Existing component names remain reserved for the duplicate-name check.
+    reserved = String[]
+    for scan in scans
+        scan.probe.name in used && continue
+        push!(used, scan.probe.name)
+        push!(reserved, scan.probe.name)
+    end
+    ztool_terminals = Dict{Tuple{Symbol, Int}, Tuple{Vararg{String}}}()
+    for scan in scans
+        (; probe, bus, terminal) = scan
+        terminal === nothing && continue
+        inner = pscad_name(probe.name * "_terminal"; used)
+        ztool_terminals[(probe.element, probe.side)] = probe.kind == :dc ?
+            (inner, last(dc_labels[bus.key])) : (inner,)
+    end
+    for scan_name in reserved
+        delete!(used, scan_name)
+    end
     state = PlanState(
         CanvasPlan(AbstractComponentPlan[], WirePlan[], used,
             Dict{String, Union{Nothing, String}}()), AbstractLineDefinitionPlan[], AbstractLineWrapperPlan[],
         ModuleDefinitionPlan[], GridLayout(), ProbeChannel[], used)
-    context = (; netlist, settings, name, line_options = overrides, dc_labels,
+    context = (; netlist, settings, name, line_options = overrides, dc_labels, ztool_terminals,
         buses = Dict(bus.key => bus for bus in netlist.buses))
     if any(e -> e.model isa Union{PowerImpedance.TLC, PowerImpedance.MMC}, netlist.elements)
         abc = abc_to_dq_module(pscad_name("ABC_DQ"; used))
@@ -92,6 +114,9 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
         end
         voltage_probe!(state, bus, labels;
             at_conducting_node = any(b -> b.key == bus.key, precharge_buses))
+    end
+    for scan in scans
+        _emit_ztool_probe!(state, scan, context)
     end
     reference_key = netlist.operating_point.slack_bus
     if reference_key === nothing
@@ -133,7 +158,8 @@ function _export_keywords(path, name, line_options, dc_reference)
 end
 
 function _export_project(
-        netlist, path, name, settings, resolved_powerflow, line_options, dc_reference)
+        netlist, path, name, settings, resolved_powerflow, line_options, dc_reference,
+        ztool_probes, ztool_library)
     if settings.time_step > 1e-6
         converters = [string(e.name) for e in netlist.elements
                       if e.model isa PowerImpedance.MMC &&
@@ -142,15 +168,35 @@ function _export_project(
             @warn "MMC with CompensatedModulation ($(join(converters, ", "))): time_step=$(settings.time_step) s exceeds the validated step of 1 us; 10 us grows unstable."
         end
     end
-    plan = build_plan(netlist; settings, name, line_options, dc_reference,
+    plan = build_plan(netlist; settings, name, line_options, dc_reference, ztool_probes,
         description = "PowerImpedance.jl: $name")
+    library, workspace = nothing, nothing
+    if !isempty(ztool_probes)
+        lowercase(name) == "z_tool" && throw(ArgumentError("Z-tool project name must differ from the library name Z_tool"))
+        library_path = joinpath(dirname(abspath(path)), "Z_tool.pslx")
+        workspace = splitext(abspath(path))[1] * ".pswx"
+        !ispath(workspace) && !islink(workspace) ||
+            throw(ArgumentError("Z-tool workspace target already exists: $workspace"))
+        source = _ztool_library(ztool_library)
+        if ispath(library_path) || islink(library_path)
+            isfile(library_path) && bytes2hex(open(sha256, library_path)) == source.sha256 ||
+                throw(ArgumentError("Z-tool export library differs from $library_path"))
+        end
+        library = (; path = library_path, sha256 = source.sha256)
+    end
     written = _write_project(plan, abspath(path))
+    if library !== nothing
+        isfile(library.path) || cp(source.path, library.path)
+        write(workspace, _ztool_workspace(String(name), basename(path)))
+        _write_ztool_frequency_tables(dirname(written.path),
+            _ztool_frequency_tables(settings.frequency))
+    end
     provenance = (source = :export,
         powerimpedance_version = string(Base.pkgversion(PowerImpedance)),
         mhi_xml_version = written.mhi_xml_version, created = string(now(UTC)),
         resolved_powerflow = resolved_powerflow)
     return PSCADModel(written.path, String(name), netlist, plan.probes, settings,
-        netlist.operating_point, provenance)
+        netlist.operating_point, provenance, library, workspace)
 end
 
 """
@@ -174,6 +220,10 @@ availability before the power-flow solve or project write.
 - `dc_reference`: `:midpoint_resistors` (default) adds two resistors of
   `1e7` \\[Ω\\] to ground per DC bus without a local source midpoint or grounded
   shunt. `:none` omits those resistors.
+- `ztool_probes`: Export-only `ZToolProbe` requests. Default: empty.
+- `ztool_library`: Local `.pslx` file, or `nothing` (default) to download and
+  cache the SHA-256-checked Z-tool v0.1.52 library on first use. Exports with
+  scan probes include `Z_tool.pslx` and a relative-path `.pswx` workspace.
 
 # Returns
 
@@ -201,18 +251,18 @@ relative to ground.
 function export_pscad(net::PowerImpedance.Network; path,
         name = splitext(basename(path))[1], powerflow = nothing,
         settings::SimulationSettings = SimulationSettings(), line_options = (;),
-        dc_reference = :midpoint_resistors)
+        dc_reference = :midpoint_resistors, ztool_probes = ZToolProbe[], ztool_library = nothing)
     _export_keywords(path, name, line_options, dc_reference)
     _require_extension()
     pf = powerflow === nothing ? PowerImpedance.power_flow(net) : powerflow
     return _export_project(netlist(net, pf), path, name, settings,
-        powerflow === nothing, line_options, dc_reference)
+        powerflow === nothing, line_options, dc_reference, ztool_probes, ztool_library)
 end
 
 function export_pscad(state::PowerImpedance.NetworkBuilder.NetworkState; path,
         name = splitext(basename(path))[1], powerflow = nothing,
         settings::SimulationSettings = SimulationSettings(), line_options = (;),
-        dc_reference = :midpoint_resistors)
+        dc_reference = :midpoint_resistors, ztool_probes = ZToolProbe[], ztool_library = nothing)
     _export_keywords(path, name, line_options, dc_reference)
     _require_extension()
     powerflow === nothing ||
@@ -221,5 +271,5 @@ function export_pscad(state::PowerImpedance.NetworkBuilder.NetworkState; path,
     elements = NamedTuple{keys(state.elements)}(
         Tuple(solved.network.elements[name] for name in keys(state.elements)))
     return _export_project(netlist(state, solved.powerflow, elements), path, name, settings,
-        solved.powerflow !== nothing, line_options, dc_reference)
+        solved.powerflow !== nothing, line_options, dc_reference, ztool_probes, ztool_library)
 end

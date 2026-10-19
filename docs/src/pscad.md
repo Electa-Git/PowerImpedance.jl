@@ -37,6 +37,78 @@ fields. AC/DC line and cable fit targets default to `YMaxE=AMaxE=0.02%`. `dc_ref
 at DC buses without a local source midpoint or grounded shunt; use `:none`
 when those additional references are unwanted.
 
+## Z-tool scan probes
+
+`ZToolProbe` adds a scan block to an export. The network keeps its elements
+and connections. `ACscan` contains a three-phase through-path with current
+measurements on both sides and a voltage measurement at the scan node.
+`DCscan` has a positive-pole through-path and a separate reference port.
+Both blocks contain voltage injection sources. Their default injection and
+decoupling times are `1e8` seconds, so they remain idle during an ordinary run.
+
+```julia
+probes = [
+    ZToolProbe(:ac, "converter_scan"; element = :DUT, side = 2),
+    ZToolProbe(:ac, "bus_scan"; bus = :B2),
+    ZToolProbe(:dc, "dc_scan"; element = :DUT, side = 1),
+]
+model = export_pscad(net; path = "pscad_exports/scanned.pscx", settings,
+    ztool_probes = probes)
+```
+
+`element` and `side` place a series probe between that element terminal and
+its bus. `A1` faces the bus and `A2` faces the element. `bus` alone places an
+open shunt probe with `A1` connected to the bus. An open shunt leaves `A2`
+unconnected, so PSCAD reports a floating-terminal build warning.
+The existing recorded terminal currents keep their positive directions.
+
+Bus names are the PSCAD identifiers in `model.netlist.buses`. Probes also
+accept topology `BusKey` values. Names must be unique ASCII PSCAD identifiers
+of at most 30 characters. Grounded terminals and repeated scans of the same
+terminal raise an error.
+
+For DC probes, `A1` and `A2` connect to the positive pole. `B1` connects to
+the negative pole of the same bus. `V0_peak` is the full pole-to-pole DC
+voltage because the block measures and injects voltage relative to `B1`.
+For AC probes, `V0_peak` is the peak line-to-ground voltage. Solved bus
+voltages give both values.
+
+An unsolved bus requires `voltage`, an explicit value in kV.
+It uses the same voltage convention. `f0` is `settings.frequency` in Hz
+for both kinds.
+
+`perturbation` sets `V_perturb_mag` in per unit and defaults to `0.01`.
+AC probes accept `vac_control` and `f_control`. DC probes accept
+`vdc_control`. These Boolean flags default to `false`. The remaining
+parameters use the library defaults: `T_inj=Tdecoupling=1e8`,
+`selector=block_id=0` and `single_frequency=1`.
+
+The first export with scan probes downloads Z-tool v0.1.52 into
+`artifacts/ztool/v0.1.52` under the first Julia depot and checks its SHA-256.
+Later exports reuse and check that file. `ztool_library = "/path/Z_tool.pslx"`
+selects a local library instead. The export copies `Z_tool.pslx` beside the
+project and writes a `.pswx` workspace with relative library and project paths.
+The workspace opens the library and project for Z-tool scans.
+
+`model.ztool_library` stores the copied library path and hash.
+`model.workspace_path` stores the workspace path. Simulation staging includes
+both files and loads the library before the project. Exports and runs with
+probes include idle `Scan_options` frequency tables that the blocks read at
+start, and `frequency_sweep()` replaces them.
+
+For an existing project, `PSCADModel(path; ztool_library = library_path)`
+records its library for simulation. With `ztool_probes` empty, the output
+consists of the original project file.
+
+[Z-tool](https://github.com/Electa-Git/Z-tool) uses the GPL v3 licence.
+The export prepares scan blocks and files. Running `frequency_sweep()` is a
+separate step.
+
+The citation is F.J. Cifuentes Garcia and J. Beerten,
+“Z-Tool: frequency-domain characterization of EMT models for small-signal
+stability analysis,” *Electr. Power Syst. Res.* 252, 112405 (2026),
+[doi:10.1016/j.epsr.2025.112405](https://doi.org/10.1016/j.epsr.2025.112405).
+
 ## Prepare the Windows station
 
 The station needs PSCAD 5.1.0, its licence and detected compiler, Julia 1.12

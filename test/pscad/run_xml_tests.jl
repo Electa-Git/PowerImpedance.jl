@@ -40,6 +40,7 @@ else
     include("networks.jl")
     using TOML
     P = PowerImpedance.PSCAD
+    include("ztool_xml_test.jl")
     runner = Module(:GeometryRunner)
     Core.eval(runner, :(include(path) = Base.include($runner, path)))
     Base.include(runner, joinpath(@__DIR__, "../../src/PSCAD/remote/runner.jl"))
@@ -287,7 +288,7 @@ else
             model = with_logger(logger) do
                 startswith(name, "transformer_dy") ?
                 P._export_project(P.netlist(input, nothing), path, name, settings,
-                    false, (;), :midpoint_resistors) :
+                    false, (;), :midpoint_resistors, ZToolProbe[], nothing) :
                 export_pscad(input; path, settings = case_settings, dc_reference)
             end
             @test !any(log -> occursin("CompensatedModulation", string(log.message)), logger.logs)

@@ -14,6 +14,8 @@ build and measured response test its execution in PSCAD.
 |---|---|---|
 | AC source | `source_3` | Three-phase ideal source at the solved voltage and angle |
 | DC source | Two `source_1` instances | Symmetric positive and negative poles |
+| AC scan | `Z_tool:ACscan` on Main | Three-phase `A1=(-54,0)` to bus. `A2=(54,0)` to element, or open. |
+| DC scan | `Z_tool:DCscan` on Main | `A1=(-36,0)` and `A2=(36,0)` on P. `B1=(0,36)` to bus N. |
 | Lumped impedance | `resistor`, `inductor`, `capacitor` | Supported series/parallel RLC realizations |
 | AC overhead line | TLine `RowDefn` and direct wrapper | Conductor count 3 after ground-wire elimination |
 | DC overhead line | TLine row, remote wrapper and `tline_interface` pair | Two conductors, P then N |
@@ -88,6 +90,24 @@ Conductor order is P then N. P contains a series ammeter; N uses a direct stub.
 The wrapper vertices describe graphics; electrical pins are on the interfaces.
 `test/pscad/fixtures/dc_ohl_interface.xml` retains the master-library fields
 and ports used by this mapping.
+
+### Z-tool scan fields
+
+| Julia input | PSCAD field | Convention |
+|---|---|---|
+| `ZToolProbe.name` | `Name` | Unique ASCII name for the PSCAD instance |
+| `settings.frequency` | `f0` | Hz, for AC and DC |
+| Solved AC `vm_pu * base_kV * sqrt(2)`, or `voltage` | `V0_peak` | Peak line-to-ground kV |
+| Solved DC `2 * vm_pu * base_kV`, or `voltage` | `V0_peak` | Pole-to-pole kV relative to `B1` |
+| `perturbation` | `V_perturb_mag` | pu. Default 0.01. |
+| `vac_control`, `f_control` | `Vac_control`, `f_control` | AC Boolean flags become 0 or 1 |
+| `vdc_control` | `Vdc_control` | DC Boolean flag becomes 0 or 1 |
+| Library idle settings | `T_inj`, `Tdecoupling` | 1e8 s |
+| Library scan settings | `selector`, `single_frequency`, `block_id` | 0, 1, 0 |
+
+The [scan guide](../pscad.md#Z-tool-scan-probes) describes placement and the
+library workspace. Series placement changes only the selected terminal label.
+The existing ammeter and its channel orientation remain in the through-path.
 
 ### Cable fields
 

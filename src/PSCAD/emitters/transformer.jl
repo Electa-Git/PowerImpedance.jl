@@ -33,7 +33,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Transformer}
     terminal_secondary = pscad_name(e.pscad * "_terminal_2"; used = state.used)
     primary_probe = current_probe!(state, e, primary, context; orientation = :into)
     secondary_probe = current_probe!(state, e, secondary, context; orientation = :out)
-    impedance_path!(state, [], :series, primary_bus.name, terminal_primary,
+    impedance_path!(state, [], :series, only(_terminal_labels(e, primary, context)), terminal_primary,
         e.pscad * "_meter_1"; first_probe = primary_probe)
     primary_parts = Tuple{String, String, Float64, String}[]
     t.R_p == 0 || push!(primary_parts, ("resistor", "R", t.R_p, "ohm"))
@@ -62,7 +62,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Transformer}
     t.L_s == 0 || push!(secondary_parts, ("inductor", "L", t.L_s, "H"))
     impedance_path!(state, secondary_parts, :series, inner_secondary, terminal_secondary,
         e.pscad * "_secondary")
-    impedance_path!(state, [], :series, terminal_secondary, secondary_bus.name,
+    impedance_path!(state, [], :series, terminal_secondary, only(_terminal_labels(e, secondary, context)),
         e.pscad * "_meter_2"; second_probe = secondary_probe)
     for (field, defn, parameter, unit) in ((:L_m, "inductor", "L", "H"), (
         :R_m, "resistor", "R", "ohm"))

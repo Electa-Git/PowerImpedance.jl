@@ -163,10 +163,10 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     if isempty(parts)
         component!(state.main, "ammeter", start, ["Name" => current])
         stub!(state.main, start, inner; direction = -1)
-        stub!(state.main, (start[1] + 36, start[2]), bus.name)
+        stub!(state.main, (start[1] + 36, start[2]), only(_terminal_labels(e, terminal, context)))
     else
         stub!(state.main, start, inner; direction = -1)
-        ammeter_stub!(state.main, endpoint, bus.name, current)
+        ammeter_stub!(state.main, endpoint, only(_terminal_labels(e, terminal, context)), current)
     end
     output_probe!(state.main, current, "branch", "kA", (x + 144, y + 144))
 

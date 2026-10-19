@@ -224,7 +224,7 @@ function xml_graphs(root, string_value; check_named = false)
             values = (defn, params, parse(Int, string_value(c.get("x"))),
                 parse(Int, string_value(c.get("y"))), parse(Int, string_value(c.get("orient"))))
             push!(components,
-                startswith(defn, "master:") ? P.ComponentPlan(values...) :
+                startswith(defn, "master:") || startswith(defn, "Z_tool:") ? P.ComponentPlan(values...) :
                 P.ModuleInstancePlan(values...))
         end
         wires = P.WirePlan[]

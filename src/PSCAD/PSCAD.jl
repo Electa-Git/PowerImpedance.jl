@@ -8,6 +8,7 @@ module PSCAD
 
 using Base64: base64encode
 using SHA: sha256
+import Downloads
 import TOML
 using Dates: now, UTC
 using Printf: @sprintf
@@ -80,6 +81,7 @@ include("netlist.jl")
 include("rlc.jl")
 include("units.jl")
 include("plan.jl")
+include("ztool.jl")
 include("blocks.jl")
 include("emitters/probes.jl")
 include("emitters/sources.jl")

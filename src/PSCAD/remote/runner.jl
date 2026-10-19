@@ -1,5 +1,6 @@
 using PythonCall
 using TOML
+using SHA: sha256
 
 include(joinpath(@__DIR__, "files.jl"))
 
@@ -139,6 +140,9 @@ function main(arguments)
     app = nothing
     previous_silence = nothing
     project = nothing
+    library = nothing
+    library_path = nothing
+    library_load_attempted = false
     load_attempted = false
     phase = "initialization"
     console = open(joinpath(output, "pscad-console.txt"), "w")
@@ -209,6 +213,24 @@ function main(arguments)
                 error("Refusing to replace loaded PSCAD project $project_name from $filename; it is outside the station scratch root $remote_root")
             existing.unload()
             _report(console, verbosity, 1, "Unloaded stale PSCAD project $project_name from $filename")
+        end
+        if haskey(input, "resources")
+            phase = "Z-tool library load"
+            library_path = joinpath(dirname(project_path), "Z_tool.pslx")
+            digest = input["resources"]["Z_tool.pslx"]
+            isfile(library_path) && bytes2hex(open(sha256, library_path)) == digest ||
+                error("Staged Z-tool library SHA-256 differs from computation.toml")
+            loaded = any(entry -> _string(entry["name"]) == "Z_tool", _components(app.projects()))
+            if loaded
+                filename = _string(app.project("Z_tool").filename)
+                isfile(filename) && bytes2hex(open(sha256, filename)) == digest ||
+                    error("Loaded Z_tool library differs from the staged library: $filename")
+            else
+                _report(console, verbosity, 1, "Loading staged Z-tool library")
+                library_load_attempted = true
+                app.load(abspath(library_path))
+                library = app.project("Z_tool")
+            end
         end
         _report(console, verbosity, 1, "Loading staged project $project_name")
         load_attempted = true
@@ -296,6 +318,20 @@ function main(arguments)
             project.unload()
         catch error
             println(console, "PSCAD project unload failed: ", sprint(showerror, error))
+        end
+        if library === nothing && library_load_attempted
+            try
+                loaded = app.project("Z_tool")
+                normpath(abspath(_string(loaded.filename))) ==
+                    normpath(abspath(library_path)) && (library = loaded)
+            catch error
+                println(console, "PSCAD Z-tool library lookup during cleanup failed: ", sprint(showerror, error))
+            end
+        end
+        library === nothing || try
+            library.unload()
+        catch error
+            println(console, "PSCAD Z-tool library unload failed: ", sprint(showerror, error))
         end
         if app !== nothing && !owned && previous_silence !== nothing
             try

@@ -230,9 +230,9 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.TLC}, contex
     push!(state.main.components,
         ModuleInstancePlan(context.name * ":" * name, Pair{String, String}[], point..., 0))
     ac_current = current_probe!(state, e, ac, context; orientation = :out)
-    ammeter_stub!(state.main, (point[1] + 54, point[2]), bus.name, ac_current)
+    ammeter_stub!(state.main, (point[1] + 54, point[2]), only(_terminal_labels(e, ac, context)), ac_current)
     dc_current = current_probe!(state, e, dc, context; orientation = :into)
-    positive, negative = context.dc_labels[dc.bus]
+    positive, negative = _terminal_labels(e, dc, context)
     ammeter_stub!(
         state.main, (point[1] - 54, point[2]), positive, dc_current; direction = -1)
     stub!(state.main, (point[1] - 54, point[2] + 36), negative; direction = -1)
