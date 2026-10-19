@@ -460,6 +460,12 @@ function eval_y(gen :: SynchronousMachine, s :: Complex)
     return Y
 end
 
+"""Return the factors that convert per-unit machine admittance to siemens."""
+function SI_scale(elem::Element{<:SynchronousMachine})
+    elec = elem.element_model.elec
+    return fill(elec.S_base / elec.Vᵃᶜ_base^2, 2, 2)
+end
+
 
 pmtype(::Element{<:SynchronousMachine}) = "gen"
 

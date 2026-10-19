@@ -53,6 +53,7 @@
 
 ### Fixed
 
+- Fix network admittance of circuits with a synchronous machine by applying its admittance base.
 - Power flow for induction machines uses torque on the network power base
   and includes transformer resistance and inductance in the stator impedance.
 - Overhead-line and cable parameters use CODATA 2018 vacuum permittivity,
