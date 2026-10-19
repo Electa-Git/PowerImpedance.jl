@@ -468,7 +468,7 @@ function run_fixture(id; remote = RemoteConfig(),
         step_column, step_quality = single_response(
             step_run, step_baseline, last(step_models).second, step_spec, selected)
         checks = Dict{String, Any}[]
-        if residual_step_eligible(id, net)
+        if residual_step_eligible(id, net) || get(spec, :kcl_required, false)
             for (index, key) in enumerate(spec.axes)
                 push!(checks, readout_evidence(results[key], results["baseline"], models[key], spec, index))
             end

@@ -136,7 +136,16 @@ const REGISTRY = [
          ("mmc_gfm_lec_compensated",:compensated,"LEC/CCC compensated MMC","compensated MMC mmc_compensated_network",8.),
          ("mmc_pq_no_energy_control",:disabled,"P/Q MMC with disabled TEC/ZSCC","legacy-mapped P2P receiving MMC c2",8.),
          ("synchronous_machine",:machine,"Synchronous machine with AVR/governor/turbine","machine sm_network",8.),
-         ("mmc_gfm_weak_grid",:gfm,"GFM MMC weak-grid twin","GFM MMC mmc_gfm_network",2.5))]...
+         ("mmc_gfm_weak_grid",:gfm,"GFM MMC weak-grid twin","GFM MMC mmc_gfm_network",2.5))]...,
+    (id = "induction_machine", category = :device,
+        description = "Induction machine with constant load torque",
+        parent = "PSCADFixtures.im_network", factory = () -> induction_machine_network(),
+        topology = "220 kV AC source — 0.01 ohm resistor — induction machine",
+        physics = ["rotor flux and slip dynamics", "AC-terminal dq admittance"],
+        dissipativity = "complete-network Nyquist and all finite descriptor roots recorded",
+        differences = ["reference circuit with element names DUT, Grid and G3",
+            "NetworkBuilder.get_y applies the machine SI scaling"],
+        measurements = ["operating_point", "frequency_response"], estimated_nodes = 45)
 ]
 
 function fixture(id)

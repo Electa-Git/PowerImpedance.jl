@@ -120,6 +120,10 @@ function record_step_witness!(record, net, spec, step_spec, column,
     indices = [only(findall(==(f), spec.frequencies)) for f in step_spec.frequencies]
     raw = Dict{String, Any}(matrix_change(half, main[:,:,indices]; epsilon = 0.01))
     raw["valid"] = main_quality["valid"] && half_quality["valid"]
+    if get(spec, :kcl_required, false)
+        raw["readout_checks"] = checks
+        raw["valid"] &= !isempty(checks) && all(check["passed"] for check in checks)
+    end
     raw["passed"] &= raw["valid"]
     raw["status"] = !raw["valid"] ? "invalid_measurement" : raw["passed"] ? "passed" : "failed"
     raw["axis"] = spec.axes[column]

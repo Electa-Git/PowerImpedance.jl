@@ -259,8 +259,8 @@ end
 end
 
 @testset "Passive catalogue and generated source plans" begin
-    @test length(V.REGISTRY) == 37
-    @test length(unique(entry.id for entry in V.REGISTRY)) == 37
+    @test length(V.REGISTRY) == 38
+    @test length(unique(entry.id for entry in V.REGISTRY)) == 38
     for entry in filter(e->e.category == :passive,V.REGISTRY)
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"

@@ -62,7 +62,9 @@ function stability_gate(net, entry)
     bases=device_bases(dut.element_model.elec)
     form=P.identify_rlc(net.elements[:Grid]; name=:Grid).form
     grid_y(s)=PowerImpedance.get_y(net.elements[:Grid],s)[1:2,1:2]
-    rotation=real.((inv(grid_y(0.0im))-form.R*I)/form.L)
+    inductance = something(form.L, 0.0)
+    rotation = iszero(inductance) ? zeros(2, 2) :
+        real.((inv(grid_y(0.0im))-form.R*I)/inductance)
     A=dut.A
     B=dut.B ./ bases.voltage_inputs'
     C=dut.C .* bases.current_outputs
@@ -81,7 +83,10 @@ function stability_gate(net, entry)
         indices=bases.ac_indices
         Bac,Cac,Dac=B[:,indices],C[indices,:],D[indices,indices]
     end
-    gate=network_stability(A,Bac,Cac,Dac,grid_y,form.R,form.L,rotation)
+    gate=network_stability(A,Bac,Cac,Dac,grid_y,form.R,inductance,rotation)
+    if iszero(inductance)
+        gate["root_scope"] = "all finite device-state roots; resistive grid algebraic; ideal source voltages clamped"
+    end
     gate["DC_termination"]=haskey(net.elements,:DC_load) ?
         "physical DC resistor; exact algebraic node elimination, converter DC states retained" : bases.dc_voltage===nothing ? "not applicable: AC-only machine" : "ideal DC voltage source"
     return gate

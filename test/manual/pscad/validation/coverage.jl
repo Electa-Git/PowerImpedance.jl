@@ -59,7 +59,9 @@ function scan_definition(id, net, list)
 end
 
 function scan_reference(net, list, spec)
-    if fixture(spec.id).category == :device
+    if spec.id == "induction_machine"
+        return induction_machine_reference(net, list, spec.frequencies)
+    elseif fixture(spec.id).category == :device
         return cat((device_port_y(net, ComplexF64(im*2π*f))
             for f in spec.frequencies)...; dims=3)
     elseif spec.id == "passive_ac_rlc"
@@ -207,6 +209,11 @@ function scan_record(spec)
         record["dc_clamped"]=spec.dc_clamped
         record["reference_scope"]=spec.dc_voltage_base_kV===nothing ? "native machine full AC-terminal Y converted from per-unit to SI; native rt/lt retained" : spec.dc_clamped ? "native DUT AC block with DC clamped" : "native DUT + DC resistor AC-terminal Schur reduction; remote zero-voltage reference grounded"
         record["refinement"]["selection"]="one worst-error drive axis; qualify both V/Idrive and Iconverter/Idrive, including cross-axis voltage; half-step at worst frequency plus 1000 Hz"
+        if spec.id == "induction_machine"
+            record["drive"] = "shunt current at the machine AC terminal; measured voltage matrix is the Y input"
+            record["reference_scope"] = "NetworkBuilder.get_y at the solved machine setpoint; SI_scale supplies S_base/Vac_base^2; inward terminal current"
+            record["kcl_required"] = true
+        end
     end
     if fixture(spec.id).category == :coupled
         record["power_base_MVA"]=spec.power_base_MVA
@@ -276,6 +283,7 @@ function device_scan_definition(net,list; id="tlc_pq_freq_support")
         time_step=id=="tlc_vdc_q" ? 0.625e-6 : id=="mmc_vdc_q" ? 1.25e-6 : id=="mmc_gfm_lec_compensated" ? 1e-6 : 2.5e-6,sample_step=20e-6,injection_time=2.0,
         window_starts=(8.0,9.0),window_duration=1.0,simulation_time=10.0,
         travel_lower_bound_s=0.0,estimated_station_seconds=1800))
+    id == "induction_machine" && return induction_machine_scan(net, list, spec)
     if id in ("mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac")
         settling = gfl_settling(stability_gate(net, fixture(id)); fixture_id = id, tone_peak_pu = spec.tone_peak_pu)
         spec = merge(spec, (; window_starts = Tuple(settling["window_starts_s"]),

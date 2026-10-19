@@ -70,7 +70,9 @@ function source_record()
     append!(paths, ["src/Network/Components/converter/MMC/" * file for file in
         ("MMC.jl", "electrical.jl", "modulation.jl", "inner_current.jl", "energy.jl")])
     append!(paths, ["test/pscad/networks.jl", "examples/P2P_HVDC_ALT.jl",
-        "src/Network/NetworkBuilder/gs_converters.jl", "src/Network/Components/machine/SynchronousMachine.jl"])
+            "src/Network/NetworkBuilder/gs_converters.jl", "src/Network/Components/machine/SynchronousMachine.jl"])
+    append!(paths, ["src/Network/Components/machine/InductionMachine.jl",
+        "src/PSCAD/emitters/induction_machine.jl", "src/core/base.jl"])
     return [Dict("path" => path, "sha256" => digest(joinpath(REPOSITORY, path)))
             for path in paths]
 end
@@ -169,7 +171,7 @@ function operating_point_rows(list)
         push!(rows,
             (owner = string(element), quantity = string(quantity), value,
                 unit =
-                startswith(string(quantity), "q") ? "MVAr" : "MW"))
+                quantity == :speed_pu ? "pu" : startswith(string(quantity), "q") ? "MVAr" : "MW"))
     end
     return rows
 end

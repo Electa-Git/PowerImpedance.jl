@@ -1,8 +1,8 @@
 # Julia–PSCAD validation suite
 
 This manual suite checks exported circuits against Julia operating points, frequency responses,
-time-domain responses and instability growth. It covers passive elements, converters, a synchronous
-machine and coupled circuits. The scripts are private test utilities. Native measurements require
+time-domain responses and instability growth. It covers passive elements, converters, synchronous
+and induction machines, and coupled circuits. The scripts are private test utilities. Native measurements need
 a configured Windows PSCAD station; preparation and local analysis do not contact it. The
 [abbreviations](../../../../docs/src/pscad.md#Abbreviations) are defined in the export guide.
 
@@ -86,7 +86,7 @@ remain diagnostic.
 The passive grid contains 24 tones:
 `[1,2,3,4,6,7,10,13,18,24,32,42,50,56,75,100,133,178,237,316,422,562,750,1000] Hz`. Balanced dq
 omits 50 Hz, which would create an abc DC sideband. Phase-domain scans retain it because their
-tones are physical phase frequencies. Active scans use the resulting 23-tone grid. Schroeder
+tones are physical phase frequencies. Most active scans use this 23-tone grid. Schroeder
 cosine phases are `-pi*k*(k-1)/N` in absolute time. Passive tone onset is 0.5 s; active onset is 2
 s. Per-tone amplitudes and bases are stored before measurement.
 
@@ -538,6 +538,58 @@ turbine. It tests machine admittance in SI units and slow electromechanical dyna
 The frequency-response check passes against the continuous model; the maximum norm error is 1.49 %
 (limit 5 %). The raw step change passes at 0.895 % (limit 1 %). The slowest mode has a decay time
 of 5.06 s. At 2.5 us, the raw step change was 1.81 % (limit 1 %); the finer stored result passes.
+
+#### Induction machine with constant load torque (`induction_machine`)
+
+The circuit is `PSCADFixtures.im_network()`: a 1000 MVA/220 kV induction machine behind a
+0.01 ohm resistor and a 220 kV ideal source. The load torque is constant at 0.9 pu and the
+inertia constant is 4 s. Element names are `DUT`, `Grid` and `G3`. The models and connections match
+the reference circuit. Julia gives 916.166 MW, 881.241 MVAr and speed 0.987551129 pu.
+
+The measurement tests stator-current, rotor-flux and speed dynamics through the full 2x2 terminal
+admittance. It uses inward machine current and measured terminal voltage in fixed nominal 50 Hz
+dq coordinates, with `d=cos(theta)` and `q=sin(theta)`. `NetworkBuilder.get_y` supplies the SI
+reference at the solved machine setpoint. Phase-peak bases are 179.629 kV and 3.71135 kA.
+Their ratio gives the admittance base `1000/220^2 = 0.0206612 S`. A kA/kV ratio is S.
+
+The 29-tone grid adds 0.5, 1.5, 48, 49, 51 and 52 Hz to the usual active grid. It spans the
+mechanical response and samples the 49.95 Hz stator-current mode. The grid excludes 50 Hz. The
+complete-circuit slowest decay is 6.67984 per second, with a 0.149704 s time constant.
+
+Tone onset is 2 s, with coherent windows [6,8) and [8,10) s in a 10 s run. The first window starts 26.7
+decay times after tone onset. The pole estimate sizes the run. Measured drift and window checks
+test validity.
+
+Integration is 1 us, with a 0.5 us half-step repeat. Recorder intervals are 25 us and 12.5 us,
+respectively. Both steps use an odd ratio of 25 and coherent two-second windows.
+
+Per-tone shunt current is 0.01 pu, or 37.1135 A. The 0.01 ohm grid gives a small terminal voltage
+response. The native response bounds the combined voltage and machine-current departures by
+5.99e-5 pu and 4.54e-4 pu. Half amplitude is 0.005 pu.
+
+The suite checks baseline subtraction, both drive axes, window agreement, half amplitude, half
+step and baseline-subtracted KCL. Preparation records the stability screen. A failed screen
+still permits preparation and execution.
+
+Four main-step runs and two half-step runs need about 80 million integration steps. The
+workflow budget is 1800 s:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/run_station.jl induction_machine --timeout=1800
+```
+
+The independent Z-tool comparison is an offline diagnostic. The data span 80 frequencies from
+1 to 499.5 Hz. The global relative Frobenius error is 0.0329212%. The largest per-frequency
+matrix error is 0.487774%, at 499.5 Hz. The largest absolute entry difference is 2.70111e-4 S.
+
+The data use the same dq order and SI units, without a further rotation or scale factor. Set
+`im_data` to the author's `IM_Ztool_1us#Y_AC#-1#.txt` file to reproduce the comparison:
+
+```sh
+julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/crosscheck_induction_machine.jl "$im_data" /tmp/im_validation_crosscheck
+```
+
+Results: pending station run.
 
 #### Grid-forming MMC, weak grid (`mmc_gfm_weak_grid`)
 
