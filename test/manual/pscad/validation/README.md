@@ -223,8 +223,8 @@ retain the ordinary rule.
 ## Fixture catalogue
 
 The entries report maximum normalized Frobenius errors and maximum-entry step changes as
-percentages, next to their limits. Displayed numerical values use two or three significant
-figures; exact settings and results are in each fixture's manifest. Corrected probe-orientation
+percentages or dimensionless ratios, next to their limits. Displayed values use two or three
+digits of precision. Each fixture's manifest gives exact settings and results. Corrected probe-orientation
 results take precedence over retained uncorrected analysis. A passing comparison with the one-step
 (discrete) model does not imply a pass with the continuous model. Native data are not distributed
 with the package.
@@ -589,7 +589,9 @@ The data use the same dq order and SI units, without a further rotation or scale
 julia +1.10.11 --project=test/manual/pscad/validation test/manual/pscad/validation/crosscheck_induction_machine.jl "$im_data" /tmp/im_validation_crosscheck
 ```
 
-Results: pending station run.
+The frequency-response check passes against the continuous model. The maximum norm error is
+1.88 % (limit 5 %), at 1000 Hz. The dimensionless half-step change passes at 3.2e-5 (limit 1 %).
+The half-amplitude change passes at 4.5e-7 (limit 2 %). Baseline drift is 8.4e-11. KCL passes.
 
 #### Grid-forming MMC, weak grid (`mmc_gfm_weak_grid`)
 
