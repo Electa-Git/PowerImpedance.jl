@@ -61,6 +61,56 @@ archives the previous Julia reference and analysis, regenerates power flow/admit
 verifies unchanged project hashes. It does not run PSCAD. Retained measurements keep their
 producing probe signs.
 
+## Z-tool component sweeps
+
+`ztool_sweeps.jl` measures component admittances with Z-tool 0.1.52 and compares them with Julia in siemens.
+Machines use an AC series probe at the device terminal.
+Converters use AC and DC series probes and a topology file for the full DC, d, q matrix.
+Passive two-ports use probes at both ends. The IEEE9 case measures the Bus5 admittance with an open shunt probe.
+The comparison uses the device-facing sides and rotates measured AC coordinates into the fixed nominal frame.
+
+The measurement copy opens an adjacent ideal source feed at the first integration step after `Tdecoupling`.
+The strict time comparator uses the same snapshot time that Z-tool assigns to that parameter.
+AC switching opens all three phases. DC switching opens both poles.
+The DC breakers use 10 MΩ off resistances to the original pole voltages as a weak common-mode reference.
+Their zero closed resistance leaves the startup circuit unchanged.
+
+The manifest lists these sources and excludes their network-facing probe results from comparison.
+Sources behind an impedance stay connected.
+A scan block replaces the ordinary terminal meter in the measurement copy.
+The manifest records that readout change. The ordinary export is unchanged.
+
+The sweep uses sixteen rounded logarithmic tones from 1 Hz to 1 kHz on a 1 Hz base, with two simulations per axis.
+Integration and sample steps come from the case specification.
+Snapshot and FFT settling times use its comparison windows and any explicit decay-time margin.
+The grid-forming MMC cases use solved initialization for slow control states, whose decay time is about 1590 s.
+
+The perturbation is at most 0.0001 pu per tone.
+The saved reference limits the predicted combined current departure to 0.004 pu.
+Julia stability predictions do not prevent execution. The manifest records each result or execution error.
+
+Each case keeps its own `data/<case>/ztool/` directory, manifest, file hashes, original project, measurement copy, Julia reference and measured files.
+Offline reanalysis reads those saved files and checks their hashes.
+Per-frequency relative Frobenius errors and their maximum use a 2 % limit for passives and 5 % for machines and converters.
+The comparison also applies the suite's entry, phase and normalized-error rules.
+The AC line, cable and IEEE9 sweep references use the native dq projection.
+Their results do not replace the existing phase-domain comparisons.
+
+Set `POWERIMPEDANCE_PSCAD_CONFIG` for station execution. The runner's Python needs `ztoolacdc==0.1.52`.
+These commands prepare the pilots locally, run them on the station and reanalyse stored outputs:
+
+```sh
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/ztool_sweeps.jl prepare induction_machine mmc_gfm_lec_compensated
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/ztool_sweeps.jl run induction_machine mmc_gfm_lec_compensated --timeout=14400
+julia --project=test/manual/pscad/validation test/manual/pscad/validation/ztool_sweeps.jl reanalyse induction_machine mmc_gfm_lec_compensated
+```
+
+Replace the case ids with `components` to select every passive and single-device case.
+The `estimates` action prints run counts, simulated durations and approximate station times for those cases.
+The estimates scale the measured induction-machine rate with integration step and node count, with a factor-two range.
+They do not predict scientific acceptance.
+The [PSCAD comparator](https://www.pscad.com/webhelp-v502-ol/Master_Library_Models/CSMF/Interpolation_Compatibility/1comparator.htm) changes its output when time exceeds its threshold.
+
 ## Measurement procedure
 
 ### Injection and baseline subtraction

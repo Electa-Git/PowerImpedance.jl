@@ -10,4 +10,5 @@ const PSCAD_TESTS = normpath(joinpath(@__DIR__, "..", "..", "..", "pscad"))
     include(joinpath(PSCAD_TESTS, "validation_test.jl"))
     include(joinpath(PSCAD_TESTS, "validation_induction_machine_test.jl"))
     include(joinpath(PSCAD_TESTS, "orientation_test.jl"))
+    include(joinpath(PSCAD_TESTS, "validation_ztool_test.jl"))
 end
