@@ -1,22 +1,5 @@
-import PowerImpedance: @network
-
-function read_validation_data(path::AbstractString)
-    lines = readlines(path)
-    validation_data = [split(line) for line in lines[2:end]]
-
-    frequency = real([
-        parse(ComplexF64, replace(row[1], "(" => ""))
-        for row in validation_data
-    ])
-    omegas = 2π .* frequency
-
-    matrices = [
-        reshape(parse.(ComplexF64, replace.(row[2:end], "(" => "")), 3, 3)
-        for row in validation_data
-    ]
-
-    return omegas, transpose.(matrices)
-end
+using PowerImpedance, LinearAlgebra, Test
+using DelimitedFiles: readdlm
 
 function element_y(elem, s::Complex)
     n = size(elem.A, 1)
@@ -165,55 +148,55 @@ function build_mmc_grid()
         limits = limits,
     )
 
-    grid = @network begin
-        voltageBase = Vm
-
-        G3 = ac_source(pins = 3, setpoint = Setpoint(Vac = Vm*sqrt(2)), transformation = true)
-        G_DC = dc_source(pins = 1, setpoint = Setpoint(Vdc = Vdc))
-
-        DUT = dut
-
-        G3[2.1] == gndD
-        G3[2.2] == gndQ
-
-        G3[1.1] == DUT[2.1]
-        G3[1.2] == DUT[2.2]
-        G_DC[1.1] == DUT[1.1]
-        G_DC[2.1] == gndDC
+    voltage = elec.vAC_base / elec.turnsRatio
+    grid = Network()
+    grid.voltageBase[1] = voltage / sqrt(2)
+    add!(grid, :DUT, dut)
+    add!(grid, :G3, ac_source(pins = 3, transformation = true,
+        setpoint = Setpoint(Vac = voltage)))
+    magnitude = (voltage * sqrt(3 / 2))^2 / elec.Sbase / 8
+    resistance = magnitude / sqrt(101)
+    inductance = 10resistance / (2π * 50)
+    add!(grid, :Grid, impedance(z = s -> resistance + inductance * s,
+        pins = 3, transformation = true))
+    for terminal in 1:2
+        for (element, side, bus) in ((:DUT, 2, "AC"), (:Grid, 1, "AC"),
+            (:Grid, 2, "Grid"), (:G3, 1, "Grid"))
+            connect!(grid, (element, Symbol("$side.$terminal")), Symbol(bus * string(terminal)))
+        end
+        connect!(grid, (:G3, Symbol("2.$terminal")), :gnd)
     end
+    add!(grid, :G_DC, dc_source(setpoint = Setpoint(Vdc = Vdc)))
+    connect!(grid, (:DUT, Symbol("1.1")), :DC)
+    connect!(grid, (:G_DC, Symbol("1.1")), :DC)
+    connect!(grid, (:G_DC, Symbol("2.1")), :gnd)
+    connect!(grid)
+    power_flow(grid)
 
     return grid
 end
 
-# Validation of GFM-CCVI with CM
+# The test compares AC terminal admittance with the DC voltage held fixed.
 @testset "Unit tests for MMC with compensated modulation" begin
-    omegas, Y_validation = read_validation_data(joinpath(@__DIR__, "data", "data_MMC_CM_validation.txt"))
+    data = readdlm(joinpath(@__DIR__, "data", "mmc_compensated_pscad_export.tsv"),
+        '\t', Float64; comments = true)
+    omegas = 2π .* data[:, 1]
+    Y_validation = [reshape(complex.(row[2:2:end], row[3:2:end]), 2, 2)
+                    for row in eachrow(data)]
     grid = build_mmc_grid()
     elem = grid.elements[:DUT]
+    @test all(pole -> real(pole) < 0, eigvals(elem.A))
 
     Y_MMC = Matrix{ComplexF64}[]
     for ω in omegas
         Y1 = element_y(elem, 1im * ω)
-        push!(Y_MMC, mmc_plot_convention(Y1))
+        push!(Y_MMC, mmc_plot_convention(Y1)[2:3, 2:3])
     end
 
     for k in eachindex(omegas)
-        for c in 1:3, r in 1:3
+        for c in 1:2, r in 1:2
             @test abs(Y_MMC[k][c, r]) ≈ abs(Y_validation[k][c, r]) atol = 1e-4 rtol = 1e-2
-            # The PSCAD references use the opposite Δ-triplen rotation. Upper error bounds
-            # round measured errors UP to four significant digits. Every other complex
-            # comparison and every magnitude tolerance remain unchanged.
-            if omegas[k] == 2π * 40 && c == 1 && r == 2
-                # Complex error with the reference triplen rotation: 9.389600e-5 S; with
-                # the native +3ωbase rotation: 1.147926e-4 S.
-                @test abs(Y_MMC[k][c, r] - Y_validation[k][c, r]) <= 1.148e-4
-            elseif omegas[k] == 2π * 45 && c == 1 && r == 3
-                # Complex error with the reference triplen rotation: 1.536634e-4 S; with
-                # the native +3ωbase rotation: 1.789236e-4 S.
-                @test abs(Y_MMC[k][c, r] - Y_validation[k][c, r]) <= 1.790e-4
-            else
-                @test Y_MMC[k][c, r] ≈ Y_validation[k][c, r] atol = 1e-4 rtol = 1e-2
-            end
+            @test Y_MMC[k][c, r] ≈ Y_validation[k][c, r] atol = 1e-4 rtol = 1e-2
         end
     end
 end 
