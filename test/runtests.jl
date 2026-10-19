@@ -52,6 +52,7 @@ end
         include("adm_SM_test.jl")
         include("synchronous_machine_operating_point_test.jl")
         include("adm_IM_test.jl")
+        include("induction_machine_power_flow_test.jl")
         include("Impedance_test.jl")
         include("Source_test.jl")
         include("NetworkBuilder_test.jl")

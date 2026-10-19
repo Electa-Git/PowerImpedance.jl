@@ -337,29 +337,31 @@ function convert!(data, elem::Element{<:InductionMachine}, ::Type{PMACDC}, key, 
     Sbase = global_dict["S"]
     Vbase = global_dict["V"]
     impscale = ((elec.Vac_base)^2/elec.S_base)/global_dict["Z"]
+    # Convert torque from the machine MVA base to the network VA base.
+    T_0 = mech.T_0 * elec.S_base * 1e6 / Sbase
     # Power flow initial values
-    data["im"][key_str]["P_ag"] = mech.T_0
+    data["im"][key_str]["P_ag"] = T_0
     data["im"][key_str]["Q_ag"] = 0.0
     data["im"][key_str]["status"] = 1
     data["im"][key_str]["im_bus"] = ac_bus
 
     # Power flow limits (not used in power flow)
-    data["im"][key_str]["Pacmin"] = 0.9 * mech.T_0 #/ Sbase
+    data["im"][key_str]["Pacmin"] = 0.9 * T_0 #/ Sbase
     data["im"][key_str]["Vmmin"] = 0.9 # Should be extended with local_base/global_base but we do not care (not used in PF)
     data["im"][key_str]["Vmmax"] = 1.1
-    data["im"][key_str]["Pacmax"] = 1.1 * mech.T_0 #/ Sbase
-    data["im"][key_str]["Pacrated"] = mech.T_0 #/ Sbase
+    data["im"][key_str]["Pacmax"] = 1.1 * T_0 #/ Sbase
+    data["im"][key_str]["Pacrated"] = T_0 #/ Sbase
 
     # Power flow elements
     data["im"][key_str]["x_m"] = elec.l_m * impscale # In per unit equal
     data["im"][key_str]["x_rl"] = elec.l_rl * impscale
-    data["im"][key_str]["x_sl"] = elec.l_sl * impscale
+    data["im"][key_str]["x_sl"] = (elec.l_sl + elec.lt) * impscale
     data["im"][key_str]["r_r"] = elec.r_r * impscale
-    data["im"][key_str]["r_s"] = elec.r_s * impscale
+    data["im"][key_str]["r_s"] = (elec.r_s + elec.rt) * impscale
 
     # Torque parameters
     data["im"][key_str]["torque"] =  Dict{String, Any}()
-    data["im"][key_str]["torque"]["T_0"] = mech.T_0 
+    data["im"][key_str]["torque"]["T_0"] = T_0
     data["im"][key_str]["torque"]["A"] = mech.A
     data["im"][key_str]["torque"]["B"] = mech.B
     data["im"][key_str]["torque"]["C"] = mech.C

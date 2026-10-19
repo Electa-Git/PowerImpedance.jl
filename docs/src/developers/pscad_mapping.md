@@ -478,15 +478,11 @@ Julia uses the inverse-Γ coefficients
 parameters. `R2` is `r_r`, before the inverse-Γ conversion.
 The stator sums include `rt` and `lt` on the same machine base.
 
-Julia power flow omits these two terms. Nonzero values can give different
-terminal powers in the state equations and the power-flow result.
+Julia power flow uses `r_s+rt` and `l_sl+lt` for the stator series impedance.
 The state equations do not use `p_f`. Speed and torque have no extra pole factor.
 
-Power flow passes `T_0` without converting from the machine base to the
-1000 MVA network base. In the reference circuit with `S_base=2000` MVA,
-power flow gives 911.922 MW and the state equations give 1832.331 MW at the
-same bus voltage. The exporter retains the machine base. The supplied
-1000 MVA case uses matching bases.
+Power flow scales `T_0`, the initial air-gap power and the power limits by the
+ratio of the machine power base to the network power base.
 
 The load module computes
 
