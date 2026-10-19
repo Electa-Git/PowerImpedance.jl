@@ -110,6 +110,49 @@ The [scan guide](../pscad.md#Z-tool-scan-probes) describes placement and the
 library workspace. Series placement changes only the selected terminal label.
 The existing ammeter and its channel orientation remain in the through-path.
 
+### Z-tool sweep inputs
+
+`ZToolScan` adds a `ztool` table to `computation.toml`.
+It records `ztoolacdc` version 0.1.52 and the sweep arguments.
+Ordinary `PSCADRun` requests have no `ztool` table.
+
+| Julia input | Z-tool argument | Unit or rule |
+|---|---|---|
+| `frequencies` | `freq` | Positive increasing values in Hz |
+| `f_min`, `f_max`, `f_points`, `f_base` | Same names | `create_freq.loglist` rounds and fills the list |
+| `snapshot_time` | `t_snap` | s, before decoupling |
+| `start_fft` | Same name | s, settling before the FFT |
+| `fft_periods` | Same name | Window length is `fft_periods/f_base` s |
+| `injection_interval` | `dt_injections` | s, delay after decoupling |
+| `perturbation` | `v_perturb_mag` | pu of the block's nominal voltage |
+| `multi_frequency` | `multi_freq_scan` | Boolean flag for up to eight tones together |
+| `time_step` | `t_step` | Seconds become microseconds |
+| `sample_step` | Same name | Seconds become microseconds |
+| `num_parallel_sim` | Same name | Positive volley count, default 1 |
+| `topology` | Same name | Path to the staged copy of the local file |
+| Detected GFortran version | `fortran_ext` | 8.1 gives `.gf81`, and 4.6 gives `.gf46` |
+| Staged run directory | `working_dir` | Contains the project and build folder |
+| Run result directory | `results_folder` | Runner copies the result files into `outputs` |
+
+The topology header lists `Name-1 Name-2` for each block.
+A symmetric binary matrix follows, with one row and column per named side.
+A diagonal one selects a component at that side. Off-diagonal ones connect
+sides for a combined scan. The library ports `A1` and `A2` correspond to
+sides 1 and 2 in topology headers and result filenames.
+
+The runner replaces the `connect` attribute in `ztoolacdc.frequency_sweep`
+with a callable that returns its own application. It restores the attribute
+in a `finally` block. It passes `launch_and_load_PSCAD=False`,
+`close_PSCAD=False`, `release_certificates=False` and
+`delete_PSCAD_output_files=False`. It also passes `run_sim=True` and disables
+every plotting or display flag.
+
+`outputs/ztool.toml` records the installed version, arguments and result filenames.
+The completion record hashes these files, including the angle and power-flow
+files. Each admittance file stores its matrix entries in row order.
+The reader assigns them to `admittance[row, column, frequency_index]` in S.
+Rows and columns follow the header axes, including mixed AC/DC files.
+
 ### Cable fields
 
 Coaxial `Cable` elements require `eliminate=true`. A row contains one

@@ -390,7 +390,8 @@ function run_remote_pscad(
     end
     verbosity >= 2 &&
         @debug "Checking PSCAD outputs" host=config.host run_id destination=local_output
-    for name in _required_outputs(output_stem)
+    input = TOML.parsefile(joinpath(dirname(local_project), "computation.toml"))
+    for name in _required_outputs(output_stem, input)
         path = joinpath(local_output, name)
         isfile(path) || throw(ErrorException(
             "required PSCAD output is missing: $path\nLast PSCAD diagnostics:\n$(_diagnostic_tail(joinpath(local_output, "pscad-console.txt")))"))
@@ -414,6 +415,13 @@ end
 function _required_outputs(stem::AbstractString)
     return ("pscad-console.txt", "build-messages.txt", "timing.txt",
         "settings-readback.toml", "solver.toml", stem * ".inf", stem * "_01.out")
+end
+
+function _required_outputs(stem::AbstractString, input::AbstractDict)
+    haskey(input, "ztool") || return _required_outputs(stem)
+    return ("pscad-console.txt", "build-messages.txt", "timing.txt",
+        "settings-readback.toml", "solver.toml", "ztool.toml",
+        stem * "_power_flow.txt", stem * "_angles.txt")
 end
 
 # Ancestor paths reveal symbolic links even when destination directories

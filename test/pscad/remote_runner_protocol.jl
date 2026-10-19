@@ -457,6 +457,273 @@ end
         end
     end
 end
+
+const PYTHON_ZTOOL_FIXTURE = raw"""
+import numpy as np
+ZTOOL_ORIGINAL_VERSION = importlib.metadata.version
+ZTOOL_OLD_MODULES = {name: sys.modules.get(name) for name in ("ztoolacdc", "ztoolacdc.frequency_sweep")}
+ZTOOL_UNSAFE_CONNECTS = 0
+ZTOOL_LAUNCHES = 0
+ZTOOL_CALLS = 0
+ZTOOL_LOGLISTS = 0
+LAST_ZTOOL_ARGS = None
+
+def ztool_version(name):
+    if name != "ztoolacdc":
+        return ZTOOL_ORIGINAL_VERSION(name)
+    mode = os.environ.get("PI_RUNNER_MODE")
+    if mode == "ztool_missing":
+        raise importlib.metadata.PackageNotFoundError(name)
+    return "0.1.51" if mode == "ztool_version" else "0.1.52"
+importlib.metadata.version = ztool_version
+
+ztool_module = types.ModuleType("ztoolacdc.frequency_sweep")
+def unsafe_ztool_connect(*args, **kwargs):
+    global ZTOOL_UNSAFE_CONNECTS
+    ZTOOL_UNSAFE_CONNECTS += 1
+    raise RuntimeError("unpatched Z-tool connect called")
+def unsafe_ztool_launch(*args, **kwargs):
+    global ZTOOL_LAUNCHES
+    ZTOOL_LAUNCHES += 1
+    raise RuntimeError("Z-tool launch called")
+def fake_frequency_sweep(**kwargs):
+    global ZTOOL_CALLS, LAST_ZTOOL_ARGS
+    ZTOOL_CALLS += 1
+    LAST_ZTOOL_ARGS = dict(kwargs)
+    application = ztool_module.connect()
+    assert application is LAST_APP
+    assert application.silence
+    assert application.project("generated") is LAST_APP._project
+    assert application.project("Z_tool") is LAST_APP.library
+    assert not application.closed
+    assert kwargs["launch_and_load_PSCAD"] is False
+    assert kwargs["close_PSCAD"] is False
+    assert kwargs["release_certificates"] is False
+    assert kwargs["delete_PSCAD_output_files"] is False
+    assert kwargs["run_sim"] is True
+    assert kwargs["compute_yz"] is True
+    for flag in ("make_plot", "pscad_plot", "plot_snapshot", "show_powerflow", "visualize_network", "save_td"):
+        assert kwargs[flag] is False
+    assert kwargs["fortran_ext"] == ".gf81"
+    assert kwargs["project_name"] == "generated"
+    assert kwargs["num_parallel_sim"] == 1
+    os.chdir(kwargs["working_dir"])
+    if os.environ.get("PI_RUNNER_MODE") == "ztool_failure":
+        raise RuntimeError("synthetic Z-tool sweep failure")
+    folder = kwargs["results_folder"]
+    os.makedirs(folder, exist_ok=True)
+    frequencies = kwargs["freq"]
+    assert isinstance(frequencies, np.ndarray)
+    assert frequencies.dtype == np.dtype("float64")
+    assert max(abs(frequencies)) == frequencies[-1]
+    for side in (1, 2):
+        filename = kwargs["output_files"] + f"#Y_AC#scan-{side}#.txt"
+        with open(os.path.join(folder, filename), "w") as stream:
+            stream.write(f"f\tscan-{side}_d\tscan-{side}_q\n")
+            for frequency in frequencies:
+                stream.write(f"({frequency}+0j) (1+2j) (3+4j) (5+6j) (7+8j)\n")
+    for suffix in ("_power_flow.txt", "_angles.txt"):
+        with open(os.path.join(folder, kwargs["output_files"] + suffix), "w") as stream:
+            stream.write("fixture data\n")
+ztool_module.connect = unsafe_ztool_connect
+ztool_module.launch = unsafe_ztool_launch
+ztool_module.frequency_sweep = fake_frequency_sweep
+
+def fake_loglist(**kwargs):
+    global ZTOOL_LOGLISTS
+    ZTOOL_LOGLISTS += 1
+    count = kwargs["f_points"]
+    assert kwargs == {"f_min": 1.0, "f_max": float(count), "f_points": count, "f_base": 1.0}
+    mode = os.environ.get("PI_RUNNER_MODE", "")
+    if mode == "ztool_count":
+        count = 7
+    elif mode.startswith("ztool_resolved_"):
+        count = int(mode.rsplit("_", 1)[-1])
+    return [float(i) for i in range(1, count + 1)]
+ztool_module.create_freq = types.SimpleNamespace(loglist=fake_loglist)
+ztool_package = types.ModuleType("ztoolacdc")
+ztool_package.__path__ = []
+ztool_package.frequency_sweep = fake_frequency_sweep
+sys.modules["ztoolacdc"] = ztool_package
+sys.modules["ztoolacdc.frequency_sweep"] = ztool_module
+"""
+
+function ztool_runner_arguments(root; owned = false, topology = false, logarithmic = false,
+        multi_frequency = false, count = multi_frequency ? 16 : 8)
+    arguments = runner_arguments(root, joinpath(root, "outputs"); port = 54330, owned)
+    project = first(arguments)
+    write(project, replace(read(project, String), "defn=\"fixture\"" => "defn=\"Z_tool:ACscan\""))
+    library = joinpath(root, "Z_tool.pslx")
+    cp(joinpath(@__DIR__, "fixtures/ztool/Z_tool.pslx"), library)
+    input_path = joinpath(root, "computation.toml")
+    input = TOML.parsefile(input_path)
+    input["resources"] = Dict("Z_tool.pslx" => bytes2hex(open(sha256, library)))
+    kwargs = Dict{String, Any}("t_snap" => 2.0, "t_step" => 1.0, "sample_step" => 25.0,
+        "f_base" => 1.0, "start_fft" => 1.0, "t_sim" => 2.0, "dt_injections" => 1.0,
+        "v_perturb_mag" => 0.01, "multi_freq_scan" => multi_frequency,
+        "fft_periods" => 1, "num_parallel_sim" => 1)
+    if logarithmic
+        merge!(kwargs, Dict("f_min" => 1.0, "f_max" => Float64(count), "f_points" => count))
+    else
+        kwargs["freq"] = collect(1.0:count)
+    end
+    if topology
+        kwargs["topology"] = "ztool_topology.txt"
+        write(joinpath(root, "ztool_topology.txt"), "scan-1 scan-2\n1 0\n0 1\n")
+    end
+    input["ztool"] = Dict("version" => "0.1.52", "arguments" => kwargs)
+    open(io -> TOML.print(io, input; sorted = true), input_path, "w")
+    return arguments
+end
+
+@testset "Z-tool sweep uses the runner application and restores connect" begin
+    @test _ztool_fortran_extension("GFortran 8.1 (64-bit)") == ".gf81"
+    @test _ztool_fortran_extension("GFortran 4.6 (32-bit)") == ".gf46"
+    @test_throws ArgumentError _ztool_fortran_extension("unknown compiler")
+    pyexec(PYTHON_ZTOOL_FIXTURE, @__MODULE__)
+    try
+        for owned in (false, true), topology in (false, true), logarithmic in (false, true),
+                multi_frequency in (false, true)
+            count = multi_frequency ? 16 : 8
+            mktempdir() do root
+                arguments = ztool_runner_arguments(root; owned, topology, logarithmic, multi_frequency)
+                pyexec("LAST_LAUNCH = None", @__MODULE__)
+                loglists = pyconvert(Int, pyeval("ZTOOL_LOGLISTS", @__MODULE__))
+                before = pwd()
+                mock_environment(root) do
+                    @test main(arguments) === nothing
+                    @test pyconvert(Bool, pyeval("LAST_LAUNCH is None", @__MODULE__))
+                    @test pyconvert(Bool, pyeval("ztool_module.connect is unsafe_ztool_connect", @__MODULE__))
+                    @test pyconvert(Int, pyeval("ZTOOL_UNSAFE_CONNECTS", @__MODULE__)) == 0
+                    @test pyconvert(Int, pyeval("ZTOOL_LAUNCHES", @__MODULE__)) == 0
+                    @test pyconvert(Int, pyeval("ZTOOL_LOGLISTS", @__MODULE__)) == loglists + Int(logarithmic)
+                    @test pyconvert(Int, pyeval("LAST_APP.quit_calls", @__MODULE__)) == Int(owned)
+                    @test pyconvert(Bool, pyeval("LAST_APP._project.unloaded", @__MODULE__))
+                    @test pyconvert(Bool, pyeval("LAST_APP.library.unloaded", @__MODULE__))
+                    @test !pyconvert(Bool, pyeval("LAST_APP.other.unloaded", @__MODULE__))
+                    @test !pyconvert(Bool, pyeval("LAST_APP._project.ran", @__MODULE__))
+                end
+                @test pwd() == before
+                output = arguments[2]
+                record = TOML.parsefile(joinpath(output, "ztool.toml"))
+                @test record["version"] == "0.1.52"
+                @test record["arguments"]["fortran_ext"] == ".gf81"
+                @test record["arguments"]["working_dir"] == root
+                @test record["arguments"]["results_folder"] == joinpath(root, "ztool_results")
+                @test record["arguments"]["t_step"] == 1.0
+                @test record["arguments"]["sample_step"] == 25.0
+                @test record["arguments"]["freq"] == collect(1.0:count)
+                @test record["arguments"]["launch_and_load_PSCAD"] === false
+                @test record["arguments"]["close_PSCAD"] === false
+                @test record["arguments"]["release_certificates"] === false
+                @test record["arguments"]["delete_PSCAD_output_files"] === false
+                @test record["arguments"]["run_sim"] === true
+                for flag in ("make_plot", "pscad_plot", "plot_snapshot", "show_powerflow", "visualize_network")
+                    @test record["arguments"][flag] === false
+                end
+                @test record["arguments"][logarithmic ? "f_points" : "freq"] == (logarithmic ? count : collect(1.0:count))
+                if topology
+                    @test record["arguments"]["topology"] == joinpath(root, "ztool_topology.txt")
+                end
+                @test Set(record["files"]) == Set(["fixture#Y_AC#scan-1#.txt",
+                    "fixture#Y_AC#scan-2#.txt", "fixture_power_flow.txt", "fixture_angles.txt"])
+                @test all(name -> isfile(joinpath(output, name)), record["files"])
+                @test !isfile(joinpath(output, "fixture.inf"))
+                @test parse(Float64, read(joinpath(output, "timing.txt"), String)) >= 0
+            end
+        end
+        mktempdir() do root
+            arguments = ztool_runner_arguments(root)
+            input_path = joinpath(root, "computation.toml")
+            input = TOML.parsefile(input_path)
+            delete!(input["ztool"]["arguments"], "sample_step")
+            open(io -> TOML.print(io, input; sorted = true), input_path, "w")
+            mock_environment(root) do
+                @test main(arguments) === nothing
+                @test pyconvert(Bool, pyeval("'sample_step' not in LAST_ZTOOL_ARGS", @__MODULE__))
+                @test pyconvert(Bool, pyeval("ztool_module.connect is unsafe_ztool_connect", @__MODULE__))
+            end
+        end
+        for (multi_frequency, counts) in ((false, (1, 7, 9, 15, 17)), (true, (1, 7, 8, 15, 17))),
+                count in counts, logarithmic in (false, true)
+            mktempdir() do root
+                arguments = ztool_runner_arguments(root; multi_frequency, logarithmic,
+                    count = logarithmic ? (multi_frequency ? 16 : 8) : count)
+                mode = logarithmic ? "ztool_resolved_$count" : "success"
+                calls = pyconvert(Int, pyeval("ZTOOL_CALLS", @__MODULE__))
+                mock_environment(root; mode) do
+                    @test_throws ErrorException main(arguments)
+                    @test pyconvert(Int, pyeval("ZTOOL_CALLS", @__MODULE__)) == calls
+                    @test pyconvert(Bool, pyeval("ztool_module.connect is unsafe_ztool_connect", @__MODULE__))
+                    @test pyconvert(Bool, pyeval("LAST_APP._project.unloaded", @__MODULE__))
+                    @test pyconvert(Bool, pyeval("LAST_APP.library.unloaded", @__MODULE__))
+                end
+                @test !isfile(joinpath(arguments[2], "ztool.toml"))
+                console = read(joinpath(arguments[2], "pscad-console.txt"), String)
+                @test occursin("the resolved list has $count points", console)
+                @test occursin(multi_frequency ? "PSCAD omits the run index" :
+                    "does not run the extra simulations", console)
+            end
+        end
+        for placement in (:none, :multiple, :with_tf)
+            mktempdir() do root
+                arguments = ztool_runner_arguments(root)
+                project = first(arguments)
+                text = read(project, String)
+                if placement === :none
+                    text = replace(text, "Z_tool:ACscan" => "master:fixture")
+                else
+                    defn = placement === :with_tf ? "TFscan" : "DCscan"
+                    text = replace(text, "</schematic>" =>
+                        "<User id=\"2\" x=\"144\" y=\"72\" defn=\"Z_tool:$defn\"/></schematic>")
+                end
+                write(project, text)
+                mock_environment(root) do
+                    if placement === :with_tf
+                        @test main(arguments) === nothing
+                    else
+                        @test_throws r"one AC or DC scan block" main(arguments)
+                    end
+                    @test pyconvert(Bool, pyeval("ztool_module.connect is unsafe_ztool_connect", @__MODULE__))
+                    @test pyconvert(Bool, pyeval("LAST_APP._project.unloaded", @__MODULE__))
+                    @test pyconvert(Bool, pyeval("LAST_APP.library.unloaded", @__MODULE__))
+                    @test pyconvert(Int, pyeval("LAST_APP.quit_calls", @__MODULE__)) == 0
+                end
+            end
+        end
+        for mode in ("ztool_failure", "ztool_version", "ztool_missing", "ztool_count")
+            mktempdir() do root
+                arguments = ztool_runner_arguments(root; logarithmic = mode == "ztool_count")
+                before = pwd()
+                mock_environment(root; mode) do
+                    @test_throws ErrorException main(arguments)
+                    @test pyconvert(Bool, pyeval("ztool_module.connect is unsafe_ztool_connect", @__MODULE__))
+                    @test pyconvert(Int, pyeval("ZTOOL_UNSAFE_CONNECTS", @__MODULE__)) == 0
+                    @test pyconvert(Int, pyeval("ZTOOL_LAUNCHES", @__MODULE__)) == 0
+                    @test pyconvert(Bool, pyeval("LAST_APP._project.unloaded", @__MODULE__))
+                    @test pyconvert(Bool, pyeval("LAST_APP.library.unloaded", @__MODULE__))
+                    @test pyconvert(Int, pyeval("LAST_APP.quit_calls", @__MODULE__)) == 0
+                end
+                @test pwd() == before
+                @test !isfile(joinpath(arguments[2], "ztool.toml"))
+                console = read(joinpath(arguments[2], "pscad-console.txt"), String)
+                expected = mode == "ztool_failure" ? "synthetic Z-tool sweep failure" :
+                           mode == "ztool_count" ? "frequency count divisible by 8" : "ztoolacdc==0.1.52"
+                @test occursin(expected, console)
+            end
+        end
+    finally
+        pyexec(raw"""
+        importlib.metadata.version = ZTOOL_ORIGINAL_VERSION
+        for name, original in ZTOOL_OLD_MODULES.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+        """, @__MODULE__)
+    end
+end
+
 end
 
 module PSCADProbeProtocol

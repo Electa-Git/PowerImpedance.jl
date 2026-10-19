@@ -122,6 +122,97 @@ function _build_messages(project, path)
     return messages
 end
 
+function _ztool_fortran_extension(compiler)
+    matched = match(r"(?i)\b(?:GFortran|GNU Fortran)\s+(\d+)\.(\d+)", compiler)
+    matched === nothing && throw(ArgumentError(
+        "Z-tool cannot derive the build extension for compiler $compiler; a detected GFortran version is required"))
+    return ".gf" * matched[1] * matched[2]
+end
+
+function _run_ztool_sweep(app, project_path, project_name, output, input, compiler, console, verbosity)
+    sweep = input["ztool"]
+    version = try
+        _string(pyimport("importlib.metadata").version("ztoolacdc"))
+    catch failure
+        error("ZToolScan requires ztoolacdc==0.1.52 in the runner's Python: $(sprint(showerror, failure))")
+    end
+    version == "0.1.52" && version == sweep["version"] ||
+        error("ztoolacdc==0.1.52 is required for ZToolScan; found $version")
+    haskey(input, "resources") && haskey(input["resources"], "Z_tool.pslx") ||
+        error("ZToolScan requires a staged Z-tool library")
+    directory = abspath(dirname(project_path))
+    results_folder = joinpath(directory, "ztool_results")
+    arguments = Dict{String, Any}(sweep["arguments"])
+    if haskey(arguments, "topology")
+        basename(arguments["topology"]) == arguments["topology"] ||
+            error("Z-tool topology must be a staged filename")
+        arguments["topology"] = joinpath(directory, arguments["topology"])
+        isfile(arguments["topology"]) || error("Staged Z-tool topology file is missing")
+    else
+        root = pyimport("xml.etree.ElementTree").parse(project_path).getroot()
+        scans = [node for node in root.findall("./definitions/Definition[@name='Main']/schematic/User")
+                 if _string(node.get("defn", "")) in ("Z_tool:ACscan", "Z_tool:DCscan", "Z_tool:DCscanPM")]
+        length(scans) == 1 || error("ZToolScan needs one AC or DC scan block on Main, or a topology file for multiple blocks")
+    end
+    any(entry -> _string(entry["name"]) == project_name, _components(app.projects())) ||
+        error("Z-tool target project is not loaded in the runner's application")
+    merge!(arguments, Dict("project_name" => project_name, "workspace_name" => project_name,
+        "working_dir" => directory, "results_folder" => results_folder,
+        "output_files" => input["settings"]["output_stem"],
+        "fortran_ext" => _ztool_fortran_extension(compiler),
+        "launch_and_load_PSCAD" => false, "close_PSCAD" => false,
+        "release_certificates" => false, "delete_PSCAD_output_files" => false,
+        "run_sim" => true, "make_plot" => false, "pscad_plot" => false,
+        "plot_snapshot" => false, "show_powerflow" => false, "visualize_network" => false,
+        "compute_yz" => true, "save_td" => false, "take_snapshot" => true,
+        "scan_single_ports" => true, "scan_multi_ports" => true,
+        "verbose" => verbosity >= 2))
+    module_ = pyimport("ztoolacdc.frequency_sweep")
+    if !haskey(arguments, "freq")
+        arguments["freq"] = pyconvert(Vector{Float64}, module_.create_freq.loglist(;
+            (Symbol(key) => arguments[key] for key in ("f_min", "f_max", "f_points", "f_base"))...))
+    end
+    frequencies = arguments["freq"]
+    !isempty(frequencies) && all(value -> isfinite(value) && value > 0, frequencies) &&
+        all(>(0), diff(frequencies)) || error("Z-tool resolved frequencies must be positive and strictly increasing")
+    count = length(frequencies)
+    if count % 8 != 0 || (arguments["multi_freq_scan"] && count < 16)
+        reason = arguments["multi_freq_scan"] ?
+            "multi-frequency sweeps need a frequency count divisible by 8 and at least 16: padding repeats the maximum frequency, and PSCAD omits the run index that Z-tool expects when each axis runs only one simulation" :
+            "single-frequency sweeps need a frequency count divisible by 8: Z-tool pads other counts with repeated maximum frequencies but does not run the extra simulations"
+        error("Z-tool 0.1.52 $reason; the resolved list has $count points")
+    end
+    kwargs = copy(arguments)
+    kwargs["freq"] = pyimport("numpy").asarray(kwargs["freq"]; dtype = "float64")
+    original_connect = module_.connect
+    started = time_ns()
+    _report(console, verbosity, 1, "Starting Z-tool frequency_sweep() with ztoolacdc $version")
+    try
+        module_.connect = pyfunc(() -> app)
+        cd(directory) do
+            module_.frequency_sweep(; (Symbol(key) => value for (key, value) in kwargs)...)
+        end
+    finally
+        module_.connect = original_connect
+    end
+    elapsed = (time_ns() - started) * 1e-9
+    write(joinpath(output, "timing.txt"), string(elapsed))
+    stem = input["settings"]["output_stem"]
+    files = sort!(filter(name -> startswith(name, stem * "#Y_") && endswith(name, "#.txt"),
+        readdir(results_folder)))
+    isempty(files) && error("Z-tool sweep produced no admittance files in $results_folder")
+    append!(files, [stem * "_power_flow.txt", stem * "_angles.txt"])
+    for name in files
+        source = joinpath(results_folder, name)
+        isfile(source) || error("Z-tool result file is missing: $source")
+        cp(source, joinpath(output, name))
+    end
+    record = Dict("version" => version, "arguments" => arguments, "files" => files)
+    open(io -> TOML.print(io, record; sorted = true), joinpath(output, "ztool.toml"), "w")
+    _report(console, verbosity, 1, "Collected Z-tool admittances in $(round(elapsed; digits = 3)) seconds")
+    return nothing
+end
+
 function main(arguments)
     length(arguments) == 9 || throw(ArgumentError(
         "runner expects project, output, project name, output stem, PSCAD version, verbosity, port, ownership, and scratch root"))
@@ -255,39 +346,47 @@ function main(arguments)
                 join(first(moved, 20), '\n'))
         end
         _record_diagnostics(console, project, verbosity, "PSCAD diagnostics before execution")
-        phase = "project run"
-        _report(console, verbosity, 1, "Starting PSCAD project.run()")
-        started = time_ns()
-        project.run()
-        elapsed = (time_ns() - started) * 1e-9
-        write(joinpath(output, "timing.txt"), string(elapsed))
-        _report(console, verbosity, 1, "PSCAD run call returned in $(round(elapsed; digits = 3)) seconds")
-        phase = "build messages"
-        _record_diagnostics(console, project, verbosity, "PSCAD diagnostics after execution")
-        _build_messages(project, build_path)
-        roots = [abspath(_string(project.temp_folder)),
-            abspath(dirname(project_path)), abspath(output)]
-        phase = "output completion"
-        expected_rows = round(Int, settings["time_duration"] /
-                                   (settings["sample_step_us"] * 1e-6)) + 1
-        _report(console, verbosity, 1, "Waiting for $expected_rows output rows; temp_folder=$(first(roots))")
-        files = _wait_outputs(roots, output_stem, expected_rows)
-        for source in (files.inf, files.outs...)
-            destination = joinpath(output, basename(source))
-            abspath(source) == abspath(destination) || cp(source, destination; force = true)
-        end
-        if haskey(settings, "snapshot_time")
-            snapshots = _output_matches(roots, output_stem * ".snp")
-            length(snapshots) == 1 ||
-                error("PSCAD did not emit exactly one $(output_stem).snp snapshot: $snapshots")
-            source = only(snapshots)
-            destination = joinpath(output, basename(source))
-            abspath(source) == abspath(destination) || cp(source, destination; force = true)
+        if haskey(input, "ztool")
+            phase = "Z-tool sweep"
+            _run_ztool_sweep(app, project_path, project_name, output, input,
+                _string(application_settings["fortran_version"]), console, verbosity)
+            _record_diagnostics(console, project, verbosity, "PSCAD diagnostics after execution")
+            _build_messages(project, build_path)
+        else
+            phase = "project run"
+            _report(console, verbosity, 1, "Starting PSCAD project.run()")
+            started = time_ns()
+            project.run()
+            elapsed = (time_ns() - started) * 1e-9
+            write(joinpath(output, "timing.txt"), string(elapsed))
+            _report(console, verbosity, 1, "PSCAD run call returned in $(round(elapsed; digits = 3)) seconds")
+            phase = "build messages"
+            _record_diagnostics(console, project, verbosity, "PSCAD diagnostics after execution")
+            _build_messages(project, build_path)
+            roots = [abspath(_string(project.temp_folder)),
+                abspath(dirname(project_path)), abspath(output)]
+            phase = "output completion"
+            expected_rows = round(Int, settings["time_duration"] /
+                                       (settings["sample_step_us"] * 1e-6)) + 1
+            _report(console, verbosity, 1, "Waiting for $expected_rows output rows; temp_folder=$(first(roots))")
+            files = _wait_outputs(roots, output_stem, expected_rows)
+            for source in (files.inf, files.outs...)
+                destination = joinpath(output, basename(source))
+                abspath(source) == abspath(destination) || cp(source, destination; force = true)
+            end
+            if haskey(settings, "snapshot_time")
+                snapshots = _output_matches(roots, output_stem * ".snp")
+                length(snapshots) == 1 ||
+                    error("PSCAD did not emit exactly one $(output_stem).snp snapshot: $snapshots")
+                source = only(snapshots)
+                destination = joinpath(output, basename(source))
+                abspath(source) == abspath(destination) || cp(source, destination; force = true)
+            end
         end
         observed = pyconvert(Dict{String, String}, identify(pscad_version, app))
         observed == initial_identity || error("PSCAD installation changed during execution")
         open(io -> TOML.print(io, observed; sorted = true), joinpath(output, "solver.toml"), "w")
-        _report(console, verbosity, 1, "Collected legacy PSCAD outputs")
+        haskey(input, "ztool") || _report(console, verbosity, 1, "Collected legacy PSCAD outputs")
     catch error
         if project !== nothing
             _record_diagnostics(console, project, verbosity,

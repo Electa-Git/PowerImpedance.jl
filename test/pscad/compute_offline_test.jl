@@ -43,16 +43,48 @@ function P.remote_command(::Val{:fixture}, config::RemoteConfig, command::Abstra
         open(io -> TOML.print(io, identity), joinpath(output, "solver.toml"), "w")
         write(joinpath(output, "timing.txt"), "3.25")
         write(joinpath(output, "build-messages.txt"), "normal\\tBuild\\tgenerated\\tOK\\nwarning\\tBuild\\tgenerated\\tfixture warning\\n")
-        write(joinpath(output, stem * ".inf"), $(repr(metadata)))
-        rows = round(Int, settings["time_duration"] / (settings["sample_step_us"] * 1e-6)) + 1
-        $(MODE[] === :incomplete) && (rows -= 1)
-        open(joinpath(output, stem * "_01.out"), "w") do io
-            println(io, "TIME Voltage Current")
-            for index in 0:rows-1
-                println(io, index * settings["sample_step_us"] * 1e-6, " ", $(repr(row_values)))
+        if haskey(input, "ztool")
+            arguments = copy(input["ztool"]["arguments"])
+            haskey(arguments, "topology") &&
+                (arguments["topology"] = replace(joinpath(root, arguments["topology"]), '/' => Char(92)))
+            merge!(arguments, Dict("fortran_ext" => ".gf81", "working_dir" => root,
+                "results_folder" => joinpath(root, "ztool_results")))
+            files = String[]
+            frequencies = get!(arguments, "freq", collect(1.0:8.0))
+            $(MODE[] === :ztool_frequencies) && (frequencies = [1.0, 3.0])
+            for side in (1, 2)
+                name = stem * "#Y_AC#scan-" * string(side) * "#.txt"
+                push!(files, name)
+                open(joinpath(output, name), "w") do io
+                    println(io, "f\tscan-", side, "_d\tscan-", side, "_q")
+                    actual = $(MODE[] === :ztool_grid_mismatch) && side == 2 ? [1.0, 3.0] : frequencies
+                    for frequency in actual
+                        println(io, "(", frequency, "+0j) (1+2j) (3+4j) (5+6j) (7+8j)")
+                    end
+                end
             end
+            for suffix in ("_power_flow.txt", "_angles.txt")
+                name = stem * suffix
+                push!(files, name)
+                write(joinpath(output, name), "fixture data")
+            end
+            $(MODE[] === :ztool_arguments) && (arguments["t_step"] = -1.0)
+            $(MODE[] === :ztool_no_files) && filter!(name -> !occursin("#Y_", name), files)
+            version = $(MODE[] === :ztool_version) ? "0.1.51" : "0.1.52"
+            record = Dict("version" => version, "arguments" => arguments, "files" => files)
+            open(io -> TOML.print(io, record; sorted = true), joinpath(output, "ztool.toml"), "w")
+        else
+            write(joinpath(output, stem * ".inf"), $(repr(metadata)))
+            rows = round(Int, settings["time_duration"] / (settings["sample_step_us"] * 1e-6)) + 1
+            $(MODE[] === :incomplete) && (rows -= 1)
+            open(joinpath(output, stem * "_01.out"), "w") do io
+                println(io, "TIME Voltage Current")
+                for index in 0:rows-1
+                    println(io, index * settings["sample_step_us"] * 1e-6, " ", $(repr(row_values)))
+                end
+            end
+            haskey(settings, "snapshot_time") && write(joinpath(output, stem * ".snp"), "snapshot fixture")
         end
-        haskey(settings, "snapshot_time") && write(joinpath(output, stem * ".snp"), "snapshot fixture")
         """
     elseif occursin("identify.py", command)
         IDENTIFICATIONS[] += 1
@@ -111,6 +143,9 @@ end
         @test read(joinpath(source, "generated.pscx"), String) == read(project, String)
         input = TOML.parsefile(joinpath(source, "computation.toml"))
         @test input["schema_version"] == 1
+        @test Set(keys(input)) == Set(["schema_version", "project_name", "project_sha256",
+            "settings", "probes", "toolkit"])
+        @test !haskey(input, "ztool")
         @test input["project_name"] == "generated"
         @test input["project_sha256"] == bytes2hex(sha256(read(project)))
         @test input["probes"]["names"] == ["Voltage"]
@@ -265,6 +300,7 @@ end
         input = TOML.parsefile(joinpath(directory, "computation.toml"))
         table_names = ["Scan_options/frequencies.txt";
             ["Scan_options/frequencies$i.txt" for i in 1:8]]
+        @test !haskey(input, "ztool")
         @test Set(keys(input["resources"])) == Set(["Z_tool.pslx", "generated.pswx", table_names...])
         @test readdir(joinpath(directory, "Scan_options")) == basename.(table_names)
         for (index, name) in enumerate(table_names)
@@ -296,4 +332,87 @@ end
         @test LAUNCHES[] == launches
     end
 end
+
+@testset "Z-tool sweep staging, readback and completed-run reuse" begin
+    MODE[] = :success
+    mktempdir() do root
+        project = joinpath(root, "scanned.pscx")
+        write(project, "<project fixture=\"offline\"/>")
+        library = joinpath(root, "Z_tool.pslx")
+        cp(joinpath(@__DIR__, "fixtures/ztool/Z_tool.pslx"), library)
+        settings = P.SimulationSettings(simulation_time = 0.0005,
+            sample_step = 0.00025, time_step = 0.00005)
+        model = PSCADModel(project; settings, ztool_library = library)
+        remote = RemoteConfig("fixture", root, "unused", "julia", "python";
+            local_root = root, transport = :fixture)
+        options = (; remote, work_root = joinpath(root, "runs"), timing = true)
+        plain = PSCADModel(project; settings)
+        launches = LAUNCHES[]
+        @test_throws r"Z-tool library" compute(plain, ZToolScan(); options)
+        @test LAUNCHES[] == launches
+        @test_throws ArgumentError compute(model, ZToolScan(backend = PowerImpedance.PIACDC); options)
+        for topology in (nothing, joinpath(root, "local_topology.txt")), logarithmic in (false, true)
+            topology === nothing || write(topology, "scan-1 scan-2\n1 0\n0 1\n")
+            grid = logarithmic ? (; f_min = 1, f_max = 8, f_points = 8) : (; frequencies = collect(1:8))
+            scan = ZToolScan(; grid..., time_step = 1e-6, sample_step = 25e-6, topology)
+            result = compute(model, scan; options)
+            directory = result.paths.run_directory
+            input = TOML.parsefile(joinpath(directory, "computation.toml"))
+            @test result isa ZToolResult
+            @test result isa AbstractProblemResult
+            @test result.formulation === scan
+            @test result.frequencies == collect(1.0:8.0)
+            @test length(result.results) == 2
+            @test [entry.name.sides for entry in result.results] == [[1], [2]]
+            @test all(entry -> entry.admittance[:, :, 1] == [1+2im 3+4im; 5+6im 7+8im], result.results)
+            @test result.diagnostics.elapsed_seconds == 3.25
+            @test !result.diagnostics.reused
+            @test result.diagnostics.timing.wall_seconds > 0
+            @test result.diagnostics.solver_identity == IDENTITY
+            @test result.diagnostics.ztool["version"] == "0.1.52"
+            @test result.diagnostics.ztool["arguments"]["t_step"] == 1.0
+            @test result.diagnostics.ztool["arguments"]["sample_step"] == 25.0
+            @test input["ztool"]["arguments"][logarithmic ? "f_points" : "freq"] ==
+                  (logarithmic ? 8 : collect(1.0:8.0))
+            @test input["ztool"]["version"] == "0.1.52"
+            @test !isfile(joinpath(directory, "outputs", "pi.inf"))
+            if topology !== nothing
+                @test read(joinpath(directory, "ztool_topology.txt")) == read(topology)
+                @test input["resources"]["ztool_topology.txt"] == bytes2hex(open(sha256, topology))
+                @test input["ztool"]["arguments"]["topology"] == "ztool_topology.txt"
+                @test occursin('\\', result.diagnostics.ztool["arguments"]["topology"])
+            end
+            launches = LAUNCHES[]
+            reused = compute(model, scan; options = merge(options, (; resume_run_directory = directory)))
+            @test reused.diagnostics.reused
+            @test isempty(reused.diagnostics.timing)
+            @test LAUNCHES[] == launches
+            @test reused.frequencies == result.frequencies
+            @test all(a.admittance == b.admittance for (a, b) in zip(reused.results, result.results))
+            @test compute(model, scan; options = merge(options, (; resume_run_directory = :latest))).diagnostics.reused
+            changed = ZToolScan(frequencies = [1, 2, 3, 4, 5, 6, 7, 9]; topology)
+            @test_throws r"different inputs" compute(model, changed;
+                options = merge(options, (; resume_run_directory = directory)))
+            for name in ("ztool.toml", "pi#Y_AC#scan-1#.txt", "pi_angles.txt", "pi_power_flow.txt")
+                path = joinpath(directory, "outputs", name)
+                original = read(path)
+                write(path, "changed sweep output")
+                @test_throws r"output integrity" compute(model, scan;
+                    options = merge(options, (; resume_run_directory = directory)))
+                write(path, original)
+            end
+        end
+        try
+            scan = ZToolScan(frequencies = collect(1:8))
+            for mode in (:ztool_version, :ztool_arguments, :ztool_frequencies, :ztool_grid_mismatch, :ztool_no_files)
+                MODE[] = mode
+                @test_throws ErrorException compute(model, scan; options)
+                @test !isfile(joinpath(last(sort(readdir(options.work_root; join = true); by = mtime)), "complete.toml"))
+            end
+        finally
+            MODE[] = :success
+        end
+    end
+end
+
 end

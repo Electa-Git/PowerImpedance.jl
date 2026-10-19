@@ -101,9 +101,85 @@ For an existing project, `PSCADModel(path; ztool_library = library_path)`
 records its library for simulation. With `ztool_probes` empty, the output
 consists of the original project file.
 
+### Frequency sweeps
+
+`ZToolScan` runs Z-tool's `frequency_sweep()` on the configured PSCAD station.
+The runner's Python needs `ztoolacdc==0.1.52`. The model needs a Z-tool library
+and scan blocks on Main. This example exports one block and scans both sides:
+
+```julia
+scan_model = export_pscad(net; path = "pscad_exports/scan_run.pscx", settings,
+    ztool_probes = [ZToolProbe(:ac, "converter_scan"; element = :DUT, side = 2)])
+scan = ZToolScan(frequencies = [1, 2, 5, 10, 20, 40, 100, 500],
+    snapshot_time = 5.0, start_fft = 2.0, time_step = 1e-6, sample_step = 25e-6)
+result = compute(scan_model, scan;
+    options = (; remote = RemoteConfig("station.toml"), verbosity = 1))
+```
+
+The caller selects startup and injection settling times for the circuit.
+`snapshot_time` ends startup before decoupling. `injection_interval` adds a
+delay between decoupling and the snapshot used for injections. Each injection
+runs for `start_fft + fft_periods/f_base` seconds. Z-tool starts its FFT after
+`start_fft` seconds and uses `fft_periods/f_base` seconds of samples.
+
+| Keyword | Default | Reason |
+|---|---|---|
+| `frequencies` | `nothing` | Z-tool creates a logarithmic list |
+| `f_min`, `f_max`, `f_points` | 1 Hz, 1000 Hz, 80 | Z-tool's `create_freq.loglist` defaults |
+| `f_base` | 1 Hz | One-second base period for the FFT |
+| `snapshot_time` | Model snapshot time, or model duration | Model startup allowance |
+| `start_fft` | 1 s | One second for injection settling |
+| `fft_periods` | 1 | One base period in the FFT window |
+| `injection_interval` | `start_fft` | Z-tool's delay after decoupling |
+| `perturbation` | 0.01 pu | Library injection amplitude |
+| `multi_frequency` | `false` | Separate single-tone injections |
+| `time_step`, `sample_step` | Model settings, in seconds | Same integration and recording intervals |
+| `num_parallel_sim` | 1 | Educational licence |
+| `topology` | `nothing` | One scan block on Main |
+
+Explicit frequencies replace `f_min`, `f_max` and `f_points`.
+Frequencies and range endpoints are positive multiples of `f_base`.
+`f_base` sets FFT resolution and differs from the network's nominal frequency.
+The sampling interval spans an integer number of integration steps and divides
+the FFT window into an integer number of samples. The highest scan frequency
+stays below the Nyquist limit.
+
+Z-tool 0.1.52 needs a frequency count divisible by eight in both sweep modes.
+It pads other counts with repeated maximum frequencies, but single-frequency
+sweeps do not run the extra simulations.
+Multi-frequency sweeps also need at least sixteen frequencies.
+Each axis then runs at least two simulations.
+PSCAD omits the run index from filenames for one simulation, but Z-tool expects
+it for perturbation outputs.
+The runner checks the count after Z-tool's `create_freq.loglist` resolves a range.
+
+Multiple blocks need a Z-tool topology file. `topology` names this local file,
+which staging copies and hashes. Its header pairs each block's sides as
+`Name-1 Name-2`, followed by a square binary matrix.
+The [sweep mapping](developers/pscad_mapping.md#Z-tool-sweep-inputs) describes these inputs.
+
+The runner loads the library and project into its silenced PSCAD application.
+A temporary replacement for Z-tool's `connect` returns that same application.
+The runner restores the original callable after success or failure.
+Z-tool runs simulations with all plotting and display flags off.
+The runner derives the build suffix from the detected GFortran version.
+
+`result.frequencies` gives the common frequencies in Hz.
+Each entry in `result.results` holds a parsed `name` with `type`, `blocks` and
+`sides`. It also holds the header `axes` and
+`admittance[row, column, frequency_index]` in S.
+AC blocks contribute d and q axes, and DC blocks contribute one dc axis.
+Rows and columns follow the file header, whose block order can differ from
+the filename. The values use Z-tool's current signs and coordinate frame.
+
+The public `read_ztool_admittance(path)` reader also reads saved Z-tool files.
+`result.paths.outputs` contains the admittance files, power-flow and angle
+files, plus `ztool.toml` with the package version and arguments passed.
+`result.diagnostics.ztool` holds that metadata. The usual
+`resume_run_directory` option reuses a completed sweep after checking the
+input hashes, output hashes and PSCAD installation.
+
 [Z-tool](https://github.com/Electa-Git/Z-tool) uses the GPL v3 licence.
-The export prepares scan blocks and files. Running `frequency_sweep()` is a
-separate step.
 
 The citation is F.J. Cifuentes Garcia and J. Beerten,
 “Z-Tool: frequency-domain characterization of EMT models for small-signal

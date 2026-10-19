@@ -101,7 +101,7 @@ function _verified_completed_run(options, signature)
                 throw(ArgumentError("PSCAD completed-run toolkit integrity check failed: $path"))
         end
         outputs = get(record, "outputs", Dict())
-        all(name -> haskey(outputs, name), _required_outputs(options.settings.output_stem)) ||
+        all(name -> haskey(outputs, name), _required_outputs(options.settings.output_stem, stored)) ||
             throw(ArgumentError("PSCAD completed run has an incomplete output record: $candidate"))
         for (name, digest) in outputs
             basename(name) == name ||
@@ -111,10 +111,16 @@ function _verified_completed_run(options, signature)
                 throw(ArgumentError("PSCAD completed-run output integrity check failed: $path"))
         end
         stem = options.settings.output_stem
-        count = length(_inf_entries(joinpath(candidate, "outputs", stem * ".inf")))
-        data_names = [stem * "_" * lpad(string(index), 2, '0') * ".out"
-                      for index in 1:cld(count, 10)]
-        options.settings.snapshot_time === nothing || push!(data_names, stem * ".snp")
+        data_names = if haskey(stored, "ztool")
+            metadata = TOML.parsefile(joinpath(candidate, "outputs", "ztool.toml"))
+            _ztool_output_names(metadata, stem)
+        else
+            count = length(_inf_entries(joinpath(candidate, "outputs", stem * ".inf")))
+            names = [stem * "_" * lpad(string(index), 2, '0') * ".out"
+                     for index in 1:cld(count, 10)]
+            options.settings.snapshot_time === nothing || push!(names, stem * ".snp")
+            names
+        end
         all(name -> haskey(outputs, name), data_names) || throw(ArgumentError(
             "PSCAD completed run has unattested data or snapshot files: $candidate"))
         actual = Dict{String, String}(validate(
@@ -163,48 +169,10 @@ function _complete_run(root, input, signature, actual)
     return nothing
 end
 
-"""
-$(TYPEDSIGNATURES)
-
-Execute a PSCAD project on a configured station and read its INF/OUT files.
-A fresh call copies `generated.pscx`, the computation record and the runner
-files into a persistent `run-XXXXXX` directory. Write the completion record
-atomically after checking settings, solver identity, outputs and probes.
-
-# Arguments
-
-- `model`: Existing PSCAD project and requested measurements.
-- `formulation`: `PSCADRun` selecting the execution backend.
-- `options`: Named tuple of computation options. Default: empty.
-  `remote` defaults to `RemoteConfig()`. The duration, integration step,
-  output interval and snapshot overrides are `simulation_time`, `time_step`,
-  `sample_step` and `snapshot_time` \\[s\\]. Other options are `output_stem`,
-  `verbosity` (0–2, default 0), `work_root` (within `remote.local_root`),
-  `resume_run_directory` (`nothing`, `:latest`, or a path), `solver_identity`
-  (the record from `PSCAD.identify(remote)`), and `timing::Bool` (default `false`).
-  Check simulation overrides together and reject unknown keys.
-
-# Returns
-
-- A `PSCADResult` with ordered channels and execution diagnostics.
-  `elapsed_seconds` \\[s\\] measures `project.run()`, excluding file transfer
-  and output waits. With `timing = true`, fresh runs also record caller
-  `wall_seconds` \\[s\\]; reused results have `timing = (;)`.
-
-# Notes
-
-Reuse requires an explicit `resume_run_directory`, matching hashes for inputs,
-runner files and outputs, and a check of the current station installation.
-Python runs on the station. Project libraries and external files must be
-available there, because this method copies only the project and runner files.
-"""
-function compute(model::PSCADModel, formulation::PSCADRun; options::NamedTuple = (;))
-    _require_backend(formulation, PSCADBackend)
-    resolved = _computation_options(model, options)
-    started = time_ns()
+function _computation_input(model::PSCADModel, ::PSCADRun, settings)
     input = Dict{String, Any}("schema_version" => 1,
         "project_sha256" => _file_digest(model.project_path), "project_name" => "generated",
-        "settings" => _settings_record(resolved.settings),
+        "settings" => _settings_record(settings),
         "probes" => Dict("names" => [channel.name for channel in model.probes.channels]),
         "toolkit" => Dict(name => bytes2hex(sha256(source))
         for (name, source) in PSCAD_REMOTE_SOURCES))
@@ -215,11 +183,56 @@ function compute(model::PSCADModel, formulation::PSCADRun; options::NamedTuple =
         workspace = _ztool_workspace("generated", "generated.pscx")
         input["resources"] = Dict("Z_tool.pslx" => library.sha256,
             "generated.pswx" => bytes2hex(sha256(workspace)))
-        frequency_tables = _ztool_frequency_tables(resolved.settings.frequency)
+        frequency_tables = _ztool_frequency_tables(settings.frequency)
         for (name, contents) in frequency_tables
             input["resources"][name] = bytes2hex(sha256(contents))
         end
     end
+    return input
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Execute a PSCAD project or Z-tool sweep on a configured station.
+A fresh call copies `generated.pscx`, the computation record and the runner
+files into a persistent `run-XXXXXX` directory. Write the completion record
+atomically after checking settings, solver identity, outputs and probes.
+
+# Arguments
+
+- `model`: Existing PSCAD project and requested measurements.
+- `formulation`: `PSCADRun` for time-domain output, or `ZToolScan` for admittances.
+- `options`: Named tuple of computation options. Default: empty.
+  `remote` defaults to `RemoteConfig()`. The duration, integration step,
+  output interval and snapshot overrides are `simulation_time`, `time_step`,
+  `sample_step` and `snapshot_time` \\[s\\]. Other options are `output_stem`,
+  `verbosity` (0–2, default 0), `work_root` (within `remote.local_root`),
+  `resume_run_directory` (`nothing`, `:latest`, or a path), `solver_identity`
+  (the record from `PSCAD.identify(remote)`), and `timing::Bool` (default `false`).
+  Check the simulation overrides together and reject unknown keys.
+
+# Returns
+
+- `PSCADRun` gives a `PSCADResult` with ordered channels and execution records.
+  `ZToolScan` gives a `ZToolResult` with admittance arrays \\[S\\].
+  `elapsed_seconds` \\[s\\] measures the project run or Z-tool sweep, excluding transfers.
+  Fresh runs also measure `wall_seconds` in \\[s\\] with `timing = true`.
+  Reused results have `timing = (;)`.
+
+# Notes
+
+Reuse requires an explicit `resume_run_directory`, matching hashes for inputs,
+runner files and outputs, and a check of the current station installation.
+Python runs on the station. Staging copies the model's Z-tool library,
+workspace and scan inputs when present. Other external project files need
+station-side paths.
+"""
+function compute(model::PSCADModel, formulation::Union{PSCADRun, ZToolScan}; options::NamedTuple = (;))
+    _require_backend(formulation, PSCADBackend)
+    resolved = _computation_options(model, options)
+    started = time_ns()
+    input = _computation_input(model, formulation, resolved.settings)
     signature = _pscad_digest(input)
     resolved.solver_identity === nothing ||
         (input["expected_solver"] = resolved.solver_identity)
@@ -237,7 +250,10 @@ function compute(model::PSCADModel, formulation::PSCADRun; options::NamedTuple =
         if model.ztool_library !== nothing
             cp(model.ztool_library.path, joinpath(root, "Z_tool.pslx"))
             write(joinpath(root, "generated.pswx"), _ztool_workspace("generated", "generated.pscx"))
-            _write_ztool_frequency_tables(root, frequency_tables)
+            _write_ztool_frequency_tables(root, _ztool_frequency_tables(resolved.settings.frequency))
+            if haskey(input["resources"], "ztool_topology.txt")
+                cp(formulation.topology, joinpath(root, "ztool_topology.txt"))
+            end
             for (name, digest) in input["resources"]
                 _file_digest(joinpath(root, name)) == digest ||
                     throw(ArgumentError("PSCAD resource changed during staging: $name"))
@@ -257,39 +273,45 @@ function compute(model::PSCADModel, formulation::PSCADRun; options::NamedTuple =
     readback = _verify_settings_readback(
         TOML.parsefile(joinpath(output, "settings-readback.toml")), input["settings"])
     warnings = _build_warnings(build_messages)
-    parsed = try
-        result = read_pscad_output(output; stem = resolved.settings.output_stem)
-        expected_rows = round(Int, resolved.settings.simulation_time /
-                                   resolved.settings.sample_step) + 1
-        length(result.time) == expected_rows || throw(ArgumentError(
-            "PSCAD output has $(length(result.time)) rows; expected $expected_rows"))
-        missing = [channel.name
-                   for channel in model.probes.channels
-                   if !_probe_present(channel, result.channels)]
-        isempty(missing) ||
-            throw(ArgumentError("PSCAD output is missing probe channels: $missing"))
-        if resolved.settings.snapshot_time !== nothing
-            path = joinpath(output, resolved.settings.output_stem * ".snp")
-            isfile(path) && filesize(path) > 0 ||
-                throw(ArgumentError("PSCAD snapshot is missing or empty: $path"))
-        end
-        result
-    catch error
-        throw(ErrorException("PSCAD result validation failed: $(sprint(showerror, error))" *
-                             "\nLast PSCAD diagnostics:\n$(_diagnostic_tail(console))\nFull PSCAD diagnostics: $console"))
-    end
     elapsed = parse(Float64, strip(read(joinpath(output, "timing.txt"), String)))
     isfinite(elapsed) && elapsed >= 0 ||
         throw(ArgumentError("invalid PSCAD execution timing"))
-    reused || _complete_run(root, input, signature, actual)
     diagnostics = (; elapsed_seconds = elapsed, reused, solver_identity = actual,
         settings_readback = readback, build_warnings = warnings)
     if resolved.timing
         diagnostics = merge(diagnostics,
             (timing = reused ? (;) : (wall_seconds = (time_ns() - started) * 1e-9,),))
     end
-    return PSCADResult(formulation, parsed.time, parsed.channels, model.probes,
-        resolved.settings, diagnostics,
+    result = try
+        _read_computation_result(model, formulation, resolved.settings, root, input, diagnostics)
+    catch error
+        throw(ErrorException("PSCAD result validation failed: $(sprint(showerror, error))" *
+                             "\nLast PSCAD diagnostics:\n$(_diagnostic_tail(console))\nFull PSCAD diagnostics: $console"))
+    end
+    reused || _complete_run(root, input, signature, actual)
+    return result
+end
+
+function _read_computation_result(model, formulation::PSCADRun, settings, root, input, diagnostics)
+    output = joinpath(root, "outputs")
+    result = read_pscad_output(output; stem = settings.output_stem)
+    expected_rows = round(Int, settings.simulation_time /
+                               settings.sample_step) + 1
+    length(result.time) == expected_rows || throw(ArgumentError(
+        "PSCAD output has $(length(result.time)) rows; expected $expected_rows"))
+    missing = [channel.name
+               for channel in model.probes.channels
+               if !_probe_present(channel, result.channels)]
+    isempty(missing) ||
+        throw(ArgumentError("PSCAD output is missing probe channels: $missing"))
+    if settings.snapshot_time !== nothing
+        path = joinpath(output, settings.output_stem * ".snp")
+        isfile(path) && filesize(path) > 0 ||
+            throw(ArgumentError("PSCAD snapshot is missing or empty: $path"))
+    end
+    return PSCADResult(formulation, result.time, result.channels, model.probes,
+        settings, diagnostics,
         (; run_directory = root, outputs = output,
-            console, build_messages, inf = parsed.inf))
+            console = joinpath(output, "pscad-console.txt"),
+            build_messages = joinpath(output, "build-messages.txt"), inf = result.inf))
 end
