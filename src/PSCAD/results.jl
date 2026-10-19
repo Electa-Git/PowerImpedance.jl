@@ -106,6 +106,10 @@ Warn once per channel when their change exceeds `STEADY_STATE_SETTLING_RTOL`
   cycle. Time checks use relative tolerance `1e-9`.
 """
 function steady_state(result::PSCADResult; window_cycles = 10)
+    return first(_steady_states(result, window_cycles))
+end
+
+function _steady_states(result::PSCADResult, window_cycles)
     window = _steady_window(result, window_cycles)
     groups = OrderedDict{String, Dict{Int, String}}()
     for (name, values) in result.channels
@@ -117,38 +121,41 @@ function steady_state(result::PSCADResult; window_cycles = 10)
         group = get!(Dict{Int, String}, groups, base)
         group[index] = name
     end
-    settled = OrderedDict{String, NamedTuple}()
+    states = ntuple(_ -> OrderedDict{String, NamedTuple}(), 3)
     midpoint = first(window) + length(window) ÷ 2
     halves = (first(window):(midpoint - 1), midpoint:last(window))
+    windows = (window, halves...)
     for (name, group) in groups
         if haskey(group, 0)
             length(group) == 1 ||
                 throw(ArgumentError("PSCAD channel $name mixes scalar and array entries"))
-            settled[name] = (dim = 1, mean = mean(result.channels[group[0]][window]))
-            values = map(half -> mean(result.channels[group[0]][half]), halves)
-            _warn_unsettled_channel(name, values...)
+            values = map(window -> mean(result.channels[group[0]][window]), windows)
+            for (state, value) in zip(states, values)
+                state[name] = (dim = 1, mean = value)
+            end
+            _warn_unsettled_channel(name, values[2], values[3])
             continue
         end
         dim = length(group)
         Set(keys(group)) == Set(1:dim) ||
             throw(ArgumentError("PSCAD array channel $name has incomplete component indices"))
         if dim == 1
-            settled[name] = (dim = 1, mean = mean(result.channels[group[1]][window]))
-            values = map(half -> mean(result.channels[group[1]][half]), halves)
-            _warn_unsettled_channel(name, values...)
+            values = map(window -> mean(result.channels[group[1]][window]), windows)
+            for (state, value) in zip(states, values)
+                state[name] = (dim = 1, mean = value)
+            end
+            _warn_unsettled_channel(name, values[2], values[3])
             continue
         end
-        phasors = _window_phasors(result, group, dim, window)
-        phasor = _sequence_phasor(phasors)
-        values = map(
-            half -> abs.(_sequence_phasor(_window_phasors(result, group, dim, half))) ./
-                    sqrt(2),
-            halves)
-        _warn_unsettled_channel(name, values...)
-        settled[name] = (dim = dim, phasors = phasors, peak = abs.(phasor),
-            rms = abs.(phasor) ./ sqrt(2), angle = angle.(phasor))
+        for (state, window) in zip(states, windows)
+            phasors = _window_phasors(result, group, dim, window)
+            phasor = _sequence_phasor(phasors)
+            state[name] = (dim = dim, phasors = phasors, peak = abs.(phasor),
+                rms = abs.(phasor) ./ sqrt(2), angle = angle.(phasor))
+        end
+        _warn_unsettled_channel(name, states[2][name].rms, states[3][name].rms)
     end
-    return settled
+    return states
 end
 
 function _comparison_bus(model, name)
@@ -212,6 +219,13 @@ Compare settled bus voltages, terminal currents and machine/converter operating
 points with a retained power flow. Check the requested channels in `model.probes`
 using complete three-phase AC or scalar DC measurements.
 
+Each row passes when `error <= tolerance` and
+`settling <= settling_fraction * tolerance`. Settling is the absolute change
+between the two window halves, with the same base and absolute or wrapped-angle
+rule as the error. Default settling limits are 0.1% for voltages and MMC capacitor
+means, 0.1° for angles, and 0.2% for currents. Machine and converter P/Q use 0.1%
+of rating. Speed uses `1e-4` pu. Unsettled rows fail without throwing.
+
 # Arguments
 
 - `result`: PSCAD output in the units recorded for each channel.
@@ -223,11 +237,13 @@ using complete three-phase AC or scalar DC measurements.
 - `rtol_i`: Current magnitude tolerance \\[dimensionless\\]. Default: `0.02`.
   AC and DC circuits without converters use relative error. DC circuits with
   converters use the larger of reference current and converter current base.
+- `settling_fraction`: Finite, nonnegative fraction of each row's tolerance
+  allowed between window halves. Default: `0.1`.
 
 # Returns
 
 - A `TypedTables.Table` with `quantity`, probe `name`, `pscad`, `powerflow`,
-  nonnegative `error` and `within_tolerance`. Voltages use \\[kV\\], currents
+  nonnegative `error`, `settling` and combined `within_tolerance`. Voltages use \\[kV\\], currents
   \\[kA\\], powers \\[MW, MVAr\\], angles \\[deg\\], and speed and filtered
   converter powers \\[dimensionless\\]. Magnitude errors are relative unless
   they use a normalization base described below. Angle errors are absolute and
@@ -302,31 +318,39 @@ a comparison to its solved equilibrium value.
   tolerances, or unequal converter current bases within a connected DC circuit.
 """
 function compare_operating_point(result::PSCADResult, model::PSCADModel;
-        rtol_v = 0.01, atol_angle_deg = 1.0, rtol_i = 0.02)
+        rtol_v = 0.01, atol_angle_deg = 1.0, rtol_i = 0.02, settling_fraction = 0.1)
     for tolerance in (rtol_v, atol_angle_deg, rtol_i)
         tolerance isa Real && isfinite(tolerance) && tolerance >= 0 ||
             throw(ArgumentError("comparison tolerances must be finite and nonnegative"))
     end
+    settling_fraction isa Real && isfinite(settling_fraction) && settling_fraction >= 0 ||
+        throw(ArgumentError("settling_fraction must be finite and nonnegative"))
     model.netlist isa Netlist && model.operating_point isa OperatingPointRecord &&
     !isempty(model.operating_point.bus_states) ||
         throw(ArgumentError("model has no solved power-flow data for comparison"))
-    settled = steady_state(result)
+    states = _steady_states(result, 10)
+    settled = first(states)
     dc_current_bases = _dc_converter_current_bases(model.netlist)
     quantities, names = Symbol[], String[]
     measured, expected, errors, passed = Float64[], Float64[], Float64[], Bool[]
+    settling = Float64[]
     function add_row(
-            quantity, name, actual, reference, tolerance, base = reference; angular = false,
+            quantity, name, actuals, reference, tolerance, base = reference; angular = false,
             absolute = false)
-        error = angular ? abs(rem2pi(deg2rad(actual - reference), RoundNearest)) * 180 / π :
-                absolute ? abs(actual - reference) :
-                iszero(base) ? (iszero(actual) ? 0.0 : Inf) :
-                abs(actual - reference) / abs(base)
+        difference(a, b) = angular ? abs(rem2pi(deg2rad(a - b), RoundNearest)) * 180 / π :
+                           absolute ? abs(a - b) :
+                           iszero(base) ? (iszero(a - b) ? 0.0 : Inf) :
+                           abs(a - b) / abs(base)
+        actual = first(actuals)
+        error = difference(actual, reference)
+        change = difference(actuals[2], actuals[3])
         push!(quantities, quantity)
         push!(names, name)
         push!(measured, actual)
         push!(expected, reference)
         push!(errors, error)
-        push!(passed, error <= tolerance)
+        push!(settling, change)
+        push!(passed, error <= tolerance && change <= settling_fraction * tolerance)
     end
     for channel in model.probes.channels
         if channel.kind in (:converter_arm_voltage, :converter_sum_current)
@@ -342,7 +366,8 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 channel.unit == "kV" ||
                     throw(ArgumentError("MMC arm voltage probe $(channel.name) must use kV"))
                 reference = 2point.vm_pu * bus.base_kV
-                add_row(:converter_arm_voltage, channel.name, settled[channel.name].mean,
+                add_row(:converter_arm_voltage, channel.name,
+                    map(state -> state[channel.name].mean, states),
                     reference, rtol_v)
             else
                 channel.unit == "pu" ||
@@ -358,7 +383,7 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 base = e.model.elec.Sbase / e.model.elec.vDC_base
                 reference = 3settled[channel.name].mean * base
                 add_row(:converter_dc_current_identity,
-                    channel.name, settled[current.name].mean,
+                    channel.name, map(state -> state[current.name].mean, states),
                     reference, rtol_i, max(abs(reference), base))
             end
             continue
@@ -378,7 +403,8 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
             # Both references are solved terminal flows divided by the rating.
             reference = flow[field] / e.model.elec.Sbase
             add_row(
-                channel.kind, channel.name, settled[channel.name].mean, reference, 0.01;
+                channel.kind, channel.name, map(state -> state[channel.name].mean, states),
+                reference, 0.01;
                 absolute = true)
             continue
         end
@@ -395,14 +421,14 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 throw(ArgumentError("speed probe $(channel.name) must use pu"))
             flow !== nothing && haskey(flow, vsm ? :pt : :terminal_voltage_kV) ||
                 throw(ArgumentError("missing solved machine terminal data for :$(e.name)"))
-            actual = settled[channel.name].mean
+            actual = map(state -> state[channel.name].mean, states)
             add_row(:machine_speed, channel.name, actual, 1.0, 1e-3; absolute = true)
             continue
         end
         channel.kind in (:voltage, :current) || continue
         _probe_present(channel, result.channels) ||
             throw(ArgumentError("missing PSCAD probe $(channel.name)"))
-        value = settled[channel.name]
+        values = map(state -> state[channel.name], states)
         bus, point = _comparison_bus(model, channel.bus)
         voltage = point.vm_pu * bus.base_kV
         dc = bus.kind == :dc
@@ -422,11 +448,11 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 other.dim == 1 && _probe_present(other, result.channels) ||
                     throw(ArgumentError("missing PSCAD scalar probe $(other.name)"))
                 channel.side == "N" && continue
-                actual = value.mean - settled[other.name].mean
+                actual = map(state -> state[channel.name].mean - state[other.name].mean, states)
                 add_row(:voltage_dc, voltage_probe_name(bus.name), actual, 2voltage, rtol_v)
                 continue
             end
-            add_row(:voltage_rms, channel.name, value.rms, voltage, rtol_v)
+            add_row(:voltage_rms, channel.name, map(value -> value.rms, values), voltage, rtol_v)
             reference_name = model.probes.reference_bus
             reference_name === nothing &&
                 throw(ArgumentError("voltage-angle comparison requires a reference bus"))
@@ -438,7 +464,9 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 _probe_present(reference_probe, result.channels) ||
                     throw(ArgumentError("missing PSCAD reference-bus voltage $reference_name"))
                 _, reference_point = _comparison_bus(model, reference_name)
-                actual = rad2deg(rem2pi(value.angle - settled[reference_probe.name].angle, RoundNearest))
+                actual = map(state -> rad2deg(rem2pi(
+                        state[channel.name].angle - state[reference_probe.name].angle,
+                        RoundNearest)), states)
                 reference = rad2deg(rem2pi(point.va_rad - reference_point.va_rad, RoundNearest))
                 add_row(:voltage_angle, channel.name, actual,
                     reference, atol_angle_deg; angular = true)
@@ -459,7 +487,8 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                     throw(ArgumentError("current comparison requires positive bus voltage"))
                 reference = abs(flow[field]) / (2voltage)
                 base = max(reference, get(dc_current_bases, bus.key, 0.0))
-                add_row(:current_dc, channel.name, abs(value.mean), reference, rtol_i, base)
+                add_row(:current_dc, channel.name, map(value -> abs(value.mean), values),
+                    reference, rtol_i, base)
                 continue
             end
             flow === nothing &&
@@ -471,7 +500,7 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
             voltage > 0 ||
                 throw(ArgumentError("current comparison requires positive bus voltage"))
             current = hypot(flow[fields[1]], flow[fields[2]]) / (3 * voltage)
-            add_row(:current_rms, channel.name, value.rms, current, rtol_i)
+            add_row(:current_rms, channel.name, map(value -> value.rms, values), current, rtol_i)
             if e.model isa Union{
                 PowerImpedance.SynchronousMachine, PowerImpedance.TLC, PowerImpedance.MMC}
                 machine = e.model isa PowerImpedance.SynchronousMachine
@@ -484,28 +513,28 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 probe = model.probes.channels[index]
                 probe.dim == 3 && _probe_present(probe, result.channels) ||
                     throw(ArgumentError("terminal power comparison requires three-phase voltage probe $(probe.name)"))
-                v = settled[probe.name].phasors
-                i = value.phasors
-                power = sum(v .* conj.(i)) / 2
+                v = map(state -> state[probe.name].phasors, states)
+                i = map(value -> value.phasors, values)
+                power = map((v, i) -> sum(v .* conj.(i)) / 2, v, i)
                 elec = e.model.elec
                 rating = machine ? elec.S_base : elec.Sbase
-                add_row(machine ? :machine_p : :converter_p, channel.name, real(power),
+                add_row(machine ? :machine_p : :converter_p, channel.name, real.(power),
                     flow[fields[1]], 0.01, rating)
-                add_row(machine ? :machine_q : :converter_q, channel.name, imag(power),
+                add_row(machine ? :machine_q : :converter_q, channel.name, imag.(power),
                     flow[fields[2]], 0.01, rating)
                 machine || continue
                 zbase = elec.Vᵃᶜ_base^2 / elec.S_base
                 r = _pscad_number(pscad_value(elec.rt * zbase))
                 l = _pscad_number(pscad_value(elec.lt * zbase / elec.ωn))
                 z = complex(r, 2π * result.settings.frequency * l)
-                terminal_voltage = abs(_sequence_phasor(v .+ z .* i)) / sqrt(2)
+                terminal_voltage = map((v, i) -> abs(_sequence_phasor(v .+ z .* i)) / sqrt(2), v, i)
                 add_row(:machine_voltage, channel.name, terminal_voltage,
                     flow.terminal_voltage_kV, rtol_v)
             end
         end
     end
     return Table(quantity = quantities, name = names, pscad = measured,
-        powerflow = expected, error = errors, within_tolerance = passed)
+        powerflow = expected, error = errors, settling = settling, within_tolerance = passed)
 end
 
 """

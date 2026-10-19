@@ -237,7 +237,7 @@ for (model, classic_reference, rtol_v) in cases
         # the final window; inspect settling warnings before accepting the table.
         # Retain all measured errors, including the OHL case's 2% voltage check.
         open(joinpath(exports, model.project_name * "_comparison.tsv"), "w") do io
-            println(io, "quantity\tname\tpscad\tpowerflow\terror\twithin_tolerance")
+            println(io, "quantity\tname\tpscad\tpowerflow\terror\tsettling\twithin_tolerance")
             for row in comparison
                 println(io, join(values(row), '\t'))
             end

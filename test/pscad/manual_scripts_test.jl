@@ -230,6 +230,7 @@ end
                             return PowerImpedance.PSCAD.Table((;
                                 quantity = ["voltage"], name = [result],
                                 pscad = [1.0], powerflow = [1.0], error = [0.0],
+                                settling = [0.0],
                                 within_tolerance = [result != "comparison_error"]))
                         end
                     end)
@@ -244,6 +245,11 @@ end
                     @test occursin("recorded build failure", first(harness.failures).second)
                     @test occursin("PSCAD acceptance failed", last(harness.failures).second)
                     @test isfile(joinpath(harness.exports, "last_pass_comparison.tsv"))
+                    lines = readlines(joinpath(harness.exports, "last_pass_comparison.tsv"))
+                    @test first(lines) ==
+                          "quantity\tname\tpscad\tpowerflow\terror\tsettling\twithin_tolerance"
+                    @test split(last(lines), '\t') ==
+                          ["voltage", "last_pass", "1.0", "1.0", "0.0", "0.0", "true"]
                     rm(harness.exports; recursive = true)
                     final_verdict = last(filter(s -> s isa Expr, expression.args))
                     code = "failures = [\"failed_case\" => \"recorded failure\"]\n" *

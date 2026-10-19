@@ -27,6 +27,9 @@
 
 ### Changed
 
+- PSCAD operating-point comparison reports `settling` and checks the change
+  between window halves against `settling_fraction` times each row's tolerance.
+  The default fraction is `0.1`.
 - Tighten default PSCAD overhead-line and cable frequency-dependent fit targets
   `YMaxE`/`AMaxE` from 0.2% to 0.02%, still overridable through `line_options`;
   exported projects containing AC/DC lines or cables change.

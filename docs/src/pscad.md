@@ -205,10 +205,23 @@ Transformer `V₁ᵒ`/`V₂ᵒ` power-flow ratings use volts per phase (phase RM
 ## Steady-state comparison and run settings
 
 `compare_operating_point(result, model; rtol_v = 0.01,
-atol_angle_deg = 1.0, rtol_i = 0.02)` returns rows containing `quantity`,
-`name`, `pscad`, `powerflow`, `error` and `within_tolerance`. It uses the final ten complete
+atol_angle_deg = 1.0, rtol_i = 0.02, settling_fraction = 0.1)` returns rows containing
+`quantity`, `name`, `pscad`, `powerflow`, `error`, `settling` and `within_tolerance`.
+It uses the final ten complete
 cycles at the configured frequency (or all complete cycles available).
 At 50 Hz this is the final 0.2 s, excluding the left endpoint.
+
+Each row passes when `error <= tolerance` and
+`settling <= settling_fraction * tolerance`. Settling is the absolute change in
+the compared quantity between the two window halves. It uses the same base and
+absolute or wrapped-angle rule as the error.
+
+Default settling limits are 0.1%
+for voltages and MMC capacitor means, 0.1° for angles, and 0.2% for currents.
+Machine and converter P/Q use 0.1% of rating. Speed uses `1e-4` pu.
+`settling_fraction` must be finite and nonnegative. Unsettled rows fail without
+throwing.
+
 `PowerImpedance.PSCAD.steady_state(result; window_cycles = 10)` also exposes
 channel means and fundamental phasors. Sampling must be uniform, with an
 integer number of samples per cycle. A relative change above `1e-3` between

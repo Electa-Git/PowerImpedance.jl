@@ -105,7 +105,7 @@ function run_case(case, remote)
             rows = compare_operating_point(result, model; rtol_v = 0.01,
                 atol_angle_deg = 1.0, rtol_i = 0.02)
             open(joinpath(OUTPUT, model.project_name * "_comparison.tsv"), "w") do io
-                println(io, "quantity\tname\tpscad\tpowerflow\terror\twithin_tolerance")
+                println(io, "quantity\tname\tpscad\tpowerflow\terror\tsettling\twithin_tolerance")
                 for row in rows
                     println(io, join(values(row), '\t'))
                 end
