@@ -72,6 +72,8 @@ const LITERATE_EXAMPLE_FILES = (
     "P2P_HVDC_stability.jl",
     "MMC_harmonic_stability.jl",
     "Energy_hub_MTDC.jl",
+    "GFM_weak_grid.jl",
+    "Converter_machine_interaction.jl",
     "IEEE39bus_Gridspace.jl",
     "SmallSignal_Gridspace.jl"
 )
