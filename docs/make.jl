@@ -69,6 +69,9 @@ const LITERATE_EXAMPLE_FILES = (
     "IEEE9_bus_impedance.jl",
     "Network_Diagram.jl",
     "P2P_HVDC_ALT.jl",
+    "P2P_HVDC_stability.jl",
+    "MMC_harmonic_stability.jl",
+    "Energy_hub_MTDC.jl",
     "IEEE39bus_Gridspace.jl",
     "SmallSignal_Gridspace.jl"
 )
