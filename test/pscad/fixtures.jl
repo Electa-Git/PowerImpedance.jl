@@ -2,6 +2,36 @@ module PSCADFixtures
 using PowerImpedance
 include("ieee9_network.jl")
 
+# The 220 kV case from adm_IM_test.jl, with independent elements in each representation.
+function im_network(; elec = ElectricalIM(r_s = 0.01),
+        mech = MechanicalIM(T_0 = 0.9, A = 0.0, B = 0.0, C = 1.0, m = 0))
+    voltage = 220 / sqrt(3)
+    elements = (;
+        g1 = ac_source(setpoint = Setpoint(Vac = voltage * sqrt(2), Pac = -500, θac = 0.0),
+            pins = 3, transformation = true),
+        im1 = inductionmachine(; elec, mech),
+        imp = impedance(z = 0.01, pins = 3, transformation = true))
+    rows = [(node = Symbol(bus * suffix), element, side, terminal)
+            for (element, side, bus) in ((:im1, 1, "machine_"), (:imp, 1, "machine_"),
+                (:imp, 2, "grid_"), (:g1, 1, "grid_"))
+            for (terminal, suffix) in enumerate(("d", "q"))]
+    state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
+        voltageBase = voltage, power_flow = (; is_bounded = (; bus_voltage = true))))
+    classic = Network()
+    classic.voltageBase[1] = voltage
+    for (name, element) in pairs(elements)
+        add!(classic, name, element)
+    end
+    for row in rows
+        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
+    end
+    for name in (:g1, :im1), terminal in 1:2
+        connect!(classic, (name, Symbol("2.$terminal")), :gnd)
+    end
+    connect!(classic)
+    return (; classic, state)
+end
+
 """
     small_ac_network()
 

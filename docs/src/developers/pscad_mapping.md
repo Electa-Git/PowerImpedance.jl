@@ -22,6 +22,7 @@ build and measured response test its execution in PSCAD.
 | Cable | Cable `RowDefn`, `Cable_Coax`, remote wrapper and `cable_interface` pair | Coaxial AC/DC cable with eliminated internal conductors |
 | Transformer | `xfmr-3p2w` and explicit T-model passives | YY or Dyn11 |
 | Synchronous machine | `sync_machine`, external R/L, AVR and governor modules | Native equivalent circuit and steam turbine |
+| Induction machine | `wound_rotor` and load torque module | Native equivalent circuit and speed-dependent load torque |
 | TLC | Controlled phase-voltage sources and DC-current source | Averaged grid-following converter |
 | MMC | Averaged arm sources (6), capacitors, R/L and control modules | Grid-following or grid-forming converter |
 
@@ -289,6 +290,7 @@ saved mirrored/rotated transform instances retain their original orientation.
 | transformer | electrical `(-54,0)`, `(36,0)` | `OHL/DUT_2.pscx:1689–1766` |
 | cable interface | `(-18,54*(i-1))`, in cable order | `Cable/DUT_2.pscx:1644–1703`, orientations 0 and 4 |
 | synchronous machine | electrical `(36,0)`; Ef `(-36,-72)`, Tm `(0,72)`, speed `(-36,72)`, Vt `(36,-72)`, Ef0 `(-72,-72)`, Tm_init `(36,72)` | `SG/SG_Project.pscx:998–1198`, orientation 4; shared control translation |
+| induction machine | stator `(54,0)`, speed input `(-54,-36)`, speed selector `(-54,0)`, torque input `(-54,36)` | PSCAD 5.1.0 `wound_rotor` definition, single-line view |
 | import/export, constants, time signal | `(36,0)` | `TLC/Simple_2L_VSC_RL.pscx:2084–2106,5923–5929`; `P2P HVDC/PowerModelsACDC_ACdroop.pscx:13112–13118` (`const`) |
 | unary control blocks | input `(-36,0)`, output `(36,0)` | control primitives below; `SG/SG_Project.pscx:1865–1944,1959–1976,2010–2024` (pole, gain, lead-lag) |
 | mult/div/dot product | left `(-36,0)`, lower `(0,36)`, output `(36,0)` | saved abc/dq canvases, `TLC/Simple_2L_VSC_RL.pscx:1851–3234` |
@@ -408,6 +410,118 @@ The machine's internal `<e>_Vt` remains diagnostic: it measured about
 `5e-4 pu` high from the control/electrical interface. The AVR filter starts
 at solved `Vt0`. Internal P/Q outputs also contain step-dependent discrepancies;
 compare public-bus phasors and reconstructed terminal voltage.
+
+## Induction-machine fields
+
+The induction machine uses `master:wound_rotor` with a closed rotor circuit,
+grounded stator neutral and linear magnetizing and leakage inductances.
+The power base is three-phase MVA. The voltage base is line-to-line RMS kV.
+The frequency base is electrical rad/s. The field values follow the PSCAD 5.1.0
+component definition and the validated `IM.pscx` instance.
+
+| Machine field | Julia value or selected setting | Effect |
+|---|---|---|
+| `Name` | Element name | Identification |
+| `Pbase` | `elec.S_base` MVA | Rated power |
+| `Vbase` | `elec.Vac_base` kV | Line-to-line RMS base in single-line view |
+| `OMEG` | `elec.ωn` rad/s | Base angular frequency |
+| `TRN` | `1` | Stator/rotor turns ratio retained from the reference instance |
+| `J` | `2*mech.H` s | Angular inertia coefficient |
+| `D` | `0` pu | Zero mechanical damping |
+| `View` | `1` | Single-line display and three-phase stator terminal |
+| `ERC` | `0` | Closed rotor circuit |
+| `MM` | `0` | External speed selector and load torque input |
+| `SNP` | `1` | Grounded stator neutral |
+| `Cage` | `0` | Zero squirrel cages |
+| `NCW` | `1` | Inactive because the cage count is `NCW*Cage=0` |
+| `Msat`, `Lsat` | `0`, `0` | Linear magnetizing and leakage inductances |
+| `R1` | `elec.r_s+elec.rt` pu | Stator series resistance |
+| `R2` | `elec.r_r` pu | Wound rotor resistance |
+| `R3`, `R4`, `R5` | `0.298`, `0.018`, `0.018` pu | Inactive cage resistances |
+| `Xmd` | `elec.l_m` pu | Magnetizing inductance |
+| `Xa` | `elec.l_sl+elec.lt` pu | Series leakage inductance of the stator |
+| `Xkd1` | `elec.l_rl` pu | Leakage inductance of the wound rotor |
+| `Xkd2`, `Xkd3`, `Xkd4` | `0.05` pu each | Inactive cage leakage inductances |
+| `Xkd12`, `Xkd13`, `Xkd14`, `Xkd23`, `Xkd24`, `Xkd34` | `0.02` pu each | Inactive mutual cage inductances |
+| `I1M`, `V1M` | `0`, `0` pu | Inactive magnetizing curve point |
+| `I2M`, `V2M` | `0.5`, `0.5` pu | Inactive magnetizing curve point |
+| `I3M`, `V3M` | `0.8`, `0.79` pu | Inactive magnetizing curve point |
+| `I4M`, `V4M` | `1`, `0.947` pu | Inactive magnetizing curve point |
+| `I5M`, `V5M` | `1.2`, `1.076` pu | Inactive magnetizing curve point |
+| `I6M`, `V6M` | `1.5`, `1.2` pu | Inactive magnetizing curve point |
+| `I7M`, `V7M` | `1.8`, `1.26` pu | Inactive magnetizing curve point |
+| `I8M`, `V8M` | `2.2`, `1.32` pu | Inactive magnetizing curve point |
+| `I9M`, `V9M` | `3.2`, `1.42` pu | Inactive magnetizing curve point |
+| `I10M`, `V10M` | `4.2`, `1.5` pu | Inactive magnetizing curve point |
+| `I1`, `V1` | `0`, `0` pu | Inactive leakage curve point |
+| `I2`, `V2` | `1.196`, `0.286` pu | Inactive leakage curve point |
+| `I3`, `V3` | `1.82`, `0.4` pu | Inactive leakage curve point |
+| `I4`, `V4` | `2.861`, `0.564` pu | Inactive leakage curve point |
+| `I5`, `V5` | `5.882`, `0.981` pu | Inactive leakage curve point |
+| `I6`, `V6`, `I7`, `V7`, `I8`, `V8`, `I9`, `V9`, `I10`, `V10` | `-1` pu each | Inactive leakage curve points |
+| `NpntsM`, `NpntsL` | `10`, `10` | Inactive curve lengths with saturation disabled |
+| `MSF`, `LSF` | Empty | Unrecorded saturation factor outputs |
+| `Spd` | `<e>_speed` pu | Mechanical speed output |
+| `Tel` | `<e>_Te` pu | Diagnostic electrical torque output |
+| `TmOp` | `<e>_Tm` pu | Diagnostic mechanical torque output |
+| `ThetaR` | Empty | Unrecorded rotor position output in rad |
+| `Vwdg` | `0.3983` kV | Inactive winding voltage with `View=1` |
+
+The script sets the cage coefficients to zero and substitutes linear curves
+with `Msat=Lsat=0`. It passes `TRN` to the compiled machine routine with `ERC=0`.
+The effect inside that routine remains unknown. The exporter retains the
+reference value `1`.
+
+Julia uses the inverse-Γ coefficients
+`l_r=l_m+l_rl`, `l_M=l_m^2/l_r`, `l_σ=l_m+l_sl+lt-l_M` and
+`r_R=(l_m/l_r)^2*r_r`. The native component receives the original winding
+parameters. `R2` is `r_r`, before the inverse-Γ conversion.
+The stator sums include `rt` and `lt` on the same machine base.
+
+Julia power flow omits these two terms. Nonzero values can give different
+terminal powers in the state equations and the power-flow result.
+The state equations do not use `p_f`. Speed and torque have no extra pole factor.
+
+Power flow passes `T_0` without converting from the machine base to the
+1000 MVA network base. In the reference circuit with `S_base=2000` MVA,
+power flow gives 911.922 MW and the state equations give 1832.331 MW at the
+same bus voltage. The exporter retains the machine base. The supplied
+1000 MVA case uses matching bases.
+
+The load module computes
+
+```math
+T_m = T_0(A\omega_r^m+B\omega_r+C),\qquad
+\dot\omega_r = (T_e-T_m)/(2H).
+```
+
+| Julia field | Control blocks |
+|---|---|
+| `T_0` | Final gain with `G=T_0` |
+| `A` | Gain with `G=A` after the integer power |
+| `B` | Gain with `G=B` on speed |
+| `C` | Parameter import for the constant term |
+| `m` | Products, squares and a reciprocal construct `ω_r^m` |
+
+Integer powers use products, squares and a reciprocal for negative exponents.
+The module imports `T_0`, `A`, `B` and `C`. The reference feeds `0.9` pu
+directly to `TMI`. Its separate base calculations end at the unused `Tau_base`.
+`TmOp` names an output. `IM_custom.pscx` contains an unfinished inverse-Γ
+calculation with disconnected integrators and gains.
+
+The speed command starts at Julia's solved `ω_r`. The reference start-up uses
+`time-sig` and `compare` with `X=0.2`, `OL=1`, `OH=0`, `INTR=0`, `conv=0`.
+The export uses `conv=1` to supply the integer input `SW` with the same levels.
+It imposes speed until 0.2 s and then applies the load torque law. The form lacks
+fields for rotor-flux and winding-current initial values. Those states settle
+during start-up. The load torque starts at its value at the imposed speed.
+
+Named node and data labels connect every port through separate stubs.
+
+The branch current points from the bus into the motor. Terminal P/Q use that
+current and the bus voltage phasors, with error divided by `S_base` and tolerance
+`0.01`. Mean speed uses Julia's equilibrium speed and absolute tolerance
+`1e-3` pu. Electrical and mechanical torque outputs are diagnostic.
 
 ## Converter controls
 

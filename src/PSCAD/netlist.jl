@@ -108,7 +108,7 @@ $(TYPEDFIELDS)
 struct OperatingPointRecord
     "Bus states `(vm_pu, va_rad)` in \\[dimensionless\\] and \\[rad\\], indexed by `BusKey`."
     bus_states::Dict{BusKey, NamedTuple}
-    "Solved component powers \\[MW, MVAr\\] and machine terminal voltage/angle \\[kV, rad\\], keyed by designator."
+    "Solved component powers \\[MW, MVAr\\], synchronous-machine terminal voltage/angle \\[kV, rad\\] and induction-machine speed \\[pu\\], keyed by designator."
     branch_flows::Dict{Symbol, NamedTuple}
     "Effective element Setpoints \\[MW, MVAr, rad, kV\\], keyed by designator."
     setpoints::Dict{Symbol, PowerImpedance.Setpoint}
@@ -143,7 +143,7 @@ function _check_supported_elements(elements)
     for (name, element) in pairs(elements)
         model = element.element_model
         model isa Union{PowerImpedance.Blackbox_line, PowerImpedance.Blackbox_MMC,
-            PowerImpedance.InductionMachine, PowerImpedance.Converter} &&
+            PowerImpedance.Converter} &&
             throw(ArgumentError("PSCAD does not support element :$name ($(typeof(model)))"))
     end
     return nothing
@@ -275,6 +275,11 @@ function _branch_flow(pmtype, solution, input, pf, terminals)
         return side == 1 ? (pf = p, qf = q) : (pt = p, qt = q)
     end
     solution === nothing && return nothing
+    if pmtype == "im"
+        # Induction-machine pg/qg are powers absorbed at its AC terminal.
+        return (pf = Float64(solution["pg"]) * 1000,
+            qf = Float64(solution["qg"]) * 1000)
+    end
     fields = pmtype == "branch" ? (:pf, :qf, :pt, :qt) :
              pmtype == "branchdc" ? (:pf, :pt) :
              pmtype == "convdc" ? (:pgrid, :qgrid, :pdc) :
@@ -371,6 +376,11 @@ function _netlist(elements, topology, voltage_base, frequency, supplied_pf,
         if pf !== nothing
             setpoints[name] = setpoint
             flow = _branch_flow(pmtype, solution, input, pf, terminals)
+            if element.element_model isa PowerImpedance.InductionMachine && flow !== nothing
+                states = NamedTuple{PowerImpedance.statenames(element.element_model)}(
+                    Tuple(PowerImpedance._steady_state(element, setpoint)))
+                flow = merge(flow, (speed_pu = states.ω_r,))
+            end
             if element.element_model isa PowerImpedance.SynchronousMachine &&
                flow !== nothing
                 # The machine's public bus lies beyond rt/lt. The power-flow generator

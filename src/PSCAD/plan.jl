@@ -487,6 +487,12 @@ function component_ports(c::ComponentPlan, modules)
             [(36, 0), (-36, -72), (0, 72), (-36, 72), (36, -72), (-72, -72), (36, 72)],
             [:electrical; fill(:signal, 6)],
             [:electrical, :input, :input, :output, :output, :output, :output])
+    elseif d == "master:wound_rotor"
+        (p["View"], p["ERC"], p["MM"], p["SNP"]) == ("1", "0", "0", "1") ||
+            throw(ArgumentError("unsupported wound_rotor ports"))
+        return _placed_ports(c, [(54, 0), (-54, -36), (-54, 0), (-54, 36)],
+            [:electrical, :signal, :signal, :signal],
+            [:electrical, :input, :input, :input])
     else
         electrical = false
         if d in ("master:import", "master:export", "master:const",
@@ -629,7 +635,9 @@ function check_connectivity(canvas::CanvasPlan, name, modules = Dict())
             implicit_keys = c.defn in
                             ("master:ammeter", "master:voltmeter", "master:voltmetergnd") ?
                             ("Name",) :
-                            c.defn == "master:sync_machine" ? ("POut", "QOut") : ()
+                            c.defn == "master:sync_machine" ? ("POut", "QOut") :
+                            c.defn == "master:wound_rotor" ?
+                            ("MSF", "LSF", "Spd", "Tel", "TmOp", "ThetaR") : ()
             for key in implicit_keys
                 value = get(Dict(c.params), key, "")
                 isempty(value) || push!(get!(drivers, lowercase(value), NTuple{2, Int}[]),

@@ -300,6 +300,8 @@ using the exported, formatted resistance \\[Ω\\], inductance \\[H\\] and
 frequency \\[Hz\\]. Compare its positive-sequence RMS magnitude with the solved
 terminal voltage using `rtol_v`. Machine power and voltage rows use the current
 probe name. Speed uses the scalar mean with absolute tolerance `1e-3` around 1.
+Induction-machine current points from the bus into the motor. Its terminal
+P/Q use that direction, and mean speed refers to its solved equilibrium speed.
 Internal machine power, voltage, field and initialization channels, and converter
 DC voltage, frequency and angle channels, remain diagnostic outputs.
 
@@ -417,12 +419,14 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
             e = model.netlist.elements[element_index]
             flow = get(model.operating_point.branch_flows, e.name, nothing)
             vsm = e.model isa PowerImpedance.MMC && e.model.sync isa PowerImpedance.VSEWithDamping
-            (!vsm || channel.unit == "pu") ||
+            induction = e.model isa PowerImpedance.InductionMachine
+            (!(vsm || induction) || channel.unit == "pu") ||
                 throw(ArgumentError("speed probe $(channel.name) must use pu"))
-            flow !== nothing && haskey(flow, vsm ? :pt : :terminal_voltage_kV) ||
+            flow !== nothing && haskey(flow, induction ? :speed_pu : vsm ? :pt : :terminal_voltage_kV) ||
                 throw(ArgumentError("missing solved machine terminal data for :$(e.name)"))
             actual = map(state -> state[channel.name].mean, states)
-            add_row(:machine_speed, channel.name, actual, 1.0, 1e-3; absolute = true)
+            reference = induction ? flow.speed_pu : 1.0
+            add_row(:machine_speed, channel.name, actual, reference, 1e-3; absolute = true)
             continue
         end
         channel.kind in (:voltage, :current) || continue
@@ -502,9 +506,11 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
             current = hypot(flow[fields[1]], flow[fields[2]]) / (3 * voltage)
             add_row(:current_rms, channel.name, map(value -> value.rms, values), current, rtol_i)
             if e.model isa Union{
-                PowerImpedance.SynchronousMachine, PowerImpedance.TLC, PowerImpedance.MMC}
-                machine = e.model isa PowerImpedance.SynchronousMachine
-                machine && !haskey(flow, :terminal_voltage_kV) &&
+                PowerImpedance.SynchronousMachine, PowerImpedance.InductionMachine,
+                PowerImpedance.TLC, PowerImpedance.MMC}
+                synchronous = e.model isa PowerImpedance.SynchronousMachine
+                machine = synchronous || e.model isa PowerImpedance.InductionMachine
+                synchronous && !haskey(flow, :terminal_voltage_kV) &&
                     throw(ArgumentError("missing solved machine terminal data for :$(e.name)"))
                 index = findfirst(c -> c.kind == :voltage && c.bus == bus.name,
                     model.probes.channels)
@@ -522,7 +528,7 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                     flow[fields[1]], 0.01, rating)
                 add_row(machine ? :machine_q : :converter_q, channel.name, imag.(power),
                     flow[fields[2]], 0.01, rating)
-                machine || continue
+                synchronous || continue
                 zbase = elec.Vᵃᶜ_base^2 / elec.S_base
                 r = _pscad_number(pscad_value(elec.rt * zbase))
                 l = _pscad_number(pscad_value(elec.lt * zbase / elec.ωn))

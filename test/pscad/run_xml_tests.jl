@@ -1229,4 +1229,5 @@ else
             PSCADTopology.check_degrees(graph, name)
         end
     end
+    include("induction_machine_xml_test.jl")
 end

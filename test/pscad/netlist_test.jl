@@ -304,7 +304,7 @@ end
         conv_pf.operating_point, conv_pf.diagnostics)
     @test_throws ArgumentError pscad.netlist(conv_state, inconsistent_conv_pf)
 
-    for model in (P.Blackbox_line(), P.Blackbox_MMC(), inductionmachine().element_model,
+    for model in (P.Blackbox_line(), P.Blackbox_MMC(),
         PSCADLegacyConverterFixture())
         bad = Network()
         add!(bad, :unsupported_thing, P.Element(; element_model = model, input_pins = 1, output_pins = 1))

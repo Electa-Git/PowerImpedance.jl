@@ -7,6 +7,7 @@ Export runs locally and does not contact PSCAD. `compute(model, PSCADRun();
 options)` runs the project on a Windows station with PSCAD 5.1.0, and
 `compare_operating_point` compares the simulated steady state with the retained
 power-flow solution.
+Induction machines export with a speed-dependent load torque and their solved equilibrium speed.
 
 ## Export a network
 

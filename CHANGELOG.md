@@ -4,6 +4,7 @@
 
 ### Added
 
+- PSCAD exports include induction machines with load torque control and terminal power and speed comparisons.
 - `ZToolProbe` adds Z-tool AC and DC scans in series at an element terminal or
   as an open shunt at a bus. Exports with probes include the checked v0.1.52
   library and workspace, and runs load the library before the project.
