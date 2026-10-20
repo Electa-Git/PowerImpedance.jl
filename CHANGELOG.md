@@ -32,6 +32,8 @@
 
 ### Changed
 
+- The IEEE 39-bus example is a NetworkBuilder tutorial with a modular STATCOM
+  and an impedance-based stability check at Bus 9. The documentation runs it.
 - PSCAD operating-point comparison reports `settling` and checks the change
   between window halves against `settling_fraction` times each row's tolerance.
   The default fraction is `0.1`.
