@@ -1,6 +1,12 @@
+"""
+$(TYPEDEF)
+
+Define the interface for distributed-parameter and imported transmission-line models.
+"""
 abstract type Transmission_line <: AbstractLinFreqDomain end
 
 # Vacuum electric permittivity [F/m], CODATA 2018 recommended value.
+"Vacuum electric permittivity, ε₀ = 8.8541878128 × 10⁻¹² \\[F/m\\]."
 const _VACUUM_PERMITTIVITY = 8.8541878128e-12
 
 function eval_y(tl :: Transmission_line, s :: Complex)

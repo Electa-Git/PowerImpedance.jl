@@ -21,21 +21,20 @@ export dc_source
 		transformation = transformation, connection = connection)
 end =#
 """
-    dc_source(; pins=1, setpoint=Setpoint(Vdc=240),
-              transformation=false, connection=true, source_kwargs...)
+$(TYPEDSIGNATURES)
 
 Construct an ideal DC voltage-source element and its power-flow data.
 
 # Arguments
 
-- `pins`: Number of DC conductors represented on each legacy element side.
-- `setpoint`: DC operating point with pole-to-pole `Vdc` \\[kV\\].
-  See [`Setpoint`](@ref).
-- `transformation`: Whether to expose a supported transformed representation.
-- `connection`: Whether NetworkBuilder includes the element in the system.
-- `source_kwargs`: Fields of the internal `Source` model. Pole-to-pole `V`
-  \\[kV\\] initializes the DC bus, while `setpoint.Vdc` controls its power-flow
-  voltage.
+- `pins`: Number of terminals per side. Used directly without inference. Default: `1`.
+- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
+  and angles \\[rad\\]. Default: `Setpoint(Vdc = 240)`.
+- `transformation`: Whether the element exposes transformed external coordinates.
+  Default: `false`.
+- `connection`: Whether the element participates in network construction. Default:
+  `true`.
+- `args...`: Additional `Source` field values, such as legacy voltage and power data.
 
 # Returns
 
@@ -43,7 +42,7 @@ Construct an ideal DC voltage-source element and its power-flow data.
 
 # Errors
 
-- Throws `ArgumentError` when `source_kwargs` contains an unknown field.
+- Throws `ArgumentError` when an additional keyword is not a `Source` field.
 
 # Examples
 

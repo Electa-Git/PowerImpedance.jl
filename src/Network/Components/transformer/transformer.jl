@@ -18,36 +18,60 @@ including its capacitive paths. Its internal zero-sequence block is an identity
 placeholder decoupled from both other sequences, discarded by the supported
 dq transformation. It does not represent physical zero-sequence transfer.
 Construct three-phase `:ΔY` elements with `transformation=true`.
+
+$(TYPEDFIELDS)
 """
 @with_kw mutable struct Transformer <: AbstractLinFreqDomain
+	"Number of phase-domain terminals per side: one or three."
 	pins::Int = 1                     # marks single or three phase
+	"Winding organization: `:YY` or `:ΔY` (Dyn11)."
 	organization::Symbol = :YY        # three phase organization (:YY or :ΔY)
 
+	"Rated electrical angular frequency \\[rad/s\\]."
 	ω::Union{Int, Float64}      = 2*π*50   # rated frequency in [rad/s]
+	"Open-circuit primary voltage \\[V\\]."
 	V₁ᵒ::Union{Int, Float64} = 0      # open circuit primary voltage [V]
+	"Short-circuit primary voltage \\[V\\]."
 	V₁ˢ::Union{Int, Float64}  = 0      # short circuit primary voltage [V]
+	"Open-circuit primary current \\[A\\]."
 	I₁ᵒ::Union{Int, Float64} = 0      # open circuit primary current [A]
+	"Short-circuit primary current \\[A\\]."
 	I₁ˢ::Union{Int, Float64}  = 0      # short circuit primary current [A]
+	"Open-circuit primary loss \\[W\\]."
 	P₁ᵒ::Union{Int, Float64} = 0      # open circuit losses on primary side [W]
+	"Short-circuit primary loss \\[W\\]."
 	P₁ˢ::Union{Int, Float64}  = 0      # short circuit losses on primary side [W]
+	"Open-circuit secondary voltage \\[V\\]."
 	V₂ᵒ::Union{Int, Float64} = 0      # open circuit secondary voltage [V]
+	"Stored short-circuit secondary voltage \\[V\\]."
 	V₂ˢ::Union{Int, Float64}  = 0      # short circuit secondary voltage [V]
 
+	"Primary-to-secondary voltage ratio; line-to-line for three phases \\[dimensionless\\]."
 	n::Union{Int, Float64}    = 0        # voltage ratio (line-to-line for three phases)
+	"Primary winding inductance \\[H\\]."
 	Lₚ::Union{Int, Float64} = 0       # primary side inductance [H]
+	"Primary winding resistance \\[Ω\\]."
 	Rₚ::Union{Int, Float64} = 0       # primary side resistance [Ω]
+	"Secondary winding resistance \\[Ω\\]."
 	Rₛ::Union{Int, Float64} = 0       # secondary side resistance [Ω]
+	"Secondary winding inductance \\[H\\]."
 	Lₛ::Union{Int, Float64} = 0       # secondary side inductance [H]
+	"Primary excitation inductance; zero omits this term \\[H\\]."
 	Lₘ::Union{Int, Float64} = 0      # magnetising inductance [H]
+	"Primary excitation resistance; zero omits this term \\[Ω\\]."
 	Rₘ::Union{Int, Float64} = 0      # magnetising resistance [Ω]
+	"Per-phase turn-to-turn capacitance \\[F\\]."
 	Cₜ::Union{Int, Float64} = 0       # turn-to-turn capacitance [F]
+	"Per-phase stray capacitance \\[F\\]."
 	Cₛ::Union{Int, Float64} = 0       # stray capacitance [F] 
+	"Whether winding resistances are scaled with absolute complex frequency."
 	hasRω::Bool              = false              # Boolean to set frequency-dependent winding resistance [-]
+	"Exponent of winding-resistance frequency scaling \\[dimensionless\\]."
 	k::Union{Int, Float64}    = 0        # Exponent for frequency-dependent winding resistance [-]
 end
 
 """
-    transformer(def=:explicit; transformer_kwargs...)
+$(TYPEDSIGNATURES)
 
 Construct a one-phase or balanced three-phase transformer element.
 
@@ -55,15 +79,19 @@ Construct a one-phase or balanced three-phase transformer element.
 
 - `def`: Parameterization mode. `:explicit` uses the supplied equivalent-circuit
   values. `:tests` derives them from the open- and short-circuit test fields.
+  Default: `:explicit`.
 - `pins`: Number of phase-domain terminals. Default: `1`.
 - `organization`: Three-phase winding organization, `:YY` or `:ΔY` (Dyn11:
   delta primary, grounded-Y secondary, secondary positive sequence leading by 30°).
 - `ω`: Rated angular frequency `\\[rad/s\\]`.
-- `V₁ᵒ`, `V₁ˢ`, `V₂ᵒ`, `V₂ˢ`: Open- and short-circuit voltages
+- `V₁ᵒ`, `V₁ˢ`, `V₂ᵒ`: Open- and short-circuit voltages
   `\\[V\\]` used by `def=:tests`; `V₁ᵒ` and `V₂ᵒ` also specify power-flow voltage ratings.
+- `V₂ˢ`: Stored secondary short-circuit voltage `\\[V\\]`, unused by the implemented
+  parameter conversion.
 - `I₁ᵒ`, `I₁ˢ`: Open- and short-circuit primary currents `\\[A\\]`.
 - `P₁ᵒ`, `P₁ˢ`: Open- and short-circuit losses `\\[W\\]`.
-- `n`: Primary-to-secondary voltage ratio (line-to-line for three phases) `\\[dimensionless\\]`.
+- `n`: Primary-to-secondary voltage ratio (line-to-line for three phases)
+  `\\[dimensionless\\]`.
 - `Lₚ`, `Lₛ`, `Lₘ`: Primary, secondary, and magnetizing inductances
   `\\[H\\]`; winding leakage is referred to its own side, excitation to the primary.
 - `Rₚ`, `Rₛ`, `Rₘ`: Primary, secondary, and magnetizing resistances
@@ -91,10 +119,22 @@ All T-model parameters are per-phase Y-equivalent values for both organizations.
 winding-resistance reference as `:YY`. Zero `Rₘ` or `Lₘ` omits that excitation
 term. The internal identity zero-sequence block is only a decoupled placeholder
 for dq conversion; delta-to-Y zero-sequence isolation has no phase-domain ABCD.
+- `args...`: Remaining component-field keywords described above.
 
 # Returns
 
 - An `Element` containing the detailed transformer model.
+
+# Notes
+
+```math
+n=V_1^o/V_2^o,\\quad R=P_1^s/(I_1^s)^2,\\quad L=\\frac{\\sqrt{(V_1^sI_1^s)^2-(P_1^s)^2}}{\\omega(I_1^s)^2},\\quad R_m=(V_1^o)^2/P_1^o.
+```
+
+In `:tests` mode the primary winding receives half of ``R,L`` and the secondary receives
+the other half divided by ``n²``. The excitation inductance is derived from the
+open-circuit reactive power. The stored test values are interpreted per the implemented
+formulas; no three-phase test-data conversion is applied.
 
 # Errors
 
@@ -158,6 +198,41 @@ function transformer(def=:explicit; args...)
 		element_value = t, transformation = transformation, connection = connection)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the component ABCD representation at complex frequency `s`.
+
+# Arguments
+
+- `t`: Transformer T-model and winding organization.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+  for frequency `f` \\[Hz\\].
+
+# Returns
+
+- ABCD matrix with A/D blocks \\[dimensionless\\], B block \\[Ω\\], and C block \\[S\\].
+
+# Notes
+
+```math
+Z_p=R_p w_k+sL_p,\\quad Z_s=R_s w_k+sL_s,\\quad Y_m=R_m^{-1}+(sL_m)^{-1},\\quad w_k=(|s|/(2\\pi\\,50))^k.
+```
+
+The resistance multiplier is unity unless `hasRω` is enabled. Zero magnetizing
+resistance or inductance omits its term. Series-winding, excitation, ideal-ratio, and
+capacitive two-ports are cascaded in implementation order. For Dyn11, the complete
+positive/negative-sequence models are multiplied by ``e^{∓jπ/6}``; the internal
+zero-sequence identity is a placeholder removed by the supported dq transformation.
+
+# Examples
+
+```julia
+using PowerImpedance
+model = transformer(n=2.0, Rₚ=0.1, Lₚ=1e-3).element_model
+PowerImpedance.eval_abcd(model, 2π*im*50)
+```
+"""
 function eval_abcd(t::Transformer, s::ComplexF64)
 	# Frequency-dependent winding resistance scaling
 	# Keep the original behavior: base = 2π*50 (NOT t.ω), because the legacy code used that constant.

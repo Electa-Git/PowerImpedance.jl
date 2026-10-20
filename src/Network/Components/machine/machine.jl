@@ -1,3 +1,8 @@
+"""
+$(TYPEDEF)
+
+Define the legacy frequency-domain interface for machine models.
+"""
 abstract type Machine end
 
 function eval_abcd(machine :: Machine, s :: Complex)

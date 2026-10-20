@@ -3,76 +3,46 @@ export inductionmachine, InductionMachine, ElectricalIM, MechanicalIM
 
 ##### Electrical model ###############333
 
-@doc raw"""
-   
-    $(TYPEDSIGNATURES)
+"""
+$(TYPEDEF)
 
-Electrical subsystem of an induction machine.
+Represent induction-machine stator-current and rotor-flux dynamics using an inverse-Γ
+model in synchronous dq coordinates. Electrical states and circuit parameters use
+machine per-unit bases; the internal q axis leads, while the external interface uses a
+lagging q axis.
 
-The model is formulated in the synchronous dq reference frame using an
-inverse-Γ representation. It describes the dynamics of stator currents
-and rotor flux linkages and computes the electromagnetic torque supplied
-to the mechanical subsystem.
-
-# Parameters
-
-## Base quantities
-
-- `ωn` : electrical base angular frequency (rad/s)
-- `p_f` : number of poles
-- `Vac_base` : line-to-line RMS voltage base
-- `S_base` : power base
-
-## Transformer impedance
-
-- `lt` : transformer inductance
-- `rt` : transformer resistance
-
-## Machine parameters
-
-- `l_m` : magnetizing inductance
-- `l_sl` : stator leakage inductance
-- `r_s` : stator resistance
-- `l_rl` : rotor leakage inductance
-- `r_r` : rotor resistance
-
-# States
-
-- `i_d` : d-axis stator current
-- `i_q` : q-axis stator current
-- `Ψ_df` : d-axis rotor flux linkage
-- `Ψ_qf` : q-axis rotor flux linkage
-
-# Initial Conditions
-
-The electrical states are initialized from the active and reactive
-power setpoint:
-
-```julia
-i_d  = 2/3 * p_ac
-i_q  = -2/3 * q_ac
-Ψ_df = 1.0
-Ψ_qf = 0.0
+$(TYPEDFIELDS)
 """
 @with_kw struct ElectricalIM <: AbstractStateSpace
 
+    "Base electrical angular frequency \\[rad/s\\]."
     ωn :: Float64 = 100π
+    "Stored legacy parameter; not used by the current state equations."
     p_f :: Float64 = 2
 
     # Base values
+    "Line-to-line RMS voltage base \\[kV\\]."
     Vac_base :: Float64 = 220
+    "Three-phase apparent-power base \\[MVA\\]."
     S_base :: Float64 = 1000
 
     # Transformer
+    "External transformer inductance on the machine base \\[dimensionless\\]."
     lt :: Float64 = 0.0
+    "External transformer resistance on the machine base \\[dimensionless\\]."
     rt :: Float64 = 0.0
 
     # Machine
+    "Magnetizing inductance on the machine base \\[dimensionless\\]."
     l_m :: Float64 = 1.66
+    "Stator leakage inductance on the machine base \\[dimensionless\\]."
     l_sl :: Float64 = 0.15
+    "Stator resistance on the machine base \\[dimensionless\\]."
     r_s :: Float64 = 0.0015
 
+    "Rotor leakage inductance on the machine base \\[dimensionless\\]."
     l_rl :: Float64 = 0.165
+    "Rotor resistance on the machine base \\[dimensionless\\]."
     r_r :: Float64 = 0.01
 end
 
@@ -82,39 +52,30 @@ initialvalues(::ElectricalIM;setpoint_pu::SetpointPU) = (;i_d=2/3*setpoint_pu.p_
 
 
 ######## Mechanical model #######################3
-@doc raw""" 
+"""
+$(TYPEDEF)
 
-    $(TYPEDSIGNATURES)
-Mechanical subsystem of an induction machine. 
+Represent induction-machine rotor inertia and a polynomial speed-dependent load torque.
 
-The model describes rotor-speed dynamics driven by the difference between electromagnetic torque and a speed-dependent load torque. 
-
-# Parameters 
-- `H` : inertia constant 
-- T_0 : Nominal load torque [pu]
-- A : nonlinear coefficient
-- B: linear coefficient
-- C: constant coefficient
-
-```math
-\tau_m = T_0 (A \omega_r^m + B \omega_r + C)
-```
-
-# Initial conditions
-- ω_r = 1.0
-
+$(TYPEDFIELDS)
 """
 @with_kw struct MechanicalIM <: AbstractStateSpace
 
+    "Inertia constant \\[s\\]."
     H :: Float64 = 4.0 # Inertia of motor
 
 
     # Mechanical torque model of form T(ω) = T₀*(A*ωᵐ+B*ω+C)
+    "Load-torque scale on the machine torque base \\[dimensionless\\]."
     T_0 :: Float64 = 0.9
 
+    "Coefficient of the speed-power term in load torque \\[dimensionless\\]."
     A :: Float64 = 0.0
+    "Coefficient of the linear speed term in load torque \\[dimensionless\\]."
     B :: Float64 = 0.0
+    "Constant load-torque coefficient \\[dimensionless\\]."
     C::Float64 = 1.0
+    "Exponent of normalized rotor speed in the load-torque polynomial."
     m :: Int = 1
 
 end
@@ -123,72 +84,49 @@ statenames(::MechanicalIM) = (:ω_r,)
 initialvalues(::MechanicalIM) = (ω_r = 1.0,)
 
 ########## Induction Machine #############33
-@doc raw"""
-    $(TYPEDSIGNATURES)
 
-Dynamic induction machine model composed of an electrical subsystem (`ElectricalIM`) and a mechanical subsystem (`MechanicalIM`). 
-
-The electrical subsystem computes stator-current and rotor-flux dynamics as well as the electromagnetic torque. 
-The mechanical subsystem uses this torque to determine rotor-speed dynamics. 
-
-# Components
-- `elec::ElectricalIM` : electrical model
-- `mech::MechanicalIM` : mechanical model
-
-# States 
-The complete state vector consists of 
-- `i_d` 
-- `i_q` 
-- `Ψ_df` 
-- `Ψ_qf` 
-- `ω_r` 
-
-# Inputs 
-- `vd` : d-axis terminal voltage 
-- `vq` : q-axis terminal voltage 
-
-# Outputs 
-- `id` : d-axis stator current 
-- `iq` : q-axis stator current 
-
-# Notes
-
-The external interface uses a dq-lagging convention for voltages and currents, while the internal state-space equations are evaluated using a dq-leading convention. The required sign conversions are handled automatically.
 
 """
+$(TYPEDEF)
 
+Combine induction-machine electrical and mechanical subsystems. External voltages and
+currents use a lagging q axis; state equations use a leading q axis, with sign
+conversion at the interface.
 
+$(TYPEDFIELDS)
+"""
 struct InductionMachine <: AbstractStateSpace
+    "Machine electrical subsystem."
     elec::ElectricalIM
+    "Machine mechanical subsystem."
     mech::MechanicalIM
 end
-@doc raw"""
-    inductionmachine(; elec=ElectricalIM(),
-                        mech=MechanicalIM(),
-                        setpoint=Setpoint(),
-                        connection=true)
+"""
+$(TYPEDSIGNATURES)
 
 Create an induction machine element.
 
 # Arguments
 
-- `elec` : electrical machine model.
-- `mech` : mechanical machine model.
-- `setpoint` : operating-point specification used for initialization.
-- `connection` : whether the element is connected to the network.
+- `elec`: Electrical subsystem and its physical base quantities. Default:
+  `ElectricalIM()`.
+- `mech`: Mechanical subsystem. Default: `MechanicalIM()`.
+- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
+  and angles \\[rad\\]. Default: `Setpoint()`.
+- `connection`: Whether the element participates in network construction. Default:
+  `true`.
 
 # Returns
 
-An `Element` containing an `InductionMachine` model.
+- An `Element` containing an `InductionMachine` model.
 
-# Example
+# Examples
 
 ```julia
 im = inductionmachine(
     elec = ElectricalIM(),
     mech = MechanicalIM(T_0 = 0.9))
-```   
-
+```
 """
 function inductionmachine(; elec = ElectricalIM(), mech = MechanicalIM(), setpoint = Setpoint(), connection = true)
 
@@ -214,6 +152,44 @@ initialvalues(m::InductionMachine;setpoint_pu, kwargs...) = merge(initialvalues(
 
 inputnames(::InductionMachine) = (:vd,:vq)
 outputnames(::InductionMachine) = (:id,:iq)
+"""
+$(TYPEDSIGNATURES)
+
+Convert a physical power-flow operating point to normalized external inputs and internal
+setpoint data.
+
+# Arguments
+
+- `m`: Induction-machine electrical and mechanical blocks.
+- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
+  and angles \\[rad\\].
+
+# Returns
+
+- `inputs`: Named tuple of bus voltages `vd`, `vq`, on machine bases \\[dimensionless\\].
+- `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+  and the angle uses \\[rad\\].
+
+# Notes
+
+```math
+v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
+```
+
+Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
+``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
+power base.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = inductionmachine().element_model
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0, Pdc=100.0, Vdc=640.0)
+inputs, point_pu = P.pftoinputs(model, point)
+```
+"""
 function pftoinputs(m::InductionMachine, setpoint::Setpoint)
 
     Sbase = m.elec.S_base
@@ -239,6 +215,52 @@ end
 ############ State space equations ###########
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate induction-machine winding dynamics and electromagnetic torque, writing state
+derivatives into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `v_dq`: d/q bus-voltage pair in internal machine coordinates \\[dimensionless\\].
+- `block`: Induction-machine winding parameters.
+- `indm`: Induction-machine electrical and mechanical blocks.
+
+# Returns
+
+- Electromagnetic torque on the machine torque base \\[dimensionless\\].
+
+# Notes
+
+```math
+L_M=L_m^2/(L_m+L_{rl}),\\quad L_\\sigma=L_m+L_{sl}+L_t-L_M,\\quad R_R=(L_m/(L_m+L_{rl}))^2R_r,\\quad \\tau_e=\\Psi_d i_q-\\Psi_q i_d.
+```
+
+The electrical equations use synchronous dq-leading coordinates. Current and rotor-flux
+derivatives include stator/rotor loss, synchronous-frame coupling, and slip terms
+``1-ω_r``; all electrical quantities use machine bases \\[dimensionless\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+model = inductionmachine(setpoint=point).element_model
+inputs, point_pu = P.pftoinputs(model, point)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+block = model.elec
+F = zeros(P.n_states(block))
+P.state_space!(F, x, (inputs.vd, -inputs.vq), block; indm=model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, v_dq, block::ElectricalIM; indm::InductionMachine)
 
     # Parameters
@@ -275,6 +297,49 @@ end
 
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate induction-machine rotor-speed dynamics, writing state derivatives into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `τ_e`: Electromagnetic torque on the machine torque base \\[dimensionless\\].
+- `block`: Rotor inertia and load-torque parameters.
+- `indm`: Induction-machine electrical and mechanical blocks.
+
+# Returns
+
+- Assigned normalized rotor-speed derivative \\[s⁻¹\\].
+
+# Notes
+
+```math
+\\tau_m=T_0(A\\omega_r^m+B\\omega_r+C),\\qquad \\dot\\omega_r=(\\tau_e-\\tau_m)/(2H).
+```
+
+Torques and rotor speed use machine bases \\[dimensionless\\]; ``H`` uses \\[s\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+model = inductionmachine(setpoint=point).element_model
+inputs, point_pu = P.pftoinputs(model, point)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+block = model.mech
+F = zeros(P.n_states(block))
+P.state_space!(F, x, 0.1, block; indm=model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!( F, x, τ_e, block::MechanicalIM; indm::InductionMachine)
 
     # States
@@ -289,6 +354,41 @@ end
 
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the coupled induction-machine electrical and mechanical dynamics, writing state
+derivatives into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  present, use \\[rad\\].
+- `indm`: Induction-machine electrical and mechanical blocks.
+
+# Returns
+
+- First unused derivative index after the assembled machine blocks.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+model = inductionmachine(setpoint=point).element_model
+inputs, point_pu = P.pftoinputs(model, point)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+F = zeros(P.n_states(model))
+P.state_space!(F, x, inputs, model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, inputs,indm::InductionMachine)
 
     v_dq = (inputs.vd, -inputs.vq) # Transform from dq-lagging to dq-leading
@@ -386,6 +486,39 @@ function transform(elemresult, busresult, global_dict, elem::Element{<:Induction
 end
 
 ##################### SI Scaling ######################################
+"""
+$(TYPEDSIGNATURES)
+
+Return the factors that convert normalized model admittance to physical terminal
+admittance.
+
+# Arguments
+
+- `elem`: Network element containing the component model and operating point.
+
+# Returns
+
+- Matrix of output-current-base to input-voltage-base ratios \\[S\\].
+
+# Notes
+
+```math
+Y_{ij}^{SI}=Y_{ij}^{pu}\\frac{I_{b,i}}{V_{b,j}}.
+```
+
+The common entry is `S_base/Vac_base²` \\[S\\], using the three-phase power base
+in \\[MVA\\] and line-to-line RMS voltage base in \\[kV\\]. These factors are returned
+for explicit use; core `eval_y` does not automatically apply them to induction machines.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+element = inductionmachine()
+scale = P.SI_scale(element)
+```
+"""
 function SI_scale(elem::Element{<:InductionMachine})
     elec = elem.element_model.elec
     Ybase = elec.S_base / elec.Vac_base^2 

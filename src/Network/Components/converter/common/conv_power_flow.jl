@@ -9,44 +9,22 @@ them.
 =#
 
 """
+$(TYPEDEF)
+
 Abstract supertype for legacy converter models.
 """
 abstract type Converter end
 
-"""
-Evaluate the ABCD representation of a converter at complex frequency `s`.
-
-$(SIGNATURES)
-
-# Details
-
-The legacy converter interface delegates ABCD evaluation to `eval_y`.
-"""
 function eval_abcd(converter :: Converter, s :: Complex)
     return eval_y(converter, s)
 end
 
-"""
-Evaluate the admittance representation of a converter at complex frequency `s`.
-
-$(SIGNATURES)
-"""
 function eval_y(converter :: Converter, s :: Complex)
     Y = eval_parameters(converter, s)
     return Y
 end
 
 
-"""
-Write a legacy converter into a PowerModelsACDC power-flow data dictionary.
-
-$(SIGNATURES)
-
-# Details
-
-The method creates the AC/DC buses, converter component entry, operating-point
-setpoints, limits, and reactor parameters expected by PowerModelsACDC.
-"""
 pmtype(::Element{<:Converter}) = "convdc"
 
 function convert!(data,elem::Element{<:Converter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)

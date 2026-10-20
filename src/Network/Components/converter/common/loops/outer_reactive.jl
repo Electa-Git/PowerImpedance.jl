@@ -16,82 +16,117 @@ export AbstractOuterReactiveControl,
        VoltageSupportLag
 
 """
+$(TYPEDEF)
+
 Abstract supertype for reactive-power outer-loop controllers.
 """
 abstract type AbstractOuterReactiveControl <: AbstractStateSpace end
 
 """
+$(TYPEDEF)
+
 Abstract supertype for reactive-power support terms.
 """
 abstract type AbstractVoltageSupportTLC <: AbstractStateSpace end
 
 """
+$(TYPEDEF)
+
 No reactive-power outer-loop control.
+
+$(TYPEDFIELDS)
 """
 struct NoOuterReactiveControl <: AbstractOuterReactiveControl end
 
-"""
-Return state names for no reactive control.
-
-$(SIGNATURES)
-"""
 statenames(::NoOuterReactiveControl) = ()
 
-"""
-Return a zero q-axis current reference.
-
-$(SIGNATURES)
-"""
 state_space!(F, x, inputs, block::NoOuterReactiveControl, conv::AbstractConverter) =
     (; q_ctrl_ref = 0.0)
 
 """
+$(TYPEDEF)
+
 No voltage-support contribution.
+
+$(TYPEDFIELDS)
 """
 struct NoVoltageSupport <: AbstractVoltageSupportTLC end
 
-"""
-Return state names for no voltage support.
-
-$(SIGNATURES)
-"""
 statenames(::NoVoltageSupport) = ()
 
-"""
-Return zero reactive-power support.
-
-$(SIGNATURES)
-"""
 function state_space!(F, x, meas, setpoint_pu::SetpointPU, ::NoVoltageSupport,
         conv::Union{AbstractConverter, Nothing} = nothing)
     (; Q_ac_support = 0.0)
 end
 
 """
-Lagged AC-voltage support contribution to reactive-power reference.
-
 $(TYPEDEF)
 
-# Fields
+Lagged AC-voltage support contribution to reactive-power reference.
 
 $(TYPEDFIELDS)
 """
 @with_kw struct VoltageSupportLag <: AbstractVoltageSupportTLC
+    "Reactive-power gain per normalized AC-voltage deviation \\[dimensionless\\]."
     K::Float64 = 0.0
+    "Support low-pass angular cutoff \\[rad/s\\]."
     ωc::Float64 = 0.0
 end
 
-"""
-Return voltage-support state names.
-
-$(SIGNATURES)
-"""
 statenames(::VoltageSupportLag) = (:ξ_vac_supp,)
 
 """
+$(TYPEDSIGNATURES)
+
 Evaluate the voltage-support lag equation.
 
-$(SIGNATURES)
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]; angle
+  signals use \\[rad\\].
+- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+  angle uses \\[rad\\].
+- `block`: The `VoltageSupportLag` parameters.
+- `conv`: Parent converter, providing electrical bases and synchronization. Default:
+  `nothing`.
+
+# Returns
+
+- `Q_ac_support`: Reactive-power support \\[dimensionless\\].
+
+# Notes
+
+```math
+v=\\sqrt{v_d^2+v_q^2},\\quad \\dot{\\xi}=\\omega_c[K(v_{ref}-v)-\\xi],\\quad Q_{supp}=\\xi.
+```
+
+The reference includes the parent converter voltage-filter ratio. Voltage and power use
+converter bases \\[dimensionless\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = tlc().element_model
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+block = VoltageSupportLag(K=5.0, ωc=2π*10)
+x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
+F = zeros(P.n_states(block))
+meas = (vG_d_f=1.0, vG_q_f=0.0, v_dc_f=1.0, i_d_f=0.1,
+    i_q_f=0.0, i_dc_f=0.1, θ_f=0.0, P_ac_f=0.1, Q_ac_f=0.0, P_dc_f=0.1)
+sync = (ω_c=1.0, P_ac_f=0.1)
+signals = meas
+outputs = P.state_space!(F, x, signals, point, block, model)
+@assert all(isfinite, F)
+```
 """
 function state_space!(F, x, meas, setpoint_pu::SetpointPU, block::VoltageSupportLag,
         conv::Union{AbstractConverter, Nothing} = nothing)
@@ -103,23 +138,41 @@ function state_space!(F, x, meas, setpoint_pu::SetpointPU, block::VoltageSupport
 end
 
 """
-Reactive-power PI controller with optional voltage support.
-
 $(TYPEDEF)
 
-# Fields
+Reactive-power PI controller with optional voltage support.
 
 $(TYPEDFIELDS)
 """
 struct OuterReactiveQControl{S<:AbstractVoltageSupportTLC} <: AbstractOuterReactiveControl
+    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
     pi_ctrl::PIControl
+    "Reactive-power support block driven by AC voltage."
     support::S
 end
 
 """
+$(TYPEDSIGNATURES)
+
 Construct a reactive-power PI controller.
 
-$(SIGNATURES)
+# Arguments
+
+- `pi_ctrl`: PI gains for normalized signals; proportional gain is \\[dimensionless\\] and
+  integral gain is \\[s⁻¹\\]. Default: `PIControl()`.
+- `support`: Reactive-power support block driven by AC voltage. Default:
+  `NoVoltageSupport()`.
+
+# Returns
+
+- An `OuterReactiveQControl` instance.
+
+# Examples
+
+```julia
+using PowerImpedance
+component = OuterReactiveQControl()
+```
 """
 function OuterReactiveQControl(;
     pi_ctrl::PIControl = PIControl(),
@@ -128,11 +181,6 @@ function OuterReactiveQControl(;
     return OuterReactiveQControl{typeof(support)}(pi_ctrl, support)
 end
 
-"""
-Return reactive-power controller state names.
-
-$(SIGNATURES)
-"""
 function statenames(block::OuterReactiveQControl)
     return (statenames(block.support)..., :ξ_Q_ac)
 end
@@ -142,9 +190,55 @@ function initialvalues(block::OuterReactiveQControl; setpoint_pu=SetpointPU(), c
 end
 
 """
+$(TYPEDSIGNATURES)
+
 Evaluate reactive-power control and support dynamics.
 
-$(SIGNATURES)
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  present, use \\[rad\\].
+- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+  angle uses \\[rad\\].
+- `block`: The `OuterReactiveQControl` parameters.
+- `conv`: Parent converter providing electrical bases and synchronization.
+
+# Returns
+
+- `q_ctrl_ref`: Control output \\[dimensionless\\].
+
+# Notes
+
+```math
+e=q_{ref}+q_{supp}-q_f,\\quad \\dot{\\xi}=K_i e,\\quad i_{q,ref}=K_p e+\\xi.
+```
+
+Reactive power and current use converter bases \\[dimensionless\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = tlc().element_model
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+block = OuterReactiveQControl(pi_ctrl=PIControl(Kp=0.1, Ki=1.0))
+x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
+F = zeros(P.n_states(block))
+meas = (vG_d_f=1.0, vG_q_f=0.0, v_dc_f=1.0, i_d_f=0.1,
+    i_q_f=0.0, i_dc_f=0.1, θ_f=0.0, P_ac_f=0.1, Q_ac_f=0.0, P_dc_f=0.1)
+sync = (ω_c=1.0, P_ac_f=0.1)
+signals = (meas=meas, sync=sync)
+outputs = P.state_space!(F, x, signals, point, block, model)
+@assert all(isfinite, F)
+```
 """
 function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterReactiveQControl, conv::AbstractConverter)
     (; meas) = inputs
@@ -159,13 +253,14 @@ function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterReactiv
 end
 
 """
-AC-voltage outer-loop controller that produces a q-axis current reference.
-The filter acts on measured voltage magnitude before calculation of the PI
-error. `NoFilter()` preserves the zero-state magnitude measurement.
-
 $(TYPEDEF)
 
-# Fields
+AC-voltage outer-loop PI controller returning the scalar `q_ctrl_ref`.
+The TLC pass-through and MMC grid-following assemblies use it as a q-axis current
+reference; the MMC grid-forming virtual-impedance block uses it as a d-axis voltage
+correction. These signals use their converter bases \\[dimensionless\\].
+The filter acts on measured voltage magnitude before calculation of the PI
+error. `NoFilter()` preserves the zero-state magnitude measurement.
 
 $(TYPEDFIELDS)
 """
@@ -175,6 +270,33 @@ struct OuterReactiveVacControl{F<:AbstractMeasurementFilter} <: AbstractOuterRea
     "Filter for measured voltage magnitude. Cutoff in \\[rad/s\\]."
     filter::F
 end
+"""
+$(TYPEDSIGNATURES)
+
+Construct a `OuterReactiveVacControl` component from the supplied parameters.
+
+# Arguments
+
+- `pi_ctrl`: PI gains for normalized signals; `Kp` is \\[dimensionless\\] and `Ki` is
+  \\[s⁻¹\\]. Default: `PIControl()`.
+- `filter`: Scalar measurement filter specification or realized filter. Default:
+  `NoFilter()`.
+
+# Returns
+
+- An `OuterReactiveVacControl` instance.
+
+# Notes
+
+The PI parameter container is also accepted as the first positional argument.
+
+# Examples
+
+```julia
+using PowerImpedance
+component = OuterReactiveVacControl()
+```
+"""
 function OuterReactiveVacControl(; pi_ctrl::PIControl = PIControl(),
         filter::AbstractMeasurementFilter = NoFilter())
     realized = measurement_filter_ss(filter)
@@ -182,11 +304,6 @@ function OuterReactiveVacControl(; pi_ctrl::PIControl = PIControl(),
 end
 OuterReactiveVacControl(pi_ctrl::PIControl) = OuterReactiveVacControl(; pi_ctrl)
 
-"""
-Return AC-voltage controller state names.
-
-$(SIGNATURES)
-"""
 statenames(block::OuterReactiveVacControl) =
     (filter_statenames(:vac_mag_f, block.filter)..., :ξ_v_ac)
 
@@ -197,9 +314,57 @@ function initialvalues(block::OuterReactiveVacControl; setpoint_pu=SetpointPU(),
 end
 
 """
+$(TYPEDSIGNATURES)
+
 Evaluate AC-voltage PI control.
 
-$(SIGNATURES)
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  present, use \\[rad\\].
+- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+  angle uses \\[rad\\].
+- `block`: The `OuterReactiveVacControl` parameters.
+- `conv`: Parent converter providing electrical bases and synchronization.
+
+# Returns
+
+- `q_ctrl_ref`: Control output \\[dimensionless\\].
+
+# Notes
+
+```math
+e=v_{ref}-\\operatorname{LPF}(\\sqrt{v_d^2+v_q^2}),\\quad \\dot{\\xi}=K_i e,\\quad u_q=K_p e+\\xi.
+```
+
+The returned `q_ctrl_ref` is ``u_q``; its interpretation as a current reference or
+voltage correction depends on the downstream assembly. Signals use converter bases
+\\[dimensionless\\]. The voltage reference includes the parent converter voltage ratio.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = tlc().element_model
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+block = OuterReactiveVacControl(pi_ctrl=PIControl(Kp=0.1, Ki=1.0))
+x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
+F = zeros(P.n_states(block))
+meas = (vG_d_f=1.0, vG_q_f=0.0, v_dc_f=1.0, i_d_f=0.1,
+    i_q_f=0.0, i_dc_f=0.1, θ_f=0.0, P_ac_f=0.1, Q_ac_f=0.0, P_dc_f=0.1)
+sync = (ω_c=1.0, P_ac_f=0.1)
+signals = (meas=meas, sync=sync)
+outputs = P.state_space!(F, x, signals, point, block, model)
+@assert all(isfinite, F)
+```
 """
 function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterReactiveVacControl, conv::AbstractConverter)
     (; meas) = inputs

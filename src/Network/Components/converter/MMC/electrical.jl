@@ -1,28 +1,53 @@
 export ElectricalMMC
 
+"""
+$(TYPEDEF)
+
+Store the twelve-state MMC electrical plant and its physical bases. Arm parameters use
+DC bases, and equivalent AC-side parameters use AC bases \\[dimensionless\\]. The keyword
+constructor accepts physical parameters and performs this normalization.
+
+$(TYPEDFIELDS)
+"""
 struct ElectricalMMC <: AbstractStateSpace
     ## Electrical parameters
+    "Arm inductance normalized by the DC inductance base \\[dimensionless\\]."
     Lₐᵣₘ :: Float64        # arm inductance [pu]
+    "Arm resistance normalized by the DC impedance base \\[dimensionless\\]."
     Rₐᵣₘ :: Float64        # equivalent arm resistance [pu]
+    "Submodule capacitance normalized by the DC capacitance base \\[dimensionless\\]."
     Cₐᵣₘ :: Float64        # capacitance per submodule [pu]
+    "Number of submodules per arm."
     N :: Int               # number of submodules per arm [-]
+    "Transformer converter-side to grid-side voltage ratio \\[dimensionless\\]."
     turnsRatio :: Float64  # Turns ratio of the converter transformer, converter side/AC side [-]
 
     ## Base values
+    "Base electrical angular frequency \\[rad/s\\]."
     ωbase :: Float64        # Base angular frequncy [rad/s]
+    "Converter-side AC phase-peak voltage base \\[kV\\]."
     vAC_base :: Float64     # TODO complete this
+    "Pole-to-pole DC voltage base \\[kV\\]."
     vDC_base :: Float64
+    "Three-phase power base \\[MVA\\]."
     Sbase :: Float64
+    "AC impedance base \\[Ω\\]."
     zAC_base :: Float64
+    "AC inductance base \\[H\\]."
     lAC_base :: Float64
 
     # Base conversions
+    "AC-to-DC voltage-base ratio \\[dimensionless\\]."
     baseConv1 :: Float64
+    "DC-to-AC voltage-base ratio \\[dimensionless\\]."
     baseConv2 :: Float64
+    "AC-to-DC current-base ratio \\[dimensionless\\]."
     baseConv3 :: Float64
 
     # Equivalent resistance and inductance
+    "Equivalent AC inductance, including half the arm inductance \\[dimensionless\\]."
     Lₑ :: Float64
+    "Equivalent AC resistance, including half the arm resistance \\[dimensionless\\]."
     Rₑ :: Float64 
 end
 
@@ -30,6 +55,56 @@ elec_inductance(block::ElectricalMMC) = block.Lₑ
 elec_resistance(block::ElectricalMMC) = block.Rₑ
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Construct a `ElectricalMMC` component from the supplied parameters.
+
+# Arguments
+
+- `Lₐᵣₘ`: Physical arm inductance \\[H\\]. Default: `0.05`.
+- `Rₐᵣₘ`: Physical arm resistance \\[Ω\\]. Default: `1.07`.
+- `Cₐᵣₘ`: Physical submodule capacitance \\[F\\]. Default: `0.01`.
+- `N`: Number of submodules per arm. Default: `400`.
+- `turnsRatio`: Transformer converter-side to grid-side voltage ratio \\[dimensionless\\].
+  Default: `1`.
+- `Lᵣ`: Physical converter-side reactor or transformer inductance \\[H\\]. Default:
+  `0.06`.
+- `Rᵣ`: Physical converter-side reactor or transformer resistance \\[Ω\\]. Default:
+  `0.535`.
+- `ωbase`: Base electrical angular frequency \\[rad/s\\]. Default: `100π`.
+- `vACbase_LL_RMS`: Converter-side line-to-line RMS voltage base \\[kV\\]. Default: `380`.
+- `Sbase`: Three-phase power base \\[MVA\\]. Default: `1000`.
+- `vDC_base`: Pole-to-pole DC voltage base \\[kV\\]. Default: `640`.
+
+# Returns
+
+- An `ElectricalMMC` instance.
+
+# Notes
+
+```math
+V_{ac,b}=\\sqrt{2/3}\\,V_{LL,rms,b},\\quad Z_{ac,b}=\\frac{3V_{ac,b}^2}{2S_b},\\quad L_{ac,b}=Z_{ac,b}/\\omega_b.
+```
+
+Voltage inputs use \\[kV\\] and the three-phase power base uses \\[MVA\\], so the resulting
+impedance and inductance bases use \\[Ω\\] and \\[H\\]. Stored reactor parameters are
+normalized by these bases.
+
+```math
+L_e=(L_{arm}/2+L_r)/L_{ac,b},\\quad R_e=(R_{arm}/2+R_r)/Z_{ac,b},\\quad C_{dc,b}=1/(\\omega_b Z_{dc,b}).
+```
+
+Arm resistance, arm inductance, and submodule capacitance are normalized using DC bases;
+the equivalent AC reactor uses AC bases.
+
+# Examples
+
+```julia
+using PowerImpedance
+component = ElectricalMMC(Lᵣ=60e-3, Rᵣ=0.535)
+```
+"""
 function ElectricalMMC(;
     ## Elec params
     Lₐᵣₘ = 50e-3,        # arm inductance [H]
@@ -69,6 +144,48 @@ end
 
 statenames(::ElectricalMMC) = (:iΔ_d, :iΔ_q, :iΣ_d, :iΣ_q, :iΣ_z, 
                     :vCΔ_d, :vCΔ_q, :vCΔ_Zd, :vCΔ_Zq, :vCΣ_d, :vCΣ_q, :vCΣ_z) # Per-unit base for capacitor voltages is vDC_base
+"""
+$(TYPEDSIGNATURES)
+
+Return the explicitly specified initial states of the component.
+
+# Arguments
+
+- `e`: Normalized MMC plant parameters.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  present, use \\[rad\\].
+- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+  angle uses \\[rad\\].
+
+# Returns
+
+- `iΔ_d`: Initial d-axis differential current \\[dimensionless\\].
+- `iΔ_q`: Initial q-axis differential current \\[dimensionless\\].
+- `iΣ_d`: Initial circulating-current coordinate computed from DC power
+  \\[dimensionless\\].
+- `vCΣ_z`: Initial zero-sequence summed capacitor voltage \\[dimensionless\\].
+
+# Notes
+
+```math
+i_{\\Delta d}=(v_d p-v_q q)/(v_d^2+v_q^2),\\quad i_{\\Delta q}=(v_q p+v_d q)/(v_d^2+v_q^2),\\quad i_{\\Sigma d}=p_{dc}/(3v_{dc}),\\quad v_{C\\Sigma z}=v_{dc}.
+```
+
+The AC voltage components include the transformer turns ratio. The returned keys,
+including `iΣ_d`, follow the implemented initialization. Other states are not explicitly
+initialized. Electrical quantities use converter bases \\[dimensionless\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+model = ElectricalMMC()
+initial = P.initialvalues(model; inputs, setpoint_pu=point)
+```
+"""
 initialvalues(e::ElectricalMMC; inputs, setpoint_pu) = (; 
     iΔ_d = (inputs.vG_d * e.turnsRatio * setpoint_pu.p_ac - inputs.vG_q * e.turnsRatio * setpoint_pu.q_ac) / ( (inputs.vG_d * e.turnsRatio)^2 + (inputs.vG_q * e.turnsRatio)^2 ),
     iΔ_q = (inputs.vG_q * e.turnsRatio * setpoint_pu.p_ac + inputs.vG_d * e.turnsRatio * setpoint_pu.q_ac) / ( (inputs.vG_d * e.turnsRatio)^2 + (inputs.vG_q * e.turnsRatio)^2 ),
@@ -77,6 +194,61 @@ initialvalues(e::ElectricalMMC; inputs, setpoint_pu) = (;
 
 
     
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate MMC electrical plant derivatives, writing state derivatives into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `data`: Named tuple of electrical input signals and modulation outputs, as shown in
+  the example.
+- `b`: Normalized MMC plant parameters.
+- `conv`: Parent converter, providing electrical bases and synchronization.
+
+# Returns
+
+- The twelve-entry assigned derivative slice in normalized electrical coordinates per
+  second \\[s⁻¹\\].
+
+# Notes
+
+```math
+\\dot i_{\\Delta d}=\\frac{\\omega_b}{L_e}(v_{M\\Delta d}-v_{Gd}-R_e i_{\\Delta d}-L_e i_{\\Delta q}),\\quad \\dot i_{\\Sigma z}=\\frac{\\omega_b}{L_{arm}}(v_{dc}/2-v_{M\\Sigma z}-R_{arm}i_{\\Sigma z}).
+```
+
+The plant writes twelve differential equations: five current and seven capacitor-voltage
+states. The inserted voltages are the implemented seven-by-seven capacitor-voltage
+coupling matrix times the insertion-index vector, with explicit AC/DC base conversion.
+All electrical states are normalized \\[dimensionless\\] and derivatives are per second.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
+    delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
+        outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
+    sigma_control=ΣdqzControlTEC()).element_model
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+block = model.elec
+x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
+F = zeros(P.n_states(block))
+data = (inputs=inputs, sig_in=(vG_d_g=1.0, vG_q_g=0.0),
+    out_modulation=(mΔd=-2model.elec.baseConv1, mΔq=0.0, mΔZd=0.0,
+        mΔZq=0.0, mΣd=0.0, mΣq=0.0, mΣz=1.0))
+P.state_space!(F, x, data, block, model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, data, b::ElectricalMMC, conv::AbstractMMC) 
     (; out_modulation, sig_in, inputs) = data
     
