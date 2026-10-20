@@ -105,11 +105,14 @@ function P.compute(
     end
 
     data, global_dict, element_mapping = convert(network, P.PMACDC)
+    P._prepare_power_flow_start!(network.powerflow_start, data,
+        (element_mapping, collect(network.topology.connections)))
     result = solve_acdcpf(
         data,
         P._PM.ACPPowerModel,
         powerflow_optimizer(network.options),
-        is_bounded_options(network.options);
+        is_bounded_options(network.options),
+        network.powerflow_start;
         setting = powerflow_setting(network.options)
     )
     point = _operating_point(result, global_dict, network, element_mapping)

@@ -46,8 +46,7 @@ active power together with its selected AC-side quantity.
 ![Power-flow equivalent of an AC/DC converter.](pictures/power_flow/converter_pf.png)
 
 Once power flow is solved, the operating point is used for the nonlinear
-equilibrium and active-device linearization. Power-flow warnings therefore
-refer to the sampled physical converter and its constraints, not to an
+equilibrium and active-device linearization. Power-flow warnings refer to the sampled physical converter and its constraints, not to an
 aggregated uncertain model.
 
 ## Calculated operating point

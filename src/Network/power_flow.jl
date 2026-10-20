@@ -106,6 +106,16 @@ function power_flow(net::Network)
     ground_nodes = [k for k in keys(net.nets) if startswith(string(k), "gnd")] #TODO: add other ground identifiers (GND, Gnd, Ground, ground)
     push!(nodes2bus, ground_nodes => "gnd")
     push!(bus2nodes, "gnd" => ground_nodes) 
+
+    elements_and_buses = [
+        (elem, elem.element_model isa Source ?
+            (make_non_ground_node(elem, bus2nodes),) :
+            Tuple(node for node in (make_node(elem, 1), make_node(elem, 2))
+                if !isempty(node) && isdisjoint(node, ground_nodes)))
+        for elem in values(net.elements)
+        if pmtype(elem) in ("gen", "branch")
+    ]
+    _infer_transformer_voltage_levels!(global_dict, elements_and_buses)
     
     #### 1. Create PowerModels dictionary and make interface 
     for elem in values(net.elements)
@@ -137,28 +147,29 @@ function power_flow(net::Network)
 
     ipopt = JuMP.optimizer_with_attributes(
         Ipopt.Optimizer,
-        "tol" => 1e2,
+        "tol" => 1e-6,
         "dual_inf_tol" => 1e-1,
-        "constr_viol_tol" => 1e-3,
+        "constr_viol_tol" => 1e-5,
         "compl_inf_tol" => 1e3,
         "print_level" => Logging.min_enabled_level(current_logger()) <= Logging.Debug ? 5 : 0,
-        "max_iter" => 100,
+        "max_iter" => 300,
         "grad_f_constant" => "yes",
         "recalc_y" => "yes",
         "bound_relax_factor" => 1e-8,
         "expect_infeasible_problem" => "yes",
     )
     s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => false)
-    result = solve_acdcpf(data, _PM.ACPPowerModel, ipopt; setting = s)
+    _prepare_power_flow_start!(net.powerflow_start, data, (nodes2bus, elem2comp, net.nets))
+    result = solve_acdcpf(data, _PM.ACPPowerModel, ipopt, net.powerflow_start; setting = s)
     
     # Rerun power flow with relaxed constraints if no convergence
-    if result["termination_status"] == MOI.LOCALLY_SOLVED
+    if result["termination_status"] == MOI.LOCALLY_SOLVED || get(result, "primal_feasible", false)
         @info "Power flow converged succesfully."
     else
         @warn "No convergence (try again with relaxation): $(result["termination_status"])"
 
-        result = solve_acdcpf_relax(data, ACPPowerModel, ipopt; setting = s)
-        if result["termination_status"] == MOI.LOCALLY_SOLVED
+        result = solve_acdcpf_relax(data, _PM.ACPPowerModel, ipopt; setting = s)
+        if result["termination_status"] == MOI.LOCALLY_SOLVED || get(result, "primal_feasible", false)
             @info "Power flow solution found with relaxation"
         else
             error("Second iteration not succesful. Check your formulation")
@@ -189,14 +200,14 @@ function power_flow(net::Network)
             Pdc = elem_dict["pdc"] * global_dict["S"] / 1e6
             Vdc = result["solution"]["busdc"][string(dc_bus)]["vm"] * (data["dcpol"] * global_dict["V"] / 1e3) # Convert the pole-ground voltage coming from PF to pole-pole voltage
             Pac = -elem_dict["pgrid"] * global_dict["S"] / 1e6
-            Qac = elem_dict["qgrid"] * global_dict["S"] / 1e6 # Think about this!
+            Qac = -elem_dict["qgrid"] * global_dict["S"] / 1e6
 
             setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 
             if element.element_model isa AbstractStateSpace
                 update!(element, setpoint)
             else
-                update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
+                update!(element.element_model, Vm, θ, Pac, -Qac, Vdc, Pdc)
             end
             
             @info begin 
@@ -396,7 +407,7 @@ function injection_initialization_dc!(data, elem2comp, comp2elem, dc_bus, elem, 
 	((data["gendc"])[key])["pmin"] = lm.P_min / S_base
 	((data["gendc"])[key])["pmax"] = lm.P_max / S_base
 
-	((data["gendc"])[key])["vgdc"] = sp.Vdc / V_base #Accesor function to treat multiple field names for DC Voltage
+	((data["gendc"])[key])["vgdc"] = sp.Vdc / (data["dcpol"] * V_base) #Accesor function to treat multiple field names for DC Voltage
 
 	# not using
 	((data["gendc"])[key])["model"] = 1
@@ -602,6 +613,73 @@ function data_init!(data, global_dict)
     return data
 end
 
+function _infer_transformer_voltage_levels!(global_dict, elements_and_buses)
+    any(pair -> first(pair).element_model isa Transformer, elements_and_buses) ||
+        return nothing
+    voltage_base = global_dict["V"] / 1e3
+    levels = Dict{Any, Float64}()
+    edges = Dict{Any, Vector{Tuple{Any, Float64, Bool}}}()
+    queue = Any[]
+
+    function assign_level!(bus, level)
+        if !haskey(levels, bus)
+            levels[bus] = level
+            push!(queue, bus)
+        elseif abs(level - levels[bus]) > 0.01 * levels[bus]
+            @warn "Conflicting transformer voltage levels at bus $bus: $(levels[bus]) kV and $level kV; retaining the first level."
+        end
+    end
+
+    for (element, buses) in elements_and_buses
+        model = element.element_model
+        if model isa Source && is_three_phase(element)
+            voltage_peak = element.setpoint.Vac
+            if !ismissing(voltage_peak) && isfinite(voltage_peak) && voltage_peak > 0
+                voltage = voltage_peak / sqrt(2)
+                if !(0.9 * voltage_base <= voltage <= 1.1 * voltage_base)
+                    assign_level!(first(buses), voltage)
+                end
+            end
+        elseif pmtype(element) == "branch" && length(buses) == 2 && buses[1] != buses[2]
+            primary, secondary = buses
+            ratio = model isa Transformer ?
+                (model.V₁ᵒ == model.V₂ᵒ == 0 ? model.n : model.V₁ᵒ / model.V₂ᵒ) : 1.0
+            push!(get!(edges, primary, Tuple{Any, Float64, Bool}[]),
+                (secondary, ratio, true))
+            push!(get!(edges, secondary, Tuple{Any, Float64, Bool}[]),
+                (primary, ratio, false))
+        end
+    end
+
+    index = 1
+    function propagate!()
+        while index <= length(queue)
+            bus = queue[index]
+            for (other, ratio, forward) in get(edges, bus, Tuple{Any, Float64, Bool}[])
+                level = forward ? levels[bus] / ratio : levels[bus] * ratio
+                assign_level!(other, level)
+            end
+            index += 1
+        end
+    end
+    propagate!()
+    for (element, buses) in elements_and_buses
+        if element.element_model isa Transformer && !haskey(levels, buses[1])
+            assign_level!(buses[1], voltage_base)
+            propagate!()
+        end
+    end
+
+    global_dict["transformer_voltage_levels"] = Dict(
+        element.symbol => (get(levels, buses[1], voltage_base),
+            get(levels, buses[2], voltage_base))
+        for (element, buses) in elements_and_buses
+        if element.element_model isa Transformer
+    )
+    global_dict["transformer_voltage_bounded_buses"] = Set{Int}()
+    return nothing
+end
+
 function make_non_ground_node(elem::Element, bus2nodes)
 	ground_nodes = Set(bus2nodes["gnd"]) #Collect ground nodes and make them a set for faster lookup
 	ac_nodes = Set(collect(Iterators.filter(x -> !(x in ground_nodes), values(elem.pins)))) #Look in the nodes of this component and convert into Set
@@ -631,6 +709,7 @@ function build_acdcpf(pm::_PM.AbstractPowerModel)
     PowerModelsACDC.variable_active_dcbranch_flow(pm, bounded = false)
     PowerModelsACDC.variable_dcbranch_current(pm, bounded = false)
     PowerModelsACDC.variable_dc_converter(pm, bounded = false)
+    _initialize_converter_current!(pm)
     PowerModelsACDC.variable_dcgrid_voltage_magnitude(pm, bounded = false)
     PowerModelsACDC.variable_dcgenerator_power(pm; bounded = false)
     PowerModelsACDC.variable_flexible_demand(pm, bounded = false)
@@ -736,7 +815,73 @@ function build_acdcpf(pm::_PM.AbstractPowerModel)
 end
 
 
-function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs...)
+function canonicalize_converter_voltages!(result)
+    for converter in values(get(result["solution"], "convdc", Dict()))
+        if get(converter, "vmconv", 0.0) < 0
+            converter["vmconv"] = -converter["vmconv"]
+            angle = rem2pi(converter["vaconv"] + π, RoundNearest)
+            converter["vaconv"] = angle == -Float64(π) ? Float64(π) : angle
+        end
+    end
+    return result
+end
+
+function accept_feasible_power_flow!(result, model)
+    result["termination_status"] == MOI.LOCALLY_SOLVED && return true
+    JuMP.has_values(model) || return false
+    residual = maximum(values(primal_feasibility_report(model; atol = 0.0)); init = 0.0)
+    tolerance = JuMP.get_optimizer_attribute(model, "constr_viol_tol")
+    if isfinite(residual) && residual <= tolerance
+        result["primal_feasible"] = true
+        @warn "Accepting power-flow point with termination status $(result["termination_status"]) and maximum primal constraint violation $residual (constr_viol_tol = $tolerance)."
+        return true
+    end
+    return false
+end
+
+function _prepare_power_flow_start!(start::_PowerFlowStart, data, mapping)
+    # Component identities and endpoints identify the topology used for a warm start.
+    # Numerical targets may change; the converged point supplies initial values for the
+    # rebuilt constraints.
+    fields = ("index", "status", "gen_bus", "load_bus", "shunt_bus",
+        "storage_bus", "f_bus", "t_bus", "busac_i", "busdc_i", "fbusdc", "tbusdc")
+    topology = (mapping, Dict(group => Dict(id => Dict(key => component[key]
+        for key in fields if haskey(component, key)) for (id, component) in data[group])
+        for group in ("bus", "busdc", "gen", "gendc", "branch", "branchdc", "convdc",
+            "load", "shunt", "storage") if haskey(data, group)))
+    if !isequal(start.topology, topology)
+        empty!(start.primal)
+        start.topology = deepcopy(topology)
+    end
+    return start
+end
+
+function _initialize_power_flow!(model, start::_PowerFlowStart)
+    variables = JuMP.all_variables(model)
+    if length(variables) == length(start.primal) &&
+       all(variable -> haskey(start.primal, JuMP.name(variable)), variables)
+        for variable in variables
+            JuMP.set_start_value(variable, start.primal[JuMP.name(variable)])
+        end
+    else
+        empty!(start.primal)
+    end
+    return nothing
+end
+
+function _store_power_flow_start!(start::_PowerFlowStart, model)
+    # Residual acceptance and penalty relaxation are not converged primal points.
+    if JuMP.termination_status(model) == MOI.LOCALLY_SOLVED
+        empty!(start.primal)
+        for variable in JuMP.all_variables(model)
+            start.primal[JuMP.name(variable)] = JuMP.value(variable)
+        end
+    end
+    return nothing
+end
+
+function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver,
+        start::_PowerFlowStart = _PowerFlowStart(); kwargs...)
     #PowerModels function that generates PowerModel
     ref_ext = [
         _PMACDC.add_ref_dcgrid!,
@@ -756,10 +901,12 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
 
     #Set the Ipopt optimizer
     JuMP.set_optimizer(pm.model, solver)
+    _initialize_power_flow!(pm.model, start)
     JuMP.optimize!(pm.model)
+    _store_power_flow_start!(start, pm.model)
     result = _IM.build_result(pm, JuMP.solve_time(pm.model))
     @info result["termination_status"]
-    if result["termination_status"] == MOI.LOCALLY_SOLVED
+    if accept_feasible_power_flow!(result, pm.model)
         @info "Power flow converged succesfully."
     else
         converged_feasible = false
@@ -777,8 +924,9 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
                 )
                 JuMP.set_optimizer(pm.model, solver)
                 JuMP.optimize!(pm.model)
+                _store_power_flow_start!(start, pm.model)
                 result = _IM.build_result(pm, JuMP.solve_time(pm.model))
-                if result["termination_status"] == MOI.LOCALLY_SOLVED
+                if accept_feasible_power_flow!(result, pm.model)
                     @info "Power flow converged succesfully after $r increment change."
                     converged_feasible = true
                     break
@@ -802,7 +950,7 @@ function solve_acdcpf(data::Dict{String, Any}, model_type::Type, solver; kwargs.
 
     end
 
-    return result
+    return canonicalize_converter_voltages!(result)
 
 end
 
@@ -841,7 +989,7 @@ function solve_acdcpf_relax(data::Dict{String, Any}, model_type::Type, solver; k
 		end
 	end
 
-	return result
+	return canonicalize_converter_voltages!(result)
 end
 
 # Function to slightly shift the setpoints of the active elements to nudge the solver towards a solution. "delta" = percentage change

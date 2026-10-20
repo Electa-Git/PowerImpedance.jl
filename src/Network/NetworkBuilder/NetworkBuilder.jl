@@ -80,7 +80,12 @@ mutable struct NetworkState
     topology::NetworkTopology
     "Numerical and power-flow options."
     options::NamedTuple
+    "Converged primal point for repeated solves of this mapped topology."
+    powerflow_start::P._PowerFlowStart
 end
+
+NetworkState(elements::NamedTuple, topology::NetworkTopology, options::NamedTuple) =
+    NetworkState(elements, topology, options, P._PowerFlowStart())
 
 function Base.show(io::IO, bs::NetworkState)
     println(io, "\n Network implemented via NetworkState \n",

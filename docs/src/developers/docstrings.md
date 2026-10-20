@@ -14,17 +14,17 @@ The following docstring standards are adopted across the codebase.
 
 All arguments, return values, struct fields, and constants that represent physical quantities must include their SI units.
 
-1. Enclose units in double-backslash escaped square brackets, for example `\\[m\\]`, `\\[Hz\\]`, `\\[Ω\\]`, and `\\[H/m\\]`.
+1. Enclose units in double-backslash escaped square brackets: `\\[m\\]`, `\\[Hz\\]`, `\\[Ω\\]`, and `\\[H/m\\]`.
 2. Mark physical quantities without dimensions as `\\[dimensionless\\]`.
 3. Do not add unit annotations to non-physical values such as counters, flags, indices, and collection sizes.
-4. Use standard SI symbols. Use the Unicode middle dot for multiplication when appropriate, for example `\\[Ω·m\\]`.
-5. Inside comments in `julia` example blocks, use ordinary square brackets, for example `# [m]`, because the comment is Julia source rather than docstring prose.
+4. Use standard SI symbols. Use the Unicode middle dot for multiplication when appropriate: `\\[Ω·m\\]`.
+5. Inside comments in `julia` example blocks, use ordinary square brackets: `# [m]`, because the comment is Julia source rather than docstring prose.
 
 ## Mathematical formulation formatting
 
 Use LaTeX whenever a function directly implements a mathematical expression, reduction, approximation, or physical law that is important for understanding its behavior. Put the expression in a `math` block within `# Notes`, followed by definitions of its symbols when they are not already unambiguous from `# Arguments`.
 
-Whether mathematics is required is determined from the implementation, not from a function-name convention. In particular, a `calc_` prefix neither requires nor excuses a formula by itself. Simple accessors, wrappers, dispatch helpers, and bookkeeping functions generally do not need a mathematical section.
+Whether mathematics is required is determined from the implementation, not from a function-name convention. A `calc_` prefix neither requires nor excuses a formula by itself. Simple accessors, wrappers, dispatch helpers, and bookkeeping functions generally do not need a mathematical section.
 
 Within Julia docstrings, escape LaTeX commands with a second backslash:
 

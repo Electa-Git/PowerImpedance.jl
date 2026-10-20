@@ -1,7 +1,7 @@
 # Release and package-registration runbook
 
 PowerImpedance is developed on the private KU Leuven GitLab repository.
-GitLab is authoritative. GitHub is the public publication repository used by
+GitLab contains the development source. GitHub is the public publication repository used by
 Julia's General registry. Make release changes on GitLab, not on GitHub.
 
 ## Release flow
@@ -31,7 +31,7 @@ recognizes the marker, publishes the commit, and the tracked GitHub registration
 workflow converts that signal into a commit comment that Registrator receives.
 
 Do not create a version tag to start a release. TagBot owns version tags after
-registration. Ordinary GitLab commits without the marker stay private until a
+registration. Ordinary GitLab commits without the marker remain private until a
 later marked commit publishes their history. Merge-request pipelines, scheduled
 pipelines, and GitLab tag pushes do not start automatic publication.
 
@@ -122,7 +122,7 @@ The marker must be a complete line with exactly this spelling and no indentation
 ```
 
 For a release merge request, edit the final merge or squash commit message to
-include it, for example:
+include the marker:
 
 ```text
 chore(release): prepare PowerImpedance 0.3.2
@@ -130,7 +130,7 @@ chore(release): prepare PowerImpedance 0.3.2
 @JuliaRegistrator register
 ```
 
-A marker buried in an earlier branch commit is not sufficient if the final
+A marker in an earlier branch commit is not sufficient if the final
 merge or squash commit has a different message. Review the actual final message
 in GitLab before merging. Do not include `[skip ci]` or push with CI skipping.
 
@@ -188,9 +188,9 @@ candidate, not the newer branch tip. If GitHub has already advanced beyond that
 candidate or diverged, publication stops.
 
 A transient failure before publication can be retried on the same candidate
-pipeline. Retrying publication when GitHub already has that exact commit is safe
-and does not create tags. It also does not generate another GitHub push event;
-use the recovery procedure below if registration itself needs a new attempt.
+pipeline. If GitHub already has the exact commit, publication leaves its refs unchanged.
+A new registration attempt requires the recovery procedure below because
+repeating publication does not produce a GitHub push event.
 
 If coverage alone fails after publication, retry only coverage. Coverage is not
 the registration trigger, and a coverage upload failure does not undo a request
@@ -313,7 +313,7 @@ signal. Check that CI was not skipped and that all required tests/docs passed.
 ### An old GitLab tag pipeline still offers publication jobs
 
 Pipelines use the configuration from their own commit. Historical tag pipelines
-can therefore still contain the old tag-publishing job. Do not retry those jobs
+can still contain the old tag-publishing job. Do not retry those jobs
 or create tags on historical commits to start a release. Use a marked commit on
 GitLab main containing the current workflow instead.
 
@@ -344,7 +344,7 @@ the App is installed for the public repository and that Actions has
 `contents: write`. If a real fix or retry is required, trigger it from GitLab
 with a new marked candidate.
 
-## Authoritative configuration
+## Release configuration
 
 - `.gitlab-ci.yml`: marker recognition, tests, docs validation, preflight,
   publication, coverage, and private development Pages.

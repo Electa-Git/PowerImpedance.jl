@@ -6,6 +6,7 @@ calculations do not load a graphics package.
 | Extension | Activated by | Purpose |
 |:--|:--|:--|
 | `PowerImpedanceMeasurementsExt` | `Measurements` | Direct uncertainty materialization, covariance-preserving first-order results, and numeric trial sampling |
+| `PowerImpedancePSCADExt` | `PythonCall` | PSCAD project export and XML round-trip verification through `mhi-xml` |
 | `PowerImpedanceMakieExt` | `Makie` | PlotBuilder rendering and `plot` methods |
 | `PowerImpedanceGraphMakieExt` | `Makie`, `GraphMakie`, `Graphs`, and `NetworkLayout` | Reusable topology and solved-state network diagrams |
 | `PowerImpedanceCairoMakieExt` | `Makie` and `CairoMakie` | Static rendering and SVG export |
@@ -30,6 +31,13 @@ PowerModels never receives Measurements values. A power-flow study with
 Measurements-valued components runs a local Monte Carlo sequence of numeric
 network realizations. The
 aggregate reconstructs Measurements for solved AC and DC bus fields only.
+
+## PSCAD
+
+Load `PythonCall` to enable `export_pscad`; CondaPkg installs `mhi-xml` for
+the project writer. Remote execution and operating-point comparison use the
+core PSCAD interface. See [PSCAD export and simulation](pscad.md) for station
+setup, supported models and comparison rules.
 
 ## LineCableModels
 

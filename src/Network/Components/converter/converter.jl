@@ -168,7 +168,10 @@ function transform(elemresult, busresult, global_dict, element::Element{<:Abstra
         dcbusresult["vm"] *
         (dcpol * global_dict["V"] / 1e3) # data["dcpol"] should be here. const dcpol in powerflow.jl
     Pac = -elemresult["pgrid"] * global_dict["S"] / 1e6
-    Qac = elemresult["qgrid"] * global_dict["S"] / 1e6
+    # User and stored Setpoints use AC power injected into the bus. PowerModels
+    # pgrid/qgrid are absorbed; pftoinputs divides the injected powers by Sbase
+    # to obtain the model's internal pu references, without another sign change.
+    Qac = -elemresult["qgrid"] * global_dict["S"] / 1e6
 
     setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
 

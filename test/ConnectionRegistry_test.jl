@@ -83,7 +83,7 @@ end
     )
 
     families = (
-        dc_source = dc_source(),
+        dc_source = dc_source(setpoint = Setpoint(Vdc = 480.0)),
         ac_source = ac_source(pins = 3, transformation = true),
         impedance = impedance(z = 1.0, pins = 3, transformation = true),
         transformer = transformer_element,
@@ -216,7 +216,7 @@ end
         (row(:n1, :dc, 1, 1), row(:n2, :dc, 1, 1))
     )
     mixed_elements = (
-        dc_source = dc_source(),
+        dc_source = dc_source(setpoint = Setpoint(Vdc = 480.0)),
         ac_source = ac_source(pins = 3, transformation = true)
     )
     @test_throws ArgumentError NB.NetworkTopology(
@@ -224,7 +224,7 @@ end
         (row(:mixed, :dc_source, 1, 1), row(:mixed, :ac_source, 1, 1))
     )
     bridge_elements = (
-        dc_source = dc_source(),
+        dc_source = dc_source(setpoint = Setpoint(Vdc = 480.0)),
         ac_source = ac_source(pins = 3, transformation = true),
         bridge = impedance(z = 1.0, pins = 1)
     )

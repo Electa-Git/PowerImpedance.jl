@@ -349,7 +349,7 @@ function build_ieee39bus_with_macro()
 			transformation = true,
 		)
 
-		G_DC=dc_source(pins = 1, setpoint=Setpoint(Vdc = Vdc_ST/2)) # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
+		G_DC=dc_source(pins = 1, setpoint = Setpoint(Vdc = Vdc_ST)) # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
 
 
@@ -1443,7 +1443,7 @@ function ieee39bus_elements()
 			transformation = true,
 		),
 
-		G_DC = dc_source(pins = 1, setpoint=Setpoint(Vdc = Vdc_ST/2)), # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
+		G_DC = dc_source(pins = 1, setpoint = Setpoint(Vdc = Vdc_ST)), # DC voltage source to arrange Powerflow of Statcom, not possible to directly connect to DC-controlling STATCOM
 
 		STATCOM = PowerImpedance.tlc(
 			elec = elec,

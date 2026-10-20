@@ -29,10 +29,13 @@ Construct an ideal DC voltage-source element and its power-flow data.
 # Arguments
 
 - `pins`: Number of DC conductors represented on each legacy element side.
-- `setpoint`: DC voltage and power operating point. See [`Setpoint`](@ref).
+- `setpoint`: DC operating point with pole-to-pole `Vdc` \\[kV\\].
+  See [`Setpoint`](@ref).
 - `transformation`: Whether to expose a supported transformed representation.
 - `connection`: Whether NetworkBuilder includes the element in the system.
-- `source_kwargs`: Legacy fields of the internal `Source` model.
+- `source_kwargs`: Fields of the internal `Source` model. Pole-to-pole `V`
+  \\[kV\\] initializes the DC bus, while `setpoint.Vdc` controls its power-flow
+  voltage.
 
 # Returns
 
@@ -45,14 +48,14 @@ Construct an ideal DC voltage-source element and its power-flow data.
 # Examples
 
 ```julia
-source = dc_source(setpoint = Setpoint(Vdc = 320.0, Pdc = 100.0))
+source = dc_source(setpoint = Setpoint(Vdc = 640.0, Pdc = 100.0))
 ```
 """
 function dc_source(; pins=1, setpoint=Setpoint(Vdc=240),transformation=false, connection=true, args...)
     source = Source()
 
     if haskey(args, :V)
-        @warn "The legacy `V` field of `dc_source` is not used for power flow; pass the voltage through `setpoint=Setpoint(Vdc=...)` instead."
+        @warn "Pass the pole-to-pole voltage through `setpoint=Setpoint(Vdc=...)` for power-flow voltage control; legacy `V` only initializes the DC bus voltage."
     end
 
     for (key, val) in pairs(args)

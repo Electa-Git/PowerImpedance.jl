@@ -182,4 +182,11 @@ include("Tools/kron.jl")
 include("Tools/stabilitymargin.jl")
 include("ScientificStability.jl")
 include("Compute.jl")
+include("PSCAD/PSCAD.jl")
+using .PSCAD: PSCADModel, PSCADRun, PSCADResult, RemoteConfig, read_pscad_output,
+              export_pscad, compare_operating_point, ZToolProbe, ZToolScan, ZToolResult,
+              read_ztool_admittance
+export PSCADModel, PSCADRun, PSCADResult, RemoteConfig, read_pscad_output,
+       export_pscad, compare_operating_point, ZToolProbe, ZToolScan, ZToolResult,
+       read_ztool_admittance
 include("StabilityPlotRecipes.jl")

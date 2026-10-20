@@ -4,7 +4,7 @@ function Base.convert(bs::NetworkState, ::Type{P.PMACDC})
 
     #PMACDC data + interface
     data = Dict{String, Any}()
-    global_dict = P.PowerModelsACDC._get_pu_bases(1000, option_value(bs.options, :voltageBase, 320)) # 3-PH MVA, LL-RMS, Original setting was 100,320
+    global_dict = P.PowerModelsACDC._get_pu_bases(1000, option_value(bs.options, :voltageBase, DEFAULT_VOLTAGE_BASE)) # 3-PH MVA, LL-RMS, Original setting was 100,320
     P.data_init!(data, global_dict)
 
     global_dict["omega"] = 2*π*50
@@ -17,13 +17,18 @@ function Base.convert(bs::NetworkState, ::Type{P.PMACDC})
 
     elempitopm = Dict{Symbol, @NamedTuple{pmtype::String, compkey::Int}}() #Maps PM component to element symbol for later use in transformation of results
 
-    for (elemid, stored_element) in pairs(bs.elements) #NamedTuple
+    elements_and_buses = map(collect(pairs(bs.elements))) do (elemid, stored_element)
         element = _element_for_powerflow(stored_element, elemid, bs.topology)
         # Get sorted connectoins (first AC, then DC)
         connections = sortedcomponentconnections(bs.topology, elemid)
         busidtable = Table(domain = connections.domain, bus = connections.bus)
         sortedbusses = Table(unique(busidtable)).bus #unique(connections.bus) #Take unique busidss (elecdomain+bus integer) and then only provide it with bus information
+        return (element, sortedbusses)
+    end
+    P._infer_transformer_voltage_levels!(global_dict, elements_and_buses)
 
+    for (element, sortedbusses) in elements_and_buses
+        elemid = element.symbol
         # Get the PM component key and update LUT
         pmtype = P.pmtype(element)
         compkey = length(data[pmtype]) + 1
@@ -116,6 +121,16 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
     push!(nodes2bus, ground_nodes => "gnd")
     push!(bus2nodes, "gnd" => ground_nodes)
 
+    elements_and_buses = [
+        (element, element.element_model isa P.Source ?
+            (P.make_non_ground_node(element, bus2nodes),) :
+            Tuple(node for node in (P.make_node(element, 1), P.make_node(element, 2))
+                if !isempty(node) && isdisjoint(node, ground_nodes)))
+        for element in values(network.elements)
+        if P.pmtype(element) in ("gen", "branch")
+    ]
+    P._infer_transformer_voltage_levels!(global_dict, elements_and_buses)
+
     for element in values(network.elements)
         P.convert!(
             data,
@@ -132,11 +147,13 @@ function solve_powerflow(network::P.Network, options::NamedTuple)
     ensure_slack_bus!(data)
     P.PowerModelsACDC.process_additional_data!(data)
 
+    P._prepare_power_flow_start!(network.powerflow_start, data, (nodes2bus, elem2comp, network.nets))
     result = solve_acdcpf(
         data,
         P._PM.ACPPowerModel,
         powerflow_optimizer(options),
-        is_bounded_options(options);
+        is_bounded_options(options),
+        network.powerflow_start;
         setting = powerflow_setting(options)
     )
 
@@ -170,7 +187,8 @@ function solve_acdcpf(
         data::Dict{String, Any},
         model_type::Type,
         optimizer,
-        variables::NamedTuple;
+        variables::NamedTuple,
+        start::P._PowerFlowStart = P._PowerFlowStart();
         kwargs...
 )
     ref_ext = [
@@ -191,10 +209,12 @@ function solve_acdcpf(
     )
 
     P.JuMP.set_optimizer(pm.model, optimizer)
+    P._initialize_power_flow!(pm.model, start)
     P.JuMP.optimize!(pm.model)
+    P._store_power_flow_start!(start, pm.model)
     result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
     @info result["termination_status"]
-    if result["termination_status"] == P.JuMP.MOI.LOCALLY_SOLVED
+    if P.accept_feasible_power_flow!(result, pm.model)
         @info "Power flow converged succesfully."
     else
         converged_feasible = false
@@ -212,8 +232,9 @@ function solve_acdcpf(
                 )
                 P.JuMP.set_optimizer(pm.model, optimizer)
                 P.JuMP.optimize!(pm.model)
+                P._store_power_flow_start!(start, pm.model)
                 result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
-                if result["termination_status"] == P.JuMP.MOI.LOCALLY_SOLVED
+                if P.accept_feasible_power_flow!(result, pm.model)
                     @info "Power flow converged succesfully after $r increment change."
                     converged_feasible = true
                     break
@@ -233,7 +254,7 @@ function solve_acdcpf(
         end
     end
 
-    return result
+    return P.canonicalize_converter_voltages!(result)
 end
 
 function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
@@ -270,6 +291,7 @@ function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
         pm,
         bounded = variable_bounded(variables, :dc_converter, false)
     )
+    P._initialize_converter_current!(pm)
     P._PMACDC.variable_dcgrid_voltage_magnitude(
         pm,
         bounded = variable_bounded(variables, :dcgrid_voltage_magnitude, false)
@@ -423,7 +445,7 @@ function solve_acdcpf_relax(
         end
     end
 
-    return result
+    return P.canonicalize_converter_voltages!(result)
 end
 
 function addbus!(data, bus, global_dict, ::Val{:AC})

@@ -39,11 +39,7 @@ function build_network(
 
     network_elements = deepcopy(elements)
     network = P.Network()
-    network.voltageBase[1] = option_value(
-        options,
-        :voltageBase,
-        network.voltageBase[1]
-    )
+    network.voltageBase[1] = option_value(options, :voltageBase, DEFAULT_VOLTAGE_BASE)
 
     for (name, element) in pairs(network_elements)
         element isa P.Element || throw(

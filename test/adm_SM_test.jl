@@ -97,3 +97,27 @@ end
     
     @test isapprox(adm_ac, Y_pscad, rtol=9e-3)
 end
+
+@testset "Synchronous machine network admittance scaling" begin
+    net = synchronousmachinecircuit()
+    machine = net.elements[:sg1]
+    state = NetworkBuilder.define((sg1 = machine, grid = net.elements[:g2],
+        load = impedance(z = 100.0, pins = 3, transformation = true)), (
+        (node = :bus_d, element = :sg1, side = 1, terminal = 1),
+        (node = :bus_q, element = :sg1, side = 1, terminal = 2),
+        (node = :bus_d, element = :grid, side = 1, terminal = 1),
+        (node = :bus_q, element = :grid, side = 1, terminal = 2),
+        (node = :bus_d, element = :load, side = 1, terminal = 1),
+        (node = :bus_q, element = :load, side = 1, terminal = 2),
+        (node = :gnd, element = :load, side = 2, terminal = 1),
+        (node = :gnd, element = :load, side = 2, terminal = 2),
+    ))
+    point = OperatingPoint(Dict(:sg1 => machine.setpoint))
+    model = NetworkBuilder.NetworkModel(state, point)
+    frequencies = 2π * im .* [1.0, 10.0, 100.0]
+    admittance = NetworkBuilder.get_y(model, :sg1, frequencies)
+    Ybase = 1000 / 380^2
+    for (index, s) in enumerate(frequencies)
+        @test admittance[:, :, index] ≈ Ybase * PowerImpedance.eval_y(machine, s) rtol = 1e-10
+    end
+end

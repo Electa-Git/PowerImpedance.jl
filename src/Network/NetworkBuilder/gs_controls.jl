@@ -19,6 +19,7 @@
 @gridconstructor P.NoOuterActiveControl P.NoOuterActiveControl
 @gridconstructor P.NoFrequencySupport P.NoFrequencySupport
 @gridconstructor P.FrequencySupportLag P.FrequencySupportLag
+@gridconstructor P.DCVoltageSupportLag P.DCVoltageSupportLag
 @gridconstructor P.OuterActivePowerControl P.OuterActivePowerControl
 @gridconstructor P.OuterActiveVdcControl P.OuterActiveVdcControl
 

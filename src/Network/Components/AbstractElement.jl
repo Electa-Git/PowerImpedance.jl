@@ -37,7 +37,7 @@ Store an AC/DC steady-state operating point.
 - `θac`: AC voltage angle `\\[rad\\]`.
 - `Vac`: phase-voltage amplitude `\\[kV\\]`.
 - `Pdc`: DC active power `\\[MW\\]`.
-- `Vdc`: DC voltage `\\[kV\\]`.
+- `Vdc`: pole-to-pole DC voltage `\\[kV\\]`.
 
 Every field defaults to `missing`; the power-flow pipeline fills quantities
 that are not fixed by the component's control mode.
@@ -54,7 +54,7 @@ that are not fixed by the component's control mode.
 
 	"DC active power `\\[MW\\]`."
     Pdc::Union{Float64, Missing} = missing
-	"DC voltage `\\[kV\\]`."
+	"Pole-to-pole DC voltage `\\[kV\\]`."
     Vdc::Union{Float64, Missing} = missing
    
 end
@@ -121,6 +121,8 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
     setpoint::Setpoint
     "Power-flow operating limits."
     limits::Limits
+    "Internal model, setpoint and converged state vector retained after linearization."
+    _equilibrium::Union{Nothing, Tuple{T, Setpoint, Vector}}
     @doc """
         Element(; element_model=nothing, element_value=nothing, kwargs...)
 
@@ -168,6 +170,7 @@ mutable struct Element{T<: Any} #TODO: consider making this an immutable struct,
         elem.connection = true
         elem.setpoint = Setpoint()
         elem.limits = Limits()
+        elem._equilibrium = nothing
         elem.A, elem.B, elem.C, elem.D = fill(Array{ComplexF64}(undef, 0, 0), 4)
 
         for (key, val) in pairs(args)
@@ -262,22 +265,7 @@ function eval_y(elem::Element{<:AbstractStateSpace}, s::Complex; SI_units::Bool=
     end
 
     if isa(model, MMC)
-        elec = model.elec
-
-        
-        
-
-        iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
-        iDCbase = elec.Sbase / elec.vDC_base
-
-        # row scaling = output current bases
-        Y[1, :]   .*= iDCbase
-        Y[2:3, :] .*= iACbase
-
-        # column scaling = input voltage bases
-        Y[:, 1]   ./= elec.vDC_base
-        Y[:, 2:3] ./= (elec.vAC_base / elec.turnsRatio)
-
+        _mmc_si_scale!(Y, model.elec)
     end
 
     return Y
@@ -403,6 +391,6 @@ function is_load(element :: Element)
 end
 
 function is_three_phase(element :: Element)
-    (np(element) == 6) || (np(element) == 4 && (element.transformation) && !is_converter(element)) && return true
-    return false
+    return np(element) == 6 ||
+           (np(element) == 4 && element.transformation && !is_converter(element))
 end

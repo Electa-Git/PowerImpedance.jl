@@ -162,7 +162,7 @@ function build_case1_grid()
         voltageBase = Vm
 
         G3 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm*sqrt(2)), transformation = true)
-        G_DC = dc_source(pins = 1, setpoint=Setpoint(Vdc = Vdc / 2))
+        G_DC = dc_source(pins = 1, setpoint = Setpoint(Vdc = Vdc))
 
         DUT = dut
 
@@ -251,7 +251,7 @@ function build_case2_grid()
         voltageBase = Vm
 
         G3 = ac_source(pins = 3, setpoint=Setpoint(Vac = Vm*sqrt(2)), transformation = true)
-        G_DC = dc_source(pins = 1, setpoint=Setpoint(Vdc = Vdc / 2))
+        G_DC = dc_source(pins = 1, setpoint = Setpoint(Vdc = Vdc))
 
         DUT = dut
 
@@ -373,7 +373,7 @@ grid=@network begin
     voltageBase = Vm # Apparently needed for correct per-unit calculation of the power flow
 
     G3 = ac_source(pins = 3, V = Vm, transformation = true)
-    G_DC = dc_source(pins = 1, V = 1*Vdc/2)
+    G_DC = dc_source(pins = 1, V = Vdc)
 
 DUT=tlc(Vᵈᶜ = Vdc, Vₘ = Vm, Lᵣ = Lf, Rᵣ = Rf, 
         Sbase = 100, vACbase_LL_RMS = 220, vDCbase = Vdc,
@@ -495,7 +495,7 @@ Vac_ref_ST=1.0
     voltageBase = Vm 
 
     G3 = ac_source(pins = 3, V = Vm, transformation = true)
-    G_DC = dc_source(pins = 1, V = Vdc_ST/2)
+    G_DC = dc_source(pins = 1, V = Vdc_ST)
 
 
 DUT=tlc(Vᵈᶜ = 640, Vₘ =  220 /sqrt(3), Lᵣ = Lf, Rᵣ = Rf, 
@@ -664,7 +664,7 @@ grid=@network begin
     voltageBase = Vm # Apparently needed for correct per-unit calculation of the power flow
 
     G3 = ac_source(pins = 3, V = Vm, transformation = true)
-    G_DC = dc_source(pins = 1, V = 1*Vdc/2)
+    G_DC = dc_source(pins = 1, V = Vdc)
 
 DUT=tlc(Vᵈᶜ = Vdc, Vₘ = Vm, Lᵣ = Lf, Rᵣ = Rf, 
         Sbase = 100, vACbase_LL_RMS = 220, vDCbase = Vdc,
@@ -786,7 +786,7 @@ Vac_ref_ST=1.0
     voltageBase = Vm 
 
     G3 = ac_source(pins = 3, V = Vm, transformation = true)
-    G_DC = dc_source(pins = 1, V = Vdc_ST/2)
+    G_DC = dc_source(pins = 1, V = Vdc_ST)
 
 
 DUT=tlc(Vᵈᶜ = 640, Vₘ =  220 /sqrt(3), Lᵣ = Lf, Rᵣ = Rf, 

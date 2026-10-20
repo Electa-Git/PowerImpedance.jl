@@ -65,6 +65,14 @@ $(TYPEDFIELDS)
 	positions::Tuple{Vector{Union{Int, Float64}}, Vector{Union{Int, Float64}}} = ([], [])    # add absolute positions manually
 end
 
+function _ohl_transposition(transposition, phases::Int)
+    transposition === :none || transposition === :ideal ||
+        throw(ArgumentError("Overhead-line transposition must be :none or :ideal."))
+    transposition == :ideal && phases != 3 &&
+        throw(ArgumentError("Ideal transposition requires exactly three phase bundles."))
+    return nothing
+end
+
 """
 $(TYPEDEF)
 
@@ -82,16 +90,19 @@ $(TYPEDFIELDS)
 	groundwires::Groundwires = Groundwires()
 	"Earth relative permeability, relative permittivity, and resistivity `\\[Ω·m\\]`."
 	earth_parameters::NTuple{N, Union{Int, Float64}} where N = (1, 1, 1) # (μᵣ_earth, ϵᵣ_earth, ρ_earth) in units ([], [], [Ωm])
+	"Phase transposition, `:none` or `:ideal` (three phase bundles only). Default: `:none`."
+	transposition::Symbol = :none
 
-
-
-
+	function Overhead_line(length, conductors, groundwires, earth_parameters, transposition)
+		_ohl_transposition(transposition, conductors.nᵇ)
+		return new(length, conductors, groundwires, earth_parameters, transposition)
+	end
 end
 
 """
     overhead_line(; length=0, conductors=Conductors(),
                   groundwires=Groundwires(), earth_parameters=(1, 1, 1),
-                  transformation=false, connection=true)
+                  transposition=:none, transformation=false, connection=true)
 
 Construct a frequency-dependent overhead transmission-line element.
 
@@ -102,6 +113,8 @@ Construct a frequency-dependent overhead transmission-line element.
 - `groundwires`: Optional ground-wire geometry and material data.
 - `earth_parameters`: Earth relative permeability `\\[dimensionless\\]`,
   relative permittivity `\\[dimensionless\\]`, and resistivity `\\[Ω·m\\]`.
+- `transposition`: Phase transposition, `:none` (default) or `:ideal` for
+  exactly three phase bundles.
 - `transformation`: Whether to expose a supported transformed representation.
 - `connection`: Whether NetworkBuilder includes the element in the system.
 
@@ -115,11 +128,16 @@ Construct a frequency-dependent overhead transmission-line element.
 `:vertical`, `:delta`, `:offset`, and `:concentric` organizations. Frequency
 evaluation retains the complete self and mutual series-impedance and shunt-
 admittance matrices.
+Ideal transposition averages the reduced series impedance and potential
+coefficients over equal lengths in the three cyclic phase positions, with
+sections short relative to the wavelength.
 
 # Errors
 
 - Throws `ArgumentError` for an unknown keyword or an unsupported conductor
   organization/order during parameter evaluation.
+- Throws `ArgumentError` for an unsupported transposition or ideal
+  transposition with a phase-bundle count other than three.
 
 # Examples
 
@@ -142,10 +160,13 @@ line = overhead_line(
 """
 function overhead_line(; args...)
 	tl = Overhead_line()
+	transposition = :none
 	transformation = false
 	connection = true
 	for (key, val) in pairs(args)
-		if in(key, propertynames(tl))
+		if key == :transposition
+			transposition = val
+		elseif in(key, propertynames(tl))
 			setfield!(tl, key, val)
 		elseif key == :transformation
 			transformation = val
@@ -155,6 +176,8 @@ function overhead_line(; args...)
 			throw(ArgumentError("Unknown property $(key) of the overhead line."))
 		end
 	end
+	_ohl_transposition(transposition, tl.conductors.nᵇ)
+	tl.transposition = transposition
 
 	# No P/Z assembly here anymore (no symbolics).
 	# P and Z fields remain in the struct (architecture unchanged), but are unused.
@@ -168,141 +191,154 @@ function overhead_line(; args...)
 	)
 end
 
+function _ohl_flat(c::Conductors)
+    if c.nᵇ == 2
+        return (Float64[-c.Δxᵇᶜ / 2, c.Δxᵇᶜ / 2], Float64[c.yᵇᶜ, c.yᵇᶜ])
+    elseif c.nᵇ == 3
+        return (Float64[-c.Δxᵇᶜ, 0.0, c.Δxᵇᶜ], Float64[c.yᵇᶜ, c.yᵇᶜ, c.yᵇᶜ])
+    elseif c.nᵇ == 6
+        return (
+            Float64[-c.Δxᵇᶜ, 0.0, c.Δxᵇᶜ, -c.Δxᵇᶜ, 0.0, c.Δxᵇᶜ],
+            Float64[c.yᵇᶜ, c.yᵇᶜ, c.yᵇᶜ, c.yᵇᶜ + c.Δyᵇᶜ, c.yᵇᶜ + c.Δyᵇᶜ, c.yᵇᶜ + c.Δyᵇᶜ]
+        )
+    else
+        throw(ArgumentError("Invalid definition of flat conductor organization."))
+    end
+end
+
+function _ohl_vertical(c::Conductors)
+    if c.nᵇ == 3
+        return (Float64[c.Δxᵇᶜ/2 for _ in 1:c.nᵇ],
+            Float64[c.yᵇᶜ + i*c.Δyᵇᶜ for i in 1:c.nᵇ])
+    elseif c.nᵇ == 6
+        return (
+            Float64[
+                c.Δxᵇᶜ / 2, c.Δxᵇᶜ / 2, c.Δxᵇᶜ / 2, -c.Δxᵇᶜ / 2, -c.Δxᵇᶜ / 2, -c.Δxᵇᶜ / 2],
+            Float64[
+                c.yᵇᶜ,
+                c.yᵇᶜ + c.Δyᵇᶜ,
+                c.yᵇᶜ + 2c.Δyᵇᶜ,
+                c.yᵇᶜ,
+                c.yᵇᶜ + c.Δyᵇᶜ,
+                c.yᵇᶜ + 2c.Δyᵇᶜ
+            ]
+        )
+    else
+        throw(ArgumentError("Invalid definition of vertical conductor organization."))
+    end
+end
+
+function _ohl_delta(c::Conductors)
+    if c.nᵇ % 3 != 0
+        throw(ArgumentError("Delta cannot be constructed from $(c.nᵇ) conductors."))
+    end
+    if c.nᵇ == 3
+        return (Float64[-c.Δxᵇᶜ / 2, c.Δxᵇᶜ / 2, 0.0],
+            Float64[c.yᵇᶜ, c.yᵇᶜ + c.Δyᵇᶜ, c.yᵇᶜ])
+    elseif c.nᵇ == 6
+        return (
+            Float64[
+                -c.Δxᵇᶜ / 2 - c.Δ̃xᵇᶜ,
+                -c.Δxᵇᶜ / 2 - c.Δ̃xᵇᶜ / 2,
+                -c.Δxᵇᶜ / 2,
+                c.Δxᵇᶜ / 2,
+                c.Δxᵇᶜ / 2 + c.Δ̃xᵇᶜ / 2,
+                c.Δxᵇᶜ / 2 + c.Δ̃xᵇᶜ
+            ],
+            Float64[
+                c.yᵇᶜ,
+                c.yᵇᶜ + c.Δyᵇᶜ,
+                c.yᵇᶜ,
+                c.yᵇᶜ,
+                c.yᵇᶜ + c.Δyᵇᶜ,
+                c.yᵇᶜ
+            ]
+        )
+    else
+        throw(ArgumentError("Invalid definition of delta conductor organization."))
+    end
+end
+
+function _ohl_concentric(c::Conductors)
+    if c.nᵇ % 3 != 0
+        throw(ArgumentError("Delta cannot be constructed from $(c.nᵇ) conductors."))
+    end
+    if c.nᵇ == 3
+        return (Float64[-c.Δ̃xᵇᶜ, 0.0, 0.0],
+            Float64[c.yᵇᶜ + c.Δyᵇᶜ, c.yᵇᶜ, c.yᵇᶜ + 2c.Δyᵇᶜ])
+    elseif c.nᵇ == 6
+        return (
+            Float64[
+                -c.Δxᵇᶜ / 2 - c.Δ̃xᵇᶜ,
+                -c.Δxᵇᶜ / 2,
+                -c.Δxᵇᶜ / 2,
+                c.Δxᵇᶜ / 2,
+                c.Δxᵇᶜ / 2,
+                c.Δxᵇᶜ / 2 + c.Δ̃xᵇᶜ
+            ],
+            Float64[
+                c.yᵇᶜ + c.Δyᵇᶜ,
+                c.yᵇᶜ,
+                c.yᵇᶜ + 2c.Δyᵇᶜ,
+                c.yᵇᶜ,
+                c.yᵇᶜ + 2c.Δyᵇᶜ,
+                c.yᵇᶜ + c.Δyᵇᶜ
+            ]
+        )
+    else
+        throw(ArgumentError("Invalid definition of concentric conductor organization."))
+    end
+end
+
+function _ohl_bundle_position(nsub::Int, dsub::Real)
+    # Make it always return vectors so indexing never explodes.
+    if nsub == 1
+        return (Float64[0.0], Float64[0.0])
+    end
+    ϕ = 2π / nsub
+    r = dsub / 2 / sin(ϕ/2)
+    ϕₛ = π/2
+    if iseven(nsub)
+        ϕₛ += ϕ/2
+    end
+    x_sub = Vector{Float64}(undef, nsub)
+    y_sub = Vector{Float64}(undef, nsub)
+    for i in 1:nsub
+        x_sub[i] = r * cos(ϕₛ)
+        y_sub[i] = r * sin(ϕₛ)
+        ϕₛ += ϕ
+    end
+    return (x_sub, y_sub)
+end
+
+"Tower geometry constructors indexed by organization."
+const _OHL_ORGANIZATIONS = (; flat = _ohl_flat, vertical = _ohl_vertical,
+    delta = _ohl_delta, concentric = _ohl_concentric, offset = _ohl_concentric)
+
+# Tower bundle-centre coordinates; sag is applied only during parameter evaluation.
+function _ohl_conductor_coordinates(c::Conductors)
+    if hasproperty(_OHL_ORGANIZATIONS, c.organization)
+        return getproperty(_OHL_ORGANIZATIONS, c.organization)(c)
+    end
+    x, y = c.positions
+    length(x) == length(y) == c.nᵇ && !isempty(x) ||
+        throw(ArgumentError("Conductor positions are not defined."))
+    return (Float64.(x), Float64.(y))
+end
+
+function _ohl_groundwire_coordinates(tl::Overhead_line)
+    nG = tl.groundwires.nᵍ
+    xg = [Float64(tl.groundwires.Δxᵍ) * i for i in (-(nG - 1) / 2):1:((nG - 1) / 2)]
+    yg = [Float64(tl.conductors.yᵇᶜ + tl.groundwires.Δyᵍ) for _ in 1:nG]
+    return (xg, yg)
+end
+
 function eval_parameters(tl::Overhead_line, s::Complex)
-	# ---------- local geometry builders (same logic, no symbolics) ----------
-	function estimate_flat(c::Conductors)
-		if c.nᵇ == 2
-			return (Float64[-c.Δxᵇᶜ/2, c.Δxᵇᶜ/2], Float64[c.yᵇᶜ, c.yᵇᶜ])
-		elseif c.nᵇ == 3
-			return (Float64[-c.Δxᵇᶜ, 0.0, c.Δxᵇᶜ], Float64[c.yᵇᶜ, c.yᵇᶜ, c.yᵇᶜ])
-		elseif c.nᵇ == 6
-			return (
-				Float64[-c.Δxᵇᶜ, 0.0, c.Δxᵇᶜ, -c.Δxᵇᶜ, 0.0, c.Δxᵇᶜ],
-				Float64[c.yᵇᶜ, c.yᵇᶜ, c.yᵇᶜ, c.yᵇᶜ+c.Δyᵇᶜ, c.yᵇᶜ+c.Δyᵇᶜ, c.yᵇᶜ+c.Δyᵇᶜ],
-			)
-		else
-			throw(ArgumentError("Invalid definition of flat conductor organization."))
-		end
-	end
-
-	function estimate_vertical(c::Conductors)
-		if c.nᵇ == 3
-			return (Float64[c.Δxᵇᶜ/2 for _ in 1:c.nᵇ],
-				Float64[c.yᵇᶜ + i*c.Δyᵇᶜ for i in 1:c.nᵇ])
-		elseif c.nᵇ == 6
-			return (
-				Float64[c.Δxᵇᶜ/2, c.Δxᵇᶜ/2, c.Δxᵇᶜ/2, -c.Δxᵇᶜ/2, -c.Δxᵇᶜ/2, -c.Δxᵇᶜ/2],
-				Float64[
-					c.yᵇᶜ,
-					c.yᵇᶜ+c.Δyᵇᶜ,
-					c.yᵇᶜ+2c.Δyᵇᶜ,
-					c.yᵇᶜ,
-					c.yᵇᶜ+c.Δyᵇᶜ,
-					c.yᵇᶜ+2c.Δyᵇᶜ,
-				],
-			)
-		else
-			throw(ArgumentError("Invalid definition of vertical conductor organization."))
-		end
-	end
-
-	function estimate_delta(c::Conductors)
-		if c.nᵇ % 3 != 0
-			throw(ArgumentError("Delta cannot be constructed from $(c.nᵇ) conductors."))
-		end
-		if c.nᵇ == 3
-			return (Float64[-c.Δxᵇᶜ/2, c.Δxᵇᶜ/2, 0.0],
-				Float64[c.yᵇᶜ, c.yᵇᶜ+c.Δyᵇᶜ, c.yᵇᶜ])
-		elseif c.nᵇ == 6
-			return (
-				Float64[
-					-c.Δxᵇᶜ/2-c.Δ̃xᵇᶜ,
-					-c.Δxᵇᶜ/2-c.Δ̃xᵇᶜ/2,
-					-c.Δxᵇᶜ/2,
-					c.Δxᵇᶜ/2,
-					c.Δxᵇᶜ/2+c.Δ̃xᵇᶜ/2,
-					c.Δxᵇᶜ/2+c.Δ̃xᵇᶜ,
-				],
-				Float64[
-					c.yᵇᶜ,
-					c.yᵇᶜ+c.Δyᵇᶜ,
-					c.yᵇᶜ,
-					c.yᵇᶜ,
-					c.yᵇᶜ+c.Δyᵇᶜ,
-					c.yᵇᶜ,
-				],
-			)
-		else
-			throw(ArgumentError("Invalid definition of delta conductor organization."))
-		end
-	end
-
-	function estimate_concentric(c::Conductors)
-		if c.nᵇ % 3 != 0
-			throw(ArgumentError("Delta cannot be constructed from $(c.nᵇ) conductors."))
-		end
-		if c.nᵇ == 3
-			return (Float64[-c.Δ̃xᵇᶜ, 0.0, 0.0],
-				Float64[c.yᵇᶜ+c.Δyᵇᶜ, c.yᵇᶜ, c.yᵇᶜ+2c.Δyᵇᶜ])
-		elseif c.nᵇ == 6
-			return (
-				Float64[
-					-c.Δxᵇᶜ/2-c.Δ̃xᵇᶜ,
-					-c.Δxᵇᶜ/2,
-					-c.Δxᵇᶜ/2,
-					c.Δxᵇᶜ/2,
-					c.Δxᵇᶜ/2,
-					c.Δxᵇᶜ/2+c.Δ̃xᵇᶜ,
-				],
-				Float64[
-					c.yᵇᶜ+c.Δyᵇᶜ,
-					c.yᵇᶜ,
-					c.yᵇᶜ+2c.Δyᵇᶜ,
-					c.yᵇᶜ,
-					c.yᵇᶜ+2c.Δyᵇᶜ,
-					c.yᵇᶜ+c.Δyᵇᶜ,
-				],
-			)
-		else
-			throw(ArgumentError("Invalid definition of concentric conductor organization."))
-		end
-	end
-
-	estimate_offset = estimate_concentric  # your current code duplicates these anyway
-
-	dict_organization = Dict{Symbol, Function}(
-		:flat       => estimate_flat,
-		:vertical   => estimate_vertical,
-		:delta      => estimate_delta,
-		:concentric => estimate_concentric,
-		:offset     => estimate_offset,
-	)
-
-	function bundle_position(nsub::Int, dsub::Real)
-		# Make it always return vectors so indexing never explodes.
-		if nsub == 1
-			return (Float64[0.0], Float64[0.0])
-		end
-		ϕ = 2π / nsub
-		r = dsub / 2 / sin(ϕ/2)
-		ϕₛ = π/2
-		if iseven(nsub)
-			ϕₛ += ϕ/2
-		end
-		x_sub = Vector{Float64}(undef, nsub)
-		y_sub = Vector{Float64}(undef, nsub)
-		for i in 1:nsub
-			x_sub[i] = r * cos(ϕₛ)
-			y_sub[i] = r * sin(ϕₛ)
-			ϕₛ += ϕ
-		end
-		return (x_sub, y_sub)
-	end
-
+	_ohl_transposition(tl.transposition, tl.conductors.nᵇ)
 	# ---------- constants ----------
 	(μᵣ_earth, ϵᵣ_earth, ρ_earth) = tl.earth_parameters
 	μ₀ = 4π * 1e-7
-	ϵ₀ = 8.85e-12
+	ϵ₀ = _VACUUM_PERMITTIVITY
 	μ_earth = μᵣ_earth * μ₀
 	ϵ_earth = ϵᵣ_earth * ϵ₀
 	σ_earth = 1 / ρ_earth
@@ -314,37 +350,22 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 	ρ_array = Float64[]   # stored as (Rdc per length) [Ω/m] in your original code (via *1e-3)
 	μ_array = Float64[]
 
-	# conductors
-	if !(
-		in(tl.conductors.organization, keys(dict_organization)) ||
-		isempty(tl.conductors.positions)
-	)
-		throw(ArgumentError("Conductor positions are not defined."))
-	else
-		x = Float64[]
-		y = Float64[]
-		if in(tl.conductors.organization, keys(dict_organization))
-			(x, y) = dict_organization[tl.conductors.organization](tl.conductors)
-		else
-			(x, y) = tl.conductors.positions
-		end
+	# conductors (named organization or explicit positions; validated by the helper)
+	(x, y) = _ohl_conductor_coordinates(tl.conductors)
+	(xˢᵇ, yˢᵇ) = _ohl_bundle_position(tl.conductors.nˢᵇ, tl.conductors.dˢᵇ)
 
-		(xˢᵇ, yˢᵇ) = bundle_position(tl.conductors.nˢᵇ, tl.conductors.dˢᵇ)
-
-		for i in 1:tl.conductors.nᵇ, j in 1:tl.conductors.nˢᵇ
-			push!(x_array, Float64(x[i]) + xˢᵇ[j])
-			push!(y_array, Float64(y[i]) + yˢᵇ[j] - (2/3) * Float64(tl.conductors.dˢᵃᵍ))
-			push!(r_array, Float64(tl.conductors.rᶜ))
-			push!(ρ_array, Float64(tl.conductors.Rᵈᶜ) * 1e-3)
-			push!(μ_array, Float64(tl.conductors.μᵣᶜ) * μ₀)
-		end
+	for i in 1:tl.conductors.nᵇ, j in 1:tl.conductors.nˢᵇ
+		push!(x_array, Float64(x[i]) + xˢᵇ[j])
+		push!(y_array, Float64(y[i]) + yˢᵇ[j] - (2/3) * Float64(tl.conductors.dˢᵃᵍ))
+		push!(r_array, Float64(tl.conductors.rᶜ))
+		push!(ρ_array, Float64(tl.conductors.Rᵈᶜ) * 1e-3)
+		push!(μ_array, Float64(tl.conductors.μᵣᶜ) * μ₀)
 	end
 
 	# groundwires
 	nG = tl.groundwires.nᵍ
 	if nG > 0
-		xg = [Float64(tl.groundwires.Δxᵍ) * i for i in (-(nG-1)/2):1:((nG-1)/2)]
-		yg = [Float64(tl.conductors.yᵇᶜ + tl.groundwires.Δyᵍ) for _ in 1:nG]
+		(xg, yg) = _ohl_groundwire_coordinates(tl)
 		for i in 1:nG
 			push!(x_array, xg[i])
 			push!(y_array, yg[i] - (2/3) * Float64(tl.groundwires.dᵍˢᵃᵍ))
@@ -418,6 +439,11 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 		P = PowerImpedance.kron(P, cond_noElim)
 	end
 
+	if tl.transposition == :ideal
+		Z = (Z + Z[[2, 3, 1], [2, 3, 1]] + Z[[3, 1, 2], [3, 1, 2]]) / 3
+		P = (P + P[[2, 3, 1], [2, 3, 1]] + P[[3, 1, 2], [3, 1, 2]]) / 3
+	end
+
 	# ---------- invert P to get Y ----------
 	Y = s * pinv(P) + Diagonal([tl.conductors.gᶜ for _ in 1:size(P, 1)])
 
@@ -426,12 +452,15 @@ end
 
 
 """
-	eval_abcd(tl::Overhead_line, s :: Complex)
-Form ABCD representation from known values for Y and Z and write values in the dictionary
+$(TYPEDSIGNATURES)
+
+Return the receiving-to-sending ABCD matrix from series impedance Z \\[Ω/m\\]
+and shunt admittance Y \\[S/m\\]. The line length is l \\[m\\].
+The matrix Γ \\[1/m\\] describes voltage propagation:
 	Γ = √ZY
 	Yᶜ = Z⁻¹γ
-	ABCD = [cosh(Γl)    Yᶜ⁻¹sinh(Γl)
-			Yᶜsinh(Γl)  cosh(Γl)]
+	ABCD = [cosh(Γl)    Γ⁻¹sinh(Γl)Z
+			Yᶜsinh(Γl)  Z⁻¹cosh(Γl)Z]
 """
 function eval_abcd(tl::Overhead_line, s::Complex)
 	(Z, Y) = eval_parameters(tl, s)
@@ -442,9 +471,9 @@ function eval_abcd(tl::Overhead_line, s::Complex)
 	abcd = zeros(Complex, 2n, 2n)
 
 	abcd[1:n, 1:n] = cosh(γ*tl.length)
-	abcd[1:n, (n+1):end] = inv(Yc) * sinh(γ*tl.length)
+	abcd[1:n, (n+1):end] = γ \ (sinh(γ*tl.length) * Z)
 	abcd[(n+1):end, 1:n] = Yc * sinh(γ*tl.length)
-	abcd[(n+1):end, (n+1):end] = cosh(γ*tl.length)
+	abcd[(n+1):end, (n+1):end] = Z \ (cosh(γ*tl.length) * Z)
 
 	return abcd
 end

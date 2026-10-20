@@ -266,5 +266,5 @@ The former NetworkBuilder `Pin`, `ConnectionDef`, `pin`, `⟷`, and `↔` gramma
 has no compatibility spelling. Replace every chained connection with one named
 row per connected terminal.
 
-The complete public surface is grouped by module in the
+Public functions and types are listed by module in the
 [API reference](reference.md).

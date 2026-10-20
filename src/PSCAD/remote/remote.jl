@@ -1,0 +1,480 @@
+function _powershell_argv(powershell::AbstractString)
+    command="\$ProgressPreference='SilentlyContinue'; $(String(powershell))"
+    utf16 = htol.(transcode(UInt16, command))
+    encoded = base64encode(reinterpret(UInt8, utf16))
+    return [
+        "powershell.exe", "-NoProfile", "-NonInteractive",
+        "-EncodedCommand", encoded
+    ]
+end
+
+function remote_command(::Val{:ssh}, config::RemoteConfig, powershell::AbstractString)
+    return Cmd(vcat(["ssh", config.host], _powershell_argv(powershell)))
+end
+
+function remote_command(::Val{:local}, ::RemoteConfig, powershell::AbstractString)
+    return Cmd(_powershell_argv(powershell))
+end
+
+function remote_command(::Val{:command}, config::RemoteConfig, powershell::AbstractString)
+    arguments = [value == "{host}" ? config.host : value for value in config.command]
+    return Cmd(vcat(arguments, _powershell_argv(powershell)))
+end
+
+function remote_command(config::RemoteConfig, powershell::AbstractString)
+    # Transport methods added after compilation require the current method world.
+    return Base.invokelatest(
+        remote_command,
+        Val(config.transport),
+        config,
+        powershell
+    )
+end
+
+function _ps_quote(value::AbstractString)
+    return "'" * replace(String(value), "'" => "''") * "'"
+end
+
+function _remote_path(root::AbstractString, parts::AbstractString...)
+    clean = rstrip(String(root), ('\\', '/'))
+    return join((clean, parts...), '\\')
+end
+
+function _remote_project_name(path::AbstractString)
+    return splitext(basename(replace(String(path), '\\' => '/')))[1]
+end
+
+function _run_remote(
+        config::RemoteConfig,
+        powershell::AbstractString;
+        stdout_path::Union{Nothing, AbstractString} = nothing,
+        stderr_path::Union{Nothing, AbstractString} = nothing,
+        stream::Bool = false,
+        on_interrupt::Function = () -> nothing,
+        timeout::Real = config.timeout
+)
+    isfinite(timeout) && timeout > 0 || throw(ArgumentError(
+        "PSCAD transport timeout must be positive and finite"))
+    stdout_path === nothing || mkpath(dirname(stdout_path))
+    stderr_path === nothing || mkpath(dirname(stderr_path))
+    output = Pipe()
+    errors = Pipe()
+    process = run(
+        pipeline(remote_command(config, powershell); stdout = output, stderr = errors);
+        wait = false
+    )
+    close(output.in)
+    close(errors.in)
+    output_buffer = IOBuffer()
+    error_buffer = IOBuffer()
+    output_file = stdout_path === nothing ? nothing : open(stdout_path, "w")
+    error_file = stderr_path === nothing ? nothing : open(stderr_path, "w")
+    output_task = @async for line in eachline(output)
+        println(output_buffer, line)
+        output_file === nothing || println(output_file, line)
+        output_file === nothing || flush(output_file)
+        if stream
+            println(stdout, line)
+            flush(stdout)
+        end
+    end
+    error_task = @async for line in eachline(errors)
+        println(error_buffer, line)
+        error_file === nothing || println(error_file, line)
+        error_file === nothing || flush(error_file)
+        if stream
+            println(stderr, line)
+            flush(stderr)
+        end
+    end
+    interrupted = nothing
+    try
+        finished = timedwait(
+            () -> istaskfailed(output_task) || istaskfailed(error_task) ||
+                  (process_exited(process) && istaskdone(output_task) &&
+                   istaskdone(error_task)),
+            timeout; pollint = min(0.1, timeout / 10))
+        finished === :ok || throw(ErrorException(
+            "PSCAD transport exceeded its timeout of $timeout seconds"))
+        istaskfailed(output_task) && wait(output_task)
+        istaskfailed(error_task) && wait(error_task)
+        wait(process)
+    catch error
+        interrupted = error
+        # SIGKILL bypasses transport signal handlers that can delay termination
+        # after timeout or interruption.
+        process_running(process) && kill(process, 9)
+        if error isa InterruptException
+            try
+                on_interrupt()
+            catch cancellation_error
+                @warn "Remote PSCAD cancellation could not be confirmed" exception = (
+                    cancellation_error, catch_backtrace())
+            end
+        end
+        try
+            wait(process)
+        catch wait_error
+            @warn "PSCAD transport wait failed during cleanup" exception = (
+                wait_error, catch_backtrace())
+        end
+    finally
+        if interrupted !== nothing
+            close(output)
+            close(errors)
+        end
+        for (stream_name, reader) in ((:stdout, output_task), (:stderr, error_task))
+            try
+                wait(reader)
+            catch reader_error
+                if interrupted === nothing
+                    interrupted = reader_error
+                elseif !(interrupted isa TaskFailedException && interrupted.task === reader)
+                    @warn "PSCAD output reader failed during cleanup" stream=stream_name exception=(
+                        reader_error, catch_backtrace())
+                end
+            end
+        end
+        for (stream_name, file) in ((:stdout, output_file), (:stderr, error_file))
+            file === nothing && continue
+            try
+                close(file)
+            catch close_error
+                if interrupted === nothing
+                    interrupted = close_error
+                else
+                    @warn "PSCAD output log could not be closed" stream=stream_name exception=(
+                        close_error, catch_backtrace())
+                end
+            end
+        end
+    end
+    stdout_value = String(take!(output_buffer))
+    stderr_value = String(take!(error_buffer))
+    interrupted === nothing || throw(interrupted)
+    success(process) || throw(ErrorException(
+        "remote PSCAD command failed with exit code $(process.exitcode)\n" *
+        "stdout:\n$stdout_value\nstderr:\n$stderr_value",
+    ))
+    return stdout_value
+end
+
+function _supervisor_command(
+        config::RemoteConfig,
+        shared_case::AbstractString,
+        remote_case::AbstractString,
+        project_name::AbstractString;
+        output_stem::AbstractString,
+        verbosity::Integer = 0
+)
+    shared_supervisor = _remote_path(shared_case, "toolkit", "supervisor.ps1")
+    return join(
+        (
+            "& $(_ps_quote(shared_supervisor))",
+            "-SharedCase $(_ps_quote(shared_case))",
+            "-LocalCase $(_ps_quote(remote_case))",
+            "-RemoteRoot $(_ps_quote(config.remote_root))",
+            "-Julia $(_ps_quote(config.julia_executable))",
+            "-Python $(_ps_quote(config.python_executable))",
+            "-ProjectName $(_ps_quote(project_name))",
+            "-OutputStem $(_ps_quote(output_stem))",
+            "-PSCADVersion $(_ps_quote(config.pscad_version))",
+            "-PSCADPort $(something(config.pscad_port, 0))",
+            "-Verbosity $(_ps_quote(string(verbosity)))",
+            "-TimeoutSeconds $(_ps_quote(string(config.timeout)))"
+        ),
+        ' ')
+end
+
+function _cancel_command(shared_toolkit::AbstractString, remote_case::AbstractString)
+    lifecycle = _remote_path(shared_toolkit, "lifecycle.ps1")
+    return ". $(_ps_quote(lifecycle)); Stop-PSCADCase -LocalCase $(_ps_quote(remote_case))"
+end
+
+function _cancel_remote(
+        config::RemoteConfig,
+        shared_toolkit::AbstractString,
+        remote_case::AbstractString;
+        verbosity::Integer = 0
+)
+    _run_remote(
+        config, _cancel_command(shared_toolkit, remote_case); stream = verbosity >= 2,
+        timeout = min(config.timeout, 30))
+    return nothing
+end
+
+# Remote sources are captured with the loaded adapter so a run cannot
+# combine that adapter with later source-file edits.
+const PSCAD_REMOTE_SOURCES = Dict(name => let
+                                      path = joinpath(@__DIR__, name)
+                                      Base.include_dependency(path)
+                                      read(path, String)
+                                  end
+for name in ("Project.toml", "Manifest.toml", "files.jl",
+    "runner.jl", "supervisor.ps1", "lifecycle.ps1", "identity.py", "probe.py"))
+
+"""
+$(TYPEDSIGNATURES)
+
+Read the PSCAD installation identity on the station without a simulation.
+A temporary application instance reads the settings and closes without loading
+a project.
+
+# Arguments
+
+- `config`: Station connection and selected PSCAD installation.
+
+# Returns
+
+- A string dictionary with application and master-library paths, their SHA-256
+  digests, automation versions and the selected Fortran compiler.
+
+# Notes
+
+The `solver_identity` computation option requires this installation record.
+Fresh simulations check identity in their own application instance.
+Reuse checks the current station installation against the saved record.
+"""
+function identify(config::RemoteConfig)
+    code = PSCAD_REMOTE_SOURCES["identity.py"] * "\nimport json\n" *
+           "for key, value in identify(" * repr(config.pscad_version) * ").items():\n" *
+           "    print(json.dumps(key) + ' = ' + json.dumps(value))\n"
+    # A full script exceeds the Windows command-line limit when encoded in
+    # PowerShell, so it must run from the shared directory.
+    directory = mktempdir(mkpath(config.local_root); prefix = "pscad-identity-")
+    result = try
+        write(joinpath(directory, "identify.py"), code)
+        remote = _remote_path(config.shared_root, basename(directory), "identify.py")
+        command = "& " * _ps_quote(config.python_executable) * " " * _ps_quote(remote) *
+                  "; if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }"
+        TOML.parse(_run_remote(config, command))
+    finally
+        rm(directory; recursive = true)
+    end
+    return Dict{String, String}(validate(result, config))
+end
+
+function validate(result::AbstractDict, config::RemoteConfig)
+    all(pair -> first(pair) isa AbstractString && last(pair) isa AbstractString, result) ||
+        throw(ArgumentError("PSCAD solver identity must contain string fields"))
+    get(result, "version", nothing) == config.pscad_version || throw(ArgumentError(
+        "PSCAD station did not return the requested solver identity"))
+    get(result, "schema", nothing) == "2" &&
+    !isempty(get(result, "fortran_version", "")) &&
+    all(name -> occursin(r"^[0-9a-f]{64}$", get(result, name * "_sha256", "")),
+        ("pscad", "master_library")) || throw(ArgumentError(
+        "PSCAD station returned an incomplete solver identity"))
+    return result
+end
+
+function _stage_toolkit(local_project::AbstractString, local_output::AbstractString)
+    isfile(local_project) || throw(ArgumentError(
+        "local PSCAD input is missing: $local_project",
+    ))
+    run_directory = dirname(local_output)
+    expected_project = joinpath(run_directory, "generated.pscx")
+    abspath(local_project) == abspath(expected_project) || throw(ArgumentError(
+        "PSCAD project must be staged as $expected_project",
+    ))
+    toolkit_stage = joinpath(run_directory, "toolkit")
+    isdir(toolkit_stage) && rm(toolkit_stage; recursive = true)
+    mkpath(toolkit_stage)
+    for (name, source) in PSCAD_REMOTE_SOURCES
+        write(joinpath(toolkit_stage, name), source)
+    end
+    return toolkit_stage
+end
+
+function _diagnostic_tail(path::AbstractString; count::Integer = 12)
+    isfile(path) || return "PSCAD produced no diagnostic log."
+    lines=filter(!isempty, strip.(readlines(path)))
+    isempty(lines) && return "PSCAD diagnostic log is empty."
+    return join(last(lines, min(count, length(lines))), '\n')
+end
+
+function _supervisor_errors(path::AbstractString)
+    isfile(path) || return ""
+    text = read(path, String)
+    # Windows PowerShell serializes stderr strings as CLIXML stream records.
+    records = [record[1]
+               for record in eachmatch(r"<S\b[^>]*\bS=\"Error\"[^>]*>(.*?)</S>"s, text)]
+    isempty(records) && return occursin("#< CLIXML", text) ? "" : strip(text)
+    return strip(join(
+        (rstrip(replace(record,
+             "_x000D__x000A_" => "\n", "_x000D_" => "\n", "_x000A_" => "\n",
+             "&lt;" => "<", "&gt;" => ">", "&quot;" => "\"", "&apos;" => "'", "&amp;" => "&"))
+        for record in records),
+        '\n'))
+end
+
+function run_remote_pscad(
+        config::RemoteConfig,
+        local_project::AbstractString,
+        local_output::AbstractString;
+        output_stem::AbstractString,
+        verbosity::Integer = 0
+)
+    verbosity in 0:2 || throw(ArgumentError("PSCAD verbosity must be 0, 1, or 2"))
+    isdir(local_output) && !isempty(readdir(local_output)) &&
+        throw(ArgumentError(
+            "PSCAD output directory is not empty; select a new run directory: $local_output"))
+    work_parts = _local_parts(dirname(abspath(local_output)), config.local_root)
+    mkpath(local_output)
+    run_id = last(work_parts)
+    _stage_toolkit(local_project, local_output)
+    shared_case = _remote_path(config.shared_root, work_parts...)
+    shared_toolkit = _remote_path(shared_case, "toolkit")
+    remote_case = _remote_path(config.remote_root, work_parts..., output_stem)
+    stdout_path = joinpath(local_output, "stdout.txt")
+    stderr_path = joinpath(local_output, "stderr.txt")
+    transport_stdout = joinpath(local_output, "transport-stdout.txt")
+    transport_stderr = joinpath(local_output, "transport-stderr.txt")
+    command = _supervisor_command(
+        config,
+        shared_case,
+        remote_case,
+        _remote_project_name(local_project);
+        output_stem,
+        verbosity
+    )
+    verbosity >= 2 &&
+        @debug "Executing PSCAD project" host=config.host run_id timeout=config.timeout
+    execution_error = try
+        _run_remote(
+            config,
+            command;
+            stdout_path = transport_stdout,
+            stderr_path = transport_stderr,
+            stream = verbosity >= 2,
+            timeout = config.timeout + (config.pscad_port === nothing ? 60 : 160),
+            on_interrupt = () -> _cancel_remote(config, shared_toolkit, remote_case; verbosity)
+        )
+        nothing
+    catch error
+        if !(error isa InterruptException)
+            try
+                _cancel_remote(config, shared_toolkit, remote_case; verbosity)
+            catch cancellation_error
+                @warn "Remote PSCAD cancellation could not be confirmed" host=config.host run_id exception=(
+                    cancellation_error, catch_backtrace())
+            end
+        end
+        error isa InterruptException && rethrow()
+        error
+    end
+    if execution_error !== nothing
+        console_path = joinpath(local_output, "pscad-console.txt")
+        if !isfile(console_path)
+            write(
+                console_path,
+                "PSCAD did not produce a console log before the remote failure.\n"
+            )
+        end
+        summary=first(split(sprint(showerror, execution_error), '\n'))
+        diagnostics = _diagnostic_tail(console_path)
+        supervisor_errors = _supervisor_errors(transport_stderr)
+        if !isempty(supervisor_errors)
+            if !occursin("PSCAD runner failed during", diagnostics)
+                summary *= "\nSupervisor error:\n$supervisor_errors"
+            elseif occursin("Cleanup failure:", supervisor_errors)
+                diagnostics *= "\nSupervisor error:\n$supervisor_errors"
+            end
+        end
+        throw(ErrorException(
+            "$summary\nLast PSCAD diagnostics:\n$diagnostics" *
+            "\nFull PSCAD diagnostics: $console_path" *
+            "\nTransport stdout: $transport_stdout" *
+            "\nTransport stderr: $transport_stderr" *
+            "\nRemote scratch: $remote_case",
+        ))
+    end
+    verbosity >= 2 &&
+        @debug "Checking PSCAD outputs" host=config.host run_id destination=local_output
+    input = TOML.parsefile(joinpath(dirname(local_project), "computation.toml"))
+    for name in _required_outputs(output_stem, input)
+        path = joinpath(local_output, name)
+        isfile(path) || throw(ErrorException(
+            "required PSCAD output is missing: $path\nLast PSCAD diagnostics:\n$(_diagnostic_tail(joinpath(local_output, "pscad-console.txt")))"))
+        name == "build-messages.txt" || filesize(path) > 0 ||
+            throw(ArgumentError(
+                "required PSCAD output is empty: $path"))
+    end
+    elapsed = parse(Float64, strip(read(joinpath(local_output, "timing.txt"), String)))
+    verbosity >= 2 &&
+        @debug "PSCAD project completed" host=config.host run_id run_call_seconds=elapsed
+    return (
+        elapsed_seconds = elapsed,
+        exit_code = 0,
+        stdout_path,
+        stderr_path,
+        console_path = joinpath(local_output, "pscad-console.txt"),
+        output_dir = String(local_output)
+    )
+end
+
+function _required_outputs(stem::AbstractString)
+    return ("pscad-console.txt", "build-messages.txt", "timing.txt",
+        "settings-readback.toml", "solver.toml", stem * ".inf", stem * "_01.out")
+end
+
+function _required_outputs(stem::AbstractString, input::AbstractDict)
+    haskey(input, "ztool") || return _required_outputs(stem)
+    return ("pscad-console.txt", "build-messages.txt", "timing.txt",
+        "settings-readback.toml", "solver.toml", "ztool.toml",
+        stem * "_power_flow.txt", stem * "_angles.txt")
+end
+
+# Ancestor paths reveal symbolic links even when destination directories
+# do not yet exist.
+function _resolved_path(path::AbstractString)
+    current = abspath(path)
+    parts = String[]
+    while !ispath(current)
+        pushfirst!(parts, basename(current))
+        parent = dirname(current)
+        parent == current && throw(ArgumentError("cannot resolve PSCAD path $path"))
+        current = parent
+    end
+    return joinpath(realpath(current), parts...)
+end
+
+function _local_parts(path::AbstractString, root::AbstractString)
+    relative = relpath(abspath(path), abspath(root))
+    resolved = relpath(_resolved_path(path), _resolved_path(root))
+    for value in (relative, resolved)
+        (isabspath(value) || first(splitpath(value)) == "..") &&
+            throw(ArgumentError("PSCAD path must be inside remote.local_root: $path"))
+    end
+    return splitpath(relative)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Copy a station file into the shared exchange directory on the caller.
+
+# Arguments
+
+- `config`: Station connection and shared-directory mapping.
+- `remote_path`: Station filename, passed literally.
+- `local_path`: Destination within `config.local_root`.
+
+# Returns
+
+- `local_path`, after checking that the file arrived.
+"""
+function fetch_station_file(config::RemoteConfig, remote_path::AbstractString,
+        local_path::AbstractString)
+    destination = abspath(local_path)
+    parts = _local_parts(destination, config.local_root)
+    shared = _remote_path(config.shared_root, parts...)
+    mkpath(dirname(destination))
+    command = "\$ErrorActionPreference='Stop'; " *
+              "\$destination=$(_ps_quote(shared)); " *
+              "New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName(\$destination)) -Force | Out-Null; " *
+              "Copy-Item -LiteralPath $(_ps_quote(remote_path)) -Destination \$destination -Force"
+    _run_remote(config, command)
+    isfile(destination) ||
+        throw(ArgumentError("PSCAD station file did not arrive: $destination"))
+    return local_path
+end

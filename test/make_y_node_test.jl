@@ -498,9 +498,9 @@ voltageBase = Vm
 # Sources
 G1=ac_source(pins = 3,setpoint=Setpoint(Vac = Vm*sqrt(2)), transformation = true)
 G2=ac_source(pins = 3, setpoint=Setpoint(Vac = Vm*sqrt(2)), transformation = true)
-DC_WF1=dc_source(pins = 2, setpoint=Setpoint(Vdc = 320), transformation = true)
-DC_WF2=dc_source(pins = 2, setpoint=Setpoint(Vdc = 320), transformation = true)
-DC_WF3=dc_source(pins = 2, setpoint=Setpoint(Vdc = 320), transformation = true)
+DC_WF1=dc_source(pins = 2, setpoint = Setpoint(Vdc = 640), transformation = true)
+DC_WF2=dc_source(pins = 2, setpoint = Setpoint(Vdc = 640), transformation = true)
+DC_WF3=dc_source(pins = 2, setpoint = Setpoint(Vdc = 640), transformation = true)
 Zg2=impedance(z = (s::Complex)-> (1.0263 + s*0.0327), pins = 3, transformation = true) # Top area
 Zg1=impedance(z = (s::Complex)-> (0.2874  + s*0.0091)  , pins = 3, transformation = true) # Bottom area
 

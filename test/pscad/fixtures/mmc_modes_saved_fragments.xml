@@ -1,0 +1,292 @@
+<SavedMMCControlModes>
+  <Mode name="DVC-Mode">
+    <!-- local/GFL-MMC/DVC-Mode/GFL_MMC_Validation.pscx:2020-2087 -->
+<User classid="UserCmp" id="99546287" name="GFL_MMC_Validation:MMC_Averaged_2" x="450" y="288" w="136" h="114" z="40" orient="2" defn="GFL_MMC_Validation:MMC_Averaged_2" link="-1" q="4" disable="false">
+          <paramlist name="" link="-1" crc="5027894">
+            <param name="Name" value="" />
+            <param name="Larm" value="50e-3" />
+            <param name="Rarm" value="1.07" />
+            <param name="Sbase" value="1000" />
+            <param name="Vbase" value="333" />
+            <param name="Vbase_DC" value="800" />
+            <param name="Kpp" value="0.1" />
+            <param name="Kip" value="31.4159" />
+            <param name="Kpq" value="0.1" />
+            <param name="Kiq" value="31.4159" />
+            <param name="Kp" value="0.7691" />
+            <param name="Ki" value="522.7654" />
+            <param name="Kpc" value="0.1048" />
+            <param name="Kic" value="48.1914" />
+            <param name="N" value="400" />
+            <param name="Csm" value="10e-3" />
+            <param name="Ltrafo_pu" value="0.1305" />
+            <param name="Rtrafo_pu" value="0.0037" />
+            <param name="KpPLL" value="0.28" />
+            <param name="KiPLL" value="12.5664" />
+            <param name="t_rst" value="0" />
+            <param name="Kpv" value="5" />
+            <param name="KiV" value="15" />
+            <param name="Vdc_ref" value="800" />
+          </paramlist>
+          <paramlist name="" link="1888507670">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="207455732">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="293621184">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="1433526551">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="1807950795">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="1613117277">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="950023109">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="1269289500">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="1280484964">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="994481585">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+        </User>
+    <!-- local/GFL-MMC/DVC-Mode/GFL_MMC_Validation.pscx:2565-2574 -->
+<User classid="UserCmp" defn="master:src_ccin_1" id="1741757690" x="18" y="288" w="28" h="44" z="1" orient="1" link="-1" layer="" q="4" disable="false">
+          <paramlist link="-1" name="" crc="48079029">
+            <param name="Name" value="Source 1" />
+            <param name="Cntrl" value="0" />
+            <param name="Vm" value="0.7527 [kA]" />
+            <param name="f" value="0 [Hz]" />
+            <param name="Ph" value="0.0 [deg]" />
+            <param name="Tc" value="0.05 [s]" />
+          </paramlist>
+        </User>
+  </Mode>
+  <Mode name="Q-V_Droop">
+    <!-- local/GFL-MMC/Q-V_Droop/GFL_MMC_Validation.pscx:621-685 -->
+<User classid="UserCmp" id="99546287" name="GFL_MMC_Validation:MMC_Averaged_2" x="252" y="288" w="136" h="114" z="40" orient="2" defn="GFL_MMC_Validation:MMC_Averaged_2" link="-1" q="4" disable="false">
+          <paramlist name="" link="-1" crc="56081836">
+            <param name="Name" value="" />
+            <param name="Larm" value="50e-3" />
+            <param name="Rarm" value="1.07" />
+            <param name="Sbase" value="1000" />
+            <param name="Vbase" value="333" />
+            <param name="Vbase_DC" value="800" />
+            <param name="Kpp" value="0.1" />
+            <param name="Kip" value="31.4159" />
+            <param name="Kpq" value="0.1" />
+            <param name="Kiq" value="31.4159" />
+            <param name="Kp" value="0.7691" />
+            <param name="Ki" value="522.7654" />
+            <param name="Kpc" value="0.1048" />
+            <param name="Kic" value="48.1914" />
+            <param name="N" value="400" />
+            <param name="Csm" value="10e-3" />
+            <param name="Ltrafo_pu" value="0.1305" />
+            <param name="Rtrafo_pu" value="0.0037" />
+            <param name="KpPLL" value="0.28" />
+            <param name="KiPLL" value="12.5664" />
+            <param name="t_rst" value="0" />
+          </paramlist>
+          <paramlist name="" link="1888507670">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="207455732">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="293621184">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="1433526551">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="1807950795">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="1613117277">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="950023109">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="1269289500">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="1280484964">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="994481585">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+        </User>
+    <!-- local/GFL-MMC/Q-V_Droop/GFL_MMC_Validation.pscx:11992-11998 -->
+<User classid="UserCmp" id="961326560" name="GFL_MMC_Validation:Untitled_6" x="1872" y="432" w="189" h="84" z="590" orient="0" defn="GFL_MMC_Validation:Untitled_6" link="-1" q="4" disable="false">
+          <paramlist name="" link="-1" crc="35174308">
+            <param name="Name" value="" />
+            <param name="Kd" value="20" />
+            <param name="wf" value="100" />
+          </paramlist>
+        </User>
+  </Mode>
+  <Mode name="VAC_Control">
+    <!-- local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:650-714 -->
+<User classid="UserCmp" id="99546287" name="GFL_MMC_Validation:MMC_Averaged_2" x="252" y="288" w="136" h="114" z="40" orient="2" defn="GFL_MMC_Validation:MMC_Averaged_2" link="-1" q="4" disable="false">
+          <paramlist name="" link="-1" crc="56081836">
+            <param name="Name" value="" />
+            <param name="Larm" value="50e-3" />
+            <param name="Rarm" value="1.07" />
+            <param name="Sbase" value="1000" />
+            <param name="Vbase" value="333" />
+            <param name="Vbase_DC" value="800" />
+            <param name="Kpp" value="0.1" />
+            <param name="Kip" value="31.4159" />
+            <param name="Kpq" value="0.1" />
+            <param name="Kiq" value="31.4159" />
+            <param name="Kp" value="0.7691" />
+            <param name="Ki" value="522.7654" />
+            <param name="Kpc" value="0.1048" />
+            <param name="Kic" value="48.1914" />
+            <param name="N" value="400" />
+            <param name="Csm" value="10e-3" />
+            <param name="Ltrafo_pu" value="0.1305" />
+            <param name="Rtrafo_pu" value="0.0037" />
+            <param name="KpPLL" value="0.28" />
+            <param name="KiPLL" value="12.5664" />
+            <param name="t_rst" value="0" />
+          </paramlist>
+          <paramlist name="" link="1888507670">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="207455732">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="293621184">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="1433526551">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="1807950795">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="1613117277">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="950023109">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="1269289500">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+          <paramlist name="" link="1280484964">
+            <param name="xmin" value="0.000000" />
+            <param name="xmax" value="1.000000" />
+          </paramlist>
+          <paramlist name="" link="994481585">
+            <param name="ymin" value="-1" />
+            <param name="ymax" value="1" />
+          </paramlist>
+        </User>
+    <!-- local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:8082-8095 -->
+<User classid="UserCmp" defn="master:sumjct" id="1327384659" x="648" y="342" w="80" h="64" z="60" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="16672553">
+            <param name="DPath" value="1" />
+            <param name="A" value="0" />
+            <param name="B" value="0" />
+            <param name="C" value="0" />
+            <param name="D" value="1" />
+            <param name="E" value="0" />
+            <param name="F" value="-1" />
+            <param name="G" value="0" />
+            <param name="Name" value="" />
+            <param name="Dim" value="1" />
+          </paramlist>
+        </User>
+    <!-- local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:8156-8170 -->
+<User classid="UserCmp" name="master:integral" id="1112328997" x="756" y="414" w="80" h="61" z="90" orient="0" defn="master:integral" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="126573893">
+            <param name="Extrn" value="0" />
+            <param name="Reset" value="0" />
+            <param name="Mthd" value="0" />
+            <param name="INTR" value="0" />
+            <param name="INTCLR" value="0" />
+            <param name="T" value="TiAC" />
+            <param name="Yo" value="0.0" />
+            <param name="YRst" value="0.0" />
+            <param name="YHi" value="1e9" />
+            <param name="YLo" value="-1e9" />
+            <param name="Name" value="" />
+          </paramlist>
+        </User>
+    <!-- local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:8171-8179 -->
+<User classid="UserCmp" defn="master:gain" id="24650408" x="756" y="342" w="80" h="36" z="70" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="34173863">
+            <param name="G" value="KpAC" />
+            <param name="COM" value="Gain" />
+            <param name="Dim" value="1" />
+            <param name="Name" value="" />
+            <param name="DPath" value="1" />
+          </paramlist>
+        </User>
+    <!-- local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:8189-8202 -->
+<User classid="UserCmp" defn="master:sumjct" id="375415067" x="900" y="342" w="80" h="64" z="100" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="16672553">
+            <param name="DPath" value="1" />
+            <param name="A" value="0" />
+            <param name="B" value="0" />
+            <param name="C" value="0" />
+            <param name="D" value="1" />
+            <param name="E" value="0" />
+            <param name="F" value="1" />
+            <param name="G" value="0" />
+            <param name="Name" value="" />
+            <param name="Dim" value="1" />
+          </paramlist>
+        </User>
+    <!-- local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:11936-11942 -->
+<User classid="UserCmp" name="GFL_MMC_Validation:VacControl" id="436923558" x="1818" y="594" w="116" h="65" z="620" orient="0" defn="GFL_MMC_Validation:VacControl" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="131491201">
+            <param name="Name" value="" />
+            <param name="KpAC" value="0" />
+            <param name="KiAC" value="100" />
+          </paramlist>
+        </User>
+  </Mode>
+</SavedMMCControlModes>

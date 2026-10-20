@@ -16,7 +16,7 @@ impedance-based or nodal-admittance-based stability assessment
 
 ## Why multiport ABCD parameters?
 
-Some elementary interconnections do not admit a finite impedance or admittance
+Some elementary interconnections have no finite impedance or admittance
 description. An ideal series branch has no finite open-circuit impedance
 matrix, while an ideal shunt connection has no finite short-circuit admittance
 matrix.
@@ -43,7 +43,7 @@ output-port variables. For an ``n``-port system,
 ```
 
 where each block is ``n\times n``. A port may represent a single conductor, a
-polyphase AC terminal, a multipole DC terminal, or the boundary of a larger
+polyphase AC terminal, a multipole DC terminal, or the terminals of a larger
 subnetwork.
 
 ![Multiport representation of a polyphase power system.](pictures/abcd/multiport_network.png)

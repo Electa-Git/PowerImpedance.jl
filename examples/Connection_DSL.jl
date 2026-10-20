@@ -29,7 +29,7 @@ using PowerImpedance.NetworkBuilder: Grid, NetworkTopology, define, solve;
 # The explicit `:gnd` node identifies the reference side.
 
 dc_elements = (
-    source = dc_source(setpoint = Setpoint(Vdc = 240.0)),
+    source = dc_source(setpoint = Setpoint(Vdc = 480.0)),
     branch = impedance(z = 2.0, pins = 1),
     load = impedance(z = 10.0, pins = 1)
 );
@@ -196,7 +196,7 @@ delta_control = ΔdqControlGFL(
 );
 
 converter_elements = (
-    dc_grid = dc_source(setpoint = Setpoint(Vdc = 240.0)),
+    dc_grid = dc_source(setpoint = Setpoint(Vdc = 480.0)),
     ac_grid = ac_source(pins = 3, transformation = true),
     mmc = mmc(
         sync = NoSynchronization(),

@@ -216,11 +216,11 @@ function eval_parameters(c::Cable, s::Complex)
 	(μᵣᵍ, ϵᵣᵍ, ρᵍ) = c.earth_parameters
 
 	μ₀ = 4π*1e-7
-	ϵ₀ = 8.85e-12
+	ϵ₀ = _VACUUM_PERMITTIVITY
 	μᵍ = μᵣᵍ * μ₀
 	# ϵᵍ = ϵᵣᵍ * ϵ₀   # not used in the original assembly
 	# σᵍ = 1/ρᵍ        # not used in the original assembly
-	γE = 0.5772156649
+	γE = exp(Base.MathConstants.eulergamma)
 
 	nₗ = length(c.conductors)
 	n = length(c.positions)
@@ -263,18 +263,11 @@ function eval_parameters(c::Cable, s::Complex)
 			Zb[i-1, i-1] += Zᵃᵃ
 		end
 
-		if i == nₗ
-			mᵍ = sqrt(s * μᵍ / ρᵍ)
-			H = 2 * c.positions[1][2]  # keep original behavior (uses positions[1] for self term)
-			d = max_r
-			Zᵍ = s*μᵍ/(2π) * (-log(γE*mᵍ*d/2) + 0.5 - 2*mᵍ*H/3)
-			Zb[i, i] += Zᵍ
-		end
-
 		i += 1
 	end
 
 	# shunt "P" build from insulators (same indexing logic as original)
+	outer_insulation = nothing
 	i = 1
 	for key in keys(c.insulators)
 		rᵢ = c.insulators[key].rᵢ
@@ -285,7 +278,13 @@ function eval_parameters(c::Cable, s::Complex)
 		Zⁱ = s*μ/(2π) * log(rₒ/rᵢ)
 		Pⁱ = log(rₒ/rᵢ) / (2π*ϵ)
 
-		Zb[i, i] += Zⁱ
+		# The outer-diagonal addition order is metal, earth, insulation; this order preserves
+		# floating-point rounding.
+		if i == nₗ
+			outer_insulation = Zⁱ
+		else
+			Zb[i, i] += Zⁱ
+		end
 		Pb[1:i, 1:i] .+= ones(ComplexF64, i, i) .* Pⁱ
 
 		i += 1
@@ -298,8 +297,19 @@ function eval_parameters(c::Cable, s::Complex)
 		P[idx, idx] .= Pb
 	end
 
-	# mutual earth-return impedance between cables (only at outer layer index, same as original)
+	# Self earth return uses each cable's own depth at its outer conducting layer.
 	mᵍ = sqrt(s * μᵍ / ρᵍ)
+	for i in 1:n
+		H = 2 * c.positions[i][2]
+		d = max_r
+		Zᵍ = s*μᵍ/(2π) * (-log(γE*mᵍ*d/2) + 0.5 - 2*mᵍ*H/3)
+		Z[i*nₗ, i*nₗ] += Zᵍ
+		if outer_insulation !== nothing
+			Z[i*nₗ, i*nₗ] += outer_insulation
+		end
+	end
+
+	# mutual earth-return impedance between cables (only at outer layer index, same as original)
 	for i in 1:n
 		for j in (i+1):n
 			H = c.positions[i][2] + c.positions[j][2]
@@ -375,8 +385,8 @@ function eval_abcd(c::Cable, s::Complex)
 	abcd = zeros(Complex, 2n, 2n) #Creation of the ABCD matrix-> zeros matrix with dimension 2n*2n
 
 	abcd[1:n, 1:n] = cosh(γ*c.length) #Eq 33 pag 19 simulator_tutorial. Matrix A[n*n]=cosh(Γl)
-	abcd[1:n, (n+1):end] = Yc \ sinh(γ*c.length) #Eq 33 pag 19 simulator_tutorial. Matrix B[n*n]=Yc^-1sinh(Γl)
+	abcd[1:n, (n+1):end] = γ \ (sinh(γ*c.length) * Z) # Matrix B[n*n]=Γ^-1sinh(Γl)Z
 	abcd[(n+1):end, 1:n] = Yc * sinh(γ*c.length) #Eq 33 pag 19 simulator_tutorial. Matrix C[n*n]=Ycsinh(Γl)
-	abcd[(n+1):end, (n+1):end] = cosh(γ*c.length) #Eq 33 pag 19 simulator_tutorial. Matrix D[n*n]=cosh(Γl)
+	abcd[(n+1):end, (n+1):end] = Z \ (cosh(γ*c.length) * Z) # Matrix D[n*n]=Z^-1cosh(Γl)Z
 	return abcd
 end

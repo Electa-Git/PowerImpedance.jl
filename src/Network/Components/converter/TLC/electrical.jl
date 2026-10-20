@@ -88,7 +88,7 @@ function initialvalues(block::ElectricalTLC; inputs, setpoint_pu=SetpointPU())
     i_d0 = (v_d * p_ac + v_q * q_ac) / V2
     i_q0 = (v_q * p_ac - v_d * q_ac) / V2
 
-    return (iΔ_d = i_d0, iΔ_q = i_q0)
+    return (i_d = i_d0, i_q = i_q0)
 end
 
 

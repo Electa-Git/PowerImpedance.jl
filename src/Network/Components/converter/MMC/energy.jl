@@ -8,19 +8,62 @@ function state_space!(F, x, meas, b::NoTotalEnergyControl, conv::AbstractMMC)
     return (iΣ_z_ref = 0,)
 end
 
-@with_kw struct TotalEnergyControl <: AbstractEnergyControl
+"""
+$(TYPEDEF)
+
+Regulate total arm energy with a zero-sequence current reference in \\[pu\\].
+The default arm-energy reference is `ref = 1` \\[pu\\].
+With `power_filter = NoFilter()`, feedforward uses the filtered AC-power
+measurement with unchanged state count. Other filters act independently on
+measured AC voltage-current
+products to avoid cascaded power-measurement filters.
+
+# Notes
+
+The current reference is
+
+```math
+i_{Σz}^{ref} = \\frac{K_p(W^{ref}-W)+ξ_W+P_f}{3V_{dc,f}},
+```
+
+where ``W`` denotes total arm energy, ``W^{ref}`` its reference and ``ξ_W``
+the PI integral state. Filtered active power ``P_f`` and filtered DC voltage
+``V_{dc,f}`` use the converter's per-unit bases, as do the energy and PI terms.
+
+$(TYPEDFIELDS)
+"""
+struct TotalEnergyControl{F<:AbstractMeasurementFilter} <: AbstractEnergyControl
+    "Energy PI gains in the converter per-unit system."
     pi_control::PIControl
-    ref::Float64 = 1
+    "Total arm-energy reference \\[pu\\]."
+    ref::Float64
+    "Independent filter for active-power feedforward. Cutoff in \\[rad/s\\]."
+    power_filter::F
+    # Legacy feedforward is independent even when its filter has no states.
+    _independent_power::Bool
 end
-statenames(::TotalEnergyControl) = (:ξ_Wtot,)
+
+function TotalEnergyControl(; pi_control::PIControl, ref::Real = 1,
+        power_filter::AbstractMeasurementFilter = NoFilter())
+    filter = measurement_filter_ss(power_filter)
+    return TotalEnergyControl{typeof(filter)}(pi_control, Float64(ref), filter,
+        !(filter isa NoFilter))
+end
+TotalEnergyControl(pi_control::PIControl, ref::Real) = TotalEnergyControl(; pi_control, ref)
+statenames(b::TotalEnergyControl) = (filter_statenames(:P_energy_f, b.power_filter)..., :ξ_Wtot)
+initialvalues(b::TotalEnergyControl; setpoint_pu=SetpointPU()) =
+    filter_initialvalues(b.power_filter, filter_statenames(:P_energy_f, b.power_filter), setpoint_pu.p_ac)
 
 function state_space!(F, x, meas, b::TotalEnergyControl, conv::AbstractMMC)
     (; ξ_Wtot, vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x
     (; v_dc_f, P_ac_f) = meas
+    power = b._independent_power ? meas.vG_d_f * meas.i_d_f + meas.vG_q_f * meas.i_q_f : P_ac_f
+    P_ac_f, idx = filter_step!(F, 1, x, b.power_filter,
+        filter_statenames(:P_energy_f, b.power_filter), power)
     # wΣz = (vCΔ_d^2 + vCΔ_q^2 + vCΔ_Zd^2 + vCΔ_Zq^2 + vCΣ_d^2 + vCΣ_q^2 + 2*vCΣ_z^2)/(2)
     wΣz = (vCΔ_d^2 + vCΔ_q^2 + vCΔ_Zd^2 + vCΔ_Zq^2 + vCΣ_d^2 + vCΣ_q^2 + 2*vCΣ_z^2)/2;
     
-    F[1] = b.pi_control.Ki * (b.ref - wΣz)
+    F[idx] = b.pi_control.Ki * (b.ref - wΣz)
     #iΣ_z_ref = (Kp_wΣ * (wΣz_ref - wΣz) + Ki_wΣ * xwΣz + Pac_f) / 3 / Vdc,
     return ( iΣ_z_ref = ( (b.pi_control.Kp * (b.ref - wΣz) + ξ_Wtot + P_ac_f) / 3 / v_dc_f ),)
 end
@@ -90,8 +133,11 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΔEne
     FΔ1 = [x.FΔ1_d, x.FΔ1_q, x.FΔ1_Zd, x.FΔ1_Zq]; FΔ2 = [x.FΔ2_d, x.FΔ2_q, x.FΔ2_Zd, x.FΔ2_Zq]; wΔ = -2 .* [wΔd, wΔq, wΔZd, wΔZq] # PSCAD implementation has a minus sign for wΔ, and *2 TODO check if it is a problem?
     J_dq = [ 0 1
             -1 0]
+    # Triplen reconstruction T = [cos(3θ) sin(3θ); sin(3θ) -cos(3θ)]
+    # gives (dT/dt)*T = -3ωbase*J_dq. Since the equations use -J_G*x,
+    # its triplen block is +3ωbase*J_dq for both notch and PI states.
     J_G = [ J_dq * conv.elec.ωbase zeros(2,2)
-            zeros(2,2) J_dq * (-3*conv.elec.ωbase)] # The minus sign comes from the convention used in Freytes thesis (could this be updated to a more consistent one?)
+            zeros(2,2) J_dq * (3*conv.elec.ωbase)]
 
     F[1:4] = FΔ2 - 2 * ζ * ω_n * (FΔ1 + wΔ) - J_G * FΔ1
     F[5:8] = -ω_n^2 * FΔ1 - J_G * FΔ2

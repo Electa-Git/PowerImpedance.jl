@@ -115,7 +115,7 @@ function convert!(data, elem::Element{<:Source}, ::Type{PMACDC}, key, buses, glo
 	dc_bus = first(buses)
 	_initialize_gendc_entry!(data, key, dc_bus, elem, global_dict)
 	busdc = data["busdc"][string(dc_bus)]
-	busdc["Vdc"] = elem.element_model.V * 1e3 / global_dict["V"]
+	busdc["Vdc"] = elem.element_model.V * 1e3 / (data["dcpol"] * global_dict["V"])
 	busdc["Vdcmax"] = 1.1 * busdc["Vdc"]
 	busdc["Vdcmin"] = 0.9 * busdc["Vdc"]
 	data["busdc"][string(dc_bus)] = set_bus_type_dc(busdc, 2)
@@ -185,7 +185,7 @@ function _initialize_gendc_entry!(data, key, dc_bus, elem, global_dict)
 	gendc["pgdcset"] = sp.Pdc / s_base
 	gendc["pmin"] = lm.P_min / s_base
 	gendc["pmax"] = lm.P_max / s_base
-	gendc["vgdc"] = sp.Vdc / v_base
+	gendc["vgdc"] = sp.Vdc / (data["dcpol"] * v_base)
 	gendc["model"] = 1
 	gendc["cost"] = 0
 	gendc["ncost"] = 0
@@ -281,7 +281,8 @@ function dc_source_power_flow!(
 
 
 
-	((data["busdc"])[string(dc_bus)])["Vdc"] = elem.element_model.V * 1e3 / global_dict["V"]
+	((data["busdc"])[string(dc_bus)])["Vdc"] = elem.element_model.V * 1e3 /
+	                                           (data["dcpol"] * global_dict["V"])
 	((data["busdc"])[string(dc_bus)])["Vdcmax"] =
 		1.1 * ((data["busdc"])[string(dc_bus)])["Vdc"]
 	((data["busdc"])[string(dc_bus)])["Vdcmin"] =

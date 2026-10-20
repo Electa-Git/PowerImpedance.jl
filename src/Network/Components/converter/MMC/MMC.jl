@@ -45,7 +45,7 @@ $(TYPEDFIELDS)
 end
 
 statenames(c::MMC) = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
-initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
+initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control; setpoint_pu)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
 inputnames(::MMC)                           = (:v_dc, :vG_d, :vG_q)
 outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q) 
 
@@ -57,7 +57,7 @@ outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q)
 end
 statenames(c::ΔdqControlGFL) = (statenames(c.outer_active)..., statenames(c.outer_reactive)..., statenames(c.occ)...)
 initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_active; setpoint_pu)...,
-                                                                initialvalues(c.outer_reactive; setpoint_pu)...,
+                                                                initialvalues(c.outer_reactive; setpoint_pu, conv)...,
                                                                 initialvalues(c.occ; inputs, conv)...) 
 
 @with_kw struct ΔdqControlGFM{R<:AbstractOuterReactiveControl, V<:AbstractVirtualImpedance, I<:AbstractInnerCurrentControl, } <: AbstractΔdqControl 
@@ -66,7 +66,7 @@ initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.vi)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; setpoint_pu)...,
+initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; setpoint_pu, conv)...,
                                                                 initialvalues(c.vi; inputs, conv)...,
                                                                 initialvalues(c.occ; inputs, conv)...) 
 
@@ -76,7 +76,7 @@ initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c
     ccsc::I2 = NoCirculatingCurrentSuppressionControl() # Circulating Current Suppression Control
 end
 statenames(c::ΣdqzControlTEC) = (statenames(c.tec)..., statenames(c.zscc)..., statenames(c.ccsc)...)
-initialvalues(c::ΣdqzControlTEC) = (; initialvalues(c.tec)..., initialvalues(c.zscc)..., initialvalues(c.ccsc)...) 
+initialvalues(c::ΣdqzControlTEC; setpoint_pu=SetpointPU()) = (; initialvalues(c.tec; setpoint_pu)..., initialvalues(c.zscc)..., initialvalues(c.ccsc)...)
 
 @with_kw struct ΣdqzControlLEC{E1<:AbstractEnergyControl, E2<:AbstractEnergyControl, I<:AbstractInnerCurrentControl} <: AbstractΣdqzControl
     wsigma::E1      # Sum Energy Control
@@ -84,7 +84,7 @@ initialvalues(c::ΣdqzControlTEC) = (; initialvalues(c.tec)..., initialvalues(c.
     ccc::I          # Circulating Current Control
 end
 statenames(c::ΣdqzControlLEC) = (statenames(c.wsigma)..., statenames(c.wdelta)..., statenames(c.ccc)...)
-initialvalues(c::ΣdqzControlLEC) = (; initialvalues(c.wsigma)..., initialvalues(c.wdelta)..., initialvalues(c.ccc)...) 
+initialvalues(c::ΣdqzControlLEC; setpoint_pu=SetpointPU()) = (; initialvalues(c.wsigma)..., initialvalues(c.wdelta)..., initialvalues(c.ccc)...)
 
 
 ################## State-space equations #####################
@@ -107,7 +107,7 @@ function state_space!(F, x, inputs, setpoint_pu::SetpointPU, c::MMC)
     # -- Electrical model -------------------------------------------------------------------------
     state_space_block!(F, x, (; out_modulation, sig_in, inputs), setpoint_pu, c.elec, c, i)
 
-    return nothing
+    return (; meas)
 end
 
 
@@ -170,7 +170,7 @@ function pftoinputs(c::MMC, setpoint::Setpoint)
     v_ac  = setpoint.Vac / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
     v_dc = setpoint.Vdc / c.elec.vDC_base
     p_ac = setpoint.Pac / c.elec.Sbase
-    q_ac = - setpoint.Qac / c.elec.Sbase   # TODO check if this minus sign is really needed/relevant
+    q_ac = setpoint.Qac / c.elec.Sbase
     p_dc = setpoint.Pdc / c.elec.Sbase
     
     vG_d = v_ac * cos(setpoint.θac)   # d component of the grid voltage in the grid frame  
@@ -226,7 +226,8 @@ control, and modulation blocks.
 - `delta_control`: AC-side differential-current control structure.
 - `sigma_control`: Internal sum/circulating-current control structure.
 - `modulation`: MMC modulation and delay model.
-- `setpoint`: AC/DC steady-state operating point.
+- `setpoint`: AC/DC steady-state operating point; `Vdc` is the pole-to-pole
+  DC voltage `\\[kV\\]`.
 - `limits`: Active- and reactive-power limits in the converter base.
 - `connection`: Whether NetworkBuilder includes the converter in the system.
 
@@ -277,25 +278,26 @@ function mmc(;
 end
 
 ##################### SI Scaling ######################################
-function SI_scale(elem::Element{<:MMC})
-    elec = elem.element_model.elec
-
-    
-
-    scale = ones(3,3)
-
+function _mmc_si_scale!(Y, elec::ElectricalMMC)
     iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
     iDCbase = elec.Sbase / elec.vDC_base
 
-    # row scaling = output current bases
-    scale[1, :]   .*= iDCbase
-    scale[2:3, :] .*= iACbase
+    Y[1:1, 1:1] .*= iDCbase
+    Y[1:1, 1:1] ./= elec.vDC_base
+    Y[1:1, 2:3] .*= iDCbase
+    Y[1:1, 2:3] ./= elec.vAC_base
+    Y[2:3, 1:1] .*= iACbase * elec.turnsRatio
+    Y[2:3, 1:1] ./= elec.vDC_base
 
-    # column scaling = input voltage bases
-    scale[:, 1]   ./= elec.vDC_base
-    scale[:, 2:3] ./= (elec.vAC_base / elec.turnsRatio)
+    # Equivalent AC-current/AC-voltage scaling preserves the rounding of the AC-AC block.
+    # The physical cross terms use the winding current base.
+    Y[2:3, 2:3] .*= iACbase
+    Y[2:3, 2:3] ./= elec.vAC_base / elec.turnsRatio
+    return Y
+end
 
-    return scale
+function SI_scale(elem::Element{<:MMC})
+    return _mmc_si_scale!(ones(3, 3), elem.element_model.elec)
 end
 
 
@@ -306,8 +308,17 @@ end
 equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC) =
     equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.delta_control)
 
-equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFL) =
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_active)
+function equilibriumequations!(
+        F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFL)
+    result = equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_active)
+    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_reactive)
+    return result
+end
+
+function equilibriumequations!(
+        F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFM)
+    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_reactive)
+end
 
 function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, ::OuterActiveVdcControl)
     idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
@@ -317,7 +328,7 @@ function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC,
     return y
 end
 
-pf_type_ac(::ΔdqControlGFL) = 1
+pf_type_ac(block::ΔdqControlGFL) = pf_type_ac(block.outer_reactive)
 pf_type_ac(block::ΔdqControlGFM) = pf_type_ac(block.outer_reactive)
 
 pf_type_dc(::VSEWithDamping) = 1
@@ -325,6 +336,10 @@ pf_type_dc(::NoSynchronization) = 1
 pf_type_dc(::PLLSynchronization) = 1
 pf_type_dc(block::ΔdqControlGFL, sync::AbstractSynchronization) = pf_type_dc(block.outer_active)
 pf_type_dc(::ΔdqControlGFM, sync::AbstractSynchronization) = pf_type_dc(sync)
+
+pf_dc_droop(block::ΔdqControlGFL, dcbase, powerbase, global_dict, data) =
+    pf_dc_droop(block.outer_active, dcbase, powerbase, global_dict, data)
+pf_dc_droop(::ΔdqControlGFM, dcbase, powerbase, global_dict, data) = 0.0
 
 
 """
@@ -367,9 +382,10 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
     end
     convdc["type_dc"] = pf_type_dc(conv.delta_control, conv.sync)
-    convdc["acq_droop"] = 0
-    convdc["kq_droop"] = 0.0
-    convdc["droop"] = 0.0
+    droop = pf_acq_droop(conv.delta_control.outer_reactive)
+    convdc["acq_droop"] = droop.enabled
+    convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
+    convdc["droop"] = pf_dc_droop(conv.delta_control, conv.elec.vDC_base, conv.elec.Sbase, global_dict, data)
     convdc["Vdcset"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
     convdc["Pacset"] = -elem.setpoint.Pac
     convdc["Pdcset"] = (!ismissing(elem.setpoint.Pdc) && !iszero(elem.setpoint.Pdc)) ? elem.setpoint.Pdc : elem.setpoint.Pac

@@ -172,7 +172,7 @@ function build_mmc_grid()
         voltageBase = Vm
 
         G3 = ac_source(pins = 3, setpoint = Setpoint(Vac = Vm*sqrt(2)), transformation = true)
-        G_DC = dc_source(pins = 1, setpoint = Setpoint(Vdc = Vdc / 2))
+        G_DC = dc_source(pins = 1, setpoint = Setpoint(Vdc = Vdc))
 
         DUT = dut
 

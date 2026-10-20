@@ -175,16 +175,16 @@ function eval_abcd(bbl :: Blackbox_line, s :: Complex)
     if bbl.data_type == :PSCAD || bbl.data_type == :LCMjl 
     # Case 1: User provides Z and Y directly, calculation of the ABCD matrix as in a normal transmission line!
     (Z, Y) = eval_parameters(bbl, s) #function eval_parameters receives in input variables c and s and gives in output the series impedance matrix Z and the shunt admittance matrix Y
-    γ = sqrt(convert(Array{Complex}, Z*Y)) # conversion of arrays product Z*Y and then Γ=sqrt(Z*Y) -> Simulator tutorial pag 19, bottom page (Calculations same as transmission line case)
+    γ = sqrt(convert(Array{ComplexF64}, Z*Y)) # conversion of arrays product Z*Y and then Γ=sqrt(Z*Y) -> Simulator tutorial pag 19, bottom page (Calculations same as transmission line case)
     # γ = sqrt(Z*Y) #TODO: This line is added to replace the one on the top, which was giving problems for single DC cables (no transformation). Need to see if this will cause any issue with other components, but so far so good.
     Yc = Z \ γ #Always ottom page 19 simulator_tutorial
     n = Int(size(Yc,1)) #Saves in n the number of rows present in the vector Yc
     abcd = zeros(Complex, 2n, 2n) #Creation of the ABCD matrix-> zeros matrix with dimension 2n*2n
 
     abcd[1:n, 1:n] = cosh(γ*bbl.length) #Eq 33 pag 19 simulator_tutorial. Matrix A[n*n]=cosh(Γl)
-    abcd[1:n,n+1:end] = Yc \ sinh(γ*bbl.length) #Eq 33 pag 19 simulator_tutorial. Matrix B[n*n]=Yc^-1sinh(Γl)
+    abcd[1:n,n+1:end] = γ \ (sinh(γ*bbl.length) * Z) # Matrix B[n*n]=Γ^-1sinh(Γl)Z
     abcd[n+1:end,1:n] = Yc * sinh(γ*bbl.length) #Eq 33 pag 19 simulator_tutorial. Matrix C[n*n]=Ycsinh(Γl)
-    abcd[n+1:end, n+1:end] = cosh(γ*bbl.length) #Eq 33 pag 19 simulator_tutorial. Matrix D[n*n]=cosh(Γl)
+    abcd[n+1:end, n+1:end] = Z \ (cosh(γ*bbl.length) * Z) # Matrix D[n*n]=Z^-1cosh(Γl)Z
 
     # Case 2: User provides the ABCD matrix directly, no calculation needed!
 

@@ -65,21 +65,30 @@ const HAS_BIBLIOGRAPHY = isfile(BIBLIOGRAPHY_FILE)
 
 const LITERATE_EXAMPLE_FILES = (
     "Connection_DSL.jl",
+    "Line_and_cable_models.jl",
+    "IEEE9_bus_impedance.jl",
+    "IEEE39bus.jl",
     "Network_Diagram.jl",
     "P2P_HVDC_ALT.jl",
+    "P2P_HVDC_stability.jl",
+    "MMC_harmonic_stability.jl",
+    "Energy_hub_MTDC.jl",
+    "GFM_weak_grid.jl",
+    "Converter_machine_interaction.jl",
     "IEEE39bus_Gridspace.jl",
     "SmallSignal_Gridspace.jl"
 )
 
-# P2P_HVDC_Gridspace currently depends on an obsolete converter-workflow
-# example. Keep its source for repair, but do not generate or execute it in
-# documentation CI until it is again compatible with the public package API.
+const PLAIN_LITERATE_EXAMPLE_FILES = ("PSCAD_tutorial.jl",)
+
+# Gridspace_uncertainty.jl and P2P_HVDC_Gridspace.jl are not part of the documentation build.
 
 const LITERATE_EXAMPLE_PATHS = [joinpath(EXAMPLES_SRC, file)
                                 for file in LITERATE_EXAMPLE_FILES
                                 if isfile(joinpath(EXAMPLES_SRC, file))]
 
-const HAS_LITERATE_EXAMPLES = !isempty(LITERATE_EXAMPLE_PATHS)
+const HAS_LITERATE_EXAMPLES = !isempty(LITERATE_EXAMPLE_PATHS) ||
+                              !isempty(PLAIN_LITERATE_EXAMPLE_FILES)
 
 if HAS_LITERATE_EXAMPLES
     using Literate
@@ -180,6 +189,16 @@ function build_example_pages()
         )
     end
 
+    for file in PLAIN_LITERATE_EXAMPLE_FILES
+        Literate.markdown(
+            joinpath(EXAMPLES_SRC, file),
+            EXAMPLES_DOC;
+            documenter = true,
+            codefence = "```julia" => "```",
+            postprocess = postprocess_literate_markdown
+        )
+    end
+
     tutorial_files = sort(
         filter(
         file -> endswith(file, ".md") && file != "index.md",
@@ -251,6 +270,7 @@ function build_pages()
         "Power-flow initialization" => "initialization.md",
         "Impedance and stability analysis" => "results.md",
         "Parametric and uncertainty studies" => "gridspace.md",
+        "PSCAD export and simulation" => "pscad.md",
         "Package extensions" => "package_extensions.md",
         "Fundamental concepts" => "manual/fundamental_concepts.md"
     ]
@@ -283,7 +303,9 @@ function build_pages()
         "Docstrings" => "developers/docstrings.md",
         "Conventions" => "developers/conventions.md",
         "Calculation parity" => "developers/calculation_parity.md",
-        "Network-model performance" => "developers/network_model_performance.md"
+        "Network-model performance" => "developers/network_model_performance.md",
+        "Legacy converter adapters" => "developers/legacy_converter_adapters.md",
+        "PSCAD mapping and station notes" => "developers/pscad_mapping.md"
     ]
 
     todo_page = copy_todo!()
@@ -356,3 +378,12 @@ if !running_in_ci()
 end
 
 @info "Finished docs build."
+
+# Makie frees every root scene in a task started by the scene's finalizer. When
+# such a task first runs during process exit, Julia compiles its code while the
+# runtime shuts down, which crashed the CI documentation build with signal 11.
+# Collect the scenes now, so these tasks run while the session is fully active.
+GC.gc(true)
+sleep(1)
+GC.gc(true)
+sleep(1)

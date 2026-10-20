@@ -36,6 +36,15 @@ Private = false
 
 Component and configuration Gridspaces use positional dispatch as `constructor(Grid; kwargs...)`. The keyword-only `constructor(; kwargs...)` method remains the scalar API. `NetworkBuilder` does not define a second constructor family.
 
+## `PowerImpedance.PSCAD`
+
+```@docs
+PowerImpedance.PSCAD
+```
+
+See [PSCAD export and simulation](pscad.md) for export, station execution and
+operating-point comparison.
+
 ## `PowerImpedance.UnitHandler`
 
 ```@autodocs

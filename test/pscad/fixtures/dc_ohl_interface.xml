@@ -1,0 +1,85 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Definition classid="UserCmpDefn" name="tline_interface" url="" view="false" instances="0" date="0" crc="6751493" id="1186657786" group="Transmission Line">
+  <!--PSCAD 5.1.0 station master.pslx SHA256 0d181e2f1c3eb57ae8019ba6d6311aee458dda02d080a8c4a92c26e6fdad5aeb; fields and scalar ports used by NC=2, View=0.-->
+  <form>
+    <category name="Configuration">
+      <parameter type="Text" name="Name" desc="Name (Same as Configuration)" group="_General" helpmode="Overwrite" allowemptystr="false" min="0" max="0">
+        <value>TLine</value>
+        <cond type="Enable" />
+        <help>Enter a name, which matches the associated transmission line configuration component (wire).</help>
+        <regex>(^((\w{1,31})(:)){0,1})\w{1,31}$</regex>
+        <error_msg>Segment name must not exceed 31 characters, nor contain any spaces or characters from the set: /\\*?\"&lt;&gt;| .~+-(){}[]!@#$%^&amp;.</error_msg>
+        <vis />
+      </parameter>
+      <parameter desc="Segment End Specification" name="send_recv" group="_General" type="Choice" helpmode="Overwrite" animate="false">
+        <value>0</value>
+        <cond type="Enable" />
+        <help>Specify which end of the transmission segment this is: Sending or receiving. It is only necessary to specify if the associated segment is part of a mutually coupled group of segments. Otherwise, you can leave this option as automatic. Specifying endpoints is necessary in order to ensure proper node/subsystem mapping and accurate runtime results.</help>
+        <vis />
+        <choice>0 = automatic</choice>
+        <choice>1 = sending</choice>
+        <choice>2 = receiving</choice>
+      </parameter>
+      <parameter type="Choice" name="NC" desc="Number of Equivalent Conductors" group="_General" helpmode="Append" animate="false">
+        <value>3</value>
+        <cond type="Enable" />
+        <help />
+        <vis />
+        <choice>1 = 1</choice>
+        <choice>2 = 2</choice>
+        <choice>3 = 3</choice>
+        <choice>4 = 4</choice>
+        <choice>5 = 5</choice>
+        <choice>6 = 6</choice>
+        <choice>7 = 7</choice>
+        <choice>8 = 8</choice>
+        <choice>9 = 9</choice>
+        <choice>10 = 10</choice>
+        <choice>11 = 11</choice>
+        <choice>12 = 12</choice>
+        <choice>13 = 13</choice>
+        <choice>14 = 14</choice>
+        <choice>15 = 15</choice>
+        <choice>16 = 16</choice>
+        <choice>17 = 17</choice>
+        <choice>18 = 18</choice>
+        <choice>19 = 19</choice>
+        <choice>20 = 20</choice>
+        <choice>21 = 21</choice>
+        <choice>22 = 22</choice>
+        <choice>23 = 23</choice>
+        <choice>24 = 24</choice>
+        <choice>25 = 25</choice>
+        <choice>26 = 26</choice>
+        <choice>27 = 27</choice>
+        <choice>28 = 28</choice>
+        <choice>29 = 29</choice>
+        <choice>30 = 30</choice>
+      </parameter>
+      <parameter type="Choice" name="View" desc="Graphics Display" group="_General" helpmode="Overwrite" animate="false">
+        <value>1</value>
+        <cond type="Enable">(true)</cond>
+        <help>Choose from Single line or Individual phases</help>
+        <vis />
+        <choice>0 = Individual phases view</choice>
+        <choice>1 = Single line view</choice>
+      </parameter>
+      <parameter desc="Sending Signal Dimension" name="dim_s" group="Control Signal Transfer" unit="" min="0" max="1024" content_type="Literal" type="Integer" helpmode="Append" intent="Input" dim="1" animate="false">
+        <value>0</value>
+        <cond type="Enable" />
+        <help>Enter the dimension of optional non-electrical signal to be transferred to the other end of the line</help>
+        <vis />
+      </parameter>
+      <parameter desc="Receiving Signal Dimension" name="dim_r" group="Control Signal Transfer" unit="" min="0" max="1024" content_type="Literal" type="Integer" helpmode="Append" intent="Input" dim="1" animate="false">
+        <value>0</value>
+        <cond type="Enable" />
+        <help>Enter the dimension of optional non-electrical signal to be received from the other end of the line</help>
+        <vis />
+      </parameter>
+    </category>
+  </form>
+  <svg>
+    <port model="Natural" name="A" x="-18" y="-18" dim="1" mode="Electrical" type="NonRemovable" internal="false">(NC&gt;=2)&amp;&amp;(View==0)</port>
+    <port model="Natural" name="C" x="-18" y="18" dim="1" mode="Electrical" type="NonRemovable" internal="false">(NC&gt;=2)&amp;&amp;(View==0)</port>
+  </svg>
+</Definition>

@@ -23,25 +23,26 @@
 @gridconstructor P.TLC P.TLC
 
 const _MMC_MODULAR_KEYS = Set((
-    :elec, :meas, :sync, :delta_control, :sigma_control, :modulation, :setpoint, :limits,
+    :elec, :meas, :sync, :delta_control, :sigma_control, :modulation, :limits,
 ))
 const _MMC_LEGACY_KEYS = Set((
     :ω₀, :P, :Q, :P_dc, :P_min, :P_max, :Q_min, :Q_max, :θ, :Vₘ, :Vᵈᶜ,
     :Lₐᵣₘ, :Rₐᵣₘ, :Cₐᵣₘ, :N, :Lᵣ, :Rᵣ, :gfm, :controls, :equilibrium,
     :A, :B, :C, :D, :timeDelay, :padeOrderNum, :padeOrderDen,
     :vACbase_LL_RMS, :Sbase, :vDCbase, :turnsRatio, :occ, :ccc, :pll, :p, :q, :dc,
+    :energy, :zcc, :vac, :vac_supp, :f_supp, :vdc_droop, :v_meas_filt, :i_meas_filt,
 ))
 
 const _TLC_MODULAR_KEYS = Set((
     :elec, :meas, :sync, :outerActive, :outerReactive, :innerVoltage,
-    :innerCurrent, :mod, :setpoint, :limits,
+    :innerCurrent, :mod, :limits,
 ))
 const _TLC_LEGACY_KEYS = Set((
     :ω₀, :P, :Q, :P_dc, :P_min, :P_max, :Q_min, :Q_max, :θ, :Vₘ, :Vᵈᶜ,
     :Lᵣ, :Rᵣ, :Lₐᵣₘ, :Rₐᵣₘ, :pll, :v_meas_filt, :i_meas_filt, :p, :q,
     :dc, :occ, :vac, :vac_supp, :controls, :equilibrium, :A, :B, :C, :D,
     :timeDelay, :padeOrderNum, :padeOrderDen, :vACbase_LL_RMS, :Sbase, :vDCbase,
-    :iDCbase, :vACbase, :iACbase, :debug,
+    :iDCbase, :vACbase, :iACbase, :debug, :f_supp, :vdc_droop,
 ))
 
 function _check_converter_keywords(kind::AbstractString, names, modular, legacy)
@@ -55,16 +56,66 @@ function _check_converter_keywords(kind::AbstractString, names, modular, legacy)
     return isempty(legacy_used) ? :modular : :legacy
 end
 
-function _legacy_setpoint(kwargs)
-    value(key, default) = haskey(kwargs, key) ? kwargs[key] : default
+# A controller reference supplies an absent setpoint. Explicit network values apply to
+# both power flow and the dynamic equilibrium.
+function _legacy_setpoint(kwargs, controls, kind::Symbol, elec, name::Symbol)
+    defaults = _legacy_setpoint_defaults(kwargs)
+    supplied = haskey(kwargs, :setpoint) ? kwargs.setpoint : P.Setpoint()
+    fields = fieldnames(P.Setpoint)
+    values = Dict{Symbol,Union{Float64,Missing}}(field => getfield(supplied, field) for field in fields)
+    for (key, field, scale) in ((:P, :Pac, 1.0), (:Q, :Qac, 1.0),
+            (:θ, :θac, 1.0), (:Vₘ, :Vac, sqrt(2)), (:P_dc, :Pdc, 1.0), (:Vᵈᶜ, :Vdc, 1.0))
+        ismissing(values[field]) && haskey(kwargs, key) && !ismissing(kwargs[key]) &&
+            (values[field] = Float64(kwargs[key]) * scale)
+    end
+    dcbase = kind === :mmc ? elec.vDC_base : elec.vDCbase
+    power_scale = kind === :mmc ? 1.0 : elec.Sbase
+    for (control, field, scale) in ((:p, :Pac, power_scale), (:q, :Qac, power_scale),
+            (:dc, :Vdc, dcbase), (:vac, :Vac, 1.0), (:vac_supp, :Vac, 1.0),
+            (:vdc_droop, :Vdc, dcbase))
+        ref = _legacy_reference(get(controls, control, nothing))
+        ref === nothing && continue
+        reference = ref * scale
+        if ismissing(values[field])
+            values[field] = reference
+        elseif values[field] != reference
+            @warn "converter :$name: legacy :$control reference $reference differs from setpoint $(values[field]); using setpoint" converter=name control=control legacy_reference=reference setpoint=values[field]
+        end
+    end
+    return P.Setpoint(; (field => ismissing(values[field]) ? getfield(defaults, field) : values[field] for field in fields)...)
+end
+
+function _legacy_setpoint_defaults(kwargs)
+    value(key, default) = haskey(kwargs, key) && !ismissing(kwargs[key]) ? kwargs[key] : default
     return P.Setpoint(
         Pac = Float64(value(:P, 0.0)),
         Qac = Float64(value(:Q, 0.0)),
         θac = Float64(value(:θ, 0.0)),
-        Vac = Float64(value(:Vₘ, 220.0)) * sqrt(2), # Convert RMS to peak 
+        Vac = Float64(value(:Vₘ, 220.0)) * sqrt(2), # Convert RMS to peak
         Pdc = Float64(value(:P_dc, 0.0)),
         Vdc = Float64(value(:Vᵈᶜ, 0.0)),
     )
+end
+
+function _legacy_reference(controller)
+    ref = _legacy_field(controller, :ref, nothing)
+    ref === nothing && return nothing
+    value = ref isa AbstractArray || ref isa Tuple ? first(ref) : ref
+    return iszero(value) ? nothing : Float64(value)
+end
+
+function _legacy_active_support(controls)
+    if haskey(controls, :vdc_droop)
+        haskey(controls, :f_supp) && throw(ArgumentError(
+            "legacy :vdc_droop and :f_supp require simultaneous active-power supports, which are not supported"))
+        controller = controls[:vdc_droop]
+        return P.DCVoltageSupportLag(K = _legacy_pi(controller).Kp,
+            ωc = Float64(_legacy_field(controller, :ω_f, 0.0)))
+    end
+    controller = get(controls, :f_supp, nothing)
+    return controller === nothing ? P.NoFrequencySupport() : P.FrequencySupportLag(
+        Kω = _legacy_pi(controller).Kp,
+        ωc = Float64(_legacy_field(controller, :ω_f, 0.0)))
 end
 
 function _legacy_limits(kwargs)
@@ -100,19 +151,20 @@ function _legacy_controls(kwargs)
             controls[name] = value
         end
     end
-    for name in (:pll, :v_meas_filt, :i_meas_filt, :p, :q, :dc, :occ, :vac, :vac_supp, :ccc, :vse, :vi)
+    for name in (:pll, :v_meas_filt, :i_meas_filt, :p, :q, :dc, :occ, :vac, :vac_supp, :energy, :zcc, :ccc, :f_supp, :vdc_droop, :vse, :vi)
         haskey(kwargs, name) && (controls[name] = kwargs[name])
     end
+    haskey(controls, :vdc_droop) && !haskey(controls, :p) && throw(ArgumentError(
+        "legacy :vdc_droop requires the :p active-power PI control"))
     return controls
 end
 
-function _legacy_tlc(kwargs)
+function _legacy_tlc(kwargs, name::Symbol = :tlc)
     value(key, default) = haskey(kwargs, key) ? kwargs[key] : default
     controls = _legacy_controls(kwargs)
     vac_filter = _legacy_filter(get(controls, :v_meas_filt, nothing))
     iac_filter = _legacy_filter(get(controls, :i_meas_filt, nothing))
-    vdc_filter = _legacy_filter(get(controls, :dc, nothing))
-    meas = value(:meas, P.Measurement(v_ac = vac_filter, i_ac = iac_filter, v_dc = vdc_filter))
+    meas = value(:meas, P.Measurement(v_ac = vac_filter, i_ac = iac_filter))
     sync = value(:sync, begin
         controller = get(controls, :pll, nothing)
         controller === nothing ? P.NoSynchronization() : P.PLLSynchronization(
@@ -120,18 +172,16 @@ function _legacy_tlc(kwargs)
         )
     end)
     outer_active = value(:outerActive, begin
-        if haskey(controls, :dc)
-            P.OuterActiveVdcControl(pi_ctrl = _legacy_pi(controls[:dc]))
-        elseif haskey(controls, :p)
-            P.OuterActivePowerControl(pi_ctrl = _legacy_pi(controls[:p]))
+        if haskey(controls, :p)
+            P.OuterActivePowerControl(pi_ctrl = _legacy_pi(controls[:p]), support = _legacy_active_support(controls))
+        elseif haskey(controls, :dc)
+            P.OuterActiveVdcControl(pi_ctrl = _legacy_pi(controls[:dc]), filter = _legacy_filter(controls[:dc]))
         else
             P.NoOuterActiveControl()
         end
     end)
     outer_reactive = value(:outerReactive, begin
-        if haskey(controls, :vac)
-            P.OuterReactiveVacControl(pi_ctrl = _legacy_pi(controls[:vac]))
-        elseif haskey(controls, :q) || haskey(controls, :vac_supp)
+        if haskey(controls, :q) || haskey(controls, :vac_supp)
             controller = haskey(controls, :q) ? controls[:q] : controls[:vac_supp]
             support = if haskey(controls, :vac_supp)
                 legacy = controls[:vac_supp]
@@ -143,6 +193,8 @@ function _legacy_tlc(kwargs)
                 P.NoVoltageSupport()
             end
             P.OuterReactiveQControl(pi_ctrl = _legacy_pi(controller), support = support)
+        elseif haskey(controls, :vac)
+            P.OuterReactiveVacControl(pi_ctrl = _legacy_pi(controls[:vac]), filter = _legacy_filter(controls[:vac]))
         else
             P.NoOuterReactiveControl()
         end
@@ -150,7 +202,7 @@ function _legacy_tlc(kwargs)
     inner_current = value(:innerCurrent, begin
         controller = get(controls, :occ, nothing)
         controller === nothing ? P.NoInnerCurrentControl() : P.InnerCurrentPIControl(
-            pi_ctrl = _legacy_pi(controller), filter = _legacy_filter(controller),
+            pi_ctrl = _legacy_pi(controller),
         )
     end)
     elec = haskey(kwargs, :elec) ? kwargs.elec : P.ElectricalTLC(
@@ -178,13 +230,13 @@ function _legacy_tlc(kwargs)
         innerVoltage = value(:innerVoltage, P.NoInnerVoltageControl()),
         innerCurrent = inner_current,
         mod = mod,
-        setpoint = value(:setpoint, _legacy_setpoint(kwargs)),
+        setpoint = _legacy_setpoint(kwargs, controls, :tlc, elec, name),
         limits = value(:limits, _legacy_limits(kwargs)),
         connection = value(:connection, true),
     )
 end
 
-function _legacy_mmc(kwargs)
+function _legacy_mmc(kwargs, name::Symbol = :mmc)
     value(key, default) = haskey(kwargs, key) ? kwargs[key] : default
     controls = _legacy_controls(kwargs)
     elec = P.ElectricalMMC(
@@ -218,32 +270,46 @@ function _legacy_mmc(kwargs)
             something(pll, P.NoSynchronization())
         end
     end)
-    outer_active = if haskey(controls, :dc)
-        P.OuterActiveVdcControl(pi_ctrl = _legacy_pi(controls[:dc]))
-    elseif haskey(controls, :p)
-        P.OuterActivePowerControl(pi_ctrl = _legacy_pi(controls[:p]))
+    outer_active = if haskey(controls, :p)
+        P.OuterActivePowerControl(pi_ctrl = _legacy_pi(controls[:p]), support = _legacy_active_support(controls))
+    elseif haskey(controls, :dc)
+        P.OuterActiveVdcControl(pi_ctrl = _legacy_pi(controls[:dc]), filter = _legacy_filter(controls[:dc]))
     else
         P.NoOuterActiveControl()
     end
-    outer_reactive = if haskey(controls, :vac)
-        P.OuterReactiveVacControl(pi_ctrl = _legacy_pi(controls[:vac]))
-    elseif haskey(controls, :q)
-        P.OuterReactiveQControl(pi_ctrl = _legacy_pi(controls[:q]))
+    outer_reactive = if haskey(controls, :q)
+        legacy = get(controls, :vac_supp, nothing)
+        # A first-order magnitude filter is exactly a lag on K*(Vref-V).
+        # Static and higher-order legacy droop require a different support block.
+        support = legacy !== nothing && _legacy_field(legacy, :n_f, 0) == 1 ?
+            P.VoltageSupportLag(K = _legacy_pi(legacy).Kp,
+                ωc = Float64(_legacy_field(legacy, :ω_f, 0.0))) : P.NoVoltageSupport()
+        P.OuterReactiveQControl(pi_ctrl = _legacy_pi(controls[:q]), support = support)
+    elseif haskey(controls, :vac)
+        P.OuterReactiveVacControl(pi_ctrl = _legacy_pi(controls[:vac]), filter = _legacy_filter(controls[:vac]))
     else
         P.NoOuterReactiveControl()
     end
     occ = haskey(controls, :occ) ? P.InnerCurrentPIControl(
         pi_ctrl = _legacy_pi(controls[:occ]), filter = _legacy_filter(controls[:occ]),
+        activate_ω_c_multiplication = false,
     ) : P.NoInnerCurrentControl()
     delta = value(:delta_control, P.ΔdqControlGFL(
         outer_active = outer_active,
         outer_reactive = outer_reactive,
         occ = occ,
     ))
+    energy = get(controls, :energy, nothing)
+    power_filter = P.measurement_filter_ss(_legacy_filter(get(controls, :q, nothing)))
+    tec = energy === nothing ? P.NoTotalEnergyControl() : P.TotalEnergyControl{typeof(power_filter)}(
+        _legacy_pi(energy), something(_legacy_reference(energy), 1.0), power_filter, true)
+    ccc = get(controls, :ccc, nothing)
+    ccc_ref = _legacy_field(ccc, :ref, [0.0])
+    refs = length(ccc_ref) == 1 && iszero(first(ccc_ref)) ? (0.0, 0.0) : Tuple(ccc_ref)
     sigma = value(:sigma_control, P.ΣdqzControlTEC(
-        tec = P.NoTotalEnergyControl(),
-        zscc = P.NoZeroSequenceCurrentControl(),
-        ccsc = P.NoCirculatingCurrentSuppressionControl(),
+        tec = tec,
+        zscc = haskey(controls, :zcc) ? P.ZeroSequenceCurrentControl(_legacy_pi(controls[:zcc])) : P.NoZeroSequenceCurrentControl(),
+        ccsc = ccc === nothing ? P.NoCirculatingCurrentSuppressionControl() : P.CirculatingCurrentSuppressionControl(_legacy_pi(ccc); ref = refs),
     ))
     modulation = value(:modulation, P.UncompensatedModulation(
         timeDelay = Float64(value(:timeDelay, 0.0)),
@@ -252,29 +318,41 @@ function _legacy_mmc(kwargs)
     ))
     return P.mmc(
         elec = elec,
-        meas = value(:meas, P.Measurement()),
+        meas = value(:meas, P.Measurement(
+            v_ac = _legacy_filter(get(controls, :v_meas_filt, nothing)),
+            i_ac = _legacy_filter(get(controls, :i_meas_filt, nothing)),
+            P_ac = _legacy_filter(get(controls, :p, nothing)),
+            Q_ac = _legacy_filter(get(controls, :q, nothing)))),
         sync = sync,
         delta_control = delta,
         sigma_control = sigma,
         modulation = modulation,
-        setpoint = value(:setpoint, _legacy_setpoint(kwargs)),
+        setpoint = _legacy_setpoint(kwargs, controls, :mmc, elec, name),
         limits = value(:limits, _legacy_limits(kwargs)),
         connection = value(:connection, true),
     )
 end
 
-struct _ConverterMaterializer{Kind,N} end
+struct _ConverterMaterializer{Kind,N}
+    name::Symbol
+end
+_ConverterMaterializer{Kind,N}() where {Kind,N} = _ConverterMaterializer{Kind,N}(Kind)
 
-function (::_ConverterMaterializer{:mmc,N})(values...) where {N}
-    kwargs = NamedTuple{N}(values)
-    route = _check_converter_keywords("mmc", N, _MMC_MODULAR_KEYS, _MMC_LEGACY_KEYS)
-    return route === :legacy ? _legacy_mmc(kwargs) : P.mmc(; kwargs...)
+_named_converter(name, value) = value
+function _named_converter(name::Symbol, space::Gridspace{P.Element,<:_ConverterMaterializer})
+    return typeof(space)(typeof(space.target)(name), space.axes, space.names, space.combine)
 end
 
-function (::_ConverterMaterializer{:tlc,N})(values...) where {N}
+function (target::_ConverterMaterializer{:mmc,N})(values...) where {N}
+    kwargs = NamedTuple{N}(values)
+    route = _check_converter_keywords("mmc", N, _MMC_MODULAR_KEYS, _MMC_LEGACY_KEYS)
+    return route === :legacy ? _legacy_mmc(kwargs, target.name) : P.mmc(; kwargs...)
+end
+
+function (target::_ConverterMaterializer{:tlc,N})(values...) where {N}
     kwargs = NamedTuple{N}(values)
     route = _check_converter_keywords("tlc", N, _TLC_MODULAR_KEYS, _TLC_LEGACY_KEYS)
-    return route === :legacy ? _legacy_tlc(kwargs) : P.tlc(; kwargs...)
+    return route === :legacy ? _legacy_tlc(kwargs, target.name) : P.tlc(; kwargs...)
 end
 
 function _mmc_gridspace(; kwargs...)

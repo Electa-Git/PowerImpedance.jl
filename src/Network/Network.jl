@@ -18,12 +18,21 @@ struct Network
 end
 
 """
+# A converged primal point belongs to one network and one mapped topology.
+mutable struct _PowerFlowStart
+    topology::Any
+    primal::Dict{String, Float64}
+end
+
+_PowerFlowStart() = _PowerFlowStart(nothing, Dict{String, Float64}())
+
 struct Network
     elements::OrderedDict{Symbol, Element}
     nets :: Dict{Symbol, Net}
     bus :: Dict{Symbol, Net}
     voltageBase :: Array{Float64,1} # Network line-ground RMS voltage base used in the power flow. This is necessary to get a matching power flow result in the presence of voltage controlling converters.
-    Network() = new(OrderedDict{Symbol, Element}(), Dict{Symbol, Net}(), Dict{Symbol, Vector{Int}}(), [220/sqrt(3)])
+    powerflow_start::_PowerFlowStart
+    Network() = new(OrderedDict{Symbol, Element}(), Dict{Symbol, Net}(), Dict{Symbol, Vector{Int}}(), [220/sqrt(3)], _PowerFlowStart())
 end
 
 ########################################################################################################################################################################################

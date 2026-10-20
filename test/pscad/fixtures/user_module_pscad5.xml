@@ -1,0 +1,43 @@
+<!-- Reference fragments from PSCAD-saved projects, not generated exports.
+     SG_Project.pscx lines 961-970; GFL_MMC_Validation.pscx lines 1218-1221
+     and 8659-8668. -->
+<project>
+  <definitions>
+    <Definition name="SG">
+      <form>
+        <category name="Configuration">
+          <parameter name="kp_f" desc="p-f proportional gain" type="Real" group="" helpmode="Append" content_type="Variable" intent="Input" dim="1" animate="false" unit="" min="-1E+308" max="1E+308">
+            <value><![CDATA[20]]></value>
+            <cond><![CDATA[true]]></cond>
+            <vis><![CDATA[true]]></vis>
+            <help><![CDATA[]]></help>
+          </parameter>
+        </category>
+      </form>
+      <svg viewBox="-200 -200 200 200" size="4">
+        <port model="Natural" name="abc" x="-54" y="0" dim="3" mode="Electrical" type="NonRemovable" internal="false"><![CDATA[true]]></port>
+      </svg>
+    </Definition>
+    <Definition name="MMC_Controller">
+      <svg viewBox="-200 -200 200 200" size="4">
+        <port model="Transfer" name="Iodref" x="54" y="-18" dim="1" mode="Output" type="Real" internal="false"><![CDATA[true]]></port>
+        <port model="Transfer" name="Pmeas" x="-54" y="0" dim="1" mode="Input" type="Real" internal="false"><![CDATA[true]]></port>
+        <port model="Transfer" name="Pref" x="-54" y="-18" dim="1" mode="Input" type="Real" internal="false"><![CDATA[true]]></port>
+      </svg>
+    </Definition>
+    <Definition name="Untitled_6">
+      <schematic>
+        <User id="803548035" classid="UserCmp" defn="master:import" x="216" y="162" h="25" w="61" z="10" q="4" orient="0" link="-1" disable="false">
+          <paramlist name="" link="-1" crc="117509081">
+            <param name="Name" value="Kd" />
+          </paramlist>
+        </User>
+        <User id="333815392" classid="UserCmp" defn="master:import" x="216" y="198" h="25" w="61" z="20" q="4" orient="0" link="-1" disable="false">
+          <paramlist name="" link="-1" crc="117509081">
+            <param name="Name" value="wf" />
+          </paramlist>
+        </User>
+      </schematic>
+    </Definition>
+  </definitions>
+</project>

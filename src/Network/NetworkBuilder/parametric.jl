@@ -28,6 +28,7 @@ function (::_NamedTupleMaterializer{Names})(values...)::NamedTuple{Names} where 
 end
 
 function _namedtuple_gridspace(values::NamedTuple{Names}) where {Names}
+    values = NamedTuple{Names}(map(_named_converter, Names, Tuple(values)))
     return _lift_gridspace(
         NamedTuple{Names},
         _NamedTupleMaterializer{Names}(),

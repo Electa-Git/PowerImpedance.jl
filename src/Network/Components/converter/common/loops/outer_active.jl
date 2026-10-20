@@ -4,7 +4,7 @@
 Shared active-power outer-loop blocks.
 
 These blocks compute the d-axis current reference used by downstream voltage or
-current loops. Optional frequency support is represented as a nested state-space
+current loops. Optional active-power support is represented as a nested state-space
 block so the outer loop remains composable.
 =#
 
@@ -14,6 +14,7 @@ export AbstractOuterActiveControl,
        NoFrequencySupport,
        OuterActivePowerControl,
        FrequencySupportLag,
+       DCVoltageSupportLag,
        OuterActiveVdcControl
 
 """
@@ -97,7 +98,66 @@ function state_space!(F, x, sync, block::FrequencySupportLag)
 end
 
 """
-Active-power PI controller with optional frequency support.
+$(TYPEDEF)
+
+Subtract lagged DC-voltage support from the active-power reference.
+Measured voltage and the solved reference use the declared DC-voltage base.
+
+# Notes
+
+```math
+\\dot{\\xi}_{vdc,supp}=\\omega_c[K(v_{dc,ref}-v_{dc,f})-\\xi_{vdc,supp}],
+\\qquad p_{ref,eff}=p_{ref}-\\xi_{vdc,supp}.
+```
+
+Here ``v_{dc,ref}`` denotes the solved DC-voltage reference, ``v_{dc,f}``
+the filtered DC voltage and ``\\xi_{vdc,supp}`` the lag state. The effective
+active-power reference ``p_{ref,eff}`` uses the converter's pu base, as do
+voltages and the lag state. The cutoff ``\\omega_c`` has units \\[rad/s\\]
+and ``K`` is droop gain in pu power per pu voltage.
+
+$(TYPEDFIELDS)
+"""
+@with_kw struct DCVoltageSupportLag <: AbstractFrequencySupport
+    "Droop gain in pu active power per pu DC voltage."
+    K::Float64 = 0.0
+    "First-order low-pass cutoff in \\[rad/s\\]."
+    ωc::Float64 = 0.0
+end
+
+statenames(::DCVoltageSupportLag) = (:ξ_vdc_supp,)
+initialvalues(::DCVoltageSupportLag; kwargs...) = (; ξ_vdc_supp = 0.0)
+
+function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::DCVoltageSupportLag)
+    F[1] = block.ωc * (block.K * (setpoint_pu.v_dc - inputs.meas.v_dc_f) - x.ξ_vdc_supp)
+    return (; P_ac_support = -x.ξ_vdc_supp)
+end
+
+state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::AbstractFrequencySupport) =
+    state_space!(F, x, inputs.sync, block)
+
+"""
+$(TYPEDSIGNATURES)
+
+Return the inverse DC-voltage droop slope on the power-flow system base.
+Voltage references and slopes use the declared converter DC-voltage base.
+
+# Arguments
+
+- Active-control model. The default method gives a zero-valued slope.
+- `dcbase`: DC-voltage base of the converter \\[kV\\].
+- `powerbase`: Power base of the converter \\[MVA\\].
+- `global_dict`: Power-flow system bases.
+- `data`: Power-flow converter fields.
+
+# Returns
+
+- Inverse droop slope in system pu DC voltage per pu power.
+"""
+pf_dc_droop(::AbstractOuterActiveControl, dcbase, powerbase, global_dict, data) = 0.0
+
+"""
+Regulate active power with PI control and optional frequency or DC-voltage support.
 
 $(TYPEDEF)
 
@@ -122,6 +182,11 @@ function OuterActivePowerControl(;
     return OuterActivePowerControl{typeof(support)}(pi_ctrl, support)
 end
 
+function pf_dc_droop(block::OuterActivePowerControl{DCVoltageSupportLag}, dcbase, powerbase, global_dict, data)
+    return (1 / block.support.K) * (dcbase / (data["dcpol"] * global_dict["V"] / 1e3)) /
+        (powerbase / (global_dict["S"] * 1e-6))
+end
+
 """
 Return active-power controller state names.
 
@@ -142,9 +207,9 @@ Evaluate active-power control and its support dynamics.
 $(SIGNATURES)
 """
 function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActivePowerControl, conv::AbstractConverter)
-    (; meas, sync) = inputs
+    (; meas) = inputs
     ns = n_states(block.support)
-    support = state_space!(@view(F[1:ns]), x, sync, block.support)
+    support = state_space!(@view(F[1:ns]), x, inputs, setpoint_pu, block.support)
     P_ac_f = meas.P_ac_f
 
     Peff_ref = setpoint_pu.p_ac + support.P_ac_support
@@ -156,6 +221,9 @@ end
 
 """
 DC-voltage outer-loop controller that produces a d-axis current reference.
+Only this controller filters its measured DC voltage. Shared measurement,
+modulation and energy feedforward use their own signals.
+`NoFilter()` preserves the zero-state measurement and PI equations.
 
 $(TYPEDEF)
 
@@ -163,25 +231,81 @@ $(TYPEDEF)
 
 $(TYPEDFIELDS)
 """
-@with_kw struct OuterActiveVdcControl <: AbstractOuterActiveControl
-    pi_ctrl::PIControl = PIControl()
+struct OuterActiveVdcControl{F<:AbstractMeasurementFilter} <: AbstractOuterActiveControl
+    "Voltage PI gains in the converter per-unit system."
+    pi_ctrl::PIControl
+    "Local filter for measured DC voltage. Cutoff in \\[rad/s\\]."
+    filter::F
 end
+
+"""
+$(TYPEDSIGNATURES)
+
+Construct a DC-voltage PI controller with a local measurement filter.
+
+# Arguments
+
+- `pi_ctrl`: PI gains in the converter per-unit system. Default: `PIControl()`.
+- `filter`: Measured-voltage filter. Default: `NoFilter()`.
+
+# Returns
+
+- `OuterActiveVdcControl` with a state-space realization of the supplied filter.
+"""
+function OuterActiveVdcControl(; pi_ctrl::PIControl = PIControl(),
+        filter::AbstractMeasurementFilter = NoFilter())
+    realized = measurement_filter_ss(filter)
+    return OuterActiveVdcControl{typeof(realized)}(pi_ctrl, realized)
+end
+OuterActiveVdcControl(pi_ctrl::PIControl) = OuterActiveVdcControl(; pi_ctrl)
 
 """
 Return DC-voltage controller state names.
 
 $(SIGNATURES)
 """
-statenames(::OuterActiveVdcControl) = (:ξ_v_dc,)
+statenames(block::OuterActiveVdcControl) =
+    (filter_statenames(:v_dc_ctrl_f, block.filter)..., :ξ_v_dc)
+
+"""
+$(TYPEDSIGNATURES)
+
+Initialize local DC-voltage filter states at the solved reference.
+
+# Arguments
+
+- `block`: DC-voltage controller with its local filter.
+- `setpoint_pu`: Converter operating point in \\[pu\\]. Default: `SetpointPU()`.
+
+# Returns
+
+- Named tuple of filter initial values in \\[pu\\].
+"""
+function initialvalues(block::OuterActiveVdcControl; setpoint_pu=SetpointPU())
+    return filter_initialvalues(block.filter,
+        filter_statenames(:v_dc_ctrl_f, block.filter), setpoint_pu.v_dc)
+end
 
 """
 Evaluate DC-voltage PI control.
 
 $(SIGNATURES)
+
+# Notes
+
+```math
+\\dot{\\xi}_{vdc}=K_i(v_{dc,ref}-v_f),\\qquad
+i_{d,ref}=-[K_p(v_{dc,ref}-v_f)+\\xi_{vdc}],
+```
+
+where ``v_f`` is the locally filtered measured DC voltage and ``v_{dc,ref}``
+is the solved reference in pu.
 """
 function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActiveVdcControl, conv::AbstractConverter)
     (; meas) = inputs
-    F[1] = block.pi_ctrl.Ki * (setpoint_pu.v_dc - meas.v_dc_f)
+    v_dc, idx = filter_step!(F, 1, x, block.filter,
+        filter_statenames(:v_dc_ctrl_f, block.filter), meas.v_dc_f)
+    F[idx] = block.pi_ctrl.Ki * (setpoint_pu.v_dc - v_dc)
 
-    return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (setpoint_pu.v_dc - meas.v_dc_f) + x.ξ_v_dc), )
+    return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (setpoint_pu.v_dc - v_dc) + x.ξ_v_dc), )
 end

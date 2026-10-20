@@ -1,0 +1,111 @@
+<SavedMMCEnergyPrimitives>
+  <!-- local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:3604-3610; master:const -->
+  <User classid="UserCmp" id="1030802919" name="master:const" x="1386" y="486" w="76" h="22" z="40" orient="4" defn="master:const" link="-1" q="4" disable="false">
+    <paramlist name="" link="-1" crc="10628662">
+      <param name="Name" value="" />
+      <param name="Value" value="640" />
+      <param name="Dim" value="1" />
+    </paramlist>
+  </User>
+  <!-- local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:2192-2205; master:sumjct, dq2abc -->
+  <User classid="UserCmp" defn="master:sumjct" id="316486492" x="396" y="180" w="80" h="64" z="200" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="16672553">
+            <param name="DPath" value="1"/>
+            <param name="A" value="0"/>
+            <param name="B" value="0"/>
+            <param name="C" value="0"/>
+            <param name="D" value="1"/>
+            <param name="E" value="0"/>
+            <param name="F" value="-1"/>
+            <param name="G" value="0"/>
+            <param name="Name" value=""/>
+            <param name="Dim" value="1"/>
+          </paramlist>
+        </User>
+  <!-- local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:2493-2501; master:gain, dq2abc -->
+  <User classid="UserCmp" defn="master:gain" id="1672035466" x="540" y="396" w="80" h="36" z="170" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="34173863">
+            <param name="G" value="qaxis"/>
+            <param name="COM" value="Gain"/>
+            <param name="Dim" value="1"/>
+            <param name="Name" value=""/>
+            <param name="DPath" value="1"/>
+          </paramlist>
+        </User>
+  <!-- local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:69814-69829; master:integral, VSM_swing_equation_1 -->
+  <User classid="UserCmp" defn="master:integral" id="1537582647" x="1008" y="414" w="80" h="61" z="250" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="126573893">
+            <param name="Extrn" value="0"/>
+            <param name="Reset" value="0"/>
+            <param name="Mthd" value="0"/>
+            <param name="noname5" value=""/>
+            <param name="INTR" value="0"/>
+            <param name="INTCLR" value="0"/>
+            <param name="T" value="1"/>
+            <param name="Yo" value="1"/>
+            <param name="YRst" value="0.0"/>
+            <param name="YHi" value="100"/>
+            <param name="YLo" value="-100"/>
+            <param name="Name" value=""/>
+          </paramlist>
+        </User>
+  <!-- local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:65904-65910; master:div, VI_VSM_CCQSEM_1 -->
+  <User classid="UserCmp" defn="master:div" id="1999674273" x="684" y="252" w="80" h="60" z="250" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="74852640">
+            <param name="Dim" value="1"/>
+            <param name="Name" value=""/>
+            <param name="DPath" value="1"/>
+          </paramlist>
+        </User>
+  <!-- local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:65832-65838; master:mult, VI_VSM_CCQSEM_1 -->
+  <User classid="UserCmp" defn="master:mult" id="1840256040" x="504" y="360" w="80" h="56" z="200" orient="6" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="29714769">
+            <param name="DPath" value="1"/>
+            <param name="Name" value=""/>
+            <param name="Dim" value="1"/>
+          </paramlist>
+        </User>
+  <!-- local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:66570-66578; master:trig, Rotation_dq -->
+  <User classid="UserCmp" defn="master:trig" id="200266086" x="576" y="234" w="80" h="36" z="60" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="54546159">
+            <param name="Type" value="2"/>
+            <param name="Mode" value="0"/>
+            <param name="COM" value="Trig-Func"/>
+            <param name="Dim" value="1"/>
+            <param name="Name" value=""/>
+          </paramlist>
+        </User>
+  <!-- local/GFM-MMC/FFVI-VSM/PSCAD model/FFVI.pscx:70421-70427; master:square, Wsigma_computation_1_2 -->
+  <User classid="UserCmp" defn="master:square" id="1552329972" x="414" y="72" w="80" h="36" z="30" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="123652463">
+            <param name="Dim" value="3"/>
+            <param name="Name" value=""/>
+            <param name="DPath" value="1"/>
+          </paramlist>
+        </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:8950-8961; master:tdelay, Untitled -->
+  <User classid="UserCmp" defn="master:tdelay" id="1976853166" x="144" y="36" w="80" h="36" z="50" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="21496410">
+            <param name="T" value="t_d"/>
+            <param name="N" value="100"/>
+            <param name="Intp" value="0"/>
+            <param name="COM" value="Delay"/>
+            <param name="Dim" value="1"/>
+            <param name="Init" value="0"/>
+            <param name="X0" value="0.0"/>
+            <param name="Name" value=""/>
+          </paramlist>
+        </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:1388-1398; master:compare, PControl_1 -->
+  <User classid="UserCmp" defn="master:compare" id="2040835190" x="954" y="288" w="80" h="59" z="90" orient="0" link="-1" q="4" disable="false">
+          <paramlist link="-1" name="" crc="18432996">
+            <param name="X" value="t_rst"/>
+            <param name="OL" value="1"/>
+            <param name="OH" value="0"/>
+            <param name="INTR" value="0"/>
+            <param name="Dim" value="1"/>
+            <param name="conv" value="0"/>
+            <param name="Name" value=""/>
+          </paramlist>
+        </User>
+</SavedMMCEnergyPrimitives>

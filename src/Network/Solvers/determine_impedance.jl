@@ -36,7 +36,7 @@ using PowerImpedance
 import PowerImpedance: @network
 
 net = @network begin
-    vs = dc_source(voltage = 500e3)
+    vs = dc_source(setpoint = Setpoint(Vdc = 1000.0))
     c = cable(length = 100e3, positions = [(0,1)], earth_parameters = (1,1,1),
     C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8), C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8),
     C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10),

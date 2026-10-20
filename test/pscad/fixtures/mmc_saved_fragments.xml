@@ -1,0 +1,205 @@
+<saved_fragments source="local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx">
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:7624 (ArmAvg_1) -->
+  <User classid="UserCmp" name="master:ammeter" id="129999998" x="828" y="522" w="28" h="44" z="50" orient="1" defn="master:ammeter" link="-1" q="4" disable="false">
+    <paramlist link="-1" name="" crc="119030036">
+      <param name="Name" value="I" />
+    </paramlist>
+  </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:7633 (ArmAvg_1) -->
+  <User classid="UserCmp" name="master:source_1" id="757669658" x="828" y="450" w="56" h="80" z="120" orient="1" defn="master:source_1" link="-1" q="4" disable="false">
+    <paramlist link="-1" name="" crc="49505675">
+      <param name="Name" value="Source1" />
+      <param name="Type" value="6" />
+      <param name="Grnd" value="0" />
+      <param name="Spec" value="0" />
+      <param name="Cntrl" value="1" />
+      <param name="AC" value="0" />
+      <param name="Vm" value="132.79 [kV]" />
+      <param name="Tc" value="0.00 [s]" />
+      <param name="Ph" value="0.0 [deg]" />
+      <param name="f" value="60.0 [Hz]" />
+      <param name="P" value="0.0 [MW]" />
+      <param name="Q" value="0.0 [MVAR]" />
+      <param name="R" value="1.0 [ohm]" />
+      <param name="Rs" value="1.0 [ohm]" />
+      <param name="Rp" value="1.0 [ohm]" />
+      <param name="Lp" value="0.1 [H]" />
+      <param name="R_" value="1.0 [ohm]" />
+      <param name="L" value="0.1 [H]" />
+      <param name="C" value="1.0 [uF]" />
+      <param name="L_" value="0.1 [H]" />
+      <param name="C_" value="1.0 [uF]" />
+      <param name="CUR" value="" />
+    </paramlist>
+  </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:7659 (ArmAvg_1) -->
+  <User classid="UserCmp" name="master:xnode" id="746522218" x="828" y="594" w="26" h="33" z="1" orient="0" defn="master:xnode" link="-1" q="4" disable="false">
+    <paramlist link="-1" name="" crc="37312176">
+      <param name="Name" value="neg" />
+    </paramlist>
+  </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:7685 (ArmAvg_1) -->
+  <User classid="UserCmp" defn="master:mult" id="1304934582" x="486" y="450" w="80" h="56" z="80" orient="0" link="-1" q="4" disable="false">
+    <paramlist link="-1" name="" crc="29714769">
+      <param name="DPath" value="1" />
+      <param name="Name" value="" />
+      <param name="Dim" value="1" />
+    </paramlist>
+  </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:7692 (ArmAvg_1) -->
+  <User classid="UserCmp" defn="master:div" id="1919250712" x="558" y="450" w="80" h="60" z="90" orient="0" link="-1" q="4" disable="false">
+    <paramlist link="-1" name="" crc="74852640">
+      <param name="Dim" value="1" />
+      <param name="Name" value="" />
+      <param name="DPath" value="1" />
+    </paramlist>
+  </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:7699 (ArmAvg_1) -->
+  <User classid="UserCmp" defn="master:integral" id="231674745" x="630" y="450" w="80" h="61" z="100" orient="0" link="-1" q="4" disable="false">
+    <paramlist link="-1" name="" crc="126573893">
+      <param name="Extrn" value="0" />
+      <param name="Reset" value="0" />
+      <param name="Mthd" value="0" />
+      <param name="noname5" value="" />
+      <param name="INTR" value="0" />
+      <param name="INTCLR" value="0" />
+      <param name="T" value="1" />
+      <param name="Yo" value="640" />
+      <param name="YRst" value="0.0" />
+      <param name="YHi" value="100000 [kV]" />
+      <param name="YLo" value="-100000 [kV]" />
+      <param name="Name" value="" />
+    </paramlist>
+  </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:11347 (MMC_Averaged_2) -->
+  <User classid="UserCmp" id="1720250564" name="master:inductor" x="810" y="864" w="31" h="60" z="1" orient="1" defn="master:inductor" link="-1" q="4" disable="false">
+    <paramlist name="" link="-1" crc="666653">
+      <param name="Name" value="" />
+      <param name="L" value="50e-3 [H]" />
+    </paramlist>
+  </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:11353 (MMC_Averaged_2) -->
+  <User classid="UserCmp" id="1378907742" name="master:resistor" x="810" y="918" w="33" h="68" z="1" orient="1" defn="master:resistor" link="-1" q="4" disable="false">
+    <paramlist name="" link="-1" crc="10119665">
+      <param name="Name" value="" />
+      <param name="R" value="1.07 [ohm]" />
+    </paramlist>
+  </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:11813 (MMC_Averaged_2) -->
+  <User classid="UserCmp" defn="master:xfmr-3p2w" id="1687624723" x="594" y="1026" w="98" h="61" z="370" orient="0" link="-1" q="4" disable="false">
+    <paramlist link="-1" name="" crc="86463138">
+      <param name="Name" value="" />
+      <param name="Tmva" value="1000" />
+      <param name="f" value="50.0 [Hz]" />
+      <param name="YD1" value="0" />
+      <param name="YD2" value="0" />
+      <param name="Lead" value="1" />
+      <param name="Xl" value="Ltrafo_pu" />
+      <param name="Ideal" value="1" />
+      <param name="NLL" value="0.0 [pu]" />
+      <param name="CuL" value="Rtrafo_pu" />
+      <param name="Tap" value="0" />
+      <param name="View" value="1" />
+      <param name="Dtls" value="0" />
+      <param name="V1" value="380" />
+      <param name="V2" value="333" />
+      <param name="Enab" value="0" />
+      <param name="Sat" value="0" />
+      <param name="Xair" value="0.2 [pu]" />
+      <param name="Tdc" value="0.0 [s]" />
+      <param name="Xknee" value="1.17 [pu]" />
+      <param name="Txk" value="0.0 [s]" />
+      <param name="Im1" value="2.0 [%]" />
+      <param name="ILA1" value="" />
+      <param name="ILB1" value="" />
+      <param name="ILC1" value="" />
+      <param name="IAB1" value="" />
+      <param name="IBC1" value="" />
+      <param name="ICA1" value="" />
+      <param name="ILA2" value="" />
+      <param name="ILB2" value="" />
+      <param name="ILC2" value="" />
+      <param name="IAB2" value="" />
+      <param name="IBC2" value="" />
+      <param name="ICA2" value="" />
+      <param name="IMA" value="" />
+      <param name="IMB" value="" />
+      <param name="IMC" value="" />
+      <param name="FLXA" value="" />
+      <param name="FLXB" value="" />
+      <param name="FLXC" value="" />
+      <param name="IMAB" value="" />
+      <param name="IMBC" value="" />
+      <param name="IMCA" value="" />
+      <param name="FLXAB" value="" />
+      <param name="FLXBC" value="" />
+      <param name="FLXCA" value="" />
+      <param name="Hys" value="0" />
+      <param name="Fremn1" value="0.0" />
+      <param name="Fremn2" value="0.0" />
+      <param name="Fremn3" value="0.0" />
+      <param name="LW2" value="10" />
+      <param name="Bnom" value="1.7" />
+      <param name="material" value="1" />
+      <param name="C" value="0.1" />
+      <param name="K" value="5.0e-5" />
+      <param name="BETA" value="0.96" />
+      <param name="alpha" value="1.325e-5" />
+      <param name="Msat" value="1.72e6" />
+      <param name="F1" value="2730" />
+      <param name="F2" value="3209" />
+      <param name="F3" value="20294" />
+      <param name="Fb" value="2" />
+      <param name="HA1" value="" />
+      <param name="HB1" value="" />
+      <param name="HC1" value="" />
+      <param name="BA1" value="" />
+      <param name="BB1" value="" />
+      <param name="BC1" value="" />
+      <param name="HAB1" value="" />
+      <param name="HBC1" value="" />
+      <param name="HCA1" value="" />
+      <param name="BAB1" value="" />
+      <param name="BBC1" value="" />
+      <param name="BCA1" value="" />
+    </paramlist>
+  </User>
+  <!-- local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:686 (Main) -->
+  <User classid="UserCmp" defn="master:source_3" id="498273108" x="576" y="252" w="28" h="105" z="1" orient="1" link="-1" layer="" q="4" disable="false">
+    <paramlist link="-1" name="" crc="111699524">
+      <param name="Name" value="Source 1" />
+      <param name="Type" value="1" />
+      <param name="Grnd" value="1" />
+      <param name="View" value="1" />
+      <param name="Spec" value="0" />
+      <param name="VCtrl" value="0" />
+      <param name="FCtrl" value="0" />
+      <param name="Vm" value="380 [kV]" />
+      <param name="Tc" value="0.0 [s]" />
+      <param name="f" value="50.0 [Hz]" />
+      <param name="Ph" value="90 [deg]" />
+      <param name="Vbase" value="380.0 [kV]" />
+      <param name="Sbase" value="1000.0 [MVA]" />
+      <param name="Vpu" value="1.0 [pu]" />
+      <param name="PhT" value="0.0 [deg]" />
+      <param name="Pinit" value="0.0 [pu]" />
+      <param name="Qinit" value="0.0 [pu]" />
+      <param name="R" value="0.5 [ohm]" />
+      <param name="Rs" value="0.18 [ohm]" />
+      <param name="Rp" value="1.0 [ohm]" />
+      <param name="Lp" value="0.003 [H]" />
+      <param name="R_" value="0.5 [ohm]" />
+      <param name="L" value="0 [H]" />
+      <param name="C" value="0 [uF]" />
+      <param name="L_" value="0.1 [H]" />
+      <param name="C_" value="1.0 [uF]" />
+      <param name="IA" value="" />
+      <param name="IB" value="" />
+      <param name="IC" value="" />
+      <param name="Iabc" value="" />
+      <param name="qset" value="0" />
+      <param name="PF_QMIN" value="-1.0" />
+      <param name="PF_QMAX" value="1.0" />
+    </paramlist>
+  </User>
+</saved_fragments>

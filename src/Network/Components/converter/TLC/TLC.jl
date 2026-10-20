@@ -86,8 +86,8 @@ function initialvalues(c::TLC; inputs, setpoint_pu=SetpointPU())
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
         v_dc = inputs.v_dc,
-        i_d = elec_init.iΔ_d,
-        i_q = elec_init.iΔ_q,
+        i_d = elec_init.i_d,
+        i_q = elec_init.i_q,
         i_dc = 0.0,             #TODO improve this initialization?
         θ   = setpoint_pu.θ_ac
     )
@@ -137,7 +137,7 @@ function pftoinputs(c::TLC, setpoint::Setpoint)
     v_dc = setpoint.Vdc / c.elec.vDCbase
 
     p_ac = setpoint.Pac / c.elec.Sbase
-    q_ac = - setpoint.Qac / c.elec.Sbase  
+    q_ac = setpoint.Qac / c.elec.Sbase
     p_dc = setpoint.Pdc / c.elec.Sbase
     
     return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),
@@ -189,8 +189,11 @@ Evaluate TLC equilibrium equations.
 
 $(SIGNATURES)
 """
-equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC) =
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerActive)
+function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC)
+    result = equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerActive)
+    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerReactive)
+    return result
+end
 
 """
 Evaluate TLC equilibrium equations for DC-voltage control.
@@ -272,7 +275,8 @@ control, and modulation blocks.
 - `innerVoltage`: Inner voltage-control block.
 - `innerCurrent`: Inner current-control block.
 - `mod`: Modulation and delay block.
-- `setpoint`: AC/DC steady-state operating point.
+- `setpoint`: AC/DC steady-state operating point; `Vdc` is the pole-to-pole
+  DC voltage `\\[kV\\]`.
 - `limits`: Active- and reactive-power limits in the converter base.
 - `connection`: Whether NetworkBuilder includes the converter in the system.
 
@@ -363,6 +367,7 @@ $(SIGNATURES)
 """
 pf_type_dc(::NoOuterActiveControl) = 1
 pf_type_dc(::OuterActivePowerControl) = 1
+pf_type_dc(::OuterActivePowerControl{DCVoltageSupportLag}) = 4
 pf_type_dc(::OuterActiveVdcControl) = 2
 
 """
@@ -450,7 +455,7 @@ function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global
     convdc["acq_droop"] = droop.enabled
     convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
 
-    convdc["droop"] = 0.0
+    convdc["droop"] = pf_dc_droop(conv.outerActive, conv.elec.vDCbase, conv.elec.Sbase, global_dict, data)
     convdc["Vdcset"] = pf_vdcset_pu(conv, elem, global_dict, data)
     convdc["Pacset"] = -pf_pacset_mw(conv, elem)
     convdc["Pdcset"] = pf_pdcset_mw(conv, elem)

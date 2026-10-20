@@ -1,0 +1,870 @@
+<fixtures>
+  <Definition name="wound_rotor">
+    <form name="Wound Rotor Induction Machine" w="540" h="580" splitter="75" commentlines="4" category-width="180" help-width="490">
+      <category name="General Data" Visible="false" visible="true">
+        <cond>true</cond>
+        <parameter type="Text" name="Name" desc="Motor Name" group="" helpmode="Overwrite" allowemprystr="true" allowemptystr="false" min="0" max="0">
+          <value>IndMachine</value>
+          <cond />
+          <help>Enter a name for identification</help>
+          <regex />
+          <error_msg />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Pbase" desc="Rated MVA" content_type="Constant" min="1E-307" max="1E+308" unit="MVA" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>2.2</value>
+          <cond />
+          <help>Rated MVA of the machine</help>
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Vbase" desc="Rated Voltage (L-L)" content_type="Constant" min="1E-307" max="1E+308" unit="kV" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.69</value>
+          <cond>View!=2</cond>
+          <help>Rated RMS Line-Line voltage</help>
+          <vis />
+        </parameter>
+        <parameter desc="Rated Voltage Across Stator Winding" name="Vwdg" group="" unit="kV" min="1E-307" max="1E+308" content_type="Constant" type="Real" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.3983</value>
+          <cond>View==2</cond>
+          <help>Rated voltage across a stator winding</help>
+          <vis />
+        </parameter>
+        <parameter type="Real" name="OMEG" desc="Base Angular Frequency" content_type="Constant" min="0" max="1E+308" unit="rad/s" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>376.991118430775</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="TRN" desc="Stator / Rotor Turns Ratio" content_type="Constant" min="1E-307" max="1E+308" unit="" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>2.637687</value>
+          <cond />
+          <help>Number of turns in stator/Number of turns in rotor</help>
+          <vis />
+        </parameter>
+        <parameter type="Real" name="J" desc="Angular Moment of Inertia (J=2H)" content_type="Constant" min="0" max="1E+308" unit="s" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.7267</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="D" desc="Mechanical Damping " content_type="Constant" min="0" max="1E+308" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.01</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Choice" name="View" desc="Graphics Display" group="" helpmode="Overwrite" animate="false">
+          <value>1</value>
+          <cond>(true)</cond>
+          <help>Select Sinle ine or 3 phase view</help>
+          <vis />
+          <choice>0 = 3 phase view</choice>
+          <choice>1 = Single line view</choice>
+          <choice>2 = Open terminals</choice>
+        </parameter>
+      </category>
+      <category name="Options" Visible="false" visible="true">
+        <cond>true</cond>
+        <parameter type="Choice" name="ERC" desc="External Connection to Rotor" group="" helpmode="Overwrite" animate="false">
+          <value>1</value>
+          <cond />
+          <help>Enable or Disable external connection to the rotor</help>
+          <vis />
+          <choice>0 = No</choice>
+          <choice>1 = Yes</choice>
+        </parameter>
+        <parameter type="Choice" name="MM" desc="Multimass Interface" group="" helpmode="Overwrite" animate="false">
+          <value>0</value>
+          <cond />
+          <help>Enable or Disable multimass interface</help>
+          <vis />
+          <choice>0 = Disable</choice>
+          <choice>1 = Enable</choice>
+        </parameter>
+        <parameter type="Choice" name="SNP" desc="Stator Winding Neutral Grounded " group="" helpmode="Overwrite" animate="false">
+          <value>1</value>
+          <cond>View!=2</cond>
+          <help>Select to ground the neutral of stator winding or externally available</help>
+          <vis />
+          <choice>0 = No</choice>
+          <choice>1 = Yes</choice>
+        </parameter>
+        <parameter type="Choice" name="Cage" desc="Rotor Squirrel Cages Exists" group="" helpmode="Overwrite" animate="false">
+          <value>0</value>
+          <cond />
+          <help>Select to model squirrel cages in addition to wound rotor</help>
+          <vis />
+          <choice>0 = No</choice>
+          <choice>1 = Yes</choice>
+        </parameter>
+        <parameter type="Choice" name="NCW" desc="Number of Rotor Squirrel Cages " group="" helpmode="Overwrite" animate="false">
+          <value>1</value>
+          <cond>Cage==1</cond>
+          <help>Select the number of squirrel cages</help>
+          <vis />
+          <choice>1 = 1</choice>
+          <choice>2 = 2</choice>
+          <choice>3 = 3</choice>
+        </parameter>
+        <parameter type="Choice" name="Msat" desc="Mutual Saturation" group="" helpmode="Overwrite" animate="false">
+          <value>0</value>
+          <cond />
+          <help>Select Enabled or Disabled</help>
+          <vis />
+          <choice>0 = Disabled</choice>
+          <choice>1 = Enabled</choice>
+        </parameter>
+        <parameter type="Choice" name="Lsat" desc="Leakage Saturation" group="" helpmode="Overwrite" animate="false">
+          <value>0</value>
+          <cond />
+          <help>Select Disabled, Enabled on stator or Enabled on both stator and rotor</help>
+          <vis />
+          <choice>0 = Disabled</choice>
+          <choice>1 = Enabled on stator</choice>
+          <choice>2 = Enabled on both stator and wound rotor</choice>
+        </parameter>
+      </category>
+      <category name="Stator and Rotor Resistances" Visible="false" visible="true">
+        <cond>true</cond>
+        <parameter type="Real" name="R1" desc="Stator Resistance" content_type="Constant" min="0" max="1E+308" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.0054</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="R2" desc="Wound Rotor Resistance" content_type="Constant" min="0" max="3" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.00607</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="R3" desc="First Squirrel Cage Resistance" content_type="Constant" min="0" max="3" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.298</value>
+          <cond>NCW*Cage&gt;=1</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="R4" desc="Second Squirrel Cage Resistance" content_type="Constant" min="0" max="3" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.018</value>
+          <cond>NCW*Cage&gt;1</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="R5" desc="Third Squirrel Cage Resistance" content_type="Constant" min="0" max="3" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.018</value>
+          <cond>NCW*Cage==3</cond>
+          <help />
+          <vis />
+        </parameter>
+      </category>
+      <category name="Stator and Rotor Inductances" Visible="false" visible="true">
+        <cond>true</cond>
+        <parameter type="Real" name="Xmd" desc="Magnetizing Inductance" content_type="Constant" min="0" max="1E+308" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>4.362</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xa" desc="Stator Leakage Inductance" content_type="Constant" min="1E-06" max="1E+308" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.102</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd1" desc="Wound Rotor Leakage Inductance" content_type="Constant" min="1E-06" max="1E+308" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.11</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd2" desc="First Cage Leakage Inductance" content_type="Constant" min="1E-06" max="10" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.05</value>
+          <cond>NCW*Cage&gt;=1</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd3" desc="Second Cage Leakage Inductance" content_type="Constant" min="1E-06" max="10" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.05</value>
+          <cond>NCW*Cage&gt;1</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd4" desc="Third Cage Leakage Inductance" content_type="Constant" min="1E-06" max="10" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.05</value>
+          <cond>NCW*Cage==3</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd12" desc="Mutual Inductance : Wound Rotor - 1st Cage" content_type="Constant" min="0" max="1E+308" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.02</value>
+          <cond>NCW*Cage&gt;=1</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd13" desc="Mutual Inductance : Wound Rotor - 2nd Cage" content_type="Constant" min="0" max="10" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.02</value>
+          <cond>NCW*Cage&gt;1</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd14" desc="Mutual Inductance : Wound Rotor - 3rd Cage" content_type="Constant" min="0" max="10" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.02</value>
+          <cond>NCW*Cage==3</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd23" desc="Mutual Inductance : 1st - 2nd Cages" content_type="Constant" min="0" max="10" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.02</value>
+          <cond>NCW*Cage&gt;1</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd24" desc="Mutual Inductance : 1st - 3rd Cages" content_type="Constant" min="0" max="10" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.02</value>
+          <cond>NCW*Cage==3</cond>
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="Xkd34" desc="Mutual Inductance : 2nd - 3rd Cages" content_type="Constant" min="0" max="10" unit="pu" group="" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.02</value>
+          <cond>NCW*Cage==3</cond>
+          <help />
+          <vis />
+        </parameter>
+      </category>
+      <category name="Mutual Saturation Curve (I,V)" Visible="false" visible="true">
+        <cond>Msat==1</cond>
+        <parameter type="Real" name="I1M" desc="Point  1 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.0</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="V1M" desc="Point  1 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.0</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="I2M" desc="Point  2 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.5</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="V2M" desc="Point  2 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.5</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="I3M" desc="Point  3 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.8</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="V3M" desc="Point  3 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.79</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="I4M" desc="Point  4 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;3</vis>
+        </parameter>
+        <parameter type="Real" name="V4M" desc="Point  4 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.947</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;3</vis>
+        </parameter>
+        <parameter type="Real" name="I5M" desc="Point  5 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.2</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;4</vis>
+        </parameter>
+        <parameter type="Real" name="V5M" desc="Point  5 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.076</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;4</vis>
+        </parameter>
+        <parameter type="Real" name="I6M" desc="Point  6 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.5</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;5</vis>
+        </parameter>
+        <parameter type="Real" name="V6M" desc="Point  6 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.2</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;5</vis>
+        </parameter>
+        <parameter type="Real" name="I7M" desc="Point  7 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.8</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;6</vis>
+        </parameter>
+        <parameter type="Real" name="V7M" desc="Point  7 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.26</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;6</vis>
+        </parameter>
+        <parameter type="Real" name="I8M" desc="Point  8 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>2.2</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;7</vis>
+        </parameter>
+        <parameter type="Real" name="V8M" desc="Point  8 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.32</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;7</vis>
+        </parameter>
+        <parameter type="Real" name="I9M" desc="Point  9 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>3.2</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;8</vis>
+        </parameter>
+        <parameter type="Real" name="V9M" desc="Point  9 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.42</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;8</vis>
+        </parameter>
+        <parameter type="Real" name="I10M" desc="Point 10 - Magnetizing Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>4.2</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;9</vis>
+        </parameter>
+        <parameter type="Real" name="V10M" desc="Point 10 - Magnetizing Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.5</value>
+          <cond />
+          <help />
+          <vis>NpntsM&gt;9</vis>
+        </parameter>
+        <parameter name="NpntsM" desc="Number of Data Points Available" type="Choice" group=" General" helpmode="Append" animate="false">
+          <value>10</value>
+          <cond>true</cond>
+          <vis>true</vis>
+          <help />
+          <choice>3 = 3</choice>
+          <choice>4 = 4</choice>
+          <choice>5 = 5</choice>
+          <choice>6 = 6</choice>
+          <choice>7 = 7</choice>
+          <choice>8 = 8</choice>
+          <choice>9 = 9</choice>
+          <choice>10 = 10</choice>
+        </parameter>
+      </category>
+      <category name="Leakage Saturation Curve (I, V)" Visible="false" visible="true">
+        <cond>Lsat&gt;0</cond>
+        <parameter type="Real" name="I1" desc="Point  1 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.0</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="V1" desc="Point  1 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.0</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="I2" desc="Point  2 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.196</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="V2" desc="Point  2 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.286</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="I3" desc="Point  3 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>1.82</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="V3" desc="Point  3 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.4</value>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Real" name="I4" desc="Point  4 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>2.861</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;3</vis>
+        </parameter>
+        <parameter type="Real" name="V4" desc="Point  4 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.564</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;3</vis>
+        </parameter>
+        <parameter type="Real" name="I5" desc="Point  5 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>5.882</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;4</vis>
+        </parameter>
+        <parameter type="Real" name="V5" desc="Point  5 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>0.981</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;4</vis>
+        </parameter>
+        <parameter type="Real" name="I6" desc="Point  6 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;5</vis>
+        </parameter>
+        <parameter type="Real" name="V6" desc="Point  6 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;5</vis>
+        </parameter>
+        <parameter type="Real" name="I7" desc="Point  7 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;6</vis>
+        </parameter>
+        <parameter type="Real" name="V7" desc="Point  7 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;6</vis>
+        </parameter>
+        <parameter type="Real" name="I8" desc="Point  8 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;7</vis>
+        </parameter>
+        <parameter type="Real" name="V8" desc="Point  8 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;7</vis>
+        </parameter>
+        <parameter type="Real" name="I9" desc="Point  9 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;8</vis>
+        </parameter>
+        <parameter type="Real" name="V9" desc="Point  9 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;8</vis>
+        </parameter>
+        <parameter type="Real" name="I10" desc="Point 10 - Short Circuit Current" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Currents" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;9</vis>
+        </parameter>
+        <parameter type="Real" name="V10" desc="Point 10 - Short Circuit Voltage" content_type="Constant" min="-1" max="1E+308" unit="pu" group="Voltages" helpmode="Append" intent="Input" dim="1" animate="false">
+          <value>-1.0</value>
+          <cond />
+          <help />
+          <vis>NpntsL&gt;9</vis>
+        </parameter>
+        <parameter name="NpntsL" desc="Number of Data Points Available" type="Choice" group=" General" helpmode="Append" animate="false">
+          <value>10</value>
+          <cond>true</cond>
+          <vis>true</vis>
+          <help />
+          <choice>3 = 3</choice>
+          <choice>4 = 4</choice>
+          <choice>5 = 5</choice>
+          <choice>6 = 6</choice>
+          <choice>7 = 7</choice>
+          <choice>8 = 8</choice>
+          <choice>9 = 9</choice>
+          <choice>10 = 10</choice>
+        </parameter>
+      </category>
+      <category name="Internal Output Variables" Visible="false" visible="true">
+        <cond>true</cond>
+        <parameter type="Text" name="MSF" desc="Mutual Saturation Factor [pu]" group="Outputs" helpmode="Append" allowemprystr="true" allowemptystr="true" min="0" max="0">
+          <value />
+          <regex>^[a-zA-Z][a-zA-Z0-9_]*$</regex>
+          <error_msg>Name must begin with a letter and can contain only letters, numbers and _</error_msg>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Text" name="LSF" desc="Leakage Saturation Factor [pu]" group="Outputs" helpmode="Append" allowemprystr="true" allowemptystr="true" min="0" max="0">
+          <value />
+          <regex>^[a-zA-Z][a-zA-Z0-9_]*$</regex>
+          <error_msg>Name must begin with a letter and can contain only letters, numbers and _</error_msg>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Text" name="Spd" desc="Mechanical Speed [pu]" group="Outputs" helpmode="Append" allowemprystr="true" allowemptystr="true" min="0" max="0">
+          <value />
+          <regex>^[a-zA-Z][a-zA-Z0-9_]*$</regex>
+          <error_msg>Name must begin with a letter and can contain only letters, numbers and _</error_msg>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Text" name="Tel" desc="Electrical Torque [pu]" group="Outputs" helpmode="Append" allowemprystr="true" allowemptystr="true" min="0" max="0">
+          <value />
+          <regex>^[a-zA-Z][a-zA-Z0-9_]*$</regex>
+          <error_msg>Name must begin with a letter and can contain only letters, numbers and _</error_msg>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Text" name="TmOp" desc="Mechanical Torque [pu]" group="Outputs" helpmode="Append" allowemprystr="true" allowemptystr="true" min="0" max="0">
+          <value />
+          <regex>^[a-zA-Z][a-zA-Z0-9_]*$</regex>
+          <error_msg>Name must begin with a letter and can contain only letters, numbers and _</error_msg>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+        <parameter type="Text" name="ThetaR" desc="Rotor Position [rad]" group="Outputs" helpmode="Append" allowemprystr="true" allowemptystr="true" min="0" max="0">
+          <value />
+          <regex>^[a-zA-Z][a-zA-Z0-9_]*$</regex>
+          <error_msg>Name must begin with a letter and can contain only letters, numbers and _</error_msg>
+          <cond />
+          <help />
+          <vis />
+        </parameter>
+      </category>
+    </form>
+    <script>
+      <segment name="Dsdyn" id="1375111678" classid="CoreSegment">#STORAGE STOR:78 RTCI:1 RTCL:1 RTCF:67
+#BEGIN
+ #LOCAL REAL RVD5_1 5
+ #LOCAL REAL RVD12_1 12
+ #LOCAL REAL RVD10_1 10
+ #LOCAL REAL RVD10_2 10
+ #LOCAL REAL RVD10_3 10
+ #LOCAL REAL RVD10_4 10
+      RVD5_1(1)   = $R1
+      RVD5_1(2)   = $R2
+      RVD5_1(3:5) = 0.0
+      RVD12_1(1)  = $Xmd
+      RVD12_1(2)  = $Xa
+      RVD12_1(3)  = $Xkd1
+      RVD12_1(4:12) = 0.0
+ #IF NCW1&gt;0
+      RVD5_1(3)   = $R3
+      RVD12_1(4)  = $Xkd2
+      RVD12_1(7)  = $Xkd12
+ #ENDIF
+ #IF NCW1&gt;1
+      RVD5_1(4)   = $R4
+      RVD12_1(5)  = $Xkd3
+      RVD12_1(8)  = $Xkd13
+      RVD12_1(10) = $Xkd23
+ #ENDIF
+ #IF NCW1&gt;2
+      RVD5_1(5)   = $R5
+      RVD12_1(6)  = $Xkd4
+      RVD12_1(9)  = $Xkd14
+      RVD12_1(11) = $Xkd24
+      RVD12_1(12) = $Xkd34
+ #ENDIF
+ #IF Lsat&gt;0
+      RVD10_1 =(/$I1,$I2,$I3,~
+  #CASE NpntsL&gt;3 {~-1.0,~}{~$I4,~}
+  #CASE NpntsL&gt;4 {~-1.0,~}{~$I5,~}
+  #CASE NpntsL&gt;5 {~-1.0,~}{~$I6,~}
+  #CASE NpntsL&gt;6 {~-1.0,~}{~$I7,~}
+  #CASE NpntsL&gt;7 {~-1.0,~}{~$I8,~}
+  #CASE NpntsL&gt;8 {~-1.0,~}{~$I9,~}
+  #CASE NpntsL&gt;9 {~-1.0/)}{~$I10/)}
+      RVD10_2 =(/$V1,$V2,$V3,~
+  #CASE NpntsL&gt;3 {~-1.0,~}{~$V4,~}
+  #CASE NpntsL&gt;4 {~-1.0,~}{~$V5,~}
+  #CASE NpntsL&gt;5 {~-1.0,~}{~$V6,~}
+  #CASE NpntsL&gt;6 {~-1.0,~}{~$V7,~}
+  #CASE NpntsL&gt;7 {~-1.0,~}{~$V8,~}
+  #CASE NpntsL&gt;8 {~-1.0,~}{~$V9,~}
+  #CASE NpntsL&gt;9 {~-1.0/)}{~$V10/)}
+ #ELSE
+      RVD10_1 =(/0.0,1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0/)
+      RVD10_2 =(/0.0,1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0/)
+ #ENDIF
+ #IF Msat==1
+      RVD10_3 =(/$I1M,$I2M,$I3M,~
+  #CASE NpntsM&gt;3 {~-1.0,~}{~$I4M,~}
+  #CASE NpntsM&gt;4 {~-1.0,~}{~$I5M,~}
+  #CASE NpntsM&gt;5 {~-1.0,~}{~$I6M,~}
+  #CASE NpntsM&gt;6 {~-1.0,~}{~$I7M,~}
+  #CASE NpntsM&gt;7 {~-1.0,~}{~$I8M,~}
+  #CASE NpntsM&gt;8 {~-1.0,~}{~$I9M,~}
+  #CASE NpntsM&gt;9 {~-1.0/)}{~$I10M/)}
+      RVD10_4 =(/$V1M,$V2M,$V3M,~
+  #CASE NpntsM&gt;3 {~-1.0,~}{~$V4M,~}
+  #CASE NpntsM&gt;4 {~-1.0,~}{~$V5M,~}
+  #CASE NpntsM&gt;5 {~-1.0,~}{~$V6M,~}
+  #CASE NpntsM&gt;6 {~-1.0,~}{~$V7M,~}
+  #CASE NpntsM&gt;7 {~-1.0,~}{~$V8M,~}
+  #CASE NpntsM&gt;8 {~-1.0,~}{~$V9M,~}
+  #CASE NpntsM&gt;9 {~-1.0/)}{~$V10M/)}
+ #ELSE
+      RVD10_3 =(/0.0,1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0/)
+      RVD10_4 =(/0.0,1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0/)
+ #ENDIF
+      CALL COMPONENT_ID(ICALL_NO,$#Component)
+ #IF View==2
+      CALL INDUCMC2_CFG($NCW1,$LSat,$Pbase,$Vwdg,
+ #ELSE
+      CALL INDUCMC2_CFG($NCW1,$LSat,$Pbase,$Vbase*SQRT_1BY3,
+ #ENDIF
+     +$OMEG,$J,$D,$TRN,20.0,10.0,RVD5_1,RVD12_1,RVD10_1,RVD10_2,RVD10_3,RVD10_4)
+#ENDBEGIN
+#HARMONIC:12
+#LOCAL INTEGER IVD1_1
+      IVD1_1 = NEXC
+      CALL COMPONENT_ID(ICALL_NO,$#Component)
+#IF View==1
+      CALL INDUCMC2_EXE($SS,$BR(1),$BR(2),$BR(3),$RCBR(1),$RCBR(2),$RCBR(3),
+#ELSE
+      CALL INDUCMC2_EXE($SS,$BRA,$BRB,$BRC,$RCBRA,$RCBRB,$RCBRC,
+#ENDIF
+#IF ERC==0
+     +0,0,0,0,0,0,
+#ELSE
+ #IF View==1
+     +$BRR(1),$BRR(2),$BRR(3),$RCBRR(1),$RCBRR(2),$RCBRR(3),
+ #ELSE
+     +$BRAR,$BRBR,$BRCR,$RCBRAR,$RCBRBR,$RCBRCR,
+ #ENDIF
+#ENDIF
+#IF MM==1
+     +$SPI,1,0.0,$ZSeq)
+#ELSE
+     +$SPI,$SW,$TMI,$ZSeq)
+#ENDIF
+#IF MM==1
+      $Te = STOR(IVD1_1+61)
+#ENDIF
+#OUTPUT  REAL  MSF      {STOR(IVD1_1+63)}
+#OUTPUT  REAL  LSF      {STOR(IVD1_1+67)}
+#OUTPUT  REAL  Spd      {STOR(IVD1_1+71)}
+#OUTPUT  REAL  Tel      {STOR(IVD1_1+61)}
+#OUTPUT  REAL  TmOp     {STOR(IVD1_1+70)}
+#OUTPUT  REAL  ThetaR   {STOR(IVD1_1+24)}</segment>
+      <segment name="Computations" id="2075722469" classid="CoreSegment">INTEGER NCW1=NCW*Cage
+INTEGER SNP1= View==2 ? 1 : SNP
+INTEGER ZSeq= View==2 ? 1 : 0</segment>
+      <segment name="Branch" id="1736081430" classid="CoreSegment">#IF View==0
+  BRA = $NA $NN BREAKER 1.0
+  BRB = $NB $NN BREAKER 1.0
+  BRC = $NC $NN BREAKER 1.0
+  RCBRA = $NA $NN BREAKER 1.0
+  RCBRB = $NB $NN BREAKER 1.0
+  RCBRC = $NC $NN BREAKER 1.0
+ #IF ERC==1
+  BRAR = $NAR $G BREAKER 1.0
+  BRBR = $NBR $G BREAKER 1.0
+  BRCR = $NCR $G BREAKER 1.0
+  RCBRAR = $NAR $G BREAKER 1.0
+  RCBRBR = $NBR $G BREAKER 1.0
+  RCBRCR = $NCR $G BREAKER 1.0
+ #ENDIF
+#ELSEIF View==1
+  BR = $NS $NN BREAKER 1.0
+  RCBR = $NS $NN BREAKER 1.0
+ #IF ERC==1
+  BRR = $NR $G BREAKER 1.0
+  RCBRR = $NR $G BREAKER 1.0
+ #ENDIF
+#ELSEIF View==2
+  BRA = $NA1 $NA2 BREAKER 1.0
+  BRB = $NB1 $NB2 BREAKER 1.0
+  BRC = $NC1 $NC2 BREAKER 1.0
+  RCBRA = $NA1 $NA2 BREAKER 1.0
+  RCBRB = $NB1 $NB2 BREAKER 1.0
+  RCBRC = $NC1 $NC2 BREAKER 1.0
+ #IF ERC==1
+  BRAR = $NAR1 $NAR2 BREAKER 1.0
+  BRBR = $NBR1 $NBR2 BREAKER 1.0
+  BRCR = $NCR1 $NCR2 BREAKER 1.0
+  RCBRAR = $NAR1 $NAR2 BREAKER 1.0
+  RCBRBR = $NBR1 $NBR2 BREAKER 1.0
+  RCBRCR = $NCR1 $NCR2 BREAKER 1.0
+ #ENDIF
+#ENDIF</segment>
+      <segment name="FlyBy" id="202558448" classid="CoreSegment">Wound Rotor Induction Machine
+:NS
+3 phase stator terminal
+:NA
+Phase A stator terminal
+:NB
+Phase B stator terminal
+:NC
+Phase C stator terminal
+:NR
+3 phase rotor terminal
+:NAR
+Phase A rotor terminal
+:NBR
+Phase B rotor terminal
+:NCR
+Phase C rotor terminal
+:NN
+Stator Neutral terminal
+:TLin
+Load Torque Input (pu)
+:SPI
+Speed Input (pu)
+:SW
+Switch selecting
+Speed Input (1) or
+Torque Input (0)
+:TMI
+Torque Input (pu)
+:TM0
+Input Torque (pu) passed 
+to the multimass
+:Te
+Electrical Torque output (pu)</segment>
+    </script>
+    <svg>
+      <port model="Natural" name="NS" x="54" y="0" dim="3" mode="Electrical" type="NonRemovable" internal="false">(View==1)</port>
+      <port model="Natural" name="NR" x="0" y="-54" dim="3" mode="Electrical" type="NonRemovable" internal="false">(View==1)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NAR" x="-18" y="-54" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==0)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NBR" x="0" y="-54" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==0)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NCR" x="18" y="-54" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==0)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NC" x="54" y="36" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==0)</port>
+      <port model="Natural" name="NN" x="54" y="72" dim="1" mode="Electrical" type="NonRemovable" internal="false">(SNP1==0)</port>
+      <port model="Natural" name="NB" x="54" y="0" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==0)</port>
+      <port model="Transfer" name="TLin" x="-18" y="72" dim="1" mode="Input" type="Real" internal="false">(MM==1)</port>
+      <port model="Natural" name="TM0" x="-54" y="36" dim="1" mode="Short" type="NonRemovable" internal="false">MM==1</port>
+      <port model="Transfer" name="Te" x="-54" y="0" dim="1" mode="Output" type="Real" internal="false">(MM==1)</port>
+      <port model="Transfer" name="SW" x="-54" y="0" dim="1" mode="Input" type="Integer" internal="false">(MM==0)</port>
+      <port model="Transfer" name="SPI" x="-54" y="-36" dim="1" mode="Input" type="Real" internal="false">true</port>
+      <port model="Transfer" name="TMI" x="-54" y="36" dim="1" mode="Input" type="Real" internal="false">(MM==0)</port>
+      <port model="Natural" name="NA" x="54" y="-36" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==0)</port>
+      <port model="Natural" name="NN" x="18" y="18" dim="1" mode="Electrical" type="Ground" internal="false">SNP==1</port>
+      <port model="Natural" name="G" x="0" y="0" dim="1" mode="Electrical" type="Ground" internal="true">ERC==1</port>
+      <port model="Natural" name="NAR1" x="-108" y="-144" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NBR1" x="-18" y="-144" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NCR1" x="72" y="-144" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NC1" x="126" y="72" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)</port>
+      <port model="Natural" name="NB1" x="126" y="-18" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)</port>
+      <port model="Natural" name="NA1" x="126" y="-108" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)</port>
+      <port model="Natural" name="NAR2" x="-72" y="-144" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NBR2" x="18" y="-144" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NCR2" x="108" y="-144" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)&amp;&amp;(ERC==1)</port>
+      <port model="Natural" name="NA2" x="126" y="-72" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)</port>
+      <port model="Natural" name="NB2" x="126" y="18" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)</port>
+      <port model="Natural" name="NC2" x="126" y="108" dim="1" mode="Electrical" type="NonRemovable" internal="false">(View==2)</port>
+    </svg>
+  </Definition>
+  <User classid="UserCmp" defn="master:wound_rotor" id="876483043" x="414" y="234" w="116" h="98" z="360" orient="0" link="-1" q="4" disable="false">
+    <paramlist link="-1" name="" crc="41131568">
+      <param name="Name" value="" />
+      <param name="Pbase" value="S_base_MVA" />
+      <param name="Vbase" value="V_ac_base_ll" />
+      <param name="OMEG" value="w_base" />
+      <param name="TRN" value="1" />
+      <param name="J" value="8" />
+      <param name="D" value="0" />
+      <param name="View" value="1" />
+      <param name="ERC" value="0" />
+      <param name="MM" value="0" />
+      <param name="SNP" value="1" />
+      <param name="Cage" value="0" />
+      <param name="NCW" value="1" />
+      <param name="Msat" value="0" />
+      <param name="Lsat" value="0" />
+      <param name="R1" value="0.01" />
+      <param name="R2" value="0.01" />
+      <param name="R3" value="0.298 [pu]" />
+      <param name="R4" value="0.018 [pu]" />
+      <param name="R5" value="0.018 [pu]" />
+      <param name="Xmd" value="1.66" />
+      <param name="Xa" value="0.15" />
+      <param name="Xkd1" value="0.165" />
+      <param name="Xkd2" value="0.05 [pu]" />
+      <param name="Xkd3" value="0.05 [pu]" />
+      <param name="Xkd4" value="0.05 [pu]" />
+      <param name="Xkd12" value="0.02 [pu]" />
+      <param name="Xkd13" value="0.02 [pu]" />
+      <param name="Xkd14" value="0.02 [pu]" />
+      <param name="Xkd23" value="0.02 [pu]" />
+      <param name="Xkd24" value="0.02 [pu]" />
+      <param name="Xkd34" value="0.02 [pu]" />
+      <param name="I1M" value="0.0 [pu]" />
+      <param name="V1M" value="0.0 [pu]" />
+      <param name="I2M" value="0.5 [pu]" />
+      <param name="V2M" value="0.5 [pu]" />
+      <param name="I3M" value="0.8 [pu]" />
+      <param name="V3M" value="0.79 [pu]" />
+      <param name="I4M" value="1.0 [pu]" />
+      <param name="V4M" value="0.947 [pu]" />
+      <param name="I5M" value="1.2 [pu]" />
+      <param name="V5M" value="1.076 [pu]" />
+      <param name="I6M" value="1.5 [pu]" />
+      <param name="V6M" value="1.2 [pu]" />
+      <param name="I7M" value="1.8 [pu]" />
+      <param name="V7M" value="1.26 [pu]" />
+      <param name="I8M" value="2.2 [pu]" />
+      <param name="V8M" value="1.32 [pu]" />
+      <param name="I9M" value="3.2 [pu]" />
+      <param name="V9M" value="1.42 [pu]" />
+      <param name="I10M" value="4.2 [pu]" />
+      <param name="V10M" value="1.5 [pu]" />
+      <param name="I1" value="0.0 [pu]" />
+      <param name="V1" value="0.0 [pu]" />
+      <param name="I2" value="1.196 [pu]" />
+      <param name="V2" value="0.286 [pu]" />
+      <param name="I3" value="1.82 [pu]" />
+      <param name="V3" value="0.4 [pu]" />
+      <param name="I4" value="2.861 [pu]" />
+      <param name="V4" value="0.564 [pu]" />
+      <param name="I5" value="5.882 [pu]" />
+      <param name="V5" value="0.981 [pu]" />
+      <param name="I6" value="-1.0 [pu]" />
+      <param name="V6" value="-1.0 [pu]" />
+      <param name="I7" value="-1.0 [pu]" />
+      <param name="V7" value="-1.0 [pu]" />
+      <param name="I8" value="-1.0 [pu]" />
+      <param name="V8" value="-1.0 [pu]" />
+      <param name="I9" value="-1.0 [pu]" />
+      <param name="V9" value="-1.0 [pu]" />
+      <param name="I10" value="-1.0 [pu]" />
+      <param name="V10" value="-1.0 [pu]" />
+      <param name="MSF" value="" />
+      <param name="LSF" value="" />
+      <param name="Spd" value="w_r" />
+      <param name="Tel" value="T_e" />
+      <param name="TmOp" value="T_m" />
+      <param name="ThetaR" value="" />
+      <param name="Vwdg" value="0.3983" />
+      <param name="NpntsM" value="10" />
+      <param name="NpntsL" value="10" />
+    </paramlist>
+  </User>
+</fixtures>

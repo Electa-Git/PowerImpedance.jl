@@ -97,6 +97,26 @@ variables:
     KUBERNETES_MEMORY_REQUEST: "8Gi"
 
 
+.julia_plotting_precompile:
+  # Makie and its extensions each need most of the job's memory while they
+  # precompile; two parallel precompile workers exceed the runner's limit.
+  variables:
+    JULIA_NUM_PRECOMPILE_TASKS: "1"
+
+
+.makie_preferences:
+  script:
+    - |
+      # Makie's precompile workload alone exceeds the runner's memory limit
+      # (OOMKilled); skip it for every environment that the job loads.
+      for project in $MAKIE_PROJECT; do
+        for package in Makie CairoMakie WGLMakie GraphMakie; do
+          printf '[%s]\nprecompile_workload = false\n\n' "$package"
+        done > "$project/LocalPreferences.toml"
+        echo "$project/LocalPreferences.toml:"; cat "$project/LocalPreferences.toml"
+      done
+
+
 .julia_formatter_resources:
   variables:
     KUBERNETES_CPU_REQUEST: "1"
@@ -157,16 +177,26 @@ extension_tests:
   extends: .julia_heavy_resources
   image: julia:1.12.6-bookworm
   stage: test
+  variables:
+    JULIA_CONDAPKG_ENV: "$CI_PROJECT_DIR/.julia/condapkg"
+    JULIA_CONDAPKG_BACKEND: "MicroMamba"
   cache:
     <<: *julia_cache
     key:
       files:
         - Project.toml
       prefix: "$CI_PROJECT_PATH_SLUG-extensions"
+    paths:
+      - .julia/clones/
+      - .julia/compiled/
+      - .julia/registries/
+      - .julia/condapkg/
     policy: pull-push
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends git ca-certificates
+    # The PSCAD runner protocol tests load PythonCall against the system Python,
+    # as a station does; PythonCall needs its shared library, not only the interpreter.
+    - apt-get install -y --no-install-recommends git ca-certificates python3 libpython3-dev python3-numpy
     - rm -rf /var/lib/apt/lists/*
   script:
     - julia --version
@@ -180,6 +210,8 @@ extension_tests:
           PackageSpec(name="Measurements"),
           PackageSpec(name="TestItems"),
           PackageSpec(name="TestItemRunner"),
+          PackageSpec(name="PythonCall"),
+          PackageSpec(name="CondaPkg"),
         ])
         Pkg.precompile()
 
@@ -187,12 +219,23 @@ extension_tests:
         test_files = [
           "run_extension_tests.jl",
           "run_testitems.jl",
+          "pscad/run_gated_tests.jl",
         ]
         # LineCableModels extension tests intentionally remain dormant until
         # LineCableModels.jl is registered and can be restored as a weakdep.
         for test_file in test_files
           path = joinpath(pwd(), "test", test_file)
           run(`$(Base.julia_cmd()) --project=$project --startup-file=no $path`)
+        end
+        # Run the XML child directly so it retains the cached CondaPkg environment.
+        mktempdir() do exports
+          path = joinpath(pwd(), "test", "pscad", "run_xml_tests.jl")
+          withenv("POWERIMPEDANCE_PSCAD_XML_CHILD" => "1",
+                  "JULIA_CONDAPKG_BACKEND" => "MicroMamba",
+                  "JULIA_CONDAPKG_OFFLINE" => "no",
+                  "JULIA_PYTHONCALL_EXE" => nothing) do
+            run(`$(Base.julia_cmd()) --project=$project --startup-file=no $path $exports`)
+          end
         end
       '
   rules:
@@ -201,7 +244,9 @@ extension_tests:
 
 
 plotting_tests:
-  extends: .julia_heavy_resources
+  extends: [.julia_heavy_resources, .julia_plotting_precompile]
+  variables:
+    MAKIE_PROJECT: "integration/plotting/headless"
   image: julia:1.12.6-bookworm
   stage: test
   timeout: 1h
@@ -218,6 +263,7 @@ plotting_tests:
     - apt-get install -y --no-install-recommends git ca-certificates
     - rm -rf /var/lib/apt/lists/*
   script:
+    - !reference [.makie_preferences, script]
     - julia --version
     - |
       julia --project=integration/plotting/headless --startup-file=no -e '
@@ -283,7 +329,9 @@ formatter:
 
 
 docs_check:
-  extends: .julia_heavy_resources
+  extends: [.julia_heavy_resources, .julia_plotting_precompile]
+  variables:
+    MAKIE_PROJECT: "docs"
   image: julia:1.12.6-bookworm
   stage: docs
   needs:
@@ -301,6 +349,7 @@ docs_check:
     - apt-get install -y --no-install-recommends git ca-certificates
     - rm -rf /var/lib/apt/lists/*
   script:
+    - !reference [.makie_preferences, script]
     - julia --version
     - git --version
     - |
@@ -597,7 +646,9 @@ github_release_coverage:
 # ---------------------------------------------------------------------------
 
 pages:
-  extends: .julia_heavy_resources
+  extends: [.julia_heavy_resources, .julia_plotting_precompile]
+  variables:
+    MAKIE_PROJECT: "docs docs/statistics"
   image: julia:1.12.6-bookworm
   stage: deploy
   cache:
@@ -612,6 +663,7 @@ pages:
     - apt-get install -y --no-install-recommends git ca-certificates openssh-client
     - rm -rf /var/lib/apt/lists/*
   script:
+    - !reference [.makie_preferences, script]
     - julia --version
     - git --version
     - |

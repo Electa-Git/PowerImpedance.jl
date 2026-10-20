@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Kept nt1-mvdc/saved-after-run.pscx: meter 298012955 moved to y=3150;
+     label 201850590 and wire 398136641 retained y=3168. -->
+<project version="5.0.2">
+  <definitions>
+    <Definition classid="UserCmpDefn" name="Main">
+      <schematic>
+        <User classid="UserCmp" id="201850590" x="990" y="3168" orient="0" defn="master:nodelabel">
+          <paramlist><param name="Name" value="DC_P"/></paramlist>
+        </User>
+        <User classid="UserCmp" id="298012955" x="1026" y="3150" orient="0" defn="master:voltmetergnd">
+          <paramlist><param name="Name" value="V_DC_P"/></paramlist>
+        </User>
+        <Wire classid="WireOrthogonal" id="398136641" x="990" y="3168">
+          <vertex x="0" y="0"/><vertex x="36" y="0"/>
+        </Wire>
+      </schematic>
+    </Definition>
+  </definitions>
+</project>

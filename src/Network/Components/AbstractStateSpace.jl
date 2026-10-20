@@ -87,6 +87,7 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     
     
     m = elem.element_model
+    elem._equilibrium = nothing
 
     # Power flow to inputs of state_space function
     inputs, setpoint_pu = pftoinputs(m, setpoint)
@@ -102,7 +103,26 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     f!(du, u, p) = _state_space!(du, u, p.inputs, p.setpoint_pu, p.m, Equil())
     @info "Starting to solve for steady-state solution"
     prob = NonlinearProblem(f!, collect(promote(values(init)...)), p_equil)
-    sol = solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+    default_error = nothing
+    sol = try
+        solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+    catch exception
+        is_converter(elem) || rethrow()
+        default_error = exception
+        nothing
+    end
+    if is_converter(elem) && (sol === nothing || !SciMLBase.successful_retcode(sol))
+        retry = try
+            solve(prob, NonlinearSolve.TrustRegion(); maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+        catch
+            nothing
+        end
+        if retry !== nothing && SciMLBase.successful_retcode(retry)
+            sol = retry
+        elseif default_error !== nothing
+            throw(default_error)
+        end
+    end
 
     name = isdefined(elem, :symbol) ? string(elem.symbol) : string(nameof(typeof(m)))
 
@@ -134,7 +154,50 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     C = jac[nb_states+1:end, 1:nb_states]
     D = jac[nb_states+1:end, nb_states+1:end-nb_addit_inputs]
 
+    elem._equilibrium = (m, setpoint, copy(equilibrium))
     return A,B,C,D 
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Return a copy of the converged state vector retained by the core linearization.
+
+# Arguments
+
+- `elem`: State-space element with a retained solved state.
+- `setpoint`: Optional operating point. If the retained state differs or is absent,
+  solve and linearize through `update(elem, setpoint)` first.
+
+# Returns
+
+- State vector in `statenames(elem.element_model)` order and the model's state
+  coordinates, with the same small-value zeroing used for linearization.
+
+# Notes
+
+Core updates clear the retained vector before the solve and store a new vector
+only after successful linearization. Changes to the returned copy leave
+the retained state unchanged.
+
+# Errors
+
+- Throws `ArgumentError` without a setpoint when the current model lacks a retained
+  state. With a setpoint, propagates core solve or linearization errors.
+"""
+function _steady_state(elem::Element{<:AbstractStateSpace})
+    saved = elem._equilibrium
+    saved !== nothing && saved[1] === elem.element_model ||
+        throw(ArgumentError("element :$(elem.symbol) has no retained converged state"))
+    return copy(saved[3])
+end
+
+function _steady_state(elem::Element{<:AbstractStateSpace}, setpoint::Setpoint)
+    saved = elem._equilibrium
+    if saved === nothing || saved[1] !== elem.element_model || !isequal(saved[2], setpoint)
+        update(elem, setpoint)
+    end
+    return _steady_state(elem)
 end
 
 function update!(elem::Element, setpoint::Setpoint)
