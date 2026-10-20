@@ -465,4 +465,48 @@ end
         @test !occursin("unexpected station configuration", text)
     end
 end
+
+@testset "Saved repeat comparisons and measured classifications" begin
+    mktempdir() do root
+        directory = mkpath(joinpath(root, "case"))
+        source = mkpath(joinpath(root, "repeat"))
+        stored_result(directory; factor = 1.06)
+        stored_result(source; factor = 1.06)
+        V.reanalyse_ztool("offline"; directory = source)
+        source_hash = V.digest(joinpath(source, "manifest.toml"))
+        for name in ("original-step", "half-step")
+            archive = mkpath(joinpath(directory, "repeats", name))
+            for file in readdir(source)
+                (file == "manifest.toml" || startswith(file, "comparison_")) &&
+                    cp(joinpath(source, file), joinpath(archive, file))
+            end
+        end
+        record = V.ztool_load(directory)
+        for (classification, status) in (("time-step limited", "time_step_limited"),
+                ("model difference near 150 Hz", "model_difference_near_150_hz"))
+            record["repeat_conclusion"] = Dict("classification" => classification,
+                "repeats" => ["original-step", "half-step"])
+            V.write_manifest(directory, record)
+            record = V.reanalyse_ztool("offline"; directory)
+            @test record["classification"] == classification
+            @test record["status"] == status
+            @test record["comparison_status"] == "failed_comparison"
+            @test length(record["repeat_results"]) == 2
+            @test all(r -> length(r["comparison_files"]) == 6, record["repeat_results"])
+            @test all(r -> r["manifest_sha256"] == source_hash, record["repeat_results"])
+            @test any(f -> f["path"] == "repeats/half-step/manifest.toml" &&
+                f["sha256"] == source_hash, record["files"])
+            @test V.ztool_load(directory)["status"] == status
+        end
+        @test V.digest(joinpath(source, "manifest.toml")) == source_hash
+        comparison = joinpath(directory, "repeats", "half-step", "comparison_entries.tsv")
+        open(io -> write(io, "changed"), comparison, "a")
+        @test_throws r"repeat comparison changed" V.ztool_repeat_results!(record, directory)
+        @test_throws r"stored file changed" V.reanalyse_ztool("offline"; directory)
+        cp(joinpath(source, "comparison_entries.tsv"), comparison; force = true)
+        record["repeat_conclusion"]["repeats"] = ["missing"]
+        V.write_manifest(directory, record)
+        @test_throws r"missing evidence" V.reanalyse_ztool("offline"; directory)
+    end
+end
 end

@@ -491,6 +491,45 @@ function ztool_phase_projection(id, record, directory)
     return read_response(path, length(record["axes"]), frequencies)
 end
 
+function ztool_repeat_results!(record, directory)
+    root = joinpath(directory, "repeats")
+    if !isdir(root)
+        haskey(record, "repeat_conclusion") && error("Z-tool repeat evidence is missing")
+        return nothing
+    end
+    results = Dict{String, Any}[]
+    for name in sort(readdir(root))
+        archive = joinpath(root, name)
+        isdir(archive) || continue
+        path = joinpath(archive, "manifest.toml")
+        repeat = TOML.parsefile(path)
+        repeat["fixture_id"] == record["fixture_id"] || error("Z-tool repeat fixture differs: $name")
+        files = filter(file -> startswith(file["path"], "comparison_") && endswith(file["path"], ".tsv"), repeat["files"])
+        for file in files
+            basename(file["path"]) == file["path"] || error("invalid Z-tool repeat comparison path")
+            comparison = joinpath(archive, file["path"])
+            isfile(comparison) && filesize(comparison) == file["bytes"] && digest(comparison) == file["sha256"] ||
+                error("Z-tool repeat comparison changed: $name/$(file["path"])")
+        end
+        push!(results, Dict("name" => name, "manifest" => relpath(path, directory),
+            "manifest_sha256" => digest(path), "status" => repeat["status"],
+            "arguments" => repeat["arguments"], "settings" => repeat["settings"],
+            "comparison_files" => [relpath(joinpath(archive, file["path"]), directory) for file in files],
+            "reference_results" => get(repeat, "reference_results", Dict{String, Any}())))
+    end
+    record["repeat_results"] = results
+    if haskey(record, "repeat_conclusion")
+        conclusion = record["repeat_conclusion"]
+        names = Set(result["name"] for result in results)
+        !isempty(conclusion["repeats"]) && all(in(names), conclusion["repeats"]) ||
+            error("Z-tool repeat conclusion refers to missing evidence")
+        record["comparison_status"] = record["status"]
+        record["classification"] = conclusion["classification"]
+        record["status"] = replace(lowercase(conclusion["classification"]), r"[\s-]+" => "_")
+    end
+    return nothing
+end
+
 """
 $(TYPEDSIGNATURES)
 
@@ -579,6 +618,7 @@ function reanalyse_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"))
             Dict("supported" => false, "observation" => "no stored sequence or image measurement attached")
     end
     record["measured_angles_to_fixed_frame"] = [collect(row) for row in eachrow(transform)]
+    ztool_repeat_results!(record, directory)
     record["analysis_source_sha256"] = digest(@__FILE__)
     record["analysis_julia_version"] = string(VERSION)
     write_manifest(directory, record)
