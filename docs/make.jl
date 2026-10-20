@@ -79,13 +79,16 @@ const LITERATE_EXAMPLE_FILES = (
     "SmallSignal_Gridspace.jl"
 )
 
+const PLAIN_LITERATE_EXAMPLE_FILES = ("PSCAD_tutorial.jl",)
+
 # Gridspace_uncertainty.jl and P2P_HVDC_Gridspace.jl are not part of the documentation build.
 
 const LITERATE_EXAMPLE_PATHS = [joinpath(EXAMPLES_SRC, file)
                                 for file in LITERATE_EXAMPLE_FILES
                                 if isfile(joinpath(EXAMPLES_SRC, file))]
 
-const HAS_LITERATE_EXAMPLES = !isempty(LITERATE_EXAMPLE_PATHS)
+const HAS_LITERATE_EXAMPLES = !isempty(LITERATE_EXAMPLE_PATHS) ||
+                              !isempty(PLAIN_LITERATE_EXAMPLE_FILES)
 
 if HAS_LITERATE_EXAMPLES
     using Literate
@@ -182,6 +185,16 @@ function build_example_pages()
             path,
             EXAMPLES_DOC;
             documenter = true,
+            postprocess = postprocess_literate_markdown
+        )
+    end
+
+    for file in PLAIN_LITERATE_EXAMPLE_FILES
+        Literate.markdown(
+            joinpath(EXAMPLES_SRC, file),
+            EXAMPLES_DOC;
+            documenter = true,
+            codefence = "```julia" => "```",
             postprocess = postprocess_literate_markdown
         )
     end
