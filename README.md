@@ -237,8 +237,8 @@ If you use PowerImpedance in your research, please cite:
   - Continuous integration
   - Parametric studies
   - Uncertainty quantification
-  - Extension modules for Measurements; LineCableModels interoperability is
-    temporarily dormant pending its registration
+  - Integration with PSCAD and [Z-tool](https://github.com/Electa-Git/Z-tool) scans
+  - Extension modules for Measurements and Makie
 
 - **Luis Müller**
   - Bipolar model
