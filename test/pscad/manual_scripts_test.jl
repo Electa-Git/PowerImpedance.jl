@@ -22,8 +22,10 @@ function definitions!(bound, expression)
         target = first(expression.args)
         if target isa Expr && target.head == :call
             bind!(bound, first(target.args))
-        else
+        elseif expression.head == :(=) || target isa Symbol
             bind!(bound, target)
+            # Value blocks share the assignment's enclosing scope.
+            expression.head == :(=) && definitions!(bound, last(expression.args))
         end
     elseif expression.head == :struct
         bind!(bound,expression.args[2])
@@ -330,6 +332,50 @@ end
             "try; values = [1,2]; values[end]; catch failure; sprint(showerror, failure); end",
             "struct LocalRecord; value::Float64; label::String; end")
             @test isempty(unresolved_globals(Meta.parseall(source), namespace))
+        end
+        @testset "Multiple loop iteration specifications" begin
+            source = """
+                for wire in ([1, 2],), pin in eachindex(wire)
+                    point = wire[pin]
+                    for (index, node) in enumerate(wire)
+                        (wire, pin, point, index, node)
+                    end
+                end
+                """
+            @test isempty(unresolved_globals(Meta.parseall(source), namespace))
+            @test unresolved_globals(Meta.parseall(source * "\n(wire, pin, point, index, node)"),
+                namespace) == [:index, :node, :pin, :point, :wire]
+        end
+        @testset "Assignments in value blocks" begin
+            source = """
+                function branch_value(condition)
+                    negative = if condition == 1
+                        negative_source = 1
+                        node = negative_source + 1
+                        (; left_negative = node)
+                    elseif condition == 2
+                        alternate_node = 3
+                        (; left_negative = alternate_node)
+                    else
+                        fallback_node = 4
+                        (; left_negative = fallback_node)
+                    end
+                    negative
+                end
+                """
+            @test isempty(unresolved_globals(Meta.parseall(source), namespace))
+            @test unresolved_globals(Meta.parseall(replace(source,
+                "negative_source + 1" => "negative_source + unknown")), namespace) == [:unknown]
+            @test unresolved_globals(Meta.parseall(source * "\n(negative_source, node)"),
+                namespace) == [:negative_source, :node]
+            @test isempty(unresolved_globals(Meta.parseall(
+                "value = begin; node = 1; node; end; node"), namespace))
+            @test isempty(unresolved_globals(Meta.parseall(
+                "value = if true; node = 1; node; else; 0; end; node"), namespace))
+            @test unresolved_globals(Meta.parseall(
+                "value = (; label = unknown); label"), namespace) == [:label, :unknown]
+            @test unresolved_globals(Meta.parseall(
+                "callback = function (item); item; end; item"), namespace) == [:item]
         end
         for (source, names) in (
             ("@missing_macro abs(unknown)", [Symbol("@missing_macro"), :unknown]),
