@@ -1,7 +1,18 @@
 export impedance
 
+"""
+$(TYPEDEF)
+
+Store impedances between input/output terminal pairs, or a complex-frequency callback,
+and an optional cached ABCD matrix. Array entries specify individual branches rather
+than mutual terms of a coupled series-impedance matrix.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Impedance <: AbstractLinFreqDomain
+	"Terminal-pair branch impedances \\[Ω\\] or a callback returning them at complex frequency; zero entries omit branches."
 	value::Any = nothing      # either Matrix{ComplexF64} or a function s::Complex -> Matrix{ComplexF64}
+	"Cached ABCD matrix for constant impedances, or `nothing` for a callback; A/D blocks are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
 	ABCD::Any  = nothing      # cached Matrix{ComplexF64} for constant impedances, otherwise nothing
 end
 
@@ -74,35 +85,47 @@ function _abcd_from_z(Z::AbstractMatrix{<:Complex}, pins::Int)
 end
 
 """
-    impedance(; z=0, pins::Int=0, transformation=false)
+$(TYPEDSIGNATURES)
 
-Construct a constant or frequency-dependent series impedance multiport.
+Construct a constant or frequency-dependent network of terminal-pair impedances.
 
 # Arguments
 
-- `z`: Impedance specification `\\[Ω\\]`. A number produces an equal diagonal;
-  a collection with `pins` entries produces an unequal diagonal; a collection
-  with `pins^2` entries produces the complete matrix; and a callable `z(s)` is
-  evaluated at complex frequency `s`.
-- `pins`: Port order. When zero, a numeric scalar implies one pin and an array
-  length must be a perfect square from which the order can be inferred.
-- `transformation`: Whether to expose a supported transformed representation.
+- `z`: Branch impedance specification \\[Ω\\]. A scalar repeats on the diagonal; a
+  vector with `pins` entries defines unequal diagonal branches, and `pins²` array
+  entries define all input-to-output branches in column-major order. A `Function`
+  `z(s)` returns a scalar or compatible array at complex Laplace frequency
+  \\[s⁻¹\\]. Default: `0`.
+- `pins`: Number of terminals per side. For constant data, zero infers the matrix
+  order from a square entry count, or one for a scalar. For a callback, zero leaves
+  the external terminal count at one. Default: `0`.
+- `transformation`: Whether the element exposes transformed external coordinates.
+  Default: `false`.
 
 # Returns
 
-- An `Element` containing the normalized dense impedance representation.
+- An `Element` containing a dense branch-impedance array or a frequency callback.
+
+# Notes
+
+For each nonzero ``z_{ij}``, a branch of admittance ``1/z_{ij}`` connects input
+terminal ``i`` to output terminal ``j``. Zero entries omit branches; they do not
+represent ideal shorts. Diagonal specifications give independent series impedances.
+An off-diagonal entry adds a cross-terminal branch, rather than a mutual impedance.
 
 # Errors
 
 - Throws `ArgumentError` when the impedance shape is incompatible with `pins`
   or when `pins=0` cannot be inferred from the supplied array.
+- A singular branch-to-ABCD conversion propagates a linear-solve error; the default
+  all-zero specification is one such case.
 
 # Examples
 
 ```julia
 single = impedance(z = 5.0, pins = 1)
 diagonal = impedance(z = [1.0, 2.0, 3.0], pins = 3)
-coupled = impedance(z = [1.0 0.1; 0.1 2.0], pins = 2)
+cross_connected = impedance(z = [1.0 0.1; 0.1 2.0], pins = 2)
 dynamic = impedance(z = s -> 0.1 + s * 2e-3, pins = 1)
 ```
 """

@@ -13,7 +13,7 @@ $(TYPEDFIELDS)
 	nᵇ::Int = 1                       # number of bundles (phases)
 	"Number of subconductors in each bundle."
 	nˢᵇ::Int = 1                      # number of subconductors per bundle
-	"Height of the lowest bundle above ground `\\[m\\]`."
+	"Reference bundle height used by the selected tower layout `\\[m\\]`."
 	yᵇᶜ::Union{Int, Float64} = 0     # height above the ground of the lowest bundle  [m]
 	"Vertical offset between bundles `\\[m\\]`."
 	Δyᵇᶜ::Union{Int, Float64} = 0     # vertical offset between the bundles   [m]
@@ -27,7 +27,7 @@ $(TYPEDFIELDS)
 	dˢᵇ::Union{Int, Float64} = 0      # subconductor spacing (symmetric)  [m]
 	"Conductor radius `\\[m\\]`."
 	rᶜ::Union{Int, Float64} = 0       # conductor radius  [m]
-	"DC resistance of one complete conductor `\\[Ω/km\\]`."
+	"DC resistance per unit length of one subconductor `\\[Ω/km\\]`."
 	Rᵈᶜ::Union{Int, Float64} = 0      # DC resistance for the entire conductor [Ω/m]
 	"Per-unit-length shunt conductance `\\[S/m\\]`."
 	gᶜ::Union{Int, Float64} = 1e-11   # shunt conductance
@@ -51,13 +51,13 @@ $(TYPEDFIELDS)
 	nᵍ::Int = 0                        # number of groundwires (typically 0 or 2)
 	"Horizontal offset between ground wires `\\[m\\]`."
 	Δxᵍ::Union{Int, Float64} = 0       # horizontal offset between groundwires [m]
-	"Vertical offset above the lowest phase conductor `\\[m\\]`."
+	"Vertical offset above the phase-conductor reference height `\\[m\\]`."
 	Δyᵍ::Union{Int, Float64} = 0       # vertical offset between the lowest conductor and groundwires  [m]
 	"Ground-wire radius `\\[m\\]`."
 	rᵍ::Union{Int, Float64} = 0        # ground wire radius  [m]
 	"Maximum ground-wire sag `\\[m\\]`."
 	dᵍˢᵃᵍ::Union{Int, Float64} = 0    # sag offset [m]
-	"DC resistance of one ground wire `\\[Ω/km\\]`."
+	"DC resistance per unit length of one ground wire `\\[Ω/km\\]`."
 	Rᵍᵈᶜ::Union{Int, Float64} = 0      # groundwire DC resistance [Ω/m]
 	"Relative ground-wire permeability `\\[dimensionless\\]`."
 	μᵣᵍ::Union{Int, Float64} = 1       # relative groundwire permeability
@@ -88,9 +88,9 @@ $(TYPEDFIELDS)
 	conductors::Conductors = Conductors()
 	"Ground-wire geometry and materials."
 	groundwires::Groundwires = Groundwires()
-	"Earth relative permeability, relative permittivity, and resistivity `\\[Ω·m\\]`."
+	"Earth relative permeability \\[dimensionless\\], relative permittivity \\[dimensionless\\], and resistivity \\[Ω·m\\]."
 	earth_parameters::NTuple{N, Union{Int, Float64}} where N = (1, 1, 1) # (μᵣ_earth, ϵᵣ_earth, ρ_earth) in units ([], [], [Ωm])
-	"Phase transposition, `:none` or `:ideal` (three phase bundles only). Default: `:none`."
+	"Phase transposition, `:none` or `:ideal` (three phase bundles only)."
 	transposition::Symbol = :none
 
 	function Overhead_line(length, conductors, groundwires, earth_parameters, transposition)
@@ -99,10 +99,45 @@ $(TYPEDFIELDS)
 	end
 end
 
+# @with_kw cannot expand @doc on an inner constructor; attach to its existing method.
+@doc """
+$(TYPEDSIGNATURES)
+
+Construct an overhead-line model after validating its phase transposition.
+
+# Arguments
+
+- `length`: Physical line length \\[m\\].
+- `conductors`: Phase-conductor geometry and material data.
+- `groundwires`: Ground-wire geometry and material data.
+- `earth_parameters`: Earth relative permeability \\[dimensionless\\], relative
+  permittivity \\[dimensionless\\], and resistivity \\[Ω·m\\].
+- `transposition`: Phase transposition, `:none` or `:ideal`.
+
+# Returns
+
+- An `Overhead_line` instance containing the supplied component data.
+
+# Errors
+
+- Throws `ArgumentError` for unsupported transposition values or for `:ideal`
+  transposition with a phase-bundle count other than three.
+
+# Examples
+
+```julia
+using PowerImpedance
+model = Overhead_line(1000.0,
+    Conductors(nᵇ=3, nˢᵇ=1, organization=:flat, yᵇᶜ=20.0,
+        Δxᵇᶜ=5.0, rᶜ=0.015, Rᵈᶜ=0.1),
+    Groundwires(), (1.0, 1.0, 100.0), :ideal)
+```
 """
-    overhead_line(; length=0, conductors=Conductors(),
-                  groundwires=Groundwires(), earth_parameters=(1, 1, 1),
-                  transposition=:none, transformation=false, connection=true)
+Overhead_line(::Any, ::Any, ::Any, ::Any, ::Any)
+
+
+"""
+$(TYPEDSIGNATURES)
 
 Construct a frequency-dependent overhead transmission-line element.
 
@@ -117,6 +152,7 @@ Construct a frequency-dependent overhead transmission-line element.
   exactly three phase bundles.
 - `transformation`: Whether to expose a supported transformed representation.
 - `connection`: Whether NetworkBuilder includes the element in the system.
+- `args...`: Remaining component-field keywords described above.
 
 # Returns
 
@@ -333,6 +369,47 @@ function _ohl_groundwire_coordinates(tl::Overhead_line)
     return (xg, yg)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the per-unit-length series impedance and shunt admittance matrices.
+
+# Arguments
+
+- `tl`: Line geometry, conductor materials, earth properties, and transposition.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+  for frequency `f` \\[Hz\\].
+
+# Returns
+
+- `Z`: Series impedance per unit length \\[Ω/m\\].
+- `Y`: Shunt admittance per unit length \\[S/m\\].
+
+# Notes
+
+```math
+d_e=[s\\mu_e(\\sigma_e+s\\epsilon_e)]^{-1/2},\\quad P_{ij}=\\frac{\\log(D_{ij}/d_{ij})}{2\\pi\\epsilon_0},\\quad Y=sP^{\\dagger}+\\operatorname{diag}(g).
+```
+
+The complex earth penetration depth ``d_e`` and conductor/image distances
+``d_{ij},D_{ij}`` use \\[m\\]. Self terms replace ``d_{ii}`` with conductor radius. ``P``
+is the potential-coefficient matrix \\[m/F\\] and ``g`` is shunt conductance \\[S/m\\].
+Bundle constraints, ground-wire elimination, and optional cyclic ideal transposition
+precede shunt-admittance evaluation. Effective heights subtract two thirds of conductor
+sag.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = overhead_line(length=1000.0,
+    conductors=Conductors(nᵇ=3, nˢᵇ=1, organization=:flat,
+        yᵇᶜ=20.0, Δxᵇᶜ=5.0, rᶜ=0.015, Rᵈᶜ=0.1),
+    earth_parameters=(1.0, 1.0, 100.0)).element_model
+result = P.eval_parameters(model, 2π*im*50)
+```
+"""
 function eval_parameters(tl::Overhead_line, s::Complex)
 	_ohl_transposition(tl.transposition, tl.conductors.nᵇ)
 	# ---------- constants ----------
@@ -454,13 +531,45 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Return the receiving-to-sending ABCD matrix from series impedance Z \\[Ω/m\\]
-and shunt admittance Y \\[S/m\\]. The line length is l \\[m\\].
-The matrix Γ \\[1/m\\] describes voltage propagation:
-	Γ = √ZY
-	Yᶜ = Z⁻¹γ
-	ABCD = [cosh(Γl)    Γ⁻¹sinh(Γl)Z
-			Yᶜsinh(Γl)  Z⁻¹cosh(Γl)Z]
+Evaluate the receiving-to-sending ABCD matrix of the distributed overhead-line model.
+
+# Arguments
+
+- `tl`: Line geometry, conductor materials, earth properties, and transposition.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+  for frequency `f` \\[Hz\\].
+
+# Returns
+
+- ABCD matrix with A/D blocks \\[dimensionless\\], B block \\[Ω\\], and C block \\[S\\].
+
+# Notes
+
+```math
+\\Gamma=(ZY)^{1/2},\\qquad Y_c=Z^{-1}\\Gamma,
+\\qquad
+\\begin{bmatrix}A&B\\\\C&D\\end{bmatrix}=
+\\begin{bmatrix}
+\\cosh(\\Gamma l)&\\Gamma^{-1}\\sinh(\\Gamma l)Z\\\\
+Y_c\\sinh(\\Gamma l)&Z^{-1}\\cosh(\\Gamma l)Z
+\\end{bmatrix}.
+```
+
+Here ``Z`` is series impedance \\[Ω/m\\], ``Y`` is shunt admittance \\[S/m\\], ``l`` is
+physical length \\[m\\], and ``Γ`` is the matrix propagation constant \\[m⁻¹\\]. Matrix
+products retain their implemented order.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = overhead_line(length=1000.0,
+    conductors=Conductors(nᵇ=3, nˢᵇ=1, organization=:flat,
+        yᵇᶜ=20.0, Δxᵇᶜ=5.0, rᶜ=0.015, Rᵈᶜ=0.1),
+    earth_parameters=(1.0, 1.0, 100.0)).element_model
+result = P.eval_abcd(model, 2π*im*50)
+```
 """
 function eval_abcd(tl::Overhead_line, s::Complex)
 	(Z, Y) = eval_parameters(tl, s)

@@ -40,20 +40,70 @@ function eval_y(source::Source, s::Complex)
 end =#
 
 
+"""
+$(TYPEDEF)
+
+Store the legacy ideal-voltage-source model and its cached ABCD representation. Source
+constructors store the operating-point targets separately in `Element.setpoint`.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Source <: AbstractLinFreqDomain
+    "Legacy voltage \\[kV\\]; for DC this initializes the pole-to-pole bus voltage. AC power flow uses `Element.setpoint`."
     V::Union{Float64, Int} = 0
 
+    "Legacy active-power parameter \\[MW\\]; power flow uses `Element.setpoint`."
     P::Union{Float64, Int}     = 0
+    "Legacy reactive-power parameter \\[MVAr\\]; power flow uses `Element.setpoint`."
     Q::Union{Float64, Int}     = 0
+    "Legacy minimum active power \\[MW\\]; power flow uses `Element.limits`."
     P_min::Union{Float64, Int} = 0
+    "Legacy maximum active power \\[MW\\]; power flow uses `Element.limits`."
     P_max::Union{Float64, Int} = 0
+    "Legacy minimum reactive power \\[MVAr\\]; power flow uses `Element.limits`."
     Q_min::Union{Float64, Int} = 0
+    "Legacy maximum reactive power \\[MVAr\\]; power flow uses `Element.limits`."
     Q_max::Union{Float64, Int} = 0
 
+    "Cached number of phase-domain or conductor terminals."
     pins::Int = 1
+    "Cached ideal-source ABCD matrix; A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
     ABCD::Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Initialize and cache the ideal-source ABCD matrix for the requested terminal count.
+
+# Arguments
+
+- `source`: Ideal-source parameters and cached ABCD matrix.
+- `p`: Number of phase-domain or conductor terminals per side.
+
+# Returns
+
+- `A`: Identity voltage-transfer matrix \\[dimensionless\\].
+- `B`: Zero series impedance matrix \\[Ω\\].
+- `C`: Zero shunt admittance matrix \\[S\\].
+- `D`: Identity current-transfer matrix \\[dimensionless\\].
+
+# Notes
+
+```math
+A=D=I_p,\\qquad B=C=0.
+```
+
+The complete matrix is cached on the source. The returned blocks use the terminal count
+`p`.
+
+# Examples
+
+```julia
+using PowerImpedance
+PowerImpedance.make_abcd(PowerImpedance.Source(), 3)
+```
+"""
 function make_abcd(source::Source, p)
     source.pins = p
 
@@ -71,6 +121,35 @@ function eval_abcd(source::Source, s::Complex)
     return source.ABCD
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the component terminal admittance at complex frequency `s`.
+
+# Arguments
+
+- `source`: Ideal-source parameters and cached ABCD matrix.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+  for frequency `f` \\[Hz\\].
+
+# Returns
+
+- Complex terminal admittance matrix \\[S\\].
+
+# Notes
+
+The source is regularized for admittance conversion by replacing its series B block with
+a diagonal \\[Ω\\] value of `1e-6`; the cached ideal ABCD matrix remains unchanged.
+The frequency argument is unused by this ideal-source model.
+
+# Examples
+
+```julia
+using PowerImpedance
+model = ac_source(pins=3).element_model
+PowerImpedance.eval_y(model, 2π*im*50)
+```
+"""
 function eval_y(source::Source, s::Complex)
     abcd = eval_abcd(source, s)
     p = source.pins

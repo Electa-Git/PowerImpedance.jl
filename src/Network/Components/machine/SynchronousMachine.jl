@@ -1,6 +1,11 @@
 export synchronousmachine, ElectricalSM, MechanicalSM, AVRSM, GovernorSM, SynchronousMachine
 #  using SciMLLogging #Debug
 ### Abstract synchronous machine type (allow for other structures in future, subtype of Machine is this necessary)
+"""
+$(TYPEDEF)
+
+Define the interface for synchronous-machine models derived from `Machine`.
+"""
 abstract type AbstractSynchronousMachine <: Machine end
 
 
@@ -8,41 +13,69 @@ abstract type AbstractSynchronousMachine <: Machine end
 
 ################# ELECTRICAL #################################
 
+"""
+$(TYPEDEF)
+
+Store the modified Kundur synchronous-machine circuit parameters, including field and
+damper windings and an external RL branch. Circuit parameters use the machine per-unit
+bases.
+
+$(TYPEDFIELDS)
+"""
 @with_kw struct ElectricalSM <: AbstractStateSpace
 
     # eq::EquationInfo = electricalsmeq()
 
+    "Base electrical angular frequency \\[rad/s\\]."
     ωn :: Float64 = 100*π
     
     # Base values
+    "Line-to-line RMS voltage base \\[kV\\]."
     Vᵃᶜ_base :: Float64 = 220 # Converter AC voltage base, LL, RMS [kV]
+    "Three-phase apparent-power base \\[MVA\\]."
     S_base :: Float64 = 1000 # Converter AC voltage base, LL, RMS [kV]
 
     
    
 
     # Transformer (RL-branch model)
+    "External transformer inductance on the machine base \\[dimensionless\\]."
     lt :: Float64 = 0.065 # [pu]
+    "External transformer resistance on the machine base \\[dimensionless\\]."
     rt :: Float64 = 0.0026 # [pu]
 
     # Modified Kundur's example
+    "d-axis magnetizing inductance on the machine base \\[dimensionless\\]."
     La_d :: Float64 = 1.66 # d-axis magnetizing inductance
+    "q-axis magnetizing inductance on the machine base \\[dimensionless\\]."
     La_q :: Float64 = 1.61 # q-axis magnetizing inductance
+    "Stator leakage inductance on the machine base \\[dimensionless\\]."
     Ll :: Float64 = 0.15    # Stator leakage inductance
+    "Armature resistance on the machine base \\[dimensionless\\]."
     Ra :: Float64 = 0.0015  # Armature resistance
 
+    "Field leakage inductance on the machine base \\[dimensionless\\]."
     Lf_d :: Float64 = 0.165  # Field leakage inductance
+    "d-axis damper leakage inductance on the machine base \\[dimensionless\\]."
     L1_d :: Float64 = 0.1713 # d-axis damper winding inductance
+    "First q-axis damper leakage inductance on the machine base \\[dimensionless\\]."
     L1_q :: Float64 = 0.7252 # q-axis first damper winding inductance
+    "Second q-axis damper leakage inductance on the machine base \\[dimensionless\\]."
     L2_q :: Float64 = 0.125  # q-axis second damper winding inductance
 
     # No mutual inductance
+    "d-axis field-to-damper mutual inductance on the machine base \\[dimensionless\\]."
     L23_d :: Float64 = 0 # d-axis field-damper mutual inductance
+    "Stored q-axis mutual-inductance parameter on the machine base, unused by the implemented equations \\[dimensionless\\]."
     L23_q :: Float64 = 0 # q-axis damper-damper mutual inductance
 
+    "Field resistance on the machine base \\[dimensionless\\]."
     Rf_d :: Float64 = 0.0002 # Field circuit resistance
+    "d-axis damper resistance on the machine base \\[dimensionless\\]."
     R1_d :: Float64 = 0.0200 # d-axis damper winding resistance
+    "First q-axis damper resistance on the machine base \\[dimensionless\\]."
     R1_q :: Float64 = 0.0050 # q-axis first damper winding resistance
+    "Second q-axis damper resistance on the machine base \\[dimensionless\\]."
     R2_q :: Float64 = 0.0100 # q-axis second damper winding resistance
 end
 
@@ -53,17 +86,32 @@ initialvalues(::ElectricalSM) =  (;) # No non-zero states
 
 ############################# MECHANICAL #######################################
 
+"""
+$(TYPEDEF)
+
+Store synchronous-machine inertia and the steam-turbine time constants and torque
+fractions.
+
+$(TYPEDFIELDS)
+"""
 @with_kw struct MechanicalSM <: AbstractStateSpace
     
     #eq::EquationInfo{}=mechsmeq()
     # init::IntialStates1{(:ω_pu, :θ_sg),2}
+    "Inertia constant \\[s\\]."
     H :: Float64 = 4 # Inertia constant [s]
     # Steam turbine
+    "Steam-chest time constant \\[s\\]."
     T_CH :: Float64 = 2 # Steam chest time constant [s]
+    "Reheater time constant \\[s\\]."
     T_RH :: Float64 = 5 # Reheater time constant [s]
+    "Crossover time constant \\[s\\]."
     T_CO :: Float64 = 1 # Cross-over time constant [s]
+    "High-pressure turbine torque fraction \\[dimensionless\\]."
     F_HP :: Float64 = 0.3 # High presure turbine fraction [pu]
+    "Intermediate-pressure turbine torque fraction \\[dimensionless\\]."
     F_IP :: Float64 = 0.4 # Intermediate presure turbine fraction [pu]
+    "Low-pressure turbine torque fraction \\[dimensionless\\]."
     F_LP :: Float64 = 0.3 # Low presure turbine fraction [pu]
 
 end
@@ -75,9 +123,19 @@ initialvalues(::MechanicalSM) =  (ω_pu=1.0,)
 ################# GOVERNOR ######################
 
 
+"""
+$(TYPEDEF)
+
+Store speed-measurement lag, governor servo time constant, and frequency droop.
+
+$(TYPEDFIELDS)
+"""
 @with_kw struct GovernorSM <: AbstractStateSpace
+    "Speed-measurement lag time constant \\[s\\]."
     T_w :: Float64 = 0.1 # Speed lag time constant [s]
+    "Governor servo time constant \\[s\\]."
     T_G :: Float64 = 0.2 # Time constant of the governor [s]
+    "Normalized frequency-to-power droop \\[dimensionless\\]."
     R :: Float64 = 0.05   # Frequency control droop / Inverse of the gain [pu/pu]
 end
 
@@ -94,6 +152,8 @@ $(TYPEDEF)
 Regulate synchronous-machine terminal voltage with a measurement filter,
 lead-lag compensator and exciter lag.
 
+$(TYPEDFIELDS)
+
 # Notes
 
 At equilibrium, the open-circuit field voltage is
@@ -103,30 +163,25 @@ E_f = K_A(v_{ref} - |V_t|),
 ```
 
 where ``E_f`` denotes field voltage, ``V_t`` terminal voltage and ``v_{ref}``
-its reference in \\[pu\\]. The regulator gain is ``K_A``.
+its reference in \\[dimensionless\\]. The regulator gain is ``K_A``.
 A complete machine power-flow point sets the fixed effective reference to
 ``v_{ref} = |V_{t,pf}| + E_{f,pf}/K_A`` and requires nonzero `K_A`.
 The configured `vref_SG` field remains unchanged. Without a complete operating
 point, the standalone AVR and machine use `vref_SG` without reference conversion
 or phasor initialization.
-
-$(TYPEDFIELDS)
 """
 @with_kw struct AVRSM <: AbstractStateSpace
-    """
-    Configured terminal-voltage reference \\[pu\\], superseded by the effective
-    reference at a power-flow operating point. Default: `1.01`.
-    """
+    "Configured terminal-voltage reference \\[dimensionless\\], superseded by the effective reference at a power-flow operating point."
     vref_SG :: Float64   = 1.01 # Terminal voltage magnitude reference [pu]
-    "Terminal-voltage measurement-filter time constant \\[s\\]. Default: `0.05`."
+    "Terminal-voltage measurement-filter time constant \\[s\\]."
     T_R :: Float64       = 0.05     # Terminal voltage filter time constant [s]
-    "Lead-lag denominator time constant \\[s\\]. Default: `1.0`."
+    "Lead-lag denominator time constant \\[s\\]."
     T_B :: Float64       = 1.0       # Lag time constant [s]
-    "Lead-lag numerator time constant \\[s\\]. Default: `0.1`."
+    "Lead-lag numerator time constant \\[s\\]."
     T_C :: Float64       = 0.1        # Lead time constant [s]
-    "Exciter-lag time constant \\[s\\]. Default: `0.02`."
+    "Exciter-lag time constant \\[s\\]."
     T_A :: Float64       = 0.02    # Regulator (lag) time constant [s]
-    "Regulator gain \\[pu/pu\\]. Default: `200`."
+    "Regulator gain \\[dimensionless\\]."
     K_A :: Float64       = 200      # Regulator gain [pu]
 end
 
@@ -140,9 +195,11 @@ initialvalues(::AVRSM) =  (;)
 $(TYPEDEF)
 
 Represent a synchronous machine in the dq frame with modified Kundur
-electrical equations, steam turbine, governor and proportional AVR.
+electrical equations, steam turbine, governor, lead-lag AVR, and exciter.
 Electrical quantities use the three-phase `S_base` \\[MVA\\] and
 line-to-line RMS `Vᵃᶜ_base` \\[kV\\] bases.
+
+$(TYPEDFIELDS)
 
 # Notes
 
@@ -175,13 +232,15 @@ unchanged and requires a separate power-flow solve.
 
 The PSCAD admittance comparison has aggregate error below 1%, with the
 largest differences at low frequencies.
-
-$(TYPEDFIELDS)
 """
 struct SynchronousMachine <: AbstractStateSpace
+    "Machine electrical subsystem."
     elec::ElectricalSM
+    "Machine mechanical subsystem."
     mech::MechanicalSM
+    "Automatic voltage regulator and exciter."
     avr::AVRSM
+    "Governor and steam-turbine dynamics."
     gov::GovernorSM
 end
 
@@ -227,6 +286,47 @@ function _machine_powerflow_state(m::SynchronousMachine, sp::SetpointPU)
     return (; state, Tm0, vref_SG=v_f + ξ_AVR)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Convert a physical power-flow operating point to normalized external inputs and internal
+setpoint data.
+
+# Arguments
+
+- `m`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
+- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
+  and angles \\[rad\\].
+
+# Returns
+
+- `inputs`: Named tuple of bus voltages `vd`, `vq`, fixed turbine torque `Tm0`, and
+  effective AVR reference `vref_SG`, on machine bases \\[dimensionless\\].
+- `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+  and the angle uses \\[rad\\]. Returns `nothing` when `Qac` is missing.
+
+# Notes
+
+```math
+v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
+```
+
+Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
+``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
+power base. A complete operating point determines fixed turbine and AVR references from
+the terminal power-flow solution; otherwise `Tm0=Pac/S_base` and the configured AVR
+reference is retained.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = synchronousmachine().element_model
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0, Pdc=100.0, Vdc=640.0)
+inputs, point_pu = P.pftoinputs(model, point)
+```
+"""
 function pftoinputs(m::SynchronousMachine, setpoint::Setpoint)
     v_bus_d = setpoint.Vac * cos(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
     v_bus_q = -setpoint.Vac * sin(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
@@ -255,6 +355,54 @@ end
 
 #################### STATE SPACE EQUATIONS ###############################
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate synchronous-machine winding dynamics and electromagnetic torque, writing state
+derivatives into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `v_dq`: d/q bus-voltage pair in internal machine coordinates \\[dimensionless\\].
+- `block`: Synchronous-machine winding parameters.
+- `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
+
+# Returns
+
+- `Te`: Electromagnetic torque on the machine base \\[dimensionless\\].
+- `didq_dt`: Tuple of d/q current time derivatives on the machine current base \\[s⁻¹\\].
+
+# Notes
+
+```math
+L_D\\dot{\\mathbf i}_D=\\mathbf r_D,\\quad L_Q\\dot{\\mathbf i}_Q=\\mathbf r_Q,\\quad T_e=-(\\Psi_d i_q-\\Psi_q i_d).
+```
+
+The assembled d/q inductance matrices contain stator, field, and damper couplings.
+Right-hand sides include winding resistive drops and speed-induced flux voltages, scaled
+by the electrical base angular frequency \\[rad/s\\]. Currents, fluxes, and torque use
+machine bases \\[dimensionless\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+model = synchronousmachine(setpoint=point).element_model
+inputs, point_pu = P.pftoinputs(model, point)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+block = model.elec
+F = zeros(P.n_states(block))
+P.state_space!(F, x, (inputs.vd, inputs.vq), block; gen=model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, v_dq, block::ElectricalSM; gen::SynchronousMachine)
     Ld = block.La_d + block.Ll + block.lt
     Lf1_d = block.La_d + block.L23_d
@@ -311,6 +459,51 @@ function state_space!(F, x, v_dq, block::ElectricalSM; gen::SynchronousMachine)
     return Te, didq_dt
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate synchronous-machine rotor-speed and angle dynamics, writing state derivatives
+into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `Te`: Electromagnetic torque on the machine torque base \\[dimensionless\\].
+- `block`: Rotor inertia and turbine torque fractions.
+- `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
+
+# Returns
+
+- Assigned rotor-angle derivative \\[rad/s\\].
+
+# Notes
+
+```math
+T_t=F_{HP}T_{HP}+F_{IP}T_{IP}+F_{LP}T_{LP},\\quad \\dot\\omega=(T_t-T_e)/(2H),\\quad \\dot\\theta=\\omega_n(\\omega-1).
+```
+
+Torques and speed use machine bases \\[dimensionless\\]; inertia uses \\[s\\] and rotor
+angle \\[rad\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+model = synchronousmachine(setpoint=point).element_model
+inputs, point_pu = P.pftoinputs(model, point)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+block = model.mech
+F = zeros(P.n_states(block))
+P.state_space!(F, x, inputs.Tm0, block; gen=model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, Te, block::MechanicalSM; gen::SynchronousMachine)
     
     TchHP       = get_state(:TchHP, x)         # Steam chest HP torque [pu]
@@ -328,6 +521,52 @@ function state_space!(F, x, Te, block::MechanicalSM; gen::SynchronousMachine)
     # return z
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate synchronous-machine governor and turbine dynamics, writing state derivatives
+into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `Tm`: Fixed turbine torque reference on the machine torque base \\[dimensionless\\].
+- `block`: Governor lag and droop parameters.
+- `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
+
+# Returns
+
+- Assigned low-pressure torque-state derivative on the machine base \\[s⁻¹\\].
+
+# Notes
+
+```math
+\\dot{\\delta\\omega}_f=(1-\\omega-\\delta\\omega_f)/T_w,\\quad \\dot f=(\\delta\\omega_f/R+T_m-f)/T_G.
+```
+
+Steam-chest, reheater, and crossover torque states follow successive first-order lags
+with the time constants stored in `gen.mech` \\[s\\]. Torque, flow, and speed are
+normalized \\[dimensionless\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+model = synchronousmachine(setpoint=point).element_model
+inputs, point_pu = P.pftoinputs(model, point)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+block = model.gov
+F = zeros(P.n_states(block))
+P.state_space!(F, x, inputs.Tm0, block; gen=model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, Tm, block::GovernorSM; gen::SynchronousMachine)
     
     dw_filt     = get_state(:δω_filt, x)          # Speed difference filtered [pu]
@@ -347,6 +586,56 @@ function state_space!(F, x, Tm, block::GovernorSM; gen::SynchronousMachine)
     # return z
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate synchronous-machine voltage-regulator and exciter dynamics, writing state
+derivatives into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `v_dq`: d/q bus-voltage pair in internal machine coordinates \\[dimensionless\\].
+- `didq_dt`: Tuple of d/q current time derivatives on the machine current base \\[s⁻¹\\].
+- `block`: Voltage-regulator and exciter parameters.
+- `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
+- `vref`: Fixed effective terminal-voltage reference on the machine base
+  \\[dimensionless\\]. Default: `block.vref_SG`.
+
+# Returns
+
+- Assigned normalized field-voltage derivative \\[s⁻¹\\].
+
+# Notes
+
+```math
+\\dot v_f=(|V_t|-v_f)/T_R,\\quad \\dot\\xi=(v_{ref}-v_f-\\xi)/T_B,\\quad y=(T_C/T_B)(v_{ref}-v_f)+(1-T_C/T_B)\\xi,\\quad \\dot v_{df}=(K_A yR_f/L_{ad}-v_{df})/T_A.
+```
+
+Terminal voltage is reconstructed from bus voltage, external branch drop, and current
+derivatives. Voltages use machine bases \\[dimensionless\\]; time constants use \\[s\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+model = synchronousmachine(setpoint=point).element_model
+inputs, point_pu = P.pftoinputs(model, point)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+block = model.avr
+F = zeros(P.n_states(block))
+electrical = zeros(P.n_states(model.elec))
+_, didq_dt = P.state_space!(electrical, x, (inputs.vd, inputs.vq), model.elec; gen=model)
+P.state_space!(F, x, (inputs.vd, inputs.vq), didq_dt, block; gen=model, vref=inputs.vref_SG)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;gen::SynchronousMachine, vref=block.vref_SG)
     
     v_d = v_dq[1]
@@ -374,6 +663,41 @@ function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;gen::SynchronousM
 end
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the coupled synchronous-machine electrical, mechanical, governor, and AVR
+dynamics, writing state derivatives into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  present, use \\[rad\\].
+- `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
+
+# Returns
+
+- First unused derivative index after the assembled machine blocks.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+model = synchronousmachine(setpoint=point).element_model
+inputs, point_pu = P.pftoinputs(model, point)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+F = zeros(P.n_states(model))
+P.state_space!(F, x, inputs, model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, inputs, gen::SynchronousMachine)
     
 
@@ -419,6 +743,34 @@ end
 
 ###### HElper functions ########################
 
+"""
+$(TYPEDSIGNATURES)
+
+Construct a network element containing the requested component model.
+
+# Arguments
+
+- `elec`: Electrical subsystem and its physical base quantities. Default:
+  `ElectricalSM()`.
+- `mech`: Mechanical subsystem. Default: `MechanicalSM()`.
+- `avr`: Automatic voltage regulator. Default: `AVRSM()`.
+- `gov`: Governor subsystem. Default: `GovernorSM()`.
+- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
+  and angles \\[rad\\]. Default: `Setpoint()`.
+- `connection`: Whether the element participates in network construction. Default:
+  `true`.
+
+# Returns
+
+- An `Element` containing the configured component model.
+
+# Examples
+
+```julia
+using PowerImpedance
+component = synchronousmachine(setpoint=Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0))
+```
+"""
 function synchronousmachine(;elec=ElectricalSM(),mech=MechanicalSM(),avr=AVRSM(),gov=GovernorSM(), setpoint=Setpoint(), connection=true)
     
     gen = SynchronousMachine(elec, mech,avr, gov)
@@ -460,7 +812,38 @@ function eval_y(gen :: SynchronousMachine, s :: Complex)
     return Y
 end
 
-"""Return the factors that convert per-unit machine admittance to siemens."""
+"""
+$(TYPEDSIGNATURES)
+
+Return the factors that convert per-unit machine admittance to siemens.
+
+# Arguments
+
+- `elem`: Network element containing the component model and operating point.
+
+# Returns
+
+- Matrix of output-current-base to input-voltage-base ratios \\[S\\].
+
+# Notes
+
+```math
+Y_{ij}^{SI}=Y_{ij}^{pu}\\frac{I_{b,i}}{V_{b,j}}.
+```
+
+The common entry is `S_base/Vac_base²` \\[S\\], using the three-phase power base
+in \\[MVA\\] and line-to-line RMS voltage base in \\[kV\\]. These factors are returned
+for explicit use; core `eval_y` does not automatically apply them to induction machines.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+element = synchronousmachine()
+scale = P.SI_scale(element)
+```
+"""
 function SI_scale(elem::Element{<:SynchronousMachine})
     elec = elem.element_model.elec
     return fill(elec.S_base / elec.Vᵃᶜ_base^2, 2, 2)

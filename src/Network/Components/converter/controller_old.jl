@@ -3,43 +3,99 @@ export Controller, PI_control, VSE_old, CCQSEM, FFVI
 abstract type Controller end
 
 
+"""
+$(TYPEDEF)
+
+Store legacy PI gains, tuning metadata, reference values, and measurement-filter
+settings. The block remains available for legacy converter adapters.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct PI_control <: Controller
+    "Legacy tuning-bandwidth metadata; not read by the current adapter."
     bandwidth :: Union{Int, Float64}  = 0
+    "Legacy damping-ratio metadata \\[dimensionless\\]."
     ζ :: Union{Int, Float64}  = 0
+    "Proportional gain for normalized signals \\[dimensionless\\]."
     Kₚ :: Union{Int, Float64}  = 0                     # proportional gain [pu]
+    "Integral gain for normalized signals \\[s⁻¹\\]."
     Kᵢ :: Union{Int, Float64}  = 0                     # integral gain [pu/s]
+    "Reference array; its physical quantity and base depend on the controller slot."
     ref :: Array{Union{Int, Float64}}  = [0]           # reference value
+    "Order of the legacy Butterworth measurement filter."
     n_f :: Int = 0                                     # Butterworth Filter order [-]
+    "Measurement-filter angular cutoff \\[rad/s\\]."
     ω_f  :: Union{Int, Float64}  = 0                   # Filter cutoff frequency [rad/s]
 end
 
+"""
+$(TYPEDEF)
+
+Store legacy virtual-swing-equation inertia, damping, droop, reference, and
+measurement-filter settings.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct VSE_old <: Controller
+    "Inertia constant \\[s\\]."
     H :: Union{Int, Float64}  = 0                       # Virtual Inertia [s]
+    "Active-power damping gain per normalized frequency difference \\[dimensionless\\]."
     K_d :: Union{Int, Float64}  = 0                     # Damping coefficient [-]
+    "Active-power droop gain per normalized frequency difference \\[dimensionless\\]."
     K_ω    :: Union{Int, Float64}  = 0                  # Droop coefficient [-]
+    "Active-power reference array \\[MW\\]."
     ref :: Array{Union{Int, Float64}}  = [0]            # Active power reference [MW]
+    "Angular-frequency reference on the nominal-frequency base \\[dimensionless\\]."
     ref_ω :: Union{Int, Float64}  = 0                   # Angular frequency reference [pu]
+    "Order of the legacy Butterworth measurement filter."
     n_f :: Int = 0                                      # Butterworth Filter order [-]
+    "Measurement-filter angular cutoff \\[rad/s\\]."
     ω_f  :: Union{Int, Float64}  = 0                    # Butterworth Filter cutoff frequency [rad/s]
 end
 
+"""
+$(TYPEDEF)
+
+Store legacy voltage references and virtual-impedance settings for grid-forming control.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct CCQSEM <: Controller                 
+    "Virtual resistance on the converter base \\[dimensionless\\]."
     Rᵥ :: Union{Int, Float64}  = 0                       # Virtual Resistance [pu]
+    "Virtual inductance on the converter base \\[dimensionless\\]."
     Lᵥ :: Union{Int, Float64}  = 0                       # Virtual inductance [pu]
+    "d-axis voltage reference on the converter base \\[dimensionless\\]."
     ref_vd :: Union{Int, Float64}  = 0                   # Vd voltage reference [pu]
+    "q-axis voltage reference on the converter base \\[dimensionless\\]."
     ref_vq :: Union{Int, Float64}  = 0                   # Vq voltage reference [pu]
+    "Order of the legacy Butterworth measurement filter."
     n_f :: Int  = 0                                      # Butterworth Filter order [-]
+    "Measurement-filter angular cutoff \\[rad/s\\]."
     ω_f  :: Union{Int, Float64}  = 0                     # Butterworth Filter cutoff frequency [rad/s]
 
 
 end
 
+"""
+$(TYPEDEF)
+
+Store legacy virtual-impedance and transient-virtual-resistance settings.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct FFVI <: Controller                 
+    "Virtual resistance on the converter base \\[dimensionless\\]."
     Rᵥ :: Union{Int, Float64}  = 0                       # Virtual Resistance [pu]
+    "Virtual inductance on the converter base \\[dimensionless\\]."
     Lᵥ :: Union{Int, Float64}  = 0                       # Virtual inductance [pu]
+    "Transient virtual resistance on the converter base \\[dimensionless\\]."
     TVR :: Union{Int, Float64}  = 0                      # Transient virtual resistance (TVR) [pu]
+    "Transient virtual-resistance cutoff \\[rad/s\\]."
     ω_ₜᵥᵣ :: Union{Int, Float64}  = 0                     # Cutoff frequency of washout filter for TVR [rad/s]
+    "d-axis voltage reference on the converter base \\[dimensionless\\]."
     ref_vd :: Union{Int, Float64}  = 0                   # Vd voltage reference [pu]
+    "q-axis voltage reference on the converter base \\[dimensionless\\]."
     ref_vq :: Union{Int, Float64}  = 0                   # Vq voltage reference [pu]
 end
 

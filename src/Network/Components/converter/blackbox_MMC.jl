@@ -5,35 +5,57 @@
 
 export blackbox_MMC
 
+"""
+$(TYPEDEF)
+
+Store one sampled black-box MMC operating point and its frequency-indexed admittance
+matrices.
+
+$(TYPEDFIELDS)
+"""
 mutable struct OP
+    "Sampled DC voltage on the scan base \\[dimensionless\\]."
     Vdc::Float64        # DC voltage [pu]
+    "Sampled AC voltage on the scan base \\[dimensionless\\]."
     Vac::Float64        # AC voltage [pu]    
+    "Sampled AC active power \\[MW\\]."
     Pac::Float64        # Active power  [MW]
+    "Sampled AC reactive power \\[MVAr\\]."
     Qac::Float64        # Reactive power [MVAR]
+    "Sampled DC active power \\[MW\\]."
     Pdc::Float64        # DC power [MW]
+    "Sampled AC current \\[kA\\]."
     Iac::Float64        # AC current [kA]
+    "Frequency-indexed admittance matrices \\[S\\]."
     Ymmc::Vector{Matrix{ComplexF64}}
     
     @doc """
-        OP(Vdc, Vac, Pac, Qac, Pdc, Iac, n, Nf)
+    $(TYPEDSIGNATURES)
 
     Construct one black-box converter operating point and allocate its sampled
     admittance matrices.
 
     # Arguments
 
-    - `Vdc`: DC voltage `\\[pu\\]`.
-    - `Vac`: AC voltage `\\[pu\\]`.
-    - `Pac`: AC active power `\\[MW\\]`.
-    - `Qac`: AC reactive power `\\[MVAr\\]`.
-    - `Pdc`: DC active power `\\[MW\\]`.
-    - `Iac`: AC current `\\[kA\\]`.
+    - `Vdc`: Sampled DC voltage on the scan base \\[dimensionless\\].
+    - `Vac`: Sampled AC voltage on the scan base \\[dimensionless\\].
+    - `Pac`: Sampled AC active power \\[MW\\].
+    - `Qac`: Sampled AC reactive power \\[MVAr\\].
+    - `Pdc`: Sampled DC active power \\[MW\\].
+    - `Iac`: Sampled AC current \\[kA\\].
     - `n`: Admittance-matrix order.
     - `Nf`: Number of frequency samples.
 
     # Returns
 
     - An `OP` with `Nf` zero-valued `n × n` complex admittance matrices.
+
+    # Examples
+
+    ```julia
+    using PowerImpedance
+    component = PowerImpedance.OP(1.0, 1.0, 100.0, 0.0, 100.0, 0.2, 3, 10)
+    ```
     """
     function OP(Vdc, Vac, Pac, Qac, Pdc, Iac, n, Nf)
         new(Vdc, Vac, Pac, Qac, Pdc, Iac, [zeros(ComplexF64, n, n) for _ in 1:Nf])
@@ -41,32 +63,59 @@ mutable struct OP
 end
 
 # Type definition, add only elements needed for the blackbox model
+"""
+$(TYPEDEF)
+
+Store imported MMC admittance scans, operating-point data, interpolation settings, and
+legacy power-flow controls.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Blackbox_MMC <: Converter
 
+    "Base electrical angular frequency \\[rad/s\\]."
     ω₀ :: Union{Int, Float64} = 100*π           # Base angular frequncy [rad/s]
 
+    "AC active power \\[MW\\]."
     P :: Union{Int, Float64} = -10              # active power [MW]
+    "Stored AC reactive power, with the update interface sign reversed \\[MVAr\\]."
     Q :: Union{Int, Float64} = 3                # reactive power [MVA]
+    "Stored DC active power \\[MW\\]."
     P_dc :: Union{Int, Float64} = 100           # DC power [MW]
+    "Minimum active power limit \\[MW\\]."
     P_min :: Union{Float64, Int} = -100         # min active power output [MW]
+    "Maximum active power limit \\[MW\\]."
     P_max :: Union{Float64, Int} = 100          # max active power output [MW]
+    "Minimum reactive power limit \\[MVAr\\]."
     Q_min :: Union{Float64, Int} = -50          # min reactive power output [MVA]
+    "Maximum reactive power limit \\[MVAr\\]."
     Q_max :: Union{Float64, Int} = 50           # max reactive power output [MVA]
 
+    "AC reference-frame angle \\[rad\\]."
     θ :: Union{Int, Float64} = 0
+    "AC phase-peak voltage \\[kV\\]."
     Vₘ :: Union{Int, Float64} = 333             # AC voltage, amplitude [kV]
+    "Pole-to-pole DC voltage \\[kV\\]."
     Vᵈᶜ :: Union{Int, Float64} = 640            # DC-bus voltage [kV]
+    "Pole-to-pole DC voltage base \\[kV\\]."
     vDCbase :: Union{Int, Float64} = 640        # DC voltage base [kV]
+    "Line-to-line RMS AC voltage base \\[kV\\]."
     vACbase :: Union{Int, Float64} = 380        # AC voltage base LL-rms, grid side [kV]
+    "Legacy controller settings used to select the power-flow control mode."
     controls :: OrderedDict{Symbol, Controller} = OrderedDict{Symbol, Controller}() # Control structures, only to indicate the operating mode of the MMC !
 
+    "Matched equivalent resistance \\[Ω\\]."
     Rₘₑ :: Float64  = 1.230972594                # matched equivalent resistance [Ohm]
+    "Admittance interpolant over AC voltage, active power, reactive power, and frequency."
     itp :: Any = nothing                         # Interpolation object for the Y-parameters
 
     # Black box data storage
 
+    "Frequency-table filename; the importer reads the second column."
     path_f :: String = "" # absoulte path to the files containing the frequency vector
+    "Operating-point scan filename with a header row."
     path_MMC :: String = "" # absolute path to the files containing the MMC data
+    "Imported operating points and admittance samples."
     data :: Vector{OP} = OP[] # Placeholder for operating point data and Y-parameters
 
 end
@@ -76,6 +125,56 @@ end
 # Constructor function
 # Pull in the data from file here and store it in the struct
 # Then do the model matching for the equivalent resistor --> which pkg?
+"""
+$(TYPEDSIGNATURES)
+
+Import MMC admittance scans, fit the equivalent loss resistance, and construct
+a black-box converter element.
+
+# Arguments
+
+- `args...`: Component-field and element-option keywords described in the corresponding
+  component type.
+
+# Returns
+
+- An `Element` containing the configured component model.
+
+# Notes
+
+The tab-delimited frequency table has no header and uses its second column for
+frequency \\[Hz\\]. The admittance table has one header row. Each scan row contains
+six operating-point entries followed by nine row-major complex entries per frequency.
+Use complex-literal tokens such as `1.0+0.0im` for the operating-point entries so
+that the reader preserves strings for the parser. Interpolation uses AC voltage,
+active power, reactive power, and frequency; DC voltage is not an interpolation axis.
+The importer requires a complete scan grid at a single DC voltage.
+
+```math
+P_{loss}=3R_{eq}I_{ac}^{2}.
+```
+
+A least-squares fit matches ``R_eq`` \\[Ω\\] to the imported loss-current samples before
+the four-axis admittance interpolant is constructed. The fit converts current samples
+from \\[kA\\] to \\[A\\] and power samples from \\[MW\\] to \\[W\\].
+
+# Errors
+
+- Propagates file-reading and parsing errors. Unknown component keywords raise
+  `ArgumentError`; incompatible scan dimensions raise an error.
+
+# Examples
+
+The following call assumes matching frequency and admittance scan files
+in the formats described above, with a complete AC-voltage/power scan grid.
+
+```julia
+using PowerImpedance
+converter = blackbox_MMC(path_f="scan_frequency.tsv",
+                        path_MMC="scan_admittance.txt",
+                        vACbase=380.0, vDCbase=640.0)
+```
+"""
 function blackbox_MMC(;args...)
 
     converter = Blackbox_MMC()
@@ -230,6 +329,39 @@ end
 # Here grab the data from the powerflow and store it in the converter struct
 # Might wanna do a two stage interpolation here: First interpolate for the OP variables (Vm, θ, Pac, Qac, Vdc, Pdc),
 # then interpolate for the frequency variable in eval_parameters function to make things faster 
+"""
+$(TYPEDSIGNATURES)
+
+Update the component operating point or stored linearization in place.
+
+# Arguments
+
+- `converter`: Scan interpolant, operating point, and voltage bases.
+- `Vm`: AC phase-peak voltage \\[kV\\].
+- `θ`: Rotation or operating-point angle \\[rad\\].
+- `Pac`: AC active power \\[MW\\].
+- `Qac`: AC reactive power \\[MVAr\\].
+- `Vdc`: Pole-to-pole DC voltage \\[kV\\].
+- `Pdc`: DC active power \\[MW\\].
+
+# Returns
+
+- The assigned reactive-power value `-Qac` \\[MVAr\\]; callers use the updated model.
+
+# Notes
+
+The update stores `Q = -Qac`. The `Pdc` argument is accepted but is not assigned to the
+model.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = P.Blackbox_MMC()
+P.update!(model, 380sqrt(2/3), 0.0, 100.0, 0.0, 640.0, 100.0)
+```
+"""
 function update!(converter :: Blackbox_MMC, Vm, θ, Pac, Qac, Vdc, Pdc)
 
     # Operating point from power flow
@@ -245,6 +377,45 @@ function update!(converter :: Blackbox_MMC, Vm, θ, Pac, Qac, Vdc, Pdc)
 
 end
 # Here do the interpolation of the imported data to evaluate the admittance matrix at the given s=jω
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the component admittance from its stored linearization or imported frequency
+data.
+
+# Arguments
+
+- `converter`: Scan interpolant, operating point, and voltage bases.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+  for frequency `f` \\[Hz\\].
+
+# Returns
+
+- Interpolated and rotated terminal admittance matrix \\[S\\], assuming the
+  imported scan admittances use \\[S\\]. No unit conversion is applied.
+
+# Notes
+
+```math
+Y=T(\\theta)^{-1}Y_{scan}(V_{pu},P,Q,f)T(\\theta),\\quad V_{pu}=V_m/(\\sqrt{2/3}V_{LL,b}).
+```
+
+``T`` leaves the DC coordinate unchanged and rotates the AC d/q coordinates. The
+imported interpolant determines its extrapolation behavior. The method computes a
+normalized DC voltage but does not use it as an interpolation axis.
+
+The imported interpolant uses linear extrapolation outside the sampled intervals.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = P.Blackbox_MMC(Vₘ=380sqrt(2/3), θ=0.0,
+    itp=(v, p, q, f) -> ComplexF64[0.1 0 0; 0 0.1 0; 0 0 0.1])
+Y = P.eval_parameters(model, 2π*im*50)
+```
+"""
 function eval_parameters(converter :: Blackbox_MMC, s :: Complex)
 
 

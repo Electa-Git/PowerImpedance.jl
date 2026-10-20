@@ -1,3 +1,8 @@
+"""
+$(TYPEDEF)
+
+Define the state-space interface shared by modular converter models.
+"""
 abstract type AbstractConverter <: AbstractStateSpace end
 
 

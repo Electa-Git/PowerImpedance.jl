@@ -21,20 +21,22 @@ export ac_source
 end
  =#
 """
-    ac_source(; setpoint=Setpoint(Vac=220/sqrt(3)), pins=1,
-              limits=Limits(), transformation=false, connection=true,
-              source_kwargs...)
+$(TYPEDSIGNATURES)
 
 Construct an ideal AC voltage-source element and its power-flow data.
 
 # Arguments
 
-- `setpoint`: AC voltage, angle, and power operating point. See [`Setpoint`](@ref).
-- `pins`: Number of phase-domain terminals.
-- `limits`: Active- and reactive-power limits in the source power-flow base.
-- `transformation`: Whether to expose supported transformed coordinates.
-- `connection`: Whether NetworkBuilder includes the element in the system.
-- `source_kwargs`: Legacy fields of the internal `Source` model.
+- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
+  and angles \\[rad\\]. Default: `Setpoint(; Vac = 220 / sqrt(3))`.
+- `pins`: Number of terminals per side. Used directly without inference. Default: `1`.
+- `limits`: Accepted legacy limits keyword; currently not forwarded to the returned
+  element, which retains default `Limits()`. Default: `Limits()`.
+- `transformation`: Whether the element exposes transformed external coordinates.
+  Default: `false`.
+- `connection`: Whether the element participates in network construction. Default:
+  `true`.
+- `args...`: Additional `Source` field values, such as legacy voltage and power data.
 
 # Returns
 
@@ -43,7 +45,7 @@ Construct an ideal AC voltage-source element and its power-flow data.
 
 # Errors
 
-- Throws `ArgumentError` when `source_kwargs` contains an unknown field.
+- Throws `ArgumentError` when an additional keyword is not a `Source` field.
 
 # Examples
 

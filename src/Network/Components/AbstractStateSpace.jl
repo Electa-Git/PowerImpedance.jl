@@ -3,9 +3,63 @@
 
 # Function for ordering states & initialvalues. Puts all that are not defined to zero & discards initial values that do not appear in statenames 
 # Default: no explicit nonzero initial values; Fallback function, so that it is not necessary in all the modular parts to initialize.
+"""
+$(TYPEDSIGNATURES)
+
+Return an empty initial-state specification for a block without a specialized
+initializer.
+
+# Arguments
+
+- `::AbstractStateSpace`: Concrete model or block.
+- `kwargs...`: Accepted and ignored by this fallback.
+
+# Returns
+
+- An empty named tuple. `orderedinitialvalues` supplies zeros for the block states.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+initial = P.initialvalues(NoModulation())
+@assert isempty(initial)
+```
+"""
 initialvalues(::AbstractStateSpace; kwargs...) = (;)
 # equilibriuminitialvalues(::AbstractStateSpace; kwargs...) = (;)
 # TODO: Find proper name, add check for discrepancy statenames and initialvalues
+"""
+$(TYPEDSIGNATURES)
+
+Order the initial states by the model state names and fill unspecified states with zero.
+
+# Arguments
+
+- `x`: Model or block providing `statenames` and `initialvalues` methods.
+- `kwargs...`: Additional keywords forwarded to the selected component or initialization
+  method.
+
+# Returns
+
+- Named tuple of initial values in `statenames(x)` order.
+
+# Notes
+
+Keys not declared by the model are discarded.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+model = ElectricalTLC()
+initial = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+```
+"""
 orderedinitialvalues(x;kwargs...) = NamedTuple{statenames(x)}((;NamedTuple{statenames(x)}(ntuple(i->0.0,length(statenames(x))))..., initialvalues(x;kwargs...)...))
 # statenamesmodular(m::AbstractStateSpace) = merge([statenames(getfield(m,n)) for n in fieldnames(typeof(m))]...)
 n_states(m::AbstractStateSpace) = length(statenames(m))
@@ -14,11 +68,80 @@ n_outputs(m::AbstractStateSpace) = length(outputnames(m))
 n_elec_inputs(m::AbstractStateSpace) = length(elecinputnames(m))
 
 # Default for elecinputnames (only different for SM atm)
+"""
+$(TYPEDSIGNATURES)
+
+Return all input names as electrical inputs for the default state-space interface.
+
+# Arguments
+
+- `m`: Model implementing `inputnames`.
+
+# Returns
+
+- Tuple of electrical input names retained as admittance columns.
+
+# Notes
+
+Models with auxiliary control references override this method to return only their
+electrical input names.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = tlc().element_model
+names = P.elecinputnames(model)
+```
+"""
 elecinputnames(m::AbstractStateSpace) = inputnames(m)
 
 
 ### Helper functions ###
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate one component block into its derivative slice and advance the destination
+index.
+
+# Arguments
+
+- `F`: Writable parent derivative buffer. The block slice starts at `idx`; normalized
+  electrical-state rates use \\[s⁻¹\\], angle rates use \\[rad/s\\], and filter-state rates
+  follow the realization.
+- `x`: Named state values of the parent model, containing all states required by the
+  block. Normalized electrical states use \\[dimensionless\\] and angles use \\[rad\\];
+  filter states follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  present, use \\[rad\\].
+- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+  angle uses \\[rad\\].
+- `block`: Submodel whose derivative slice is evaluated.
+- `m`: Parent model providing shared parameters to the submodel.
+- `idx`: First destination index for the block derivatives.
+
+# Returns
+
+- `out`: Outputs returned by the block.
+- `idx_next`: First unused derivative index after the block.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = tlc().element_model
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+F = zeros(2)
+data = (inputs=inputs, mod=(m_d=2.0, m_q=0.0))
+outputs, next_index = P.state_space_block!(F, x, data, point, model.elec, model, 1)
+@assert next_index == 3
+```
+"""
 function state_space_block!(F, x, inputs, setpoint_pu, block, m::AbstractStateSpace, idx::Integer)
     idx_end = idx + n_states(block) - 1
     out = state_space!(@view(F[idx:idx_end]), x, inputs, setpoint_pu, block, m)
@@ -38,9 +161,28 @@ state_space!(F, x, inputs,::Nothing,  block::AbstractStateSpace) = state_space!(
 state_space_block!(F, x, inputs, block, m::AbstractStateSpace, idx::Integer) = state_space_block!(F, x, inputs, nothing, block, m::AbstractStateSpace, idx::Integer)
 
 ### Solution methods (additional equations equilibriumequations or outputequations)
+"""
+$(TYPEDEF)
+
+Select the additional equations used for equilibrium or Jacobian evaluation.
+"""
 abstract type AbstractSolveKind end
 # Types for form of state-space equations
+"""
+$(TYPEDEF)
+
+Select equilibrium constraints when evaluating component state equations.
+
+$(TYPEDFIELDS)
+"""
 struct Equil <: AbstractSolveKind end
+"""
+$(TYPEDEF)
+
+Select output equations when differentiating a component model.
+
+$(TYPEDFIELDS)
+"""
 struct Jac <: AbstractSolveKind end
 
 ### Dispatch on modeler functions
@@ -83,6 +225,52 @@ function _state_space!(F, x, inputs, setpoint_pu::Union{SetpointPU, Nothing}, m:
 
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Solve the nonlinear equilibrium and differentiate state and output equations to obtain
+the electrical linearization.
+
+# Arguments
+
+- `elem`: Network element containing the component model and operating point.
+- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
+  and angles \\[rad\\].
+
+# Returns
+
+- `A`: Linearized state matrix.
+- `B`: Linearized electrical-input matrix.
+- `C`: Linearized output matrix.
+- `D`: Linearized electrical feedthrough matrix. Matrix units follow the declared state,
+  input, and output coordinates.
+
+# Notes
+
+```math
+f(x_0,u_0)=0,\\quad A=\\left.\\frac{\\partial f}{\\partial x}\\right|_0,\\quad B=\\left.\\frac{\\partial f}{\\partial u_e}\\right|_0,\\quad C=\\left.\\frac{\\partial g}{\\partial x}\\right|_0,\\quad D=\\left.\\frac{\\partial g}{\\partial u_e}\\right|_0.
+```
+
+Electrical inputs ``u_e`` exclude auxiliary reference inputs, which remain fixed during
+differentiation. A successful solve retains a copy of the converged state on the
+element; the returned matrices are stored by `update!`. Converter solves retry with a
+trust-region algorithm after a failed default solve.
+
+# Errors
+
+- Raises an error when equilibrium cannot be found; propagates unsupported-model and
+  differentiation errors.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+element = synchronousmachine(setpoint=point)
+A, B, C, D = P.update(element, point)
+```
+"""
 function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpace}
     
     
@@ -165,9 +353,7 @@ Return a copy of the converged state vector retained by the core linearization.
 
 # Arguments
 
-- `elem`: State-space element with a retained solved state.
-- `setpoint`: Optional operating point. If the retained state differs or is absent,
-  solve and linearize through `update(elem, setpoint)` first.
+- `elem`: Network element containing the component model and operating point.
 
 # Returns
 
@@ -184,6 +370,17 @@ the retained state unchanged.
 
 - Throws `ArgumentError` without a setpoint when the current model lacks a retained
   state. With a setpoint, propagates core solve or linearization errors.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+element = synchronousmachine(setpoint=point)
+P.update!(element, point)
+state = P._steady_state(element)
+```
 """
 function _steady_state(elem::Element{<:AbstractStateSpace})
     saved = elem._equilibrium
@@ -200,6 +397,31 @@ function _steady_state(elem::Element{<:AbstractStateSpace}, setpoint::Setpoint)
     return _steady_state(elem)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Update the component operating point or stored linearization in place.
+
+# Arguments
+
+- `elem`: Network element containing the component model and operating point.
+- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
+  and angles \\[rad\\].
+
+# Returns
+
+- The updated `Element`, with its operating point and linearization matrices stored.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+element = synchronousmachine(setpoint=point)
+P.update!(element, point)
+```
+"""
 function update!(elem::Element, setpoint::Setpoint)
 
     A, B, C, D = update(elem, setpoint)

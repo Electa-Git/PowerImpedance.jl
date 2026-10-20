@@ -7,20 +7,82 @@
 
 export blackbox_line
 
+"""
+$(TYPEDEF)
+
+Store sampled line constants or ABCD matrices and their frequency grid. Line-constant
+evaluation uses per-unit-length Z and Y matrices; the ABCD representation includes the
+configured physical length.
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct Blackbox_line <: Transmission_line 
 
+    "Number of phase-domain or conductor terminals per side."
     n :: Int = 3 # Number of phases
+    "Physical line length \\[m\\]."
     length :: Float64 = 1 # Line length [m]
+    "Import selector: `:PSCAD`, `:LCMjl`, or the incomplete `:Ztool` path."
     data_type :: Symbol = :PSCAD # :PSCAD, :Ztool, :LCMjl #Type of data to be imported
+    "Path or filename prefix passed to the selected importer."
     path :: String = "" # Path to the file containing the data
+    "Sampled shunt admittance matrices per unit length \\[S/m\\]."
     Y ::Vector{Matrix{ComplexF64}} = [] # Imported shunt admittance matrix [Ohms/m]
+    "Sampled series impedance matrices per unit length \\[Ω/m\\]."
     Z :: Vector{Matrix{ComplexF64}} = [] # Imported series impedance matrix [Siemens/m]
+    "Sampled full-length ABCD matrices; A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
     ABCD :: Vector{Matrix{ComplexF64}} = [] # Imported ABCD matrix
+    "Sample frequencies \\[Hz\\]."
     f:: Vector{Float64} = [] # Imported frequency vector [Hz]
 
 end
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Import sampled transmission-line parameters and construct a line element.
+
+# Arguments
+
+- `args...`: Component-field and element-option keywords described in the corresponding
+  component type.
+
+# Returns
+
+- An `Element` containing the configured component model.
+
+# Notes
+
+`:PSCAD` reads magnitude and angle files with `_zm.out`, `_zp.out`, `_ym.out`, and
+`_yp.out` suffixes. `:LCMjl` reads a tab-delimited table with one header row,
+followed by rows containing frequency and `n²` complex Z entries and `n²` complex Y
+entries. Each block is reshaped and adjointed: row-major input entries are conjugated on import. Encode the imaginary
+parts accordingly. Z and Y use \\[Ω/m\\] and \\[S/m\\]. The `:Ztool` import branch is
+currently unimplemented.
+
+# Errors
+
+- Propagates file-reading and parsing errors. Unknown component keywords raise
+  `ArgumentError`; incompatible scan dimensions raise an error.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+mktempdir() do directory
+    path = joinpath(directory, "line.tsv")
+    open(path, "w") do io
+        println(io, "frequency\\tZ\\tY")
+        for f in (10.0, 100.0)
+            println(io, f, "\\t0.01-", 2π*f*1e-6, "im\\t0.0-", 2π*f*1e-10, "im")
+        end
+    end
+    line = blackbox_line(n=1, length=1000.0, data_type=:LCMjl, path=path)
+end
+```
+"""
 function blackbox_line(;args...)
     
     bbl = Blackbox_line()
@@ -142,6 +204,48 @@ end
 
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the per-unit-length series impedance and shunt admittance matrices.
+
+# Arguments
+
+- `bbl`: Sampled line matrices and frequency grid.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+  for frequency `f` \\[Hz\\].
+
+# Returns
+
+- `Z`: Series impedance per unit length \\[Ω/m\\].
+- `Y`: Shunt admittance per unit length \\[S/m\\].
+
+# Notes
+
+```math
+f=\\operatorname{Re}\\left(\\frac{s}{2\\pi\\mathrm{j}}\\right),\\quad Z(f)=(1-t)Z_k+tZ_{k+1},\\quad t=\\frac{f-f_k}{f_{k+1}-f_k}.
+```
+
+The same interpolation applies to ``Y``. Frequencies use \\[Hz\\]. Exact samples are
+selected directly; other points use linear interpolation with linear extrapolation
+outside the sampled interval. `:Ztool` has no Z/Y data and raises an error.
+
+# Errors
+
+- Raises an error for `:Ztool`, which does not provide line constants.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = P.Blackbox_line(n=1, length=1000.0, data_type=:LCMjl,
+    f=[10.0, 100.0],
+    Z=[ComplexF64[0.01 + 2π*im*f*1e-6;;] for f in (10.0, 100.0)],
+    Y=[ComplexF64[2π*im*f*1e-10;;] for f in (10.0, 100.0)])
+result = P.eval_parameters(model, 2π*im*50)
+```
+"""
 function eval_parameters(bbl :: Blackbox_line, s :: Complex) #function eval_parameters with in input two variables: blackbox_line c and s variable
 
     if bbl.data_type == :Ztool
@@ -169,6 +273,53 @@ end
 
 # Only function that is called externally, the interface with the rest of the code!
 # Two cases: Either the user provides Z and Y, or the user provides the ABCD matrix directly.
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the component ABCD representation at complex frequency `s`.
+
+# Arguments
+
+- `bbl`: Sampled line matrices and frequency grid.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+  for frequency `f` \\[Hz\\].
+
+# Returns
+
+- ABCD matrix with A/D blocks \\[dimensionless\\], B block \\[Ω\\], and C block \\[S\\].
+
+# Notes
+
+```math
+\\Gamma=(ZY)^{1/2},\\qquad Y_c=Z^{-1}\\Gamma,
+\\qquad
+\\begin{bmatrix}A&B\\\\C&D\\end{bmatrix}=
+\\begin{bmatrix}
+\\cosh(\\Gamma l)&\\Gamma^{-1}\\sinh(\\Gamma l)Z\\\\
+Y_c\\sinh(\\Gamma l)&Z^{-1}\\cosh(\\Gamma l)Z
+\\end{bmatrix}.
+```
+
+Here ``Z`` is series impedance \\[Ω/m\\], ``Y`` is shunt admittance \\[S/m\\], ``l`` is
+physical length \\[m\\], and ``Γ`` is the matrix propagation constant \\[m⁻¹\\]. Matrix
+products retain their implemented order.
+
+For `:Ztool`, the alternative branch uses sampled ABCD data rather than line constants.
+That import path is incomplete; at an exact sample the current implementation assigns
+the sample to a local variable other than the returned `abcd`.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = P.Blackbox_line(n=1, length=1000.0, data_type=:LCMjl,
+    f=[10.0, 100.0],
+    Z=[ComplexF64[0.01 + 2π*im*f*1e-6;;] for f in (10.0, 100.0)],
+    Y=[ComplexF64[2π*im*f*1e-10;;] for f in (10.0, 100.0)])
+result = P.eval_abcd(model, 2π*im*50)
+```
+"""
 function eval_abcd(bbl :: Blackbox_line, s :: Complex)
     
     

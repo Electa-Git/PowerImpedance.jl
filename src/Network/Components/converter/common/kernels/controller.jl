@@ -11,26 +11,28 @@ without depending on each other's implementation files.
 export Controller, PIControl
 
 """
-Abstract supertype for converter controller parameter blocks.
+$(TYPEDEF)
+
+Abstract supertype for shared controller parameter containers.
 """
 abstract type Controller end
 
 """
-Store proportional-integral controller gains.
-
 $(TYPEDEF)
 
-# Fields
+Store proportional-integral controller gains.
 
 $(TYPEDFIELDS)
 
-# Details
+# Notes
 
 `PIControl` is intentionally a lightweight immutable parameter container.
 State variables for the integrator live in the state-space blocks that use the
 controller.
 """
 @with_kw struct PIControl <: Controller
+    "Proportional gain for the normalized input and output signals \\[dimensionless\\]."
     Kp :: Float64  = 0  # Proportional gain
+    "Integral gain for normalized signals \\[s⁻¹\\]."
     Ki :: Float64  = 0  # Integral gain
 end

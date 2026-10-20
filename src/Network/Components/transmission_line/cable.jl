@@ -65,42 +65,43 @@ $(TYPEDFIELDS)
 	conductors::OrderedDict{Symbol, Conductor} = OrderedDict{Symbol, Conductor}() #OrderedDict -> dictionary with a particular order. Key: Symbol-> C1, C2, C3 and C4. Value: Conductor-> Mutable Struct Conductor, defined above
 	"Ordered insulating layers."
 	insulators::OrderedDict{Symbol, Insulator} = OrderedDict{Symbol, Insulator}() #OrderedDict -> dictionary with a particular order. Key: Symbol-> I1, I2, I3 and I4. Value: Insulator-> Mutable Struct Insulator, defined above
-	"Cable-center coordinates `\\[m\\]`."
+	"Cable-center coordinates `(x, depth)` for underground installations \\[m\\]."
 	positions::Vector{Tuple{Real, Real}} = [] #Real -> indicates all variables are real number, vector composed by tuple of real numbers. e.g. positions=[(0,0),(1,1)]. Cables positions 1st:x=0, y=0. 2nd: x=1, y=1.
-	"Earth relative permeability, relative permittivity, and resistivity `\\[Ω·m\\]`."
+	"Earth relative permeability \\[dimensionless\\], relative permittivity \\[dimensionless\\], and resistivity \\[Ω·m\\]."
 	earth_parameters::NTuple{N, Union{Int, Float64}} where N = (1, 1, 1) # (μᵣ, ϵᵣ, ρ) in units ([], [], [Ωm]) compact way of representing the type for a tuple of length N where all elements are of type Int or Float64.
-	"Cable geometry identifier."
+	"Stored geometry identifier; the native parameter assembly does not branch on this field."
 	configuration::Symbol = :coaxial #Configuration is a datatype symbol with value coaxial Symbol -> Type of data. Symbols can be entered using the quote operator ":"
 	"Installation identifier, such as `:underground` or `:aerial`."
 	type::Symbol = :underground   # or aerial. for the description, see above.
 
 
 
-	"Whether grounded internal conducting layers are Kron-reduced."
+	"Whether all conducting layers except the first core in each cable are Kron-reduced."
 	eliminate::Bool = true #eliminate-> variable with Bool datatype and value TRUE (Bool variable can be true or false)-> predifined with true value. If not specified elsewhere in the code, eliminate=true
 end
 
 """
-    cable(; length=0, positions=[], earth_parameters=(1, 1, 1),
-          configuration=:coaxial, type=:underground, eliminate=true,
-          transformation=false, connection=true, layers...)
+$(TYPEDSIGNATURES)
 
 Construct a frequency-dependent group of coaxial power cables.
 
 # Arguments
 
 - `length`: Physical cable length `\\[m\\]`.
-- `positions`: Cable-center coordinates `(x, y)` `\\[m\\]`; one pair per cable.
+- `positions`: Cable-center coordinates `(x, depth)` `\\[m\\]` for underground
+  installations; one pair per cable.
 - `earth_parameters`: Earth relative permeability `\\[dimensionless\\]`,
   relative permittivity `\\[dimensionless\\]`, and resistivity `\\[Ω·m\\]`.
 - `configuration`: Cable geometry identifier. Default: `:coaxial`.
 - `type`: Installation identifier. Default: `:underground`.
-- `eliminate`: Whether grounded internal conducting layers are Kron-reduced.
+- `eliminate`: Whether all conducting layers except the first core in each cable are
+  Kron-reduced. Default: `true`.
 - `transformation`: Whether to expose a supported transformed representation.
 - `connection`: Whether NetworkBuilder includes the element in the system.
-- `layers`: Named `Conductor` values (`C1`, `C2`, ...) and `Insulator`
-  values (`I1`, `I2`, ...). A metallic screen may be supplied as `SC` together
-  with sheath `C2`.
+- `C1`, `C2`, ...: Named `Conductor` layers, in radial order. A metallic screen
+  may be supplied as `SC` together with sheath `C2`.
+- `I1`, `I2`, ...: Named `Insulator` layers, in radial order.
+- `args...`: Remaining component-field keywords described above.
 
 # Returns
 
@@ -113,10 +114,22 @@ in `\\[Ω·m\\]`; relative permeability and permittivity are dimensionless.
 The complete phase-domain self and mutual parameter matrices are evaluated at
 the requested frequency before optional internal-layer elimination.
 
+```math
+\\rho_{eq}=\\rho\\,\\pi r_o^2/A,\\quad r_{i,sheath}=\\sqrt{r_{o,screen}^2-A_{screen}/\\pi}.
+```
+
+For a solid first core, the nominal-area correction preserves its DC resistance.
+A separately supplied metallic screen is merged into the sheath by changing sheath
+radii while retaining the sheath resistivity. Insulation properties are adjusted
+through the implemented logarithmic layer relations. The first insulation's
+permittivity correction is applied when `I1.a` is nonzero and then uses both `a` and
+`b`. Radii use \\[m\\], areas \\[m²\\], and resistivities \\[Ω·m\\].
+
 # Errors
 
-- Throws `ArgumentError` for an unknown property or layer, or when a metallic
-  screen is supplied without sheath `C2`.
+- Throws `ArgumentError` for an unsupported keyword value or when a metallic
+  screen is supplied without sheath `C2`. Missing required layers such as `C1`
+  propagate `KeyError`.
 
 # Examples
 
@@ -212,6 +225,50 @@ function cable(; args...)
 	)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the per-unit-length series impedance and shunt admittance matrices.
+
+# Arguments
+
+- `c`: Cable geometry, material parameters, and reduction options.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+  for frequency `f` \\[Hz\\].
+
+# Returns
+
+- `Z`: Series impedance per unit length \\[Ω/m\\].
+- `Y`: Shunt admittance per unit length \\[S/m\\].
+
+# Notes
+
+```math
+m=\\sqrt{s\\mu/\\rho},\\quad Z_{ins}=\\frac{s\\mu}{2\\pi}\\log(r_o/r_i),\\quad P_{ins}=\\frac{\\log(r_o/r_i)}{2\\pi\\epsilon},\\quad Y=sP^{-1}.
+```
+
+Layer radii ``r_i,r_o`` use \\[m\\], resistivity ``ρ`` \\[Ω·m\\], permeability ``μ``
+\\[H/m\\], and permittivity ``ε`` \\[F/m\\]. The implementation assembles conductor
+skin-effect and earth-return impedances, transforms layer currents, and optionally
+Kron-reduces all but the first conducting layer of each cable before forming the
+shunt admittance. Without reduction, matrix order is the cable count times the number
+of conducting layers. The earth relative permittivity is stored but unused in this
+assembly; underground potential coefficients use vacuum permittivity.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = cable(length=1000.0, positions=[(0.0, 1.0)],
+    C1=Conductor(rₒ=0.02, ρ=1.72e-8),
+    I1=Insulator(rᵢ=0.02, rₒ=0.04, ϵᵣ=2.3),
+    C2=Conductor(rᵢ=0.04, rₒ=0.042, ρ=2.2e-7),
+    I2=Insulator(rᵢ=0.042, rₒ=0.045, ϵᵣ=2.3),
+    earth_parameters=(1.0, 1.0, 100.0)).element_model
+result = P.eval_parameters(model, 2π*im*50)
+```
+"""
 function eval_parameters(c::Cable, s::Complex)
 	(μᵣᵍ, ϵᵣᵍ, ρᵍ) = c.earth_parameters
 
@@ -376,6 +433,51 @@ function eval_parameters(c::Cable, s::Complex)
 end
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the component ABCD representation at complex frequency `s`.
+
+# Arguments
+
+- `c`: Cable geometry, material parameters, and reduction options.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+  for frequency `f` \\[Hz\\].
+
+# Returns
+
+- ABCD matrix with A/D blocks \\[dimensionless\\], B block \\[Ω\\], and C block \\[S\\].
+
+# Notes
+
+```math
+\\Gamma=(ZY)^{1/2},\\qquad Y_c=Z^{-1}\\Gamma,
+\\qquad
+\\begin{bmatrix}A&B\\\\C&D\\end{bmatrix}=
+\\begin{bmatrix}
+\\cosh(\\Gamma l)&\\Gamma^{-1}\\sinh(\\Gamma l)Z\\\\
+Y_c\\sinh(\\Gamma l)&Z^{-1}\\cosh(\\Gamma l)Z
+\\end{bmatrix}.
+```
+
+Here ``Z`` is series impedance \\[Ω/m\\], ``Y`` is shunt admittance \\[S/m\\], ``l`` is
+physical length \\[m\\], and ``Γ`` is the matrix propagation constant \\[m⁻¹\\]. Matrix
+products retain their implemented order.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = cable(length=1000.0, positions=[(0.0, 1.0)],
+    C1=Conductor(rₒ=0.02, ρ=1.72e-8),
+    I1=Insulator(rᵢ=0.02, rₒ=0.04, ϵᵣ=2.3),
+    C2=Conductor(rᵢ=0.04, rₒ=0.042, ρ=2.2e-7),
+    I2=Insulator(rᵢ=0.042, rₒ=0.045, ϵᵣ=2.3),
+    earth_parameters=(1.0, 1.0, 100.0)).element_model
+result = P.eval_abcd(model, 2π*im*50)
+```
+"""
 function eval_abcd(c::Cable, s::Complex)
 	(Z, Y) = eval_parameters(c, s) #function eval_parameters receives in input variables c and s and gives in output the series impedance matrix Z and the shunt admittance matrix Y
 	γ = sqrt(convert(Array{ComplexF64}, Z*Y)) # conversion of arrays product Z*Y and then Γ=sqrt(Z*Y) -> Simulator tutorial pag 19, bottom page (Calculations same as transmission line case)

@@ -136,12 +136,13 @@ function delete!(n::Network, designator::Symbol)
     end
     delete!(n.elements, designator)
 end
+
+# Return the matching net in n "net" for the input net "p"
 """
     netfor!(n::Network, p::Tuple{Symbol,Symbol})
 Returns the net `p` if it is an element of the network nets `n.nets`
 If not, throws an error.
 """
-# Return the matching net in n "net" for the input net "p"
 function netfor!(n::Network, p::Tuple{Symbol,Symbol})
     for (name, net) in n.nets
         p ∈ net && return net

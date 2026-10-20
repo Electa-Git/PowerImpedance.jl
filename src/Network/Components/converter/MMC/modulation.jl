@@ -1,16 +1,55 @@
 export UncompensatedModulation, CompensatedModulation
 
 
+"""
+$(TYPEDEF)
+
+Define the interface for MMC insertion-index calculation and modulation delays.
+"""
 abstract type AbstractModulationMMC               <: AbstractStateSpace end 
 
 
+"""
+$(TYPEDEF)
+
+Calculate insertion indices using measured DC voltage, without instantaneous
+capacitor-voltage compensation. Separate delays act on differential, sum, and
+zero-sequence commands.
+
+$(TYPEDFIELDS)
+"""
 struct UncompensatedModulation{D<:PadeDelay} <: AbstractModulationMMC 
+    "Two-channel differential d/q modulation delay."
     delay1::D
+    "Two-channel sum d/q modulation delay."
     delay2::D
+    "Scalar sum zero-sequence modulation delay."
     delay3::D
 end
 statenames(m::UncompensatedModulation) = (statenames(m.delay1)..., statenames(m.delay2)..., statenames(m.delay3)...)
 
+"""
+$(TYPEDSIGNATURES)
+
+Construct a `UncompensatedModulation` component from the supplied parameters.
+
+# Arguments
+
+- `timeDelay`: Delay duration \\[s\\]. Default: `0.0`.
+- `padeOrderNum`: Requested Padé numerator polynomial order. Default: `0`.
+- `padeOrderDen`: Requested Padé denominator polynomial order. Default: `0`.
+
+# Returns
+
+- An `UncompensatedModulation` instance.
+
+# Examples
+
+```julia
+using PowerImpedance
+component = UncompensatedModulation(timeDelay=200e-6, padeOrderNum=3, padeOrderDen=3)
+```
+"""
 function UncompensatedModulation(;
     timeDelay::Real = 0.0,
     padeOrderNum::Int = 0,
@@ -41,6 +80,69 @@ function UncompensatedModulation(;
 end
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate DC-voltage-normalized MMC modulation with delays and frame-dependent phase
+compensation, writing state derivatives into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  present, use \\[rad\\].
+- `b`: The `UncompensatedModulation` parameters.
+- `conv`: Parent converter, providing electrical bases and synchronization.
+
+# Returns
+
+- `mΔd`: Insertion index or modulation command \\[dimensionless\\].
+- `mΔq`: Insertion index or modulation command \\[dimensionless\\].
+- `mΔZd`: Insertion index or modulation command \\[dimensionless\\].
+- `mΔZq`: Insertion index or modulation command \\[dimensionless\\].
+- `mΣd`: Insertion index or modulation command \\[dimensionless\\].
+- `mΣq`: Insertion index or modulation command \\[dimensionless\\].
+- `mΣz`: Insertion index or modulation command \\[dimensionless\\].
+
+# Notes
+
+```math
+\\mathbf m_\\Delta=-2\\frac{V_{ac,b}}{V_{dc,b}}\\frac{\\mathbf v_\\Delta^{ref}}{v_{dc,f}},\\qquad \\mathbf m_\\Sigma=2\\frac{\\mathbf v_\\Sigma^{ref}}{v_{dc,f}}.
+```
+
+References are rotated to the electrical-model frames before insertion-index
+calculation. Triplen differential indices are zero; delayed commands receive
+frame-dependent phase compensation. Voltages and insertion indices are normalized
+\\[dimensionless\\].
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
+    delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
+        outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
+    sigma_control=ΣdqzControlTEC()).element_model
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+block = UncompensatedModulation()
+x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
+F = zeros(P.n_states(block))
+meas = (vG_d_f=1.0, vG_q_f=0.0, v_dc_f=1.0, i_d_f=0.1,
+    i_q_f=0.0, i_dc_f=0.1, θ_f=0.0, P_ac_f=0.1, Q_ac_f=0.0, P_dc_f=0.1)
+sync = (ω_c=1.0, P_ac_f=0.1)
+signals = (meas=meas, out_delta=(vMΔ_d_ref_c=1.0, vMΔ_q_ref_c=0.0),
+    out_sigma=(vMΣ_d_ref_c=0.0, vMΣ_q_ref_c=0.0, vMΣ_z_ref=0.5))
+outputs = P.state_space!(F, x, signals, block, model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, inputs, b::UncompensatedModulation, conv::AbstractMMC)
     (; meas, out_delta, out_sigma) = inputs
     (;v_dc_f) = meas
@@ -74,15 +176,51 @@ function state_space!(F, x, inputs, b::UncompensatedModulation, conv::AbstractMM
         mΣd = mΣd, mΣq = mΣq, mΣz = mΣz)
 end
 
+"""
+$(TYPEDEF)
+
+Calculate insertion indices by solving the instantaneous capacitor-voltage coupling
+system. A singular coupling matrix produces NaN insertion indices so an equilibrium
+solver can reject the iterate.
+
+$(TYPEDFIELDS)
+"""
 struct CompensatedModulation{D<:PadeDelay} <: AbstractModulationMMC 
+    "Two-channel differential d/q modulation delay."
     delay1::D
+    "Differential triplen d-component modulation delay."
     delay2a::D
+    "Differential triplen q-component modulation delay."
     delay2b::D
+    "Two-channel sum d/q modulation delay."
     delay3::D
+    "Scalar sum zero-sequence modulation delay."
     delay4::D
 end
 statenames(m::CompensatedModulation) = (statenames(m.delay1)..., statenames(m.delay2a)..., statenames(m.delay2b)..., statenames(m.delay3)..., statenames(m.delay4)...)
 
+"""
+$(TYPEDSIGNATURES)
+
+Construct a `CompensatedModulation` component from the supplied parameters.
+
+# Arguments
+
+- `timeDelay`: Delay duration \\[s\\]. Default: `0.0`.
+- `padeOrderNum`: Requested Padé numerator polynomial order. Default: `0`.
+- `padeOrderDen`: Requested Padé denominator polynomial order. Default: `0`.
+
+# Returns
+
+- A `CompensatedModulation` instance.
+
+# Examples
+
+```julia
+using PowerImpedance
+component = CompensatedModulation(timeDelay=200e-6, padeOrderNum=3, padeOrderDen=3)
+```
+"""
 function CompensatedModulation(;
     timeDelay::Real = 0.0,
     padeOrderNum::Int = 0,
@@ -127,6 +265,72 @@ function CompensatedModulation(;
 end
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Solve MMC capacitor-voltage compensation and apply delays and frame-dependent phase
+compensation, writing state derivatives into `F`.
+
+# Arguments
+
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  present, use \\[rad\\].
+- `b`: The `CompensatedModulation` parameters.
+- `conv`: Parent converter, providing electrical bases and synchronization.
+
+# Returns
+
+- `mΣd`: Insertion index or modulation command \\[dimensionless\\].
+- `mΣq`: Insertion index or modulation command \\[dimensionless\\].
+- `mΣz`: Insertion index or modulation command \\[dimensionless\\].
+- `mΔd`: Insertion index or modulation command \\[dimensionless\\].
+- `mΔq`: Insertion index or modulation command \\[dimensionless\\].
+- `mΔZd`: Insertion index or modulation command \\[dimensionless\\].
+- `mΔZq`: Insertion index or modulation command \\[dimensionless\\].
+
+# Notes
+
+```math
+M(\\mathbf v_C)\\mathbf m=\\mathbf v^{ref}.
+```
+
+``M`` is the seven-by-seven capacitor-voltage coupling matrix used by the electrical
+model. The reference vector contains sum d/q/z and differential d/q voltages, followed
+by two zero triplen-voltage targets. Differential references rotate into the grid
+frame and are multiplied by `baseConv1`; sum references are used without rotation
+in this method. Singular matrices produce NaN insertion indices.
+Independent Padé delays and fundamental, negative-double-frequency, and triplen phase
+compensation follow the solve.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
+    delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
+        outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
+    sigma_control=ΣdqzControlTEC()).element_model
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+block = CompensatedModulation()
+x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
+F = zeros(P.n_states(block))
+meas = (vG_d_f=1.0, vG_q_f=0.0, v_dc_f=1.0, i_d_f=0.1,
+    i_q_f=0.0, i_dc_f=0.1, θ_f=0.0, P_ac_f=0.1, Q_ac_f=0.0, P_dc_f=0.1)
+sync = (ω_c=1.0, P_ac_f=0.1)
+signals = (meas=meas, out_delta=(vMΔ_d_ref_c=1.0, vMΔ_q_ref_c=0.0),
+    out_sigma=(vMΣ_d_ref_c=0.0, vMΣ_q_ref_c=0.0, vMΣ_z_ref=0.5))
+outputs = P.state_space!(F, x, signals, block, model)
+@assert all(isfinite, F)
+```
+"""
 function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
     (; meas, out_delta, out_sigma) = inputs
     (; vCΔ_d, vCΔ_q, vCΔ_Zd, vCΔ_Zq, vCΣ_d, vCΣ_q, vCΣ_z) = x

@@ -11,33 +11,79 @@ measurement primitives live under `converter/common`.
 export ElectricalTLC
 
 """
-Electrical parameters and states of the TLC reactor model.
-
 $(TYPEDEF)
 
-# Fields
+Electrical parameters and states of the TLC reactor model.
 
 $(TYPEDFIELDS)
 """
 struct ElectricalTLC <: AbstractStateSpace
+    "Reactor inductance normalized by the AC inductance base \\[dimensionless\\]."
     Lᵣ::Float64
+    "Reactor resistance normalized by the AC impedance base \\[dimensionless\\]."
     Rᵣ::Float64
 
     # Base values
+    "Base electrical angular frequency \\[rad/s\\]."
     ωbase::Float64
 
+    "Three-phase power base \\[MVA\\]."
     Sbase::Float64
+    "Pole-to-pole DC voltage base \\[kV\\]."
     vDCbase::Float64
+    "AC impedance base \\[Ω\\]."
     zACbase::Float64
+    "AC inductance base \\[H\\]."
     lACbase::Float64
+    "DC current base \\[kA\\]."
     iDCbase::Float64 
+    "AC phase-peak voltage base \\[kV\\]."
     vACbase::Float64 
+    "AC phase-peak current base \\[kA\\]."
     iACbase::Float64 
 end
 
 elec_inductance(block::ElectricalTLC) = block.Lᵣ
 elec_resistance(block::ElectricalTLC) = block.Rᵣ
 
+"""
+$(TYPEDSIGNATURES)
+
+Construct a `ElectricalTLC` component from the supplied parameters.
+
+# Arguments
+
+- `ωbase`: Base electrical angular frequency \\[rad/s\\]. Default: `100π`.
+- `Lᵣ`: Physical converter-side reactor or transformer inductance \\[H\\]. Default:
+  `0.06`.
+- `Rᵣ`: Physical converter-side reactor or transformer resistance \\[Ω\\]. Default:
+  `0.535`.
+- `vACbase_LL_RMS`: Converter-side line-to-line RMS voltage base \\[kV\\]. Default:
+  `220.0`.
+- `Sbase`: Three-phase power base \\[MVA\\]. Default: `500.0`.
+- `vDCbase`: Pole-to-pole DC voltage base \\[kV\\]. Default: `640.0`.
+
+# Returns
+
+- An `ElectricalTLC` instance.
+
+# Notes
+
+```math
+V_{ac,b}=\\sqrt{2/3}\\,V_{LL,rms,b},\\quad Z_{ac,b}=\\frac{3V_{ac,b}^2}{2S_b},\\quad L_{ac,b}=Z_{ac,b}/\\omega_b.
+```
+
+Voltage inputs use \\[kV\\] and the three-phase power base uses \\[MVA\\], so the resulting
+impedance and inductance bases use \\[Ω\\] and \\[H\\]. Stored reactor parameters are
+normalized by these bases.
+
+# Examples
+
+```julia
+using PowerImpedance
+component = ElectricalTLC(Lᵣ=60e-3, Rᵣ=0.535)
+```
+"""
 function ElectricalTLC(; 
     ωbase = 100 * π,
 
@@ -64,16 +110,71 @@ end
 
 
 """
-Return electrical state names.
+$(TYPEDSIGNATURES)
 
-$(SIGNATURES)
+Return the TLC reactor state names in derivative order.
+
+# Arguments
+
+- `::ElectricalTLC`: TLC electrical plant.
+
+# Returns
+
+- `(:i_d, :i_q)`: Names of the normalized d/q reactor currents.
+
+# Notes
+
+Other blocks specialize this interface. Composite models concatenate their block state
+names in equation order.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+names = P.statenames(ElectricalTLC())
+@assert names == (:i_d, :i_q)
+```
 """
 statenames(::ElectricalTLC) = (:i_d, :i_q)
 
 """
+$(TYPEDSIGNATURES)
+
 Compute initial current states from power-flow inputs and setpoints.
 
-$(SIGNATURES)
+# Arguments
+
+- `block`: Normalized TLC reactor parameters.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  present, use \\[rad\\].
+- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+  angle uses \\[rad\\]. Default: `SetpointPU()`.
+
+# Returns
+
+- `i_d`: Initial d-axis reactor current \\[dimensionless\\].
+- `i_q`: Initial q-axis reactor current \\[dimensionless\\].
+
+# Notes
+
+```math
+i_d=(v_d p+v_q q)/(v_d^2+v_q^2),\\qquad i_q=(v_q p-v_d q)/(v_d^2+v_q^2).
+```
+
+Voltages, powers, and currents use TLC bases \\[dimensionless\\]. The method returns zero
+currents for zero voltage magnitude.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+model = ElectricalTLC()
+initial = P.initialvalues(model; inputs, setpoint_pu=point)
+```
 """
 function initialvalues(block::ElectricalTLC; inputs, setpoint_pu=SetpointPU())
     v_d = inputs.vG_d
@@ -93,14 +194,57 @@ end
 
 
 """
+$(TYPEDSIGNATURES)
+
 Evaluate the TLC reactor current dynamics and electrical outputs.
 
-$(SIGNATURES)
+# Arguments
 
-# Details
+- `F`: Writable derivative buffer in block state order. Normalized electrical-state
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  realization.
+- `x`: Named state values. Electrical states use their component bases
+  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+- `data`: Named tuple of electrical input signals and modulation outputs, as shown in
+  the example.
+- `block`: Normalized TLC reactor parameters.
+- `conv`: Parent converter, providing electrical bases and synchronization.
+
+# Returns
+
+- `i_dc`: Terminal current \\[dimensionless\\].
+- `i_d`: Terminal current \\[dimensionless\\].
+- `i_q`: Terminal current \\[dimensionless\\].
+
+# Notes
 
 The method writes derivatives for `i_d` and `i_q` and returns the DC current
 and AC currents used by output equations and downstream reporting.
+
+```math
+\\dot i_d=\\frac{\\omega_b}{L}(v_{Md}-v_{Gd}-Ri_d-Li_q),\\quad \\dot i_q=\\frac{\\omega_b}{L}(v_{Mq}-v_{Gq}-Ri_q+Li_d),\\quad i_{dc}=\\frac{v_{Md}i_d+v_{Mq}i_q}{v_{dc}}.
+```
+
+Modulated voltages are ``v_{Md,q}=v_{dc}m_{d,q}/2``. Electrical quantities use converter
+bases \\[dimensionless\\] and ``ω_b`` uses \\[rad/s\\]. The DC-current output is zero for
+zero DC input voltage.
+
+# Examples
+
+```julia
+using PowerImpedance
+P = PowerImpedance
+model = tlc().element_model
+inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
+point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+block = model.elec
+x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
+F = zeros(P.n_states(block))
+data = (inputs=inputs, mod=(m_d=2.0, m_q=0.0))
+outputs = P.state_space!(F, x, data, block, model)
+@assert all(isfinite, F)
+```
 """
 function state_space!(F, x, data, block::ElectricalTLC, conv::AbstractTLC)
     (; inputs, mod) = data
