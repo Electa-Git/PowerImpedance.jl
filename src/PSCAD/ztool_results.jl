@@ -24,9 +24,9 @@ struct ZToolResult{F, R} <: AbstractProblemResult
     paths::NamedTuple
 end
 
-function _ztool_complex(field, path, line)
+function _ztool_complex(field, path, line; finite = true)
     value = tryparse(ComplexF64, strip(field, ('(', ')')))
-    value !== nothing && isfinite(value) ||
+    value !== nothing && (!finite || isfinite(value)) ||
         throw(ArgumentError("invalid Z-tool complex value at $path:$line: $field"))
     return value
 end
@@ -51,10 +51,11 @@ The ratio of kA to kV gives siemens.
   `admittance[row, column, frequency_index]` follows the header axis order.
   The filename's block order can differ from the header axis order.
   Repeated frequencies remain in their original rows.
+  Nonfinite matrix entries keep the numerical outcome of a diverged simulation.
 
 # Errors
 
-Malformed names, headers, matrix sizes, nonfinite values, nonpositive
+Malformed names, headers, matrix sizes, nonfinite frequencies, nonpositive
 frequencies and decreasing frequencies raise `ArgumentError`.
 """
 function read_ztool_admittance(path::AbstractString)
@@ -108,7 +109,7 @@ function read_ztool_admittance(path::AbstractString)
             throw(ArgumentError("Z-tool frequency must be positive and real at $path:$line"))
         frequencies[k] = real(frequency)
         for row in 1:n, column in 1:n
-            admittance[row, column, k] = _ztool_complex(fields[1 + (row - 1) * n + column], path, line)
+            admittance[row, column, k] = _ztool_complex(fields[1 + (row - 1) * n + column], path, line; finite = false)
         end
     end
     issorted(frequencies) || throw(ArgumentError("Z-tool frequencies decrease in $path"))

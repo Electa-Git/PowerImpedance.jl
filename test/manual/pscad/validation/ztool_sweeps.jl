@@ -20,17 +20,15 @@ function main(arguments)
     for id in ids
         if action == "prepare"
             V.prepare_ztool(id)
-        elseif action == "run"
+        elseif action in ("run", "reanalyse")
             try
-                record = V.run_ztool(id; remote, deadline)
+                record = action == "run" ? V.run_ztool(id; remote, deadline) : V.reanalyse_ztool(id)
                 println(id, ": ", record["status"])
             catch failure
                 failure isa InterruptException && rethrow()
                 push!(failures, id)
-                @warn "Z-tool sweep did not complete; continuing selected cases" case = id error = sprint(showerror, failure)
+                println(id, ": analysis_or_run_failed: ", sprint(showerror, failure))
             end
-        elseif action == "reanalyse"
-            V.reanalyse_ztool(id)
         else
             net = V.fixture(id).factory()
             list = V.fixture_netlist(net, V.power_flow(net))

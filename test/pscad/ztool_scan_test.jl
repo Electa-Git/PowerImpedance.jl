@@ -148,10 +148,14 @@ end
         @test dc.admittance[1, 1, :] == [2 - 3im, 4 + 5im]
         for text in ("", "f dc-2_dc\n", "x dc-2_dc\n1 2", "f other-2_dc\n1 2",
             "f dc-2_d dc-2_q\n1 2 3 4 5", "f dc-2_dc dc-2_dc\n1 2 3 4 5",
-            "f dc-2_dc\n1 2 3", "f dc-2_dc\n1 (NaN+0j)", "f dc-2_dc\n(1+2j) 3",
+            "f dc-2_dc\n1 2 3", "f dc-2_dc\n(NaN+0j) 1", "f dc-2_dc\n(1+2j) 3",
             "f dc-2_dc\n0 2", "f dc-2_dc\n2 3\n1 4", "f dc-2_dc\n1 invalid")
             write(path, text)
             @test_throws ArgumentError read_ztool_admittance(path)
+        end
+        for value in ("nan+nanj", "inf+0j", "0-infj")
+            write(path, "f dc-2_dc\n1 ($value)\n")
+            @test !isfinite(only(read_ztool_admittance(path).admittance))
         end
         for filename in ("invalid.txt", "result#Y_X#dc-2#.txt", "result#Y_DC#dc-3#.txt")
             invalid = joinpath(directory, filename)

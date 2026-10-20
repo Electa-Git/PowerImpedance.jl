@@ -4,6 +4,39 @@ const ZTOOL_LIBRARY = joinpath(REPOSITORY, "test/pscad/fixtures/ztool/Z_tool.psl
 
 ztool_component_ids() = [entry.id for entry in REGISTRY if entry.category in (:passive, :device)]
 
+function ztool_references(id, record, directory; net = nothing)
+    frequencies = record["arguments"]["freq"]
+    continuous = read_response(joinpath(directory, record["julia_reference"]), length(record["axes"]), frequencies)
+    if !haskey(record, "reference_selection")
+        active_case = record["active"] && id in ztool_component_ids()
+        if active_case && net === nothing
+            net = fixture(id).factory()
+            power_flow(net)
+        end
+        eligible = active_case && interface_step_eligible(net.elements[:DUT].element_model)
+        path = joinpath(directory, "suite_reference.toml")
+        suite = isfile(path) ? TOML.parsefile(path) : Dict{String, Any}()
+        policy = get(suite, "reference", eligible ? "discrete_realization" : "plain_model")
+        policy in ("plain_model", "discrete_realization") || error("unknown suite reference: $policy")
+        policy == "discrete_realization" && !eligible && error("suite one-step reference needs zero-delay modulation")
+        if eligible
+            response = one_step_full_y(net.elements[:DUT], record["settings"]["time_step_s"])
+            one_step = cat((response(ComplexF64(2π * im * f)) for f in frequencies)...; dims = 3)
+        else
+            one_step = continuous
+        end
+        write_response(joinpath(directory, "reference_one_step.tsv"), one_step, frequencies)
+        record["one_step_reference"] = "reference_one_step.tsv"
+        record["reference_selection"] = Dict("selected" => policy == "discrete_realization" ? "one_step" : "continuous",
+            "one_step_applies" => eligible,
+            "rule" => isempty(suite) ? "suite zero-delay modulation rule" : "recorded suite reference",
+            "one_step_source_sha256" => digest(joinpath(ROOT, "interface_step.jl")),
+            "suite_record" => suite)
+    end
+    one_step = read_response(joinpath(directory, record["one_step_reference"]), length(record["axes"]), frequencies)
+    return (; continuous, one_step)
+end
+
 function ztool_ports(id, net, list, spec)
     entry = fixture(id)
     entry.category in (:passive, :device) || throw(ArgumentError("$id is outside the component sweep"))
@@ -102,7 +135,8 @@ function ztool_estimate(definition)
     # The runner requests the single-port scans and the topology's multi-port scans.
     extra = length(ports) > 1 && all(p -> p.kind == first(ports).kind, ports) ?
         sum(length(p.voltage) for p in ports) : 0
-    injections = 2(axes + extra)
+    simulations_per_axis = scan.multi_frequency ? cld(length(scan.frequencies), 8) : length(scan.frequencies)
+    injections = simulations_per_axis * (axes + extra)
     duration = scan.start_fft + scan.fft_periods / scan.f_base
     seconds = scan.snapshot_time + scan.injection_interval + (injections + 1) * duration
     # The measured induction-machine rate is about 20 wall seconds per simulated second at 1 us.
@@ -269,12 +303,14 @@ Preparation records unstable predictions and does not contact PSCAD.
 
 - `directory`: Case data directory with the `ztool` suffix.
 - `library`: Local pinned scan library. Default: the repository fixture.
+- `scan`: Optional sweep with explicit frequencies and snapshot time in \\[s\\].
+  Default: the case settings and sixteen multi-frequency tones.
 
 # Returns
 
 - The saved case manifest, including frequency settings in \\[Hz\\] and file hashes.
 """
-function prepare_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"), library = ZTOOL_LIBRARY)
+function prepare_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"), library = ZTOOL_LIBRARY, scan = nothing)
     id in ztool_component_ids() || throw(ArgumentError("$id is outside the component sweep"))
     ispath(directory) && return ztool_load(directory; id)
     P._require_extension()
@@ -282,6 +318,19 @@ function prepare_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"), libr
     point = power_flow(net)
     list = fixture_netlist(net, point)
     definition = ztool_definition(id, net, list)
+    requested = scan
+    if requested !== nothing
+        requested isa ZToolScan || throw(ArgumentError("scan must be a ZToolScan"))
+        requested.frequencies === nothing && throw(ArgumentError("measurement preparation needs explicit frequencies"))
+        requested.snapshot_time === nothing && throw(ArgumentError("measurement preparation needs an explicit snapshot time"))
+        arguments = P._ztool_arguments(requested, definition.settings)
+        settings = P.SimulationSettings(simulation_time = requested.snapshot_time,
+            time_step = arguments["t_step"] / 1e6, sample_step = arguments["sample_step"] / 1e6,
+            frequency = definition.settings.frequency, source_ramp = definition.settings.source_ramp,
+            output_stem = definition.settings.output_stem)
+        reference = ztool_reference(id, net, list, definition.spec, definition.ports, requested.frequencies)
+        definition = merge(definition, (; settings, scan = requested, reference))
+    end
     (; ports, settings, scan, reference) = definition
     requests = [p.element === nothing ? ZToolProbe(p.kind, p.name; bus = p.bus.name,
             perturbation = scan.perturbation) : ZToolProbe(p.kind, p.name;
@@ -328,7 +377,9 @@ function prepare_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"), libr
                 "source feed disconnected; only the element side is compared" :
                 "only the element or selected bus side is compared") for p in ports],
         "suite_decay_time_margin" => definition.declared_decay_times,
-        "perturbation_reason" => "at most 0.0001 pu per tone; eight simultaneous tones; reference current bound at most 0.004 pu",
+        "perturbation_reason" => requested === nothing ?
+            "at most 0.0001 pu per tone; eight simultaneous tones; reference current bound at most 0.004 pu" :
+            "caller-selected formulation; perturbation and timing stored in arguments",
         "ports" => [Dict("name" => p.name, "kind" => string(p.kind), "bus" => p.bus.name,
             "measured_side" => p.measured_side, "source_angle_rad" => something(p.bus.va_rad, 0.0)) for p in ports],
         "comparison_rule" => Dict(string(k) => v for (k, v) in pairs(definition.active ? ACTIVE_FREQUENCY_LIMITS : PASSIVE_FREQUENCY_LIMITS)),
@@ -341,6 +392,7 @@ function prepare_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"), libr
     else
         record["settling_basis"] = "case settled windows; dissipativity does not give a decay rate"
     end
+    ztool_references(id, record, directory; net)
     write_manifest(directory, record)
     return record
 end
@@ -392,12 +444,60 @@ function ztool_frame(record, angle_path)
     return transform
 end
 
+function ztool_comparison(record, actual, reference)
+    frequencies = record["arguments"]["freq"]
+    voltage, current = record["voltage_bases_kV"], record["current_bases_kA"]
+    scale(matrix) = matrix .* reshape(voltage, 1, :, 1) ./ reshape(current, :, 1, 1)
+    entries = comparison_rows(frequencies, scale(actual), scale(reference); active = record["active"])
+    rows = [(; frequency_Hz = f,
+        relative_frobenius_error = norm(actual[:, :, k] - reference[:, :, k]) / max(norm(reference[:, :, k]), eps()),
+        scored_frobenius_error = first(filter(row -> row.frequency_Hz == f, entries)).frobenius_error,
+        limit = record["comparison_rule"]["epsilon"],
+        passed = norm(actual[:, :, k] - reference[:, :, k]) / max(norm(reference[:, :, k]), eps()) <=
+            record["comparison_rule"]["epsilon"] &&
+            all(row -> row.within_tolerance, filter(row -> row.frequency_Hz == f, entries)))
+        for (k, f) in enumerate(frequencies)]
+    summary = Dict("status" => all(row.passed for row in rows) ? "passed" : "failed_comparison",
+        "passing_frequencies" => count(row -> row.passed, rows), "frequency_count" => length(rows),
+        "maximum_relative_frobenius_error" => maximum(row.relative_frobenius_error for row in rows),
+        "maximum_scored_frobenius_error" => maximum(row.scored_frobenius_error for row in rows))
+    return (; entries, rows, summary)
+end
+
+function ztool_phase_projection(id, record, directory)
+    path = joinpath(directory, "reference_phase_projection.tsv")
+    frequencies = record["arguments"]["freq"]
+    if !isfile(path)
+        net = fixture(id).factory()
+        list = fixture_netlist(net, power_flow(net))
+        if id == "ieee9_bus_impedance"
+            twin = phase_twin(net, list)
+            bus = only(filter(b -> b.name == only(record["ports"])["bus"], list.buses))
+            # The owned two-port projection also projects two copies of a local
+            # phase admittance. Its first block gives the local dq result.
+            phase_y(f) = kron(Matrix{Float64}(I, 2, 2),
+                inv(phase_network_z(twin, [bus], f; floating_stars = true)))
+            reference = cat((PowerImpedance.transformation_dq(phase_y(f + 50), phase_y(f - 50))[1:2, 1:2]
+                for f in frequencies)...; dims = 3)
+        else
+            model = net.elements[:line].element_model
+            reference = cat((PowerImpedance.transformation_dq(
+                PowerImpedance.abcd_to_y(eval_abcd(model, ComplexF64(2π * im * (f + 50)))),
+                PowerImpedance.abcd_to_y(eval_abcd(model, ComplexF64(2π * im * (f - 50)))))
+                for f in frequencies)...; dims = 3)
+        end
+        write_response(path, reference, frequencies)
+    end
+    return read_response(path, length(record["axes"]), frequencies)
+end
+
 """
 $(TYPEDSIGNATURES)
 
-Compare stored Z-tool matrices with the saved Julia matrices in \\[S\\].
+Compare stored Z-tool matrices with continuous and one-step Julia matrices in \\[S\\].
 Use file headers to order the axes and rotate measured dq blocks into the fixed frame.
-Read local files without loading the network or contacting PSCAD.
+Build missing references locally and reuse the saved matrices afterwards.
+Keep nonfinite results as diverged outcomes without contacting PSCAD.
 
 # Keywords
 
@@ -410,6 +510,20 @@ Read local files without loading the network or contacting PSCAD.
 function reanalyse_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"))
     record = ztool_load(directory; id)
     output = joinpath(directory, "outputs")
+    if !isfile(joinpath(output, "ztool.toml"))
+        archived = [joinpath(directory, run, "outputs") for run in get(record, "kept_runs", String[])
+                    if isfile(joinpath(directory, run, "outputs", "ztool.toml"))]
+        if isempty(archived)
+            record["status"] = "no_result"
+            record["analysis_error"] = "Z-tool metadata is missing from outputs and archived runs"
+            write_manifest(directory, record)
+            return record
+        end
+        source = only(archived)
+        isdir(output) && error("incomplete outputs already exist: $output")
+        cp(source, output)
+        record["recovered_outputs"] = relpath(source, directory)
+    end
     metadata = TOML.parsefile(joinpath(output, "ztool.toml"))
     metadata["version"] == record["ztoolacdc_version"] || error("Z-tool version differs")
     for (key, expected) in record["arguments"]
@@ -419,29 +533,51 @@ function reanalyse_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"))
     candidates = [read_ztool_admittance(joinpath(output, file)) for file in metadata["files"] if occursin("#Y_", file)]
     selected = only(filter(result -> Set(result.axes) == Set(record["axes"]), candidates))
     selected.frequencies == record["arguments"]["freq"] || error("Z-tool frequencies differ")
+    if any(!isfinite, selected.admittance)
+        record["status"] = "diverged"
+        record["result_file"] = relpath(selected.path, directory)
+        record["nonfinite_entries"] = count(!isfinite, selected.admittance)
+        record["nonfinite_frequencies_Hz"] = selected.frequencies[
+            [any(!isfinite, selected.admittance[:, :, k]) for k in eachindex(selected.frequencies)]]
+        record["observation"] = "nonfinite measured admittances; Julia stability prediction is stored separately"
+        write_manifest(directory, record)
+        return record
+    end
     order = [only(findall(==(axis), selected.axes)) for axis in record["axes"]]
     transform = ztool_frame(record, joinpath(output, "sweep_angles.txt"))
     actual = cat((transform' * selected.admittance[order, order, k] * transform
                   for k in eachindex(selected.frequencies))...; dims = 3)
-    reference = read_response(joinpath(directory, record["julia_reference"]), length(order), selected.frequencies)
-    voltage, current = record["voltage_bases_kV"], record["current_bases_kA"]
-    scale(matrix) = matrix .* reshape(voltage, 1, :, 1) ./ reshape(current, :, 1, 1)
-    comparisons = comparison_rows(selected.frequencies, scale(actual), scale(reference); active = record["active"])
-    write_table(joinpath(directory, "comparison_entries.tsv"), comparisons)
-    rows = [(; frequency_Hz = f,
-        relative_frobenius_error = norm(actual[:, :, k] - reference[:, :, k]) / max(norm(reference[:, :, k]), eps()),
-        scored_frobenius_error = first(filter(row -> row.frequency_Hz == f, comparisons)).frobenius_error,
-        limit = record["comparison_rule"]["epsilon"],
-        passed = norm(actual[:, :, k] - reference[:, :, k]) / max(norm(reference[:, :, k]), eps()) <=
-            record["comparison_rule"]["epsilon"] &&
-            all(row -> row.within_tolerance, filter(row -> row.frequency_Hz == f, comparisons)))
-        for (k, f) in enumerate(selected.frequencies)]
-    write_table(joinpath(directory, "comparison_frequencies.tsv"), rows)
+    references = ztool_references(id, record, directory)
+    selected_reference = record["reference_selection"]["selected"]
+    record["reference_results"] = Dict{String, Any}()
+    for (label, reference) in pairs(references)
+        comparison = ztool_comparison(record, actual, reference)
+        write_table(joinpath(directory, "comparison_$(label)_entries.tsv"), comparison.entries)
+        write_table(joinpath(directory, "comparison_$(label)_frequencies.tsv"), comparison.rows)
+        record["reference_results"][string(label)] = comparison.summary
+        if string(label) == selected_reference
+            write_table(joinpath(directory, "comparison_entries.tsv"), comparison.entries)
+            write_table(joinpath(directory, "comparison_frequencies.tsv"), comparison.rows)
+        end
+    end
     write_response(joinpath(directory, "measured_fixed_frame.tsv"), actual, selected.frequencies)
-    record["status"] = all(row -> row.passed, rows) ? "passed" : "failed_comparison"
+    summary = record["reference_results"][selected_reference]
+    record["status"] = summary["status"]
     record["result_file"] = relpath(selected.path, directory)
-    record["maximum_relative_frobenius_error"] = maximum(row.relative_frobenius_error for row in rows)
-    record["maximum_scored_frobenius_error"] = maximum(row.scored_frobenius_error for row in rows)
+    record["maximum_relative_frobenius_error"] = summary["maximum_relative_frobenius_error"]
+    record["maximum_scored_frobenius_error"] = summary["maximum_scored_frobenius_error"]
+    if id in ("ac_ohl_untransposed", "ac_cable_coaxial", "ieee9_bus_impedance")
+        projection = ztool_comparison(record, actual, ztool_phase_projection(id, record, directory))
+        write_table(joinpath(directory, "comparison_phase_projection_entries.tsv"), projection.entries)
+        write_table(joinpath(directory, "comparison_phase_projection_frequencies.tsv"), projection.rows)
+        record["phase_projection_result"] = projection.summary
+        record["classification"] = "dq approximation"
+        record["informational_only"] = true
+        record["status"] = "informational_dq_approximation"
+        evidence = joinpath(directory, "dq_evidence.toml")
+        record["dq_evidence"] = isfile(evidence) ? TOML.parsefile(evidence) :
+            Dict("supported" => false, "observation" => "no stored sequence or image measurement attached")
+    end
     record["measured_angles_to_fixed_frame"] = [collect(row) for row in eachrow(transform)]
     record["analysis_source_sha256"] = digest(@__FILE__)
     record["analysis_julia_version"] = string(VERSION)

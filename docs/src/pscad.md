@@ -173,6 +173,7 @@ Rows and columns follow the file header, whose block order can differ from
 the filename. The values use Z-tool's current signs and coordinate frame.
 
 The public `read_ztool_admittance(path)` reader also reads saved Z-tool files.
+It keeps nonfinite admittances so that a diverged simulation remains a recorded outcome.
 `result.paths.outputs` contains the admittance files, power-flow and angle
 files, plus `ztool.toml` with the package version and arguments passed.
 `result.diagnostics.ztool` holds that metadata. The usual

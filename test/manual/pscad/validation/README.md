@@ -111,6 +111,101 @@ The estimates scale the measured induction-machine rate with integration step an
 They do not predict scientific acceptance.
 The [PSCAD comparator](https://www.pscad.com/webhelp-v502-ol/Master_Library_Models/CSMF/Interpolation_Compatibility/1comparator.htm) changes its output when time exceeds its threshold.
 
+### Stored sweep results
+
+The sweeps use sixteen tones from 1 Hz to 1 kHz.
+The table gives maximum relative Frobenius errors in percent and the number of frequencies that pass every entry and phase check.
+Zero-delay MMCs use the suite's recorded one-step reference for the verdict.
+Both comparison tables keep the continuous-model errors visible.
+Positive-delay converters and machines use their native reference.
+`n/a` marks cases that keep their native reference.
+
+| Case | Continuous, % | One step, % | Passing / 16 | Outcome |
+|---|---:|---:|---:|---|
+| `passive_ac_rlc` | 0.003194 | n/a | 16/16 | Pass |
+| `passive_dc_rlc` | 0.002868 | n/a | 16/16 | Pass |
+| `ac_ohl_untransposed` | 2.562 | n/a | 0/16 | dq approximation |
+| `ac_cable_coaxial` | 11.01 | n/a | 0/16 | dq approximation |
+| `dc_cable_ohl` | 0.3031 | n/a | 16/16 | Pass |
+| `transformer_yy` | 0.0156 | n/a | 16/16 | Pass |
+| `transformer_dyn11` | 0.01546 | n/a | 16/16 | Pass |
+| `ieee9_bus_impedance` | 9.333 | n/a | 15/16 | dq approximation |
+| `tlc_pq_freq_support` | 1.096 | n/a | 16/16 | Pass |
+| `tlc_pf_q` | 1.096 | n/a | 16/16 | Pass |
+| `tlc_p_qv` | 1.095 | n/a | 13/16 | Entry failure |
+| `tlc_p_vac` | 1.084 | n/a | 15/16 | Entry failure |
+| `tlc_vdc_q` | 0.2593 | n/a | 16/16 | Pass |
+| `tlc_pq_weak_grid` | 1.096 | n/a | 16/16 | Pass |
+| `mmc_pq` | 1.054 | 0.3013 | 16/16 | Pass |
+| `mmc_pf_q` | 1.052 | 0.3034 | 16/16 | Pass |
+| `mmc_p_qv` | 1.047 | 0.2956 | 16/16 | Pass |
+| `mmc_p_vac` | 1.025 | 0.4827 | 16/16 | Pass |
+| `mmc_vdc_q` | 0.6815 | 0.3019 | 16/16 | Pass |
+| `mmc_pq_weak_grid` | 1.064 | 0.3051 | 16/16 | Pass |
+| `mmc_gfm_vsm` | 0.3615 | n/a | 15/16 | Entry failure |
+| `mmc_gfm_lec_compensated` | 0.1005 | n/a | 16/16 | Pass |
+| `mmc_pq_no_energy_control` | 0.7303 | n/a | 15/16 | Entry failure |
+| `synchronous_machine` | 2.923 | n/a | 16/16 | Pass |
+| `mmc_gfm_weak_grid` | n/a | n/a | n/a | Diverged |
+| `induction_machine` | 1.885 | n/a | 16/16 | Pass |
+
+The weak-grid MMC reproduces the instability that Julia predicts near +101 ± j360 s⁻¹.
+All sixteen measured matrices contain nonfinite entries.
+Reanalysis records `diverged`, keeps the files and continues with the other cases.
+A missing result receives `no_result` and keeps its diagnostic.
+
+The untransposed cases report `dq approximation`, as in the suite.
+Stored phase-domain baselines give negative-sequence current ratios of 6.60 % for the overhead line and 5.36 % for the cable.
+The Bus5 voltage ratio is 0.173 %.
+These sequences produce 100 Hz images in the nominal 50 Hz dq frame.
+Z-tool kept frequency matrices without time traces.
+
+The IEEE9 phase-admittance projection agrees with the sweep to 0.038 %.
+Changing projection order leaves 2.52 % and 11.0 % errors for the overhead line and cable.
+The stored matrices do not separate image coupling, fitting and frame effects in those two cases.
+Their phase-domain suite comparisons keep their existing results.
+
+`tlc_p_qv` and `tlc_p_vac` keep new DC-row discrepancies at 1–3 Hz.
+The suite's AC comparisons use a DC clamp and do not measure these rows.
+With prescribed terminal voltages, the slowest `tlc_p_qv` pole decays at 3.136 s⁻¹, or 18.8 decay times before the FFT.
+The `tlc_p_vac` device has an observable near-zero pole even though its original network has a 3.090 s⁻¹ decay rate.
+That network rate does not show whether transients decay after the scan sources take over.
+The saved spectra cannot show adjacent-window changes in the DC row.
+
+The dominant errors from d-axis voltage to DC current match the size and frequency shape of one electrical step of P/Q mixing.
+The estimate multiplies Julia's quadrature current response by `2*pi*50*h`.
+It matches the observed error at 1–3 Hz to within 1.5 %.
+This estimate uses terminal voltage and omits the reactor correction.
+
+The full power derivative adds the reactor voltage and terms from the operating current.
+Its residuals for entries (1,2) and (1,3) stay below 0.0003 pu at 1–3 Hz.
+This points to timing in the exported DC-power calculation.
+The comparison keeps the native reference and its failed entries.
+
+Paired TLC repeats use 12 s settling, a 0.5 Hz base and a 2 s FFT window.
+Their integration steps are 2.5 and 1.25 us.
+The longer window tests timing dependence, while the half step tests the predicted scaling of the P/Q error.
+Longer settling alone cannot remove a neutral mode.
+
+The VSM MMC and the MMC without total-energy control each miss only entry (3,1) at 158 Hz.
+Their positive 200 us modulation delay keeps the continuous reference.
+The absolute errors are 0.0168 and 0.0206 pu against reference magnitudes of 0.108 and 0.204 pu.
+Phase errors of 1.08° and 2.40° pass the 3° limit.
+The matrix norm does not remove an entry failure.
+The saved matrices do not identify the cause of this new DC-to-AC discrepancy.
+
+A single-frequency repeat separates multi-tone interaction from a persistent entry error.
+It uses 100, 125, 140, 150, 158, 170, 200 and 251 Hz, a 1 Hz base and 6 s settling.
+A matching half-step repeat tests integration-step dependence if the entry error persists.
+The repeats keep the original per-tone perturbations and an 8 s snapshot.
+
+The TLC repeats take about 11 min each, or 21 min at half step.
+The MMC repeats take about 21 min each, or 42 min at half step.
+These estimates scale the recorded station times with simulated duration and integration step.
+
+`prepare_ztool(...; scan = ZToolScan(...))` writes a separate measurement directory for a repeat.
+An explicit frequency list and snapshot time tie the source opening to that sweep.
+
 ## Measurement procedure
 
 ### Injection and baseline subtraction

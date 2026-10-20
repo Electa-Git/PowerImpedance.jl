@@ -5,6 +5,7 @@ include("topology.jl")
 const P = PowerImpedance.PSCAD
 const RUN_CASE = Ref("")
 const RUN_FAIL = Ref(false)
+const RUN_NAN = Ref(false)
 const RUN_LAUNCHES = Ref(0)
 const RUN_IDENTITY = Dict("schema" => "2", "version" => "5.1.0",
     "pscad_sha256" => repeat("1", 64), "master_library_sha256" => repeat("2", 64),
@@ -42,6 +43,7 @@ function P.remote_command(::Val{:component_ztool}, config::RemoteConfig, command
         haskey(arguments, "topology") && (arguments["topology"] = joinpath(root, arguments["topology"]))
         entries = split.(readlines(joinpath(directory, "reference.tsv"))[2:end], '\\t')
         matrix = reshape([complex(parse(Float64, r[4]), parse(Float64, r[5])) for r in entries], n, n, :)
+        $(RUN_NAN[]) && (matrix .= ComplexF64(NaN, NaN))
         kind = n == 3 ? "ACDC" : "AC"
         ports = unique([replace(axis, r"_(dc|d|q)\$" => "") for axis in axes])
         name = s["output_stem"] * "#Y_" * kind * "#" * join(ports, '#') * "#.txt"
@@ -361,6 +363,106 @@ end
         @test occursin("synthetic sweep failure", record["failure"])
         @test length(record["kept_runs"]) == 1
         @test any(f -> endswith(f["path"], "pscad-console.txt"), record["files"])
+    end
+end
+
+@testset "Recorded references and diverged or missing results" begin
+    mktempdir() do root
+        id = "induction_machine"
+        directory = joinpath(root, "case", "ztool")
+        V.prepare_ztool(id; directory)
+        RUN_CASE[] = directory
+        remote = RemoteConfig("fixture", root, "unused", "julia", "python";
+            local_root = root, transport = :component_ztool)
+        launches = RUN_LAUNCHES[]
+        RUN_NAN[] = true
+        try
+            result = V.run_ztool(id; directory, remote, deadline = time() + 60)
+            @test result["status"] == "diverged"
+            @test result["nonfinite_entries"] == 64
+            @test RUN_LAUNCHES[] == launches + 1
+            @test V.run_ztool(id; directory, remote, deadline = time() + 60)["status"] == "diverged"
+            @test RUN_LAUNCHES[] == launches + 1
+        finally
+            RUN_NAN[] = false
+        end
+    end
+    mktempdir() do parent
+        directory = joinpath(parent, "rerun")
+        scan = ZToolScan(frequencies = V.ZTOOL_FREQUENCIES[1:8], f_base = 0.5,
+            snapshot_time = 9.0, start_fft = 12.0, injection_interval = 12.0)
+        record = V.prepare_ztool("mmc_gfm_lec_compensated"; directory, scan)
+        @test record["arguments"]["freq"] == scan.frequencies
+        @test record["arguments"]["f_base"] == 0.5
+        @test record["arguments"]["start_fft"] == 12.0
+        @test record["estimate"]["simulations"] == 25
+        @test only(record["source_openings"])["open_threshold_s"] == 9.0
+        @test size(V.read_response(joinpath(directory, "reference.tsv"), 3, scan.frequencies)) == (3, 3, 8)
+        @test !record["reference_selection"]["one_step_applies"]
+        @test V.ztool_formulation(record, directory).snapshot_time == 9.0
+        @test P.check_geometry(joinpath(directory, "scan.pscx")) === nothing
+    end
+    mktempdir() do directory
+        record = stored_result(directory; factor = 1.06)
+        frequencies = record["arguments"]["freq"]
+        reference = V.read_response(joinpath(directory, "reference.tsv"), 3, frequencies)
+        V.write_response(joinpath(directory, "reference_one_step.tsv"), 1.06reference, frequencies)
+        record["one_step_reference"] = "reference_one_step.tsv"
+        record["reference_selection"] = Dict("selected" => "one_step", "one_step_applies" => true)
+        V.write_manifest(directory, record)
+        result = V.reanalyse_ztool("offline"; directory)
+        @test result["status"] == "passed"
+        @test result["reference_results"]["continuous"]["status"] == "failed_comparison"
+        @test result["reference_results"]["one_step"]["maximum_relative_frobenius_error"] < 1e-12
+        @test isfile(joinpath(directory, "comparison_continuous_entries.tsv"))
+        @test isfile(joinpath(directory, "comparison_one_step_entries.tsv"))
+    end
+    mktempdir() do directory
+        record = stored_result(directory; factor = NaN)
+        archived = mkpath(joinpath(directory, "runs", "run-diverged"))
+        mv(joinpath(directory, "outputs"), joinpath(archived, "outputs"))
+        record["kept_runs"] = ["runs/run-diverged"]
+        record["stability"] = Dict("most_positive_located_real_per_s" => 101.0)
+        V.write_manifest(directory, record)
+        result = V.reanalyse_ztool("offline"; directory)
+        @test result["status"] == "diverged"
+        @test result["nonfinite_entries"] == 27
+        @test result["stability"]["most_positive_located_real_per_s"] == 101.0
+        @test result["recovered_outputs"] == "runs/run-diverged/outputs"
+        @test V.reanalyse_ztool("offline"; directory)["status"] == "diverged"
+        @test V.ztool_load(directory)["status"] == "diverged"
+    end
+    mktempdir() do directory
+        record = stored_result(directory)
+        rm(joinpath(directory, "outputs"); recursive = true)
+        V.write_manifest(directory, record)
+        @test V.reanalyse_ztool("offline"; directory)["status"] == "no_result"
+        @test occursin("missing", V.ztool_load(directory)["analysis_error"])
+    end
+    mktempdir() do directory
+        script = joinpath(directory, "ztool_sweeps.jl")
+        cp(joinpath(V.ROOT, "ztool_sweeps.jl"), script)
+        source = read(script, String)
+        write(script, replace(source, "using PythonCall" => ""))
+        write(joinpath(directory, "validation.jl"), """
+            module PSCADValidation
+            ztool_component_ids() = ["first", "second", "third"]
+            RemoteConfig() = error("unexpected station configuration")
+            function reanalyse_ztool(id)
+                id == "first" && error("missing fixture")
+                return Dict("status" => id == "second" ? "diverged" : "passed")
+            end
+            end
+            """)
+        output = IOBuffer()
+        process = run(pipeline(ignorestatus(`$(Base.julia_cmd()) --startup-file=no --project=@stdlib $script reanalyse components`);
+            stdout = output, stderr = output))
+        text = String(take!(output))
+        @test !success(process)
+        @test occursin("first: analysis_or_run_failed", text)
+        @test occursin("second: diverged", text)
+        @test occursin("third: passed", text)
+        @test !occursin("unexpected station configuration", text)
     end
 end
 end
