@@ -1,0 +1,576 @@
+commit = "a1a7fb71d6ac189ddf06d58e2817dc4197dd4031"
+source_sha256 = "05f53268e650a7935fa76b175df1877c708e52f70d09afb9b8a04815e7683dd3"
+
+[canvases.ABC_DQ]
+components = []
+nets = []
+
+[canvases.DQ_ABC]
+components = []
+nets = []
+
+[canvases.MEAS_DUT]
+components = []
+nets = []
+
+[[canvases.MMC_DUT.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_DUT.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_DUT.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_a_arm_inductance"
+[[canvases.MMC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "u_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_DUT.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "i_u_a"
+[[canvases.MMC_DUT.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_DUT.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_DUT.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_a_arm_inductance"
+[[canvases.MMC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "l_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_DUT.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "i_l_a"
+[[canvases.MMC_DUT.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_DUT.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_DUT.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_b_arm_inductance"
+[[canvases.MMC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "u_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_DUT.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "i_u_b"
+[[canvases.MMC_DUT.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_DUT.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_DUT.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_b_arm_inductance"
+[[canvases.MMC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "l_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_DUT.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "i_l_b"
+[[canvases.MMC_DUT.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_DUT.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_DUT.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_c_arm_inductance"
+[[canvases.MMC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "u_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_DUT.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "i_u_c"
+[[canvases.MMC_DUT.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_DUT.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_DUT.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_c_arm_inductance"
+[[canvases.MMC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "l_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_DUT.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "i_l_c"
+[[canvases.MMC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "reactor_a_R"
+    R = "0.4102893 [ohm]"
+[[canvases.MMC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_DUT.components.parameters]
+    L = "0.0460626698 [H]"
+    Name = "reactor_a_L"
+[[canvases.MMC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "reactor_b_R"
+    R = "0.4102893 [ohm]"
+[[canvases.MMC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_DUT.components.parameters]
+    L = "0.0460626698 [H]"
+    Name = "reactor_b_L"
+[[canvases.MMC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "reactor_c_R"
+    R = "0.4102893 [ohm]"
+[[canvases.MMC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_DUT.components.parameters]
+    L = "0.0460626698 [H]"
+    Name = "reactor_c_L"
+[[canvases.MMC_DUT.components]]
+definition = "master:breakout"
+
+    [canvases.MMC_DUT.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.MMC_DUT.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "i_abc"
+[[canvases.MMC_DUT.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "v_abc"
+[[canvases.MMC_DUT.components]]
+definition = "master:xfmr-3p2w"
+
+    [canvases.MMC_DUT.components.parameters]
+    CuL = "0.0 [pu]"
+    Dtls = "0"
+    Enab = "0"
+    Ideal = "0"
+    Im1 = "0.001 [%]"
+    Lead = "1"
+    NLL = "0.0 [pu]"
+    Name = "converter_transformer"
+    Tap = "0"
+    Tmva = "1000.0 [MVA]"
+    V1 = "333.0 [kV]"
+    V2 = "380.0 [kV]"
+    View = "1"
+    Xl = "0.0001 [pu]"
+    YD1 = "0"
+    YD2 = "0"
+    f = "50.0 [Hz]"
+[[canvases.MMC_DUT.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "AC"
+[[canvases.MMC_DUT.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "DC_P"
+[[canvases.MMC_DUT.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "DC_N"
+[[canvases.MMC_DUT.components]]
+definition = "master:voltmeter"
+
+    [canvases.MMC_DUT.components.parameters]
+    Name = "v_dc"
+
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[1, 1], [9, 1], [17, 1], [36, 1], [38, 1]]
+probe = true
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[1, 2], [2, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[10, 2], [11, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[11, 2], [12, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[12, 2], [13, 1], [27, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[13, 2], [14, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[14, 2], [15, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[15, 2], [16, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[17, 2], [18, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[18, 2], [19, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[19, 2], [20, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[20, 2], [21, 1], [29, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[21, 2], [22, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[22, 2], [23, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[23, 2], [24, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[25, 2], [26, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[26, 2], [31, 2]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[27, 2], [28, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[28, 2], [31, 3]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[29, 2], [30, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[30, 2], [31, 4]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[31, 1], [32, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[32, 2], [33, 1], [34, 1]]
+probe = true
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[34, 2], [35, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[4, 2], [5, 1], [25, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[6, 2], [7, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[7, 2], [8, 1]]
+probe = false
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[8, 2], [16, 2], [24, 2], [37, 1], [38, 2]]
+probe = true
+[[canvases.MMC_DUT.nets]]
+ground = false
+ports = [[9, 2], [10, 1]]
+probe = false
+
+[canvases.MOD_DUT]
+components = []
+nets = []
+
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "G_AC"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "380.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_G_AC_1"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "G_DC_P"
+    Ph = "0.0 [deg]"
+    Tc = "0.05 [s]"
+    Type = "6"
+    Vm = "400.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_G_DC_1"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "G_DC_N"
+    Ph = "0.0 [deg]"
+    Tc = "0.05 [s]"
+    Type = "6"
+    Vm = "400.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "mmc_qv:MMC_DUT"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_DUT_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_DUT_1"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "Grid_R"
+    R = "0.01 [ohm]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Grid_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Grid_2"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_AC"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_BUS2"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_DC_P"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_DC_N"
+
+[[canvases.Main.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[2, 2], [10, 1], [13, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[3, 1], [4, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = true
+ports = [[3, 2], [5, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[4, 1], [8, 1], [14, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[5, 2], [6, 3], [15, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[6, 1], [7, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[6, 2], [8, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[7, 2], [11, 2], [12, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[9, 1], [10, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[9, 2], [11, 1]]
+probe = false
+
+[canvases.OCC_DUT]
+components = []
+nets = []
+
+[canvases.PCTRL_DUT]
+components = []
+nets = []
+
+[canvases.PLL_DUT]
+components = []
+nets = []
+
+[canvases.QCTRL_DUT]
+components = []
+nets = []
+
+[canvases.SIGMA_DUT]
+components = []
+nets = []

@@ -59,6 +59,7 @@ end
         include("ConnectionRegistry_test.jl")
         include("calculation_model_test.jl")
         include("numeric_parity_test.jl")
+        include("parity_test.jl")
         include("convert_pmacdc_test.jl")
         include("make_y_node_test.jl")
         include("Transformer_test.jl")

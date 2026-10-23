@@ -1230,4 +1230,5 @@ else
         end
     end
     include("induction_machine_xml_test.jl")
+    include("../parity/pscad_test.jl")
 end

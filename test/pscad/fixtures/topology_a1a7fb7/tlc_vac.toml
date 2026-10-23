@@ -1,0 +1,650 @@
+commit = "a1a7fb71d6ac189ddf06d58e2817dc4197dd4031"
+source_sha256 = "c77776b872268c5fd97ea22f55976fd459b027496a9cc3cba3eb982a48ad9f8a"
+
+[canvases.ABC_DQ]
+components = []
+nets = []
+
+[canvases.CableDC12_row]
+nets = []
+
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableDC12_row.components.parameters]
+        CABNUM = "1"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableDC12"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10.0"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "-0.5 [m]"
+        Y = "1.0 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableDC12_row.components.parameters]
+        CABNUM = "2"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableDC12"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10.0"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0.5 [m]"
+        Y = "1.0 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.CableDC12_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "1 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.CableDC12_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.001 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.CableDC12_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.DQ_ABC]
+components = []
+nets = []
+
+[canvases.MEAS_DUT]
+components = []
+nets = []
+
+[canvases.MOD_DUT]
+components = []
+nets = []
+
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "G3"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "220.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_G3_1"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "G_DC_P"
+    Ph = "0.0 [deg]"
+    Tc = "0.05 [s]"
+    Type = "6"
+    Vm = "320.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_G_DC_1"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "G_DC_N"
+    Ph = "0.0 [deg]"
+    Tc = "0.05 [s]"
+    Type = "6"
+    Vm = "320.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "tlc_vac:VSC_DUT"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_DUT_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_DUT_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "CableDC12"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableDC12_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "CableDC12"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableDC12_2"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "0.1 [H]"
+    Name = "Grid_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Grid_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Grid_2"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_AC"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_BUS2"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC1_reference_P_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC1_reference_N_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_DC1_P"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_DC1_N"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_DC2_P"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_DC2_N"
+[[canvases.Main.components]]
+definition = "tlc_vac:CableDC12_row"
+
+    [canvases.Main.components.parameters]
+    B = ""
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Date = "0"
+    Dim = "0"
+    Freq = "0.0 [Hz]"
+    Length = "10.0 [km]"
+    Mode = "0"
+    Name = "CableDC12"
+    R = ""
+    X = ""
+    const_path = ""
+    gen_cnst = "1"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+
+[[canvases.Main.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[11, 1], [12, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[13, 1], [14, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[13, 2], [15, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[2, 2], [14, 1], [17, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[3, 1], [4, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = true
+ports = [[3, 2], [5, 1], [18, 2], [19, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[4, 1], [12, 2], [22, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[5, 2], [11, 2], [23, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[6, 1], [7, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[6, 2], [8, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[6, 3], [9, 2], [19, 1], [21, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[7, 2], [15, 2], [16, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[8, 1], [10, 1], [18, 1], [20, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[9, 1], [10, 2]]
+probe = false
+
+[canvases.OCC_DUT]
+components = []
+nets = []
+
+[canvases.PCTRL_DUT]
+components = []
+nets = []
+
+[canvases.PLL_DUT]
+components = []
+nets = []
+
+[canvases.QCTRL_DUT]
+components = []
+nets = []
+
+[[canvases.VSC_DUT.components]]
+definition = "master:source_1"
+
+    [canvases.VSC_DUT.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "1"
+    Name = "phase1"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.VSC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.VSC_DUT.components.parameters]
+    Name = "phase1_R"
+    R = "0.3872 [ohm]"
+[[canvases.VSC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.VSC_DUT.components.parameters]
+    L = "0.123249588 [H]"
+    Name = "phase1_L"
+[[canvases.VSC_DUT.components]]
+definition = "master:source_1"
+
+    [canvases.VSC_DUT.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "1"
+    Name = "phase2"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.VSC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.VSC_DUT.components.parameters]
+    Name = "phase2_R"
+    R = "0.3872 [ohm]"
+[[canvases.VSC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.VSC_DUT.components.parameters]
+    L = "0.123249588 [H]"
+    Name = "phase2_L"
+[[canvases.VSC_DUT.components]]
+definition = "master:source_1"
+
+    [canvases.VSC_DUT.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "1"
+    Name = "phase3"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.VSC_DUT.components]]
+definition = "master:resistor"
+
+    [canvases.VSC_DUT.components.parameters]
+    Name = "phase3_R"
+    R = "0.3872 [ohm]"
+[[canvases.VSC_DUT.components]]
+definition = "master:inductor"
+
+    [canvases.VSC_DUT.components.parameters]
+    L = "0.123249588 [H]"
+    Name = "phase3_L"
+[[canvases.VSC_DUT.components]]
+definition = "master:breakout"
+
+    [canvases.VSC_DUT.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.VSC_DUT.components]]
+definition = "master:ammeter"
+
+    [canvases.VSC_DUT.components.parameters]
+    Name = "i_abc"
+[[canvases.VSC_DUT.components]]
+definition = "master:xnode"
+
+    [canvases.VSC_DUT.components.parameters]
+    Name = "AC"
+[[canvases.VSC_DUT.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.VSC_DUT.components.parameters]
+    Name = "v_abc"
+[[canvases.VSC_DUT.components]]
+definition = "master:src_ccin_1"
+
+    [canvases.VSC_DUT.components.parameters]
+    Cntrl = "1"
+    Name = "dc_injection"
+    Tc = "0.0 [s]"
+[[canvases.VSC_DUT.components]]
+definition = "master:xnode"
+
+    [canvases.VSC_DUT.components.parameters]
+    Name = "DC_P"
+[[canvases.VSC_DUT.components]]
+definition = "master:xnode"
+
+    [canvases.VSC_DUT.components.parameters]
+    Name = "DC_N"
+[[canvases.VSC_DUT.components]]
+definition = "master:voltmeter"
+
+    [canvases.VSC_DUT.components.parameters]
+    Name = "v_dc_m"
+
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[10, 1], [11, 1]]
+probe = false
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[11, 2], [12, 1], [13, 1]]
+probe = true
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[14, 1], [15, 1], [17, 1]]
+probe = true
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[14, 2], [16, 1], [17, 2]]
+probe = true
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[3, 2], [10, 2]]
+probe = false
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[4, 1], [5, 1]]
+probe = false
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[6, 2], [10, 3]]
+probe = false
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[7, 1], [8, 1]]
+probe = false
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[8, 2], [9, 1]]
+probe = false
+[[canvases.VSC_DUT.nets]]
+ground = false
+ports = [[9, 2], [10, 4]]
+probe = false

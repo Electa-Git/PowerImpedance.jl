@@ -1,0 +1,3784 @@
+commit = "a1a7fb71d6ac189ddf06d58e2817dc4197dd4031"
+source_sha256 = "1097d4fb61a9e97f1f83b62d8ae70abcedb159da24ded69100f20bb88afc10a4"
+
+[canvases.ABC_DQ]
+components = []
+nets = []
+
+[canvases.CableAC23_row]
+nets = []
+
+    [[canvases.CableAC23_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableAC23_row.components.parameters]
+        CABNUM = "1"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "none"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.71739915"
+        EPS2 = "100"
+        EPS3 = "0.0"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "3"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableAC23"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "0.0"
+        PERM4 = "0.0"
+        PERMA = "0.0"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02545 [m]"
+        R3 = "0.05065 [m]"
+        R4 = "0.05235 [m]"
+        R5 = "0.05575 [m]"
+        R6 = "0.0 [m]"
+        R7 = "0.0 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "0.0 [ohm*m]"
+        RHOC = "2.63E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0 [m]"
+        Y = "1.33562 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "0"
+        elim3 = "0"
+    [[canvases.CableAC23_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableAC23_row.components.parameters]
+        CABNUM = "2"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "none"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.71739915"
+        EPS2 = "100"
+        EPS3 = "0.0"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "3"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableAC23"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "0.0"
+        PERM4 = "0.0"
+        PERMA = "0.0"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02545 [m]"
+        R3 = "0.05065 [m]"
+        R4 = "0.05235 [m]"
+        R5 = "0.05575 [m]"
+        R6 = "0.0 [m]"
+        R7 = "0.0 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "0.0 [ohm*m]"
+        RHOC = "2.63E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "-0.0575 [m]"
+        Y = "1.4322 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "0"
+        elim3 = "0"
+    [[canvases.CableAC23_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableAC23_row.components.parameters]
+        CABNUM = "3"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "none"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.71739915"
+        EPS2 = "100"
+        EPS3 = "0.0"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "3"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableAC23"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "0.0"
+        PERM4 = "0.0"
+        PERMA = "0.0"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02545 [m]"
+        R3 = "0.05065 [m]"
+        R4 = "0.05235 [m]"
+        R5 = "0.05575 [m]"
+        R6 = "0.0 [m]"
+        R7 = "0.0 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "0.0 [ohm*m]"
+        RHOC = "2.63E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0.0575 [m]"
+        Y = "1.4322 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "0"
+        elim3 = "0"
+    [[canvases.CableAC23_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.CableAC23_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "1 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.CableAC23_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.CableAC23_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.CableAC23_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.CableAC23_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.CableAC24_row]
+nets = []
+
+    [[canvases.CableAC24_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableAC24_row.components.parameters]
+        CABNUM = "1"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "none"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.71739915"
+        EPS2 = "100"
+        EPS3 = "0.0"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "3"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableAC24"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "0.0"
+        PERM4 = "0.0"
+        PERMA = "0.0"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02545 [m]"
+        R3 = "0.05065 [m]"
+        R4 = "0.05235 [m]"
+        R5 = "0.05575 [m]"
+        R6 = "0.0 [m]"
+        R7 = "0.0 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "0.0 [ohm*m]"
+        RHOC = "2.63E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0 [m]"
+        Y = "1.33562 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "0"
+        elim3 = "0"
+    [[canvases.CableAC24_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableAC24_row.components.parameters]
+        CABNUM = "2"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "none"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.71739915"
+        EPS2 = "100"
+        EPS3 = "0.0"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "3"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableAC24"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "0.0"
+        PERM4 = "0.0"
+        PERMA = "0.0"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02545 [m]"
+        R3 = "0.05065 [m]"
+        R4 = "0.05235 [m]"
+        R5 = "0.05575 [m]"
+        R6 = "0.0 [m]"
+        R7 = "0.0 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "0.0 [ohm*m]"
+        RHOC = "2.63E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "-0.0575 [m]"
+        Y = "1.4322 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "0"
+        elim3 = "0"
+    [[canvases.CableAC24_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableAC24_row.components.parameters]
+        CABNUM = "3"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "none"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.71739915"
+        EPS2 = "100"
+        EPS3 = "0.0"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "3"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableAC24"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "0.0"
+        PERM4 = "0.0"
+        PERMA = "0.0"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02545 [m]"
+        R3 = "0.05065 [m]"
+        R4 = "0.05235 [m]"
+        R5 = "0.05575 [m]"
+        R6 = "0.0 [m]"
+        R7 = "0.0 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "0.0 [ohm*m]"
+        RHOC = "2.63E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0.0575 [m]"
+        Y = "1.4322 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "0"
+        elim3 = "0"
+    [[canvases.CableAC24_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.CableAC24_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "1 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.CableAC24_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.CableAC24_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.CableAC24_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.CableAC24_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.CableDC12_row]
+nets = []
+
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableDC12_row.components.parameters]
+        CABNUM = "1"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableDC12"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "-0.5 [m]"
+        Y = "1 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableDC12_row.components.parameters]
+        CABNUM = "2"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableDC12"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0.5 [m]"
+        Y = "1 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.CableDC12_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "1 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.CableDC12_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.001 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.CableDC12_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.CableDC12_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.CableDC23_row]
+nets = []
+
+    [[canvases.CableDC23_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableDC23_row.components.parameters]
+        CABNUM = "1"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableDC23"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "-0.5 [m]"
+        Y = "1 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.CableDC23_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.CableDC23_row.components.parameters]
+        CABNUM = "2"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "CableDC23"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0.5 [m]"
+        Y = "1 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.CableDC23_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.CableDC23_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "1 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.CableDC23_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.CableDC23_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.001 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.CableDC23_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.CableDC23_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.DQ_ABC]
+components = []
+nets = []
+
+[canvases.MEAS_MMC1]
+components = []
+nets = []
+
+[canvases.MEAS_MMC2]
+components = []
+nets = []
+
+[canvases.MEAS_MMC3]
+components = []
+nets = []
+
+[canvases.MEAS_OWF]
+components = []
+nets = []
+
+[[canvases.MMC_MMC1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_a_arm_inductance"
+[[canvases.MMC_MMC1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "u_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "i_u_a"
+[[canvases.MMC_MMC1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_a_arm_inductance"
+[[canvases.MMC_MMC1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "l_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "i_l_a"
+[[canvases.MMC_MMC1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_b_arm_inductance"
+[[canvases.MMC_MMC1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "u_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "i_u_b"
+[[canvases.MMC_MMC1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_b_arm_inductance"
+[[canvases.MMC_MMC1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "l_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "i_l_b"
+[[canvases.MMC_MMC1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_c_arm_inductance"
+[[canvases.MMC_MMC1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "u_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "i_u_c"
+[[canvases.MMC_MMC1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_c_arm_inductance"
+[[canvases.MMC_MMC1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "l_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "i_l_c"
+[[canvases.MMC_MMC1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "reactor_a_R"
+    R = "0.554445 [ohm]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    L = "0.0635347169 [H]"
+    Name = "reactor_a_L"
+[[canvases.MMC_MMC1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "reactor_b_R"
+    R = "0.554445 [ohm]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    L = "0.0635347169 [H]"
+    Name = "reactor_b_L"
+[[canvases.MMC_MMC1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "reactor_c_R"
+    R = "0.554445 [ohm]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC1.components.parameters]
+    L = "0.0635347169 [H]"
+    Name = "reactor_c_L"
+[[canvases.MMC_MMC1.components]]
+definition = "master:breakout"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.MMC_MMC1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "i_abc"
+[[canvases.MMC_MMC1.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "v_abc"
+[[canvases.MMC_MMC1.components]]
+definition = "master:xfmr-3p2w"
+
+    [canvases.MMC_MMC1.components.parameters]
+    CuL = "0.0 [pu]"
+    Dtls = "0"
+    Enab = "0"
+    Ideal = "0"
+    Im1 = "0.001 [%]"
+    Lead = "1"
+    NLL = "0.0 [pu]"
+    Name = "converter_transformer"
+    Tap = "0"
+    Tmva = "1000.0 [MVA]"
+    V1 = "333.0 [kV]"
+    V2 = "220.0 [kV]"
+    View = "1"
+    Xl = "0.0001 [pu]"
+    YD1 = "0"
+    YD2 = "0"
+    f = "50.0 [Hz]"
+[[canvases.MMC_MMC1.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "AC"
+[[canvases.MMC_MMC1.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "DC_P"
+[[canvases.MMC_MMC1.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "DC_N"
+[[canvases.MMC_MMC1.components]]
+definition = "master:voltmeter"
+
+    [canvases.MMC_MMC1.components.parameters]
+    Name = "v_dc"
+
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[1, 1], [9, 1], [17, 1], [36, 1], [38, 1]]
+probe = true
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[1, 2], [2, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[10, 2], [11, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[11, 2], [12, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[12, 2], [13, 1], [27, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[13, 2], [14, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[14, 2], [15, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[15, 2], [16, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[17, 2], [18, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[18, 2], [19, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[19, 2], [20, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[20, 2], [21, 1], [29, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[21, 2], [22, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[22, 2], [23, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[23, 2], [24, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[25, 2], [26, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[26, 2], [31, 2]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[27, 2], [28, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[28, 2], [31, 3]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[29, 2], [30, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[30, 2], [31, 4]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[31, 1], [32, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[32, 2], [33, 1], [34, 1]]
+probe = true
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[34, 2], [35, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[4, 2], [5, 1], [25, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[6, 2], [7, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[7, 2], [8, 1]]
+probe = false
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[8, 2], [16, 2], [24, 2], [37, 1], [38, 2]]
+probe = true
+[[canvases.MMC_MMC1.nets]]
+ground = false
+ports = [[9, 2], [10, 1]]
+probe = false
+
+[[canvases.MMC_MMC2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_a_arm_inductance"
+[[canvases.MMC_MMC2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "u_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "i_u_a"
+[[canvases.MMC_MMC2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_a_arm_inductance"
+[[canvases.MMC_MMC2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "l_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "i_l_a"
+[[canvases.MMC_MMC2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_b_arm_inductance"
+[[canvases.MMC_MMC2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "u_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "i_u_b"
+[[canvases.MMC_MMC2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_b_arm_inductance"
+[[canvases.MMC_MMC2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "l_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "i_l_b"
+[[canvases.MMC_MMC2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_c_arm_inductance"
+[[canvases.MMC_MMC2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "u_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "i_u_c"
+[[canvases.MMC_MMC2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_c_arm_inductance"
+[[canvases.MMC_MMC2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "l_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "i_l_c"
+[[canvases.MMC_MMC2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "reactor_a_R"
+    R = "0.554445 [ohm]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    L = "0.0635347169 [H]"
+    Name = "reactor_a_L"
+[[canvases.MMC_MMC2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "reactor_b_R"
+    R = "0.554445 [ohm]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    L = "0.0635347169 [H]"
+    Name = "reactor_b_L"
+[[canvases.MMC_MMC2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "reactor_c_R"
+    R = "0.554445 [ohm]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC2.components.parameters]
+    L = "0.0635347169 [H]"
+    Name = "reactor_c_L"
+[[canvases.MMC_MMC2.components]]
+definition = "master:breakout"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.MMC_MMC2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "i_abc"
+[[canvases.MMC_MMC2.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "v_abc"
+[[canvases.MMC_MMC2.components]]
+definition = "master:xfmr-3p2w"
+
+    [canvases.MMC_MMC2.components.parameters]
+    CuL = "0.0 [pu]"
+    Dtls = "0"
+    Enab = "0"
+    Ideal = "0"
+    Im1 = "0.001 [%]"
+    Lead = "1"
+    NLL = "0.0 [pu]"
+    Name = "converter_transformer"
+    Tap = "0"
+    Tmva = "1000.0 [MVA]"
+    V1 = "333.0 [kV]"
+    V2 = "220.0 [kV]"
+    View = "1"
+    Xl = "0.0001 [pu]"
+    YD1 = "0"
+    YD2 = "0"
+    f = "50.0 [Hz]"
+[[canvases.MMC_MMC2.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "AC"
+[[canvases.MMC_MMC2.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "DC_P"
+[[canvases.MMC_MMC2.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "DC_N"
+[[canvases.MMC_MMC2.components]]
+definition = "master:voltmeter"
+
+    [canvases.MMC_MMC2.components.parameters]
+    Name = "v_dc"
+
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[1, 1], [9, 1], [17, 1], [36, 1], [38, 1]]
+probe = true
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[1, 2], [2, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[10, 2], [11, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[11, 2], [12, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[12, 2], [13, 1], [27, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[13, 2], [14, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[14, 2], [15, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[15, 2], [16, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[17, 2], [18, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[18, 2], [19, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[19, 2], [20, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[20, 2], [21, 1], [29, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[21, 2], [22, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[22, 2], [23, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[23, 2], [24, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[25, 2], [26, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[26, 2], [31, 2]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[27, 2], [28, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[28, 2], [31, 3]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[29, 2], [30, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[30, 2], [31, 4]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[31, 1], [32, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[32, 2], [33, 1], [34, 1]]
+probe = true
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[34, 2], [35, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[4, 2], [5, 1], [25, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[6, 2], [7, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[7, 2], [8, 1]]
+probe = false
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[8, 2], [16, 2], [24, 2], [37, 1], [38, 2]]
+probe = true
+[[canvases.MMC_MMC2.nets]]
+ground = false
+ports = [[9, 2], [10, 1]]
+probe = false
+
+[[canvases.MMC_MMC3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_a_arm_inductance"
+[[canvases.MMC_MMC3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "u_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "i_u_a"
+[[canvases.MMC_MMC3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_a_arm_inductance"
+[[canvases.MMC_MMC3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "l_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "i_l_a"
+[[canvases.MMC_MMC3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_b_arm_inductance"
+[[canvases.MMC_MMC3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "u_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "i_u_b"
+[[canvases.MMC_MMC3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_b_arm_inductance"
+[[canvases.MMC_MMC3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "l_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "i_l_b"
+[[canvases.MMC_MMC3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_c_arm_inductance"
+[[canvases.MMC_MMC3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "u_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "i_u_c"
+[[canvases.MMC_MMC3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_MMC3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_MMC3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_c_arm_inductance"
+[[canvases.MMC_MMC3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "l_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "i_l_c"
+[[canvases.MMC_MMC3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "reactor_a_R"
+    R = "0.554445 [ohm]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    L = "0.0635347169 [H]"
+    Name = "reactor_a_L"
+[[canvases.MMC_MMC3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "reactor_b_R"
+    R = "0.554445 [ohm]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    L = "0.0635347169 [H]"
+    Name = "reactor_b_L"
+[[canvases.MMC_MMC3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "reactor_c_R"
+    R = "0.554445 [ohm]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_MMC3.components.parameters]
+    L = "0.0635347169 [H]"
+    Name = "reactor_c_L"
+[[canvases.MMC_MMC3.components]]
+definition = "master:breakout"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.MMC_MMC3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "i_abc"
+[[canvases.MMC_MMC3.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "v_abc"
+[[canvases.MMC_MMC3.components]]
+definition = "master:xfmr-3p2w"
+
+    [canvases.MMC_MMC3.components.parameters]
+    CuL = "0.0 [pu]"
+    Dtls = "0"
+    Enab = "0"
+    Ideal = "0"
+    Im1 = "0.001 [%]"
+    Lead = "1"
+    NLL = "0.0 [pu]"
+    Name = "converter_transformer"
+    Tap = "0"
+    Tmva = "1000.0 [MVA]"
+    V1 = "333.0 [kV]"
+    V2 = "220.0 [kV]"
+    View = "1"
+    Xl = "0.0001 [pu]"
+    YD1 = "0"
+    YD2 = "0"
+    f = "50.0 [Hz]"
+[[canvases.MMC_MMC3.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "AC"
+[[canvases.MMC_MMC3.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "DC_P"
+[[canvases.MMC_MMC3.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "DC_N"
+[[canvases.MMC_MMC3.components]]
+definition = "master:voltmeter"
+
+    [canvases.MMC_MMC3.components.parameters]
+    Name = "v_dc"
+
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[1, 1], [9, 1], [17, 1], [36, 1], [38, 1]]
+probe = true
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[1, 2], [2, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[10, 2], [11, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[11, 2], [12, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[12, 2], [13, 1], [27, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[13, 2], [14, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[14, 2], [15, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[15, 2], [16, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[17, 2], [18, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[18, 2], [19, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[19, 2], [20, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[20, 2], [21, 1], [29, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[21, 2], [22, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[22, 2], [23, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[23, 2], [24, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[25, 2], [26, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[26, 2], [31, 2]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[27, 2], [28, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[28, 2], [31, 3]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[29, 2], [30, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[30, 2], [31, 4]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[31, 1], [32, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[32, 2], [33, 1], [34, 1]]
+probe = true
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[34, 2], [35, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[4, 2], [5, 1], [25, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[6, 2], [7, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[7, 2], [8, 1]]
+probe = false
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[8, 2], [16, 2], [24, 2], [37, 1], [38, 2]]
+probe = true
+[[canvases.MMC_MMC3.nets]]
+ground = false
+ports = [[9, 2], [10, 1]]
+probe = false
+
+[canvases.MOD_MMC1]
+components = []
+nets = []
+
+[canvases.MOD_MMC2]
+components = []
+nets = []
+
+[canvases.MOD_MMC3]
+components = []
+nets = []
+
+[canvases.MOD_OWF]
+components = []
+nets = []
+
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "G1"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "220.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_G1_1"
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "G3"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "220.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_G3_1"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "G_dc_P"
+    Ph = "0.0 [deg]"
+    Tc = "0.05 [s]"
+    Type = "6"
+    Vm = "320.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_G_dc_1"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "G_dc_N"
+    Ph = "0.0 [deg]"
+    Tc = "0.05 [s]"
+    Type = "6"
+    Vm = "320.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:MMC_MMC1"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_MMC1_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_MMC1_1"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:MMC_MMC2"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_MMC2_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_MMC2_1"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:MMC_MMC3"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_MMC3_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_MMC3_1"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:VSC_OWF"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_OWF_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_OWF_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "CableDC12"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableDC12_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "CableDC12"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableDC12_2"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "CableDC23"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableDC23_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "CableDC23"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableDC23_2"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "3"
+    Name = "CableAC23"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:breakout"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableAC23_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "3"
+    Name = "CableAC23"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:breakout"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableAC23_2"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "3"
+    Name = "CableAC24"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:breakout"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableAC24_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "3"
+    Name = "CableAC24"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:breakout"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_CableAC24_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_OHLAC01_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_OHLAC01_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_OHLAC35_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_OHLAC35_2"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "Zg1_R"
+    R = "0.1 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "0.005 [H]"
+    Name = "Zg1_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Zg1_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Zg1_2"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "Zg3_R"
+    R = "0.1 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "0.005 [H]"
+    Name = "Zg3_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Zg3_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Zg3_2"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "Q2_R"
+    R = "1.0 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "3.0812397 [H]"
+    Name = "Q2_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Q2_1"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "Q3_R"
+    R = "1.0 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "3.0812397 [H]"
+    Name = "Q3_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_Q3_1"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC1_P"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "319.348367 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC1_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC1_N"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "319.348367 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC1_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC2_P"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "320.200607 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC2_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC2_N"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "320.200607 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC2_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC3_P"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "320.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC3_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC3_N"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "320.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC3_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_AC1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_AC2"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_AC3"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_WindAC"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Grid1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Grid3"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Source1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Source3"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC1_reference_P_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC1_reference_N_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC2_reference_P_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC2_reference_N_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC3_reference_P_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC3_reference_N_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_WindDC_P"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_WindDC_N"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:OHLAC01_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "50.0 [km]"
+    Mode = "1"
+    Name = "OHLAC01"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:OHLAC35_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "50.0 [km]"
+    Mode = "1"
+    Name = "OHLAC35"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:CableDC12_row"
+
+    [canvases.Main.components.parameters]
+    B = ""
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Date = "0"
+    Dim = "0"
+    Freq = "0.0 [Hz]"
+    Length = "250.0 [km]"
+    Mode = "0"
+    Name = "CableDC12"
+    R = ""
+    X = ""
+    const_path = ""
+    gen_cnst = "1"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:CableDC23_row"
+
+    [canvases.Main.components.parameters]
+    B = ""
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Date = "0"
+    Dim = "0"
+    Freq = "0.0 [Hz]"
+    Length = "60.0 [km]"
+    Mode = "0"
+    Name = "CableDC23"
+    R = ""
+    X = ""
+    const_path = ""
+    gen_cnst = "1"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:CableAC23_row"
+
+    [canvases.Main.components.parameters]
+    B = ""
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Date = "0"
+    Dim = "0"
+    Freq = "50.0 [Hz]"
+    Length = "60.0 [km]"
+    Mode = "0"
+    Name = "CableAC23"
+    R = ""
+    X = ""
+    const_path = ""
+    gen_cnst = "1"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "energy_hub_mtdc:CableAC24_row"
+
+    [canvases.Main.components.parameters]
+    B = ""
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Date = "0"
+    Dim = "0"
+    Freq = "50.0 [Hz]"
+    Length = "10.0 [km]"
+    Mode = "0"
+    Name = "CableAC24"
+    R = ""
+    X = ""
+    const_path = ""
+    gen_cnst = "1"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+
+[[canvases.Main.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[10, 1], [21, 1], [59, 2], [78, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[11, 1], [12, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[11, 2], [13, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[11, 3], [22, 2], [24, 2], [65, 2], [81, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[12, 2], [30, 1], [36, 1], [52, 1], [71, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[13, 1], [23, 2], [25, 1], [63, 2], [80, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[14, 1], [15, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[14, 2], [16, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[14, 3], [26, 2], [69, 2], [83, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[15, 2], [33, 2], [42, 1], [55, 1], [72, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[16, 1], [27, 2], [67, 2], [82, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[17, 1], [18, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[17, 2], [19, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[18, 2], [39, 2], [73, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[2, 2], [46, 1], [76, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[20, 1], [21, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[22, 1], [23, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[24, 1], [25, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[26, 1], [27, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[28, 1], [29, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[28, 2], [29, 3]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[28, 3], [29, 4]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[29, 1], [30, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[3, 1], [4, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[31, 1], [32, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[31, 2], [32, 3]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[31, 3], [32, 4]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[32, 1], [33, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[34, 1], [35, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[34, 2], [35, 3]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[34, 3], [35, 4]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[35, 1], [36, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[37, 1], [38, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[37, 2], [38, 3]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[37, 3], [38, 4]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[38, 1], [39, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[4, 2], [50, 1], [77, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[40, 2], [86, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[41, 1], [86, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[41, 2], [47, 2], [74, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[42, 2], [87, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[43, 1], [87, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[43, 2], [51, 2], [75, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[44, 1], [46, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[44, 2], [45, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[45, 2], [47, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[48, 1], [50, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[48, 2], [49, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[49, 2], [51, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[5, 1], [6, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = true
+ports = [[5, 2], [7, 1], [54, 2], [57, 2], [58, 2], [60, 1], [62, 2], [64, 1], [66, 2], [68, 1], [78, 2], [79, 2], [80, 2], [81, 2], [82, 2], [83, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[52, 2], [53, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[53, 2], [54, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[55, 2], [56, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[56, 2], [57, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[58, 1], [59, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[6, 1], [19, 1], [84, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[60, 2], [61, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[62, 1], [63, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[64, 2], [65, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[66, 1], [67, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[68, 2], [69, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[7, 2], [17, 3], [85, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[8, 1], [9, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[8, 2], [10, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[8, 3], [20, 2], [61, 2], [79, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[9, 2], [40, 1], [70, 1]]
+probe = true
+
+[canvases.OCC_MMC1]
+components = []
+nets = []
+
+[canvases.OCC_MMC2]
+components = []
+nets = []
+
+[canvases.OCC_MMC3]
+components = []
+nets = []
+
+[canvases.OCC_OWF]
+components = []
+nets = []
+
+[canvases.OHLAC01_row]
+nets = []
+
+    [[canvases.OHLAC01_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.OHLAC01_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "OHLAC01_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.OHLAC01_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.OHLAC01_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.OHLAC01_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.OHLAC01_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.OHLAC01_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.OHLAC01_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.OHLAC35_row]
+nets = []
+
+    [[canvases.OHLAC35_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.OHLAC35_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "OHLAC35_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.OHLAC35_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.OHLAC35_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.OHLAC35_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.OHLAC35_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.OHLAC35_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.OHLAC35_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.PCTRL_MMC1]
+components = []
+nets = []
+
+[canvases.PCTRL_MMC2]
+components = []
+nets = []
+
+[canvases.PCTRL_OWF]
+components = []
+nets = []
+
+[canvases.PLL_MMC1]
+components = []
+nets = []
+
+[canvases.PLL_MMC2]
+components = []
+nets = []
+
+[canvases.PLL_MMC3]
+components = []
+nets = []
+
+[canvases.PLL_OWF]
+components = []
+nets = []
+
+[canvases.QCTRL_MMC1]
+components = []
+nets = []
+
+[canvases.QCTRL_MMC2]
+components = []
+nets = []
+
+[canvases.QCTRL_MMC3]
+components = []
+nets = []
+
+[canvases.QCTRL_OWF]
+components = []
+nets = []
+
+[canvases.SIGMA_MMC1]
+components = []
+nets = []
+
+[canvases.SIGMA_MMC2]
+components = []
+nets = []
+
+[canvases.SIGMA_MMC3]
+components = []
+nets = []
+
+[canvases.VDCCTRL_MMC3]
+components = []
+nets = []
+
+[[canvases.VSC_OWF.components]]
+definition = "master:source_1"
+
+    [canvases.VSC_OWF.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "1"
+    Name = "phase1"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.VSC_OWF.components]]
+definition = "master:resistor"
+
+    [canvases.VSC_OWF.components.parameters]
+    Name = "phase1_R"
+    R = "0.03872 [ohm]"
+[[canvases.VSC_OWF.components]]
+definition = "master:inductor"
+
+    [canvases.VSC_OWF.components.parameters]
+    L = "0.01232 [H]"
+    Name = "phase1_L"
+[[canvases.VSC_OWF.components]]
+definition = "master:source_1"
+
+    [canvases.VSC_OWF.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "1"
+    Name = "phase2"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.VSC_OWF.components]]
+definition = "master:resistor"
+
+    [canvases.VSC_OWF.components.parameters]
+    Name = "phase2_R"
+    R = "0.03872 [ohm]"
+[[canvases.VSC_OWF.components]]
+definition = "master:inductor"
+
+    [canvases.VSC_OWF.components.parameters]
+    L = "0.01232 [H]"
+    Name = "phase2_L"
+[[canvases.VSC_OWF.components]]
+definition = "master:source_1"
+
+    [canvases.VSC_OWF.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "1"
+    Name = "phase3"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.VSC_OWF.components]]
+definition = "master:resistor"
+
+    [canvases.VSC_OWF.components.parameters]
+    Name = "phase3_R"
+    R = "0.03872 [ohm]"
+[[canvases.VSC_OWF.components]]
+definition = "master:inductor"
+
+    [canvases.VSC_OWF.components.parameters]
+    L = "0.01232 [H]"
+    Name = "phase3_L"
+[[canvases.VSC_OWF.components]]
+definition = "master:breakout"
+
+    [canvases.VSC_OWF.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.VSC_OWF.components]]
+definition = "master:ammeter"
+
+    [canvases.VSC_OWF.components.parameters]
+    Name = "i_abc"
+[[canvases.VSC_OWF.components]]
+definition = "master:xnode"
+
+    [canvases.VSC_OWF.components.parameters]
+    Name = "AC"
+[[canvases.VSC_OWF.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.VSC_OWF.components.parameters]
+    Name = "v_abc"
+[[canvases.VSC_OWF.components]]
+definition = "master:src_ccin_1"
+
+    [canvases.VSC_OWF.components.parameters]
+    Cntrl = "1"
+    Name = "dc_injection"
+    Tc = "0.0 [s]"
+[[canvases.VSC_OWF.components]]
+definition = "master:xnode"
+
+    [canvases.VSC_OWF.components.parameters]
+    Name = "DC_P"
+[[canvases.VSC_OWF.components]]
+definition = "master:xnode"
+
+    [canvases.VSC_OWF.components.parameters]
+    Name = "DC_N"
+[[canvases.VSC_OWF.components]]
+definition = "master:voltmeter"
+
+    [canvases.VSC_OWF.components.parameters]
+    Name = "v_dc_m"
+
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[10, 1], [11, 1]]
+probe = false
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[11, 2], [12, 1], [13, 1]]
+probe = true
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[14, 1], [15, 1], [17, 1]]
+probe = true
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[14, 2], [16, 1], [17, 2]]
+probe = true
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[3, 2], [10, 2]]
+probe = false
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[4, 1], [5, 1]]
+probe = false
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[6, 2], [10, 3]]
+probe = false
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[7, 1], [8, 1]]
+probe = false
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[8, 2], [9, 1]]
+probe = false
+[[canvases.VSC_OWF.nets]]
+ground = false
+ports = [[9, 2], [10, 4]]
+probe = false

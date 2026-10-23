@@ -1,0 +1,4795 @@
+commit = "a1a7fb71d6ac189ddf06d58e2817dc4197dd4031"
+source_sha256 = "aa346bd42d4332f2adf699d4cb872d878cb1b2dc0bc1b84cb902d3fb2597cbc8"
+
+[canvases.ABC_DQ]
+components = []
+nets = []
+
+[canvases.AVR_sg1]
+components = []
+nets = []
+
+[canvases.DQ_ABC]
+components = []
+nets = []
+
+[canvases.GOV_sg1]
+components = []
+nets = []
+
+[canvases.MEAS_c1]
+components = []
+nets = []
+
+[canvases.MEAS_c2]
+components = []
+nets = []
+
+[canvases.MEAS_c3]
+components = []
+nets = []
+
+[canvases.MEAS_c4]
+components = []
+nets = []
+
+[[canvases.MMC_c1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c1.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_a_arm_inductance"
+[[canvases.MMC_c1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "u_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "i_u_a"
+[[canvases.MMC_c1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c1.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_a_arm_inductance"
+[[canvases.MMC_c1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "l_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "i_l_a"
+[[canvases.MMC_c1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c1.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_b_arm_inductance"
+[[canvases.MMC_c1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "u_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "i_u_b"
+[[canvases.MMC_c1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c1.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_b_arm_inductance"
+[[canvases.MMC_c1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "l_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "i_l_b"
+[[canvases.MMC_c1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c1.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_c_arm_inductance"
+[[canvases.MMC_c1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "u_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "i_u_c"
+[[canvases.MMC_c1.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c1.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c1.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_c_arm_inductance"
+[[canvases.MMC_c1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "l_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "i_l_c"
+[[canvases.MMC_c1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "reactor_a_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c1.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_a_L"
+[[canvases.MMC_c1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "reactor_b_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c1.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_b_L"
+[[canvases.MMC_c1.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "reactor_c_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c1.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c1.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_c_L"
+[[canvases.MMC_c1.components]]
+definition = "master:breakout"
+
+    [canvases.MMC_c1.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.MMC_c1.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "i_abc"
+[[canvases.MMC_c1.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "v_abc"
+[[canvases.MMC_c1.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "AC"
+[[canvases.MMC_c1.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "DC_P"
+[[canvases.MMC_c1.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "DC_N"
+[[canvases.MMC_c1.components]]
+definition = "master:voltmeter"
+
+    [canvases.MMC_c1.components.parameters]
+    Name = "v_dc"
+
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[1, 1], [9, 1], [17, 1], [35, 1], [37, 1]]
+probe = true
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[1, 2], [2, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[10, 2], [11, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[11, 2], [12, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[12, 2], [13, 1], [27, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[13, 2], [14, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[14, 2], [15, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[15, 2], [16, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[17, 2], [18, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[18, 2], [19, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[19, 2], [20, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[20, 2], [21, 1], [29, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[21, 2], [22, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[22, 2], [23, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[23, 2], [24, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[25, 2], [26, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[26, 2], [31, 2]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[27, 2], [28, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[28, 2], [31, 3]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[29, 2], [30, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[30, 2], [31, 4]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[31, 1], [32, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[32, 2], [33, 1], [34, 1]]
+probe = true
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[4, 2], [5, 1], [25, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[6, 2], [7, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[7, 2], [8, 1]]
+probe = false
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[8, 2], [16, 2], [24, 2], [36, 1], [37, 2]]
+probe = true
+[[canvases.MMC_c1.nets]]
+ground = false
+ports = [[9, 2], [10, 1]]
+probe = false
+
+[[canvases.MMC_c2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c2.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_a_arm_inductance"
+[[canvases.MMC_c2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "u_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "i_u_a"
+[[canvases.MMC_c2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c2.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_a_arm_inductance"
+[[canvases.MMC_c2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "l_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "i_l_a"
+[[canvases.MMC_c2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c2.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_b_arm_inductance"
+[[canvases.MMC_c2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "u_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "i_u_b"
+[[canvases.MMC_c2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c2.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_b_arm_inductance"
+[[canvases.MMC_c2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "l_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "i_l_b"
+[[canvases.MMC_c2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c2.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_c_arm_inductance"
+[[canvases.MMC_c2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "u_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "i_u_c"
+[[canvases.MMC_c2.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c2.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c2.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_c_arm_inductance"
+[[canvases.MMC_c2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "l_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "i_l_c"
+[[canvases.MMC_c2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "reactor_a_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c2.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_a_L"
+[[canvases.MMC_c2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "reactor_b_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c2.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_b_L"
+[[canvases.MMC_c2.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "reactor_c_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c2.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c2.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_c_L"
+[[canvases.MMC_c2.components]]
+definition = "master:breakout"
+
+    [canvases.MMC_c2.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.MMC_c2.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "i_abc"
+[[canvases.MMC_c2.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "v_abc"
+[[canvases.MMC_c2.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "AC"
+[[canvases.MMC_c2.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "DC_P"
+[[canvases.MMC_c2.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "DC_N"
+[[canvases.MMC_c2.components]]
+definition = "master:voltmeter"
+
+    [canvases.MMC_c2.components.parameters]
+    Name = "v_dc"
+
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[1, 1], [9, 1], [17, 1], [35, 1], [37, 1]]
+probe = true
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[1, 2], [2, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[10, 2], [11, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[11, 2], [12, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[12, 2], [13, 1], [27, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[13, 2], [14, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[14, 2], [15, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[15, 2], [16, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[17, 2], [18, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[18, 2], [19, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[19, 2], [20, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[20, 2], [21, 1], [29, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[21, 2], [22, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[22, 2], [23, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[23, 2], [24, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[25, 2], [26, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[26, 2], [31, 2]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[27, 2], [28, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[28, 2], [31, 3]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[29, 2], [30, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[30, 2], [31, 4]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[31, 1], [32, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[32, 2], [33, 1], [34, 1]]
+probe = true
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[4, 2], [5, 1], [25, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[6, 2], [7, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[7, 2], [8, 1]]
+probe = false
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[8, 2], [16, 2], [24, 2], [36, 1], [37, 2]]
+probe = true
+[[canvases.MMC_c2.nets]]
+ground = false
+ports = [[9, 2], [10, 1]]
+probe = false
+
+[[canvases.MMC_c3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c3.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_a_arm_inductance"
+[[canvases.MMC_c3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "u_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "i_u_a"
+[[canvases.MMC_c3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c3.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_a_arm_inductance"
+[[canvases.MMC_c3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "l_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "i_l_a"
+[[canvases.MMC_c3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c3.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_b_arm_inductance"
+[[canvases.MMC_c3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "u_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "i_u_b"
+[[canvases.MMC_c3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c3.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_b_arm_inductance"
+[[canvases.MMC_c3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "l_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "i_l_b"
+[[canvases.MMC_c3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c3.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_c_arm_inductance"
+[[canvases.MMC_c3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "u_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "i_u_c"
+[[canvases.MMC_c3.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c3.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c3.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_c_arm_inductance"
+[[canvases.MMC_c3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "l_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "i_l_c"
+[[canvases.MMC_c3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "reactor_a_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c3.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_a_L"
+[[canvases.MMC_c3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "reactor_b_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c3.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_b_L"
+[[canvases.MMC_c3.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "reactor_c_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c3.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c3.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_c_L"
+[[canvases.MMC_c3.components]]
+definition = "master:breakout"
+
+    [canvases.MMC_c3.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.MMC_c3.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "i_abc"
+[[canvases.MMC_c3.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "v_abc"
+[[canvases.MMC_c3.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "AC"
+[[canvases.MMC_c3.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "DC_P"
+[[canvases.MMC_c3.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "DC_N"
+[[canvases.MMC_c3.components]]
+definition = "master:voltmeter"
+
+    [canvases.MMC_c3.components.parameters]
+    Name = "v_dc"
+
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[1, 1], [9, 1], [17, 1], [35, 1], [37, 1]]
+probe = true
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[1, 2], [2, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[10, 2], [11, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[11, 2], [12, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[12, 2], [13, 1], [27, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[13, 2], [14, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[14, 2], [15, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[15, 2], [16, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[17, 2], [18, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[18, 2], [19, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[19, 2], [20, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[20, 2], [21, 1], [29, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[21, 2], [22, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[22, 2], [23, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[23, 2], [24, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[25, 2], [26, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[26, 2], [31, 2]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[27, 2], [28, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[28, 2], [31, 3]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[29, 2], [30, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[30, 2], [31, 4]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[31, 1], [32, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[32, 2], [33, 1], [34, 1]]
+probe = true
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[4, 2], [5, 1], [25, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[6, 2], [7, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[7, 2], [8, 1]]
+probe = false
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[8, 2], [16, 2], [24, 2], [36, 1], [37, 2]]
+probe = true
+[[canvases.MMC_c3.nets]]
+ground = false
+ports = [[9, 2], [10, 1]]
+probe = false
+
+[[canvases.MMC_c4.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c4.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c4.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c4.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_a_arm_inductance"
+[[canvases.MMC_c4.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "u_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c4.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "i_u_a"
+[[canvases.MMC_c4.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c4.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_a_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c4.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c4.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_a_arm_inductance"
+[[canvases.MMC_c4.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "l_a_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c4.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "i_l_a"
+[[canvases.MMC_c4.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c4.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c4.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c4.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_b_arm_inductance"
+[[canvases.MMC_c4.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "u_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c4.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "i_u_b"
+[[canvases.MMC_c4.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c4.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_b_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c4.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c4.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_b_arm_inductance"
+[[canvases.MMC_c4.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "l_b_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c4.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "i_l_b"
+[[canvases.MMC_c4.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c4.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "u_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c4.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c4.components.parameters]
+    L = "0.05 [H]"
+    Name = "u_c_arm_inductance"
+[[canvases.MMC_c4.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "u_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c4.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "i_u_c"
+[[canvases.MMC_c4.components]]
+definition = "master:source_1"
+
+    [canvases.MMC_c4.components.parameters]
+    AC = "0"
+    Cntrl = "1"
+    Grnd = "0"
+    Name = "l_c_arm_source"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+[[canvases.MMC_c4.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c4.components.parameters]
+    L = "0.05 [H]"
+    Name = "l_c_arm_inductance"
+[[canvases.MMC_c4.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "l_c_arm_resistance"
+    R = "1.07 [ohm]"
+[[canvases.MMC_c4.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "i_l_c"
+[[canvases.MMC_c4.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "reactor_a_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c4.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c4.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_a_L"
+[[canvases.MMC_c4.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "reactor_b_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c4.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c4.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_b_L"
+[[canvases.MMC_c4.components]]
+definition = "master:resistor"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "reactor_c_R"
+    R = "0.535 [ohm]"
+[[canvases.MMC_c4.components]]
+definition = "master:inductor"
+
+    [canvases.MMC_c4.components.parameters]
+    L = "0.06 [H]"
+    Name = "reactor_c_L"
+[[canvases.MMC_c4.components]]
+definition = "master:breakout"
+
+    [canvases.MMC_c4.components.parameters]
+    Com = "0"
+    Dis = "0"
+[[canvases.MMC_c4.components]]
+definition = "master:ammeter"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "i_abc"
+[[canvases.MMC_c4.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "v_abc"
+[[canvases.MMC_c4.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "AC"
+[[canvases.MMC_c4.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "DC_P"
+[[canvases.MMC_c4.components]]
+definition = "master:xnode"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "DC_N"
+[[canvases.MMC_c4.components]]
+definition = "master:voltmeter"
+
+    [canvases.MMC_c4.components.parameters]
+    Name = "v_dc"
+
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[1, 1], [9, 1], [17, 1], [35, 1], [37, 1]]
+probe = true
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[1, 2], [2, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[10, 2], [11, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[11, 2], [12, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[12, 2], [13, 1], [27, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[13, 2], [14, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[14, 2], [15, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[15, 2], [16, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[17, 2], [18, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[18, 2], [19, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[19, 2], [20, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[2, 2], [3, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[20, 2], [21, 1], [29, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[21, 2], [22, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[22, 2], [23, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[23, 2], [24, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[25, 2], [26, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[26, 2], [31, 2]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[27, 2], [28, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[28, 2], [31, 3]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[29, 2], [30, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[3, 2], [4, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[30, 2], [31, 4]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[31, 1], [32, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[32, 2], [33, 1], [34, 1]]
+probe = true
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[4, 2], [5, 1], [25, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[5, 2], [6, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[6, 2], [7, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[7, 2], [8, 1]]
+probe = false
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[8, 2], [16, 2], [24, 2], [36, 1], [37, 2]]
+probe = true
+[[canvases.MMC_c4.nets]]
+ground = false
+ports = [[9, 2], [10, 1]]
+probe = false
+
+[canvases.MOD_c1]
+components = []
+nets = []
+
+[canvases.MOD_c2]
+components = []
+nets = []
+
+[canvases.MOD_c3]
+components = []
+nets = []
+
+[canvases.MOD_c4]
+components = []
+nets = []
+
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "g3"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "380.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_g3_1"
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "g4"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "380.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_g4_1"
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "g5"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "380.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_g5_1"
+[[canvases.Main.components]]
+definition = "master:sync_machine"
+
+    [canvases.Main.components.parameters]
+    Cnfg = "1"
+    D = "0.0 [pu]"
+    Enab = "sg1_L2N"
+    H = "4.0 [s]"
+    Icmp = "0"
+    Icsp = "0"
+    Iexc = "1"
+    Igov = "1"
+    InExc = "sg1_InitEx"
+    InGov = "sg1_InitGv"
+    IorMVA = "1"
+    MM = "1"
+    MSat = "0"
+    MVA = "1000.0 [MVA]"
+    Name = "sg1"
+    Neut = "0"
+    Nqaxw = "2"
+    OMO = "314.159265 [rad/s]"
+    Ospd = "1"
+    P0 = "900.0 [MW]"
+    POut = "sg1_P_pu"
+    PQscl = "0"
+    Pheta = "1.74228161 [rad]"
+    Ptcon = "0.05 [s]"
+    Q0 = "55.0546378 [MVAR]"
+    QOut = "sg1_Q_pu"
+    R2D = "0.0002 [pu]"
+    R2Q = "0.005 [pu]"
+    R3D = "0.02 [pu]"
+    R3Q = "0.01 [pu]"
+    Ri = "1000000.0 [pu]"
+    Rs1 = "0.0015 [pu]"
+    Sysfl = "15.0 [pu]"
+    Term = "1"
+    Trmpv = "0.01 [s]"
+    Ts = "0.0 [s]"
+    VT = "1.0 [pu]"
+    VbaseLL = "380.0 [kV]"
+    View = "1"
+    VolTyp = "1"
+    X230 = "0.0 [pu]"
+    X231 = "0.0 [pu]"
+    X2D = "0.165 [pu]"
+    X2Q = "0.7252 [pu]"
+    X3D = "0.1713 [pu]"
+    X3Q = "0.125 [pu]"
+    XMD0 = "1.66 [pu]"
+    XMQ = "1.61 [pu]"
+    XS1 = "0.15 [pu]"
+    icTyp = "1"
+    machsw = "sg1_S2M"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "sg1_stepup_R"
+    R = "0.37544 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "0.0298765659 [H]"
+    Name = "sg1_stepup_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_sg1_1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "sg1_Vt_abc"
+[[canvases.Main.components]]
+definition = "converter_machine:MMC_c1"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_c1_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_c1_1"
+[[canvases.Main.components]]
+definition = "converter_machine:MMC_c2"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_c2_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_c2_1"
+[[canvases.Main.components]]
+definition = "converter_machine:MMC_c3"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_c3_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_c3_1"
+[[canvases.Main.components]]
+definition = "converter_machine:MMC_c4"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_c4_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_c4_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "3"
+    Name = "tl78"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:breakout"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl78_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "3"
+    Name = "tl78"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:breakout"
+
+    [canvases.Main.components.parameters]
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl78_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl89_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl89_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl75_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl75_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl96_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl96_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl54_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl54_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl64_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl64_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl1_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl1_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl2_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_tl2_2"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "dc_line"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_dc_line_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "dc_line"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_dc_line_2"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "dc_line_2"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_dc_line_2_1"
+[[canvases.Main.components]]
+definition = "master:cable_interface"
+
+    [canvases.Main.components.parameters]
+    C10T = "1"
+    C11T = "1"
+    C12T = "1"
+    C1T = "1"
+    C2T = "1"
+    C3T = "1"
+    C4T = "1"
+    C5T = "1"
+    C6T = "1"
+    C7T = "1"
+    C8T = "1"
+    C9T = "1"
+    GroundA = "0"
+    GroundOC = "0"
+    GroundS = "0"
+    NCAB = "2"
+    Name = "dc_line_2"
+    ResA = "0.001 [ohm]"
+    ResOC = "0.001 [ohm]"
+    ResS = "0.001 [ohm]"
+    dim_r = "0"
+    dim_s = "0"
+    pipe = "0"
+    recv_default = "0"
+    recv_default_type = "0"
+    send_recv = "0"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_dc_line_2_2"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_t3_1"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "0.01345 [H]"
+    Name = "t3_primary_L"
+[[canvases.Main.components]]
+definition = "master:xfmr-3p2w"
+
+    [canvases.Main.components.parameters]
+    CuL = "0.0 [pu]"
+    Dtls = "0"
+    Enab = "0"
+    Ideal = "0"
+    Im1 = "0.001 [%]"
+    Lead = "1"
+    NLL = "0.0 [pu]"
+    Name = "t3"
+    Tap = "0"
+    Tmva = "1000 [MVA]"
+    V1 = "380.0 [kV]"
+    V2 = "380.0 [kV]"
+    View = "1"
+    Xl = "0.0001 [pu]"
+    YD1 = "0"
+    YD2 = "0"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "0.01345 [H]"
+    Name = "t3_secondary_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_t3_2"
+[[canvases.Main.components]]
+definition = "master:capacitor"
+
+    [canvases.Main.components.parameters]
+    C = "0.007 [uF]"
+    Name = "t3_turn_1_C"
+[[canvases.Main.components]]
+definition = "master:capacitor"
+
+    [canvases.Main.components.parameters]
+    C = "0.007 [uF]"
+    Name = "t3_turn_2_C"
+[[canvases.Main.components]]
+definition = "master:capacitor"
+
+    [canvases.Main.components.parameters]
+    C = "0.012 [uF]"
+    Name = "t3_stray_C"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_l5_1"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "l5_R"
+    R = "192.5 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "4.6 [H]"
+    Name = "l5_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_l6_1"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "l6_R"
+    R = "192.5 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "4.6 [H]"
+    Name = "l6_L"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_l8_1"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "l8_R"
+    R = "192.5 [ohm]"
+[[canvases.Main.components]]
+definition = "master:inductor"
+
+    [canvases.Main.components.parameters]
+    L = "4.6 [H]"
+    Name = "l8_L"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC1_P"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "400.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC1_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC1_N"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "400.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC1_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC2_P"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "399.296924 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC2_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC2_N"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "399.296924 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC2_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC3_P"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "400.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC3_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC3_N"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "400.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC3_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC4_P"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "399.648947 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC4_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:source_1"
+
+    [canvases.Main.components.parameters]
+    AC = "0"
+    Cntrl = "0"
+    Grnd = "0"
+    Name = "precharge_DC4_N"
+    Ph = "0.0 [deg]"
+    Spec = "0"
+    Tc = "0.0 [s]"
+    Type = "6"
+    Vm = "399.648947 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:breaker1"
+
+    [canvases.Main.components.parameters]
+    BOpen = "0"
+    CLVL = "0.0 [kA]"
+    ENAB = "0"
+    IBR = ""
+    NAME = "precharge_DC4_open"
+    OPCUR = "1"
+    ROFF = "1.0E100 [ohm]"
+    RON = "0.0 [ohm]"
+    SBR = ""
+    VBR = ""
+    ViewB = "0"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Bus4"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Bus6"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Bus5"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Bus9"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Bus7"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Bus8"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Bus3"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Remote1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Source1"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Remote2"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_Source2"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC1_reference_P_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC1_reference_N_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC2_reference_P_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC2_reference_N_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC3_reference_P_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC3_reference_N_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC4_reference_P_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "DC4_reference_N_R"
+    R = "1.0E7 [ohm]"
+[[canvases.Main.components]]
+definition = "converter_machine:tl89_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "50.0 [km]"
+    Mode = "1"
+    Name = "tl89"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "converter_machine:tl75_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "50.0 [km]"
+    Mode = "1"
+    Name = "tl75"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "converter_machine:tl96_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "90.0 [km]"
+    Mode = "1"
+    Name = "tl96"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "converter_machine:tl54_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "120.0 [km]"
+    Mode = "1"
+    Name = "tl54"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "converter_machine:tl64_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "70.0 [km]"
+    Mode = "1"
+    Name = "tl64"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "converter_machine:tl1_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "50.0 [km]"
+    Mode = "1"
+    Name = "tl1"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "converter_machine:tl2_row"
+
+    [canvases.Main.components.parameters]
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Dim = "3"
+    Freq = "50.0 [Hz]"
+    Length = "50.0 [km]"
+    Mode = "1"
+    Name = "tl2"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "converter_machine:tl78_row"
+
+    [canvases.Main.components.parameters]
+    B = ""
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Date = "0"
+    Dim = "0"
+    Freq = "50.0 [Hz]"
+    Length = "30.0 [km]"
+    Mode = "0"
+    Name = "tl78"
+    R = ""
+    X = ""
+    const_path = ""
+    gen_cnst = "1"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "converter_machine:dc_line_row"
+
+    [canvases.Main.components.parameters]
+    B = ""
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Date = "0"
+    Dim = "0"
+    Freq = "0.0 [Hz]"
+    Length = "100.0 [km]"
+    Mode = "0"
+    Name = "dc_line"
+    R = ""
+    X = ""
+    const_path = ""
+    gen_cnst = "1"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+[[canvases.Main.components]]
+definition = "converter_machine:dc_line_2_row"
+
+    [canvases.Main.components.parameters]
+    B = ""
+    CoupleEnab = "0"
+    CoupleName = "row"
+    CoupleOffset = "0.0 [m]"
+    CoupleRef = "0"
+    Date = "0"
+    Dim = "0"
+    Freq = "0.0 [Hz]"
+    Length = "50.0 [km]"
+    Mode = "0"
+    Name = "dc_line_2"
+    R = ""
+    X = ""
+    const_path = ""
+    gen_cnst = "1"
+    linc = "10.0 [km]"
+    sfault = "0"
+    steps = "3"
+    tname = "tandem_segment"
+
+[[canvases.Main.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[10, 2], [36, 1], [38, 1], [85, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[12, 1], [13, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[12, 2], [14, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[12, 3], [44, 2], [72, 2], [97, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[13, 2], [41, 2], [92, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[14, 1], [45, 1], [70, 2], [96, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[15, 1], [16, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[15, 2], [17, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[15, 3], [46, 2], [76, 2], [99, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[16, 2], [26, 1], [33, 2], [89, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[17, 1], [47, 2], [74, 2], [98, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[18, 1], [19, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[18, 2], [20, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[18, 3], [48, 2], [80, 2], [101, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[19, 2], [43, 2], [94, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[2, 2], [52, 1], [91, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[20, 1], [49, 1], [78, 2], [100, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[21, 1], [22, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[21, 2], [23, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[21, 3], [50, 2], [84, 2], [103, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[22, 2], [32, 1], [37, 2], [61, 1], [62, 1], [87, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[23, 1], [51, 2], [82, 2], [102, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[24, 1], [25, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[24, 2], [25, 3]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[24, 3], [25, 4]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[25, 1], [26, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[27, 1], [28, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[27, 2], [28, 3]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[27, 3], [28, 4]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[28, 1], [29, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[29, 2], [31, 2], [67, 1], [68, 1], [90, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[3, 1], [4, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[30, 1], [35, 2], [56, 2], [88, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[30, 2], [104, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[31, 1], [104, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[32, 2], [105, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[33, 1], [105, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[34, 1], [39, 2], [64, 1], [65, 1], [86, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[34, 2], [106, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[35, 1], [106, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[36, 2], [107, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[37, 1], [107, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[38, 2], [108, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[39, 1], [108, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[4, 2], [40, 1], [93, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[40, 2], [109, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[41, 1], [109, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[42, 2], [110, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[43, 1], [110, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[44, 1], [45, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[46, 1], [47, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[48, 1], [49, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[5, 1], [6, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[50, 1], [51, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[52, 2], [53, 1], [57, 1], [59, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[53, 2], [54, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[54, 2], [55, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[55, 2], [56, 1], [58, 1], [59, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = true
+ports = [[57, 2], [58, 2], [60, 2], [63, 2], [66, 2], [69, 2], [71, 1], [73, 2], [75, 1], [77, 2], [79, 1], [81, 2], [83, 1], [96, 2], [97, 2], [98, 2], [99, 2], [100, 2], [101, 2], [102, 2], [103, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[6, 2], [42, 1], [95, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[60, 1], [61, 2], [62, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[63, 1], [64, 2], [65, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[66, 1], [67, 2], [68, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[69, 1], [70, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[7, 1], [8, 1], [11, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[71, 2], [72, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[73, 1], [74, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[75, 2], [76, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[77, 1], [78, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[79, 2], [80, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[8, 2], [9, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[81, 1], [82, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[83, 2], [84, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[9, 2], [10, 1]]
+probe = false
+
+[canvases.OCC_c1]
+components = []
+nets = []
+
+[canvases.OCC_c2]
+components = []
+nets = []
+
+[canvases.OCC_c3]
+components = []
+nets = []
+
+[canvases.OCC_c4]
+components = []
+nets = []
+
+[canvases.PCTRL_c2]
+components = []
+nets = []
+
+[canvases.PCTRL_c4]
+components = []
+nets = []
+
+[canvases.PLL_c1]
+components = []
+nets = []
+
+[canvases.PLL_c2]
+components = []
+nets = []
+
+[canvases.PLL_c3]
+components = []
+nets = []
+
+[canvases.PLL_c4]
+components = []
+nets = []
+
+[canvases.QCTRL_c1]
+components = []
+nets = []
+
+[canvases.QCTRL_c2]
+components = []
+nets = []
+
+[canvases.QCTRL_c3]
+components = []
+nets = []
+
+[canvases.QCTRL_c4]
+components = []
+nets = []
+
+[canvases.SIGMA_c1]
+components = []
+nets = []
+
+[canvases.SIGMA_c2]
+components = []
+nets = []
+
+[canvases.SIGMA_c3]
+components = []
+nets = []
+
+[canvases.SIGMA_c4]
+components = []
+nets = []
+
+[canvases.VDCCTRL_c1]
+components = []
+nets = []
+
+[canvases.VDCCTRL_c3]
+components = []
+nets = []
+
+[canvases.dc_line_2_row]
+nets = []
+
+    [[canvases.dc_line_2_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.dc_line_2_row.components.parameters]
+        CABNUM = "1"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "dc_line_2"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "-0.5 [m]"
+        Y = "1 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.dc_line_2_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.dc_line_2_row.components.parameters]
+        CABNUM = "2"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "dc_line_2"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0.5 [m]"
+        Y = "1 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.dc_line_2_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.dc_line_2_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "1 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.dc_line_2_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.dc_line_2_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.001 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.dc_line_2_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.dc_line_2_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.dc_line_row]
+nets = []
+
+    [[canvases.dc_line_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.dc_line_row.components.parameters]
+        CABNUM = "1"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "dc_line"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "-0.5 [m]"
+        Y = "1 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.dc_line_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.dc_line_row.components.parameters]
+        CABNUM = "2"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "dc_line"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0.5 [m]"
+        Y = "1 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.dc_line_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.dc_line_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "1 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.dc_line_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.dc_line_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.001 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.dc_line_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.dc_line_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.tl1_row]
+nets = []
+
+    [[canvases.tl1_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.tl1_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "tl1_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.tl1_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.tl1_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.tl1_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.tl1_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.tl1_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.tl1_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.tl2_row]
+nets = []
+
+    [[canvases.tl2_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.tl2_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "tl2_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.tl2_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.tl2_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.tl2_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.tl2_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.tl2_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.tl2_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.tl54_row]
+nets = []
+
+    [[canvases.tl54_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.tl54_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "tl54_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.tl54_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.tl54_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.tl54_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.tl54_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.tl54_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.tl54_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.tl64_row]
+nets = []
+
+    [[canvases.tl64_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.tl64_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "tl64_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.tl64_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.tl64_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.tl64_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.tl64_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.tl64_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.tl64_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.tl75_row]
+nets = []
+
+    [[canvases.tl75_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.tl75_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "tl75_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.tl75_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.tl75_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.tl75_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.tl75_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.tl75_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.tl75_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.tl78_row]
+nets = []
+
+    [[canvases.tl78_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.tl78_row.components.parameters]
+        CABNUM = "1"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "tl78"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "-0.5 [m]"
+        Y = "1.9 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.tl78_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.tl78_row.components.parameters]
+        CABNUM = "2"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "tl78"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0 [m]"
+        Y = "1.9 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.tl78_row.components]]
+    definition = "master:Cable_Coax"
+
+        [canvases.tl78_row.components.parameters]
+        CABNUM = "3"
+        CONNAM1 = "C1"
+        CONNAM2 = "C2"
+        CONNAM3 = "C3"
+        CONNAM4 = "none"
+        CROSSBOND = "0"
+        EPS1 = "2.3"
+        EPS2 = "2.3"
+        EPS3 = "2.3"
+        EPS4 = "0.0"
+        FLT = "50.0 [Hz]"
+        LC = "2"
+        LL = "5"
+        LT1 = "0.0"
+        LT2 = "0.0"
+        LT3 = "0.0"
+        LT4 = "0.0"
+        Name = "tl78"
+        OHC = "0"
+        PERM1 = "1"
+        PERM2 = "1"
+        PERM3 = "1"
+        PERM4 = "0.0"
+        PERMA = "10"
+        PERMC = "1"
+        PERMO = "0.0"
+        PERMS = "1"
+        R1 = "0 [m]"
+        R2 = "0.02425 [m]"
+        R3 = "0.04175 [m]"
+        R4 = "0.04625 [m]"
+        R5 = "0.04975 [m]"
+        R6 = "0.06055 [m]"
+        R7 = "0.06575 [m]"
+        R8 = "0.0 [m]"
+        R9 = "0.0 [m]"
+        RHOA = "1.8E-7 [ohm*m]"
+        RHOC = "1.72E-8 [ohm*m]"
+        RHOO = "0.0 [ohm*m]"
+        RHOS = "2.2E-7 [ohm*m]"
+        RorT = "0"
+        SHRad = "1"
+        SL1 = "0.0 [m]"
+        SL2 = "0.0 [m]"
+        SemiCL = "0"
+        ShuntA = "1.0E-38 [mho/m]"
+        X = "0.5 [m]"
+        Y = "1.9 [m]"
+        Y2 = "0.0 [m]"
+        elim1 = "1"
+        elim2 = "1"
+        elim3 = "0"
+    [[canvases.tl78_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.tl78_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.tl78_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.tl78_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.tl78_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.tl78_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.tl89_row]
+nets = []
+
+    [[canvases.tl89_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.tl89_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "tl89_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.tl89_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.tl89_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.tl89_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.tl89_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.tl89_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.tl89_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
+
+[canvases.tl96_row]
+nets = []
+
+    [[canvases.tl96_row.components]]
+    definition = "master:Line_Tower_Universal"
+
+        [canvases.tl96_row.components.parameters]
+        BSP = "0 [m]"
+        BundSym = "0"
+        CDataType = "1"
+        CLName = "..\\conductor.clb"
+        CName = "chukar"
+        DCResC = "0.063 [ohm/km]"
+        DCResG = "0.92 [ohm/km]"
+        DCResG2 = "2.8645 [ohm/km]"
+        ElimGW = "1"
+        G2Name = "1/2_HighStrengthSteel"
+        GDataType = "1"
+        GLName = "..\\conductor.clb"
+        GName = "1/2_HighStrengthSteel"
+        GWSame = "1"
+        Hollow = "0"
+        NC1 = "1"
+        NC10 = "10"
+        NC11 = "11"
+        NC12 = "12"
+        NC2 = "2"
+        NC3 = "3"
+        NC4 = "4"
+        NC5 = "5"
+        NC6 = "6"
+        NC7 = "7"
+        NC8 = "8"
+        NC9 = "9"
+        NCondB = "1"
+        NG = "2"
+        NG1 = "4"
+        NG2 = "5"
+        Nc = "3"
+        PERMC = "1"
+        PERMG = "1"
+        PERMG2 = "1.0"
+        RadiusC = "0.015 [m]"
+        RadiusCin = "0.0 [m]"
+        RadiusG = "0.0062 [m]"
+        RadiusG2 = "0.0055245 [m]"
+        RadiusS = "0.003 [m]"
+        SAGC = "10 [m]"
+        SAGG = "10 [m]"
+        SHBund = "1"
+        SHSag = "0"
+        STL = "0"
+        ShuntG = "1.0E-11 [mho/m]"
+        TName = "tl96_row"
+        Transp = "0"
+        X = "0.0 [m]"
+        XB1 = "-0.1 [m]"
+        XB10 = "-0.1 [m]"
+        XB11 = "-0.1 [m]"
+        XB12 = "-0.1 [m]"
+        XB13 = "-0.1 [m]"
+        XB14 = "-0.1 [m]"
+        XB15 = "-0.1 [m]"
+        XB2 = "-0.1 [m]"
+        XB3 = "-0.1 [m]"
+        XB4 = "-0.1 [m]"
+        XB5 = "-0.1 [m]"
+        XB6 = "-0.1 [m]"
+        XB7 = "-0.1 [m]"
+        XB8 = "-0.1 [m]"
+        XB9 = "-0.1 [m]"
+        XC1 = "-10.0 [m]"
+        XC10 = "40 [m]"
+        XC11 = "45 [m]"
+        XC12 = "50 [m]"
+        XC2 = "0.0 [m]"
+        XC3 = "10.0 [m]"
+        XC4 = "10 [m]"
+        XC5 = "15 [m]"
+        XC6 = "20 [m]"
+        XC7 = "25 [m]"
+        XC8 = "30 [m]"
+        XC9 = "35 [m]"
+        XG1 = "-3.25 [m]"
+        XG2 = "3.25 [m]"
+        YB1 = "0.1 [m]"
+        YB10 = "0.1 [m]"
+        YB11 = "0.1 [m]"
+        YB12 = "0.1 [m]"
+        YB13 = "0.1 [m]"
+        YB14 = "0.1 [m]"
+        YB15 = "0.1 [m]"
+        YB2 = "0.1 [m]"
+        YB3 = "0.1 [m]"
+        YB4 = "0.1 [m]"
+        YB5 = "0.1 [m]"
+        YB6 = "0.1 [m]"
+        YB7 = "0.1 [m]"
+        YB8 = "0.1 [m]"
+        YB9 = "0.1 [m]"
+        YC1 = "30.0 [m]"
+        YC10 = "30 [m]"
+        YC11 = "30 [m]"
+        YC12 = "30 [m]"
+        YC2 = "30.0 [m]"
+        YC3 = "30.0 [m]"
+        YC4 = "30 [m]"
+        YC5 = "30 [m]"
+        YC6 = "30 [m]"
+        YC7 = "30 [m]"
+        YC8 = "30 [m]"
+        YC9 = "30 [m]"
+        YG1 = "37.5 [m]"
+        YG2 = "37.5 [m]"
+        num_out_strnd = "12"
+        num_tot_strnd = "19"
+    [[canvases.tl96_row.components]]
+    definition = "master:Line_Ground"
+
+        [canvases.tl96_row.components.parameters]
+        EarthForm = "2"
+        EarthForm2 = "0"
+        EarthForm3 = "2"
+        GPERM = "1"
+        GRP = "1"
+        GRRES = "100 [ohm*m]"
+        GrRho = "0"
+        K0 = "0.001 [S/m]"
+        K1 = "0.01 [S/m]"
+        alpha = "0.7"
+    [[canvases.tl96_row.components]]
+    definition = "master:Line_FrePhase_Options"
+
+        [canvases.tl96_row.components.parameters]
+        AMaxE = "0.02 [%]"
+        AMaxP = "20"
+        CPASS = "0"
+        DCCOR = "1"
+        DCenab = "0"
+        ET_PE = "1e-10"
+        FDIS = "3"
+        FE = "1000000.0 [Hz]"
+        FEP = "1E6 [Hz]"
+        FS = "0.5 [Hz]"
+        FSP = "0.001 [Hz]"
+        Inflen = "0"
+        Interp1 = "1"
+        MER_PE = "2.0"
+        MIT_PE = "5"
+        MaxRPtol = "2000000.0"
+        NFP = "1000"
+        Numf = "100"
+        Output = "0"
+        W1 = "1.0"
+        W2 = "1.0"
+        W3 = "1.0"
+        YMaxE = "0.02 [%]"
+        YMaxP = "20"
+        enablf = "1"
+        shntcab = "1.0E-9 [mho/m]"
+    [[canvases.tl96_row.components]]
+    definition = "master:Line_Out_Disp"
+
+        [canvases.tl96_row.components.parameters]
+        DataF = "50.0 [Hz]"
+        EMM = "0"
+        MVAbase = "100.0 [MVA]"
+        OMM = "3"
+        Rip = "1.0E5 [ohm]"
+        Vbase = "230.0 [kV]"
+        Zero_Tol = "1e-19"
+        picomp = "0"
