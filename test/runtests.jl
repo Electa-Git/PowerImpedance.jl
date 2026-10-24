@@ -47,7 +47,6 @@ end
     include("power_flow_idempotence_test.jl")
     include("pscad/power_flow_idempotence_test.jl")
         include("tlc_initialization_test.jl")
-        include("legacy_converter_adapter_test.jl")
         include("dc_voltage_support_test.jl")
         include("adm_SM_test.jl")
         include("synchronous_machine_operating_point_test.jl")

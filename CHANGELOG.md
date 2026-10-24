@@ -53,6 +53,13 @@
   pole-to-pole DC voltage in kV, consistently with converters. Pass the
   pole-to-pole voltage; callers that halved it must stop halving.
 
+### Removed
+
+- Remove the unused legacy converter files and `make_y_edge_old`.
+- **Breaking:** remove the converter keyword adapter. `mmc(Grid; ...)` and
+  `tlc(Grid; ...)` accept the modular constructor keywords only.
+- Remove the error messages for retired NetworkBuilder names.
+
 ### Fixed
 
 - Network models now build for networks with no passive elements.

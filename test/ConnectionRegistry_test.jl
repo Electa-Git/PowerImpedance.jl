@@ -248,33 +248,6 @@ end
     @test all(!=(:off), builder.topology.connections.element)
 end
 
-@testset "Retired NetworkBuilder names" begin
-    replacements = (
-        BuilderState = "NetworkState",
-        ConnectionsRegistry = "NetworkTopology",
-        LinearizedAdmittanceCollection = "AdmittanceLookup",
-        LinearizedInterface = "NetworkLookup",
-        LinearizedAdmittanceNetwork = "NetworkModel"
-    )
-    for (removed, replacement) in pairs(replacements)
-        error = try
-            getfield(NB, removed)()
-            nothing
-        catch caught
-            caught
-        end
-        @test error isa ArgumentError
-        @test occursin(String(removed), sprint(showerror, error))
-        @test occursin(replacement, sprint(showerror, error))
-        @test occursin("migration", sprint(showerror, error))
-    end
-    @test !isdefined(NB, :pin)
-    @test !isdefined(NB, :Pin)
-    @test !isdefined(NB, :ConnectionDef)
-    @test !isdefined(NB, Symbol("⟷"))
-    @test !isdefined(NB, Symbol("↔"))
-end
-
 module ClassicNetworkDSLTest
 import PowerImpedance: @network
 using PowerImpedance: impedance

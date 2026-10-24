@@ -1375,6 +1375,7 @@ connections = (
     (node = :B7q, element = :tl78, side = 2, terminal = 2)
 )
 
+# Bus-voltage bounds belong in the builder options used for every case.
 builder_options = (;
     voltageBase = transmissionVoltage,
     power_flow = (;
@@ -1384,6 +1385,8 @@ builder_options = (;
     )
 )
 
+# `x` is the fraction of the corridor implemented as underground cable. A 100 m
+# regularization at either endpoint avoids singular zero-length line models.
 function ohl_to_ugc(x)
     share = clamp(x, 1e-3, 1 - 1e-3)
     ohl_model = overhead_line(
@@ -1421,7 +1424,7 @@ function ohl_to_ugc(x)
     return (;
         g1 = ac_source(
             setpoint = Setpoint(Vac = transmissionVoltage*sqrt(2),
-                Pac = pHVDC1),
+            Pac = pHVDC1),
             P_min = -2000,
             P_max = 2000,
             Q_max = 1000,
@@ -1430,28 +1433,55 @@ function ohl_to_ugc(x)
             transformation = true
         ),
 
-        c1 = only(mmc(Grid; Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
-            P_max = 1500, P_min = -1500, P = -pHVDC1, Q = qC1, Q_max = 500,
-            Q_min = -500,
-            occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-            ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-            pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-            q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-            dc = PI_control(Kₚ = 6, Kᵢ = 15), timeDelay = 200e-6, padeOrderNum = 5,
-            padeOrderDen = 5
+        c1 = only(mmc(Grid;
+            elec = ElectricalMMC(
+                Sbase = 1000.0, vDC_base = 640.0,
+                vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
+            setpoint = Setpoint(Pac = -pHVDC1, Qac = qC1,
+                Vac = transmissionVoltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
+            limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
+                Q_min = -500.0, Q_max = 500.0),
+            sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+            delta_control = ΔdqControlGFL(
+                outer_active = OuterActiveVdcControl(
+                    pi_ctrl = PIControl(Kp = 6.0, Ki = 15.0)),
+                outer_reactive = OuterReactiveQControl(
+                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                occ = InnerCurrentPIControl(
+                    pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                    activate_ω_c_multiplication = false)),
+            sigma_control = ΣdqzControlTEC(
+                ccsc = CirculatingCurrentSuppressionControl(
+                    PIControl(Kp = 0.1048, Ki = 48.1914))),
+            modulation = UncompensatedModulation(timeDelay = 200e-6,
+                padeOrderNum = 5, padeOrderDen = 5)
         )),
 
-        c2 = only(mmc(Grid; Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
-            P_max = 1000, P_min = -1000, P = pHVDC1, Q = qC2, Q_max = 1000,
-            Q_min = -1000,
-            vACbase_LL_RMS = 333, turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
-            Lₐᵣₘ = 30e-3,
-            occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-            ccc = PI_control(Kₚ = 1 * 0.1048, Kᵢ = 1 * 48.1914),
-            pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-            p = PI_control(Kₚ = 1 * 0.1, Kᵢ = 31.4159),
-            q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159), timeDelay = 200e-6,
-            padeOrderNum = 5, padeOrderDen = 5
+        c2 = only(mmc(Grid;
+            elec = ElectricalMMC(
+                Sbase = 1000.0, vDC_base = 640.0,
+                vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
+                Lᵣ = 0.0461, Rᵣ = 0.4103,
+                Lₐᵣₘ = 30e-3
+            ),
+            setpoint = Setpoint(Pac = pHVDC1, Qac = qC2,
+                Vac = transmissionVoltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
+            limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
+                Q_min = -1000.0, Q_max = 1000.0),
+            sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+            delta_control = ΔdqControlGFL(
+                outer_active = OuterActivePowerControl(
+                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                outer_reactive = OuterReactiveQControl(
+                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                occ = InnerCurrentPIControl(
+                    pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                    activate_ω_c_multiplication = false)),
+            sigma_control = ΣdqzControlTEC(
+                ccsc = CirculatingCurrentSuppressionControl(
+                    PIControl(Kp = 0.1048, Ki = 48.1914))),
+            modulation = UncompensatedModulation(timeDelay = 200e-6,
+                padeOrderNum = 5, padeOrderDen = 5)
         )),
 
         ugc = ugc_model,
@@ -1459,7 +1489,7 @@ function ohl_to_ugc(x)
 
         g4 = ac_source(
             setpoint = Setpoint(Vac = transmissionVoltage*sqrt(2),
-                Pac = pHVDC1),
+            Pac = pHVDC1),
             P_min = -2000,
             P_max = 2000,
             Q_max = 1000,
@@ -1537,7 +1567,7 @@ const connections = (
     (node = :B7d, element = :g1, side = 1, terminal = 1),
     (node = :B7d, element = :tl78, side = 2, terminal = 1),
     (node = :B7q, element = :g1, side = 1, terminal = 2),
-    (node = :B7q, element = :tl78, side = 2, terminal = 2)
+    (node = :B7q, element = :tl78, side = 2, terminal = 2),
 );
 
 const builder_options = (;
@@ -1545,10 +1575,13 @@ const builder_options = (;
     power_flow = (; is_bounded = (; bus_voltage = true))
 );
 
+# These elements do not change in the length or cable-geometry studies. The
+# lazy constructors still return singleton Gridspaces; `only` makes the
+# fixed scalar elements explicit.
 const fixed_element_specs = (;
     g1 = ac_source(Grid;
         setpoint = Setpoint(Vac = transmission_voltage * sqrt(2),
-            Pac = p_hvdc),
+        Pac = p_hvdc),
         P_min = -2000,
         P_max = 2000,
         Q_min = -1000,
@@ -1557,51 +1590,57 @@ const fixed_element_specs = (;
         transformation = true
     ),
     c1 = mmc(Grid;
-        Vᵈᶜ = 640,
-        vDCbase = 640,
-        Vₘ = transmission_voltage,
-        P = -p_hvdc,
-        Q = q_c1,
-        P_min = -1500,
-        P_max = 1500,
-        Q_min = -500,
-        Q_max = 500,
-        occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-        ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-        pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-        q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-        dc = PI_control(Kₚ = 6.0, Kᵢ = 15.0),
-        timeDelay = 200e-6,
-        padeOrderNum = 5,
-        padeOrderDen = 5
+        elec = ElectricalMMC(
+            Sbase = 1000.0, vDC_base = 640.0,
+            vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
+        setpoint = Setpoint(Pac = -p_hvdc, Qac = q_c1,
+            Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
+        limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
+            Q_min = -500.0, Q_max = 500.0),
+        sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+        delta_control = ΔdqControlGFL(
+            outer_active = OuterActiveVdcControl(
+                pi_ctrl = PIControl(Kp = 6.0, Ki = 15.0)),
+            outer_reactive = OuterReactiveQControl(
+                pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+            occ = InnerCurrentPIControl(
+                pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                activate_ω_c_multiplication = false)),
+        sigma_control = ΣdqzControlTEC(
+            ccsc = CirculatingCurrentSuppressionControl(
+                PIControl(Kp = 0.1048, Ki = 48.1914))),
+        modulation = UncompensatedModulation(timeDelay = 200e-6,
+            padeOrderNum = 5, padeOrderDen = 5)
     ),
     c2 = mmc(Grid;
-        Vᵈᶜ = 640,
-        vDCbase = 640,
-        Vₘ = transmission_voltage,
-        P = p_hvdc,
-        Q = q_c2,
-        P_min = -1000,
-        P_max = 1000,
-        Q_min = -1000,
-        Q_max = 1000,
-        vACbase_LL_RMS = 333,
-        turnsRatio = 333 / 380,
-        Lᵣ = 0.0461,
-        Rᵣ = 0.4103,
-        Lₐᵣₘ = 30e-3,
-        occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-        ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-        pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-        p = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-        q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-        timeDelay = 200e-6,
-        padeOrderNum = 5,
-        padeOrderDen = 5
+        elec = ElectricalMMC(
+            Sbase = 1000.0, vDC_base = 640.0,
+            vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
+            Lᵣ = 0.0461, Rᵣ = 0.4103,
+            Lₐᵣₘ = 30e-3
+        ),
+        setpoint = Setpoint(Pac = p_hvdc, Qac = q_c2,
+            Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
+        limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
+            Q_min = -1000.0, Q_max = 1000.0),
+        sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+        delta_control = ΔdqControlGFL(
+            outer_active = OuterActivePowerControl(
+                pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+            outer_reactive = OuterReactiveQControl(
+                pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+            occ = InnerCurrentPIControl(
+                pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                activate_ω_c_multiplication = false)),
+        sigma_control = ΣdqzControlTEC(
+            ccsc = CirculatingCurrentSuppressionControl(
+                PIControl(Kp = 0.1048, Ki = 48.1914))),
+        modulation = UncompensatedModulation(timeDelay = 200e-6,
+            padeOrderNum = 5, padeOrderDen = 5)
     ),
     g4 = ac_source(Grid;
         setpoint = Setpoint(Vac = transmission_voltage * sqrt(2),
-            Pac = p_hvdc),
+        Pac = p_hvdc),
         P_min = -2000,
         P_max = 2000,
         Q_min = -1000,
@@ -1688,6 +1727,8 @@ const corridor_groundwires = only(Groundwires(Grid;
     dᵍˢᵃᵍ = 6.0
 ));
 
+# Cable layer boundaries are generated from positive thicknesses. Independent
+# perturbations therefore cannot invert or overlap adjacent layers.
 @gridspace struct P2PCableGeometry
     spacing::Float64
     burial_depth::Float64
@@ -1709,6 +1750,13 @@ const nominal_geometry = only(P2PCableGeometry(
     screen = 0.06651 - 0.06636,
     insulation_3 = 0.07256 - 0.06651
 ));
+
+# ## Deterministic OHL/UGC transition
+#
+# One explicit `Grid` holds the paired lengths. Treating the OHL and UGC
+# lengths as independent grids would create an unphysical Cartesian product.
+# A 100 m endpoint regularization avoids the singular zero-length line model;
+# the labels retain the requested 0% and 100% values.
 
 const characteristic_shares = (0.0, 0.05, 0.1, 0.5, 0.9, 1.0)
 const endpoint_fraction = 1e-3

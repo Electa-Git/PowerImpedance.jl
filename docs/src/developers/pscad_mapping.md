@@ -996,8 +996,7 @@ conductance and settling. It is not assigned to physical insulation leakage.
 “not yet exportable” before equilibrium recovery. Nontrivial energy
 `power_filter` and nonzero CCC references need a separate Σ-generator review.
 Exposed cable sheath/armour interfaces, AC counts other than three and DC
-line counts other than two are unsupported. See
-[legacy converter adapters](legacy_converter_adapters.md) for adapter limits.
+line counts other than two are unsupported.
 
 ### Distributed-line travel time and licence size
 

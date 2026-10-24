@@ -248,23 +248,5 @@ end
 not imported by `using PowerImpedance`. Import it explicitly with
 `import PowerImpedance: @network`.
 
-## Migration from the removed NetworkBuilder names
-
-The former temporary type names were removed, not aliased. Calling one of the
-retired constructors raises an error with the replacement and this migration
-page.
-
-| Removed name | Replacement |
-|:--|:--|
-| `BuilderState` | `NetworkState` |
-| `ConnectionsRegistry` | `NetworkTopology` |
-| `LinearizedAdmittanceCollection` | `AdmittanceLookup` |
-| `LinearizedInterface` | `NetworkLookup` |
-| `LinearizedAdmittanceNetwork` | `NetworkModel` |
-
-The former NetworkBuilder `Pin`, `ConnectionDef`, `pin`, `⟷`, and `↔` grammar
-has no compatibility spelling. Replace every chained connection with one named
-row per connected terminal.
-
 Public functions and types are listed by module in the
 [API reference](reference.md).

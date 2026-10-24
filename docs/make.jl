@@ -304,7 +304,6 @@ function build_pages()
         "Conventions" => "developers/conventions.md",
         "Calculation parity" => "developers/calculation_parity.md",
         "Network-model performance" => "developers/network_model_performance.md",
-        "Legacy converter adapters" => "developers/legacy_converter_adapters.md",
         "PSCAD mapping and station notes" => "developers/pscad_mapping.md"
     ]
 

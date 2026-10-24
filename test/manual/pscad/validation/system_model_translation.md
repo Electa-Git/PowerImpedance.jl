@@ -47,9 +47,8 @@ Source snapshots (SHA256; source files were read only):
 
 Unspecified historical MMC electrical values are made explicit: arm R=1.07 Ω,
 L=50 mH, C=10 mF, N=400, transformer R=0.535 Ω and L=60 mH, 380 kV LL / 1000 MVA,
-ratio 1. The retained archived definitions in
-`src/Network/Components/converter/MMC_legacy.jl` and `controller_old.jl` document
-these defaults. Initial unspecified Pac=-10 MW and Pdc=100 MW are historical
+ratio 1. These values are the defaults of the former legacy MMC model.
+Initial unspecified Pac=-10 MW and Pdc=100 MW are historical
 initial guesses, overwritten by the package power flow; they are not new
 specified operating points. TLC DC base is 640 kV. Source source-voltage and
 current package naming conventions require the voltage conversions above.

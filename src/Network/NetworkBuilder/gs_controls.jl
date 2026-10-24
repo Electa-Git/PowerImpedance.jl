@@ -1,8 +1,4 @@
 @gridconstructor P.PIControl P.PIControl
-@gridconstructor P.PI_control P.PI_control
-@gridconstructor P.VSE_old P.VSE_old
-@gridconstructor P.CCQSEM P.CCQSEM
-@gridconstructor P.FFVI P.FFVI
 @gridconstructor P.PadeDelay P.PadeDelay
 @gridconstructor P.NoFilter P.NoFilter
 @gridconstructor P.Butterworth P.Butterworth

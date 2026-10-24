@@ -204,21 +204,9 @@ function oracle_voltage!(rows, labels)
     record!(rows, labels, "$prefix.outputs", result)
 end
 
-include("../legacy_mmc_reference.jl")
-
 function oracle_droop!(rows, labels)
-    legacy_models = Dict{Int,Any}()
     for kind in (:mmc, :tlc), order in (0, 2)
 
-        controls = PI.OrderedDict{Symbol, PI.Controller}(
-            :pll => PI_control(Kₚ = 0.085, Kᵢ = 32.0),
-            :p => PI_control(Kₚ = 0.2, Kᵢ = 10.0, n_f = order, ω_f = 80.0),
-            :q => PI_control(Kₚ = 0.2, Kᵢ = 10.0, ref = [25.0], n_f = order, ω_f = 120.0),
-            :vdc_droop => PI_control(Kₚ = 5.0, ω_f = 2.0, ref = [1.05]),
-            :ccc => PI_control(Kₚ = 0.1, Kᵢ = 43.0, ref = [0.02, -0.01]),
-            :energy => PI_control(Kₚ = 1.4, Kᵢ = 30.0, ref = [1.1]),
-            :occ => PI_control(Kₚ = 0.1, Kᵢ = 43.0),
-            :zcc => PI_control(Kₚ = 0.1, Kᵢ = 43.0))
         model = ParityFixtures.Droop.converter(kind).element_model
         block = kind == :mmc ? model.delta_control.outer_active : model.outerActive
         point = PI.SetpointPU(p_ac = 0.3, v_dc = 1.05)
@@ -230,18 +218,6 @@ function oracle_droop!(rows, labels)
             outputs = PI.state_space!(F, x, inputs, point, block, model)
             record!(rows, labels, "oracle.droop_$kind.order$order.case$i.F", F)
             record!(rows, labels, "oracle.droop_$kind.order$order.case$i.outputs", outputs)
-        end
-        old = get!(legacy_models, order) do
-            model = LegacyMMCReference.MMC(; Sbase = 500.0, controls = deepcopy(controls))
-            LegacyMMCReference.update!(model, 380sqrt(2/3), 0.0, 50.0, -25.0, 672.0, 50.0)
-            model
-        end
-        prefix = "oracle.droop_$kind.order$order"
-        record!(rows, labels, "$prefix.x", old.equilibrium)
-        for (i, ω) in enumerate((2π, 100π, 1000π))
-            reference = LegacyMMCReference.eval_parameters(old, ComplexF64(im * ω))
-            reference[2:3, :] .*= -1
-            record!(rows, labels, "$prefix.y.$i", reference)
         end
     end
 end

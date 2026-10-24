@@ -3,45 +3,6 @@ using PowerImpedance, LinearAlgebra, Test
 const P = PowerImpedance.PSCAD
 const NB = PowerImpedance.NetworkBuilder
 
-# Adapt only legacy calls whose current model mapping is already defined.
-# No example parameters, connections or impedance expressions are changed.
-function current_calls(expression)
-    expression isa Expr || return expression
-    arguments = map(current_calls, expression.args)
-    if expression.head == :call && first(arguments) in (:mmc, :tlc, :ac_source)
-        function_name = first(arguments)
-        keywords = Any[]
-        positional = Any[]
-        for argument in arguments[2:end]
-            if argument isa Expr && argument.head == :parameters
-                append!(keywords, argument.args)
-            elseif argument isa Expr && argument.head == :kw
-                push!(keywords, argument)
-            else
-                push!(positional, argument)
-            end
-        end
-        if isempty(positional) && function_name in (:mmc, :tlc) &&
-            any(k -> k isa Expr && k.head == :kw && k.args[1] == :occ, keywords)
-            return Expr(:call, :only, Expr(:call, function_name,
-                Expr(:parameters, keywords...), :(PowerImpedance.NetworkBuilder.Grid)))
-        elseif function_name == :ac_source &&
-            any(k -> k isa Expr && k.head == :kw && k.args[1] == :V, keywords)
-            fields = Dict(k.args[1] => k.args[2] for k in keywords)
-            haskey(fields, :setpoint) && error("legacy source supplies both V and setpoint")
-            setpoint_fields = Any[Expr(:kw, :Vac, :(sqrt(2) * $(fields[:V])))]
-            for (old, new) in ((:P, :Pac), (:Q, :Qac))
-                haskey(fields, old) && push!(setpoint_fields, Expr(:kw, new, fields[old]))
-            end
-            retained = filter(k -> !(k.args[1] in (:V, :P, :Q)), keywords)
-            push!(retained, Expr(:kw, :setpoint,
-                Expr(:call, :Setpoint, Expr(:parameters, setpoint_fields...))))
-            return Expr(:call, :ac_source, Expr(:parameters, retained...))
-        end
-    end
-    return Expr(expression.head, arguments...)
-end
-
 # Include model definitions through one named definition, excluding subsequent
 # frequency scans and plotting. Each example has its own variable namespace.
 function load_through(path, target)
@@ -63,7 +24,7 @@ function load_through(path, target)
             statement.head == :(=) && statement.args[1] == target
             done[] = true
         end
-        return current_calls(expression)
+        return expression
     end
     Base.include(select, namespace, path)
     done[] || error("definition $target not found in $path")

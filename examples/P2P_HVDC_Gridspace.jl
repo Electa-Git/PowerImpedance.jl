@@ -71,47 +71,53 @@ const fixed_element_specs = (;
         transformation = true
     ),
     c1 = mmc(Grid;
-        Vᵈᶜ = 640,
-        vDCbase = 640,
-        Vₘ = transmission_voltage,
-        P = -p_hvdc,
-        Q = q_c1,
-        P_min = -1500,
-        P_max = 1500,
-        Q_min = -500,
-        Q_max = 500,
-        occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-        ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-        pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-        q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-        dc = PI_control(Kₚ = 6.0, Kᵢ = 15.0),
-        timeDelay = 200e-6,
-        padeOrderNum = 5,
-        padeOrderDen = 5
+        elec = ElectricalMMC(
+            Sbase = 1000.0, vDC_base = 640.0,
+            vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
+        setpoint = Setpoint(Pac = -p_hvdc, Qac = q_c1,
+            Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
+        limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
+            Q_min = -500.0, Q_max = 500.0),
+        sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+        delta_control = ΔdqControlGFL(
+            outer_active = OuterActiveVdcControl(
+                pi_ctrl = PIControl(Kp = 6.0, Ki = 15.0)),
+            outer_reactive = OuterReactiveQControl(
+                pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+            occ = InnerCurrentPIControl(
+                pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                activate_ω_c_multiplication = false)),
+        sigma_control = ΣdqzControlTEC(
+            ccsc = CirculatingCurrentSuppressionControl(
+                PIControl(Kp = 0.1048, Ki = 48.1914))),
+        modulation = UncompensatedModulation(timeDelay = 200e-6,
+            padeOrderNum = 5, padeOrderDen = 5)
     ),
     c2 = mmc(Grid;
-        Vᵈᶜ = 640,
-        vDCbase = 640,
-        Vₘ = transmission_voltage,
-        P = p_hvdc,
-        Q = q_c2,
-        P_min = -1000,
-        P_max = 1000,
-        Q_min = -1000,
-        Q_max = 1000,
-        vACbase_LL_RMS = 333,
-        turnsRatio = 333 / 380,
-        Lᵣ = 0.0461,
-        Rᵣ = 0.4103,
-        Lₐᵣₘ = 30e-3,
-        occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-        ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-        pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-        p = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-        q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-        timeDelay = 200e-6,
-        padeOrderNum = 5,
-        padeOrderDen = 5
+        elec = ElectricalMMC(
+            Sbase = 1000.0, vDC_base = 640.0,
+            vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
+            Lᵣ = 0.0461, Rᵣ = 0.4103,
+            Lₐᵣₘ = 30e-3
+        ),
+        setpoint = Setpoint(Pac = p_hvdc, Qac = q_c2,
+            Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
+        limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
+            Q_min = -1000.0, Q_max = 1000.0),
+        sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+        delta_control = ΔdqControlGFL(
+            outer_active = OuterActivePowerControl(
+                pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+            outer_reactive = OuterReactiveQControl(
+                pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+            occ = InnerCurrentPIControl(
+                pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                activate_ω_c_multiplication = false)),
+        sigma_control = ΣdqzControlTEC(
+            ccsc = CirculatingCurrentSuppressionControl(
+                PIControl(Kp = 0.1048, Ki = 48.1914))),
+        modulation = UncompensatedModulation(timeDelay = 200e-6,
+            padeOrderNum = 5, padeOrderDen = 5)
     ),
     g4 = ac_source(Grid;
         setpoint = Setpoint(Vac = transmission_voltage * sqrt(2),
@@ -455,52 +461,59 @@ converter_uq_elements = merge(
     ),
     (;
         c1 = mmc(Grid;
-            Vᵈᶜ = 640,
-            vDCbase = 640,
-            Vₘ = transmission_voltage,
-            P = -p_hvdc,
-            Q = q_c1,
-            P_min = -1500,
-            P_max = 1500,
-            Q_min = -500,
-            Q_max = 500,
-            Lₐᵣₘ = Grid(50e-3, 5 / sqrt(3)),
-            Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
-            Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3)),
-            occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-            ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-            pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-            q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-            dc = PI_control(Kₚ = 6.0, Kᵢ = 15.0),
-            timeDelay = 200e-6,
-            padeOrderNum = 5,
-            padeOrderDen = 5
+            elec = ElectricalMMC(Grid;
+                Sbase = 1000.0, vDC_base = 640.0,
+                vACbase_LL_RMS = 380.0, turnsRatio = 1.0,
+                Lₐᵣₘ = Grid(50e-3, 5 / sqrt(3)),
+                Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
+                Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))
+            ),
+            setpoint = Setpoint(Pac = -p_hvdc, Qac = q_c1,
+                Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
+            limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
+                Q_min = -500.0, Q_max = 500.0),
+            sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+            delta_control = ΔdqControlGFL(
+                outer_active = OuterActiveVdcControl(
+                    pi_ctrl = PIControl(Kp = 6.0, Ki = 15.0)),
+                outer_reactive = OuterReactiveQControl(
+                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                occ = InnerCurrentPIControl(
+                    pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                    activate_ω_c_multiplication = false)),
+            sigma_control = ΣdqzControlTEC(
+                ccsc = CirculatingCurrentSuppressionControl(
+                    PIControl(Kp = 0.1048, Ki = 48.1914))),
+            modulation = UncompensatedModulation(timeDelay = 200e-6,
+                padeOrderNum = 5, padeOrderDen = 5)
         ),
         c2 = mmc(Grid;
-            Vᵈᶜ = 640,
-            vDCbase = 640,
-            Vₘ = transmission_voltage,
-            P = p_hvdc,
-            Q = q_c2,
-            P_min = -1000,
-            P_max = 1000,
-            Q_min = -1000,
-            Q_max = 1000,
-            vACbase_LL_RMS = 333,
-            turnsRatio = 333 / 380,
-            Lᵣ = 0.0461,
-            Rᵣ = 0.4103,
-            Lₐᵣₘ = Grid(30e-3, 5 / sqrt(3)),
-            Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
-            Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3)),
-            occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-            ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-            pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-            p = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-            q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-            timeDelay = 200e-6,
-            padeOrderNum = 5,
-            padeOrderDen = 5
+            elec = ElectricalMMC(Grid;
+                Sbase = 1000.0, vDC_base = 640.0,
+                vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
+                Lᵣ = 0.0461, Rᵣ = 0.4103,
+                Lₐᵣₘ = Grid(30e-3, 5 / sqrt(3)),
+                Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
+                Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))
+            ),
+            setpoint = Setpoint(Pac = p_hvdc, Qac = q_c2,
+                Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
+            limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
+                Q_min = -1000.0, Q_max = 1000.0),
+            sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+            delta_control = ΔdqControlGFL(
+                outer_active = OuterActivePowerControl(
+                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                outer_reactive = OuterReactiveQControl(
+                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                occ = InnerCurrentPIControl(
+                    pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                    activate_ω_c_multiplication = false)),
+            sigma_control = ΣdqzControlTEC(
+                ccsc = CirculatingCurrentSuppressionControl(
+                    PIControl(Kp = 0.1048, Ki = 48.1914))),
+            modulation = UncompensatedModulation(timeDelay = 200e-6,
+                padeOrderNum = 5, padeOrderDen = 5)
         ),
         ohl = overhead_line(Grid;
             length = half_corridor.ohl,

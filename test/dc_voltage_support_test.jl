@@ -2,7 +2,7 @@ module DCVoltageSupportTests
 using Test, PowerImpedance, LinearAlgebra, Logging
 const PI = PowerImpedance
 const NB = PI.NetworkBuilder
-include("legacy_mmc_reference.jl")
+include("parity/structure.jl")
 
 active(m::MMC) = m.delta_control.outer_active
 active(m::TLC) = m.outerActive
@@ -62,8 +62,6 @@ end
         inputs = (; meas = (; P_ac_f = 0.21, v_dc_f = measured_voltage), sync = (; ω_c = 0.98))
         F = zeros(2)
         y = PI.state_space!(F, x, inputs, sp, block, m)
-        # Independent MMC_legacy.jl:444–454; the lag always has order one,
-        # regardless of the legacy PI controller's n_f and Ki fields.
         delta_p_unfiltered = 5.0 * (1.05 - measured_voltage)
         effective_reference = 0.3 - 0.017
         @test F[1] == 2.0 * (delta_p_unfiltered - 0.017)
@@ -77,38 +75,6 @@ end
     end
     space = DCVoltageSupportLag(Grid; K = Grid([3.0, 5.0]), ωc = 2.0)
     @test collect(space) == [DCVoltageSupportLag(K = 3.0, ωc = 2.0), DCVoltageSupportLag(K = 5.0, ωc = 2.0)]
-end
-
-@testset "Legacy DC droop adapter and reference policy" begin
-    for (kind, adapter, factory) in ((:mmc, NB._legacy_mmc, mmc), (:tlc, NB._legacy_tlc, tlc))
-        p = PI_control(Kₚ = 0.2, Kᵢ = 10.0)
-        droop = PI_control(Kₚ = 5.0, Kᵢ = 99.0, n_f = 4, ω_f = 2.0, ref = [1.05])
-        kwargs = (; Sbase = 500.0, p, vdc_droop = droop)
-        e = @test_logs min_level=Logging.Warn adapter(kwargs, :station)
-        @test e.setpoint.Vdc == 672.0
-        @test active(e.element_model).support == DCVoltageSupportLag(K = 5.0, ωc = 2.0)
-        @test active(e.element_model).pi_ctrl == PIControl(Kp = 0.2, Ki = 10.0)
-        @test droop.ref == [1.05]
-        @test PI.n_states(active(e.element_model)) == 2
-        @test adapter((; kwargs..., vDCbase = 800.0)).setpoint.Vdc == 840.0
-        e = @test_logs (:warn, r"converter :station: legacy :vdc_droop reference 672.0 differs from setpoint 680.0") adapter((; kwargs..., setpoint = Setpoint(Vdc = 680.0)), :station)
-        @test e.setpoint.Vdc == 680.0
-        e = @test_logs min_level=Logging.Warn adapter((; kwargs..., Vᵈᶜ = 672.0), :station)
-        @test e.setpoint.Vdc == 672.0
-        e = adapter((; Sbase = 500.0, controls = Dict(:p => p, :vdc_droop => droop)))
-        @test active(e.element_model).support == DCVoltageSupportLag(K = 5.0, ωc = 2.0)
-        @test adapter((; p, Vᵈᶜ = 672.0, vdc_droop = PI_control(ref = [0]))).setpoint.Vdc == 672.0
-        @test_throws r"requires the :p" adapter((; vdc_droop = droop))
-        @test_throws r"simultaneous active-power supports" adapter((; kwargs..., f_supp = PI_control()))
-        @test_throws ArgumentError factory(Grid; elec = kind === :mmc ? ElectricalMMC() : ElectricalTLC(), vdc_droop = droop)
-        space = NB.define((; station = factory(Grid; kwargs..., Vᵈᶜ = 680.0)), [
-            (node = :dc, element = :station, side = 1, terminal = 1),
-            (node = :d, element = :station, side = 2, terminal = 1),
-            (node = :q, element = :station, side = 2, terminal = 2)])
-        state = @test_logs (:warn, r"converter :station: legacy :vdc_droop reference 672.0 differs from setpoint 680.0") materialize(first(configurations(space)))
-        @test active(state.elements.station.element_model).support == DCVoltageSupportLag(K = 5.0, ωc = 2.0)
-        @test state.elements.station.setpoint.Vdc == 680.0
-    end
 end
 
 @testset "DC droop power-flow voltage and power bases" begin
@@ -178,26 +144,42 @@ end
 end
 
 @testset "DC droop against historical MMC steady state and admittance" begin
+    reference = ParityData.load_rows(joinpath(@__DIR__, "reference/v2/numeric.csv"))
     for order in (0, 2)
-        controls = PI.OrderedDict{Symbol,PI.Controller}(
-            :pll => PI_control(Kₚ = 0.085, Kᵢ = 32.0),
-            :p => PI_control(Kₚ = 0.2, Kᵢ = 10.0, n_f = order, ω_f = 80.0),
-            :q => PI_control(Kₚ = 0.2, Kᵢ = 10.0, ref = [25.0], n_f = order, ω_f = 120.0),
-            :vdc_droop => PI_control(Kₚ = 5.0, ω_f = 2.0, ref = [1.05]),
-            :ccc => PI_control(Kₚ = 0.1, Kᵢ = 43.0, ref = [0.02, -0.01]),
-            :energy => PI_control(Kₚ = 1.4, Kᵢ = 30.0, ref = [1.1]),
-            :occ => PI_control(Kₚ = 0.1, Kᵢ = 43.0),
-            :zcc => PI_control(Kₚ = 0.1, Kᵢ = 43.0))
-        old = LegacyMMCReference.MMC(; Sbase = 500.0, controls = deepcopy(controls))
-        LegacyMMCReference.update!(old, 380sqrt(2/3), 0.0, 50.0, -25.0, 672.0, 50.0)
-        e = NB._legacy_mmc((; Sbase = 500.0, controls = deepcopy(controls),
-            P = 50.0, Vₘ = 380/sqrt(3), Vᵈᶜ = 672.0, P_dc = 50.0))
+        p_filter = order == 0 ? PI.NoFilter() : PI.Butterworth(order = order, ωc = 80.0)
+        q_filter = order == 0 ? PI.NoFilter() : PI.Butterworth(order = order, ωc = 120.0)
+        energy_filter = PI.measurement_filter_ss(q_filter)
+        e = mmc(
+            elec = ElectricalMMC(Sbase = 500.0, vDC_base = 640.0,
+                vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
+            meas = Measurement(P_ac = p_filter, Q_ac = q_filter),
+            sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.085, Ki = 32.0)),
+            delta_control = ΔdqControlGFL(
+                outer_active = OuterActivePowerControl(
+                    pi_ctrl = PIControl(Kp = 0.2, Ki = 10.0),
+                    support = DCVoltageSupportLag(K = 5.0, ωc = 2.0)),
+                outer_reactive = OuterReactiveQControl(
+                    pi_ctrl = PIControl(Kp = 0.2, Ki = 10.0)),
+                occ = InnerCurrentPIControl(pi_ctrl = PIControl(Kp = 0.1, Ki = 43.0),
+                    activate_ω_c_multiplication = false)),
+            sigma_control = ΣdqzControlTEC(
+                tec = TotalEnergyControl(PIControl(Kp = 1.4, Ki = 30.0),
+                    1.1, energy_filter, true),
+                zscc = ZeroSequenceCurrentControl(PIControl(Kp = 0.1, Ki = 43.0)),
+                ccsc = CirculatingCurrentSuppressionControl(
+                    PIControl(Kp = 0.1, Ki = 43.0); ref = (0.02, -0.01))),
+            modulation = UncompensatedModulation(),
+            setpoint = Setpoint(Pac = 50.0, Qac = 25.0, θac = 0.0,
+                Vac = (380 / sqrt(3)) * sqrt(2), Vdc = 672.0, Pdc = 50.0),
+            limits = PI.Limits(P_min = 0.9, P_max = 1.1, Q_min = -0.5, Q_max = 0.5))
         PI.update!(e, e.setpoint)
-        @test PI._steady_state(e)[end-11:end] ≈ old.equilibrium[1:12]
-        for ω in (2π, 100π, 1000π)
-            reference = LegacyMMCReference.eval_parameters(old, ComplexF64(im*ω))
-            reference[2:3, :] .*= -1 # Generation to terminal load-current sign.
-            @test PI.eval_y(e, ComplexF64(im*ω)) ≈ reference
+        prefix = "oracle.droop_mmc.order$order"
+        x = [real(get(reference, ("$prefix.x", i, 1, 1), 0.0)) for i in 1:12]
+        @test PI._steady_state(e)[end-11:end] ≈ x
+        for (index, ω) in enumerate((2π, 100π, 1000π))
+            y = [get(reference, ("$prefix.y.$index", i, j, 1), 0.0 + 0.0im)
+                for i in 1:3, j in 1:3]
+            @test PI.eval_y(e, ComplexF64(im*ω)) ≈ y
         end
     end
 end
