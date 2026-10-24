@@ -13,6 +13,13 @@
     @test ac_one != dc_one
     @test model.key_to_vertex[ac_one] != model.key_to_vertex[dc_one]
     @test length(model.buses) == 4
+    @test enriched.nodes2bus == Dict(
+        :ac_1_d => (:ac, 1), :ac_1_q => (:ac, 1),
+        :ac_2_d => (:ac, 2), :ac_2_q => (:ac, 2),
+        :dc_1 => (:dc, 1), :dc_2 => (:dc, 2),
+        :gnd_dc => (:ground, 0), :gnd_ac_d => (:ground, 0),
+        :gnd_ac_q => (:ground, 0)
+    )
     @test Set(only(bus.nodes for bus in model.buses if bus.key == ac_one)) ==
           Set((:ac_1_d, :ac_1_q))
 
@@ -26,6 +33,14 @@
     for component in model.components
     if component.key.element == :converter)
     @test converter.role == :converter
+    @test converter.model_type === typeof(network.elements.converter)
+    @test converter.terminal_rows == Tuple(
+        row for row in network.topology.connections if row.component == :converter
+    )
+    @test Set(connection.port for connection in converter.connected_buses) ==
+          Set((:ac, :dc))
+    @test Set(incidence.port for incidence in model.incidences
+    if incidence.component == converter.key) == Set((:ac, :dc))
     @test Set(connection.bus.domain for connection in converter.connected_buses) ==
           Set((1, 2))
 
@@ -33,7 +48,7 @@
     dc_load = only(component
     for component in topology_model.components
     if component.key.element == :dc_load)
-    @test dc_load.grounded_sides == (2,)
+    @test dc_load.grounded_ports == (:side2,)
     @test dc_load.role == :shunt
 
     roles = Dict(component.key.element => component.role
@@ -165,6 +180,9 @@
     @test view.selected[] == DiagramExtension.ComponentKey(:converter)
     @test view.details[].kind == :component
     @test view.details[].role == :converter
+    @test view.details[].grounded_ports == converter.grounded_ports
+    @test view.details[].operating_point ===
+          get(enriched.operating_point, :converter, nothing)
     @test view.positions == original_positions
     @test view.model.graph === original_graph
     @test view.plots.graph === original_graph_plot
@@ -200,26 +218,19 @@ end
 
 struct DiagramUnknownModel <: PowerImpedance.AbstractLinFreqDomain end
 
-function PowerImpedance.NetworkBuilder._port_descriptions(
-        ::PowerImpedance.Element{<:DiagramUnknownModel}
-)
-    return (
-        PowerImpedance.NetworkBuilder._PortDescription(1, 1, 2),
-        PowerImpedance.NetworkBuilder._PortDescription(2, 1, 2)
-    )
+function PowerImpedance.electricalconnections(::DiagramUnknownModel)
+    return (side1 = Port(DC_CM), side2 = Port(DC_CM))
 end
 
 @testset "GraphMakie diagram generic component fallback" begin
-    unknown = PowerImpedance.Element(
-        input_pins = 1,
-        output_pins = 1,
-        element_model = DiagramUnknownModel()
-    )
+    unknown = DiagramUnknownModel()
     network = PowerImpedance.NetworkBuilder.define(
         (; unknown),
         (
-            diagram_row(:unknown_left, :unknown, 1, 1),
-            diagram_row(:unknown_right, :unknown, 2, 1)
+            PowerImpedance.NetworkBuilder.Bus(:unknown_left;
+                ports = ((:unknown, :side1),)),
+            PowerImpedance.NetworkBuilder.Bus(:unknown_right;
+                ports = ((:unknown, :side2),))
         )
     )
     model = DiagramExtension.project_diagram(network)
@@ -229,29 +240,35 @@ end
 
 @testset "GraphMakie diagram transformer and omission roles" begin
     elements = (
-        source = ac_source(pins = 3, transformation = true),
+        source = ac_source(pins = 3),
         transformer = transformer(
             pins = 3,
             n = 1.0,
             Rₚ = 0.1,
             Lₚ = 1.0e-3,
             Rₛ = 0.1,
-            Lₛ = 1.0e-3,
-            transformation = true
-        ),
-        isolated = impedance(z = 2.0, pins = 1)
+            Lₛ = 1.0e-3
+        )
     )
     connections = (
-        diagram_row(:primary_d, :source, 1, 1),
-        diagram_row(:primary_q, :source, 1, 2),
-        diagram_row(:primary_d, :transformer, 1, 1),
-        diagram_row(:primary_q, :transformer, 1, 2),
-        diagram_row(:secondary_d, :transformer, 2, 1),
-        diagram_row(:secondary_q, :transformer, 2, 2)
+        PowerImpedance.NetworkBuilder.Bus(:primary_; ports = (
+            (:source, :ac), (:transformer, :side1)
+        ), domain = ACDQ),
+        PowerImpedance.NetworkBuilder.Bus(:secondary_;
+            ports = ((:transformer, :side2),), domain = ACDQ)
     )
-    model = DiagramExtension.project_diagram(
-        PowerImpedance.NetworkBuilder.define(elements, connections)
+    network = PowerImpedance.NetworkBuilder.define(elements, connections)
+    isolated = PowerImpedance.NetworkBuilder.define(
+        (; isolated = impedance(z = 2.0, pins = 1)),
+        (PowerImpedance.NetworkBuilder.Bus(:isolated; ports = ((:isolated, :side1),)),)
+    ).elements.isolated
+    disconnected = PowerImpedance.NetworkBuilder.NetworkState(
+        merge(network.elements, (; isolated)),
+        network.topology,
+        network.options,
+        network.powerflow_start
     )
+    model = DiagramExtension.project_diagram(disconnected)
     @test only(component.role
     for component in model.components
     if component.key.element == :transformer) == :transformer

@@ -206,15 +206,15 @@ end
 
 function _entity_details(model::DiagramModel, key::ComponentKey)
     descriptor = only(component for component in model.components if component.key == key)
-    setpoint = model.operating_point === nothing ? nothing :
-               get(model.operating_point, key.element, nothing)
+    values = model.operating_point === nothing ? nothing :
+             get(model.operating_point, key.element, nothing)
     return (
         kind = :component,
         key = descriptor.key,
         element = descriptor.key.element,
         role = descriptor.role,
         connected_buses = descriptor.connected_buses,
-        grounded_sides = descriptor.grounded_sides,
+        grounded_ports = descriptor.grounded_ports,
         terminal_rows = descriptor.terminal_rows,
         model_type = descriptor.model_type,
         pmtype = descriptor.pmtype,
@@ -222,7 +222,7 @@ function _entity_details(model::DiagramModel, key::ComponentKey)
         active = descriptor.active,
         input = descriptor.input,
         solution = descriptor.solution,
-        operating_point = setpoint
+        operating_point = values
     )
 end
 

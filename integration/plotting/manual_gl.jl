@@ -23,12 +23,11 @@ elements = (
 )
 
 connections = (
-    (node = :source, element = :branch, side = 1, terminal = 1),
-    (node = :remote, element = :branch, side = 2, terminal = 1),
-    (node = :source, element = :source_shunt, side = 1, terminal = 1),
-    (node = :gnd, element = :source_shunt, side = 2, terminal = 1),
-    (node = :remote, element = :remote_shunt, side = 1, terminal = 1),
-    (node = :gnd, element = :remote_shunt, side = 2, terminal = 1)
+    NB.Bus(:source; ports = ((:branch, :side1), (:source_shunt, :side1))),
+    NB.Bus(:remote; ports = ((:branch, :side2), (:remote_shunt, :side1))),
+    NB.Bus(:gnd; ports = (
+        (:source_shunt, :side2), (:remote_shunt, :side2)
+    ))
 )
 
 network = NB.define(elements, connections)

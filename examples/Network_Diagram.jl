@@ -4,7 +4,7 @@
 # backend owns display and export; `diagram` only builds and returns a figure.
 
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: define
+using PowerImpedance.NetworkBuilder: Bus, define
 using GraphMakie
 using CairoMakie
 
@@ -12,27 +12,19 @@ using CairoMakie
 # parallel AC coordinates on each physical bus, and a grounded DC load.
 
 elements = (
-    source = ac_source(pins = 3, transformation = true),
-    ac_branch = impedance(z = 0.2 + 0.8im, pins = 3, transformation = true),
+    source = ac_source(pins = 3),
+    ac_branch = impedance(z = 0.2 + 0.8im, pins = 3),
     converter = tlc(),
     dc_branch = impedance(z = 1.0, pins = 1),
     load = impedance(z = 10.0, pins = 1)
 )
 
 connections = (
-    (node = :ac_1_d, element = :source, side = 1, terminal = 1),
-    (node = :ac_1_q, element = :source, side = 1, terminal = 2),
-    (node = :ac_1_d, element = :ac_branch, side = 1, terminal = 1),
-    (node = :ac_1_q, element = :ac_branch, side = 1, terminal = 2),
-    (node = :ac_2_d, element = :ac_branch, side = 2, terminal = 1),
-    (node = :ac_2_q, element = :ac_branch, side = 2, terminal = 2),
-    (node = :dc_1, element = :converter, side = 1, terminal = 1),
-    (node = :ac_2_d, element = :converter, side = 2, terminal = 1),
-    (node = :ac_2_q, element = :converter, side = 2, terminal = 2),
-    (node = :dc_1, element = :dc_branch, side = 1, terminal = 1),
-    (node = :dc_2, element = :dc_branch, side = 2, terminal = 1),
-    (node = :dc_2, element = :load, side = 1, terminal = 1),
-    (node = :gnd_dc, element = :load, side = 2, terminal = 1)
+    Bus(:ac_1_; ports = ((:source, :ac), (:ac_branch, :side1)), domain = ACDQ),
+    Bus(:ac_2_; ports = ((:ac_branch, :side2), (:converter, :ac)), domain = ACDQ),
+    Bus(:dc_1; ports = ((:converter, :dc), (:dc_branch, :side1))),
+    Bus(:dc_2; ports = ((:dc_branch, :side2), (:load, :side1))),
+    Bus(:gnd_dc; ports = ((:load, :side2),))
 )
 
 network = define(elements, connections)

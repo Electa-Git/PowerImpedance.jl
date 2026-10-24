@@ -1,12 +1,3 @@
-const DiagramTerminal = @NamedTuple{
-    node::Symbol,
-    bus::Int,
-    element::Symbol,
-    side::Int,
-    terminal::Int,
-    domain::Int
-}
-
 "Identify one physical AC or DC bus without allowing domain collisions."
 struct BusKey
     domain::Int
@@ -34,17 +25,17 @@ struct BusDescriptor
     solution::PowerModelsPayload
 end
 
-struct SideBus
-    side::Int
+struct PortBus
+    port::Symbol
     bus::BusKey
 end
 
 struct ComponentDescriptor
     key::ComponentKey
     role::Symbol
-    connected_buses::Tuple{Vararg{SideBus}}
-    grounded_sides::Tuple{Vararg{Int}}
-    terminal_rows::Tuple{Vararg{DiagramTerminal}}
+    connected_buses::Tuple{Vararg{PortBus}}
+    grounded_ports::Tuple{Vararg{Symbol}}
+    terminal_rows::Tuple{Vararg{NetworkBuilder.TopologyConnection}}
     model_type::DataType
     pmtype::Union{Nothing, String}
     pmindex::Union{Nothing, Int}
@@ -55,7 +46,7 @@ end
 
 struct IncidenceDescriptor
     component::ComponentKey
-    side::Int
+    port::Symbol
     bus::BusKey
 end
 
@@ -183,13 +174,13 @@ end
 
 # End PowerModels adapter.
 
-function _expected_node_bus(row::DiagramTerminal)
+function _expected_node_bus(row::NetworkBuilder.TopologyConnection)
     row.bus == 0 && return (:ground, 0)
     return (row.domain == 1 ? :ac : :dc, row.bus)
 end
 
 function _validate_powerflow_network(network, powerflow)
-    topology_nodes = Set(network.topology.connections.node)
+    topology_nodes = Set(network.topology.connections.net)
     mapped_nodes = Set(keys(powerflow.nodes2bus))
     topology_nodes == mapped_nodes || throw(
         ArgumentError(
@@ -198,11 +189,11 @@ function _validate_powerflow_network(network, powerflow)
     ),
     )
     for row in network.topology.connections
-        mapped = powerflow.nodes2bus[row.node]
+        mapped = powerflow.nodes2bus[row.net]
         mapped == _expected_node_bus(row) || throw(
             ArgumentError(
             "power-flow result does not belong to the supplied network: " *
-            "node :$(row.node) maps to $mapped, expected $(_expected_node_bus(row))",
+            "node :$(row.net) maps to $mapped, expected $(_expected_node_bus(row))",
         ),
         )
     end
@@ -296,7 +287,7 @@ function _projection_parts(network, powerflow)
             bus_nodes[key] = Symbol[]
             push!(bus_order, key)
         end
-        row.node in bus_nodes[key] || push!(bus_nodes[key], row.node)
+        row.net in bus_nodes[key] || push!(bus_nodes[key], row.net)
     end
 
     buses = _bus_descriptors(bus_order, bus_nodes, powerflow)
@@ -305,7 +296,9 @@ function _projection_parts(network, powerflow)
     diagnostics = DiagramDiagnostic[]
 
     for (element_name, element) in pairs(network.elements)
-        terminal_rows = DiagramTerminal[row for row in rows if row.element == element_name]
+        terminal_rows = NetworkBuilder.TopologyConnection[
+            row for row in rows if row.component == element_name
+        ]
         if isempty(terminal_rows)
             push!(
                 diagnostics,
@@ -318,27 +311,29 @@ function _projection_parts(network, powerflow)
             continue
         end
 
-        connected = SideBus[]
-        seen = Set{Tuple{Int, Int, Int}}()
-        grounded_sides = Int[]
+        connected = PortBus[]
+        seen = Set{Tuple{Symbol, Int, Int}}()
+        grounded_ports = Symbol[]
         for row in terminal_rows
             if row.bus == 0
-                row.side in grounded_sides || push!(grounded_sides, row.side)
+                row.port in grounded_ports || push!(grounded_ports, row.port)
                 continue
             end
-            incidence_key = (row.side, row.domain, row.bus)
+            incidence_key = (row.port, row.domain, row.bus)
             incidence_key in seen && continue
             push!(seen, incidence_key)
-            side_bus = SideBus(row.side, BusKey(row.domain, row.bus))
-            push!(connected, side_bus)
-            push!(incidences, IncidenceDescriptor(ComponentKey(element_name), row.side, side_bus.bus))
+            port_bus = PortBus(row.port, BusKey(row.domain, row.bus))
+            push!(connected, port_bus)
+            push!(incidences, IncidenceDescriptor(
+                ComponentKey(element_name), row.port, port_bus.bus
+            ))
         end
 
         pmtype, pmindex, input, solution = powerflow === nothing ?
                                            (nothing, nothing, nothing, nothing) :
                                            _powerflow_records(powerflow, element_name)
         role = PowerImpedance.NetworkBuilder.refined_role(
-            PowerImpedance.NetworkBuilder.topology_role(element, connected, grounded_sides),
+            PowerImpedance.NetworkBuilder.topology_role(element, connected, grounded_ports),
             element,
             pmtype,
             input
@@ -348,9 +343,9 @@ function _projection_parts(network, powerflow)
             ComponentKey(element_name),
             role,
             Tuple(connected),
-            Tuple(grounded_sides),
+            Tuple(grounded_ports),
             Tuple(terminal_rows),
-            typeof(element.element_model),
+            typeof(element),
             pmtype,
             pmindex,
             input,
