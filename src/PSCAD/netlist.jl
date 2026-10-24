@@ -219,6 +219,14 @@ function _branch_flow(model, pmtype, solution, input, pf, terminals, values)
     for field in fields))
 end
 
+function _branch_flow(model::PowerImpedance.Source, pmtype, solution, input,
+        pf, terminals, values)
+    solution === nothing && return nothing
+    fields = pmtype == "gendc" ? (:pgdc,) : (:pg, :qg)
+    return NamedTuple{fields}(Tuple(-Float64(solution[string(field)]) * 1000.0
+    for field in fields))
+end
+
 function _branch_flow(model::PowerImpedance.InductionMachine,
         pmtype, solution, input, pf, terminals, values)
     solution === nothing && return nothing
@@ -239,8 +247,8 @@ function _branch_flow(model::PowerImpedance.SynchronousMachine,
     branch = pf.result["solution"]["branch"][string(input["index"])]
     return (pg = Float64(solution["pg"]) * 1000,
         qg = Float64(solution["qg"]) * 1000,
-        pf = -Float64(branch["pt"]) * 1000,
-        qf = -Float64(branch["qt"]) * 1000,
+        pf = Float64(branch["pt"]) * 1000,
+        qf = Float64(branch["qt"]) * 1000,
         terminal_voltage_kV = Float64(terminal_bus["vm"]) * terminal_base,
         terminal_angle_rad = Float64(terminal_bus["va"]))
 end
@@ -248,8 +256,7 @@ end
 function _branch_flow(model::Union{PowerImpedance.TLC, PowerImpedance.MMC},
         pmtype, solution, input, pf, terminals, values)
     solution === nothing && return nothing
-    # convdc defines pgrid and qgrid as power absorbed from the AC bus. The
-    # external ammeter points toward the bus. The DC port absorbs pdc.
+    # Terminal meters measure absorbed power. Filtered AC powers use injection.
     return (pgrid = Float64(solution["pgrid"]) * 1000,
         qgrid = Float64(solution["qgrid"]) * 1000,
         pdc = values.dc.p, pf = values.dc.p, pt = -values.ac.p, qt = -values.ac.q)

@@ -98,7 +98,7 @@ end
                          Dict(c.params)["Name"] == "I_line_side$side",
                     plan.main.components))
                 @test (meter.x, meter.y) ==
-                      (port[1] + (direction == -1 ? -36 : 0), port[2] - 36)
+                      (port[1] + 36direction, port[2] - 36)
             end
         end
     end

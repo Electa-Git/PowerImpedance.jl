@@ -46,6 +46,8 @@
 
 ### Changed
 
+- **Breaking:** PSCAD current probes measure current into the component.
+
 - **Breaking:** `export_pscad` accepts only a `NetworkState`, with an optional
   `PowerFlowResult` through `powerflow`.
 - **Breaking:** PSCAD current probes use `I_<element>_<port>`, such as `I_c1_ac`.

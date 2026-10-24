@@ -114,8 +114,9 @@ end
     offset = cis(0.52)
     add_three_phase!(channels, "V_B1", times, sqrt(2) * source_voltage * offset)
     add_three_phase!(channels, "V_B2", times, sqrt(2) * receiving_voltage * offset)
-    for name in ("I_source_ac", "I_line_side1", "I_line_side2", "I_load_side1")
-        add_three_phase!(channels, name, times, sqrt(2) * current * offset)
+    for (name, polarity) in (("I_source_ac", -1), ("I_line_side1", 1),
+        ("I_line_side2", -1), ("I_load_side1", 1))
+        add_three_phase!(channels, name, times, polarity * sqrt(2) * current * offset)
     end
     result = synthetic_result(times, channels; probes = plan.probes)
     comparison = compare_operating_point(result, model)
@@ -185,8 +186,9 @@ end
         channels["V_$(bus)_P"] = voltage .+ 1.7 .+ 0.4 .* cos.(2π * 50 .* times)
         channels["V_$(bus)_N"] = -voltage .+ 1.7 .+ 0.3 .* sin.(2π * 50 .* times)
     end
-    for name in ("I_from_dc", "I_to_dc", "I_line_side1", "I_line_side2")
-        channels[name] = -2.0 .+ 0.2 .* cos.(2π * 50 .* times)
+    for (name, polarity) in (("I_from_dc", -1), ("I_to_dc", 1),
+        ("I_line_side1", 1), ("I_line_side2", -1))
+        channels[name] = polarity .* (2.0 .- 0.2 .* cos.(2π * 50 .* times))
     end
     result = synthetic_result(times, channels; probes = plan.probes)
     comparison = compare_operating_point(result, model)
@@ -474,14 +476,14 @@ end
 
     # The 1000 MVA rating governs both power errors, even for zero reference Q.
     flows = copy(model.operating_point.branch_flows)
-    flows[:sg1] = merge(flow, (pf = 600.0, qf = 0.0))
+    flows[:sg1] = merge(flow, (pf = -600.0, qf = 0.0))
     point = P.OperatingPointRecord(model.operating_point.bus_states, flows,
         model.operating_point.values, model.operating_point.slack_bus,
         model.operating_point.bases)
     reference = PSCADModel(model.project_path, model.project_name, netlist,
         plan.probes, model.settings, point, model.provenance)
-    for (power, error, accepted) in ((609.0 + 9im, 0.009, true),
-        (591.0 - 9im, 0.009, true), (611.0 + 11im, 0.011, false))
+    for (power, error, accepted) in ((-609.0 - 9im, 0.009, true),
+        (-591.0 + 9im, 0.009, true), (-611.0 - 11im, 0.011, false))
         measured = deepcopy(channels)
         add_three_phase!(measured, "I_sg1_ac", times, sqrt(2) * conj(power / (3voltage)))
         table = compare_operating_point(synthetic_result(times, measured), reference)
@@ -506,7 +508,7 @@ end
         plan.probes, model.settings, point, model.provenance)
     measured = deepcopy(channels)
     add_three_phase!(measured, "I_sg1_ac", times, sqrt(2) *
-                                                  conj((609.0 + 9im) / (3voltage)))
+                                                  conj((-609.0 - 9im) / (3voltage)))
     rated_table = compare_operating_point(synthetic_result(times, measured), rated_model)
     for quantity in (:machine_p, :machine_q)
         @test only(filter(r -> r.quantity == quantity, rated_table)).error ≈ 0.0045
@@ -515,7 +517,7 @@ end
     # Known exported R = 0.37544 ohm and L = 0.0298765659 H. Measured bus current is in
     # kA; their voltage drop reconstructs phase RMS terminal kV.
     measured = deepcopy(channels)
-    add_three_phase!(measured, "I_sg1_ac", times, sqrt(2) * (2.0 - 1im))
+    add_three_phase!(measured, "I_sg1_ac", times, -sqrt(2) * (2.0 - 1im))
     expected_terminal = abs(voltage + (0.37544 + 2π * 50 * 0.0298765659im) * (2.0 - 1im))
     table = compare_operating_point(synthetic_result(times, measured), model)
     @test only(filter(r -> r.quantity == :machine_voltage, table)).pscad ≈ expected_terminal rtol = 1e-12
@@ -611,8 +613,8 @@ end
     flow = netlist.operating_point.branch_flows[:DUT]
     @test flow.pt == -flow.pgrid
     @test flow.qt == -flow.qgrid
-    @test flow.pt ≈ -converter.values.ac.p
-    @test flow.qt ≈ -converter.values.ac.q
+    @test flow.pgrid ≈ converter.values.ac.p
+    @test flow.qgrid ≈ converter.values.ac.q
     for channel in plan.probes.channels
         bus = only(filter(b -> b.name == channel.bus, netlist.buses))
         voltage = bus.base_kV * bus.vm_pu
@@ -633,6 +635,7 @@ end
                 channels[channel.name] = fill(haskey(f, key) ? f[key] / (2voltage) : 0.0, length(times))
             else
                 keys = e.model isa PowerImpedance.Source ? (:pg, :qg) :
+                       e.role == :converter ? (:pgrid, :qgrid) :
                        channel.port in (:side1, :dc) ? (:pf, :qf) : (:pt, :qt)
                 current = sqrt(2) * conj(complex(f[keys[1]], f[keys[2]]) /
                                (3voltage * cis(bus.va_rad)))
@@ -653,9 +656,9 @@ end
           2
     for quantity in (:converter_p, :converter_q)
         row = only(filter(r -> r.quantity == quantity && r.name == "I_DUT_ac", table))
-        @test row.powerflow == (quantity == :converter_p ? flow.pt : flow.qt)
+        @test row.powerflow == (quantity == :converter_p ? flow.pgrid : flow.qgrid)
         internal = only(filter(r -> r.quantity == quantity && r.name != "I_DUT_ac", table))
-        @test internal.powerflow == row.powerflow / 100.0
+        @test internal.powerflow == -row.powerflow / 100.0
         @test internal.pscad ≈ internal.powerflow
     end
     ac_bus = only(filter(b -> b.kind != :dc, netlist.buses))
@@ -663,7 +666,7 @@ end
     for deviation in (0.009, 0.011)
         measured = deepcopy(channels)
         add_three_phase!(measured, "I_DUT_ac", times,
-            sqrt(2) * conj(complex(flow.pt + 100deviation, flow.qt - 100deviation) /
+            sqrt(2) * conj(complex(flow.pgrid + 100deviation, flow.qgrid - 100deviation) /
                  (3solved_voltage)))
         changed = compare_operating_point(synthetic_result(times, measured), model)
         for quantity in (:converter_p, :converter_q)

@@ -197,7 +197,7 @@ function ztool_measurement_plan(list, settings, requests)
                 c.port == probe.port, plan.probes.channels))
             meter = only(filter(c -> c isa P.ComponentPlan && c.defn == "master:ammeter" &&
                 get(Dict(c.params), "Name", "") == channel.name, plan.main.components))
-            pins = [(meter.x, meter.y), (meter.x + 36, meter.y)]
+            pins = first.(P.component_ports(meter, Dict()))
             meter_wires = filter(w -> any(p -> p in w.vertices, pins), plan.main.wires)
             length(meter_wires) == 2 || error("terminal meter needs two labelled stubs: $(channel.name)")
             endpoints = [only(filter(p -> p ∉ pins, w.vertices)) for w in meter_wires]
@@ -242,7 +242,7 @@ function ztool_disconnect_sources!(plan, list, ports, scan)
         channel = only(filter(c -> c.kind == :current && c.element == string(source.name), plan.probes.channels))
         meter = only(filter(c -> c isa P.ComponentPlan && c.defn == "master:ammeter" &&
             get(Dict(c.params), "Name", "") == channel.name, plan.main.components))
-        pins = [(meter.x, meter.y), (meter.x + 36, meter.y)]
+        pins = first.(P.component_ports(meter, Dict()))
         labels = Int[]
         for wire in plan.main.wires, pin in pins
             pin in wire.vertices || continue

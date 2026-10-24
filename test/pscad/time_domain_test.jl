@@ -147,7 +147,10 @@ end
         for p in plan.probes.channels
             if p.dim==3
                 abc=time_domain_phase_wave(time,hcat(fill(1.,length(time)),fill(.2,length(time))))
-                for k in 1:3;channels[p.name*":"*string(k)]=abc[:,k];end
+                polarity=p.kind==:injection_current && p.orientation==:into ? -1 : 1
+                for k in 1:3
+                    channels[p.name*":"*string(k)]=polarity .* abc[:,k]
+                end
             else
                 channels[p.name]=zeros(length(time))
             end

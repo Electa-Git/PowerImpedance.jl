@@ -515,8 +515,8 @@ end
                 add_three_phase!(channels, c.name, times, 380sqrt(2 / 3))
             elseif c.kind == :current && c.port in (:side2, :ac)
                 v = 380sqrt(2 / 3)
-                add_three_phase!(channels, c.name, times, 2complex(flow.pt, -flow.qt) /
-                                                          (3v))
+                add_three_phase!(channels, c.name, times,
+                    2complex(flow.pgrid, -flow.qgrid) / (3v))
             else
                 value = c.kind == :converter_p ? flow.pt / 1000 :
                         c.kind == :converter_q ? flow.qt / 1000 :

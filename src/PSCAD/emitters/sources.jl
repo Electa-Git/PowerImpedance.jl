@@ -25,8 +25,9 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Source}, con
             "f" => pscad_value(settings.frequency; unit = "Hz"),
             "Ph" => pscad_value(rad2deg(angle) + 90; unit = "deg"),
             "Tc" => pscad_value(settings.source_ramp; unit = "s")])
-    name = current_probe!(state, e, terminal, context; orientation = :out)
-    ammeter_stub!(state.main, (x + 108, y + 54), only(_terminal_labels(e, terminal, context)), name)
+    name = current_probe!(state, e, terminal, context; orientation = :into)
+    ammeter_stub!(state.main, (x + 108, y + 54),
+        only(_terminal_labels(e, terminal, context)), name; reverse = true)
     output_probe!(state.main, name, "branch", "kA", (x + 144, y + 126))
     return nothing
 end

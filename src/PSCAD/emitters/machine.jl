@@ -159,14 +159,16 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
         iszero(value) || push!(parts, (defn, parameter, value, unit))
     end
     endpoint = component_chain!(state.main, parts, start, e.pscad * "_stepup", state.used)
-    current = current_probe!(state, e, terminal, context; orientation = :out)
+    current = current_probe!(state, e, terminal, context; orientation = :into)
     if isempty(parts)
-        component!(state.main, "ammeter", start, ["Name" => current])
+        component!(state.main, "ammeter", (start[1] + 36, start[2]),
+            ["Name" => current]; orient = 4)
         stub!(state.main, start, inner; direction = -1)
         stub!(state.main, (start[1] + 36, start[2]), only(_terminal_labels(e, terminal, context)))
     else
         stub!(state.main, start, inner; direction = -1)
-        ammeter_stub!(state.main, endpoint, only(_terminal_labels(e, terminal, context)), current)
+        ammeter_stub!(state.main, endpoint,
+            only(_terminal_labels(e, terminal, context)), current; reverse = true)
     end
     output_probe!(state.main, current, "branch", "kA", (x + 144, y + 144))
 

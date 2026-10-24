@@ -371,12 +371,12 @@ end
     current = conj(complex(flow.pg, flow.qg) / (3terminal_voltage))
     z = complex(0.0026, 0.065) * 380^2 / 1000
     @test terminal_voltage - z * current ≈ 380 / sqrt(3) rtol = 1e-8
-    @test flow.pf ≈ flow.pg - 3abs2(current) * real(z) rtol = 1e-8
+    @test flow.pf ≈ -flow.pg + 3abs2(current) * real(z) rtol = 1e-8
     # Raw solved reactive power includes its feasibility residual; an analytically
     # balanced replacement would change this reference.
     branch_index = string(solved.elem2comp[:sg1].compkey)
     @test flow.qf ==
-          -Float64(solved.result["solution"]["branch"][branch_index]["qt"]) * 1000
+          Float64(solved.result["solution"]["branch"][branch_index]["qt"]) * 1000
     @test flow.terminal_voltage_kV != only(list.buses).vm_pu * 380 / sqrt(3)
     machine = parameters(plans[1].main, "sync_machine")
     @test machine["VT"] == P.pscad_value(abs(terminal_voltage) * sqrt(3) / 380; unit = "pu")

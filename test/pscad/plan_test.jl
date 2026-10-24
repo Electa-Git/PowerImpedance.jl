@@ -296,7 +296,7 @@ end
             c -> c.defn == "master:ammeter" &&
                  Dict(c.params)["Name"] == probe,
             plan.main.components))
-        @test (meter.x, meter.y) == (port[1] + (direction == -1 ? -36 : 0), port[2] - 36)
+        @test (meter.x, meter.y) == (port[1] + 36direction, port[2] - 36)
         outer = (port[1] + direction * 36, port[2] - 36)
         endpoint = (outer[1] + direction * 36, outer[2])
         @test any(w -> Set(w.vertices) == Set([outer, endpoint]), plan.main.wires)

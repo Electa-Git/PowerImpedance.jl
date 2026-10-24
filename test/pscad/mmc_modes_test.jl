@@ -172,7 +172,8 @@ end
                     point = list.operating_point.bus_states[b.key]
                     add_three_phase!(channels, c.name, times, sqrt(2)*b.base_kV*point.vm_pu*cis(point.va_rad))
                 elseif c.kind == :current && c.port in (:side2, :ac)
-                    add_three_phase!(channels, c.name, times, 2complex(flow.pt, -flow.qt)/(3conj(voltage)))
+                    add_three_phase!(channels, c.name, times,
+                        2complex(flow.pgrid, -flow.qgrid)/(3conj(voltage)))
                 else
                     value = c.kind == :converter_p ? flow.pt/m.elec.Sbase :
                             c.kind == :converter_q ? flow.qt/m.elec.Sbase :

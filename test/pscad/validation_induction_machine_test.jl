@@ -126,7 +126,8 @@ function induction_recordings(net, list, spec; amplitude_scale = 1.0)
         dp = only(filter(c -> c.kind == :injection_current, plan.probes.channels))
         channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
         for (probe, dq) in ((vp, voltage), (ip, current), (gp, grid), (dp, drive))
-            sign = probe.kind == :current && probe.orientation == :out ? -1 : 1
+            sign = probe.kind == :current && probe.orientation == :out ||
+                   probe.kind == :injection_current && probe.orientation == :into ? -1 : 1
             samples = phase_wave(times, sign .* dq)
             for phase in 1:3
                 channels[probe.name * ":" * string(phase)] = samples[:, phase]

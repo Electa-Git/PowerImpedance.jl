@@ -28,8 +28,7 @@ function composed_samples(result, model, spec, c)
         end
         push!(aggregates,agg)
         ip=only(filter(p->p.kind==:injection_current && p.bus==bus.name,model.probes.channels))
-        ip.orientation==:out || error("injection must point into composed bus")
-        push!(drives,fixed_dq(result.time,probe_samples(result,ip)))
+        push!(drives,fixed_dq(result.time,injection_samples(result,ip)))
     end
     voltage=reduce(hcat,voltages);current=reduce(hcat,aggregates);drive=reduce(hcat,drives)
     outputs=Dict("aggregate_Y"=>current,"direct_Z"=>voltage)

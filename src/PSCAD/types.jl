@@ -66,6 +66,7 @@ end
 $(TYPEDEF)
 
 Describe a measured PSCAD channel and its bus or element.
+Exported terminal current probes measure current into the component.
 
 $(TYPEDFIELDS)
 """

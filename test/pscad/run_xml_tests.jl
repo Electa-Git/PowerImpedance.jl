@@ -424,6 +424,7 @@ else
                     for (canvas, graph) in graphs
                         expected = deepcopy(reference[canvas])
                         PSCADProbeNames.map_graph!(expected, mapping.names)
+                        PSCADProbeNames.turn_meters!(expected, mapping.polarities)
                         row_names = Dict(stem * ":" * line.name =>
                             name * ":" * line.name for line in plan.lines)
                         for component in expected["components"]

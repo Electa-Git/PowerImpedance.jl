@@ -71,6 +71,8 @@ function run_parity()
                             expected = reference["canvases"][canvas]
                             rewritten += PSCADProbeNames.map_graph!(
                                 expected, fresh.mapping.names)
+                            PSCADProbeNames.turn_meters!(expected,
+                                fresh.mapping.polarities)
                             @test PSCADTopology.equivalent(expected, graph)
                         end
                         old_probes = probes[string(fixture.name)]
@@ -79,7 +81,9 @@ function run_parity()
                         count = sum(p -> haskey(fresh.mapping.names, p), old_probes)
                         println("PSCAD names fixture=", fixture.name,
                             " graph=", rewritten, " probes=", count,
-                            " truncated=", fresh.mapping.truncated)
+                            " truncated=", fresh.mapping.truncated,
+                            " turned=", join(sort!([name for (name, polarity) in
+                                fresh.mapping.polarities if polarity == -1]), ','))
                     end
                 end
             end

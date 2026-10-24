@@ -180,7 +180,16 @@ function run_parity()
                 parts = split(key, '.')
                 first(parts) == "pscad_op" && last(parts) == "name" || continue
                 names = result.pscad_name_maps[parts[2]]
-                reference_labels[key] = get(names, label, label)
+                mapped = get(names, label, label)
+                reference_labels[key] = mapped
+                row = chop(key; tail = 5)
+                quantity = reference_labels[row * ".quantity"]
+                if get(result.pscad_polarities[parts[2]], mapped, 1) == -1 &&
+                   quantity in ("machine_p", "machine_q", "converter_p", "converter_q")
+                    for field in ("pscad", "powerflow")
+                        reference[row * "." * field] = -reference[row * "." * field]
+                    end
+                end
             end
             filter!(pair -> !stored_only(first(pair)), reference_labels)
             @test labels == reference_labels

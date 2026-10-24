@@ -217,7 +217,8 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
             if c.kind == :voltage && c.dim == 3
                 add_three_phase!(channels, c.name, times, voltage)
             elseif c.kind == :current && c.port in (:side2, :ac)
-                add_three_phase!(channels, c.name, times, 2complex(flow.pt, -flow.qt)/(3conj(voltage)))
+                add_three_phase!(channels, c.name, times,
+                        2complex(flow.pgrid, -flow.qgrid)/(3conj(voltage)))
             else
                 value = c.kind == :converter_p ? flow.pt/m.elec.Sbase :
                         c.kind == :converter_q ? flow.qt/m.elec.Sbase :

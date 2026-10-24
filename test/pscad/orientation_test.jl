@@ -8,25 +8,25 @@ const P=PowerImpedance.PSCAD
 @testset "Probe orientation metadata and AC cable connection" begin
     fixtures = [
         (V.ClassicFixtures.small_ac_network(),
-            Dict("I_source_ac"=>:out, "I_line_side1"=>:into, "I_line_side2"=>:out,
+            Dict("I_source_ac"=>:into, "I_line_side1"=>:into, "I_line_side2"=>:into,
                 "I_load_side1"=>:into)),
         (V.ClassicFixtures.passive_ohl_network(),
-            Dict("I_line_side1"=>:into, "I_line_side2"=>:out)),
+            Dict("I_line_side1"=>:into, "I_line_side2"=>:into)),
         (V.ClassicFixtures.dc_network(),
             Dict("I_from_dc"=>:into, "I_to_dc"=>:into, "I_line_side1"=>:into,
-                "I_line_side2"=>:out)),
+                "I_line_side2"=>:into)),
         (V.ClassicFixtures.dc_cable_network(),
-            Dict("I_line_side1"=>:into, "I_line_side2"=>:out)),
+            Dict("I_line_side1"=>:into, "I_line_side2"=>:into)),
         (V.fixture("dc_cable_ohl").factory(),
-            Dict("I_line_side1"=>:into, "I_line_side2"=>:out, "I_ohl_side1"=>:into,
-                "I_ohl_side2"=>:out)),
+            Dict("I_line_side1"=>:into, "I_line_side2"=>:into, "I_ohl_side1"=>:into,
+                "I_ohl_side2"=>:into)),
         (V.ClassicFixtures.transformer_network(),
-            Dict("I_line_side1"=>:into, "I_line_side2"=>:out)),
+            Dict("I_line_side1"=>:into, "I_line_side2"=>:into)),
         (V.ClassicFixtures.transformer_network(; organization = :ΔY),
-            Dict("I_line_side1"=>:into, "I_line_side2"=>:out)),
-        (V.ClassicFixtures.sm_network(), Dict("I_sg1_ac"=>:out, "I_g2_ac"=>:out)),
-        (V.ClassicFixtures.tlc_case1_network(), Dict("I_DUT_dc"=>:into, "I_DUT_ac"=>:out)),
-        (V.ClassicFixtures.mmc_pq_network(), Dict("I_DUT_dc"=>:into, "I_DUT_ac"=>:out))]
+            Dict("I_line_side1"=>:into, "I_line_side2"=>:into)),
+        (V.ClassicFixtures.sm_network(), Dict("I_sg1_ac"=>:into, "I_g2_ac"=>:into)),
+        (V.ClassicFixtures.tlc_case1_network(), Dict("I_DUT_dc"=>:into, "I_DUT_ac"=>:into)),
+        (V.ClassicFixtures.mmc_pq_network(), Dict("I_DUT_dc"=>:into, "I_DUT_ac"=>:into))]
     for (net, expected) in fixtures
         # Active emitter initialization needs the solved point; passive network fixtures
         # use the same retained operating-point data.
@@ -35,7 +35,7 @@ const P=PowerImpedance.PSCAD
         for (name, direction) in expected
             @test only(filter(c->c.name==name,plan.probes.channels)).orientation==direction
         end
-        @test all(c.kind==:current ? c.orientation in (:into,:out) : c.orientation===nothing
+        @test all(c.kind==:current ? c.orientation==:into : c.orientation===nothing
                   for c in plan.probes.channels)
         stored=V.recorded_probes(V.probe_record.(plan.probes.channels),plan.probes.reference_bus)
         @test repr(stored)==repr(plan.probes)
@@ -53,11 +53,11 @@ const P=PowerImpedance.PSCAD
                          Dict(c.params)["Name"]=="I_line_side2",plan.main.components))
     label(point)=Dict(only(filter(c->c isa P.ComponentPlan && c.defn=="master:nodelabel" &&
                                     (c.x,c.y)==point,plan.main.components)).params)["Name"]
-    @test meter.orient==0
-    @test label((meter.x-36,meter.y))=="I_line_side2_node"
-    @test label((meter.x+36,meter.y-36))==spec.buses[2].name
+    @test meter.orient==4
+    @test label((meter.x-72,meter.y))=="I_line_side2_node"
+    @test label((meter.x,meter.y-36))==spec.buses[2].name
     @test P.check_connectivity(plan)===nothing
-    @test only(filter(c->c.name=="I_line_side2",plan.probes.channels)).orientation==:out
+    @test only(filter(c->c.name=="I_line_side2",plan.probes.channels)).orientation==:into
 
     # Both-inward cable records and branch-direction records must yield the same physical
     # inward currents. Each result uses its recorded project metadata, independently of
@@ -66,7 +66,7 @@ const P=PowerImpedance.PSCAD
     for historical in (false,true)
         records=V.probe_record.(plan.probes.channels)
         for c in records
-            c["name"]=="I_line_side2" && historical && (c["orientation"]="into")
+            c["name"]=="I_line_side2" && historical && (c["orientation"]="out")
         end
         probes=V.recorded_probes(records,plan.probes.reference_bus)
         channels=PowerImpedance.OrderedDict{String,Vector{Float64}}()
@@ -120,6 +120,35 @@ const P=PowerImpedance.PSCAD
         end
         @test tables[1]==tables[2]
         @test count(r->r.quantity in (:machine_p,:machine_q,:converter_p,:converter_q),tables[1])==2
+    end
+end
+
+@testset "Injection meter pins and recorded direction" begin
+    net=V.fixture("synchronous_machine").factory()
+    list=V.fixture_netlist(net,power_flow(net))
+    spec,_=V.applicable_scan("synchronous_machine",net,list)
+    plan,_=V.scan_plan(list,spec,"baseline")
+    source=only(filter(m->startswith(m.name,"CurrentPort_"),plan.modules))
+    for meter in filter(c->c.defn=="master:ammeter",source.canvas.components)
+        pins=first.(P.component_ports(meter,Dict()))
+        @test meter.orient==4
+        labels=map(pins) do pin
+            wire=only(filter(w->pin in w.vertices,source.canvas.wires))
+            endpoint=only(filter(!=(pin),wire.vertices))
+            label=only(filter(c->c.defn=="master:nodelabel" &&
+                (c.x,c.y)==endpoint,source.canvas.components))
+            Dict(label.params)["Name"]
+        end
+        @test startswith(labels[1],"phase_")
+        @test startswith(labels[2],"inner_")
+    end
+    outward=hcat(fill(1.0,3),fill(2.0,3),fill(3.0,3))
+    for orientation in (:into,:out)
+        probe=P.ProbeChannel("drive",:injection_current,"AC","source",:ac,3,
+            "kA",orientation)
+        samples=orientation==:into ? -outward : outward
+        result=(;channels=Dict("drive:$phase"=>samples[:,phase] for phase in 1:3))
+        @test V.injection_samples(result,probe)==outward
     end
 end
 end

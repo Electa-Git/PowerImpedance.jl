@@ -55,8 +55,8 @@ end
         meter = only(filter(c -> c.defn == "master:ammeter" &&
             Dict(c.params)["Name"] == "I_line_side$side", plan.main.components))
         meter_ports = first.(P.component_ports(meter, Dict()))
-        @test node(ports[1]) == node(meter_ports[side == 1 ? 2 : 1])
-        @test node(meter_ports[side == 1 ? 1 : 2]) == "D$(side)_P"
+        @test node(ports[1]) == node(meter_ports[2])
+        @test node(meter_ports[1]) == "D$(side)_P"
     end
     override = P.build_plan(list; line_options = (; FS = 0.01))
     @test Dict(only(override.lines).frephase)["FS"] == "0.01 [Hz]"

@@ -17,8 +17,9 @@ const P = PowerImpedance.PSCAD
     current = voltage / (400 + 0.19 + 2π * 50 * 0.0122im)
     add_three_phase!(channels, "V_B1", times, sqrt(2) * voltage)
     add_three_phase!(channels, "V_B2", times, sqrt(2) * 400current)
-    for name in ("I_source_ac", "I_line_side1", "I_line_side2", "I_load_side1")
-        add_three_phase!(channels, name, times, sqrt(2) * current)
+    for (name, polarity) in (("I_source_ac", -1), ("I_line_side1", 1),
+        ("I_line_side2", -1), ("I_load_side1", 1))
+        add_three_phase!(channels, name, times, polarity * sqrt(2) * current)
     end
     result = synthetic_result(times, channels)
     table = compare_operating_point(result, model)
@@ -183,8 +184,8 @@ end
     @test only(filter(r -> r.quantity == :current_rms, table)).settling < 1e-12
     # Independently recorded exported machine impedance, in ohms.
     z = 0.37544 + 2π * 50 * 0.0298765659im
-    expected = abs(abs(voltage + z * current * cis(delta)) -
-                   abs(voltage + z * current * cis(-delta))) / flow.terminal_voltage_kV
+    expected = abs(abs(voltage - z * current * cis(delta)) -
+                   abs(voltage - z * current * cis(-delta))) / flow.terminal_voltage_kV
     row = only(filter(r -> r.quantity == :machine_voltage, table))
     @test row.settling ≈ expected rtol = 1e-10
 end

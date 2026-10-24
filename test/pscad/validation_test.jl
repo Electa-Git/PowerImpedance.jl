@@ -878,11 +878,11 @@ end
         ip=only(filter(c->c.kind==:current && c.element=="DUT" && c.port==:ac,
             plan.probes.channels))
         dp=only(filter(c->c.kind==:injection_current, plan.probes.channels))
-        @test ip.orientation==:out && dp.orientation==:out
+        @test ip.orientation==:into && dp.orientation==:into
         for phase in 1:3
             channels[vp.name*":"*string(phase)]=voltage_abc[:,phase]
-            channels[ip.name*":"*string(phase)]=-current_abc[:,phase]
-            channels[dp.name*":"*string(phase)]=drive_abc[:,phase]
+            channels[ip.name*":"*string(phase)]=current_abc[:,phase]
+            channels[dp.name*":"*string(phase)]=-drive_abc[:,phase]
         end
         for pole in ("P", "N")
             probe=only(filter(
@@ -972,7 +972,7 @@ end
         @test P.check_connectivity(plan)===nothing
         probe=only(filter(c->c.kind==:current && c.element=="DUT" && c.port==:ac,
             plan.probes.channels))
-        @test probe.orientation==:out
+        @test probe.orientation==:into
     end
 end
 
@@ -1007,7 +1007,7 @@ end
             plan.probes.channels))
         dp=only(filter(c->c.kind==:injection_current, plan.probes.channels))
         for (probe, wave) in ((vp, phase_wave(time, voltage)),
-            (ip, phase_wave(time, -current)), (dp, phase_wave(time, drive)))
+            (ip, phase_wave(time, current)), (dp, phase_wave(time, -drive)))
             for phase in 1:3
                 channels[probe.name*":"*string(phase)]=wave[:,phase]
             end
@@ -1088,7 +1088,7 @@ end
                 plan.main.components)==1
             probe=only(filter(c->c.kind==:current && c.element=="DUT" && c.port==:ac,
                 plan.probes.channels))
-            @test probe.orientation==:out
+            @test probe.orientation==:into
             if mode==:vdc
                 @test count(c -> c isa P.ComponentPlan && c.defn == "master:source_1", plan.main.components) == 2
                 @test all(c -> startswith(Dict(c.params)["Name"], "precharge_"),
@@ -1461,7 +1461,7 @@ const V=PSCADValidation
     @test spec.window_starts==(2.,6.) && spec.simulation_time==10.
     plan,_=V.scan_plan(list,spec,"p1_a")
     probes=filter(c->c.kind==:injection_current,plan.probes.channels)
-    @test length(probes)==1 && only(probes).bus=="Bus5" && only(probes).orientation==:out
+    @test length(probes)==1 && only(probes).bus=="Bus5" && only(probes).orientation==:into
     step=merge(spec,(;time_step=spec.time_step/2));prefix=V.scan_prefix(spec)*"half_step__"
     mktempdir() do directory
         write(joinpath(directory,"fixture.pscx"),"<project/>")
@@ -2030,7 +2030,7 @@ function synthetic_bus_run(bus,axis;spec=bus.spec,omit_shunt=false)
             samples=if probe.kind==:voltage && probe.bus==only(spec.buses).name
                 v
             elseif probe.kind==:injection_current
-                drive
+                probe.orientation==:into ? -drive : drive
             elseif probe.kind==:current && probe.bus==only(spec.buses).name
                 inward=probe.element=="C1" ? i1 : probe.element=="C2" ? i2 :
                     probe.element=="Filter" ? (omit_shunt ? zero(ish) : ish) : ig
@@ -2623,7 +2623,7 @@ end
                 samples=if probe.kind==:voltage
                     probe.bus==remote_bus ? u : v
                 elseif probe.kind==:injection_current
-                    d
+                    probe.orientation==:into ? -d : d
                 else
                     inward=currents[(probe.element,
                         string(V.terminal_side(list, probe.element, probe.port)))]
@@ -2869,7 +2869,7 @@ function dc_pair_synthetic(net,list,c,spec,axis;bad_port=false,dc_drift=false)
             samples=if p.kind==:voltage && port!==nothing
                 voltage[:,(2port-1):2port]
             elseif p.kind==:injection_current
-                drive[:,(2port-1):2port]
+                (p.orientation==:into ? -drive : drive)[:,(2port-1):2port]
             elseif p.kind==:current && port!==nothing
                 inward=(Symbol(p.element) in c.devices ? current : grid)[:,(2port-1):2port]
                 bad_port && port==2 && p.element=="Grid_B" && (inward.=0.)

@@ -38,8 +38,7 @@ function scan_samples(result, model, spec)
                               (spec.current_bases, spec.voltage_bases)
     if get(spec,:drive,"") == "current"
         probe=only(filter(c->c.kind==:injection_current,model.probes.channels))
-        drive=fixed_dq(result.time,probe_samples(result,probe))
-        probe.orientation==:out || error("injected current must be recorded outwards")
+        drive=fixed_dq(result.time,injection_samples(result,probe))
         if spec.dc_voltage_base_kV===nothing
             return (; voltage,current,input,output,input_base,output_base,drive,drive_base=spec.current_bases)
         end

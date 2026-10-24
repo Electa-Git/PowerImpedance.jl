@@ -120,6 +120,12 @@ function probe_samples(result, probe)
     return hcat((result.channels[probe.name * ":" * string(phase)] for phase in 1:3)...)
 end
 
+function injection_samples(result, probe)
+    probe.orientation in (:into, :out) || error("missing injection current orientation")
+    samples = probe_samples(result, probe)
+    return probe.orientation == :into ? -samples : samples
+end
+
 function branch_samples(result, model)
     current = only(filter(
         c -> c.kind == :current && c.element == "branch" && c.port == :side1,

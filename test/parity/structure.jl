@@ -236,7 +236,8 @@ function pscad_operating_point!(rows, labels, name, state)
         NB._node_bus_mapping(state.topology), mapping, point, (;))
     list = P.netlist(state, pf)
     plan = P.build_plan(list)
-    names = PSCADProbeNames.name_map(list, plan.probes).names
+    probe_mapping = PSCADProbeNames.name_map(list, plan.probes)
+    names = probe_mapping.names
     frozen = load_labels(joinpath(@__DIR__, "../reference/v2/labels.tsv"))
     voltage_order = String[]
     index = 1
@@ -262,14 +263,15 @@ function pscad_operating_point!(rows, labels, name, state)
     times = collect(0.0:250e-6:0.3)
     channels = PI.OrderedDict{String, Vector{Float64}}()
     for (index, channel) in enumerate(probes.channels)
+        polarity = get(probe_mapping.polarities, channel.name, 1)
         if channel.dim == 3
             for phase in 1:3
                 angle = 0.01index - 2π * (phase - 1) / 3
-                channels["$(channel.name):$phase"] = (1.0 + index) .*
-                                                     cos.(2π * 50 .* times .+ angle)
+                channels["$(channel.name):$phase"] = polarity .* ((1.0 + index) .*
+                    cos.(2π * 50 .* times .+ angle))
             end
         else
-            channels[channel.name] = fill(1.0 + index, length(times))
+            channels[channel.name] = fill(polarity * (1.0 + index), length(times))
         end
     end
     result = PI.PSCADResult(PI.PSCADRun(), times, channels, probes,
@@ -280,7 +282,7 @@ function pscad_operating_point!(rows, labels, name, state)
     end
     println("PSCAD synthetic fixture=", name, " channels=",
         join((c.name for c in probes.channels), ','))
-    return names
+    return probe_mapping
 end
 
 function exception_text(exception, backtrace)
@@ -317,12 +319,16 @@ function collect_oracles()
         oracle_droop!(r, l)
     end
     pscad_name_maps = Dict{String, Dict{String, String}}()
+    pscad_polarities = Dict{String, Dict{String, Int}}()
     for name in (:small_ac, :sm, :mmc_pq, :tlc_case2)
         result = collect_family!(rows, labels, skipped, errors, "pscad_op.$name") do r, l
             build = getfield(ParityFixtures.PSCADFixtures, Symbol(name, "_network"))
             pscad_operating_point!(r, l, string(name), build())
         end
-        result.ok && (pscad_name_maps[string(name)] = result.value)
+        if result.ok
+            pscad_name_maps[string(name)] = result.value.names
+            pscad_polarities[string(name)] = result.value.polarities
+        end
     end
     result = collect_family!(rows, labels, skipped, errors, "stability.mmc_vdc") do r, l
         fixture = only(f for f in ParityFixtures.FIXTURES if f.name == :mmc_vdc)
@@ -342,7 +348,8 @@ function collect_oracles()
         record!(r, l, "stability.mmc_vdc", fields)
     end
     stability_fixture = result.ok ? "mmc_vdc" : ""
-    return (; rows, labels, skipped, errors, stability_fixture, pscad_name_maps)
+    return (; rows, labels, skipped, errors, stability_fixture, pscad_name_maps,
+        pscad_polarities)
 end
 
 # Frozen Setpoint powers enter induction machines and converter DC ports.

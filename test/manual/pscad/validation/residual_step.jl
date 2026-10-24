@@ -78,14 +78,14 @@ function readout_evidence(result, baseline, model, spec, column; axis = spec.axe
     branches = [only(filter(c -> c.kind == :current && c.element == element && c.bus == bus,
         model.probes.channels)) for element in ("DUT", "Grid")]
     injection = only(filter(c -> c.kind == :injection_current, model.probes.channels))
-    injection.orientation == :out || error("injection orientation missing")
     currents = [begin
         c.orientation in (:into, :out) || error("branch orientation missing")
         sign = c.orientation == :into ? 1 : -1
         sign .* fixed_dq(result.time, probe_samples(result, c) - probe_samples(baseline, c))
     end for c in branches]
     kcl = sum(currents)
-    drive = fixed_dq(result.time, probe_samples(result, injection) - probe_samples(baseline, injection))
+    drive = fixed_dq(result.time,
+        injection_samples(result, injection) - injection_samples(baseline, injection))
     rows = Dict{String, Any}[]
     for start in spec.window_starts
         kp = dft_phasors(result.time, kcl, spec.frequencies; start, duration = spec.window_duration)

@@ -5,7 +5,8 @@ Store Z-tool admittances and execution records from a PSCAD sweep.
 Every entry in `results` represents one Z-tool result file. Its `admittance`
 array uses row, column, frequency order and units of siemens.
 Rows and columns follow that file's `axes` header, including mixed AC/DC files.
-The values use Z-tool's current signs and coordinate frame.
+Currents flow from each scan side into its connected network, so admittance
+uses `Y = I_in / V` in Z-tool's coordinate frame.
 
 $(TYPEDFIELDS)
 """

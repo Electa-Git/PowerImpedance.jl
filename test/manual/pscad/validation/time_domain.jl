@@ -302,8 +302,8 @@ function time_domain_samples(result,model,c)
         append!(columns, [data[:, 1], data[:, 2]])
     end
     ip=only(filter(p->p.kind==:injection_current,model.probes.channels))
-    ip.orientation==:out || error("time-domain injection orientation is missing")
-    return (;signals=reduce(hcat,columns),drive=fixed_dq(result.time,probe_samples(result,ip)))
+    return (;signals=reduce(hcat,columns),
+        drive=fixed_dq(result.time,injection_samples(result,ip)))
 end
 
 # Only stimulus instance gains may differ from the zero-stimulus baseline.

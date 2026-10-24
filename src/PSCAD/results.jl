@@ -259,9 +259,9 @@ I_{ref} = \\frac{|S|}{3V_{LN}},
 
 where ``S = P + \\mathrm{j}Q`` uses \\[MW, MVAr\\], ``V_{LN}`` is phase RMS
 voltage \\[kV\\], and ``I_{ref}`` is in \\[kA\\]. Series ports `side1` and `side2`
-use `(pf, qf)` and `(pt, qt)`, respectively. Sources use `(pg, qg)`. Shunt power
-follows from input admittance and solved bus voltage. AC angles use the manifest
-reference bus.
+use `(pf, qf)` and `(pt, qt)`, respectively. Source records negate the solved
+generator `(pg, qg)`. Shunt power follows from input admittance and solved bus
+voltage. AC angles use the manifest reference bus.
 
 DC voltage is the window mean of `V_P - V_N`, compared with twice the solved
 pole-to-ground voltage. DC current magnitude is the absolute P-pole mean,
@@ -283,8 +283,8 @@ S = \\frac{1}{2}\\sum_k V_k I_k^*,
 ```
 
 where ``V_k`` and ``I_k`` are peak phasors \\[kV, kA\\], with current directed
-from device to bus. Compare with terminal `pf/qf` for the machine or
-`-pgrid/-qgrid` at converter port `ac`. Normalize power error by the device rating
+into the component. Compare with terminal `pf/qf` for the machine or
+`pgrid/qgrid` at converter port `ac`. Normalize power error by the device rating
 (`elec.S_base` for machines, `elec.Sbase` for converters) \\[MVA\\], with tolerance
 `0.01`. Filtered converter `P_ac_f/Q_ac_f` use that rating as their per-unit base
 and an absolute error tolerance of `0.01`. The sine q basis gives
@@ -294,7 +294,7 @@ and an absolute error tolerance of `0.01`. The sine q basis gives
 Reconstruct the machine terminal voltage as
 
 ```math
-V_t = V_{bus} + (R_{export} + \\mathrm{j}2\\pi f L_{export})I,
+V_t = V_{bus} - (R_{export} + \\mathrm{j}2\\pi f L_{export})I,
 ```
 
 using the exported, formatted resistance \\[Ω\\], inductance \\[H\\] and
@@ -501,7 +501,7 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 throw(ArgumentError("missing power-flow current data for :$(e.name) " *
                                     "port :$(channel.port)"))
             fields = e.model isa PowerImpedance.Source ? (:pg, :qg) :
-                     e.role == :converter ? (:pt, :qt) :
+                     e.role == :converter ? (:pgrid, :qgrid) :
                      channel.port in (:side1, :ac) ? (:pf, :qf) : (:pt, :qt)
             all(field -> haskey(flow, field), fields) ||
                 throw(ArgumentError("missing power-flow terminal powers for :$(e.name) " *
@@ -538,7 +538,8 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 r = _pscad_number(pscad_value(elec.rt * zbase))
                 l = _pscad_number(pscad_value(elec.lt * zbase / elec.ωn))
                 z = complex(r, 2π * result.settings.frequency * l)
-                terminal_voltage = map((v, i) -> abs(_sequence_phasor(v .+ z .* i)) / sqrt(2), v, i)
+                terminal_voltage = map(
+                    (v, i) -> abs(_sequence_phasor(v .- z .* i)) / sqrt(2), v, i)
                 add_row(:machine_voltage, channel.name, terminal_voltage,
                     flow.terminal_voltage_kV, rtol_v)
             end

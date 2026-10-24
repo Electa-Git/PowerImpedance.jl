@@ -60,10 +60,10 @@ function current_port(project, name, spec)
             P.ComponentPlan("master:src_ccin_1",
                 ["Name" => "phase$phase", "Cntrl" => "1", "Tc" => "0.0 [s]"], 180, y, 1))
         P.module_signal_stub!(canvas, (144, y), command.name, -1)
-        # Upper A injects outwards. Upper A -> ammeter -> AC, lower B -> ground.
+        # Upper A injects outwards. The ammeter measures back into the source.
         P.stub!(canvas, (180, y), "inner_$phase")
         P.stub!(canvas, (180, y + 36), nothing)
-        P.component!(canvas, "ammeter", (324, y), ["Name" => current.name])
+        P.component!(canvas, "ammeter", (360, y), ["Name" => current.name]; orient = 4)
         P.stub!(canvas, (324, y), "inner_$phase"; direction = -1)
         P.stub!(canvas, (360, y), "phase_$phase")
         P.stub!(canvas, (576, 216 + 36 * (phase - 2)), "phase_$phase"; direction = -1)
@@ -170,7 +170,7 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
                     P.output_probe!(plan.main, probe, "injection", "kA", (x + 108, y + 72))
                     push!(plan.probes.channels,
                         P.ProbeChannel(probe, :injection_current, bus.name,
-                            "injection_$port", :ac, 3, "kA", :out))
+                            "injection_$port", :ac, 3, "kA", :into))
                 end
             end
         end

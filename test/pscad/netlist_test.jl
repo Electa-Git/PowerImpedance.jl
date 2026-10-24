@@ -146,7 +146,7 @@ end
     source_type, source_index = builder_pf.elem2comp[:source]
     source_solution = builder_pf.result["solution"][source_type][string(source_index)]
     @test solved.operating_point.branch_flows[:source] ==
-          (pg = source_solution["pg"] * 1000, qg = source_solution["qg"] * 1000)
+          (pg = -source_solution["pg"] * 1000, qg = -source_solution["qg"] * 1000)
     @test solved.elements[1].values === builder_pf.operating_point[:source]
     @test solved.operating_point.values[:source] === builder_pf.operating_point[:source]
     @test solved.elements[2].values === nothing
@@ -181,8 +181,8 @@ end
           machine_pf.operating_point[:machine]
     machine_flow = machine_list.operating_point.branch_flows[:machine]
     branch = machine_pf.result["solution"]["branch"][string(machine_index)]
-    @test machine_flow.pf == -branch["pt"] * 1000
-    @test machine_flow.qf == -branch["qt"] * 1000
+    @test machine_flow.pf == branch["pt"] * 1000
+    @test machine_flow.qf == branch["qt"] * 1000
     @test machine_flow.terminal_voltage_kV == terminal_bus["vm"] *
           machine_pf.data["bus"][string(terminal_index)]["base_kv"]
     @test machine_flow.terminal_angle_rad == terminal_bus["va"]
