@@ -32,7 +32,8 @@ const P = PowerImpedance.PSCAD
                 CompensatedModulation(timeDelay = tau, padeOrderNum = 3, padeOrderDen = 3)
             m = e.model
             altered = kind == :tlc ? converter_element(e, TLC(m.elec, m.meas, m.sync,
-                m.outerActive, m.outerReactive, m.innerVoltage, m.innerCurrent, block)) :
+                m.outerActive, m.outerReactive, m.innerVoltage, m.innerCurrent, block,
+                m.limits, m.powerflow)) :
                 converter_element(e, with_modulation(m, block))
             build() = kind == :tlc ? P.tlc_modulation("MOD", altered, eq, transforms, settings) :
                 P.mmc_modulation("MOD", altered, eq, transforms, settings)

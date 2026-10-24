@@ -492,3 +492,13 @@ function eval_abcd(c::Cable, s::Complex)
 	abcd[(n+1):end, (n+1):end] = Z \ (cosh(γ*c.length) * Z) # Matrix D[n*n]=Z^-1cosh(Γl)Z
 	return abcd
 end
+
+function electricalconnections(model::Cable)
+    n = length(model.positions)
+    n in (1, 2, 3) ||
+        throw(ArgumentError("Cable ports do not support $n conductors."))
+    domain = n == 3 ? ACABC : DC_CM
+    return (side1 = Port(domain), side2 = Port(domain))
+end
+
+bases(::Cable) = nothing

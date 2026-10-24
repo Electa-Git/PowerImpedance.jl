@@ -39,7 +39,8 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
             fieldcount(typeof(elec)))
         physical = PowerImpedance.ElectricalMMC(fields...)
         element.element_model = PowerImpedance.MMC(model.meas, model.sync,
-            model.delta_control, model.sigma_control, model.modulation, physical)
+            model.delta_control, model.sigma_control, model.modulation, physical,
+            model.limits, model.powerflow)
         old_scale = mmc_scaling_before(ones(3, 3), physical)
         new_scale = PowerImpedance.SI_scale(element)
         @test mmc_scaling_bits(new_scale[1:1, 1:1]) == mmc_scaling_bits(old_scale[1:1, 1:1])

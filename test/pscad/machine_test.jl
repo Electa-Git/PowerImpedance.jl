@@ -153,8 +153,9 @@ end
     machine = SynchronousMachine(ElectricalSM(),
         MechanicalSM(
             T_CH = 0.7, T_RH = 3.1, T_CO = 0.4, F_HP = 0.2, F_IP = 0.5, F_LP = 0.3),
-        AVRSM(vref_SG = 1.02, T_R = 0.03, T_B = 0.8, T_C = 0.12, T_A = 0.04, K_A = 123.0),
-        GovernorSM(T_w = 0.15, T_G = 0.25, R = 0.04))
+        AVRSM(v_ref = 1.02, T_R = 0.03, T_B = 0.8, T_C = 0.12, T_A = 0.04, K_A = 123.0),
+        GovernorSM(T_w = 0.15, T_G = 0.25, R = 0.04),
+        PowerImpedance.Limits(), (p = 0.0, q = 0.0, v = 1.0))
     avr = P.machine_avr("AVR_custom", machine, 0.99)
     gov = P.machine_governor("GOV_custom", machine, 0.72)
     @test Dict(p.name => p.default for p in avr.parameters) == Dict(

@@ -59,6 +59,9 @@ function state_space!(F, x, meas, setpoint_pu::SetpointPU, ::NoVoltageSupport,
     (; Q_ac_support = 0.0)
 end
 
+const _VOLTAGE_SUPPORT_INPUT =
+    Input(1.0; unit = "pu", description = "AC-voltage support reference")
+
 """
 $(TYPEDEF)
 
@@ -71,6 +74,8 @@ $(TYPEDFIELDS)
     K::Float64 = 0.0
     "Support low-pass angular cutoff \\[rad/s\\]."
     ωc::Float64 = 0.0
+    "AC-voltage reference on converter bases \\[dimensionless\\]."
+    v_ac_ref::Float64 = _VOLTAGE_SUPPORT_INPUT.default
 end
 
 statenames(::VoltageSupportLag) = (:ξ_vac_supp,)
@@ -137,6 +142,9 @@ function state_space!(F, x, meas, setpoint_pu::SetpointPU, block::VoltageSupport
     return (; Q_ac_support = x.ξ_vac_supp)
 end
 
+const _OUTER_REACTIVE_Q_INPUT =
+    Input(0.0; unit = "pu", description = "reactive-power reference")
+
 """
 $(TYPEDEF)
 
@@ -149,6 +157,8 @@ struct OuterReactiveQControl{S<:AbstractVoltageSupportTLC} <: AbstractOuterReact
     pi_ctrl::PIControl
     "Reactive-power support block driven by AC voltage."
     support::S
+    "Reactive-power reference on converter bases \\[dimensionless\\]."
+    q_ref::Float64
 end
 
 """
@@ -162,6 +172,7 @@ Construct a reactive-power PI controller.
   integral gain is \\[s⁻¹\\]. Default: `PIControl()`.
 - `support`: Reactive-power support block driven by AC voltage. Default:
   `NoVoltageSupport()`.
+- `q_ref`: Reactive-power reference on converter bases \\[dimensionless\\]. Default: `0.0`.
 
 # Returns
 
@@ -177,8 +188,9 @@ component = OuterReactiveQControl()
 function OuterReactiveQControl(;
     pi_ctrl::PIControl = PIControl(),
     support::AbstractVoltageSupportTLC = NoVoltageSupport(),
+    q_ref::Real = _OUTER_REACTIVE_Q_INPUT.default,
 )
-    return OuterReactiveQControl{typeof(support)}(pi_ctrl, support)
+    return OuterReactiveQControl{typeof(support)}(pi_ctrl, support, Float64(q_ref))
 end
 
 function statenames(block::OuterReactiveQControl)
@@ -252,6 +264,9 @@ function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterReactiv
     return (q_ctrl_ref = block.pi_ctrl.Kp * (Q_ac_ref_eff - Q_ac_f) + x.ξ_Q_ac,)
 end
 
+const _OUTER_REACTIVE_VAC_INPUT =
+    Input(1.0; unit = "pu", description = "AC-voltage reference")
+
 """
 $(TYPEDEF)
 
@@ -269,6 +284,8 @@ struct OuterReactiveVacControl{F<:AbstractMeasurementFilter} <: AbstractOuterRea
     pi_ctrl::PIControl
     "Filter for measured voltage magnitude. Cutoff in \\[rad/s\\]."
     filter::F
+    "AC-voltage reference on converter bases \\[dimensionless\\]."
+    v_ac_ref::Float64
 end
 """
 $(TYPEDSIGNATURES)
@@ -281,6 +298,7 @@ Construct a `OuterReactiveVacControl` component from the supplied parameters.
   \\[s⁻¹\\]. Default: `PIControl()`.
 - `filter`: Scalar measurement filter specification or realized filter. Default:
   `NoFilter()`.
+- `v_ac_ref`: AC-voltage reference on converter bases \\[dimensionless\\]. Default: `1.0`.
 
 # Returns
 
@@ -298,9 +316,10 @@ component = OuterReactiveVacControl()
 ```
 """
 function OuterReactiveVacControl(; pi_ctrl::PIControl = PIControl(),
-        filter::AbstractMeasurementFilter = NoFilter())
+        filter::AbstractMeasurementFilter = NoFilter(),
+        v_ac_ref::Real = _OUTER_REACTIVE_VAC_INPUT.default)
     realized = measurement_filter_ss(filter)
-    return OuterReactiveVacControl{typeof(realized)}(pi_ctrl, realized)
+    return OuterReactiveVacControl{typeof(realized)}(pi_ctrl, realized, Float64(v_ac_ref))
 end
 OuterReactiveVacControl(pi_ctrl::PIControl) = OuterReactiveVacControl(; pi_ctrl)
 
@@ -385,3 +404,14 @@ function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y,
     F[idx_ξvac] = setpoint_pu.q_ac - y.meas.Q_ac_f
     return y
 end
+
+inputs(block::OuterReactiveQControl) = (
+    q_ref = _OUTER_REACTIVE_Q_INPUT, support = inputs(block.support),
+)
+inputs(::OuterReactiveVacControl) = (v_ac_ref = _OUTER_REACTIVE_VAC_INPUT,)
+inputs(::VoltageSupportLag) = (v_ac_ref = _VOLTAGE_SUPPORT_INPUT,)
+
+_powerflow_references(block::OuterReactiveQControl) =
+    merge((q_ac = block.q_ref,), _powerflow_references(block.support))
+_powerflow_references(block::OuterReactiveVacControl) = (v_ac = block.v_ac_ref,)
+_powerflow_references(block::VoltageSupportLag) = (v_ac = block.v_ac_ref,)

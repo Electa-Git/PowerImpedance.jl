@@ -162,6 +162,9 @@ function state_space!(F, x, meas, ::SetpointPU, block::PLLSynchronization, conv:
 end
 
 
+const _VSE_POWER_INPUT =
+    Input(0.0; unit = "pu", description = "active-power reference")
+
 """
 $(TYPEDEF)
 
@@ -181,6 +184,8 @@ struct VSEWithDamping <: AbstractSynchronization   # VSE = Virtual Swing Equatio
     ω_ref::Float64      # Angular frequency reference [pu]
     "PLL used to estimate grid frequency for the damping term."
     pll::PLLSynchronization # PLL
+    "Active-power reference on converter bases \\[dimensionless\\]."
+    p_ref::Float64
 end
 
 """
@@ -198,6 +203,7 @@ Construct a `VSEWithDamping` component from the supplied parameters.
 - `ω_ref`: Angular-frequency reference on the nominal-frequency base \\[dimensionless\\].
   Default: `1`.
 - `pll`: PLL used to estimate grid frequency for the damping term.
+- `p_ref`: Active-power reference on converter bases \\[dimensionless\\]. Default: `0.0`.
 
 # Returns
 
@@ -216,6 +222,7 @@ function VSEWithDamping(;
     K_ω::Real = 10,
     ω_ref::Real = 1,
     pll::PLLSynchronization,
+    p_ref::Real = _VSE_POWER_INPUT.default,
 )
     return VSEWithDamping(
         Float64(H),
@@ -223,6 +230,7 @@ function VSEWithDamping(;
         Float64(K_ω),
         Float64(ω_ref),
         pll,
+        Float64(p_ref),
     )
 end
 
@@ -307,3 +315,8 @@ function state_space!(F, x, meas, setpoint_pu::SetpointPU, b::VSEWithDamping, co
 end
 
 syncangle(::VSEWithDamping, x) = x.Δθ_VSM
+
+inputs(block::VSEWithDamping) = (
+    p_ref = _VSE_POWER_INPUT, pll = inputs(block.pll),
+)
+_powerflow_references(block::VSEWithDamping) = (p_ac = block.p_ref,)

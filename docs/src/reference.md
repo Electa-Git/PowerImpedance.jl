@@ -12,6 +12,12 @@ Gridspace construction, study definitions, and result containers belong to
 
 ## `PowerImpedance`
 
+Component ports are declared by `Port`, `ACDQ`, `ACABC`, `DC_CM` and
+`electricalconnections`. Configurable inputs use `Input`, `inputs`, `inputvalues`,
+`withinputs` and `component`. Bases and limits are available through `BaseValues`,
+`bases` and `limits`. Control references and converter or machine power-flow seeds use
+the model bases. Source inputs use physical units.
+
 ```@autodocs
 Modules = [PowerImpedance]
 Public = true

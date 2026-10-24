@@ -50,7 +50,8 @@ Construct an ideal DC voltage-source element and its power-flow data.
 source = dc_source(setpoint = Setpoint(Vdc = 640.0, Pdc = 100.0))
 ```
 """
-function dc_source(; pins=1, setpoint=Setpoint(Vdc=240),transformation=false, connection=true, args...)
+function dc_source(; pins=1, setpoint=Setpoint(Vdc=_DC_SOURCE_INPUTS.v.default),
+        transformation=false, connection=true, args...)
     source = Source()
 
     if haskey(args, :V)
@@ -68,6 +69,12 @@ function dc_source(; pins=1, setpoint=Setpoint(Vdc=240),transformation=false, co
             throw(ArgumentError("Source does not have a property $(key)."))
         end
     end
+
+    source.conductors = pins
+    source.domain = DC_CM
+    source.limits = Limits()
+    source.v = ismissing(setpoint.Vdc) ? _DC_SOURCE_INPUTS.v.default : setpoint.Vdc
+    source.p = ismissing(setpoint.Pdc) ? _DC_SOURCE_INPUTS.p.default : setpoint.Pdc
 
     A, B, C, D = make_abcd(source, pins)
 

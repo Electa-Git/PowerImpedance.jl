@@ -4,6 +4,13 @@
 
 ### Added
 
+- Declare named electrical ports for component models with `Port`, `ACDQ`, `ACABC`
+  and `DC_CM`.
+- Declare configurable inputs with `Input`, `inputs` and `inputvalues`. Configure
+  copies with `withinputs` and `component`.
+- Add component bases through `BaseValues` and `bases`, and stored operating limits
+  through `limits`.
+
 - `ZToolScan` runs Z-tool frequency sweeps from Julia through the configured
   PSCAD application. `ZToolResult` and `read_ztool_admittance` give admittance
   matrices in siemens from AC, DC and mixed scans.
@@ -31,6 +38,8 @@
   (`compare_operating_point`).
 
 ### Changed
+
+- **Breaking:** rename the `AVRSM` field `vref_SG` to `v_ref`.
 
 - The IEEE 39-bus example is a NetworkBuilder tutorial with a modular STATCOM
   and an impedance-based stability check at Bus 9. The documentation runs it.

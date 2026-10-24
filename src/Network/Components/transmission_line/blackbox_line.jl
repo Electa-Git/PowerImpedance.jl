@@ -360,3 +360,13 @@ function eval_abcd(bbl :: Blackbox_line, s :: Complex)
     return abcd
 
 end
+
+function electricalconnections(model::Blackbox_line)
+    n = model.n
+    n in (1, 2, 3) ||
+        throw(ArgumentError("Blackbox_line ports do not support $n conductors."))
+    domain = n == 3 ? ACABC : DC_CM
+    return (side1 = Port(domain), side2 = Port(domain))
+end
+
+bases(::Blackbox_line) = nothing

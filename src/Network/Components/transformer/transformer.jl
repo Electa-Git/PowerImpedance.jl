@@ -397,3 +397,13 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
     branch["b_to"] = imag(yto)
 	return nothing
 end
+
+function electricalconnections(model::Transformer)
+    n = model.pins
+    n in (1, 2, 3) ||
+        throw(ArgumentError("Transformer ports do not support $n conductors."))
+    domain = n == 3 ? ACABC : DC_CM
+    return (side1 = Port(domain), side2 = Port(domain))
+end
+
+bases(::Transformer) = nothing

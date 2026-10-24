@@ -62,6 +62,9 @@ include("core/logging.jl")
 # Including all components    
 include("Network/Components/AbstractElement.jl")
 include("Network/Components/AbstractStateSpace.jl")
+include("Network/Components/ports.jl")
+include("Network/Components/inputs.jl")
+include("Network/Components/bases.jl")
 
 # Impedance
 include("Network/Components/impedance/impedance.jl")

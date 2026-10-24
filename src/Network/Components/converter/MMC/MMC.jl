@@ -57,6 +57,10 @@ $(TYPEDFIELDS)
     modulation::Mod                      
     "MMC electrical plant and physical bases."
     elec::ElectricalMMC
+    "Active- and reactive-power limits on converter bases \\[dimensionless\\]."
+    limits::Limits = Limits()
+    "Power-flow seeds on converter bases \\[dimensionless\\]."
+    powerflow::NamedTuple = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
 end
 
 statenames(c::MMC) = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
@@ -612,6 +616,8 @@ control, and modulation blocks.
   and angles \\[rad\\]. Default: `Setpoint()`.
 - `limits`: Operating limits on the component power base \\[dimensionless\\]. Default:
   `Limits()`.
+- `powerflow`: Partial power-flow seeds on converter bases \\[dimensionless\\].
+  Default: `(;)`.
 - `connection`: Whether the element participates in network construction. Default:
   `true`.
 
@@ -652,12 +658,17 @@ function mmc(;
     modulation::AbstractModulationMMC = UncompensatedModulation(),
     setpoint::Setpoint=Setpoint(),
     limits::Limits = Limits(),
+    powerflow::NamedTuple = (;),
     connection::Bool = true)
 
+    defaults = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
+    seeds = _withinputs(defaults, _CONVERTER_POWERFLOW_INPUTS,
+        powerflow, "powerflow")
     return Element(
-        input_pins = 1, 
-        output_pins = 2, 
-        element_model = MMC(meas, sync, delta_control, sigma_control, modulation, elec), 
+        input_pins = 1,
+        output_pins = 2,
+        element_model = MMC(meas, sync, delta_control, sigma_control, modulation, elec,
+            limits, seeds),
         transformation = false; 
         connection,
         setpoint,
@@ -849,3 +860,38 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
 
     return nothing
 end
+
+electricalconnections(::MMC) = (ac = Port(ACDQ), dc = Port(DC_CM))
+
+inputs(model::MMC) = (
+    delta_control = inputs(model.delta_control),
+    sigma_control = inputs(model.sigma_control),
+    sync = inputs(model.sync),
+    powerflow = _CONVERTER_POWERFLOW_INPUTS,
+)
+inputs(block::ΔdqControlGFL) = (
+    outer_active = inputs(block.outer_active),
+    outer_reactive = inputs(block.outer_reactive),
+    occ = inputs(block.occ),
+)
+inputs(block::ΔdqControlGFM) = (
+    outer_reactive = inputs(block.outer_reactive),
+    vi = inputs(block.vi),
+    occ = inputs(block.occ),
+)
+inputs(block::ΣdqzControlTEC) = (
+    tec = inputs(block.tec), zscc = inputs(block.zscc), ccsc = inputs(block.ccsc),
+)
+inputs(block::ΣdqzControlLEC) = (
+    wsigma = inputs(block.wsigma), wdelta = inputs(block.wdelta), ccc = inputs(block.ccc),
+)
+
+_powerflow_references(block::ΔdqControlGFL) = merge(
+    _powerflow_references(block.outer_active), _powerflow_references(block.outer_reactive))
+_powerflow_references(block::ΔdqControlGFM) = _powerflow_references(block.outer_reactive)
+_powerflow_references(model::MMC) = merge(
+    _powerflow_references(model.sync), _powerflow_references(model.delta_control))
+powerflow_targets(model::MMC) = merge(model.powerflow, _powerflow_references(model))
+
+bases(model::MMC) = BaseValues(S = model.elec.Sbase, v_ac = model.elec.vAC_base,
+    v_dc = model.elec.vDC_base, omega = model.elec.ωbase)

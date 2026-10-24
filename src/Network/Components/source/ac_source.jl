@@ -57,7 +57,8 @@ source = ac_source(
 )
 ```
 """
-function ac_source(; setpoint = Setpoint(;Vac=220/sqrt(3)), pins=1, limits=Limits(), transformation=false, connection=true, args...)
+function ac_source(; setpoint = Setpoint(; Vac = _AC_SOURCE_INPUTS.v.default),
+        pins=1, limits=Limits(), transformation=false, connection=true, args...)
     source = Source()
 
     if haskey(args, :V)
@@ -75,6 +76,14 @@ function ac_source(; setpoint = Setpoint(;Vac=220/sqrt(3)), pins=1, limits=Limit
             throw(ArgumentError("Source does not have a property $(key)."))
         end
     end
+
+    source.conductors = pins
+    source.domain = ACABC
+    source.limits = Limits()
+    source.v = ismissing(setpoint.Vac) ? _AC_SOURCE_INPUTS.v.default : setpoint.Vac
+    source.theta = ismissing(setpoint.θac) ? _AC_SOURCE_INPUTS.theta.default : setpoint.θac
+    source.p = ismissing(setpoint.Pac) ? _AC_SOURCE_INPUTS.p.default : setpoint.Pac
+    source.q = ismissing(setpoint.Qac) ? _AC_SOURCE_INPUTS.q.default : setpoint.Qac
 
     A, B, C, D = make_abcd(source, pins)
 

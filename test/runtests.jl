@@ -48,6 +48,7 @@ end
     include("pscad/power_flow_idempotence_test.jl")
         include("tlc_initialization_test.jl")
         include("dc_voltage_support_test.jl")
+        include("model_declarations_test.jl")
         include("adm_SM_test.jl")
         include("synchronous_machine_operating_point_test.jl")
         include("adm_IM_test.jl")

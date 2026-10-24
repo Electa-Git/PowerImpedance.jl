@@ -586,3 +586,13 @@ function eval_abcd(tl::Overhead_line, s::Complex)
 
 	return abcd
 end
+
+function electricalconnections(model::Overhead_line)
+    n = model.conductors.nᵇ
+    n in (1, 2, 3) ||
+        throw(ArgumentError("Overhead_line ports do not support $n conductors."))
+    domain = n == 3 ? ACABC : DC_CM
+    return (side1 = Port(domain), side2 = Port(domain))
+end
+
+bases(::Overhead_line) = nothing

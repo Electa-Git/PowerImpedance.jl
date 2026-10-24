@@ -439,7 +439,7 @@ zero. The nonlinear solver's existing iteration limit and tolerances are unchang
 
 
 These references remain fixed during linearization. With incomplete operating
-setpoints, `Tm0=Pac/S_base` and configured `AVRSM.vref_SG` remain in use.
+setpoints, `Tm0=Pac/S_base` and configured `AVRSM.v_ref` remain in use.
 The configured field itself is unchanged by the effective reference conversion.
 
 `SM_AVR_FIELD_VOLTAGE_SCALE=1.0`: Julia's `v_df=K_A*y*Rf_d/La_d` and

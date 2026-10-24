@@ -60,6 +60,10 @@ struct TLC{
     innerCurrent::IC
     "Modulation and delay block."
     mod::Mod
+    "Active-power limits \\[MW\\] and reactive-power limits \\[MVAr\\]."
+    limits::Limits
+    "Power-flow seeds on converter bases \\[dimensionless\\]."
+    powerflow::NamedTuple
 end
 
 statenames(c::TLC) = (
@@ -397,6 +401,8 @@ control, and modulation blocks.
   and angles \\[rad\\]. Default: `Setpoint()`.
 - `limits`: Active-power limits \\[MW\\] and reactive-power limits \\[MVAr\\],
   passed directly to the TLC power-flow adapter. Default: `Limits()`.
+- `powerflow`: Partial power-flow seeds on converter bases \\[dimensionless\\].
+  Default: `(;)`.
 - `connection`: Whether the element participates in network construction. Default:
   `true`.
 
@@ -434,9 +440,14 @@ function tlc(;
     mod::AbstractModulationTLC = NoModulation(),
     setpoint::Setpoint = Setpoint(),
     limits::Limits = Limits(),
+    powerflow::NamedTuple = (;),
     connection::Bool = true
 )
-    conv = TLC(elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent, mod)
+    defaults = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
+    seeds = _withinputs(defaults, _CONVERTER_POWERFLOW_INPUTS,
+        powerflow, "powerflow")
+    conv = TLC(elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent,
+        mod, limits, seeds)
 
     return Element(
         input_pins = 1,
@@ -622,3 +633,21 @@ function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global
 
     return nothing
 end
+
+electricalconnections(::TLC) = (ac = Port(ACDQ), dc = Port(DC_CM))
+
+inputs(model::TLC) = (
+    sync = inputs(model.sync),
+    outerActive = inputs(model.outerActive),
+    outerReactive = inputs(model.outerReactive),
+    innerVoltage = inputs(model.innerVoltage),
+    innerCurrent = inputs(model.innerCurrent),
+    powerflow = _CONVERTER_POWERFLOW_INPUTS,
+)
+
+_powerflow_references(model::TLC) = merge(_powerflow_references(model.sync),
+    _powerflow_references(model.outerActive), _powerflow_references(model.outerReactive))
+powerflow_targets(model::TLC) = merge(model.powerflow, _powerflow_references(model))
+
+bases(model::TLC) = BaseValues(S = model.elec.Sbase, v_ac = model.elec.vACbase,
+    v_dc = model.elec.vDCbase, omega = model.elec.ωbase)

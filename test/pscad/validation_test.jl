@@ -1277,14 +1277,14 @@ end
             el = net.elements[:DUT]; m = el.element_model
             @test !V.interface_step_eligible(m) # existing fixture has positive delay
             el.element_model = MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
-                CompensatedModulation(), m.elec)
+                CompensatedModulation(), m.elec, m.limits, m.powerflow)
             PowerImpedance.update!(el, el.setpoint)
         end
         if id == "tlc_vdc_q"
             el = net.elements[:DUT]; m = el.element_model
             net.elements[:DUT] = PowerImpedance.Element(element_model =
                 TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
-                    m.innerVoltage, m.innerCurrent, NoModulation()),
+                    m.innerVoltage, m.innerCurrent, NoModulation(), m.limits, m.powerflow),
                 input_pins = 1, output_pins = 2, setpoint = el.setpoint,
                 limits = el.limits, pins = deepcopy(el.pins), symbol = :DUT)
             el = net.elements[:DUT]

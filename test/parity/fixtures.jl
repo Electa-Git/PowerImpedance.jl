@@ -2015,7 +2015,7 @@ machine_mechanical = MechanicalSM(
 
 machine_governor = GovernorSM(R = 0.05, T_w = 0.1, T_G = 0.2);
 
-machine_avr = AVRSM(vref_SG = 1.01, T_R = 0.05, T_B = 1, T_C = 0.1, T_A = 0.02, K_A = 200);
+machine_avr = AVRSM(v_ref = 1.01, T_R = 0.05, T_B = 1, T_C = 0.1, T_A = 0.02, K_A = 200);
 
 sg1 = synchronousmachine(elec = machine_electrical, mech = machine_mechanical,
     gov = machine_governor, avr = machine_avr,

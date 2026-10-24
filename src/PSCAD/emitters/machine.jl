@@ -10,7 +10,7 @@ const SM_AVR_FIELD_VOLTAGE_SCALE = 1.0
 "Machine iron-loss resistance on its per-unit base \\[dimensionless\\]."
 const SM_IRON_LOSS_RESISTANCE_PU = 1.0e6
 
-function machine_avr(name, machine, voltage_pu, vref=machine.avr.vref_SG)
+function machine_avr(name, machine, voltage_pu, vref=machine.avr.v_ref)
     a = machine.avr
     parameters = ModuleParameterPlan[
         ModuleParameterPlan("vref", vref, ""),

@@ -105,9 +105,9 @@ end
 $(TYPEDEF)
 
 Store active- and reactive-power limits using the component adapter's convention.
-Source and TLC adapters interpret active limits in \\[MW\\] and reactive limits in
-\\[MVAr\\]. The MMC adapter multiplies these limits by its power base, interpreting
-them as per-unit values \\[dimensionless\\] for its power bounds.
+Source, TLC and synchronous-machine adapters interpret active limits in \\[MW\\] and
+reactive limits in \\[MVAr\\]. The MMC adapter multiplies these limits by its power base,
+interpreting them as per-unit values \\[dimensionless\\] for its power bounds.
 
 $(TYPEDFIELDS)
 """

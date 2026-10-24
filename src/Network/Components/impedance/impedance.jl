@@ -14,6 +14,8 @@ $(TYPEDFIELDS)
 	value::Any = nothing      # either Matrix{ComplexF64} or a function s::Complex -> Matrix{ComplexF64}
 	"Cached ABCD matrix for constant impedances, or `nothing` for a callback; A/D blocks are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
 	ABCD::Any  = nothing      # cached Matrix{ComplexF64} for constant impedances, otherwise nothing
+    "Number of physical conductors per side."
+    conductors::Int = 1
 end
 
 
@@ -140,6 +142,7 @@ function impedance(; z = 0, pins::Int = 0, transformation = false)
 		end
 		imp.ABCD = nothing
 		inferred_pins = pins == 0 ? 1 : pins
+        imp.conductors = inferred_pins
 		element = Element(element_value = imp, input_pins = inferred_pins,
 			output_pins = inferred_pins,
 			transformation = transformation, connection = connection)
@@ -149,6 +152,7 @@ function impedance(; z = 0, pins::Int = 0, transformation = false)
 	# constant z: normalize once and cache ABCD
 	Z = _z_matrix(z, pins)
 	pins_eff = size(Z, 1)
+    imp.conductors = pins_eff
 
 	imp.value = Z
 	imp.ABCD  = _abcd_from_z(Z, pins_eff)
@@ -242,3 +246,13 @@ function convert!(data, elem::Element{<:Impedance}, ::Type{PMACDC}, key, buses, 
 	branchdc["r"] = real(z) / 2
 	return nothing
 end
+
+function electricalconnections(model::Impedance)
+    n = model.conductors
+    n in (1, 2, 3) ||
+        throw(ArgumentError("Impedance ports do not support $n conductors."))
+    domain = n == 3 ? ACABC : DC_CM
+    return (side1 = Port(domain), side2 = Port(domain))
+end
+
+bases(::Impedance) = nothing

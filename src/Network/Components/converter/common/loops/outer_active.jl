@@ -127,6 +127,9 @@ function state_space!(F, x, sync, block::FrequencySupportLag)
     return (; P_ac_support = x.ξ_f_supp)
 end
 
+const _DC_VOLTAGE_SUPPORT_INPUT =
+    Input(1.0; unit = "pu", description = "DC-voltage support reference")
+
 """
 $(TYPEDEF)
 
@@ -153,6 +156,8 @@ and ``K`` is droop gain in pu power per pu voltage.
     K::Float64 = 0.0
     "First-order low-pass cutoff in \\[rad/s\\]."
     ωc::Float64 = 0.0
+    "DC-voltage reference on converter bases \\[dimensionless\\]."
+    v_dc_ref::Float64 = _DC_VOLTAGE_SUPPORT_INPUT.default
 end
 
 statenames(::DCVoltageSupportLag) = (:ξ_vdc_supp,)
@@ -261,6 +266,9 @@ state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::AbstractFrequencySupp
 
 pf_dc_droop(::AbstractOuterActiveControl, dcbase, powerbase, global_dict, data) = 0.0
 
+const _OUTER_ACTIVE_POWER_INPUT =
+    Input(0.0; unit = "pu", description = "active-power reference")
+
 """
 $(TYPEDEF)
 
@@ -273,6 +281,8 @@ struct OuterActivePowerControl{S<:AbstractFrequencySupport} <: AbstractOuterActi
     pi_ctrl::PIControl
     "Active-power support block driven by frequency or DC voltage."
     support::S
+    "Active-power reference on converter bases \\[dimensionless\\]."
+    p_ref::Float64
 end
 
 """
@@ -286,6 +296,7 @@ Construct an active-power PI controller.
   integral gain is \\[s⁻¹\\]. Default: `PIControl()`.
 - `support`: Active-power support block driven by frequency or DC voltage. Default:
   `NoFrequencySupport()`.
+- `p_ref`: Active-power reference on converter bases \\[dimensionless\\]. Default: `0.0`.
 
 # Returns
 
@@ -301,8 +312,9 @@ component = OuterActivePowerControl()
 function OuterActivePowerControl(;
     pi_ctrl::PIControl = PIControl(),
     support::AbstractFrequencySupport = NoFrequencySupport(),
+    p_ref::Real = _OUTER_ACTIVE_POWER_INPUT.default,
 )
-    return OuterActivePowerControl{typeof(support)}(pi_ctrl, support)
+    return OuterActivePowerControl{typeof(support)}(pi_ctrl, support, Float64(p_ref))
 end
 
 function pf_dc_droop(block::OuterActivePowerControl{DCVoltageSupportLag}, dcbase, powerbase, global_dict, data)
@@ -385,6 +397,9 @@ function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActiveP
     return (iΔ_d_ref = block.pi_ctrl.Kp * (Peff_ref - P_ac_f) + x.ξ_P_ac, P_ac_f = P_ac_f)
 end
 
+const _OUTER_ACTIVE_VDC_INPUT =
+    Input(1.0; unit = "pu", description = "DC-voltage reference")
+
 """
 $(TYPEDEF)
 
@@ -400,6 +415,8 @@ struct OuterActiveVdcControl{F<:AbstractMeasurementFilter} <: AbstractOuterActiv
     pi_ctrl::PIControl
     "Local filter for measured DC voltage. Cutoff in \\[rad/s\\]."
     filter::F
+    "DC-voltage reference on converter bases \\[dimensionless\\]."
+    v_dc_ref::Float64
 end
 
 """
@@ -413,6 +430,7 @@ Construct a DC-voltage PI controller with a local measurement filter.
   \\[s⁻¹\\]. Default: `PIControl()`.
 - `filter`: Scalar measurement filter specification or realized filter. Default:
   `NoFilter()`.
+- `v_dc_ref`: DC-voltage reference on converter bases \\[dimensionless\\]. Default: `1.0`.
 
 # Returns
 
@@ -430,9 +448,10 @@ component = OuterActiveVdcControl()
 ```
 """
 function OuterActiveVdcControl(; pi_ctrl::PIControl = PIControl(),
-        filter::AbstractMeasurementFilter = NoFilter())
+        filter::AbstractMeasurementFilter = NoFilter(),
+        v_dc_ref::Real = _OUTER_ACTIVE_VDC_INPUT.default)
     realized = measurement_filter_ss(filter)
-    return OuterActiveVdcControl{typeof(realized)}(pi_ctrl, realized)
+    return OuterActiveVdcControl{typeof(realized)}(pi_ctrl, realized, Float64(v_dc_ref))
 end
 OuterActiveVdcControl(pi_ctrl::PIControl) = OuterActiveVdcControl(; pi_ctrl)
 
@@ -505,3 +524,14 @@ function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActiveV
 
     return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (setpoint_pu.v_dc - v_dc) + x.ξ_v_dc), )
 end
+
+inputs(block::OuterActivePowerControl) = (
+    p_ref = _OUTER_ACTIVE_POWER_INPUT, support = inputs(block.support),
+)
+inputs(::OuterActiveVdcControl) = (v_dc_ref = _OUTER_ACTIVE_VDC_INPUT,)
+inputs(::DCVoltageSupportLag) = (v_dc_ref = _DC_VOLTAGE_SUPPORT_INPUT,)
+
+_powerflow_references(block::OuterActivePowerControl) =
+    merge((p_ac = block.p_ref,), _powerflow_references(block.support))
+_powerflow_references(block::OuterActiveVdcControl) = (v_dc = block.v_dc_ref,)
+_powerflow_references(block::DCVoltageSupportLag) = (v_dc = block.v_dc_ref,)

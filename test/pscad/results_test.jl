@@ -489,7 +489,7 @@ end
     rated = deepcopy(e.element)
     rated.element_model = SynchronousMachine(
         ElectricalSM(Vᵃᶜ_base = 380.0, S_base = 2000.0),
-        e.model.mech, e.model.avr, e.model.gov)
+        e.model.mech, e.model.avr, e.model.gov, e.model.limits, e.model.powerflow)
     elements = copy(netlist.elements)
     elements[index] = P.NetlistElement(e.name, e.pscad, rated, rated.element_model,
         e.terminals, e.role, e.setpoint)

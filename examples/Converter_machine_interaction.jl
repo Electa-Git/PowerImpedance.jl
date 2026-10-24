@@ -17,7 +17,7 @@ machine_mechanical = MechanicalSM(H = 4, T_CH = 2, T_RH = 5, T_CO = 1, F_HP = 0.
 # The governor adjusts mechanical power with 5 percent droop and 0.1 s and 0.2 s lags.
 machine_governor = GovernorSM(R = 0.05, T_w = 0.1, T_G = 0.2);
 # The regulator controls field excitation with a 0.05 s voltage filter, lead-lag compensation and gain 200.
-machine_avr = AVRSM(vref_SG = 1.01, T_R = 0.05, T_B = 1, T_C = 0.1, T_A = 0.02, K_A = 200);
+machine_avr = AVRSM(v_ref = 1.01, T_R = 0.05, T_B = 1, T_C = 0.1, T_A = 0.02, K_A = 200);
 # The machine supplies 900 MW at Bus 4.
 sg1 = synchronousmachine(elec = machine_electrical, mech = machine_mechanical,
     gov = machine_governor, avr = machine_avr,

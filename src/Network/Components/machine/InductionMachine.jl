@@ -526,3 +526,9 @@ function SI_scale(elem::Element{<:InductionMachine})
     
     return scale
 end
+
+electricalconnections(::InductionMachine) = (ac = Port(ACDQ),)
+inputs(::InductionMachine) = (;)
+
+bases(model::InductionMachine) = BaseValues(S = model.elec.S_base,
+    v_ac = model.elec.Vac_base * sqrt(2/3), omega = model.elec.ωn)

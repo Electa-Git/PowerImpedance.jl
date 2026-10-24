@@ -24,8 +24,8 @@ end
             (220.0, 1000.0, -0.1, 0.0015, 1e-10, 1e-10, 24.2, 0.0, 1/sqrt(2), 200.0))
         electrical = ElectricalSM(Vᵃᶜ_base=vbase, S_base=sbase, Ra=Ra, rt=rt, lt=lt,
             L23_d=0.01, L23_q=0.02)
-        m = SynchronousMachine(electrical, MechanicalSM(), AVRSM(vref_SG=1.2, K_A=gain),
-            GovernorSM())
+        m = SynchronousMachine(electrical, MechanicalSM(), AVRSM(v_ref=1.2, K_A=gain),
+            GovernorSM(), PI.Limits(), (p = 0.0, q = 0.0, v = 1.0))
         # Independent fixture starts at the machine terminal, not the bus.
         Vterminal = v * cis(θ)
         Igen = conj(complex(p, q) / Vterminal)
@@ -36,7 +36,7 @@ end
         @test inputs.Tm0 ≈ p + Ra*abs2(Igen)
         @test pu.p_ac == p
         @test pu.q_ac ≈ q
-        @test m.avr.vref_SG == 1.2
+        @test m.avr.v_ref == 1.2
         seed = PI.orderedinitialvalues(m; inputs, setpoint_pu=pu)
         quantities = terminal_quantities(m, inputs, collect(values(seed)))
         @test quantities.Igen ≈ Igen atol=DYNAMIC_ATOL
@@ -76,7 +76,8 @@ end
 end
 
 @testset "Synchronous machine without a complete power-flow point" begin
-    m = SynchronousMachine(ElectricalSM(), MechanicalSM(), AVRSM(vref_SG=1.03), GovernorSM())
+    m = SynchronousMachine(ElectricalSM(), MechanicalSM(), AVRSM(v_ref=1.03),
+        GovernorSM(), PI.Limits(), (p = 0.0, q = 0.0, v = 1.0))
     sp = Setpoint(Pac=50.0, Vac=220sqrt(2/3), θac=0.12)
     inputs, pu = PI.pftoinputs(m, sp)
     @test pu === nothing
@@ -93,7 +94,7 @@ end
     PI.state_space!(Fraw, seed, (; inputs.vd, inputs.vq, inputs.Tm0), m)
     @test F == Fraw
     raw = synchronousmachine(avr=m.avr)
-    @test raw.element_model.avr.vref_SG == 1.03
+    @test raw.element_model.avr.v_ref == 1.03
     @test isempty(raw.A)
 end
 
@@ -116,7 +117,7 @@ include("pscad/fixtures.jl")
         @test imag(actual.Sterminal) ≈ flow.qg/m.elec.S_base atol=DYNAMIC_ATOL rtol=0
         @test actual.Vterminal ≈ Vt_pf atol=POWER_FLOW_ATOL rtol=0
         @test abs(actual.Vterminal) ≈ abs(Vt_pf) atol=POWER_FLOW_ATOL rtol=0
-        @test inputs.vref_SG != m.avr.vref_SG
+        @test inputs.vref_SG != m.avr.v_ref
         @test inputs.Tm0 > element.setpoint.Pac/m.elec.S_base
         F = zeros(16)
         PI._state_space!(F, state, collect(values(inputs)), pu, m, PI.Equil())
@@ -129,7 +130,7 @@ include("pscad/fixtures.jl")
         next_actual = terminal_quantities(m, next_inputs, PI._steady_state(element))
         @test next_actual.Sterminal ≈ complex(0.7, 0.04) atol=DYNAMIC_ATOL rtol=0
         @test next_inputs.vref_SG != inputs.vref_SG
-        @test m.avr.vref_SG == 1.01
+        @test m.avr.v_ref == 1.01
     end
 end
 end

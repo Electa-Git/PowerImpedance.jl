@@ -146,6 +146,9 @@ initialvalues(::GovernorSM;inputs) =  NamedTuple{(:flow, :TchHP, :TreIP, :TcrLP)
 
 ########################### AVR #############################
 
+const _AVR_VOLTAGE_INPUT =
+    Input(1.01; unit = "pu", description = "AVR voltage reference")
+
 """
 $(TYPEDEF)
 
@@ -166,13 +169,13 @@ where ``E_f`` denotes field voltage, ``V_t`` terminal voltage and ``v_{ref}``
 its reference in \\[dimensionless\\]. The regulator gain is ``K_A``.
 A complete machine power-flow point sets the fixed effective reference to
 ``v_{ref} = |V_{t,pf}| + E_{f,pf}/K_A`` and requires nonzero `K_A`.
-The configured `vref_SG` field remains unchanged. Without a complete operating
-point, the standalone AVR and machine use `vref_SG` without reference conversion
+The configured `v_ref` field remains unchanged. Without a complete operating
+point, the standalone AVR and machine use `v_ref` without reference conversion
 or phasor initialization.
 """
 @with_kw struct AVRSM <: AbstractStateSpace
     "Configured terminal-voltage reference \\[dimensionless\\], superseded by the effective reference at a power-flow operating point."
-    vref_SG :: Float64   = 1.01 # Terminal voltage magnitude reference [pu]
+    v_ref :: Float64 = _AVR_VOLTAGE_INPUT.default
     "Terminal-voltage measurement-filter time constant \\[s\\]."
     T_R :: Float64       = 0.05     # Terminal voltage filter time constant [s]
     "Lead-lag denominator time constant \\[s\\]."
@@ -217,13 +220,13 @@ Here ``p_{pf}`` denotes terminal active power, ``R_a`` armature resistance
 and ``I_{pf}`` terminal current, on machine pu bases. Terminal voltage
 ``V_{t,pf}`` and field voltage ``E_{f,pf}`` also use machine pu bases.
 The AVR gain is ``K_A``.
-The effective reference replaces `avr.vref_SG` in the equations while the
+The effective reference replaces `avr.v_ref` in the equations while the
 configured field remains unchanged. Initial states use the power-flow phasors
 and the high-voltage solution of the external branch. Turbine fractions must
 sum to one for `Tm0` to equal total turbine torque. References remain fixed
 during linearization.
 
-Without a complete operating point, the AVR uses `avr.vref_SG` and turbine
+Without a complete operating point, the AVR uses `avr.v_ref` and turbine
 torque is `Tm0 = Pac/S_base`. Initial states use synchronous-speed and governor
 seeds without phasor initialization. A complete setpoint supplied to `pftoinputs`
 gives the same reference conversion as a solver-provided point. Construction
@@ -242,6 +245,10 @@ struct SynchronousMachine <: AbstractStateSpace
     avr::AVRSM
     "Governor and steam-turbine dynamics."
     gov::GovernorSM
+    "Operating limits in \\[MW\\] and \\[MVAr\\]."
+    limits::Limits
+    "Power-flow seeds on machine bases \\[dimensionless\\]."
+    powerflow::NamedTuple
 end
 
 statenames(m::SynchronousMachine) = (statenames(m.elec)..., statenames(m.mech)...,statenames(m.gov)...,statenames(m.avr)...)
@@ -333,7 +340,7 @@ function pftoinputs(m::SynchronousMachine, setpoint::Setpoint)
     p_ac = setpoint.Pac / m.elec.S_base
     if ismissing(setpoint.Qac)
         return (; vd=v_bus_d, vq=v_bus_q, Tm0=p_ac,
-            vref_SG=m.avr.vref_SG), nothing
+            vref_SG=m.avr.v_ref), nothing
     end
     sp = SetpointPU(p_ac=p_ac, q_ac=setpoint.Qac / m.elec.S_base,
         θ_ac=setpoint.θac, v_ac=setpoint.Vac / (m.elec.Vᵃᶜ_base * sqrt(2/3)))
@@ -604,7 +611,7 @@ derivatives into `F`.
 - `block`: Voltage-regulator and exciter parameters.
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
 - `vref`: Fixed effective terminal-voltage reference on the machine base
-  \\[dimensionless\\]. Default: `block.vref_SG`.
+  \\[dimensionless\\]. Default: `block.v_ref`.
 
 # Returns
 
@@ -636,7 +643,8 @@ P.state_space!(F, x, (inputs.vd, inputs.vq), didq_dt, block; gen=model, vref=inp
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;gen::SynchronousMachine, vref=block.vref_SG)
+function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;
+        gen::SynchronousMachine, vref=block.v_ref)
     
     v_d = v_dq[1]
     v_q = v_dq[2]
@@ -734,7 +742,8 @@ function state_space!(F, x, inputs, gen::SynchronousMachine)
 
     ### AVR
     index_end = index + n_states(gen.avr)-1 #Nb of equatinos
-    state_space!(@view(F[index:index_end]), x, v_dq, didq_dt, gen.avr;gen, vref=get(inputs, :vref_SG, gen.avr.vref_SG))
+    state_space!(@view(F[index:index_end]), x, v_dq, didq_dt, gen.avr;
+        gen, vref=get(inputs, :vref_SG, gen.avr.v_ref))
     index = index_end+1
 
     
@@ -757,6 +766,8 @@ Construct a network element containing the requested component model.
 - `gov`: Governor subsystem. Default: `GovernorSM()`.
 - `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
   and angles \\[rad\\]. Default: `Setpoint()`.
+- `powerflow`: Partial power-flow seeds on machine bases \\[dimensionless\\].
+  Default: `(;)`.
 - `connection`: Whether the element participates in network construction. Default:
   `true`.
 
@@ -771,9 +782,13 @@ using PowerImpedance
 component = synchronousmachine(setpoint=Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0))
 ```
 """
-function synchronousmachine(;elec=ElectricalSM(),mech=MechanicalSM(),avr=AVRSM(),gov=GovernorSM(), setpoint=Setpoint(), connection=true)
-    
-    gen = SynchronousMachine(elec, mech,avr, gov)
+function synchronousmachine(; elec = ElectricalSM(), mech = MechanicalSM(),
+        avr = AVRSM(), gov = GovernorSM(), setpoint = Setpoint(), connection = true,
+        powerflow::NamedTuple = (;))
+    defaults = map(input -> input.default, _MACHINE_POWERFLOW_INPUTS)
+    seeds = _withinputs(defaults, _MACHINE_POWERFLOW_INPUTS,
+        powerflow, "powerflow")
+    gen = SynchronousMachine(elec, mech, avr, gov, Limits(), seeds)
     # Transformation property set to false, as model is natively defined in dq-frame. TODO: Fix this; outpins 0 bcs oneport, kept for legacy
     elem = Element(input_pins = 2, output_pins = 2, element_model = gen, transformation = false; connection, setpoint)
     return elem
@@ -924,3 +939,14 @@ function transform(elemresult, busresult, global_dict, elem::Element{<:Synchrono
     setpoint = Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
     return setpoint
 end
+
+electricalconnections(::SynchronousMachine) = (ac = Port(ACDQ),)
+
+inputs(::AVRSM) = (v_ref = _AVR_VOLTAGE_INPUT,)
+inputs(model::SynchronousMachine) = (
+    avr = inputs(model.avr),
+    powerflow = _MACHINE_POWERFLOW_INPUTS,
+)
+
+bases(model::SynchronousMachine) = BaseValues(S = model.elec.S_base,
+    v_ac = model.elec.Vᵃᶜ_base * sqrt(2/3), omega = model.elec.ωn)

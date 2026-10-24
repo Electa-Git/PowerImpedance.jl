@@ -440,8 +440,4 @@ function eval_parameters(converter :: Blackbox_MMC, s :: Complex)
 
 end
 
-
-
-
-
-
+electricalconnections(::Blackbox_MMC) = (ac = Port(ACDQ), dc = Port(DC_CM))

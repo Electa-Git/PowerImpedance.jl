@@ -40,6 +40,18 @@ function eval_y(source::Source, s::Complex)
 end =#
 
 
+const _AC_SOURCE_INPUTS = (
+    v = Input(220 / sqrt(3); unit = "kV",
+        description = "source voltage magnitude, AC phase peak"),
+    theta = Input(0.0; unit = "rad", description = "source AC voltage angle"),
+    p = Input(0.0; unit = "MW", description = "source AC active power"),
+    q = Input(0.0; unit = "MVAr", description = "source reactive power"),
+)
+const _DC_SOURCE_INPUTS = (
+    v = Input(240.0; unit = "kV", description = "source DC pole-to-pole voltage"),
+    p = Input(0.0; unit = "MW", description = "source DC active power"),
+)
+
 """
 $(TYPEDEF)
 
@@ -69,6 +81,22 @@ $(TYPEDFIELDS)
     pins::Int = 1
     "Cached ideal-source ABCD matrix; A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
     ABCD::Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
+    "Number of physical conductors supplied to the source constructor."
+    conductors::Int = 1
+    "Electrical coordinate domain selected by the source constructor."
+    domain::AbstractDomain = ACABC
+    "Voltage magnitude \\[kV\\], AC phase peak or DC pole to pole."
+    v::Float64 = domain === ACABC ? _AC_SOURCE_INPUTS.v.default :
+        _DC_SOURCE_INPUTS.v.default
+    "AC voltage angle \\[rad\\]."
+    theta::Float64 = _AC_SOURCE_INPUTS.theta.default
+    "Active power \\[MW\\]."
+    p::Float64 = domain === ACABC ? _AC_SOURCE_INPUTS.p.default :
+        _DC_SOURCE_INPUTS.p.default
+    "Reactive power \\[MVAr\\]."
+    q::Float64 = _AC_SOURCE_INPUTS.q.default
+    "Operating limits in \\[MW\\] and \\[MVAr\\]."
+    limits::Limits = Limits()
 end
 
 """
@@ -369,3 +397,13 @@ function dc_source_power_flow!(
 
 	((data["busdc"])[string(dc_bus)]) = set_bus_type_dc((data["busdc"])[string(dc_bus)], 2)
 end
+
+electricalconnections(model::Source) = electricalconnections(model, model.domain)
+electricalconnections(::Source, ::ACABCDomain) = (ac = Port(ACABC),)
+electricalconnections(::Source, ::DCDomain) = (dc = Port(DC_CM),)
+
+inputs(model::Source) = inputs(model, model.domain)
+inputs(::Source, ::ACABCDomain) = _AC_SOURCE_INPUTS
+inputs(::Source, ::DCDomain) = _DC_SOURCE_INPUTS
+
+bases(::Source) = nothing
