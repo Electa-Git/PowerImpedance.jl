@@ -167,6 +167,7 @@ equilibriumnames(::TLC) = ()
 $(TYPEDSIGNATURES)
 
 Convert physical terminal values into normalized TLC inputs.
+Port powers are injected into each bus. DC-to-AC inversion has `values.dc.p < 0`.
 
 # Arguments
 
@@ -189,7 +190,8 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
-power base. DC voltage is divided by the pole-to-pole DC base.
+power base, with DC power negated to get the power taken from the DC bus.
+DC voltage is divided by the pole-to-pole DC base.
 
 # Examples
 
@@ -198,7 +200,7 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),
-    dc = DCPortValues(640.0, 100.0))
+    dc = DCPortValues(640.0, -100.0))
 inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
@@ -211,7 +213,7 @@ function pftoinputs(c::TLC, values::NamedTuple)
 
     p_ac = values.ac.p / c.elec.Sbase
     q_ac = values.ac.q / c.elec.Sbase
-    p_dc = values.dc.p / c.elec.Sbase
+    p_dc = -values.dc.p / c.elec.Sbase
     
     return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),
         SetpointPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
@@ -682,7 +684,7 @@ function convert!(data, conv::TLC, ::Type{PMACDC}, component_key,
     p_ac = target.p_ac * b.S
     q_ac = target.q_ac * b.S
     v_ac = target.v_ac * b.v_ac
-    p_dc = target.p_dc * b.S
+    p_dc = -target.p_dc * b.S
     v_dc = target.v_dc * b.v_dc
     lm = limits(conv)
     ac_bus = ports.ac

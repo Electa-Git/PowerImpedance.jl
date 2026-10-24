@@ -68,7 +68,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
         @test PI.pf_type_ac(PI.ΔdqControlGFM(outer_reactive = reactive,
             vi = PI.CCVI(), occ = model.delta_control.occ))==2
         declared = (ac = ACPortValues(1.01*380sqrt(2/3), 0.0, 600.0, 200.0),
-            dc = DCPortValues(800.0, 600.0))
+            dc = DCPortValues(800.0, -600.0))
         inputs, sp=PI.pftoinputs(model, declared)
         signals=PI.input_signals(
             model, (;

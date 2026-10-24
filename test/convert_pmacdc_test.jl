@@ -105,6 +105,32 @@ module ConversionSourceFixtures
 include("pscad/fixtures.jl")
 end
 
+@testset "Converter DC power seeds" begin
+    PI = PowerImpedance
+    NB = PI.NetworkBuilder
+    for factory in (ConversionSourceFixtures.PSCADFixtures.mmc_pq_network,
+            ConversionSourceFixtures.PSCADFixtures.tlc_case1_network)
+        original = factory().state
+        for p_dc in (-0.25, 0.0, 0.25)
+            model = withinputs(original.elements.DUT; powerflow = (; p_dc))
+            elements = merge(original.elements, (; DUT = model))
+            state = NB.NetworkState(elements, original.topology, original.options)
+            data, _, mapping = convert(state, PI.PMACDC)
+            entry = data["convdc"][string(mapping[:DUT].compkey)]
+            b = bases(model)
+            p_ac = PI.powerflow_targets(model).p_ac * b.S
+            fallback = model isa MMC ? p_ac : -p_ac
+            expected = (iszero(p_dc) ? fallback : -p_dc * b.S) / data["baseMVA"]
+            @test entry["Pdcset"] === expected
+            configured = NB._configured_model(model, Setpoint(Pdc = -p_dc * b.S),
+                limits(model))
+            @test configured.powerflow.p_dc === p_dc
+            retained = NB._configured_model(model, Setpoint(), limits(model))
+            @test retained.powerflow.p_dc === p_dc
+        end
+    end
+end
+
 @testset "Solved source terminal values" begin
     state = ConversionSourceFixtures.PSCADFixtures.mmc_pq_network().state
     powerflow = compute(PowerFlowProblem(state), ACDCPowerFlow())

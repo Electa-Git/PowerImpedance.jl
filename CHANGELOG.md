@@ -46,6 +46,10 @@
 
 ### Changed
 
+- **Breaking:** port values are powers injected into the bus at every port. For
+  induction machines and the DC side of converters, this is the opposite sign of
+  the former `Setpoint` fields.
+
 - **Breaking:** `solve(state)` returns a `PowerFlowResult`.
 
 - **Breaking:** NetworkBuilder topology rows use `net`, `bus`, `component`, `port`,

@@ -10,7 +10,7 @@ is_converter(::AbstractConverter) = true
 _terminal_values(::AbstractConverter, sp::Setpoint) = (
     ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
         coalesce(sp.Pac, NaN), coalesce(sp.Qac, NaN)),
-    dc = DCPortValues(coalesce(sp.Vdc, NaN), coalesce(sp.Pdc, NaN)),
+    dc = DCPortValues(coalesce(sp.Vdc, NaN), -coalesce(sp.Pdc, NaN)),
 )
 
 
@@ -241,6 +241,12 @@ function timeDelayPadeMatrices(padeOrderNum,padeOrderDen,t_delay,numberVars)
 end
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Return AC and DC port values with powers injected into each bus.
+A converter inverting from DC to AC has `dc.p < 0`.
+"""
 function transform(elemresult, busresult::NamedTuple, global_dict,
         model::AbstractConverter, ::Type{PMACDC}, ::Type{PIACDC})
 
@@ -262,5 +268,5 @@ function transform(elemresult, busresult::NamedTuple, global_dict,
     # to obtain the model's internal pu references, without another sign change.
     Qac = -elemresult["qgrid"] * global_dict["S"] / 1e6
 
-    return (ac = ACPortValues(Vm, θ, Pac, Qac), dc = DCPortValues(Vdc, Pdc))
+    return (ac = ACPortValues(Vm, θ, Pac, Qac), dc = DCPortValues(Vdc, -Pdc))
 end

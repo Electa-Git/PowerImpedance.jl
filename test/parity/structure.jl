@@ -277,18 +277,28 @@ function collect_oracles()
     return (; rows, labels, skipped, errors, stability_fixture)
 end
 
+# Frozen Setpoint powers are absorbed by induction machines and converter DC ports.
+const SETPOINT_POWER_SIGNS = (
+    InductionMachine = (ac = -1, dc = 1),
+    MMC = (ac = 1, dc = -1),
+    TLC = (ac = 1, dc = -1),
+)
+
 function record_operating_point!(rows, labels, name, state, point)
     for (element, values) in point.values
         # The frozen operating-point datasets omit sources.
         PI.is_source(state.elements[element]) && continue
+        signs = get(SETPOINT_POWER_SIGNS, nameof(typeof(state.elements[element])),
+            (ac = 1, dc = 1))
         fields = (;)
         if haskey(values, :ac)
             ac = values.ac
-            fields = (; Pac = ac.p, Qac = ac.q, Vac = ac.v, θac = ac.theta)
+            fields = (; Pac = signs.ac * ac.p, Qac = signs.ac * ac.q,
+                Vac = ac.v, θac = ac.theta)
         end
         if haskey(values, :dc)
             dc = values.dc
-            fields = merge(fields, (; Pdc = dc.p, Vdc = dc.v))
+            fields = merge(fields, (; Pdc = signs.dc * dc.p, Vdc = dc.v))
         end
         record!(rows, labels, "$name.op.$element", fields)
     end

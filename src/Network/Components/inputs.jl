@@ -47,7 +47,8 @@ const _CONVERTER_POWERFLOW_INPUTS = (
     p_ac = Input(0.0; unit = "pu", description = "AC active-power seed"),
     q_ac = Input(0.0; unit = "pu", description = "AC reactive-power seed"),
     v_ac = Input(1.0; unit = "pu", description = "AC-voltage power-flow seed"),
-    p_dc = Input(0.0; unit = "pu", description = "DC active-power seed"),
+    p_dc = Input(0.0; unit = "pu",
+        description = "DC power injected into the bus on the converter base"),
     v_dc = Input(1.0; unit = "pu", description = "DC-voltage power-flow seed"),
 )
 
@@ -211,6 +212,7 @@ Select converter power-flow targets from loop references and stored seeds.
 # Returns
 
 - NamedTuple `(p_ac, q_ac, v_ac, p_dc, v_dc)` on converter bases
-  \\[dimensionless\\]. Loop references replace owned quantities. `p_dc` uses its seed.
+  \\[dimensionless\\]. Loop references replace owned quantities. `p_dc` uses its seed
+  for power injected into the DC bus.
 """
 function powerflow_targets end

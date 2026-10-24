@@ -496,6 +496,11 @@ function convert!(data, model::Source, ::Type{PMACDC}, component_key,
 end
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Return source port values with powers injected into the bus.
+"""
 function transform(elemresult, busresult::NamedTuple, global_dict,
         model::Source, ::Type{PMACDC}, ::Type{PIACDC})
     return transform(elemresult, busresult, global_dict, model.domain, PMACDC, PIACDC)

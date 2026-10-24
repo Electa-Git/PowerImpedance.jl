@@ -300,6 +300,7 @@ $(TYPEDSIGNATURES)
 
 Convert physical terminal values to normalized external inputs and internal
 terminal data.
+Port powers are injected into the bus.
 
 # Arguments
 
@@ -1067,6 +1068,11 @@ function convert!(data, machine::SynchronousMachine, ::Type{PMACDC}, component_k
 end
 
 
+"""
+$(TYPEDSIGNATURES)
+
+Return AC port values with powers injected into the bus.
+"""
 function transform(elemresult, busresult::NamedTuple, global_dict,
         model::SynchronousMachine, ::Type{PMACDC}, ::Type{PIACDC})
 

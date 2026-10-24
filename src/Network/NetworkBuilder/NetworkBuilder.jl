@@ -199,7 +199,7 @@ function _configured_model(model::P.AbstractConverter, point, limits)
     targets = (p_ac = coalesce(point.Pac, current.p_ac * b.S) / b.S,
         q_ac = coalesce(point.Qac, current.q_ac * b.S) / b.S,
         v_ac = coalesce(point.Vac, current.v_ac * b.v_ac) / b.v_ac,
-        p_dc = coalesce(point.Pdc, current.p_dc * b.S) / b.S,
+        p_dc = -coalesce(point.Pdc, -current.p_dc * b.S) / b.S,
         v_dc = coalesce(point.Vdc, current.v_dc * b.v_dc) / b.v_dc)
     refs = (p_ref = targets.p_ac, q_ref = targets.q_ac,
         v_ac_ref = targets.v_ac, v_dc_ref = targets.v_dc)

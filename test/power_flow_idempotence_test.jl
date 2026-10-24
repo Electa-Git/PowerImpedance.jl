@@ -91,7 +91,7 @@ function consumer_values(net::NB.NetworkState, flow)
     nodes = sort!(collect(keys(model.indices.nodes)); by = n -> model.indices.nodes[n])
     # transitional
     setpoints = Dict(name => Setpoint(Pac = point.ac.p, Qac = point.ac.q,
-        Vac = point.ac.v, θac = point.ac.theta, Pdc = point.dc.p, Vdc = point.dc.v)
+        Vac = point.ac.v, θac = point.ac.theta, Pdc = -point.dc.p, Vdc = point.dc.v)
         for (name, point) in flow.operating_point.values
         if PI.is_converter(net.elements[name]))
     return (; converters, y, nodes, omega, setpoints)
@@ -327,7 +327,7 @@ function repeated_converter_power_flow(cases)
                         point = flow.operating_point[name]
                         @test two.setpoints[name] == Setpoint(Pac = point.ac.p,
                             Qac = point.ac.q, θac = point.ac.theta, Vac = point.ac.v,
-                            Pdc = point.dc.p, Vdc = point.dc.v)
+                            Pdc = -point.dc.p, Vdc = point.dc.v)
                     end
                 end
                 @test one.nodes == two.nodes

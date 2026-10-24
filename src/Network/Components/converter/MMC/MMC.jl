@@ -473,6 +473,7 @@ $(TYPEDSIGNATURES)
 
 Convert physical terminal values to normalized external inputs and internal
 terminal data.
+Port powers are injected into each bus. DC-to-AC inversion has `values.dc.p < 0`.
 
 # Arguments
 
@@ -495,7 +496,8 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
-power base. DC voltage is divided by the pole-to-pole DC base.
+power base, with DC power negated to get the power taken from the DC bus.
+DC voltage is divided by the pole-to-pole DC base.
 
 # Examples
 
@@ -507,7 +509,7 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 values = (ac = ACPortValues(380sqrt(2/3), 0.0, 100.0, 0.0),
-    dc = DCPortValues(640.0, 100.0))
+    dc = DCPortValues(640.0, -100.0))
 inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
@@ -516,7 +518,7 @@ function pftoinputs(c::MMC, values::NamedTuple)
     v_dc = values.dc.v / c.elec.vDC_base
     p_ac = values.ac.p / c.elec.Sbase
     q_ac = values.ac.q / c.elec.Sbase
-    p_dc = values.dc.p / c.elec.Sbase
+    p_dc = -values.dc.p / c.elec.Sbase
     
     vG_d = v_ac * cos(values.ac.theta)   # d component of the grid voltage in the grid frame
     vG_q = -v_ac * sin(values.ac.theta)  # q component of the grid voltage in the grid frame
@@ -930,7 +932,7 @@ function convert!(data, conv::MMC, ::Type{PMACDC}, component_key,
     p_ac = target.p_ac * b.S
     q_ac = target.q_ac * b.S
     v_ac = target.v_ac * b.v_ac
-    p_dc = target.p_dc * b.S
+    p_dc = -target.p_dc * b.S
     v_dc = target.v_dc * b.v_dc
     lm = limits(conv)
     ac_bus = ports.ac

@@ -1,7 +1,8 @@
 module TerminalValuesTests
 using Test, PowerImpedance
 const PI = PowerImpedance
-include("pscad/fixtures.jl")
+include("parity/fixtures.jl")
+using .ParityFixtures: PSCADFixtures
 
 @testset "Physical terminal values" begin
     ac = ACPortValues(2, 1//4, 3, 4f0)
@@ -22,6 +23,40 @@ include("pscad/fixtures.jl")
 end
 
 empty_cache(cache) = all(f -> getfield(cache, f) === nothing, fieldnames(typeof(cache)))
+
+@testset "Solved port powers and frozen Setpoint inputs" begin
+    path = joinpath(@__DIR__, "reference/v2/numeric.csv")
+    for (name, element) in ((:im, :im1), (:mmc_pq, :DUT), (:tlc_case1, :DUT))
+        @testset "$name" begin
+            fixture = only(filter(f -> f.name == name, ParityFixtures.FIXTURES))
+            network = fixture.build()
+            solved = compute(PowerFlowProblem(network), ACDCPowerFlow())
+            @test solved.result["termination_status"] == PI.MOI.LOCALLY_SOLVED
+            model = network.elements[element]
+            values = solved.operating_point[element]
+            prefix = "$name.op.$element."
+            fields = Dict(Symbol(split(line, ',')[1][length(prefix) + 1:end]) =>
+                parse(Float64, split(line, ',')[5]) for line in eachline(path)
+                if startswith(line, prefix))
+            frozen = Setpoint(; fields...)
+            if model isa PI.InductionMachine
+                @test values.ac.p === -frozen.Pac
+                @test values.ac.q === -frozen.Qac
+            else
+                @test values.dc.p === -frozen.Pdc
+            end
+            inputs, pu = PI.pftoinputs(model, values)
+            old_inputs, old_pu = PI.pftoinputs(model, frozen)
+            @test inputs === old_inputs
+            @test pu === old_pu
+            @test pu.p_ac === frozen.Pac / bases(model).S
+            @test pu.q_ac === frozen.Qac / bases(model).S
+            if model isa Union{MMC, TLC}
+                @test pu.p_dc === frozen.Pdc / bases(model).S
+            end
+        end
+    end
+end
 
 @testset "State-space terminal values and retained state" begin
     for (factory, name) in ((PSCADFixtures.mmc_pq_network, :DUT),

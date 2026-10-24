@@ -161,7 +161,13 @@ function P.compute(
     )
 end
 
-# Transforms output(output payload) from PMACDC to PIACDC
+"""
+$(TYPEDSIGNATURES)
+
+Return physical port values from a PowerModelsACDC solution.
+Powers are injected into each bus: `ac.p < 0` for an induction motor and
+`dc.p < 0` for a converter inverting from DC to AC.
+"""
 function transform(output, global_dict, bs::NetworkState,
         ::Type{P.PMACDC}, ::Type{P.PIACDC}, elempitopm)
     values = Dict{Symbol, NamedTuple}()

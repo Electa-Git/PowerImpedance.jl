@@ -18,6 +18,8 @@ _default_backend(formulation::Type) = get(_FORMULATION_BACKENDS, formulation, PI
 $(TYPEDEF)
 
 Store physical terminal values by element and port name.
+Port powers are injected into each bus. An induction machine running as a motor
+has `ac.p < 0`. A converter inverting from DC to AC has `dc.p < 0`.
 
 Each entry is a NamedTuple of `ACPortValues` or `DCPortValues`. Access values with
 `point[:c1].ac.p`, `point[:c1].dc.v`, or `get(point, :c1, nothing)`. `keys` returns

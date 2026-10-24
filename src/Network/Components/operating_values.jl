@@ -4,6 +4,7 @@ export ACPortValues, DCPortValues
 $(TYPEDEF)
 
 Store physical terminal values at an AC port. Powers are injected into the bus.
+An induction machine running as a motor has `p < 0`.
 Real arguments are converted to `Float64`. Use `NaN` for unknown reactive power.
 
 $(TYPEDFIELDS)
@@ -29,6 +30,7 @@ end
 $(TYPEDEF)
 
 Store physical terminal values at a DC port. Power is injected into the bus.
+A converter inverting from DC to AC has `p < 0`.
 Real arguments are converted to `Float64`.
 
 $(TYPEDFIELDS)
