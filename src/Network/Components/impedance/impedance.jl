@@ -256,3 +256,57 @@ function electricalconnections(model::Impedance)
 end
 
 bases(::Impedance) = nothing
+
+
+pmtype(model::Impedance, rows) = is_three_phase(model) ?
+    (any(row -> iszero(row.bus), rows) ? "shunt" : "branch") : "branchdc"
+
+function convert!(data, imp::Impedance, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+    key = component_key.index
+    buses = (ports.side1, ports.side2)
+
+    if component_key.pmtype == "shunt"
+        ac_bus = iszero(ports.side1) ? ports.side2 : ports.side1
+        shunt = Dict{String, Any}()
+        shunt["source_id"] = Any["bus", ac_bus]
+        shunt["index"] = key
+        shunt["shunt_bus"] = ac_bus
+        shunt["status"] = 1
+
+        abcd = eval_abcd(imp, global_dict["omega"] * 1im)
+        n = 3
+        z = abcd[1:n, (n+1):end][1, 1] / global_dict["Z"]
+        shunt["gs"] = real(1 / z)
+        shunt["bs"] = imag(1 / z)
+        data["shunt"][string(key)] = shunt
+        return nothing
+    elseif component_key.pmtype == "branch"
+        branch_ac!(data, key, buses, global_dict)
+        branch = data["branch"][string(key)]
+        branch["transformer"] = false
+        branch["tap"] = 1
+        branch["shift"] = 0
+        branch["c_rating_a"] = 1
+
+        abcd = eval_abcd(imp, global_dict["omega"] * 1im)
+        n = 3
+        z = abcd[1:n, (n+1):end][1, 1] / global_dict["Z"]
+        branch["br_r"] = real(z)
+        branch["br_x"] = imag(z)
+        branch["g_fr"] = 0
+        branch["b_fr"] = 0
+        branch["g_to"] = 0
+        branch["b_to"] = 0
+        return nothing
+    end
+    branch_dc!(data, key, buses, global_dict)
+    branchdc = data["branchdc"][string(key)]
+    abcd = eval_abcd(imp, 1e-6 * 1im)
+    z = abcd[1, 2] * global_dict["S"] / global_dict["V"]^2
+    # A one-terminal DC impedance is the pole-to-pole loop impedance of the differential
+    # model (`transformation_dc`). Each pole has impedance z/2. PowerModelsACDC's branchdc
+    # resistance is per pole (dcpol = 2).
+    branchdc["r"] = real(z) / 2
+    return nothing
+end

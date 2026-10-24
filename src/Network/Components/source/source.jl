@@ -410,3 +410,109 @@ inputs(::Source, ::ACABCDomain) = _AC_SOURCE_INPUTS
 inputs(::Source, ::DCDomain) = _DC_SOURCE_INPUTS
 
 bases(::Source) = nothing
+
+
+pmtype(model::Source, rows) = is_three_phase(model) ? "gen" : "gendc"
+
+function convert!(data, model::Source, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+    key = component_key.index
+    point = inputvalues(model)
+    lm = limits(model)
+    if component_key.pmtype == "gen"
+        ac_bus = ports.ac
+        key_str = string(key)
+        data["gen"][key_str] = Dict{String, Any}()
+        gen = data["gen"][key_str]
+        gen["mBase"] = global_dict["S"] / 1e6
+        gen["gen_bus"] = ac_bus
+        gen["pc1"] = 0
+        gen["pc2"] = 0
+        gen["qc1min"] = 0
+        gen["qc1max"] = 0
+        gen["qc2min"] = 0
+        gen["qc2max"] = 0
+        gen["ramp_agc"] = 0
+        gen["ramp_q"] = 0
+        gen["ramp_10"] = 0
+        gen["ramp_30"] = 0
+        gen["apf"] = 0
+        gen["startup"] = 0
+        gen["shutdown"] = 0
+        gen["gen_status"] = 1
+        gen["source_id"] = Any["gen", key]
+        gen["index"] = key
+
+        s_base = global_dict["S"] / 1e6
+        v_base = global_dict["V"] / 1e3
+        gen["pg"] = point.p / s_base
+        gen["qg"] = point.q / s_base
+        gen["pmin"] = lm.P_min / s_base
+        gen["pmax"] = lm.P_max / s_base
+        gen["qmin"] = lm.Q_min / s_base
+        gen["qmax"] = lm.Q_max / s_base
+        gen["vg"] = point.v / v_base/sqrt(2)
+        gen["model"] = 1
+        gen["cost"] = 0
+        gen["ncost"] = 0
+        set_bus = data["bus"][string(ac_bus)]
+        gen = data["gen"][string(key)]
+        set_bus["vmin"] = 0.9 * gen["vg"]
+        set_bus["vmax"] = 1.1 * gen["vg"]
+        set_bus["vm"] = gen["vg"]
+        data["bus"][string(ac_bus)] = set_bus_type(set_bus, 3)
+        return nothing
+    end
+    dc_bus = ports.dc
+    key_str = string(key)
+    data["gendc"][key_str] = Dict{String, Any}()
+    gendc = data["gendc"][key_str]
+    gendc["mBase"] = global_dict["S"] / 1e6
+    gendc["gen_bus"] = dc_bus
+    gendc["quadratic_cost"] = 0
+    gendc["linear_cost"] = 0
+    gendc["idle_cost"] = 0
+    gendc["control_type"] = 2
+    gendc["droop_const"] = 0
+    gendc["gen_status"] = 1
+    gendc["source_id"] = Any["gen", key]
+    gendc["index"] = key
+
+    s_base = global_dict["S"] / 1e6
+    v_base = global_dict["V"] / 1e3
+    gendc["pgdcset"] = point.p / s_base
+    gendc["pmin"] = lm.P_min / s_base
+    gendc["pmax"] = lm.P_max / s_base
+    gendc["vgdc"] = point.v / (data["dcpol"] * v_base)
+    gendc["model"] = 1
+    gendc["cost"] = 0
+    gendc["ncost"] = 0
+    busdc = data["busdc"][string(dc_bus)]
+    busdc["Vdc"] = model.V * 1e3 / (data["dcpol"] * global_dict["V"])
+    busdc["Vdcmax"] = 1.1 * busdc["Vdc"]
+    busdc["Vdcmin"] = 0.9 * busdc["Vdc"]
+    data["busdc"][string(dc_bus)] = set_bus_type_dc(busdc, 2)
+    return nothing
+end
+
+
+function transform(elemresult, busresult::NamedTuple, global_dict,
+        model::Source, ::Type{PMACDC}, ::Type{PIACDC})
+    return transform(elemresult, busresult, global_dict, model.domain, PMACDC, PIACDC)
+end
+
+function transform(elemresult, busresult, global_dict,
+        ::ACABCDomain, ::Type{PMACDC}, ::Type{PIACDC})
+    bus = busresult.ac
+    p = elemresult["pg"] * global_dict["S"] / 1e6
+    q = elemresult["qg"] * global_dict["S"] / 1e6
+    v = (bus["vm"] * global_dict["V"] / 1e3) * sqrt(2)
+    return (ac = ACPortValues(v, bus["va"], p, q),)
+end
+
+function transform(elemresult, busresult, global_dict,
+        ::DCDomain, ::Type{PMACDC}, ::Type{PIACDC})
+    p = elemresult["pgdc"] * global_dict["S"] / 1e6
+    v = busresult.dc["vm"] * (dcpol * global_dict["V"] / 1e3)
+    return (dc = DCPortValues(v, p),)
+end

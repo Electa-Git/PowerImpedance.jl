@@ -136,3 +136,7 @@ Return the port and terminal labels in the model's admittance row order.
 """
 admittance_order(model) = Tuple((name, terminal)
     for (name, port) in pairs(electricalconnections(model)) for terminal in port.terminals)
+
+
+islinear(::AbstractLinFreqDomain) = true
+islinear(::AbstractStateSpace) = false

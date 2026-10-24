@@ -2,6 +2,21 @@ module PSCADFixtures
 using PowerImpedance
 include("ieee9_network.jl")
 
+# transitional
+function builder_elements_and_rows(classic, state)
+    names = keys(state.elements)
+    elements = NamedTuple{names}(Tuple(deepcopy(classic.elements[name]) for name in names))
+    rows = map(collect(state.topology.connections)) do row
+        model = elements[row.component].element_model
+        side = findfirst(==(row.port), NetworkBuilder._legacy_port_names(model))
+        labels = row.frame == :dq ? (:d, :q) :
+            electricalconnections(model)[row.port].terminals
+        terminal = findfirst(==(row.terminal), labels)
+        (; node = row.net, element = row.component, side, terminal)
+    end
+    return elements, rows
+end
+
 # The 220 kV case from adm_IM_test.jl, with independent elements in each representation.
 function im_network(; elec = ElectricalIM(r_s = 0.01),
         mech = MechanicalIM(T_0 = 0.9, A = 0.0, B = 0.0, C = 1.0, m = 0))
@@ -150,9 +165,7 @@ function passive_ohl_network()
     tl1.symbol = :line
     tl1.pins = copy(classic.elements[:line].pins)
     classic.elements[:line] = tl1
-    elements = merge(state.elements, (; line = deepcopy(tl1)))
-    rows = [(; row.node, row.element, row.side, row.terminal)
-            for row in state.topology.connections]
+    elements, rows = builder_elements_and_rows(classic, state)
     builder = NetworkBuilder.define(elements, rows;
         options = (; voltageBase = 380 / sqrt(3)))
     return (; classic, state = builder)
@@ -191,9 +204,7 @@ function transformer_network(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
     winding.symbol = :line
     winding.pins = copy(classic.elements[:line].pins)
     classic.elements[:line] = winding
-    elements = merge(state.elements, (; line = deepcopy(winding)))
-    rows = [(; row.node, row.element, row.side, row.terminal)
-            for row in state.topology.connections]
+    elements, rows = builder_elements_and_rows(classic, state)
     builder = NetworkBuilder.define(elements, rows;
         options = (; voltageBase = 380 / sqrt(3)))
     return (; classic, state = builder)
@@ -280,9 +291,7 @@ function dc_cable_network()
     ugc.symbol = :line
     ugc.pins = copy(classic.elements[:line].pins)
     classic.elements[:line] = ugc
-    elements = merge(state.elements, (; line = deepcopy(ugc)))
-    rows = [(; row.node, row.element, row.side, row.terminal)
-            for row in state.topology.connections]
+    elements, rows = builder_elements_and_rows(classic, state)
     builder = NetworkBuilder.define(elements, rows; options = state.options)
     return (; classic, state = builder)
 end
@@ -464,7 +473,7 @@ function mmc_network(mode)
         # DVC saved project supplies current, not a stiff voltage (2565–2573).
         # Its Julia validation supplies that DC side with a remote PQ MMC and
         # 60 km cable: DC_Voltage_Control.jl:62–104,126–133.
-        remote = deepcopy(mmc_pq_network().state.elements.DUT)
+        remote = deepcopy(mmc_pq_network().classic.elements[:DUT])
         remote.setpoint = Setpoint(Pac = -608.3578, Qac = -200.0,
             Vac = 380sqrt(2 / 3), Vdc = 800 * 1.00009, Pdc = -608.3578)
         dc_cable = cable(length = 60e3, positions = [(-0.5, 1.0), (0.5, 1.0)],

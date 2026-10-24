@@ -21,15 +21,18 @@ end
 
 
 function tlc_qv_fixture()
-    state = PSCADFixtures.tlc_network(false).state
-    e = state.elements.DUT
+    fixture = PSCADFixtures.tlc_network(false)
+    e = fixture.classic.elements[:DUT]
     m = e.element_model
     converter = tlc(; m.elec, m.meas, m.sync, m.outerActive,
         outerReactive = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0),
             support = VoltageSupportLag(K = 5.0, ωc = 2.0)),
         m.innerVoltage, m.innerCurrent, m.mod, e.setpoint, e.limits)
-    rows = [(; r.node, r.element, r.side, r.terminal) for r in state.topology.connections]
-    return NB.define(merge(state.elements, (; DUT = converter)), rows; options = state.options)
+    converter.symbol, converter.pins = e.symbol, copy(e.pins)
+    fixture.classic.elements[:DUT] = converter
+    elements, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, fixture.state)
+    state = NB.define(elements, rows; options = fixture.state.options)
+    return (; fixture.classic, state)
 end
 
 function consumer_values(net)
@@ -58,6 +61,40 @@ function consumer_values(net)
     y, nodes, omega = make_y_node(net; freq_range = (1.0, 5000.0, 3))
     return (; converters, y, nodes, omega,
         setpoints = Dict(n => e.setpoint for (n, e) in pairs(net.elements)))
+end
+
+function consumer_values(net::NB.NetworkState, flow)
+    model = NB.NetworkModel(net, flow.operating_point)
+    converters = Dict()
+    for (name, m) in pairs(net.elements)
+        PI.is_converter(m) || continue
+        point = flow.operating_point[name]
+        inputs, sp = PI.pftoinputs(m, point)
+        seed = PI.orderedinitialvalues(m; inputs, setpoint_pu = sp)
+        parameters = (; inputs = collect(values(inputs)), sp, m)
+        f!(F, x, p) = PI._state_space!(F, x, p.inputs, p.sp, p.m, PI.Equil())
+        solution = PI.solve(
+            PI.NonlinearProblem(f!, collect(promote(values(seed)...)), parameters);
+            maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+        @test PI.SciMLBase.successful_retcode(solution)
+        residual = zeros(length(solution.u))
+        f!(residual, solution.u, parameters)
+        @test norm(residual, Inf) <= 1e-6
+        @test sp.q_ac == point.ac.q / m.elec.Sbase
+        converters[name] = (; state = copy(solution.u), A = copy(m.cache.A),
+            B = copy(m.cache.B), C = copy(m.cache.C), D = copy(m.cache.D),
+            y = NB.get_y(model, name, ComplexF64.(2π * im .* [1.0, 100.0, 5000.0])))
+    end
+    omega, s = NB._frequency_axis((1.0, 5000.0, 3))
+    y = NB.initY(model, s)
+    fill!(y, model.element_admittances[model.active_elements], s)
+    nodes = sort!(collect(keys(model.indices.nodes)); by = n -> model.indices.nodes[n])
+    # transitional
+    setpoints = Dict(name => Setpoint(Pac = point.ac.p, Qac = point.ac.q,
+        Vac = point.ac.v, θac = point.ac.theta, Pdc = point.dc.p, Vdc = point.dc.v)
+        for (name, point) in flow.operating_point.values
+        if PI.is_converter(net.elements[name]))
+    return (; converters, y, nodes, omega, setpoints)
 end
 
 function check_powerflow(one, two, tolerance, reactive_bounds = Dict())
@@ -121,16 +158,24 @@ end
 
 @testset "P2P builder repeated calls and exported setpoints" begin
     state = first(P2PExample.transition_network_space([0.0]))
-    declared = Dict(n => e.setpoint for (n, e) in pairs(state.elements))
+    declared = map(inputvalues, state.elements)
     one = compute(PowerFlowProblem(state), ACDCPowerFlow())
     two = compute(PowerFlowProblem(state), ACDCPowerFlow())
-    @test declared == Dict(n => e.setpoint for (n, e) in pairs(state.elements))
+    @test declared == map(inputvalues, state.elements)
     tolerance = constraint_tolerance(state.options)
     # A warm solve reoptimizes the converged point; compare using the same
     # physical tolerance as the converter repeats rather than exact rounding.
     check_powerflow(one.result["solution"], two.result["solution"], tolerance)
-    check_setpoints(one.operating_point.setpoints, two.operating_point.setpoints,
-        one.data, state.options.voltageBase, tolerance)
+    @test keys(one.operating_point) == keys(two.operating_point)
+    for name in keys(one.operating_point), port in keys(one.operating_point[name]),
+            field in propertynames(one.operating_point[name][port])
+        x = getproperty(one.operating_point[name][port], field)
+        y = getproperty(two.operating_point[name][port], field)
+        base = field in (:p, :q) ? one.data["baseMVA"] :
+            field === :v ? (port === :ac ? sqrt(2) : one.data["dcpol"]) *
+                state.options.voltageBase : 1.0
+        @test abs(x - y) / base <= tolerance
+    end
     a = PSC.netlist(state, one)
     b = PSC.netlist(state, two)
     @test keys(a.operating_point.branch_flows) == keys(b.operating_point.branch_flows)
@@ -241,20 +286,21 @@ function repeated_converter_power_flow(cases)
         for (label, factory) in cases, representation in (:classic, :builder)
 
             @testset "$label $representation" begin
-                state = factory()
+                fixture = factory()
+                state = fixture.state
                 tolerance = constraint_tolerance(state.options)
-                declared = Dict(n => e.setpoint for (n, e) in pairs(state.elements))
-                net = NB.build_network(state.elements, state.topology, state.options)
+                declared = map(inputvalues, state.elements)
+                net = representation === :classic ? fixture.classic : state
                 if representation === :classic
                     result, data, _, mapping = power_flow(net)
                 else
                     flow = compute(PowerFlowProblem(state), ACDCPowerFlow())
-                    NB._apply_operating_point!(net, flow.operating_point)
                     result, data = flow.result, flow.data
                     mapping = Dict(n => (m.pmtype, m.compkey)
                     for (n, m) in pairs(flow.elem2comp))
                 end
-                one = consumer_values(net)
+                one = representation === :classic ? consumer_values(net) :
+                    consumer_values(net, flow)
                 system_base = data["baseMVA"]
                 for (name, c) in one.converters
                     @test one.setpoints[name].Qac ==
@@ -267,20 +313,22 @@ function repeated_converter_power_flow(cases)
                     # Builder compute leaves its input definition unchanged. Reusing
                     # solved output setpoints would construct a different problem.
                     flow = compute(PowerFlowProblem(state), ACDCPowerFlow())
-                    NB._apply_operating_point!(net, flow.operating_point)
                     second = flow.result
                 end
-                two = consumer_values(net)
+                two = representation === :classic ? consumer_values(net) :
+                    consumer_values(net, flow)
                 bounds = label == "MMC Q-V" && representation === :classic ?
                          qv_reactive_bounds(result["solution"], second["solution"],
                     data, tolerance) : Dict()
                 check_powerflow(result["solution"], second["solution"], tolerance, bounds)
                 if representation === :builder
-                    @test declared ==
-                          Dict(n => e.setpoint for (n, e) in pairs(state.elements))
-                    @test flow.operating_point.setpoints ==
-                          Dict(n => two.setpoints[n]
-                    for n in keys(flow.operating_point.setpoints))
+                    @test declared == map(inputvalues, state.elements)
+                    for name in keys(two.setpoints)
+                        point = flow.operating_point[name]
+                        @test two.setpoints[name] == Setpoint(Pac = point.ac.p,
+                            Qac = point.ac.q, θac = point.ac.theta, Vac = point.ac.v,
+                            Pdc = point.dc.p, Vdc = point.dc.v)
+                    end
                 end
                 @test one.nodes == two.nodes
                 @test one.omega == two.omega
@@ -326,6 +374,12 @@ function repeated_converter_power_flow(cases)
                     PI.is_source(net.elements[name]) || continue
                     @test point === two.setpoints[name]
                 end
+                if representation === :builder
+                    for (name, model) in pairs(net.elements)
+                        PI.is_source(model) || continue
+                        @test inputvalues(model) == declared[name]
+                    end
+                end
             end
         end
     end
@@ -335,8 +389,8 @@ pscad_export_after_explicit_power_flow((
     () -> PSCADFixtures.mmc_pq_network().state,
     () -> PSCADFixtures.tlc_network(false).state))
 
-repeated_converter_power_flow((("MMC PQ", () -> PSCADFixtures.mmc_pq_network().state),
-    ("TLC PQ", () -> PSCADFixtures.tlc_network(false).state),
+repeated_converter_power_flow((("MMC PQ", PSCADFixtures.mmc_pq_network),
+    ("TLC PQ", () -> PSCADFixtures.tlc_network(false)),
     ("TLC Q-V", tlc_qv_fixture),
-    ("TLC Vdc", () -> PSCADFixtures.tlc_network(true).state)))
+    ("TLC Vdc", () -> PSCADFixtures.tlc_network(true))))
 end

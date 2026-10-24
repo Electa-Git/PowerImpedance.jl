@@ -104,29 +104,21 @@ end
 end
 
 @testset "DC droop off-nominal power-flow/dynamic operating point" begin
-    for kind in (:mmc, :tlc), representation in (:classic, :builder), K in (0.0, 5.0)
+    for kind in (:mmc, :tlc), K in (0.0, 5.0)
         state = droop_network(kind; K)
-        if representation === :classic
-            net = NB.build_network(state.elements, state.topology, state.options)
-            result, data, _, emap = power_flow(net)
-            e = net.elements[:DUT]
-            record = data["convdc"][string(last(emap[:DUT]))]
-        else
-            solved = NB.solve(state)
-            e = solved.network.elements[:DUT]
-            result = solved.powerflow.result
-            data = solved.powerflow.data
-            record = data["convdc"][string(solved.powerflow.elem2comp[:DUT].compkey)]
-        end
+        solved = NB.solve(state)
+        m = state.elements.DUT
+        point = solved.operating_point[:DUT]
+        result, data = solved.result, solved.data
+        record = data["convdc"][string(solved.elem2comp[:DUT].compkey)]
         solution = result["solution"]
         flow = solution["convdc"][string(record["index"])]
         vdc = solution["busdc"][string(record["busdc_i"])]["vm"]
         @test flow["pconv"] ≈ record["Pacset"] - (vdc - record["Vdcset"]) / record["droop"] atol=1e-6
-        @test abs(e.setpoint.Vdc - 640.0) > 30.0
-        @test e.setpoint.Vdc ≈ 2state.options.voltageBase * vdc
-        m = e.element_model
-        inputs, sp = PI.pftoinputs(m, e.setpoint)
-        vector = PI._steady_state(e)
+        @test abs(point.dc.v - 640.0) > 30.0
+        @test point.dc.v ≈ 2state.options.voltageBase * vdc
+        inputs, sp = PI.pftoinputs(m, point)
+        vector = PI.steady_state(m, point)
         x = NamedTuple{PI.statenames(m)}(Tuple(vector))
         F = zeros(length(vector))
         outputs = PI.state_space!(F, x, inputs, sp, m)
@@ -137,9 +129,9 @@ end
         @test x.ξ_vdc_supp == 0.0
         @test F[findfirst(==(:ξ_vdc_supp), PI.statenames(m))] == 0.0
         @test abs(outputs.meas.P_ac_f - sp.p_ac) <= 1e-6
-        @test sp.v_dc == e.setpoint.Vdc / 640.0
-        K > 0 && @test abs(e.setpoint.Pac - 50.0) > 30.0
-        println((; kind, representation, K, Vdc = e.setpoint.Vdc, Pac = e.setpoint.Pac, residual = norm(F, Inf)))
+        @test sp.v_dc == point.dc.v / 640.0
+        K > 0 && @test abs(point.ac.p - 50.0) > 30.0
+        println((; kind, K, Vdc = point.dc.v, Pac = point.ac.p, residual = norm(F, Inf)))
     end
 end
 

@@ -974,3 +974,110 @@ function _withinputs(model::SynchronousMachine, declarations::NamedTuple, change
         model, declarations, changes, path)
     return Parameters.reconstruct(configured; cache = LinearizationCache())
 end
+
+
+pmtype(::SynchronousMachine, rows) = "gen"
+
+function convert!(data, machine::SynchronousMachine, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+    key_branch = component_key.index
+    ac_bus = ports.ac
+    target = inputvalues(machine).powerflow
+    b = bases(machine)
+    point = (p = target.p * b.S, q = target.q * b.S, v = target.v * b.v_ac)
+    lm = limits(machine)
+    interm_bus = add_interm_bus_ac!(data, global_dict)
+
+
+
+    key_branch_str = string(key_branch)
+    data["gen"][key_branch_str] = Dict{String, Any}()
+    gen = data["gen"][key_branch_str]
+    gen["mBase"] = global_dict["S"] / 1e6
+    gen["gen_bus"] = interm_bus
+    gen["pc1"] = 0
+    gen["pc2"] = 0
+    gen["qc1min"] = 0
+    gen["qc1max"] = 0
+    gen["qc2min"] = 0
+    gen["qc2max"] = 0
+    gen["ramp_agc"] = 0
+    gen["ramp_q"] = 0
+    gen["ramp_10"] = 0
+    gen["ramp_30"] = 0
+    gen["apf"] = 0
+    gen["startup"] = 0
+    gen["shutdown"] = 0
+    gen["gen_status"] = 1
+    gen["source_id"] = Any["gen", key_branch]
+    gen["index"] = key_branch
+
+    s_base = global_dict["S"] / 1e6
+    v_base = global_dict["V"] / 1e3
+    gen["pg"] = point.p / s_base
+    gen["qg"] = point.q / s_base
+    gen["pmin"] = lm.P_min / s_base
+    gen["pmax"] = lm.P_max / s_base
+    gen["qmin"] = lm.Q_min / s_base
+    gen["qmax"] = lm.Q_max / s_base
+    gen["vg"] = point.v / v_base/sqrt(2)
+    gen["model"] = 1
+    gen["cost"] = 0
+    gen["ncost"] = 0
+
+    key_branch_str = string(key_branch)
+
+    data["branch"][key_branch_str] = Dict{String, Any}()
+    branch = data["branch"][key_branch_str]
+    branch["f_bus"] = interm_bus
+    branch["t_bus"] = ac_bus
+    branch["source_id"] = Any["branch", key_branch]
+    branch["index"] = key_branch
+    branch["rate_a"] = 1
+    branch["rate_b"] = 1
+    branch["rate_c"] = 1
+    branch["br_status"] = 1
+    branch["angmin"] = ang_min
+    branch["angmax"] = ang_max
+    branch["transformer"] = false
+    branch["tap"] = 1
+    branch["shift"] = 0
+    branch["c_rating_a"] = 1
+    branch["br_r"] = machine.elec.rt *
+        (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
+    branch["br_x"] = machine.elec.lt *
+        (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
+    branch["g_fr"] = 0
+    branch["b_fr"] = 0
+    branch["g_to"] = 0
+    branch["b_to"] = 0
+
+    bus = data["bus"][string(interm_bus)]
+    if isapprox(lm.P_max, point.p)
+        data["bus"][string(interm_bus)] = set_bus_type(bus, 1)
+    else
+        data["bus"][string(interm_bus)] = set_bus_type(bus, 2)
+    end
+
+    gen = data["gen"][key_branch_str]
+    data["bus"][string(interm_bus)]["vm"] = gen["vg"]
+    data["bus"][string(interm_bus)]["vmin"] = 0.9 * gen["vg"]
+    data["bus"][string(interm_bus)]["vmax"] = 1.1 * gen["vg"]
+    return nothing
+end
+
+
+function transform(elemresult, busresult::NamedTuple, global_dict,
+        model::SynchronousMachine, ::Type{PMACDC}, ::Type{PIACDC})
+
+    acbusresult = busresult.ac
+    Pgen = elemresult["pg"] * global_dict["S"] / 1e6 #MW
+    Qgen = elemresult["qg"] * global_dict["S"] / 1e6 #MVAr
+    Vm =
+        (acbusresult["vm"] *
+            # Convert the LN-RMS voltage coming from the PF to LN-PK
+            global_dict["V"] / 1e3) * sqrt(2)
+    θ = acbusresult["va"]
+
+    return (ac = ACPortValues(Vm, θ, Pgen, Qgen),)
+end

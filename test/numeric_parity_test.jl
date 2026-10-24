@@ -101,9 +101,9 @@ function parity_powerflow_numbers(powerflow, prefix)
             end
         end
     end
-    for field in fieldnames(Setpoint)
-        value = getfield(powerflow.operating_point[:sm1], field)
-        value isa Number || continue
+    point = powerflow.operating_point[:sm1].ac
+    for (field, value) in pairs((Pac = point.p, Qac = point.q, θac = point.theta,
+            Vac = point.v))
         numbers["$prefix.operating_point.sm1.$field"] = value
     end
     return numbers

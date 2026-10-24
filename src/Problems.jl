@@ -17,22 +17,26 @@ _default_backend(formulation::Type) = get(_FORMULATION_BACKENDS, formulation, PI
 """
 $(TYPEDEF)
 
-Store the steady-state quantities required to linearize active elements.
+Store physical terminal values by element and port name.
+
+Each entry is a NamedTuple of `ACPortValues` or `DCPortValues`. Access values with
+`point[:c1].ac.p`, `point[:c1].dc.v`, or `get(point, :c1, nothing)`. `keys` returns
+the element names, and `isempty` tests whether values are present.
 
 $(TYPEDFIELDS)
 """
 struct OperatingPoint
-    "Calculated steady-state values indexed by element name."
-    setpoints::Dict{Symbol, Setpoint}
+    "Calculated terminal values indexed by element and port name."
+    values::Dict{Symbol, NamedTuple}
 end
 
-OperatingPoint() = OperatingPoint(Dict{Symbol, Setpoint}())
-Base.getindex(point::OperatingPoint, element::Symbol) = point.setpoints[element]
+OperatingPoint() = OperatingPoint(Dict{Symbol, NamedTuple}())
+Base.getindex(point::OperatingPoint, element::Symbol) = point.values[element]
 function Base.get(point::OperatingPoint, element::Symbol, default)
-    get(point.setpoints, element, default)
+    get(point.values, element, default)
 end
-Base.keys(point::OperatingPoint) = keys(point.setpoints)
-Base.isempty(point::OperatingPoint) = isempty(point.setpoints)
+Base.keys(point::OperatingPoint) = keys(point.values)
+Base.isempty(point::OperatingPoint) = isempty(point.values)
 
 """
 $(TYPEDEF)
@@ -65,7 +69,7 @@ struct PowerFlowResult{F, R, D, N, E, G} <: AbstractProblemResult
 end
 
 function Base.getproperty(result::PowerFlowResult, field::Symbol)
-    field === :active_setpoint_values && return getfield(result, :operating_point).setpoints
+    field === :active_setpoint_values && return getfield(result, :operating_point).values
     return getfield(result, field)
 end
 

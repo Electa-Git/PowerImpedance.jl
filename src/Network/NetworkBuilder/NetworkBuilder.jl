@@ -19,7 +19,7 @@ using ..Grammar: LineParametersInput, EmpiricalSamples, MeasurementsSurrogate
 import ..Grammar: _axis, _direct_value, _gridspace_axis, _lift_gridspace, _materialize
 
 export NetworkState, NetworkTopology, AdmittanceLookup, NetworkLookup, NetworkModel
-export define, update!, solve
+export Bus, Net, define, update!, solve
 export PowerFlowProblem, ACDCPowerFlow, LinearizationProblem, AdmittanceLinearization
 export AbstractGrid, AbstractUncertainGrid, AbsoluteError, AbsoluteGrid
 export Configuration, DeterministicGrid, Grid, Gridspace, RelativeGrid, UncertainValue
@@ -57,16 +57,16 @@ end
 
 ### Import relevant files
 
-include("connections.jl")
+include("topology.jl")
 include("options.jl")
-include("legacy.jl")
+include("roles.jl")
 
 ##### Builder state
 
 """
 $(TYPEDEF)
 
-Store one materialized NetworkBuilder system with ordinary numeric elements,
+Store one materialized NetworkBuilder system with numeric component models,
 topology, and numerical options.
 
 Construct systems with [`define`](@ref) rather than calling this type directly.
@@ -74,9 +74,9 @@ Construct systems with [`define`](@ref) rather than calling this type directly.
 $(TYPEDFIELDS)
 """
 mutable struct NetworkState
-    "Materialized PowerImpedance elements indexed by name."
+    "Materialized component models indexed by name."
     elements::NamedTuple
-    "Node–element incidence relation."
+    "Net-component incidence relation."
     topology::NetworkTopology
     "Numerical and power-flow options."
     options::NamedTuple
@@ -98,27 +98,34 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Construct a [`NetworkState`](@ref) or a lazy space of network states from scalar and parametric elements.
+Construct a [`NetworkState`](@ref) or a lazy space of network states.
 
 # Arguments
 
-- `elements`: Named tuple of scalar elements and element Gridspaces.
-- `connections`: tuple or vector of named topology rows.
-- `options`: builder and power-flow options.
+- `elements`: Named tuple of component models or component Gridspaces.
+- `connections`: Tuple or vector of `Bus` and `Net` declarations.
+- `options`: Builder and power-flow options. Default: `(;)`.
+- `exclude`: Element names to omit, with an informational message. Default: `()`.
 
 # Returns
 
 - A `NetworkState` when every input is scalar.
 - A `Gridspace{NetworkState}` when an element or direct option is parametric.
+
+# Errors
+
+- Throws `ArgumentError` for invalid topology, an unreferenced included element, or
+  a model without NetworkBuilder power-flow support.
 """
 function define(
         elements::NamedTuple,
         connections::Union{Tuple, AbstractVector};
-        options = (;)
+        options = (;),
+        exclude = ()
 )
     inputs = (Tuple(values(elements))..., Tuple(values(options))...)
     style = _network_input_style(inputs)
-    return _define_network(style, elements, connections, options)
+    return _define_network(style, elements, connections, options, exclude)
 end
 
 _network_input_style(::Tuple{}) = Val(false)
@@ -126,24 +133,109 @@ _network_input_style(::Tuple{<:Union{AbstractGrid,Gridspace},Vararg}) = Val(true
 _network_input_style(inputs::Tuple) = _network_input_style(Base.tail(inputs))
 
 function _define_network(
-    ::Val{false},
-    elements::NamedTuple,
-    connections::Union{Tuple,AbstractVector},
-    options::NamedTuple,
+        ::Val{false},
+        elements::NamedTuple,
+        connections::Union{Tuple, AbstractVector},
+        options::NamedTuple,
+        exclude
 )
-    connected_names = Tuple(
-        name for name in keys(elements) if elements[name].connection
-    )
-    connected_elements = NamedTuple{connected_names}(
-        Tuple(elements[name] for name in connected_names),
-    )
-    nonconnectedid = setdiff(keys(elements), keys(connected_elements))
-    if !isempty(nonconnectedid)
-        @info "The following elements are not connected according to their definition and will be ignored: $(nonconnectedid). If you want to include them, set connection=true in their definition."
+    excluded = _excluded_names(elements, exclude)
+    isempty(excluded) || @info "Excluded elements: $excluded."
+    topology = NetworkTopology(elements, connections; exclude = excluded)
+    names = Tuple(name for name in keys(elements) if name ∉ excluded)
+    referenced = Set(topology.connections.component)
+    models = map(names) do name
+        name ∈ referenced ||
+            throw(ArgumentError("element :$name is not referenced by the topology"))
+        model = _element_call(name) do
+            _configured_model(elements[name])
+        end
+        _validate_builder_model(model, name)
+        model
     end
-    topology = NetworkTopology(elements, connections)
-    return NetworkState(connected_elements, topology, options)
+    return NetworkState(NamedTuple{names}(models), topology, options)
 end
+
+_configured_model(model::Union{P.AbstractElementModel, P.Blackbox_MMC}) = model
+_validate_builder_model(::P.AbstractElementModel, name) = nothing
+function _validate_builder_model(model::P.Blackbox_MMC, name)
+    throw(ArgumentError("element :$name ($(typeof(model))) has no NetworkBuilder " *
+        "power-flow or linearization support"))
+end
+
+# transitional
+function _configured_model(element::P.Element)
+    return _configured_model(element.element_model, element.setpoint, element.limits)
+end
+
+# transitional
+_configured_model(model::Union{P.AbstractElementModel, P.Blackbox_MMC}, point, limits) =
+    model
+
+# transitional
+function _configured_model(model::P.Source, point, limits)
+    return _configured_source(model, point, limits, model.domain)
+end
+
+# transitional
+function _configured_source(model, point, limits, ::P.ACABCDomain)
+    current = P.inputvalues(model)
+    return P.component(model; limits, v = coalesce(point.Vac, current.v),
+        theta = coalesce(point.θac, current.theta), p = coalesce(point.Pac, current.p),
+        q = coalesce(point.Qac, current.q))
+end
+
+# transitional
+function _configured_source(model, point, limits, ::P.DCDomain)
+    current = P.inputvalues(model)
+    return P.component(model; limits, v = coalesce(point.Vdc, current.v),
+        p = coalesce(point.Pdc, current.p))
+end
+
+# transitional
+function _configured_model(model::P.AbstractConverter, point, limits)
+    b = P.bases(model)
+    current = P.powerflow_targets(model)
+    targets = (p_ac = coalesce(point.Pac, current.p_ac * b.S) / b.S,
+        q_ac = coalesce(point.Qac, current.q_ac * b.S) / b.S,
+        v_ac = coalesce(point.Vac, current.v_ac * b.v_ac) / b.v_ac,
+        p_dc = coalesce(point.Pdc, current.p_dc * b.S) / b.S,
+        v_dc = coalesce(point.Vdc, current.v_dc * b.v_dc) / b.v_dc)
+    refs = (p_ref = targets.p_ac, q_ref = targets.q_ac,
+        v_ac_ref = targets.v_ac, v_dc_ref = targets.v_dc)
+    changes = _legacy_reference_inputs(model, P.inputs(model), refs)
+    seeds = Base.structdiff(targets, P._powerflow_references(model))
+    return P.component(model; limits, changes..., powerflow = seeds)
+end
+
+# transitional
+function _legacy_reference_inputs(block, declarations::NamedTuple, refs)
+    changes = (;)
+    for (key, declaration) in pairs(declarations)
+        value = _legacy_reference_input(getfield(block, key), declaration, key, refs)
+        value === nothing && continue
+        changes = merge(changes, NamedTuple{(key,)}((value,)))
+    end
+    return changes
+end
+
+# transitional
+_legacy_reference_input(value, ::P.Input, key, refs) = get(refs, key, nothing)
+function _legacy_reference_input(block, declarations::NamedTuple, key, refs)
+    changes = _legacy_reference_inputs(block, declarations, refs)
+    return isempty(changes) ? nothing : changes
+end
+
+# transitional
+function _configured_model(model::P.SynchronousMachine, point, limits)
+    b = P.bases(model)
+    current = P.inputvalues(model).powerflow
+    powerflow = (p = coalesce(point.Pac, current.p * b.S) / b.S,
+        q = coalesce(point.Qac, current.q * b.S) / b.S,
+        v = coalesce(point.Vac, current.v * b.v_ac) / b.v_ac)
+    return P.component(model; limits, powerflow)
+end
+
 
 """
 $(TYPEDSIGNATURES)
@@ -187,60 +279,18 @@ Build and solve one ordinary numeric NetworkBuilder system.
 
 # Returns
 
-- A named tuple containing `powerflow` and the constructed scalar `network`.
+- A `PowerFlowResult` with the solved per-port operating point.
 
-# Notes
-
-The `Gridspace{NetworkState}` overload applies this scalar pipeline to every
-deterministic case and numeric Monte Carlo trial.
 """
 function solve(builder::NetworkState)
-    return _solve(builder)
+    return P.compute(PowerFlowProblem(builder), ACDCPowerFlow())
 end
 
-function _apply_operating_point!(network::P.Network, point::P.OperatingPoint)
-    for (name, setpoint) in point.setpoints
-        haskey(network.elements, name) || throw(
-            ArgumentError("operating point references missing element :$name"),
-        )
-        element = network.elements[name]
-        if element.element_model isa P.AbstractStateSpace
-            P.update!(element, setpoint)
-        elseif P.is_converter(element)
-            P.update!(
-                element.element_model,
-                setpoint.Vac,
-                setpoint.θac,
-                setpoint.Pac,
-                setpoint.Qac,
-                setpoint.Vdc,
-                setpoint.Pdc
-            )
-            element.setpoint = setpoint
-        else
-            P.update!(element, setpoint)
-        end
-    end
-    return network
-end
-
-function _solve(builder::NetworkState)
-    network = build_network(builder.elements, builder.topology, builder.options)
-    if islinear(builder.elements)
-        @info "Network only consists of linear elements. Skipping power flow."
-        return (; powerflow = nothing, network)
-    end
-
-    powerflow = P.compute(PowerFlowProblem(builder), ACDCPowerFlow())
-    _apply_operating_point!(network, powerflow.operating_point)
-    return (; powerflow, network)
-end
-
-include("../../core/base.jl")
+include("model.jl")
 include("powerflow.jl")
-include("../../core/convert.jl")
-include("../Solvers/make_adm_NB.jl")
-include("../Solvers/determine_impedance_NB.jl")
+include("results.jl")
+include("../Solvers/admittance.jl")
+include("../Solvers/impedance.jl")
 include("uquant.jl")
 include("parametric.jl")
 include("small_signal.jl")

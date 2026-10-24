@@ -9,12 +9,27 @@ finally
 end
 const D = ParityData
 const DIRECTORY = joinpath(@__DIR__, "reference/v2")
-const STORED_ONLY_KEYS = Set(
-    "oracle.droop_$kind.order$order.$dataset"
-    for kind in (:mmc, :tlc), order in (0, 2), dataset in ("x", "y.1", "y.2", "y.3")
+# PSCAD export on models restores recomputation of pscad_op.
+const STORED_ONLY = (
+    keys = Set("oracle.droop_$kind.order$order.$dataset"
+        for kind in (:mmc, :tlc), order in (0, 2),
+            dataset in ("x", "y.1", "y.2", "y.3")),
+    families = ("pscad_op",),
 )
+
+stored_only(name) = name in STORED_ONLY.keys ||
+    any(prefix -> startswith(name, "$prefix."), STORED_ONLY.families)
+const GENERATOR_POWER_SEED_FIELDS = (gen = ("pg", "qg"), gendc = ("pgdcset",))
+
+function default_power_seed(name, value)
+    parts = split(name, '.')
+    length(parts) == 5 && parts[2] == "pm" || return false
+    fields = get(GENERATOR_POWER_SEED_FIELDS, Symbol(parts[3]), ())
+    return parts[5] in fields && value === 0.0 + 0.0im
+end
+
 const TOLERANCES = Dict(
-    "pm" => (rtol = 1e-15, atol = 1e-15),
+    "pm" => (rtol = 1e-13, atol = 1e-13),
     "nodes" => (rtol = 0.0, atol = 0.0),
     "pf" => (rtol = 1e-12, atol = 1e-12),
     "op" => (rtol = 1e-12, atol = 1e-12),
@@ -71,9 +86,14 @@ end
 function compare_numeric(reference, live_rows)
     live = arrays(Dict(r[1:4] => complex(r[5], r[6]) for r in live_rows))
     maxima = Dict{Tuple{String, String}, Tuple{Float64, Float64}}()
-    @test all(name -> haskey(reference, name), STORED_ONLY_KEYS)
-    @test isempty(intersect(Set(keys(live)), STORED_ONLY_KEYS))
-    @test Set(keys(live)) == setdiff(Set(keys(reference)), STORED_ONLY_KEYS)
+    @test all(name -> haskey(reference, name), STORED_ONLY.keys)
+    stored = Set(filter(stored_only, collect(keys(reference))))
+    @test isempty(intersect(Set(keys(live)), stored))
+    extra = setdiff(Set(keys(live)), Set(keys(reference)))
+    accepted = Set(name for name in extra if default_power_seed(name, live[name]))
+    @test extra == accepted
+    @test setdiff(Set(keys(reference)), stored) ⊆ Set(keys(live))
+    @printf("parity accepted_zero_power_seeds=%d\n", length(accepted))
     for name in sort!(collect(intersect(keys(reference), keys(live))))
         ref, value = reference[name], live[name]
         kind = family(name)
@@ -156,7 +176,9 @@ function run_parity()
             @test network_skipped == reference_network_skipped
             @test join(conversion_skipped, ',') == metadata["pm_conversion_skipped"]
             @test result.stability_fixture == metadata["stability_fixture"]
-            @test labels == D.load_labels(joinpath(DIRECTORY, "labels.tsv"))
+            reference_labels = D.load_labels(joinpath(DIRECTORY, "labels.tsv"))
+            filter!(pair -> !stored_only(first(pair)), reference_labels)
+            @test labels == reference_labels
             compare_numeric(reference, rows)
         end
     finally

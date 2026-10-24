@@ -49,7 +49,13 @@ end
             PI.JuMP.all_variables(pm.model))
         # Changing the power target must still change the solved power.
         element = network.elements[:DUT]
-        element.setpoint = Setpoint(element.setpoint; Pac = 60.0, Qac = 15.0)
+        if representation === :classic
+            element.setpoint = Setpoint(element.setpoint; Pac = 60.0, Qac = 15.0)
+        else
+            network.elements = merge(network.elements, (; DUT = withinputs(element;
+                outerActive = (p_ref = 60.0 / bases(element).S,),
+                outerReactive = (q_ref = 15.0 / bases(element).S,))))
+        end
         second_result = flow()
         converter = only(values(second_result["solution"]["convdc"]))
         @test second_result["termination_status"] == PI.MOI.LOCALLY_SOLVED
@@ -97,12 +103,12 @@ end
     @test !isempty(start.primal)
     snapshot = deepcopy(start.topology)
     connections = state.topology.connections
-    for i in eachindex(connections.element)
-        connections.element[i] === :machine || continue
-        source_row = only(findall(j -> connections.element[j] === :source &&
+    for i in eachindex(connections.component)
+        connections.component[i] === :machine || continue
+        source_row = only(findall(j -> connections.component[j] === :source &&
             connections.terminal[j] == connections.terminal[i],
-            eachindex(connections.element)))
-        connections.node[i] = connections.node[source_row]
+            eachindex(connections.component)))
+        connections.net[i] = connections.net[source_row]
         connections.bus[i] = connections.bus[source_row]
     end
     changed, _, mapping = convert(state, PI.PMACDC)

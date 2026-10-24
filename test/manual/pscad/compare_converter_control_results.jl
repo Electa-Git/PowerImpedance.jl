@@ -37,7 +37,7 @@ end
 function compare_case(name, network)
     println("Reading ", name)
     flush(stdout)
-    pf = network isa Network ? power_flow(network) : NetworkBuilder.solve(network).powerflow
+    pf = network isa Network ? power_flow(network) : NetworkBuilder.solve(network)
     list = P.netlist(network, pf)
     mmc = startswith(name, "mmc_")
     ramp = name == "mmc_pq_default_ramp" || startswith(name, "tlc_vac") ?

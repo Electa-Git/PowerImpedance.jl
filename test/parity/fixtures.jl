@@ -2274,13 +2274,16 @@ converter_topology = NetworkTopology(converter_elements, converter_connections);
 converter_topology.connections
 
 function build()
-    return NetworkBuilder.define(converter_elements, converter_connections)
+    # transitional
+    models = map(NetworkBuilder._configured_model, converter_elements)
+    return NetworkBuilder.NetworkState(models, converter_topology, (;))
 end
 
 end
 
-function replace_model(state, name; replacements...)
-    element = state.elements[name]
+function replace_model(fixture, name; replacements...)
+    state = fixture.state
+    element = fixture.classic.elements[name]
     model = element.element_model
     fields = merge(
         NamedTuple{fieldnames(typeof(model))}(
@@ -2294,33 +2297,32 @@ function replace_model(state, name; replacements...)
         element_model = replacement, setpoint = deepcopy(element.setpoint),
         limits = deepcopy(element.limits), transformation = element.transformation,
         connection = element.connection)
-    elements = merge(state.elements, NamedTuple{(name,)}((updated,)))
-    rows = [(; r.node, r.element, r.side, r.terminal)
-            for r in state.topology.connections]
+    elements, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, state)
+    elements = merge(elements, NamedTuple{(name,)}((updated,)))
     return NB.define(elements, rows; options = state.options)
 end
 
 function no_control()
-    state = PSCADFixtures.mmc_pq_network().state
+    fixture = PSCADFixtures.mmc_pq_network()
     sigma = PI.ΣdqzControlTEC(tec = PI.NoTotalEnergyControl(),
         zscc = PI.NoZeroSequenceCurrentControl(),
         ccsc = PI.NoCirculatingCurrentSuppressionControl())
-    return replace_model(state, :DUT; sigma_control = sigma)
+    return replace_model(fixture, :DUT; sigma_control = sigma)
 end
 
 function filter_fixture(kind)
-    state = PSCADFixtures.mmc_pq_network().state
-    meas = state.elements.DUT.element_model.meas
+    fixture = PSCADFixtures.mmc_pq_network()
+    meas = fixture.classic.elements[:DUT].element_model.meas
     fields = NamedTuple{fieldnames(typeof(meas))}(
         Tuple(getfield(meas, f) for f in fieldnames(typeof(meas))))
     fields = merge(fields, (;
         v_dc = PI.MeasurementSignal(:v_dc,
         kind(order = 2, ωc = 100π))))
-    return replace_model(state, :DUT; meas = PI.Measurement(values(fields)...))
+    return replace_model(fixture, :DUT; meas = PI.Measurement(values(fields)...))
 end
 
 function modulation_fixture(block)
-    return replace_model(PSCADFixtures.tlc_case1_network().state, :DUT; mod = block)
+    return replace_model(PSCADFixtures.tlc_case1_network(), :DUT; mod = block)
 end
 
 function probes(state; elim_elements = Symbol[], abcd_elements = Symbol[], pscad = true)
@@ -2334,12 +2336,12 @@ function probes(state; elim_elements = Symbol[], abcd_elements = Symbol[], pscad
             push!(active, name)
         end
     end
-    source_nets = Set(row.node for row in rows if row.element in sources)
-    nets = unique(row.node for row in rows if row.bus != 0 && row.node ∉ source_nets)
+    source_nets = Set(row.net for row in rows if row.component in sources)
+    nets = unique(row.net for row in rows if row.bus != 0 && row.net ∉ source_nets)
     if length(nets) > 12
         retained = Set(nets)
-        nets = unique(row.node for row in rows if row.node in retained &&
-                      row.element in active)
+        nets = unique(row.net for row in rows if row.net in retained &&
+                      row.component in active)
         nets = nets[1:min(12, length(nets))]
     end
     return (; nets = collect(nets), elim_elements, abcd_elements, pscad)

@@ -6,7 +6,8 @@ include("pscad/fixtures.jl")
 function voltage_fixture(reactive)
     fixture=PSCADFixtures.mmc_pq_network()
     state=fixture.state
-    e=deepcopy(state.elements.DUT)
+    original, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, state)
+    e=deepcopy(original.DUT)
     m=e.element_model
     e=PI.mmc(; m.elec, m.meas, m.sync, m.sigma_control, m.modulation,
         delta_control = PI.ΔdqControlGFL(outer_active = m.delta_control.outer_active,
@@ -15,9 +16,9 @@ function voltage_fixture(reactive)
         Pac = 600.0, Qac = 200.0, Vac = 1.01*380sqrt(2/3), θac = 0.0,
         Vdc = 800.0, Pdc = 600.0)
     branch=impedance(z = s->0.19+s*0.0122, pins = 3, transformation = true)
-    elements=merge(state.elements, (; DUT = e, branch))
+    elements=merge(original, (; DUT = e, branch))
     rows=[(; node = r.element==:G_AC ? Symbol("source_", r.terminal) : r.node,
-              r.element, r.side, r.terminal) for r in state.topology.connections]
+              r.element, r.side, r.terminal) for r in rows]
     append!(rows, [(node = Symbol("source_", t), element = :branch, side = 1, terminal = t)
                    for t in 1:2])
     append!(rows,
@@ -26,9 +27,8 @@ function voltage_fixture(reactive)
     return PI.NetworkBuilder.define(elements, rows; options = state.options)
 end
 
-function equilibrium(element)
-    m=element.element_model
-    inputs, sp=PI.pftoinputs(m, element.setpoint)
+function equilibrium(m, terminal_values)
+    inputs, sp=PI.pftoinputs(m, terminal_values)
     seed=PI.orderedinitialvalues(m; inputs, setpoint_pu = sp)
     f!(F, x, p) = PI._state_space!(F, x, p.inputs, p.sp, p.m, PI.Equil())
     p=(; inputs = collect(values(inputs)), sp, m)
@@ -39,19 +39,21 @@ function equilibrium(element)
     return sol, F, inputs, sp
 end
 
-function vac_grid(state, converter)
+function vac_grid(fixture, converter)
+    state = fixture.state
+    elements, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, state)
     # Keep the original plant and give VAC a separate converter bus. This is
     # the 0.1 H grid reactor used by PSCADFixtures.tlc_vac_network.
     grid = impedance(z = s -> 0.1s, pins = 3, transformation = true)
     rows = [(; node = r.element == :G3 ? Symbol("Grid" * string(r.terminal)) : r.node,
-                r.element, r.side, r.terminal) for r in state.topology.connections]
+                r.element, r.side, r.terminal) for r in rows]
     append!(rows, [(node = Symbol("Grid" * string(t)),
                        element = :Grid, side = 1, terminal = t)
                    for t in 1:2])
     append!(rows,
         [(node = Symbol("AC" * axis), element = :Grid, side = 2, terminal = t)
          for (t, axis) in enumerate(("d", "q"))])
-    return NB.define(merge(state.elements, (; DUT = converter, Grid = grid)), rows;
+    return NB.define(merge(elements, (; DUT = converter, Grid = grid)), rows;
         options = state.options)
 end
 
@@ -61,11 +63,13 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
         OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159),
         support = VoltageSupportLag(K = 20.0, ωc = 100.0)))
         state=voltage_fixture(reactive)
-        model=state.elements.DUT.element_model
+        model=state.elements.DUT
         @test model.elec.turnsRatio != 1.0
         @test PI.pf_type_ac(PI.ΔdqControlGFM(outer_reactive = reactive,
             vi = PI.CCVI(), occ = model.delta_control.occ))==2
-        inputs, sp=PI.pftoinputs(model, state.elements.DUT.setpoint)
+        declared = (ac = ACPortValues(1.01*380sqrt(2/3), 0.0, 600.0, 200.0),
+            dc = DCPortValues(800.0, 600.0))
+        inputs, sp=PI.pftoinputs(model, declared)
         signals=PI.input_signals(
             model, (;
                 Δθ_pll = 0.0, iΔ_d = 0.0, iΔ_q = 0.0, iΣ_z = 0.0), inputs)
@@ -80,7 +84,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
         bus=data["bus"][string(c["busac_i"])]
         @test c["type_ac"]==2
         @test bus["bus_type"]==2
-        @test c["Vtar"]==(state.elements.DUT.setpoint.Vac/sqrt(2))/(bases["V"]/1e3)
+        @test c["Vtar"]==(declared.ac.v/sqrt(2))/(bases["V"]/1e3)
         @test bus["vm"]==c["Vtar"]
         @test c["acq_droop"]==(reactive isa OuterReactiveVacControl ? 0 : 1)
         @test c["kq_droop"]==(reactive isa OuterReactiveVacControl ? 0.0 :
@@ -88,42 +92,36 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
         alternate_bases=PI.PowerModelsACDC._get_pu_bases(250.0, state.options.voltageBase)
         alternate_bases["omega"]=100π
         alternate=deepcopy(data)
-        PI.convert!(alternate, state.elements.DUT, PI.PMACDC, c["index"],
-            (c["busac_i"], c["busdc_i"]), alternate_bases)
+        PI.convert!(alternate, model, PI.PMACDC,
+            (; name = :DUT, index = c["index"], pmtype = "convdc"),
+            (ac = c["busac_i"], dc = c["busdc_i"]), alternate_bases)
         @test alternate["convdc"][string(c["index"])]["kq_droop"]==(reactive isa
                                                                     OuterReactiveVacControl ?
                                                                     0.0 :
                                                                     4.0*reactive.support.K)
-        for representation in (:builder, :classic)
-            if representation==:builder
-                solved=NB.solve(state)
-                element=solved.network.elements[:DUT]
-                solution=solved.powerflow.result["solution"]
-                record=solved.powerflow.data["convdc"][string(solved.powerflow.elem2comp[:DUT].compkey)]
-            else
-                network=NB.build_network(state.elements, state.topology, state.options)
-                result, pfdata, _, emap=PI.power_flow(network)
-                element=network.elements[:DUT]
-                solution=result["solution"]
-                record=pfdata["convdc"][string(last(emap[:DUT]))]
-            end
-            sol, F, inputs, sp=equilibrium(element)
-            @test PI.SciMLBase.successful_retcode(sol)
-            @test norm(F, Inf)<=1e-6 # The existing converter equilibrium tolerance.
-            @test element.setpoint.Vac≈sqrt(2)*state.options.voltageBase*solution["bus"][string(record["busac_i"])]["vm"]
-            x=NamedTuple{PI.statenames(model)}(Tuple(sol.u[1:PI.n_states(model)]))
-            signals=PI.input_signals(model, x, inputs)
-            measured=PI.state_space!(zeros(PI.n_states(model.meas)), x, signals,
-                model.meas, model)
-            @test abs(measured.P_ac_f-sp.p_ac)<=1e-6
-            @test abs(measured.Q_ac_f-sp.q_ac)<=1e-6
-            if reactive isa OuterReactiveQControl
-                flow=solution["convdc"][string(record["index"])]
-                vm=solution["bus"][string(record["busac_i"])]["vm"]
-                # PowerModelsACDC 0.10.1 formconv/acp.jl:154-159:
-                # qgrid = -Q_g - kq_droop*(Vtar-vm).
-                @test flow["qgrid"]≈-record["Q_g"]-record["kq_droop"]*(record["Vtar"]-vm) atol=1e-6
-            end
+        solved=NB.solve(state)
+        element=state.elements.DUT
+        solution=solved.result["solution"]
+        record=solved.data["convdc"][string(solved.elem2comp[:DUT].compkey)]
+        values=solved.operating_point[:DUT]
+        sol, F, inputs, sp=equilibrium(element, values)
+        @test PI.SciMLBase.successful_retcode(sol)
+        @test norm(F, Inf)<=1e-6 # The existing converter equilibrium tolerance.
+        @test values.ac.v≈sqrt(2)*state.options.voltageBase*
+            solution["bus"][string(record["busac_i"])]["vm"]
+        x=NamedTuple{PI.statenames(model)}(Tuple(sol.u[1:PI.n_states(model)]))
+        signals=PI.input_signals(model, x, inputs)
+        measured=PI.state_space!(zeros(PI.n_states(model.meas)), x, signals,
+            model.meas, model)
+        @test abs(measured.P_ac_f-sp.p_ac)<=1e-6
+        @test abs(measured.Q_ac_f-sp.q_ac)<=1e-6
+        if reactive isa OuterReactiveQControl
+            flow=solution["convdc"][string(record["index"])]
+            vm=solution["bus"][string(record["busac_i"])]["vm"]
+            # PowerModelsACDC 0.10.1 formconv/acp.jl:154-159:
+            # qgrid = -Q_g - kq_droop*(Vtar-vm).
+            @test flow["qgrid"]≈
+                -record["Q_g"]-record["kq_droop"]*(record["Vtar"]-vm) atol=1e-6
         end
     end
     @testset "TLC shared semantics and unchanged arithmetic" begin
@@ -134,16 +132,15 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             support = VoltageSupportLag(K = 5.0, ωc = 2.0)))
             fixture=PSCADFixtures.tlc_network(false)
             state=fixture.state
-            e=deepcopy(state.elements.DUT)
+            elements, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, state)
+            e=deepcopy(elements.DUT)
             m=e.element_model
             e=PI.tlc(elec = m.elec, meas = m.meas, sync = m.sync,
                 outerActive = m.outerActive, outerReactive = reactive,
                 innerVoltage = m.innerVoltage, innerCurrent = m.innerCurrent,
                 mod = m.mod, setpoint = e.setpoint, limits = e.limits)
-            rows=[(; r.node, r.element, r.side, r.terminal)
-                  for r in state.topology.connections]
-            state=reactive isa OuterReactiveVacControl ? vac_grid(state, e) :
-                  NB.define(merge(state.elements, (; DUT = e)), rows; options = state.options)
+            state=reactive isa OuterReactiveVacControl ? vac_grid(fixture, e) :
+                  NB.define(merge(elements, (; DUT = e)), rows; options = state.options)
             data, bases, mapping=convert(state, PI.PMACDC)
             c=data["convdc"][string(mapping[:DUT].compkey)]
             controlled=reactive isa OuterReactiveVacControl ||
@@ -189,21 +186,22 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
     end
     @testset "TLC VAC operating points with P and Vdc control" begin
         for vdc_control in (false, true)
-            state = PSCADFixtures.tlc_network(vdc_control).state
-            original = state.elements.DUT
+            fixture = PSCADFixtures.tlc_network(vdc_control)
+            state = fixture.state
+            original = fixture.classic.elements[:DUT]
             m = original.element_model
             element = PI.tlc(elec = m.elec, meas = m.meas, sync = m.sync,
                 outerActive = m.outerActive,
                 outerReactive = OuterReactiveVacControl(pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0)),
                 innerVoltage = m.innerVoltage, innerCurrent = m.innerCurrent,
                 mod = m.mod, setpoint = original.setpoint, limits = original.limits)
-            state = vac_grid(state, element)
+            state = vac_grid(fixture, element)
             solved = NB.solve(state)
-            element = solved.network.elements[:DUT]
-            sol, F, inputs, sp = equilibrium(element)
+            element = state.elements.DUT
+            sol, F, inputs, sp = equilibrium(element, solved.operating_point[:DUT])
             @test PI.SciMLBase.successful_retcode(sol)
             @test norm(F, Inf) <= 1e-6
-            m = element.element_model
+            m = element
             x = NamedTuple{PI.statenames(m)}(Tuple(sol.u[1:PI.n_states(m)]))
             signals = PI.input_signals(m, x, inputs)
             measured = PI.state_space!(zeros(PI.n_states(m.meas)), x, signals, m.meas, m)
@@ -214,7 +212,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             for p in NB.powerflow_optimizer(state.options).params
             if p.first == PI.JuMP.MOI.RawOptimizerAttribute("constr_viol_tol"))
             power_tolerance = vdc_control ?
-                              tolerance * solved.powerflow.data["baseMVA"] / m.elec.Sbase :
+                              tolerance * solved.data["baseMVA"] / m.elec.Sbase :
                               1e-6
             @test abs(measured.P_ac_f - sp.p_ac) <= power_tolerance
             @test abs(measured.Q_ac_f - sp.q_ac) <= 1e-6
@@ -222,7 +220,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
     end
     @testset "MMC without voltage support" begin
         fixture=PSCADFixtures.mmc_pq_network()
-        model=fixture.state.elements.DUT.element_model
+        model=fixture.state.elements.DUT
         reactive=model.delta_control.outer_reactive
         F=zeros(1)
         sp=PI.SetpointPU(v_ac = 1.2, q_ac = -0.217)

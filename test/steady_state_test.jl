@@ -46,8 +46,8 @@ PI.outputequations!(F, x, inputs, y, ::RecordedState) = (F[1] = y.y)
     state[1] = -10.0
     @test PI._steady_state(element) == [1.25]
 
-    # The matrix-returning update used by builder linearization also retains
-    # its solved state, without changing the element's declared setpoint.
+    # The matrix-returning update retains its solved state without changing
+    # the element's declared setpoint.
     PI.update(element, second_point)
     @test isequal(element.setpoint, first_point)
     @test PI._steady_state(element) == [1.5]
@@ -85,13 +85,14 @@ end
             PSCADFixtures.mmc_qv_network, PSCADFixtures.mmc_vac_network)
         fixture = factory()
         pf = power_flow(fixture.classic)
-        classic = P.netlist(fixture.classic, pf)
+        # transitional
+        classic = [(; name, element, model = element.element_model,
+            setpoint = element.setpoint) for (name, element) in fixture.classic.elements]
         solved = NB.solve(fixture.state)
-        elements = NamedTuple{keys(fixture.state.elements)}(
-            Tuple(solved.network.elements[name] for name in keys(fixture.state.elements)))
-        builder = P.netlist(fixture.state, solved.powerflow, elements)
-        @test [e.name for e in builder.elements] == collect(keys(fixture.state.elements))
-        for list in (classic, builder), e in list.elements
+        builder = NB.NetworkModel(fixture.state, solved.operating_point)
+        @test Set(keys(builder.indices.elements)) == Set(name
+            for (name, model) in pairs(fixture.state.elements) if !PI.is_source(model))
+        for e in classic
             e.model isa Union{PI.MMC, PI.TLC} || continue
             saved = e.element._equilibrium
             @test saved !== nothing
@@ -105,16 +106,33 @@ end
             PI._state_space!(residual, vector, collect(values(equilibrium.inputs)),
                 equilibrium.setpoint_pu, e.model, PI.Equil())
             @test maximum(abs, residual) <= 1e-6
-            if list === builder
-                @test e.element === solved.network.elements[e.name]
-                @test e.element !== fixture.state.elements[e.name]
-                @test fixture.state.elements[e.name]._equilibrium === nothing
-            end
         end
-        # A direct netlist of declared builder elements has no stored solve;
-        # the accessor obtains it once through the core and then reuses it.
-        declared = P.netlist(fixture.state, solved.powerflow)
-        converter = first(e for e in declared.elements if e.model isa Union{PI.MMC, PI.TLC})
+        for (name, model) in pairs(fixture.state.elements)
+            PI.is_converter(model) || continue
+            point = solved.operating_point[name]
+            saved = model.cache.state
+            @test saved !== nothing
+            vector = steady_state(model, point)
+            @test isequal(vector, saved)
+            @test model.cache.state === saved
+            @test isequal(steady_state(model, point), vector)
+            @test model.cache.state === saved
+            inputs, sp = PI.pftoinputs(model, point)
+            residual = zeros(length(vector))
+            PI._state_space!(residual, vector, collect(values(inputs)), sp,
+                model, PI.Equil())
+            @test maximum(abs, residual) <= 1e-6
+            @test model === fixture.state.elements[name]
+            @test model !== fixture.classic.elements[name].element_model
+            @test fixture.classic.elements[name]._equilibrium !== nothing
+        end
+        # The accessor obtains a fresh element's state once and then reuses it.
+        # transitional
+        name = first(name for (name, model) in pairs(fixture.state.elements)
+            if PI.is_converter(model))
+        element = factory().classic.elements[name]
+        converter = (; name, element, model = element.element_model,
+            setpoint = fixture.classic.elements[name].setpoint)
         @test converter.element._equilibrium === nothing
         initial = P.converter_equilibrium(converter)
         saved = converter.element._equilibrium

@@ -11,9 +11,8 @@ function network()
         groundwires = Groundwires(nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
             Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0),
         earth_parameters = (1, 1, 100), transformation = true)
-    rows = [(; row.node, row.element, row.side, row.terminal)
-        for row in state.topology.connections]
-    return PowerImpedance.NetworkBuilder.define(merge(state.elements, (; line)),
+    elements, rows = PSCADFixtures.builder_elements_and_rows(classic, state)
+    return PowerImpedance.NetworkBuilder.define(merge(elements, (; line)),
         rows; options = state.options)
 end
 

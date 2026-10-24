@@ -99,7 +99,7 @@ end
     networks = @inferred NB.define((; varying, fixed), mixed_connections)
     @test networks isa Gridspace{NB.NetworkState}
     @test length(networks) == 2
-    @test all(network -> network.elements.fixed === fixed, networks)
+    @test all(network -> network.elements.fixed === fixed.element_model, networks)
     @test @inferred(PowerFlowProblem(networks)) isa
           Gridspace{PowerFlowProblem{NB.NetworkState}}
 

@@ -198,8 +198,7 @@ function circuit(windings; voltage_base = 120.0, source_voltage = voltage_base,
         push!(rows, (; node = :gnd, element = :load, side = 2, terminal))
     end
     state = NB.define(deepcopy(elements), rows; options = (; voltageBase = voltage_base))
-    network = NB.build_network(state.elements, state.topology, state.options)
-    return network, state
+    return state, (; elements, rows)
 end
 
 bounds(data, bus) = (data["bus"][string(bus)]["vmin"], data["bus"][string(bus)]["vmax"])
@@ -217,16 +216,15 @@ bounds(data, bus) = (data["bus"][string(bus)]["vmin"], data["bus"][string(bus)][
         (:Rₘ, 481333.3333333334), (:Lₘ, 140.2539753949343))
         @test getproperty(tested.element_model, field) ≈ expected rtol = 1e-12
     end
-    network, state = circuit((; winding = tested); voltage_base = primary / 1e3)
-    result, data, _, mapping = power_flow(network)
+    state, original = circuit((; winding = tested); voltage_base = primary / 1e3)
+    data, _, mapping = convert(state, P.PMACDC)
+    result = NB.solve_acdcpf(data, P._PM.ACPPowerModel,
+        NB.powerflow_optimizer(state.options), NB.is_bounded_options(state.options);
+        setting = NB.powerflow_setting(state.options))
     @test result["termination_status"] == P.MOI.LOCALLY_SOLVED
-    branch = data["branch"][string(last(mapping[:winding]))]
+    branch = data["branch"][string(mapping[:winding].compkey)]
     @test collect(bounds(data, branch["f_bus"])) ≈ [0.9, 1.1]
     @test collect(bounds(data, branch["t_bus"])) ≈ [0.9, 1.1] .* (150 / 380)
-    builder_data, _, builder_mapping = convert(state, P.PMACDC)
-    builder_branch = builder_data["branch"][string(builder_mapping[:winding].compkey)]
-    @test bounds(builder_data, builder_branch["f_bus"]) == bounds(data, branch["f_bus"])
-    @test bounds(builder_data, builder_branch["t_bus"]) == bounds(data, branch["t_bus"])
 end
 
 include("pscad/ieee9_network.jl")
@@ -256,25 +254,20 @@ end
         n = 2.0, Rₚ = 0.1, Rₛ = 0.1, Lₚ = 1e-3, Lₛ = 1e-3),
         second = transformer(; pins = 3, transformation = true,
             n = 3.0, Rₚ = 0.1, Rₛ = 0.1, Lₚ = 1e-3, Lₛ = 1e-3))
-    network, state = circuit(windings)
-    result, data, _, mapping = power_flow(network)
+    state, original = circuit(windings)
+    data, _, mapping = convert(state, P.PMACDC)
+    result = NB.solve_acdcpf(data, P._PM.ACPPowerModel,
+        NB.powerflow_optimizer(state.options), NB.is_bounded_options(state.options);
+        setting = NB.powerflow_setting(state.options))
     @test result["termination_status"] == P.MOI.LOCALLY_SOLVED
-    first = data["branch"][string(last(mapping[:first]))]
-    second = data["branch"][string(last(mapping[:second]))]
+    first = data["branch"][string(mapping[:first].compkey)]
+    second = data["branch"][string(mapping[:second].compkey)]
     @test bounds(data, first["f_bus"]) == (0.9, 1.1)
     @test bounds(data, first["t_bus"]) == (0.45, 0.55)
     @test bounds(data, second["f_bus"]) == (0.45, 0.55)
     @test bounds(data, second["t_bus"]) == ((20 / 120) * 0.9, (20 / 120) * 1.1)
-    builder_data, _, bm = convert(state, P.PMACDC)
-    for name in (:first, :second)
-        a = data["branch"][string(last(mapping[name]))]
-        b = builder_data["branch"][string(bm[name].compkey)]
-        @test bounds(data, a["f_bus"]) == bounds(builder_data, b["f_bus"])
-        @test bounds(data, a["t_bus"]) == bounds(builder_data, b["t_bus"])
-    end
-
     # A source on the final secondary anchors propagation in the reverse direction.
-    _, reverse = circuit(windings; source_voltage = 30.0, source_bus = 3, load_bus = 1)
+    reverse, _ = circuit(windings; source_voltage = 30.0, source_bus = 3, load_bus = 1)
     reverse_data, levels, rm = convert(reverse, P.PMACDC)
     @test levels["transformer_voltage_levels"][:first] == (180.0, 90.0)
     @test levels["transformer_voltage_levels"][:second] == (90.0, 30.0)
@@ -282,7 +275,7 @@ end
     @test bounds(reverse_data, reverse_branch["f_bus"]) == (1.5 * 0.9, 1.5 * 1.1)
 
     # Voltage control inside the base band does not redefine the nominal level.
-    _, in_band = circuit(windings; source_voltage = 126.0)
+    in_band, _ = circuit(windings; source_voltage = 126.0)
     _, in_band_levels, _ = convert(in_band, P.PMACDC)
     @test in_band_levels["transformer_voltage_levels"][:first] == (120.0, 60.0)
     @test in_band_levels["transformer_voltage_levels"][:second] == (60.0, 20.0)
@@ -290,20 +283,19 @@ end
     rated = deepcopy(windings)
     rated.first.element_model.V₁ᵒ = 120e3
     rated.first.element_model.V₂ᵒ = 60e3
-    _, rated_chain = circuit(rated)
+    rated_chain, _ = circuit(rated)
     _, rated_levels, _ = convert(rated_chain, P.PMACDC)
     @test rated_levels["transformer_voltage_levels"][:second] == (60.0, 20.0)
 
     # The first unreached primary seeds an entire component from the network base.
-    unseeded_rows = [(; row.node, row.element, row.side, row.terminal)
-                     for row in state.topology.connections]
+    unseeded_rows = copy(original.rows)
     for index in eachindex(unseeded_rows)
         row = unseeded_rows[index]
         row.element == :source || continue
         suffix = row.terminal == 1 ? "d" : "q"
         unseeded_rows[index] = merge(row, (; node = Symbol("B4$suffix")))
     end
-    unseeded = NB.define(state.elements, unseeded_rows; options = state.options)
+    unseeded = NB.define(original.elements, unseeded_rows; options = state.options)
     _, unseeded_levels, _ = convert(unseeded, P.PMACDC)
     @test unseeded_levels["transformer_voltage_levels"][:first] == (120.0, 60.0)
     @test unseeded_levels["transformer_voltage_levels"][:second] == (60.0, 20.0)
@@ -319,19 +311,19 @@ end
     series = impedance(; z = 0.1, pins = 3, transformation = true)
     for (feed, source_voltage, primary, secondary) in
             ((line, 120.0, 120.0, 60.0), (series, 30.0, 30.0, 15.0))
-        network, state = circuit((; feed, winding); source_voltage)
-        result, data, _, mapping = power_flow(network)
+        state, original = circuit((; feed, winding); source_voltage)
+        data, _, mapping = convert(state, P.PMACDC)
+        result = NB.solve_acdcpf(data, P._PM.ACPPowerModel,
+            NB.powerflow_optimizer(state.options), NB.is_bounded_options(state.options);
+            setting = NB.powerflow_setting(state.options))
         @test result["termination_status"] == P.MOI.LOCALLY_SOLVED
-        branch = data["branch"][string(last(mapping[:winding]))]
+        branch = data["branch"][string(mapping[:winding].compkey)]
         @test collect(bounds(data, branch["f_bus"])) ≈ [0.9, 1.1] .* (primary / 120)
         @test collect(bounds(data, branch["t_bus"])) ≈ [0.9, 1.1] .* (secondary / 120)
         @test result["solution"]["bus"][string(branch["t_bus"])]["vm"] ≈
             secondary / 120 rtol = 0.01
-        builder_data, levels, bm = convert(state, P.PMACDC)
+        _, levels, _ = convert(state, P.PMACDC)
         @test levels["transformer_voltage_levels"][:winding] == (primary, secondary)
-        builder_branch = builder_data["branch"][string(bm[:winding].compkey)]
-        @test bounds(builder_data, builder_branch["f_bus"]) == bounds(data, branch["f_bus"])
-        @test bounds(builder_data, builder_branch["t_bus"]) == bounds(data, branch["t_bus"])
     end
 end
 
@@ -350,22 +342,17 @@ end
 end
 
 @testset "Conflicting transformer voltage levels retain the first bound" begin
-    _, state = circuit((; first = transformer(; pins = 3, transformation = true,
+    state, _ = circuit((; first = transformer(; pins = 3, transformation = true,
         n = 2.0, Rₚ = 0.1, Rₛ = 0.1),
         second = transformer(; pins = 3, transformation = true,
             n = 3.0, Rₚ = 0.1, Rₛ = 0.1)))
     # Connect the two transformers in parallel with incompatible nominal ratios.
-    rows = [(; row.node, row.element, row.side, row.terminal)
-            for row in state.topology.connections if row.element != :load]
-    for index in eachindex(rows)
-        row = rows[index]
-        row.element == :second || continue
-        suffix = row.terminal == 1 ? "d" : "q"
-        rows[index] = merge(row, (; node = Symbol("B$(row.side)$suffix")))
-    end
     conflict = NB.define((; source = state.elements.source,
-        first = state.elements.first, second = state.elements.second), rows;
-        options = state.options)
+        first = state.elements.first, second = state.elements.second), (
+            NB.Bus(:B1; ports = ((:source, :ac), (:first, :side1), (:second, :side1)),
+                domain = ACDQ),
+            NB.Bus(:B2; ports = ((:first, :side2), (:second, :side2)), domain = ACDQ),
+        ); options = state.options)
     logger = Test.TestLogger(min_level = Logging.Warn)
     data, levels, mapping = with_logger(logger) do
         convert(conflict, P.PMACDC)

@@ -1,77 +1,64 @@
-
 function Base.convert(bs::NetworkState, ::Type{P.PMACDC})
     _validate_powerflow_domains(bs)
-
-    #PMACDC data + interface
     data = Dict{String, Any}()
-    global_dict = P.PowerModelsACDC._get_pu_bases(1000, option_value(bs.options, :voltageBase, DEFAULT_VOLTAGE_BASE)) # 3-PH MVA, LL-RMS, Original setting was 100,320
+    global_dict = P.PowerModelsACDC._get_pu_bases(1000,
+        option_value(bs.options, :voltageBase, DEFAULT_VOLTAGE_BASE))
     P.data_init!(data, global_dict)
-
     global_dict["omega"] = 2*π*50
-
-    ## Adding buses 
-
     convert!(data, bs.topology, P.PMACDC, global_dict)
+    elempitopm = Dict{Symbol, @NamedTuple{pmtype::String, compkey::Int}}()
 
-    # 2. Fill up the data dictionary with corresponding PM index and bus connections 
-
-    elempitopm = Dict{Symbol, @NamedTuple{pmtype::String, compkey::Int}}() #Maps PM component to element symbol for later use in transformation of results
-
-    elements_and_buses = map(collect(pairs(bs.elements))) do (elemid, stored_element)
-        element = _element_for_powerflow(stored_element, elemid, bs.topology)
-        # Get sorted connectoins (first AC, then DC)
-        connections = sortedcomponentconnections(bs.topology, elemid)
-        busidtable = Table(domain = connections.domain, bus = connections.bus)
-        sortedbusses = Table(unique(busidtable)).bus #unique(connections.bus) #Take unique busidss (elecdomain+bus integer) and then only provide it with bus information
-        return (element, sortedbusses)
+    records = map(collect(pairs(bs.elements))) do (name, model)
+        _element_call(name) do
+            rows = filter(row -> row.component == name, bs.topology.connections)
+            ports = _powerflow_ports(model, rows)
+            pmtype = P.pmtype(model, rows)
+            (; name, model, ports, pmtype)
+        end
     end
-    P._infer_transformer_voltage_levels!(global_dict, elements_and_buses)
-
-    for (element, sortedbusses) in elements_and_buses
-        elemid = element.symbol
-        # Get the PM component key and update LUT
-        pmtype = P.pmtype(element)
+    _infer_transformer_voltage_levels!(global_dict, records)
+    for record in records
+        (; name, model, ports, pmtype) = record
         compkey = length(data[pmtype]) + 1
-        elempitopm[elemid] = (; pmtype, compkey)
-
-        P.convert!(data, element, P.PMACDC, compkey, sortedbusses, global_dict)
+        elempitopm[name] = (; pmtype, compkey)
+        key = (; name, index = compkey, pmtype)
+        _element_call(name) do
+            P.convert!(data, model, P.PMACDC, key, ports, global_dict)
+        end
     end
-
     ensure_slack_bus!(data)
     P.PowerModelsACDC.process_additional_data!(data)
-
     return data, global_dict, elempitopm
 end
 
-function _validate_powerflow_domains(network::NetworkState)
-    for (name, element) in pairs(network.elements)
-        ports = _port_descriptions(element)
-        all(iszero(port.domain) for port in ports) || continue
-        rows = filter(row -> row.element == name, network.topology.connections)
-        any(row -> row.domain == 1, rows) || continue
-        throw(
-            ArgumentError(
-            "one-conductor passive element :$name was inferred as AC from its " *
-            "topology. This representation is supported by frequency-domain " *
-            "calculations but has no AC PowerModels conversion; use a " *
-            "transformed three-phase element for power flow",
-        ),
-        )
+function _powerflow_ports(model, rows)
+    names = keys(P.electricalconnections(model))
+    buses = map(names) do port
+        ids = unique(row.bus for row in rows if row.port == port)
+        length(ids) == 1 ||
+            throw(ArgumentError("port :$port must connect to one power-flow bus"))
+        only(ids)
     end
-    return nothing
+    return NamedTuple{names}(buses)
 end
 
-function _element_for_powerflow(
-        element::P.Element,
-        name::Symbol,
-        topology::NetworkTopology
-)
-    result = deepcopy(element)
-    result.symbol = name
-    for row in filter(connection -> connection.element == name, topology.connections)
-        result.pins[pin_name(row.side, row.terminal)] = row.node
+function _validate_powerflow_domains(network::NetworkState)
+    for (name, model) in pairs(network.elements)
+        _validate_builder_model(model, name)
+        _element_call(name) do
+            ports = P.electricalconnections(model)
+            for row in network.topology.connections
+                row.component == name || continue
+                _domain_number(ports[row.port].domain) == row.domain && continue
+                throw(ArgumentError(
+                    "one-conductor passive element was inferred as AC from its " *
+                    "topology. This representation is supported by frequency-domain " *
+                    "calculations but has no AC PowerModels conversion; use a " *
+                    "transformed three-phase element for power flow"))
+            end
+        end
     end
-    return result
+    return nothing
 end
 
 findvalue(componentdata, id) = componentdata[id]
@@ -482,4 +469,97 @@ function addbus!(data, bus, global_dict, ::Val{:DC})
     ((data["busdc"])[busstr])["Pdc"] = 0
     ((data["busdc"])[busstr])["basekVdc"] = global_dict["V"] / 1e3
     ((data["busdc"])[busstr])["bus_type"] = 1 # bus type - depends on components 1 is default P
+end
+
+
+function _voltage_links!(edges, sources, transformers, model::P.AbstractElementModel,
+        name, ports, pmtype)
+    return nothing
+end
+
+function _voltage_links!(edges, sources, transformers, model::P.Source,
+        name, ports, pmtype)
+    haskey(ports, :ac) && push!(sources, ports.ac => P.inputvalues(model).v)
+    return nothing
+end
+
+function _voltage_links!(edges, sources, transformers,
+        model::Union{P.Impedance, P.Transmission_line}, name, ports, pmtype)
+    pmtype == "branch" && ports.side1 != ports.side2 || return nothing
+    push!(get!(edges, ports.side1, Tuple{Any, Float64, Bool}[]),
+        (ports.side2, 1.0, true))
+    push!(get!(edges, ports.side2, Tuple{Any, Float64, Bool}[]),
+        (ports.side1, 1.0, false))
+    return nothing
+end
+
+function _voltage_links!(edges, sources, transformers, model::P.Transformer,
+        name, ports, pmtype)
+    primary, secondary = ports.side1, ports.side2
+    push!(transformers, (name, primary, secondary))
+    primary != secondary || return nothing
+    ratio = model.V₁ᵒ == model.V₂ᵒ == 0 ? model.n : model.V₁ᵒ / model.V₂ᵒ
+    push!(get!(edges, primary, Tuple{Any, Float64, Bool}[]), (secondary, ratio, true))
+    push!(get!(edges, secondary, Tuple{Any, Float64, Bool}[]), (primary, ratio, false))
+    return nothing
+end
+
+function _infer_transformer_voltage_levels!(global_dict, records)
+    sources = Pair{Int, Float64}[]
+    transformers = Tuple{Symbol, Int, Int}[]
+    edges = Dict{Any, Vector{Tuple{Any, Float64, Bool}}}()
+    for record in records
+        _element_call(record.name) do
+            _voltage_links!(edges, sources, transformers, record.model,
+                record.name, record.ports, record.pmtype)
+        end
+    end
+    isempty(transformers) && return nothing
+    voltage_base = global_dict["V"] / 1e3
+    levels = Dict{Any, Float64}()
+    queue = Any[]
+
+    function assign_level!(bus, level)
+        if !haskey(levels, bus)
+            levels[bus] = level
+            push!(queue, bus)
+        elseif abs(level - levels[bus]) > 0.01 * levels[bus]
+            @warn "Conflicting transformer voltage levels at bus $bus: " *
+                "$(levels[bus]) kV and $level kV; retaining the first level."
+        end
+    end
+
+    for (bus, voltage_peak) in sources
+        if !ismissing(voltage_peak) && isfinite(voltage_peak) && voltage_peak > 0
+            voltage = voltage_peak / sqrt(2)
+            if !(0.9 * voltage_base <= voltage <= 1.1 * voltage_base)
+                assign_level!(bus, voltage)
+            end
+        end
+    end
+
+    index = 1
+    function propagate!()
+        while index <= length(queue)
+            bus = queue[index]
+            for (other, ratio, forward) in get(edges, bus, Tuple{Any, Float64, Bool}[])
+                level = forward ? levels[bus] / ratio : levels[bus] * ratio
+                assign_level!(other, level)
+            end
+            index += 1
+        end
+    end
+    propagate!()
+    for (_, primary, _) in transformers
+        if !haskey(levels, primary)
+            assign_level!(primary, voltage_base)
+            propagate!()
+        end
+    end
+
+    global_dict["transformer_voltage_levels"] = Dict(
+        name => (get(levels, primary, voltage_base), get(levels, secondary, voltage_base))
+        for (name, primary, secondary) in transformers)
+    global_dict["transformer_voltage_bounded_buses"] = Set{Int}()
+    return nothing
 end

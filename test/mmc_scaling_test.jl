@@ -20,7 +20,9 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
     network = build_mmc_grid()
     original = network.elements[:DUT]
     frequencies = ComplexF64.(im .* [2π * 0.1, 2π * 10, 2π * 1000])
-    cached = PowerImpedance.NetworkBuilder.build(original, original.setpoint)
+    # transitional
+    values = PowerImpedance._terminal_values(original.element_model, original.setpoint)
+    cached = PowerImpedance.NetworkBuilder.build(original.element_model, values, :dq)
     builder_response = zeros(ComplexF64, 3, 3, length(frequencies))
     cached(builder_response, frequencies)
     for (index, s) in enumerate(frequencies)

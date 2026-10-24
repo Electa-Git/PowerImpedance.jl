@@ -105,31 +105,46 @@ include("pscad/fixtures.jl")
     fixture = PSCADFixtures.sm_network()
     pf_classic = power_flow(fixture.classic)
     solved_builder = NB.solve(fixture.state)
-    classic_list = PI.PSCAD.netlist(fixture.classic, pf_classic)
-    builder_list = PI.PSCAD.netlist(fixture.state, solved_builder.powerflow)
-    for (net, netlist) in ((fixture.classic, classic_list), (solved_builder.network, builder_list))
-        element = net.elements[:sg1]
-        m = element.element_model
-        inputs, pu = PI.pftoinputs(m, element.setpoint)
-        state = PI._steady_state(element)
+    for representation in (:classic, :builder)
+        if representation === :classic
+            element = fixture.classic.elements[:sg1]
+            m = element.element_model
+            point = PI._terminal_values(m, element.setpoint) # transitional
+            state = PI._steady_state(element)
+            result, data, _, mapping = pf_classic
+            record = data["gen"][string(last(mapping[:sg1]))]
+        else
+            m = fixture.state.elements.sg1
+            point = solved_builder.operating_point[:sg1]
+            state = steady_state(m, point)
+            index = string(solved_builder.elem2comp[:sg1].compkey)
+            record = solved_builder.data["gen"][index]
+            result, data = solved_builder.result, solved_builder.data
+        end
+        solution = result["solution"]
+        gen = solution["gen"][string(record["index"])]
+        bus = solution["bus"][string(record["gen_bus"])]
+        base = data["bus"][string(record["gen_bus"])]["base_kv"]
+        flow = (pg = gen["pg"] * 1000, qg = gen["qg"] * 1000,
+            terminal_voltage_kV = bus["vm"] * base, terminal_angle_rad = bus["va"])
+        inputs, pu = PI.pftoinputs(m, point)
         actual = terminal_quantities(m, inputs, state)
-        flow = netlist.operating_point.branch_flows[:sg1]
         Vt_pf = flow.terminal_voltage_kV*sqrt(3)/m.elec.Vᵃᶜ_base * cis(flow.terminal_angle_rad)
         @test real(actual.Sterminal) ≈ flow.pg/m.elec.S_base atol=DYNAMIC_ATOL rtol=0
         @test imag(actual.Sterminal) ≈ flow.qg/m.elec.S_base atol=DYNAMIC_ATOL rtol=0
         @test actual.Vterminal ≈ Vt_pf atol=POWER_FLOW_ATOL rtol=0
         @test abs(actual.Vterminal) ≈ abs(Vt_pf) atol=POWER_FLOW_ATOL rtol=0
         @test inputs.vref_SG != m.avr.v_ref
-        @test inputs.Tm0 > element.setpoint.Pac/m.elec.S_base
+        @test inputs.Tm0 > point.ac.p/m.elec.S_base
         F = zeros(16)
         PI._state_space!(F, state, collect(values(inputs)), pu, m, PI.Equil())
         @test norm(F, Inf) <= DYNAMIC_ATOL
         @test state ≈ collect(values(PI.orderedinitialvalues(m; inputs, setpoint_pu=pu))) atol=DYNAMIC_ATOL
         # A changed operating point recomputes references from its own phasors.
-        next_sp = Setpoint(Pac=700.0, Qac=40.0, Vac=element.setpoint.Vac, θac=0.2)
-        PI.update!(element, next_sp)
+        next_sp = (ac = ACPortValues(point.ac.v, 0.2, 700.0, 40.0),)
+        next_state = steady_state(m, next_sp)
         next_inputs, _ = PI.pftoinputs(m, next_sp)
-        next_actual = terminal_quantities(m, next_inputs, PI._steady_state(element))
+        next_actual = terminal_quantities(m, next_inputs, next_state)
         @test next_actual.Sterminal ≈ complex(0.7, 0.04) atol=DYNAMIC_ATOL rtol=0
         @test next_inputs.vref_SG != inputs.vref_SG
         @test m.avr.v_ref == 1.01

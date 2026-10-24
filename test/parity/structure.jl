@@ -51,12 +51,12 @@ function bus_keys(state, data, mapping)
         group = domain == 1 ? "bus" : "busdc"
         rows = filter(r -> r.domain == domain, state.topology.connections)
         for bus in unique(rows.bus)
-            nets = sort!(string.(unique(r.node for r in rows if r.bus == bus)))
+            nets = sort!(string.(unique(r.net for r in rows if r.bus == bus)))
             result[(group, bus)] = join(nets, "+")
         end
     end
     for (name, element) in pairs(state.elements)
-        element.element_model isa PI.SynchronousMachine || continue
+        element isa PI.SynchronousMachine || continue
         entry = mapping[name]
         gen = data["gen"][string(entry.compkey)]
         result[("bus", gen["gen_bus"])] = "$name#terminal"
@@ -98,7 +98,7 @@ function entry_keys(state, data, mapping)
     end
     for (name, entry) in mapping
         entries[(entry.pmtype, string(entry.compkey))] = string(name)
-        if state.elements[name].element_model isa PI.SynchronousMachine
+        if state.elements[name] isa PI.SynchronousMachine
             entries[("branch", string(entry.compkey))] = string(name)
         end
     end
@@ -131,7 +131,8 @@ function record_pm!(rows, labels, prefix, data, entries)
         if records isa AbstractDict && all(v -> v isa AbstractDict, values(records))
             for id in sort!(collect(keys(records)))
                 name = entries[(group, id)]
-                record!(rows, labels, "$prefix.$group.$name", records[id])
+                value = records[id]
+                record!(rows, labels, "$prefix.$group.$name", value)
             end
         else
             record!(rows, labels, "$prefix.$group", records)
@@ -192,7 +193,7 @@ function write_structure(directory, fixture, state)
 end
 
 function oracle_voltage!(rows, labels)
-    model = ParityFixtures.PSCADFixtures.mmc_pq_network().state.elements.DUT.element_model
+    model = ParityFixtures.PSCADFixtures.mmc_pq_network().state.elements.DUT
     reactive = model.delta_control.outer_reactive
     F = zeros(1)
     sp = PI.SetpointPU(v_ac = 1.2, q_ac = -0.217)
@@ -219,35 +220,6 @@ function oracle_droop!(rows, labels)
             record!(rows, labels, "oracle.droop_$kind.order$order.case$i.F", F)
             record!(rows, labels, "oracle.droop_$kind.order$order.case$i.outputs", outputs)
         end
-    end
-end
-
-function pscad_operating_point!(rows, labels, name, state, pf)
-    P = PI.PSCAD
-    classic = NB.build_network(state.elements, state.topology, state.options)
-    list = P.netlist(classic, PI.power_flow(classic))
-    plan = P.build_plan(list)
-    settings = P.SimulationSettings(sample_step = 250e-6)
-    model = PI.PSCADModel("synthetic.pscx", "synthetic", list, plan.probes,
-        settings, list.operating_point, (;))
-    times = collect(0.0:250e-6:0.3)
-    channels = PI.OrderedDict{String, Vector{Float64}}()
-    for (index, channel) in enumerate(plan.probes.channels)
-        if channel.dim == 3
-            for phase in 1:3
-                angle = 0.01index - 2π * (phase - 1) / 3
-                channels["$(channel.name):$phase"] = (1.0 + index) .*
-                                                     cos.(2π * 50 .* times .+ angle)
-            end
-        else
-            channels[channel.name] = fill(1.0 + index, length(times))
-        end
-    end
-    result = PI.PSCADResult(PI.PSCADRun(), times, channels, plan.probes,
-        settings, (;), (;))
-    table = PI.compare_operating_point(result, model)
-    for (i, row) in enumerate(table)
-        record!(rows, labels, "pscad_op.$name.$i", NamedTuple(row))
     end
 end
 
@@ -284,12 +256,6 @@ function collect_oracles()
     collect_family!(rows, labels, skipped, errors, "oracle.droop") do r, l
         oracle_droop!(r, l)
     end
-    for name in (:small_ac, :sm, :mmc_pq, :tlc_case2)
-        collect_family!(rows, labels, skipped, errors, "pscad_op.$name") do r, l
-            build = getfield(ParityFixtures.PSCADFixtures, Symbol(name, "_network"))
-            pscad_operating_point!(r, l, string(name), build().state, nothing)
-        end
-    end
     result = collect_family!(rows, labels, skipped, errors, "stability.mmc_vdc") do r, l
         fixture = only(f for f in ParityFixtures.FIXTURES if f.name == :mmc_vdc)
         builder, element, direction = fixture.build(), :DUT, :dc
@@ -311,15 +277,31 @@ function collect_oracles()
     return (; rows, labels, skipped, errors, stability_fixture)
 end
 
+function record_operating_point!(rows, labels, name, state, point)
+    for (element, values) in point.values
+        # The frozen operating-point datasets omit sources.
+        PI.is_source(state.elements[element]) && continue
+        fields = (;)
+        if haskey(values, :ac)
+            ac = values.ac
+            fields = (; Pac = ac.p, Qac = ac.q, Vac = ac.v, θac = ac.theta)
+        end
+        if haskey(values, :dc)
+            dc = values.dc
+            fields = merge(fields, (; Pdc = dc.p, Vdc = dc.v))
+        end
+        record!(rows, labels, "$name.op.$element", fields)
+    end
+end
+
 function record_state_space!(rows, labels, name, state, point)
     for (element, value) in pairs(state.elements)
-        PI.is_statespace(value) && PI.is_active(value) || continue
-        setpoint = get(point, element, PI.Setpoint())
-        A, B, C, D = PI.update(value, setpoint)
+        !PI.islinear(value) && PI.is_active(value) || continue
+        A, B, C, D = PI.linearize(value, point[element])
         for (field, matrix) in (("A", A), ("B", B), ("C", C), ("D", D))
             record!(rows, labels, "$name.ss.$element.$field", matrix)
         end
-        record!(rows, labels, "$name.ss.$element.x", value._equilibrium[3])
+        record!(rows, labels, "$name.ss.$element.x", value.cache.state)
         eig = sort!(eigvals(A); by = v -> (real(v), imag(v)))
         record!(rows, labels, "$name.ss.$element.eig", eig)
     end
@@ -328,11 +310,11 @@ end
 function record_admittances!(rows, labels, name, state, point, frequencies)
     for (element, value) in pairs(state.elements)
         PI.is_source(value) && continue
-        setpoint = get(point, element, PI.Setpoint())
-        admittance! = NB.build(value, setpoint)
         connections = NB.sortedcomponentconnections(state.topology, element;
             withground = true, acfirst = false)
-        n = length(connections.node)
+        admittance! = NB.build(value, get(point, element, (;)),
+            NB._component_frame(connections))
+        n = length(connections.net)
         response = Array{ComplexF64, 3}(undef, n, n, length(frequencies))
         admittance!(response, frequencies)
         record!(rows, labels, "$name.y.$element", response)
@@ -399,13 +381,7 @@ function collect_fixture(fixture; dump_directory = nothing,
     end
     point = powerflow.value.operating_point
     collect_family!(rows, labels, skipped, errors, "$name.op"; skipped_families) do r, l
-        for (element, setpoint) in point.setpoints
-            values = (;
-                (f => getfield(setpoint, f)
-            for f in fieldnames(typeof(setpoint))
-            if getfield(setpoint, f) !== missing)...)
-            record!(r, l, "$name.op.$element", values)
-        end
+        record_operating_point!(r, l, name, state, point)
     end
     collect_family!(rows, labels, skipped, errors, "$name.ss"; skipped_families) do r, l
         record_state_space!(r, l, name, state, point)

@@ -1,22 +1,30 @@
-@testset "Three-phase classification of untransformed six-pin elements" begin
-    abc_branch = impedance(z = s -> 1.0 + 0.01s, pins = 3)
-    @test PI.is_three_phase(abc_branch)
-    @test PI.pmtype(abc_branch) == "branch"
-    @test all(port -> port.domain == 1, NB._port_descriptions(abc_branch))
-
-    abc_source = ac_source(pins = 3)
-    @test PI.is_three_phase(abc_source)
-    @test PI.pmtype(abc_source) == "gen"
-
-    dq_branch = impedance(z = s -> 1.0, pins = 3, transformation = true)
-    @test PI.is_three_phase(dq_branch)
-
-    dc_branch = impedance(z = s -> 1.0, pins = 1)
-    @test !PI.is_three_phase(dc_branch)
-    @test PI.pmtype(dc_branch) == "branchdc"
+using Test, PowerImpedance
+if !isdefined(@__MODULE__, :PI)
+    const PI = PowerImpedance
+end
+if !isdefined(@__MODULE__, :NB)
+    const NB = PI.NetworkBuilder
 end
 
-@testset "NetworkBuilder power flow and network share the default voltage base" begin
+@testset "Three-phase classification of untransformed six-pin elements" begin
+    abc_branch = impedance(z = s -> 1.0 + 0.01s, pins = 3).element_model
+    @test PI.is_three_phase(abc_branch)
+    @test PI.pmtype(abc_branch, ((bus = 1,), (bus = 2,))) == "branch"
+    @test all(port -> port.domain == ACABC, electricalconnections(abc_branch))
+
+    abc_source = ac_source(pins = 3).element_model
+    @test PI.is_three_phase(abc_source)
+    @test PI.pmtype(abc_source, ()) == "gen"
+
+    dq_branch = impedance(z = s -> 1.0, pins = 3, transformation = true).element_model
+    @test PI.is_three_phase(dq_branch)
+
+    dc_branch = impedance(z = s -> 1.0, pins = 1).element_model
+    @test !PI.is_three_phase(dc_branch)
+    @test PI.pmtype(dc_branch, ((bus = 1,), (bus = 2,))) == "branchdc"
+end
+
+@testset "NetworkBuilder power flow uses the default voltage base" begin
     elements = (
         source = ac_source(pins = 3, transformation = true,
             setpoint = Setpoint(Vac = 320 * sqrt(2))),
@@ -33,15 +41,11 @@ end
     state = NB.define(elements, connections)
     @test !hasproperty(state.options, :voltageBase)
     data, global_dict, _ = convert(state, PI.PMACDC)
-    network = NB.build_network(state.elements, state.topology, state.options)
     @test global_dict["V"] / 1e3 == NB.DEFAULT_VOLTAGE_BASE
-    @test network.voltageBase[1] == NB.DEFAULT_VOLTAGE_BASE
-    @test all(bus -> bus["base_kv"] == network.voltageBase[1], values(data["bus"]))
+    @test all(bus -> bus["base_kv"] == NB.DEFAULT_VOLTAGE_BASE, values(data["bus"]))
 
     explicit = NB.define(elements, connections; options = (voltageBase = 220 / sqrt(3),))
     explicit_data, _, _ = convert(explicit, PI.PMACDC)
-    explicit_network = NB.build_network(explicit.elements, explicit.topology, explicit.options)
-    @test explicit_network.voltageBase[1] == 220 / sqrt(3)
     @test all(bus -> bus["base_kv"] ≈ 220 / sqrt(3), values(explicit_data["bus"]))
 end
 

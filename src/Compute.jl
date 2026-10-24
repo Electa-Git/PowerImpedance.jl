@@ -738,9 +738,9 @@ function _statistics_tree(values::AbstractVector)
             real=_scalar_statistics(real.(Complex[values...])),
             imag=_scalar_statistics(imag.(Complex[values...])),
         )
-    elseif first_value isa NamedTuple
-        names = keys(first_value)
-        all(value -> keys(value) == names, values) || throw(ArgumentError(
+    elseif first_value isa Union{NamedTuple, ACPortValues, DCPortValues}
+        names = propertynames(first_value)
+        all(value -> propertynames(value) == names, values) || throw(ArgumentError(
             "named result schemas differ across trials",
         ))
         return NamedTuple{names}(map(
@@ -782,7 +782,8 @@ function _primitive_statistics(values::AbstractVector{<:PowerFlowResult})
     return (
         result=_statistics_tree([value.result for value in values]),
         data=_statistics_tree([value.data for value in values]),
-        operating_point=_statistics_tree([value.operating_point.setpoints for value in values]),
+        operating_point=_statistics_tree(
+            [value.operating_point.values for value in values]),
         bus_measurements=_powerflow_bus_measurements(values),
     )
 end

@@ -31,7 +31,9 @@ function induction_machine_reference(net, list, frequencies)
                    for e in list.elements for t in e.terminals if !t.grounded
                    for (k, node) in enumerate(t.nets)]
     builder = NetworkBuilder.define(elements, connections)
-    point = PowerImpedance.OperatingPoint(Dict(:DUT => net.elements[:DUT].setpoint))
+    # transitional
+    point = PowerImpedance.OperatingPoint(Dict(:DUT =>
+        PowerImpedance._terminal_values(builder.elements.DUT, net.elements[:DUT].setpoint)))
     model = NetworkBuilder.NetworkModel(builder, point)
     return NetworkBuilder.get_y(model, :DUT, ComplexF64.(2π * im .* frequencies))
 end

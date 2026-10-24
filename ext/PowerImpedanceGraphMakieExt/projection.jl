@@ -181,13 +181,6 @@ function _pm_component_active(pmtype::String, record::AbstractDict)
     return nothing
 end
 
-function _pm_transformer(record::AbstractDict)
-    value = _record_get(record, "transformer", false)
-    value isa Bool && return value
-    value isa Number && return !iszero(value)
-    return false
-end
-
 # End PowerModels adapter.
 
 function _expected_node_bus(row::DiagramTerminal)
@@ -254,39 +247,6 @@ function _powerflow_records(powerflow, element::Symbol)
         mapping.pmindex
     )
     return (mapping.pmtype, mapping.pmindex, input, solution)
-end
-
-function _topology_role(element, connected_buses, grounded_sides)
-    model = element.element_model
-    PowerImpedance.is_converter(element) && return :converter
-    PowerImpedance.is_source(element) && return :source
-    (PowerImpedance.is_generator(element) ||
-     PowerImpedance.is_inductionmachine(element)) && return :machine
-    model isa PowerImpedance.Transformer && return :transformer
-    if model isa PowerImpedance.Impedance
-        isempty(grounded_sides) || return :shunt
-        return all(connection -> connection.bus.domain == 2, connected_buses) ?
-               :dc_branch : :ac_branch
-    end
-    if model isa PowerImpedance.Transmission_line
-        return all(connection -> connection.bus.domain == 2, connected_buses) ?
-               :dc_branch : :ac_branch
-    end
-    return :generic
-end
-
-function _refined_role(role::Symbol, element, pmtype, input)
-    pmtype === nothing && return role
-    pmtype == "convdc" && return :converter
-    pmtype == "branchdc" && return :dc_branch
-    pmtype == "branch" && return _pm_transformer(input) ? :transformer : :ac_branch
-    pmtype == "load" && return :load
-    pmtype == "shunt" && return :shunt
-    pmtype == "im" && return :machine
-    if pmtype in ("gen", "gendc")
-        return PowerImpedance.is_source(element) ? :source : :machine
-    end
-    return role
 end
 
 function _validate_component_endpoints(component::ComponentDescriptor)
@@ -377,8 +337,8 @@ function _projection_parts(network, powerflow)
         pmtype, pmindex, input, solution = powerflow === nothing ?
                                            (nothing, nothing, nothing, nothing) :
                                            _powerflow_records(powerflow, element_name)
-        role = _refined_role(
-            _topology_role(element, connected, grounded_sides),
+        role = PowerImpedance.NetworkBuilder.refined_role(
+            PowerImpedance.NetworkBuilder.topology_role(element, connected, grounded_sides),
             element,
             pmtype,
             input

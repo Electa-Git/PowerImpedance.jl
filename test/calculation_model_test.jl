@@ -19,7 +19,7 @@ end
 
 @testset "Primitive result contracts" begin
     state = passive_calculation_state()
-    original_impedance = copy(state.elements.branch.element_model.value)
+    original_impedance = copy(state.elements.branch.value)
     powerflow = compute(PowerFlowProblem(state), ACDCPowerFlow())
     @test powerflow isa PowerFlowResult
     @test fieldnames(typeof(powerflow)) == (
@@ -33,7 +33,7 @@ end
     )
     @test powerflow.result === nothing
     @test convert(OperatingPoint, powerflow) === powerflow.operating_point
-    @test state.elements.branch.element_model.value == original_impedance
+    @test state.elements.branch.value == original_impedance
 
     linearization = compute(LinearizationProblem(state, powerflow),
         AdmittanceLinearization())

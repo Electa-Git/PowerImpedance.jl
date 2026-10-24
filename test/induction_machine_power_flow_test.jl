@@ -17,17 +17,20 @@ include("pscad/fixtures.jl")
                 if representation === :classic
                     network = pair.classic
                     result, data = power_flow(network)
+                    element = network.elements[:im1]
+                    m = element.element_model
+                    state = PI._steady_state(element)
+                    inputs, pu = PI.pftoinputs(m, element.setpoint)
                 else
                     solved = NB.solve(pair.state)
-                    network = solved.network
-                    result, data = solved.powerflow.result, solved.powerflow.data
+                    result, data = solved.result, solved.data
+                    m = pair.state.elements.im1
+                    point = solved.operating_point[:im1]
+                    state = PI.steady_state(m, point)
+                    inputs, pu = PI.pftoinputs(m, point)
                 end
                 @test result["termination_status"] == PI.MOI.LOCALLY_SOLVED
-                element = network.elements[:im1]
-                m = element.element_model
-                state = PI._steady_state(element)
                 x = NamedTuple{PI.statenames(m)}(state)
-                inputs, pu = PI.pftoinputs(m, element.setpoint)
                 current = zeros(2)
                 PI.outputequations!(current, x, inputs, nothing, m)
                 power = complex(inputs.vd, -inputs.vq) *

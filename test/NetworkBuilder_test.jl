@@ -13,13 +13,6 @@ if !isdefined(@__MODULE__, :NB)
 end
 
 @testset "NetworkBuilder unit tests" begin
-	legacy = @network begin
-		z1 = impedance(z = 1, pins = 1)
-		z2 = impedance(z = 2, pins = 1)
-
-		z1[1.1] ⟷ z2[1.1] ⟷ n1
-		z1[2.1] ⟷ z2[2.1] ⟷ gnd
-	end
 
 	elements = (; z1 = impedance(z = 1, pins = 1), z2 = impedance(z = 2, pins = 1))
 	connections = (
@@ -30,31 +23,15 @@ end
 	)
 
 	builder = NetworkBuilder.define(elements, connections)
-	buildernetwork = NetworkBuilder.build_network(
-		builder.elements,
-		builder.topology,
-		builder.options,
-	)
+	@test NetworkBuilder.solve(builder).result === nothing
 
-	@test collect(keys(buildernetwork.elements)) == collect(keys(legacy.elements))
-	@test Set(buildernetwork.nets[:n1]) == Set(legacy.nets[:n1])
-	@test Set(buildernetwork.nets[:gnd]) == Set(legacy.nets[:gnd])
-	@test buildernetwork.elements[:z1].pins == legacy.elements[:z1].pins
-	@test buildernetwork.elements[:z2].pins == legacy.elements[:z2].pins
-
-	@test NetworkBuilder.solve(builder).powerflow === nothing
-
-	updated_elements = (; z1 = impedance(z = 3, pins = 1), z2 = impedance(z = 4, pins = 1))
+	updated_elements = (; z1 = impedance(z = 3, pins = 1).element_model,
+        z2 = impedance(z = 4, pins = 1).element_model)
 	updated = NetworkBuilder.update!(builder; elements = updated_elements)
-	updatednetwork = NetworkBuilder.build_network(
-		builder.elements,
-		builder.topology,
-		builder.options,
-	)
 
 	@test !hasproperty(updated, :operating_point)
-	@test builder.elements[:z1].element_model.value == ComplexF64[3;;]
-	@test Set(updatednetwork.nets[:n1]) == Set(updatednetwork.nets[:n1])
+	@test builder.elements[:z1].value == ComplexF64[3;;]
+
 end
 
 
@@ -2531,7 +2508,7 @@ function build_ieee39bus_with_networkbuilder()
 		options = builder_options,
 	)
 	solved = NetworkBuilder.solve(builder)
-	return (; builder, solved, network = solved.network)
+	return (; builder, solved)
 end
 
 function ieee39bus_with_nwbuilder_powerflow()
@@ -2562,10 +2539,7 @@ function ieee39bus_with_nwbuilder_powerflow()
         setting = powerflow_setting(options),
     )
 
-	network = NB.build_network(builder.elements, builder.topology, builder.options)
-
-
-	return (; builder, solved=(;data, result, elempitopm), network )
+	return (; builder, solved=(;data, result, elempitopm))
 end
 
 function determine_ieee39bus_impedance(network; freq_range = IEEE39_FREQ_RANGE)
@@ -2578,226 +2552,29 @@ function determine_ieee39bus_impedance(network; freq_range = IEEE39_FREQ_RANGE)
 	)
 end
 
-function test_ieee39bus_networkbuilder_parity(; freq_range = IEEE39_FREQ_RANGE)
-	legacy = build_ieee39bus_with_macro()
-	built = build_ieee39bus_with_networkbuilder()
-
-	builtnetw = built.network
-
-	z_legacy, omega_legacy = determine_ieee39bus_impedance(legacy; freq_range)
-	z_built, omega_built = determine_ieee39bus_impedance(builtnetw; freq_range)
-
-	@test isequal(omega_built, omega_legacy)
-	@test axes(z_built) == axes(z_legacy)
-	@test isapprox(z_built, z_legacy, rtol=1e-12,atol=1e-12)
-
-	eignew = eigvals(builtnetw.elements[:STATCOM].A)
-	eiglegacy = eigvals(legacy.elements[:STATCOM].A)
-
-	@test sort(real(eignew)) ≈ sort(real(eiglegacy)) rtol=1e-8
-	@test sort(imag(eignew)) ≈ sort(imag(eiglegacy)) rtol=1e-8
-
-	# @test legacy.elements[:STATCOM].A ≈ built.elements[:STATCOM].A rtol=1e-8 #Check if the linearized state matrix are approx the same
-
-	return nothing
-end
-
-function test_nwbuilder_powerflow_parity(; freq_range = IEEE39_FREQ_RANGE)
-	sharedpf = build_ieee39bus_with_networkbuilder().solved.powerflow
-	direct_case = ieee39bus_with_nwbuilder_powerflow()
-	newpf = direct_case.solved
-	classic_network = NB.build_network(
-		direct_case.builder.elements,
-		direct_case.builder.topology,
-		direct_case.builder.options,
-	)
-	classic_result, classic_data, classic_nodes2bus, classic_elem2comp =
-		PI.power_flow(classic_network)
-
-	function dicts_approx_equal(dict1, dict2; atol = 1e-8)
-		keys1 = keys(dict1)
-		keys2 = keys(dict2)
-		if keys1 != keys2
-			return false
-		end
-		for key in keys1
-			val1 = dict1[key]
-			val2 = dict2[key]
-			if val1 isa AbstractDict && val2 isa AbstractDict
-				if !dicts_approx_equal(val1, val2; atol)
-					return false
-				end
-			elseif val1 isa Number && val2 isa Number
-				isapprox(val1, val2; atol) || return false
-			elseif !isequal(val1, val2)
-				return false
-			end
-		end
-		return true
-	end
-	normalize_mapping(mapping) = Dict(
-		name => value isa NamedTuple ? (value.pmtype, value.compkey) : Tuple(value)
-		for (name, value) in mapping
-	)
-
-	# The shared calculation and the direct NetworkBuilder parameterization use
-	# the same PowerModelsACDC model and therefore have the same complete result.
-	@test sharedpf.result["termination_status"] == newpf.result["termination_status"]
-	@test dicts_approx_equal(sharedpf.result["solution"], newpf.result["solution"])
-
-	# The Classic route numbers buses in construction order. Compare complete
-	# component and bus solutions through their semantic mappings instead of
-	# comparing those incidental integer identifiers.
-	shared_elements = normalize_mapping(sharedpf.elem2comp)
-	classic_elements = normalize_mapping(classic_elem2comp)
-	@test shared_elements == classic_elements == normalize_mapping(newpf.elempitopm)
-	for (element, (group, index)) in shared_elements
-		haskey(sharedpf.result["solution"], group) || continue
-		@test dicts_approx_equal(
-			sharedpf.result["solution"][group][string(index)],
-			classic_result["solution"][group][string(index)],
-		)
-	end
-
-	typed_bus_nodes = Dict{Tuple{Symbol,Int},Set{Symbol}}()
-	for (node, bus) in sharedpf.nodes2bus
-		bus[1] === :ground && continue
-		push!(get!(typed_bus_nodes, bus, Set{Symbol}()), node)
-	end
-	for ((domain, typed_bus), nodes) in typed_bus_nodes
-		@test haskey(classic_nodes2bus, nodes)
-		classic_group, classic_bus = classic_nodes2bus[nodes]
-		typed_group = domain === :ac ? "bus" : "busdc"
-		@test classic_group == typed_group
-		@test dicts_approx_equal(
-			sharedpf.result["solution"][typed_group][string(typed_bus)],
-			classic_result["solution"][classic_group][string(classic_bus)],
-		)
-	end
-
-	@test sharedpf.result["termination_status"] == classic_result["termination_status"]
-	@test Set(keys(sharedpf.result["solution"])) ==
-	      Set(keys(classic_result["solution"]))
-	for group in ("bus", "busdc", "gen", "gendc", "branch", "branchdc", "convdc")
-		@test length(sharedpf.data[group]) == length(classic_data[group])
-	end
-	@test Set(keys(sharedpf.nodes2bus)) ==
-	      Set(row.node for row in ieee39bus_connections())
-	@test sharedpf.active_setpoint_values === sharedpf.operating_point.setpoints
-	for field in fieldnames(Setpoint)
-		@test isapprox(
-			getfield(classic_network.elements[:STATCOM].setpoint, field),
-			getfield(sharedpf.operating_point[:STATCOM], field);
-			atol = 1e-8,
-		)
-	end
-
-	# @test isequal(legacypf, builtpf)
-	# @test axes(z_built) == axes(z_legacy)
-	# @test isequal(z_built, z_legacy)
-
-	return nothing
-end
-
-function test_linearizedadmittance_parity(; freq_range = IEEE39_FREQ_RANGE)
-	legacy = build_ieee39bus_with_macro()
-	built = build_ieee39bus_with_networkbuilder().builder
-	newadmnw = compute(
-		LinearizationProblem(built),
-		AdmittanceLinearization(),
-	).network_model
-
-	freqs = range(freq_range[1], freq_range[2], step=freq_range[3])
-	s = 1im .* 2π .* freqs
-	elemkeys = [:STATCOM, :T1_39, :T9_39, :LoadB39]
-	for key in elemkeys
-		@test haskey(legacy.elements, key) #"Legacy network is missing element $key"
-		@test haskey(newadmnw.indices.elements, key) #"New network is missing element $key"
-		
-		ylegacy = PI.eval_y.((legacy.elements[key],), s;SI_units = true) #Should be pu (disabled scaling)
-		ynew = get_y(newadmnw,key, s)
-		ynew = [ynew[:,:,i] for i in axes(ynew, 3)]
-
-		@test isapprox(ylegacy, ynew; atol = 1e-4, rtol=1e-4) #"Admittance mismatch for element $key"
-	end
-	
-	
-
-
-
-
-	# @test isequal(omega_built, omega_legacy)
-	# @test axes(z_built) == axes(z_legacy)
-
-
-	# @test legacy.elements[:STATCOM].A ≈ built.elements[:STATCOM].A rtol=1e-11 #Check if the linearized state matrix are approx the same
-
-
-	return nothing
-end
-
-
-function test_ynode_and_edge_parity(; freq_range = IEEE39_FREQ_RANGE)
-	legacy = build_ieee39bus_with_macro()
-	built = build_ieee39bus_with_networkbuilder().builder
-	newadmnw = compute(
-		LinearizationProblem(built),
-		AdmittanceLinearization(),
-	).network_model
-	Z, omega = determine_impedance(legacy; input_pins=[:Bus9d, :Bus9q], output_pins=[:gndD, :gndQ], elim_elements=[:STATCOM], freq_range)
-	s = omega .*im
-	yedge = NB.make_y_edge(newadmnw, s)
-	Znew = [inv(yedge[1:2,1:2,i]) for i in axes(yedge,3)]
-
-	@test isapprox(Z,Znew)
-	Ynodeleg, _, omega = make_y_node(legacy;freq_range)
-	#Restructure to have AC-first. TODO: Update so you look at net ids for better robustness
-	Ynodeleg_sc = [[A[end-1, end-1] A[end-1, end] A[end-1, end-2]; A[end, end-1] A[end, end] A[end, end-2]; A[end-2,end-1] A[end-2,end] A[end-2,end-2]] for A in Ynodeleg] # Only take Ysc
-	
-	Ynodenew = NB.make_y_node(newadmnw, im.*omega)
-	DC_dummy_adm = zeros(3,3)
-	DC_dummy_adm[3,3] = 1e-4 #Dummy impedance added at DC side
-	Ynodenew = [Ynodenew[:,:,i] .+ DC_dummy_adm for i in axes(Ynodenew,3)]
-
-	@test isapprox(Ynodeleg_sc, Ynodenew;rtol=1e-7, atol=1e-7)
-end
-
-function test_determine_impedance_parity(; freq_range = IEEE39_FREQ_RANGE)
-	legacy = build_ieee39bus_with_macro()
-	built = build_ieee39bus_with_networkbuilder().builder
-	newadmnw = compute(
-		LinearizationProblem(built),
-		AdmittanceLinearization(),
-	).network_model
-	Z, omega = determine_impedance(legacy; input_pins=[:Bus9d, :Bus9q], output_pins=[:gndD, :gndQ], elim_elements=[:STATCOM], freq_range)
-	Znew, omega_new = NB.determine_impedance(newadmnw; nets=[:Bus9d, :Bus9q], elim_elements=[:STATCOM], freq_range)
-	Zresh = cat(Z...; dims=3)
-
-	@test isequal(omega, omega_new)
-	@test isapprox(Zresh,Znew)
-	
-end
-
-
-@testset "IEEE39bus NetworkBuilder parity" begin
-	test_ieee39bus_networkbuilder_parity()
-end
-
-@testset "IEEE39bus NetworkBuilder power flow parity" begin
-	test_nwbuilder_powerflow_parity()
-end
-
-@testset "IEEE39bus NetworkBuilder linearized admittance parity" begin
-	test_linearizedadmittance_parity()
-end
-
-@testset "IEEE39bus NetworkBuilder linearized admittance Ynode and Yedge parity" begin
-	test_ynode_and_edge_parity()
-end
-
-
-@testset "IEEE39bus NetworkBuilder linearized admittance determine_impedance parity" begin
-	test_determine_impedance_parity()
+@testset "IEEE39bus NetworkBuilder power flow" begin
+    sharedpf = build_ieee39bus_with_networkbuilder().solved
+    direct_case = ieee39bus_with_nwbuilder_powerflow()
+    newpf = direct_case.solved
+    function dicts_approx_equal(dict1, dict2; atol = 1e-8)
+        keys(dict1) == keys(dict2) || return false
+        for key in keys(dict1)
+            val1, val2 = dict1[key], dict2[key]
+            if val1 isa AbstractDict && val2 isa AbstractDict
+                dicts_approx_equal(val1, val2; atol) || return false
+            elseif val1 isa Number && val2 isa Number
+                isapprox(val1, val2; atol) || return false
+            elseif !isequal(val1, val2)
+                return false
+            end
+        end
+        return true
+    end
+    @test sharedpf.result["termination_status"] == newpf.result["termination_status"]
+    @test dicts_approx_equal(sharedpf.result["solution"], newpf.result["solution"])
+    @test Set(keys(sharedpf.nodes2bus)) ==
+        Set(row.node for row in ieee39bus_connections())
+    @test sharedpf.active_setpoint_values === sharedpf.operating_point.values
 end
 
 
@@ -2843,11 +2620,10 @@ end
 	)
 
 	builder = NetworkBuilder.define(elements, connections)
-	network = NB.build_network(builder.elements, builder.topology, builder.options)
-
-	@test !haskey(network.elements, :open_line)
-	@test network.elements[:a].pins[Symbol("1.1")] == :B
-	@test network.elements[:b].pins[Symbol("1.1")] == :B
-	@test network.elements[:a].pins[Symbol("2.1")] == :gnd
-	@test network.elements[:b].pins[Symbol("2.1")] == :gnd
+	@test !haskey(builder.elements, :open_line)
+    rows = builder.topology.connections
+    for name in (:a, :b)
+        @test only(filter(r -> r.component == name && r.port == :side1, rows)).net == :B
+        @test only(filter(r -> r.component == name && r.port == :side2, rows)).net == :gnd
+    end
 end

@@ -19,7 +19,10 @@ Component ports are declared by `Port`, `ACDQ`, `ACABC`, `DC_CM` and
 the model bases. Source inputs use physical units.
 
 Terminal operating points use `ACPortValues` and `DCPortValues`, keyed by port name
-in a NamedTuple. `linearize(model, values)` computes the state-space matrices and
+in a NamedTuple. `OperatingPoint` stores these NamedTuples by element name:
+`op[:c1].ac.p` accesses AC active power, and `op[:c1].dc.v` accesses DC voltage.
+`get(op, :missing, nothing)` returns `nothing` for an absent element.
+`linearize(model, values)` computes the state-space matrices and
 stores the converged state. `steady_state(model, values)` reuses that state when
 the terminal values compare equal with `isequal`.
 
@@ -38,6 +41,17 @@ Private = false
 ```
 
 ## `PowerImpedance.NetworkBuilder`
+
+`Bus(name; ports, domain = nothing)` connects named component ports and expands
+into one net per coordinate. AC names append `d`, `q` or `a`, `b`, `c`. A DC net
+retains the bus name. `Net(name; terminals, domain = nothing)` connects individual
+terminals using `(component, port, terminal)` triples. Both infer their domain from
+the attached ports. An AC bus uses dq coordinates when one attached port declares
+`ACDQ`, or when `domain = ACDQ` is supplied. Names starting with `gnd` denote ground.
+
+`define(elements, topology; options = (;), exclude = ())` stores models under their
+NamedTuple names. An included model without a topology reference raises `ArgumentError`.
+Excluded names are dropped with an informational message.
 
 ```@autodocs
 Modules = [PowerImpedance.NetworkBuilder]

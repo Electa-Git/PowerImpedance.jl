@@ -112,7 +112,9 @@ end
         (node = :gnd, element = :load, side = 2, terminal = 1),
         (node = :gnd, element = :load, side = 2, terminal = 2),
     ))
-    point = OperatingPoint(Dict(:sg1 => machine.setpoint))
+    # transitional
+    point = OperatingPoint(Dict(:sg1 =>
+        PowerImpedance._terminal_values(state.elements.sg1, machine.setpoint)))
     model = NetworkBuilder.NetworkModel(state, point)
     frequencies = 2π * im .* [1.0, 10.0, 100.0]
     admittance = NetworkBuilder.get_y(model, :sg1, frequencies)

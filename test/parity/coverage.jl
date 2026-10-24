@@ -47,7 +47,7 @@ function main()
     for fixture in ParityFixtures.FIXTURES
         state = fixture.build()
         for element in values(state.elements)
-            collect_models!(found, element.element_model)
+            collect_models!(found, element)
         end
     end
     kinds = ("Butterworth", "Chebyshev", "Bessel", "CriticalDamping")

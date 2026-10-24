@@ -4,6 +4,10 @@
 
 ### Added
 
+- Add `NetworkBuilder.Bus` and `NetworkBuilder.Net` for topology declarations using
+  named component ports and terminals.
+- Add per-port terminal values to NetworkBuilder power-flow operating points.
+
 - Add `ACPortValues` and `DCPortValues`, and `linearize` and `steady_state` for
   state-space component models.
 
@@ -41,6 +45,15 @@
   (`compare_operating_point`).
 
 ### Changed
+
+- **Breaking:** `solve(state)` returns a `PowerFlowResult`.
+
+- **Breaking:** NetworkBuilder topology rows use `net`, `bus`, `component`, `port`,
+  `terminal`, `domain` and `frame`, with symbol terminal labels.
+- **Breaking:** `OperatingPoint` stores values by element and port name through
+  `values`, with access such as `op[:c1].ac.p`.
+- **Breaking:** `NetworkState.elements` stores component models. `define` accepts
+  `exclude` for omitted elements and rejects unreferenced included elements.
 
 - **Breaking:** rename the `AVRSM` field `vref_SG` to `v_ref`.
 

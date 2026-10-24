@@ -110,12 +110,11 @@ function _check_stability_nodes(builder::NetworkState, definition::_CheckStabili
     domain = definition.direction === :ac ? 1 : definition.direction === :dc ? 2 :
         throw(ArgumentError("direction must be :ac or :dc"))
     rows = filter(
-        row -> row.element == definition.element && row.domain == domain && row.bus != 0,
-        builder.topology.connections,
+        row -> row.domain == domain && row.bus != 0,
+        sortedcomponentconnections(builder.topology, definition.element),
     )
     isempty(rows) && throw(ArgumentError("the selected element has no connected terminals"))
-    sort!(rows; by=row -> (row.side, row.terminal))
-    return unique(Symbol.(rows.node))
+    return unique(rows.net)
 end
 
 function _device_admittance(network, element_index, identifiers, complex_frequencies)

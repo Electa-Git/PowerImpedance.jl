@@ -557,3 +557,71 @@ function _withinputs(model::InductionMachine, declarations::NamedTuple, changes,
         model, declarations, changes, path)
     return Parameters.reconstruct(configured; cache = LinearizationCache())
 end
+
+
+pmtype(::InductionMachine, rows) = "im"
+
+function convert!(data, indm::InductionMachine, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+    key = component_key.index
+    ac_bus = ports.ac
+
+
+    key_str = string(key)
+    data["im"][key_str] = Dict{String, Any}()
+
+    elec = indm.elec
+    mech = indm.mech
+    Sbase = global_dict["S"]
+    Vbase = global_dict["V"]
+    impscale = ((elec.Vac_base)^2/elec.S_base)/global_dict["Z"]
+    # Convert torque from the machine MVA base to the network VA base.
+    T_0 = mech.T_0 * elec.S_base * 1e6 / Sbase
+    # Power flow initial values
+    data["im"][key_str]["P_ag"] = T_0
+    data["im"][key_str]["Q_ag"] = 0.0
+    data["im"][key_str]["status"] = 1
+    data["im"][key_str]["im_bus"] = ac_bus
+
+    # Power flow limits (not used in power flow)
+    data["im"][key_str]["Pacmin"] = 0.9 * T_0 #/ Sbase
+    # Should be extended with local_base/global_base but we do not care (not used in PF)
+    data["im"][key_str]["Vmmin"] = 0.9
+    data["im"][key_str]["Vmmax"] = 1.1
+    data["im"][key_str]["Pacmax"] = 1.1 * T_0 #/ Sbase
+    data["im"][key_str]["Pacrated"] = T_0 #/ Sbase
+
+    # Power flow elements
+    data["im"][key_str]["x_m"] = elec.l_m * impscale # In per unit equal
+    data["im"][key_str]["x_rl"] = elec.l_rl * impscale
+    data["im"][key_str]["x_sl"] = (elec.l_sl + elec.lt) * impscale
+    data["im"][key_str]["r_r"] = elec.r_r * impscale
+    data["im"][key_str]["r_s"] = (elec.r_s + elec.rt) * impscale
+
+    # Torque parameters
+    data["im"][key_str]["torque"] =  Dict{String, Any}()
+    data["im"][key_str]["torque"]["T_0"] = T_0
+    data["im"][key_str]["torque"]["A"] = mech.A
+    data["im"][key_str]["torque"]["B"] = mech.B
+    data["im"][key_str]["torque"]["C"] = mech.C
+    data["im"][key_str]["torque"]["m"] = mech.m
+
+    return nothing
+
+end
+
+
+function transform(elemresult, busresult::NamedTuple, global_dict,
+        model::InductionMachine, ::Type{PMACDC}, ::Type{PIACDC})
+
+    acbusresult = busresult.ac
+    Pgen = elemresult["pg"] * global_dict["S"] / 1e6 #MW
+    Qgen = elemresult["qg"] * global_dict["S"] / 1e6 #MVAr
+    Vm =
+        (acbusresult["vm"] *
+            # Convert the LN-RMS voltage coming from the PF to LN-PK
+            global_dict["V"] / 1e3) * sqrt(2)
+    θ = acbusresult["va"]
+
+    return (ac = ACPortValues(Vm, θ, Pgen, Qgen),)
+end

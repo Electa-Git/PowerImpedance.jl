@@ -20,10 +20,11 @@ end
 
 struct _BuilderMaterializer{Connections}
     connections::Connections
+    exclude::Tuple
 end
 
 function (target::_BuilderMaterializer)(elements, options)::NetworkState
-    return define(elements, target.connections; options)
+    return define(elements, target.connections; options, exclude = target.exclude)
 end
 
 """
@@ -37,12 +38,13 @@ function _define_network(
     elements::NamedTuple,
     connections::Union{Tuple,AbstractVector},
     options::NamedTuple,
+    exclude,
 )
     element_space = _namedtuple_gridspace(elements)
     option_space = _namedtuple_gridspace(options)
     return _lift_gridspace(
         NetworkState,
-        _BuilderMaterializer(connections),
+        _BuilderMaterializer(connections, Tuple(exclude)),
         (; elements=element_space, options=option_space),
         Val(:product),
     )

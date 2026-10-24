@@ -2,6 +2,7 @@ module ModelPredicatesTests
 using Test, PowerImpedance
 const PI = PowerImpedance
 include("parity/fixtures.jl")
+const NB = PI.NetworkBuilder
 
 const PREDICATES = (PI.is_source, PI.is_converter, PI.is_generator,
     PI.is_inductionmachine, PI.is_passive, PI.is_active, PI.issingleport,
@@ -11,7 +12,21 @@ const PREDICATES = (PI.is_source, PI.is_converter, PI.is_generator,
     for fixture in ParityFixtures.FIXTURES
         state = fixture.build()
         for (name, element) in pairs(state.elements)
-            model = element.element_model
+            model = element
+            rows = NB.sortedcomponentconnections(state.topology, name; withground = true)
+            frame = NB._component_frame(rows)
+            ports = electricalconnections(model)
+            transformed = frame == :dq && first(ports).domain === ACABC
+            sides = NB._legacy_port_names(model)
+            counts = Tuple(length(ports[port].terminals) for port in sides)
+            if frame == :dc && PI.is_passive(model)
+                n = size(PI.eval_abcd(model, 100π * im), 1) ÷ 2
+                counts = (n, n)
+                transformed = n == 2
+            end
+            element = PI.Element(element_model = deepcopy(model),
+                input_pins = counts[1], output_pins = last(counts),
+                transformation = transformed) # transitional
             model isa PI.Blackbox_MMC && continue
             @testset "$(fixture.name).$name" begin
                 for predicate in PREDICATES

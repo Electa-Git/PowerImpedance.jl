@@ -407,3 +407,72 @@ function electricalconnections(model::Transformer)
 end
 
 bases(::Transformer) = nothing
+
+
+pmtype(::Transformer, rows) = "branch"
+
+function convert!(data, t::Transformer, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+    key_branch = component_key.index
+    bus1, bus2 = ports.side1, ports.side2
+    branch_ac!(data, key_branch, (bus1, bus2), global_dict)
+    branch = data["branch"][string(key_branch)]
+    branch["transformer"] = true
+    # PowerModels uses t = tap*exp(j*shift), with V_to = V_from/t
+    # (core/data.jl:15-22, core/admittance_matrix.jl:55-59).
+    branch["shift"] = t.pins == 3 && t.organization == :ΔY ? -π / 6 : 0
+    branch["c_rating_a"] = 1
+
+    ## Update voltage limits to match the transformer voltage ratings
+    if t.V₁ᵒ == t.V₂ᵒ == 0
+        @warn ("Transformer has no open-circuit voltage ratings; " *
+            "voltage limits will use inferred bus voltage levels.")
+        levels = get(global_dict, "transformer_voltage_levels", nothing)
+        Vbase = global_dict["V"] / 1e3
+        Vprim, Vsec = levels === nothing ? (Vbase, Vbase / t.n) : levels[component_key.name]
+    else
+        Vprim = t.V₁ᵒ / 1e3
+        Vsec = t.V₂ᵒ / 1e3
+        ((Vprim != global_dict["V"]/1e3) && (Vsec != global_dict["V"]/1e3)) &&
+            @warn ("Transformer voltage ratings do not match system base voltage.")
+    end
+
+    Vbase_global = global_dict["V"] / 1e3
+    bounded_buses = get(global_dict, "transformer_voltage_bounded_buses", nothing)
+    for (bus, voltage) in ((bus1, Vprim), (bus2, Vsec))
+        bounded_buses !== nothing && bus in bounded_buses && continue
+        data["bus"][string(bus)]["vmax"] = (voltage/Vbase_global)*1.1
+        data["bus"][string(bus)]["vmin"] = (voltage/Vbase_global)*0.9
+        bounded_buses === nothing || push!(bounded_buses, bus)
+    end
+
+
+    # Dyn11 has the same balanced tap, series and shunt parameters as YY.
+    # Remove only its frame rotation before the exact YY conversion.
+    balanced_t = t.organization == :ΔY ? Transformer(t; organization = :YY) : t
+    abcd = eval_abcd(balanced_t, global_dict["omega"] * 1im)
+    n = 3
+    (a, b, c, d) = (
+        abcd[1:n, 1:n],
+        abcd[1:n, (n+1):end],
+        abcd[(n+1):end, 1:n],
+        abcd[(n+1):end, (n+1):end],
+    )
+    y = [d * inv(b) c - d * inv(b) * a; -inv(b) inv(b) * a] * global_dict["Z"]
+
+    # Exact pi equivalent of the unshifted two-port. PowerModels scales the
+    # primary shunt by tap^2 (core/admittance_matrix.jl:55-59).
+    tap = t.n
+    ys = -y[1, n + 1] * tap
+    yfr = y[1, 1] * tap^2 - ys
+    yto = y[n + 1, n + 1] - ys
+
+    branch["tap"] = tap
+    branch["br_r"] = real(1 / ys)
+    branch["br_x"] = imag(1 / ys)
+    branch["g_fr"] = real(yfr)
+    branch["b_fr"] = imag(yfr)
+    branch["g_to"] = real(yto)
+    branch["b_to"] = imag(yto)
+    return nothing
+end

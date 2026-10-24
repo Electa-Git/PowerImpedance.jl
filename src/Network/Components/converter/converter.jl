@@ -239,3 +239,28 @@ function timeDelayPadeMatrices(padeOrderNum,padeOrderDen,t_delay,numberVars)
 
     return A_Pade,B_Pade,C_Pade,D_Pade
 end
+
+
+function transform(elemresult, busresult::NamedTuple, global_dict,
+        model::AbstractConverter, ::Type{PMACDC}, ::Type{PIACDC})
+
+    acbusresult = busresult.ac # AC bus
+    dcbusresult = busresult.dc # DC bus
+
+    Pdc = elemresult["pdc"] * global_dict["S"] / 1e6
+    Vm =
+        (acbusresult["vm"] * global_dict["V"] / 1e3) *
+        sqrt(2)
+    θ = acbusresult["va"]
+    Vdc =
+        dcbusresult["vm"] *
+        # data["dcpol"] should be here. const dcpol in powerflow.jl
+        (dcpol * global_dict["V"] / 1e3)
+    Pac = -elemresult["pgrid"] * global_dict["S"] / 1e6
+    # User and stored Setpoints use AC power injected into the bus. PowerModels
+    # pgrid/qgrid are absorbed; pftoinputs divides the injected powers by Sbase
+    # to obtain the model's internal pu references, without another sign change.
+    Qac = -elemresult["qgrid"] * global_dict["S"] / 1e6
+
+    return (ac = ACPortValues(Vm, θ, Pac, Qac), dc = DCPortValues(Vdc, Pdc))
+end

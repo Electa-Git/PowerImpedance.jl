@@ -33,7 +33,7 @@ function main(output_directory)
         state = result.state
         active = join(string.(keys(filter(PowerImpedance.is_active, state.elements))), ", ")
         source = D.ParityFixtures.SOURCES[fixture.name]
-        nets = length(unique(state.topology.connections.node))
+        nets = length(unique(state.topology.connections.net))
         push!(summary,
             "| $(fixture.name) | $source | $(length(state.elements)) | " *
             "$active | $nets | $(fixture.probes.pscad) | $(length(result.rows)) |")

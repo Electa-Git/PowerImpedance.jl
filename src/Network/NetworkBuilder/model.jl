@@ -31,25 +31,49 @@ Base.isempty(lookup::AdmittanceLookup) = isempty(lookup.Y!)
 
 fwrap(f, ::Type{T}) where {T <: Number} = AdmFunc{T}(f)
 
-function build(element::P.Element, setpoint)
-    if P.is_statespace(element)
-        A, B, C, D = P.update(element, setpoint)
-        admittance! = P.freqresp_cache(A, B, C, D; scale = P.SI_scale(element))
-    elseif P.is_linfreqdomain(element)
-        function admittance!(output, complex_frequencies)
-            @simd for index in eachindex(complex_frequencies)
-                copyto!(
-                    @view(output[:, :, index]),
-                    P.get_y(element, complex_frequencies[index])
-                )
-            end
+const FUNDAMENTAL_ANGULAR_FREQUENCY = 100π
+
+function build(model::P.AbstractStateSpace, values::NamedTuple, frame::Symbol)
+    A, B, C, D = P.linearize(model, values)
+    return P.freqresp_cache(A, B, C, D; scale = P.SI_scale(model))
+end
+
+function build(model::P.AbstractLinFreqDomain, values::NamedTuple, frame::Symbol)
+    function admittance!(output, complex_frequencies)
+        @simd for index in eachindex(complex_frequencies)
+            copyto!(@view(output[:, :, index]),
+                admittance(model, complex_frequencies[index], frame))
         end
-    else
-        throw(ArgumentError(
-            "element $(typeof(element)) has no state-space or frequency-domain model",
-        ))
     end
-    return fwrap(admittance!, ComplexF64)
+    return admittance!
+end
+
+function build(model::P.Blackbox_MMC, values::NamedTuple, frame::Symbol)
+    throw(ArgumentError("linearization is unsupported for $(typeof(model))"))
+end
+
+function admittance(model::P.AbstractLinFreqDomain, s::Complex, frame::Symbol)
+    domain = first(P.electricalconnections(model)).domain
+    return admittance(model, s, domain, Val(frame))
+end
+
+admittance(model, s, ::P.AbstractDomain, ::Val) = P.abcd_to_y(P.eval_abcd(model, s))
+
+function admittance(model, s, ::P.ACABCDomain, ::Val{:dq})
+    ω₀ = FUNDAMENTAL_ANGULAR_FREQUENCY
+    return P.abcd_to_y(P.transformation_dq(
+        P.eval_abcd(model, s + 1im * ω₀), P.eval_abcd(model, s - 1im * ω₀)))
+end
+
+function admittance(model, s, ::P.DCDomain, ::Val{:dc})
+    abcd = P.eval_abcd(model, s)
+    size(abcd, 1) == 4 && (abcd = P.transformation_dc(abcd))
+    return P.abcd_to_y(abcd)
+end
+
+function _component_frame(rows)
+    ac = filter(row -> row.domain == 1, rows)
+    return isempty(ac) ? :dc : first(ac).frame
 end
 
 """
@@ -111,7 +135,9 @@ end
 
 Construct the frequency-domain network model at a calculated operating point.
 Ideal sources are omitted from the element admittance lookup and their external
-nodes are included in the grounded-node selection.
+nodes are included in the grounded-node selection. Every active non-source element
+requires terminal values in `operating_point`. A missing entry raises `ArgumentError`
+with the element name.
 """
 function NetworkModel(network::NetworkState, operating_point)::NetworkModel{ComplexF64}
     elements = filter(element -> !P.is_source(element), network.elements)
@@ -120,11 +146,12 @@ function NetworkModel(network::NetworkState, operating_point)::NetworkModel{Comp
     element_indices = Dict{Symbol, Int}()
 
     connections = network.topology.connections
-    node_names = unique(connections.node)
+    node_names = unique(connections.net)
     node_indices = Dict(node_names .=> collect(eachindex(node_names)))
 
-    _build_admittances!(admittances, element_indices, elements, operating_point)
-    _build_positions!(positions, connections, node_indices, element_indices)
+    _build_admittances!(admittances, element_indices, elements, operating_point,
+        network.topology)
+    _build_positions!(positions, network.topology, node_indices, element_indices)
     lookup = AdmittanceLookup(admittances, positions)
 
     active = filter(P.is_active, elements)
@@ -136,7 +163,7 @@ function NetworkModel(network::NetworkState, operating_point)::NetworkModel{Comp
         keys(filter(P.is_source, network.elements)),
         connections
     )
-    active_node_names = filter(row -> row.element in keys(active), connections).node
+    active_node_names = filter(row -> row.component in keys(active), connections).net
     retained_nodes = unique(node_indices[node] for node in active_node_names)
 
     return NetworkModel(
@@ -149,23 +176,29 @@ function NetworkModel(network::NetworkState, operating_point)::NetworkModel{Comp
     )
 end
 
-function _build_admittances!(admittances, indices, elements, operating_point)
-    for (index, (name, element)) in enumerate(pairs(elements))
-        setpoint = get(operating_point, name, P.Setpoint())
-        admittances[index] = build(element, setpoint)
+function _build_admittances!(admittances, indices, elements, operating_point, topology)
+    for (index, (name, model)) in enumerate(pairs(elements))
+        values = get(operating_point, name, nothing)
+        P.is_active(model) && values === nothing && throw(ArgumentError(
+            "operating point is missing active element :$name"))
+        rows = sortedcomponentconnections(topology, name; withground = true)
+        response! = _element_call(name) do
+            build(model, values === nothing ? (;) : values, _component_frame(rows))
+        end
+        function admittance!(output, frequencies)
+            return _element_call(name) do
+                response!(output, frequencies)
+            end
+        end
+        admittances[index] = fwrap(admittance!, ComplexF64)
         indices[name] = index
     end
     return nothing
 end
 
-function _build_positions!(positions, connections, node_indices, element_indices)
+function _build_positions!(positions, topology, node_indices, element_indices)
     for (element, index) in pairs(element_indices)
-        nodes = sortedcomponentconnections(
-            connections,
-            element;
-            withground = true,
-            acfirst = false
-        ).node
+        nodes = sortedcomponentconnections(topology, element; withground = true).net
         local_indices = [node_indices[node] for node in nodes]
         positions[index] = [(row, column) for row in local_indices, column in local_indices]
     end
@@ -173,10 +206,10 @@ function _build_positions!(positions, connections, node_indices, element_indices
 end
 
 function _grounded_nodes(node_indices, source_names, connections)
-    grounded = Int[node_indices[row.node] for row in connections if row.bus == 0]
+    grounded = Int[node_indices[row.net] for row in connections if row.bus == 0]
     for source in source_names
-        for row in filter(row -> row.element == source, connections)
-            push!(grounded, node_indices[row.node])
+        for row in filter(row -> row.component == source, connections)
+            push!(grounded, node_indices[row.net])
         end
     end
     return unique(grounded)

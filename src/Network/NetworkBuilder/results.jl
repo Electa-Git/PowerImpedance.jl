@@ -42,10 +42,11 @@ AdmittanceLinearization(; backend::Type{B}=P.PIACDC) where {B} =
     AdmittanceLinearization{B}(backend)
 
 function islinear(elements)
-    for elem in values(elements)
-        if !P.islinear(elem)
-            return false
+    for (name, model) in pairs(elements)
+        linear = _element_call(name) do
+            P.islinear(model)
         end
+        linear || return false
     end
     return true
 end
@@ -54,7 +55,7 @@ function _node_bus_mapping(topology::NetworkTopology)
     mapping = Dict{Symbol, Tuple{Symbol, Int}}()
     for row in topology.connections
         bus_type = row.bus == 0 ? :ground : row.domain == 1 ? :ac : :dc
-        mapping[row.node] = (bus_type, row.bus)
+        mapping[row.net] = (bus_type, row.bus)
     end
     return mapping
 end
@@ -74,7 +75,7 @@ function _operating_point(
         network::NetworkState,
         element_mapping
 )
-    setpoints = transform(
+    values = transform(
         result["solution"],
         global_dict,
         network,
@@ -82,7 +83,7 @@ function _operating_point(
         P.PIACDC,
         element_mapping
     )
-    return P.OperatingPoint(Dict{Symbol, P.Setpoint}(pairs(setpoints)))
+    return P.OperatingPoint(values)
 end
 
 function P.compute(
@@ -116,7 +117,7 @@ function P.compute(
         setting = powerflow_setting(network.options)
     )
     point = _operating_point(result, global_dict, network, element_mapping)
-    @info "Setpoints of nonlinear devices: $(point.setpoints)"
+    @info "Terminal operating values: $(point.values)"
     return P.PowerFlowResult(
         formulation,
         result,
@@ -133,8 +134,6 @@ function Base.convert(::Type{P.OperatingPoint}, powerflow::P.PowerFlowResult)
     powerflow.operating_point
 end
 
-nonlinearsetpoints(powerflow::P.PowerFlowResult) = convert(P.OperatingPoint, powerflow)
-
 function P.compute(
         problem::LinearizationProblem,
         formulation::AdmittanceLinearization{P.PIACDC};
@@ -143,11 +142,11 @@ function P.compute(
     network = problem.network
     powerflow = problem.powerflow
     point = if powerflow isa P.PowerFlowResult
-        nonlinearsetpoints(powerflow)
+        convert(P.OperatingPoint, powerflow)
     elseif islinear(network.elements)
         P.OperatingPoint()
     else
-        nonlinearsetpoints(P.compute(PowerFlowProblem(network), ACDCPowerFlow()))
+        P.compute(PowerFlowProblem(network), ACDCPowerFlow()).operating_point
     end
     model = NetworkModel(network, point)
     return P.LinearizationResult(
@@ -165,33 +164,22 @@ end
 # Transforms output(output payload) from PMACDC to PIACDC
 function transform(output, global_dict, bs::NetworkState,
         ::Type{P.PMACDC}, ::Type{P.PIACDC}, elempitopm)
-    sp = (;)
-    for (key, elem) in pairs(bs.elements)
-
-        #1. Skip passive devices
-        if P.is_passive(elem) || P.is_source(elem)
-            continue # Skips iteration
+    values = Dict{Symbol, NamedTuple}()
+    for (name, model) in pairs(bs.elements)
+        P.is_passive(model) && continue
+        values[name] = _element_call(name) do
+            pmcomptype, pmkey = elempitopm[name]
+            elemresult = output[pmcomptype][string(pmkey)]
+            rows = filter(row -> row.component == name, bs.topology.connections)
+            ports = _powerflow_ports(model, rows)
+            descriptions = P.electricalconnections(model)
+            busvalues = map(keys(ports)) do port
+                group = P.isac(descriptions[port].domain) ? "bus" : "busdc"
+                output[group][string(ports[port])]
+            end
+            busresult = NamedTuple{keys(ports)}(busvalues)
+            P.transform(elemresult, busresult, global_dict, model, P.PMACDC, P.PIACDC)
         end
-
-        pmcomptype, pmkey = elempitopm[key]
-        elemresult = output[pmcomptype][string(pmkey)]
-        busresult = transform(output, bs.topology, P.PMACDC, P.PIACDC, key) #Sorted from AC to DC (easier extension for nonshunt active elements)
-
-        sp = merge(sp, (;
-            key =>
-            P.transform(elemresult, busresult, global_dict, elem, P.PMACDC, P.PIACDC),))
     end
-
-    return sp
-end
-
-function transform(output, connections, ::Type{P.PMACDC}, ::Type{P.PIACDC}, key)
-    elemconnections = sortedcomponentconnections(connections, key) #Sorted from AC to DC and with terminal
-    busids = unique(Table(bus = elemconnections.bus, domain = elemconnections.domain))
-    # Bus identifiers are unique only together with their electrical domain.
-    busresults = [output[string(busid.domain == 1 ? "bus" : "busdc")][string(busid.bus)]
-                  for busid in busids]
-    # busresults_nt = NamedTuple{busids_symbol}(busresults)
-
-    return busresults
+    return values
 end

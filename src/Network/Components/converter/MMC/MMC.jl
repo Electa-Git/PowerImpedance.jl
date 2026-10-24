@@ -917,3 +917,98 @@ function _withinputs(model::MMC, declarations::NamedTuple, changes, path)
         model, declarations, changes, path)
     return Parameters.reconstruct(configured; cache = LinearizationCache())
 end
+
+
+pmtype(::MMC, rows) = "convdc"
+
+function convert!(data, conv::MMC, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+
+    key = component_key.index
+    target = powerflow_targets(conv)
+    b = bases(conv)
+    p_ac = target.p_ac * b.S
+    q_ac = target.q_ac * b.S
+    v_ac = target.v_ac * b.v_ac
+    p_dc = target.p_dc * b.S
+    v_dc = target.v_dc * b.v_dc
+    lm = limits(conv)
+    ac_bus = ports.ac
+    dc_bus = ports.dc
+
+    key_str = string(key)
+
+
+    data["convdc"][key_str] = Dict{String, Any}()
+    convdc = data["convdc"][key_str]
+
+    convdc["busdc_i"] = dc_bus
+    convdc["busac_i"] = ac_bus
+    convdc["source_id"] = Any["convdc", key]
+    convdc["status"] = 1
+    convdc["index"] = key
+    convdc["basekVac"] = global_dict["V"] / 1e3
+
+    convdc["type_ac"] = pf_type_ac(conv.delta_control)
+    # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages,
+    # PowerImpedance uses amplitude
+    convdc["Vtar"] = (v_ac/sqrt(2)) / (global_dict["V"] / 1e3)
+    if convdc["type_ac"] == 2
+        data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
+        data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
+    end
+    convdc["type_dc"] = pf_type_dc(conv.delta_control, conv.sync)
+    droop = pf_acq_droop(conv.delta_control.outer_reactive)
+    convdc["acq_droop"] = droop.enabled
+    convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
+    convdc["droop"] = pf_dc_droop(conv.delta_control,
+        conv.elec.vDC_base, conv.elec.Sbase, global_dict, data)
+    convdc["Vdcset"] = v_dc / (data["dcpol"] * global_dict["V"] / 1e3)
+    convdc["Pacset"] = -p_ac
+    convdc["Pdcset"] = (!ismissing(p_dc) && !iszero(p_dc)) ? p_dc : p_ac
+    convdc["dVdcSet"] = 0.0
+
+    convdc["islcc"] = 0
+    convdc["transformer"] = 0
+    convdc["rtf"] = 0.0
+    convdc["xtf"] = 0.0
+    convdc["tm"] = 1.0
+    convdc["filter"] = 0
+    convdc["bf"] = 0.0
+    convdc["reactor"] = 1
+
+    convdc["rc"] = conv.elec.turnsRatio^(-2) *
+        (conv.elec.Rₑ * conv.elec.zAC_base) / global_dict["Z"]
+    convdc["xc"] = conv.elec.turnsRatio^(-2) *
+        (conv.elec.Lₑ * conv.elec.lAC_base) * global_dict["omega"] / global_dict["Z"]
+
+    convdc["Vmmax"] = 1.1 * convdc["Vtar"]
+    convdc["Vmmin"] = 0.9 * convdc["Vtar"]
+    convdc["Imax"] = 1.1 * max(abs(lm.P_min), abs(lm.P_max), abs(p_ac)) /
+        max(v_ac / sqrt(2), eps())
+
+    convdc["P_g"] = p_ac
+    convdc["Q_g"] = q_ac
+    convdc["LossA"] = 0.0
+    convdc["LossB"] = 0.0
+    convdc["LossCrec"] = 0.0
+    convdc["LossCinv"] = 0.0
+    convdc["Qacmax"] = lm.Q_max*conv.elec.Sbase
+    convdc["Qacmin"] = lm.Q_min*conv.elec.Sbase
+    convdc["Pacmax"] = lm.P_max*conv.elec.Sbase
+    convdc["Pacmin"] = lm.P_min*conv.elec.Sbase
+
+    if data["bus"][string(ac_bus)]["bus_type"] == 1
+        data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
+        data["bus"][string(ac_bus)]["vmin"] = 0.9 * data["bus"][string(ac_bus)]["vm"]
+        data["bus"][string(ac_bus)]["vmax"] = 1.1 * data["bus"][string(ac_bus)]["vm"]
+    end
+
+    data["busdc"][string(dc_bus)]["Vdc"] = v_dc / (data["dcpol"] * global_dict["V"] / 1e3)
+    data["busdc"][string(dc_bus)]["Vdcmax"] = 1.1 * data["busdc"][string(dc_bus)]["Vdc"]
+    data["busdc"][string(dc_bus)]["Vdcmin"] = 0.9 * data["busdc"][string(dc_bus)]["Vdc"]
+    data["busdc"][string(dc_bus)] = set_bus_type_dc(
+        data["busdc"][string(dc_bus)], convdc["type_dc"])
+
+    return nothing
+end

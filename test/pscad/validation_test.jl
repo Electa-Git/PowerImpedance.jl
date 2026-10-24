@@ -1009,7 +1009,7 @@ end
     for (id,mode,scr) in (("mmc_pq",:pq,8.),("mmc_pf_q",:pf,8.),("mmc_p_qv",:qv,8.),
         ("mmc_p_vac",:vac,8.),("mmc_vdc_q",:vdc,8.),("mmc_pq_weak_grid",:pq,2.5))
         net=V.fixture(id).factory()
-        parent=V.PSCADFixtures.mmc_network(mode).state.elements.DUT
+        parent=V.PSCADFixtures.mmc_network(mode).classic.elements[:DUT]
         dut=net.elements[:DUT];m=dut.element_model
         @test repr(m)==repr(parent.element_model)
         @test dut.limits==parent.limits

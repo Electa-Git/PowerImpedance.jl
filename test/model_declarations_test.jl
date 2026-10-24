@@ -163,7 +163,7 @@ end
     for fixture in ParityFixtures.FIXTURES
         for (name, element) in pairs(fixture.build().elements)
             @testset "$(fixture.name).$name defaults" begin
-                model = element.element_model
+                model = element
                 declarations = inputs(model)
                 defaults = declared_defaults(declarations)
                 fresh = with_logger(NullLogger()) do
@@ -182,15 +182,20 @@ end
         state = fixture.build()
         for (name, element) in pairs(state.elements)
             @testset "$(fixture.name).$name" begin
-                model = element.element_model
+                model = element
                 ports = electricalconnections(model)
                 sides = element_ports(model)
                 @test Set(sides) == Set(keys(ports))
                 @test length(ports) in (1, 2)
-                for (side, key) in enumerate(sides)
-                    actual = side == 1 ? element.input_pins : element.output_pins
-                    @test actual == expected_pins(ports[key], model,
-                        element.transformation)
+                for key in sides
+                    rows = filter(row -> row.component == name && row.port == key,
+                        state.topology.connections)
+                    transformed = (first(rows).frame == :dq &&
+                        ports[key].domain === ACABC) ||
+                        (ports[key].domain === DC_CM && length(ports) == 2 &&
+                         physical_conductors(model) == 2)
+                    actual = length(unique(rows.terminal))
+                    @test actual == expected_pins(ports[key], model, transformed)
                 end
                 check_tree(model)
             end
@@ -390,10 +395,9 @@ end
         @test PI.powerflow_targets(m) === merge(seeds, (p_ac = 0.31,), references)
         check_tree(m)
     end
-    for fixture in ParityFixtures.FIXTURES, element in values(fixture.build().elements)
-        m = element.element_model
+    for fixture in ParityFixtures.FIXTURES, (name, m) in pairs(fixture.build().elements)
         m isa Union{MMC, TLC} || continue
-        @testset "$(fixture.name).$(element.symbol) ownership" begin
+        @testset "$(fixture.name).$name ownership" begin
             tree = inputvalues(m)
             expected = m.powerflow
             reference_values = Dict{Symbol, Float64}()
