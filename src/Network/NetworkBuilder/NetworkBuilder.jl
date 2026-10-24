@@ -150,18 +150,17 @@ function _define_network(
         model = _element_call(name) do
             _configured_model(elements[name])
         end
-        _validate_builder_model(model, name)
         model
     end
     return NetworkState(NamedTuple{names}(models), topology, options)
 end
 
-_configured_model(model::Union{P.AbstractElementModel, P.Blackbox_MMC}) = model
-_validate_builder_model(::P.AbstractElementModel, name) = nothing
-function _validate_builder_model(model::P.Blackbox_MMC, name)
-    throw(ArgumentError("element :$name ($(typeof(model))) has no NetworkBuilder " *
-        "power-flow or linearization support"))
-end
+"""
+$(TYPEDSIGNATURES)
+
+Return a direct component model for network construction.
+"""
+_configured_model(model::P.AbstractElementModel) = model
 
 # transitional
 function _configured_model(element::P.Element)
@@ -169,7 +168,13 @@ function _configured_model(element::P.Element)
 end
 
 # transitional
-_configured_model(model::Union{P.AbstractElementModel, P.Blackbox_MMC}, point, limits) =
+"""
+$(TYPEDSIGNATURES)
+
+Retain a direct model whose inputs already store its power-flow targets and limits.
+The classic `point` and `limits` arguments do not replace these stored values.
+"""
+_configured_model(model::P.AbstractElementModel, point, limits) =
     model
 
 # transitional

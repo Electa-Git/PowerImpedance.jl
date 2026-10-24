@@ -1,7 +1,12 @@
 topology_role(::P.AbstractElementModel, connected_buses, grounded_ports) = :generic
 topology_role(::P.Source, connected_buses, grounded_ports) = :source
 topology_role(::P.AbstractConverter, connected_buses, grounded_ports) = :converter
-topology_role(::P.Converter, connected_buses, grounded_ports) = :converter
+"""
+$(TYPEDSIGNATURES)
+
+Return the converter topology role for a scan-based MMC.
+"""
+topology_role(::P.Blackbox_MMC, connected_buses, grounded_ports) = :converter
 topology_role(::P.SynchronousMachine, connected_buses, grounded_ports) = :machine
 topology_role(::P.InductionMachine, connected_buses, grounded_ports) = :machine
 topology_role(::P.Transformer, connected_buses, grounded_ports) = :transformer

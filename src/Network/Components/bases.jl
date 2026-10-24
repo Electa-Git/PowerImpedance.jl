@@ -92,9 +92,10 @@ Return a component's power, voltage and angular-frequency bases.
 
 # Returns
 
-- `BaseValues` for MMC, TLC and machine models, or `nothing` for passives and sources.
+- `BaseValues` for MMC, TLC and machine models, or `nothing` for passives, sources
+  and the black-box MMC.
   Machine line-to-line RMS voltage bases are multiplied by `sqrt(2/3)` to give
-  phase-peak voltage \\[kV\\]. Black-box MMC bases are not declared.
+  phase-peak voltage \\[kV\\].
 """
 function bases end
 
@@ -110,7 +111,7 @@ Return the component's stored operating limits.
 # Returns
 
 - Stored `Limits`. MMC power limits use converter bases \\[dimensionless\\]. TLC,
-  synchronous-machine and source limits use \\[MW\\] and \\[MVAr\\]. These conventions
-  match the existing model calculations.
+  black-box MMC, synchronous-machine and source limits use \\[MW\\] and \\[MVAr\\].
+  These conventions match the existing model calculations.
 """
 limits(model) = model.limits

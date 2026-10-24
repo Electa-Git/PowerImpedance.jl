@@ -48,9 +48,35 @@ function build(model::P.AbstractLinFreqDomain, values::NamedTuple, frame::Symbol
     return admittance!
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Store solved MMC port values and construct its frequency-admittance function.
+
+# Arguments
+
+- `model`: Scan-based MMC model.
+- `values`: AC/DC terminal values in phase-peak or pole-to-pole \\[kV\\],
+  angles in \\[rad\\], injected active power in \\[MW\\] and reactive power in \\[MVAr\\].
+- `frame`: Network coordinate frame.
+
+# Returns
+
+- In-place admittance function returning terminal matrices in \\[S\\].
+"""
 function build(model::P.Blackbox_MMC, values::NamedTuple, frame::Symbol)
-    throw(ArgumentError("linearization is unsupported for $(typeof(model))"))
+    model.cache.values = values
+    return invoke(build, Tuple{P.AbstractLinFreqDomain, NamedTuple, Symbol},
+        model, values, frame)
 end
+
+"""
+$(TYPEDSIGNATURES)
+
+Return the MMC scan admittance in \\[S\\] at frequency `s` \\[s⁻¹\\].
+The cached voltage angle supplies its d/q rotation. `frame` is the network frame.
+"""
+admittance(model::P.Blackbox_MMC, s::Complex, frame::Symbol) = P.eval_parameters(model, s)
 
 function admittance(model::P.AbstractLinFreqDomain, s::Complex, frame::Symbol)
     domain = first(P.electricalconnections(model)).domain

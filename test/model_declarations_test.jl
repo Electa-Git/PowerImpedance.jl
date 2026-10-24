@@ -39,7 +39,7 @@ function check_tree(model, tree = inputs(model))
             @test current[key] === value
             @test declaration.default isa declaration.type
             @test value isa declaration.type
-            @test !isempty(declaration.unit)
+            @test declaration.type === Symbol || !isempty(declaration.unit)
             @test !isempty(declaration.description)
         else
             @test declaration isa NamedTuple

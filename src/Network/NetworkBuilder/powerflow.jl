@@ -44,7 +44,6 @@ end
 
 function _validate_powerflow_domains(network::NetworkState)
     for (name, model) in pairs(network.elements)
-        _validate_builder_model(model, name)
         _element_call(name) do
             ports = P.electricalconnections(model)
             for row in network.topology.connections

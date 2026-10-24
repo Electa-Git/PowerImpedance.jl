@@ -186,11 +186,7 @@ end
     topology = (NB.Bus(:AC; ports = ((:blackbox, :ac),)),
         NB.Bus(:DC; ports = ((:blackbox, :dc),)))
     @test NB.NetworkTopology((; blackbox), topology).connections.port == [:ac, :ac, :dc]
-    message = topology_error() do
-        NB.define((; blackbox), topology)
-    end
-    @test occursin("blackbox", message)
-    @test occursin("Blackbox_MMC", message)
+    @test NB.define((; blackbox), topology).elements.blackbox === blackbox
 end
 
 @testset "Old rows and configured models" begin

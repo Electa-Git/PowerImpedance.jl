@@ -46,6 +46,10 @@
 
 ### Changed
 
+- **Breaking:** the black-box MMC takes `ac_control`, `dc_control`, `powerflow`
+  in physical units (MW, MVAr, AC phase-peak kV and DC pole-to-pole kV), and `limits`
+  instead of controller objects. Its scan is read at the solved terminal values.
+
 - **Breaking:** port values are powers injected into the bus at every port. For
   induction machines and the DC side of converters, this is the opposite sign of
   the former `Setpoint` fields.
@@ -83,6 +87,10 @@
   pole-to-pole voltage; callers that halved it must stop halving.
 
 ### Removed
+
+- Remove the old controller types `Controller`, `PI_control`, `VSE_old`, `CCQSEM`
+  and `FFVI`, and the black-box MMC droop options `:vdc_droop` and `:vac_supp`,
+  which always threw an error.
 
 - Remove the unused legacy converter files and `make_y_edge_old`.
 - **Breaking:** remove the converter keyword adapter. `mmc(Grid; ...)` and

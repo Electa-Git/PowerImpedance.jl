@@ -2,8 +2,6 @@ using Test
 using PowerImpedance
 using LinearAlgebra
 
-struct PSCADLegacyConverterFixture <: PowerImpedance.Converter end
-
 function pscad_classic_from_rows(elements, rows, voltage = 220 / sqrt(3))
     classic = Network()
     classic.voltageBase[1] = voltage
@@ -304,8 +302,7 @@ end
         conv_pf.operating_point, conv_pf.diagnostics)
     @test_throws ArgumentError pscad.netlist(conv_state, inconsistent_conv_pf)
 
-    for model in (P.Blackbox_line(), P.Blackbox_MMC(),
-        PSCADLegacyConverterFixture())
+    for model in (P.Blackbox_line(), P.Blackbox_MMC())
         bad = Network()
         add!(bad, :unsupported_thing, P.Element(; element_model = model, input_pins = 1, output_pins = 1))
         err = try

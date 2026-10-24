@@ -35,7 +35,7 @@ struct PMACDC end
 $(TYPEDEF)
 
 Common parent of the direct frequency-domain and state-space model interfaces.
-The legacy `Converter` and `Machine` hierarchies are separate.
+The legacy `Machine` hierarchy is separate.
 """
 abstract type AbstractElementModel end
 

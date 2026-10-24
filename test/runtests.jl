@@ -48,6 +48,7 @@ end
     include("pscad/power_flow_idempotence_test.jl")
         include("tlc_initialization_test.jl")
         include("dc_voltage_support_test.jl")
+        include("blackbox_mmc_test.jl")
         include("model_declarations_test.jl")
         include("model_predicates_test.jl")
         include("terminal_values_test.jl")

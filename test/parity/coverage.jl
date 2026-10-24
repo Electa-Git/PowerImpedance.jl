@@ -30,7 +30,6 @@ function main()
     selected = filter(files) do path
         occursin("/Components/machine/", path) ||
             (occursin("/Components/converter/", path) &&
-             !endswith(path, "controller_old.jl") &&
              !endswith(path, "blackbox_MMC.jl"))
     end
     expected = Set{String}()

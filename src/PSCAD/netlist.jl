@@ -142,8 +142,7 @@ end
 function _check_supported_elements(elements)
     for (name, element) in pairs(elements)
         model = element.element_model
-        model isa Union{PowerImpedance.Blackbox_line, PowerImpedance.Blackbox_MMC,
-            PowerImpedance.Converter} &&
+        model isa Union{PowerImpedance.Blackbox_line, PowerImpedance.Blackbox_MMC} &&
             throw(ArgumentError("PSCAD does not support element :$name ($(typeof(model)))"))
     end
     return nothing

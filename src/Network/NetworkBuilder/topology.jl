@@ -410,10 +410,20 @@ _connected(element::P.Element) = element.connection
 
 # transitional
 _legacy_port_names(model::P.AbstractElementModel) = keys(P.electricalconnections(model))
-_legacy_port_names(::Union{P.AbstractConverter, P.Converter}) = (:dc, :ac)
+"""
+$(TYPEDSIGNATURES)
+
+Return converter port names in the classic side order: DC, AC.
+"""
+_legacy_port_names(::Union{P.AbstractConverter, P.Blackbox_MMC}) = (:dc, :ac)
 
 # transitional
-_legacy_domain(model::Union{P.AbstractElementModel, P.Blackbox_MMC}, port) =
+"""
+$(TYPEDSIGNATURES)
+
+Return the numerical electrical domain of a direct model's declared port.
+"""
+_legacy_domain(model::P.AbstractElementModel, port) =
     _domain_number(port.domain)
 function _legacy_domain(model::Union{P.Impedance, P.Transmission_line}, port)
     return P.is_three_phase(model) ? 1 : 0
