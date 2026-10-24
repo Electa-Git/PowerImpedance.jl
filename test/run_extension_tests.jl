@@ -114,7 +114,16 @@ end
 end
 
 @testset "Local Monte Carlo power-flow coupling" begin
-    space = uncertain_impedance_space()
+    key = nothing
+    space = NB.define((
+        source=component(PowerImpedance.Source(; domain=DC_CM); v=10.0),
+        z=impedance(Grid; z=Grid(2.0, 5.0; key), pins=1),
+        shunt=impedance(z=4.0, pins=1),
+    ), (
+        NB.Bus(:bus; ports=((:z, :side1), (:shunt, :side1))),
+        NB.Bus(:supply; ports=((:source, :dc), (:z, :side2))),
+        NB.Bus(:gnd; ports=((:shunt, :side2),)),
+    ))
     result = compute(
         ParametricProblem(PowerFlowProblem(space)),
         MonteCarlo(ACDCPowerFlow(); trials=4, seed=17, return_samples=true),

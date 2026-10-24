@@ -20,6 +20,12 @@ stored_only(name) = name in STORED_ONLY.keys ||
     any(prefix -> startswith(name, "$prefix."), STORED_ONLY.families)
 const GENERATOR_POWER_SEED_FIELDS = (gen = ("pg", "qg"), gendc = ("pgdcset",))
 
+function new_powerflow_solution(name)
+    parts = split(name, '.')
+    return length(parts) >= 3 && Symbol(parts[1]) in D.POWERFLOW_SOLVE_EXCEPTIONS &&
+           parts[2] == "pf" && parts[3] != "termination_status"
+end
+
 function default_power_seed(name, value)
     parts = split(name, '.')
     length(parts) == 5 && parts[2] == "pm" || return false
@@ -89,10 +95,13 @@ function compare_numeric(reference, live_rows)
     stored = Set(filter(stored_only, collect(keys(reference))))
     @test isempty(intersect(Set(keys(live)), stored))
     extra = setdiff(Set(keys(live)), Set(keys(reference)))
-    accepted = Set(name for name in extra if default_power_seed(name, live[name]))
+    accepted = Set(name for name in extra
+        if default_power_seed(name, live[name]) || new_powerflow_solution(name))
     @test extra == accepted
     @test setdiff(Set(keys(reference)), stored) ⊆ Set(keys(live))
-    @printf("parity accepted_zero_power_seeds=%d\n", length(accepted))
+    @printf("parity accepted_zero_power_seeds=%d new_powerflow_datasets=%d\n",
+        count(name -> default_power_seed(name, live[name]), accepted),
+        count(new_powerflow_solution, accepted))
     for name in sort!(collect(intersect(keys(reference), keys(live))))
         ref, value = reference[name], live[name]
         kind = family(name)
@@ -176,6 +185,14 @@ function run_parity()
             @test join(conversion_skipped, ',') == metadata["pm_conversion_skipped"]
             @test result.stability_fixture == metadata["stability_fixture"]
             reference_labels = D.load_labels(joinpath(DIRECTORY, "labels.tsv"))
+            @test Set(first(split(key, '.')) for (key, label) in reference_labels
+                if endswith(key, ".pf.termination_status") && label == "not_required") ==
+                  Set(string.(D.POWERFLOW_SOLVE_EXCEPTIONS))
+            for fixture in D.POWERFLOW_SOLVE_EXCEPTIONS
+                key = "$fixture.pf.termination_status"
+                @test labels[key] == string(D.PI.MOI.LOCALLY_SOLVED)
+                reference_labels[key] = string(D.PI.MOI.LOCALLY_SOLVED)
+            end
             for (key, label) in reference_labels
                 parts = split(key, '.')
                 first(parts) == "pscad_op" && last(parts) == "name" || continue
@@ -192,6 +209,9 @@ function run_parity()
                 end
             end
             filter!(pair -> !stored_only(first(pair)), reference_labels)
+            extra_labels = setdiff(Set(keys(labels)), Set(keys(reference_labels)))
+            @test all(new_powerflow_solution, extra_labels)
+            filter!(pair -> first(pair) ∉ extra_labels, labels)
             @test labels == reference_labels
             compare_numeric(reference, rows)
         end

@@ -92,19 +92,6 @@ function P.compute(
         options::NamedTuple = (;)
 )
     network = _assert_numeric_powerflow_network(problem.network)
-    if islinear(network.elements)
-        point = P.OperatingPoint()
-        return P.PowerFlowResult(
-            formulation,
-            nothing,
-            nothing,
-            _node_bus_mapping(network.topology),
-            Dict{Symbol, Any}(),
-            point,
-            (termination_status = :not_required,)
-        )
-    end
-
     data, global_dict, element_mapping = convert(network, P.PMACDC)
     P._prepare_power_flow_start!(network.powerflow_start, data,
         (element_mapping, collect(network.topology.connections)))

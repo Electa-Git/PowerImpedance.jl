@@ -8,6 +8,8 @@ const NB = PI.NetworkBuilder
 const SOURCE_COMMIT = "a1a7fb71d6ac189ddf06d58e2817dc4197dd4031"
 const FREQUENCIES = (1e-3, 1.0, 5.0, 49.0, 150.0, 500.0, 1500.0, 5000.0)
 const Row = Tuple{String, Int, Int, Int, Float64, Float64}
+const POWERFLOW_SOLVE_EXCEPTIONS = (
+    :small_ac, :passive_ohl, :transformer_yy, :transformer_dy, :dc, :dc_cable)
 
 function record!(rows, labels, name, value::Number)
     push!(rows, (name, 1, 1, 1, Float64(real(value)), Float64(imag(value))))
@@ -445,13 +447,9 @@ function collect_fixture(fixture; dump_directory = nothing,
     powerflow = collect_family!(rows, labels, skipped, errors, "$name.pf";
         skipped_families) do r, l
         result = compute(NB.PowerFlowProblem(state), NB.ACDCPowerFlow())
-        if result.result === nothing
-            l["$name.pf.termination_status"] = "not_required"
-        else
-            converted.ok || error("PowerModels entry names are unavailable")
-            record_pm!(r, l, "$name.pf", result.result["solution"], converted.value.entries)
-            l["$name.pf.termination_status"] = string(result.result["termination_status"])
-        end
+        converted.ok || error("PowerModels entry names are unavailable")
+        record_pm!(r, l, "$name.pf", result.result["solution"], converted.value.entries)
+        l["$name.pf.termination_status"] = string(result.result["termination_status"])
         if dump_directory !== nothing
             open(joinpath(dump_directory, "$name.solution.txt"), "w") do io
                 plain_dump(io, "", result.result)

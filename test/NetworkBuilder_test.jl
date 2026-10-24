@@ -23,7 +23,8 @@ end
 	)
 
 	builder = NetworkBuilder.define(elements, connections)
-	@test NetworkBuilder.solve(builder).result === nothing
+	# A power flow needs a source, and this network has none.
+	@test_throws Exception NetworkBuilder.solve(builder)
 
 	updated_elements = (; z1 = impedance(z = 3, pins = 1).element_model,
         z2 = impedance(z = 4, pins = 1).element_model)

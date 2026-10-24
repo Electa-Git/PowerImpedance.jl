@@ -365,8 +365,7 @@ else
                   string(Base.pkgversion(PowerImpedance))
             @test model.provenance.mhi_xml_version == "1.3.0"
             @test model.provenance.resolved_powerflow ==
-                  (name == "sm_builder" || startswith(name, "tlc_") ||
-                   startswith(name, "mmc_"))
+                  !startswith(name, "transformer_dy")
             root = etree.parse(path).getroot()
             @testset "Electrical topology: $name" begin
                 graphs = PSCADTopology.xml_graphs(root, x -> pyconvert(String, x); check_named = true)
@@ -1036,12 +1035,12 @@ else
             end
             println("Exported ", path)
         end
-        @test isempty(models[1].operating_point.bus_states)
-        @test isempty(models[2].operating_point.bus_states)
-        @test isempty(models[3].operating_point.bus_states)
+        @test !isempty(models[1].operating_point.bus_states)
+        @test !isempty(models[2].operating_point.bus_states)
+        @test !isempty(models[3].operating_point.bus_states)
         @test isempty(models[4].operating_point.bus_states)
-        @test isempty(models[5].operating_point.bus_states)
-        @test isempty(models[6].operating_point.bus_states)
+        @test !isempty(models[5].operating_point.bus_states)
+        @test !isempty(models[6].operating_point.bus_states)
         @test !isempty(models[7].operating_point.bus_states)
         @test all(m -> !isempty(m.operating_point.bus_states), models[8:9])
         @test all(m -> !isempty(m.operating_point.bus_states), models[10:end])
@@ -1112,7 +1111,7 @@ else
                   "5"
         end
         # Exercise dc_reference through the public exporter, including no extra
-        # references at the source bus and no power flow for the linear builder.
+        # references at the source bus.
         elements = (; ac = dc_state.elements.ac, from = dc_state.elements.from,
             line = dc_state.elements.line, ac_load = dc_state.elements.ac_load)
         elements = merge(elements, (; parallel = impedance(; z = s -> 400.0, pins = 1)))
@@ -1130,7 +1129,7 @@ else
                 @test pyconvert(Int,
                     root.xpath("count(.//User[@defn='master:resistor']/paramlist/param[@name='R'][@value='1.0E7 [ohm]'])")) ==
                       (reference == :midpoint_resistors ? 2 : 0)
-                @test !model.provenance.resolved_powerflow
+                @test model.provenance.resolved_powerflow
             end
         end
         # A supplied solution leaves declared source inputs unchanged.
@@ -1168,7 +1167,6 @@ else
         path = joinpath(only(ARGS), "network_ieee9.pscx")
         state = PSCADFixtures.state_from_classic(PSCADFixtures.ieee9_network())
         model = export_pscad(state; path,
-            powerflow = PSCADFixtures.solved_powerflow(state),
             settings = P.SimulationSettings(simulation_time = 3.0))
         root = etree.parse(path).getroot()
         summary = P.read_project_summary(path)

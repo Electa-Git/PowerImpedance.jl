@@ -233,8 +233,8 @@ availability before the power-flow solve or project write.
 # Notes
 
 With `powerflow = nothing`, calculate the operating point with
-`compute(PowerFlowProblem(state), ACDCPowerFlow())`. Linear networks use source
-inputs and have no solved comparison data. Export never contacts the station.
+`compute(PowerFlowProblem(state), ACDCPowerFlow())` for every network. Bus voltages
+and transformer ratings use that solution. Export never contacts the station.
 
 DC source inputs and converter port values use pole-to-pole voltages \\[kV\\].
 Without a solved result, each pole source uses half the declared voltage.

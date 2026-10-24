@@ -116,11 +116,12 @@ end
     @test plain.elements[2].ports == electricalconnections(state.elements.line)
     @test all(e -> e.values === nothing, plain.elements)
     @test NB.solve(state) isa PowerFlowResult
-    empty_pf = compute(NB.PowerFlowProblem(state), NB.ACDCPowerFlow())
-    @test empty_pf.result === nothing
-    @test pscad.netlist(state, empty_pf).operating_point.bases === nothing
-    # NB.solve intentionally skips this linear network. Solve its actual
-    # PowerModels conversion explicitly for the independent PF parity check.
+    powerflow = compute(NB.PowerFlowProblem(state), NB.ACDCPowerFlow())
+    @test powerflow.result["termination_status"] == PowerImpedance.MOI.LOCALLY_SOLVED
+    @test pscad.netlist(state, powerflow).operating_point.bases ==
+          (S_MVA = 1000.0, V_kV = powerflow.data["bus"]["1"]["base_kv"], dcpol = 2)
+    # Solve its actual PowerModels conversion explicitly for the independent
+    # PF parity check.
     source_inputs = inputvalues(state.elements.source)
     builder_pf = pscad_solved_linear(state)
     solved = pscad.netlist(state, builder_pf)

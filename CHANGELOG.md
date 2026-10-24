@@ -109,6 +109,8 @@
 
 ### Fixed
 
+- Power-flow calls solve networks with only sources and passive elements.
+  PSCAD exports use solved bus voltages and transformer ratings.
 - Network models now build for networks with no passive elements.
 - Fix network admittance of circuits with a synchronous machine by applying its admittance base.
 - Power flow for induction machines uses torque on the network power base
