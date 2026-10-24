@@ -92,8 +92,9 @@ function TotalEnergyControl(; pi_control::PIControl, ref::Real = 1,
 end
 TotalEnergyControl(pi_control::PIControl, ref::Real) = TotalEnergyControl(; pi_control, ref)
 statenames(b::TotalEnergyControl) = (filter_statenames(:P_energy_f, b.power_filter)..., :ξ_Wtot)
-initialvalues(b::TotalEnergyControl; setpoint_pu=SetpointPU()) =
-    filter_initialvalues(b.power_filter, filter_statenames(:P_energy_f, b.power_filter), setpoint_pu.p_ac)
+initialvalues(b::TotalEnergyControl; terminal_pu=TerminalValuesPU()) =
+    filter_initialvalues(b.power_filter, filter_statenames(:P_energy_f, b.power_filter),
+        terminal_pu.p_ac)
 
 """
 $(TYPEDSIGNATURES)
@@ -137,8 +138,8 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = TotalEnergyControl(pi_control=PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -233,8 +234,8 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = ΣEnergyControl(pi_control=PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -354,8 +355,8 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = ΔEnergyControl(pi_control=PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))

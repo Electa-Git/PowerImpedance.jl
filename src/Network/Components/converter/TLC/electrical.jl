@@ -141,15 +141,15 @@ statenames(::ElectricalTLC) = (:i_d, :i_q)
 """
 $(TYPEDSIGNATURES)
 
-Compute initial current states from power-flow inputs and setpoints.
+Compute initial current states from power-flow inputs and terminal values.
 
 # Arguments
 
 - `block`: Normalized TLC reactor parameters.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
-  angle uses \\[rad\\]. Default: `SetpointPU()`.
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+  angle uses \\[rad\\]. Default: `TerminalValuesPU()`.
 
 # Returns
 
@@ -171,20 +171,20 @@ currents for zero voltage magnitude.
 using PowerImpedance
 P = PowerImpedance
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 model = ElectricalTLC()
-initial = P.initialvalues(model; inputs, setpoint_pu=point)
+initial = P.initialvalues(model; inputs, terminal_pu=point)
 ```
 """
-function initialvalues(block::ElectricalTLC; inputs, setpoint_pu=SetpointPU())
+function initialvalues(block::ElectricalTLC; inputs, terminal_pu=TerminalValuesPU())
     v_d = inputs.vG_d
     v_q = inputs.vG_q
 
     V2 = v_d^2 + v_q^2
     iszero(V2) && return (i_d = 0.0, i_q = 0.0)
 
-    p_ac = setpoint_pu.p_ac
-    q_ac = setpoint_pu.q_ac
+    p_ac = terminal_pu.p_ac
+    q_ac = terminal_pu.q_ac
 
     i_d0 = (v_d * p_ac + v_q * q_ac) / V2
     i_q0 = (v_q * p_ac - v_d * q_ac) / V2
@@ -236,8 +236,8 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = model.elec
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))

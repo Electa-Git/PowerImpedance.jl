@@ -9,20 +9,20 @@
     @testset "Nonzero seeds and measurement filters" begin
         cases = (
             (inputs = (v_dc = 1.0, vG_d = 1.0, vG_q = 0.0),
-                setpoint = P.SetpointPU(p_ac = 0.7, q_ac = -0.2),
+                setpoint = P.TerminalValuesPU(p_ac = 0.7, q_ac = -0.2),
                 expected = (0.7, 0.2)),
             (inputs = (v_dc = 1.0, vG_d = 0.8, vG_q = -0.6),
-                setpoint = P.SetpointPU(p_ac = -0.35, q_ac = 0.15),
+                setpoint = P.TerminalValuesPU(p_ac = -0.35, q_ac = 0.15),
                 expected = (-0.37, 0.09))
         )
         for case in cases
-            inputs, setpoint_pu = case.inputs, case.setpoint
-            seed = P.initialvalues(plant; inputs, setpoint_pu)
+            inputs, terminal_pu = case.inputs, case.setpoint
+            seed = P.initialvalues(plant; inputs, terminal_pu)
             @test keys(seed) == P.statenames(plant)
             @test collect(values(seed)) ≈ collect(case.expected)
-            @test P.orderedinitialvalues(plant; inputs, setpoint_pu) == seed
+            @test P.orderedinitialvalues(plant; inputs, terminal_pu) == seed
 
-            ordered = P.orderedinitialvalues(conv; inputs, setpoint_pu)
+            ordered = P.orderedinitialvalues(conv; inputs, terminal_pu)
             @test keys(ordered) == P.statenames(conv)
             @test ordered.i_d == seed.i_d
             @test ordered.i_q == seed.i_q
@@ -38,12 +38,12 @@
 
     @testset "Zero AC voltage" begin
         inputs = (v_dc = 1.0, vG_d = 0.0, vG_q = 0.0)
-        setpoint_pu = P.SetpointPU(p_ac = 0.7, q_ac = -0.2)
-        seed = P.initialvalues(plant; inputs, setpoint_pu)
+        terminal_pu = P.TerminalValuesPU(p_ac = 0.7, q_ac = -0.2)
+        seed = P.initialvalues(plant; inputs, terminal_pu)
         @test keys(seed) == P.statenames(plant)
         @test seed == (i_d = 0.0, i_q = 0.0)
-        @test P.orderedinitialvalues(plant; inputs, setpoint_pu) == seed
-        ordered = P.orderedinitialvalues(conv; inputs, setpoint_pu)
+        @test P.orderedinitialvalues(plant; inputs, terminal_pu) == seed
+        ordered = P.orderedinitialvalues(conv; inputs, terminal_pu)
         @test keys(ordered) == P.statenames(conv)
         @test (ordered.i_d, ordered.i_q) == (0.0, 0.0)
         for measurement in (conv.meas.i_d, conv.meas.i_q)

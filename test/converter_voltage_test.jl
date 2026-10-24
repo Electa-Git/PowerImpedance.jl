@@ -30,7 +30,7 @@ end
 
 function equilibrium(m, terminal_values)
     inputs, sp=PI.pftoinputs(m, terminal_values)
-    seed=PI.orderedinitialvalues(m; inputs, setpoint_pu = sp)
+    seed=PI.orderedinitialvalues(m; inputs, terminal_pu = sp)
     f!(F, x, p) = PI._state_space!(F, x, p.inputs, p.sp, p.m, PI.Equil())
     p=(; inputs = collect(values(inputs)), sp, m)
     sol=PI.solve(PI.NonlinearProblem(f!, collect(promote(values(seed)...)), p);
@@ -157,7 +157,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             @test c["kq_droop"]==(reactive isa OuterReactiveQControl &&
                                   reactive.support isa VoltageSupportLag ?
                                   5.0*(m.elec.Sbase/(bases["S"]*1e-6)) : 0.0)
-            sp=PI.SetpointPU(v_ac = 0.973, q_ac = -0.217)
+            sp=PI.TerminalValuesPU(v_ac = 0.973, q_ac = -0.217)
             meas=(; vG_d_f = 0.891, vG_q_f = -0.133, Q_ac_f = -0.178)
             x=(; ξ_v_ac = 0.071, ξ_Q_ac = -0.087, ξ_vac_supp = 0.013)
             F=zeros(PI.n_states(reactive))
@@ -224,7 +224,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
         model=fixture.elements.DUT
         reactive=model.delta_control.outer_reactive
         F=zeros(1)
-        sp=PI.SetpointPU(v_ac = 1.2, q_ac = -0.217)
+        sp=PI.TerminalValuesPU(v_ac = 1.2, q_ac = -0.217)
         meas=(; vG_d_f = 0.891, vG_q_f = -0.133, Q_ac_f = -0.178)
         x=(; ξ_Q_ac = -0.087)
         result=PI.state_space!(F, x, (; meas), sp, reactive, model)

@@ -38,7 +38,7 @@ end
         @test pu.p_ac == p
         @test pu.q_ac ≈ q
         @test m.avr.v_ref == 1.2
-        seed = PI.orderedinitialvalues(m; inputs, setpoint_pu=pu)
+        seed = PI.orderedinitialvalues(m; inputs, terminal_pu=pu)
         quantities = terminal_quantities(m, inputs, collect(values(seed)))
         @test quantities.Igen ≈ Igen atol=DYNAMIC_ATOL
         @test quantities.Vterminal ≈ Vterminal atol=DYNAMIC_ATOL
@@ -85,7 +85,7 @@ end
     @test pu === nothing
     @test inputs.Tm0 == 0.05
     @test inputs.vref_SG == 1.03
-    seed = PI.orderedinitialvalues(m; inputs, setpoint_pu=pu)
+    seed = PI.orderedinitialvalues(m; inputs, terminal_pu=pu)
     @test seed.i_d == seed.i_q == seed.i_df == seed.θ_sg == seed.v_f == seed.v_df == 0.0
     @test seed.ω_pu == 1.0
     @test seed.flow == seed.TchHP == seed.TreIP == seed.TcrLP == inputs.Tm0
@@ -141,7 +141,8 @@ include("manual/pscad/validation/classic_fixtures.jl")
         F = zeros(16)
         PI._state_space!(F, state, collect(values(inputs)), pu, m, PI.Equil())
         @test norm(F, Inf) <= DYNAMIC_ATOL
-        @test state ≈ collect(values(PI.orderedinitialvalues(m; inputs, setpoint_pu=pu))) atol=DYNAMIC_ATOL
+        @test state ≈ collect(values(PI.orderedinitialvalues(m;
+            inputs, terminal_pu=pu))) atol=DYNAMIC_ATOL
         # A changed operating point recomputes references from its own phasors.
         next_sp = (ac = ACPortValues(point.ac.v, 0.2, -700.0, -40.0),)
         next_state = steady_state(m, next_sp)

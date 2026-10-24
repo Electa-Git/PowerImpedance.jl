@@ -47,7 +47,8 @@ $(TYPEDFIELDS)
 end
 
 statenames(::ElectricalIM) = (:i_d,:i_q,:Ψ_df,:Ψ_qf)
-initialvalues(::ElectricalIM;setpoint_pu::SetpointPU) = (;i_d=2/3*setpoint_pu.p_ac, i_q=-2/3*setpoint_pu.q_ac, Ψ_df=1.0)
+initialvalues(::ElectricalIM;terminal_pu::TerminalValuesPU) = (;
+    i_d=2/3*terminal_pu.p_ac, i_q=-2/3*terminal_pu.q_ac, Ψ_df=1.0)
 
 
 
@@ -150,7 +151,8 @@ statenames(m::InductionMachine) =
     statenames(m.mech)...
 )
 
-initialvalues(m::InductionMachine;setpoint_pu, kwargs...) = merge(initialvalues(m.elec;setpoint_pu), initialvalues(m.mech))
+initialvalues(m::InductionMachine;terminal_pu, kwargs...) =
+    merge(initialvalues(m.elec;terminal_pu), initialvalues(m.mech))
 
 inputnames(::InductionMachine) = (:vd,:vq)
 outputnames(::InductionMachine) = (:id,:iq)
@@ -170,7 +172,7 @@ Port powers are positive into the machine. A motor drawing 916 MW has `ac.p = 91
 # Returns
 
 - `inputs`: Named tuple of bus voltages `vd`, `vq`, on machine bases \\[dimensionless\\].
-- `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\].
 
 # Notes
@@ -202,7 +204,7 @@ function pftoinputs(m::InductionMachine, values::NamedTuple)
 
     v_bus_q = -values.ac.v*sin(values.ac.theta) / (Vac_base_phpk) # Inputs are in dq-lagging
 
-    sp_pu = SetpointPU(p_ac = values.ac.p/Sbase, q_ac = values.ac.q/Sbase,
+    sp_pu = TerminalValuesPU(p_ac = values.ac.p/Sbase, q_ac = values.ac.q/Sbase,
         θ_ac = values.ac.theta, v_ac = values.ac.v/Vac_base_phpk)
     return NamedTuple{inputnames(m)}((v_bus_d,v_bus_q)), sp_pu
 end
@@ -266,7 +268,7 @@ P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
 model = inductionmachine(setpoint=point).element_model
 inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.elec
 F = zeros(P.n_states(block))
 P.state_space!(F, x, (inputs.vd, -inputs.vq), block; indm=model)
@@ -345,7 +347,7 @@ P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
 model = inductionmachine(setpoint=point).element_model
 inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.mech
 F = zeros(P.n_states(block))
 P.state_space!(F, x, 0.1, block; indm=model)
@@ -395,7 +397,7 @@ P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
 model = inductionmachine(setpoint=point).element_model
 inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 F = zeros(P.n_states(model))
 P.state_space!(F, x, inputs, model)
 @assert all(isfinite, F)

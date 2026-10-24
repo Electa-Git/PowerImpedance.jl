@@ -57,9 +57,9 @@ Keys not declared by the model are discarded.
 using PowerImpedance
 P = PowerImpedance
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 model = ElectricalTLC()
-initial = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+initial = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 ```
 """
 orderedinitialvalues(x;kwargs...) = NamedTuple{statenames(x)}((;NamedTuple{statenames(x)}(ntuple(i->0.0,length(statenames(x))))..., initialvalues(x;kwargs...)...))
@@ -118,7 +118,7 @@ index.
   filter states follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `block`: Submodel whose derivative slice is evaluated.
 - `m`: Parent model providing shared parameters to the submodel.
@@ -136,23 +136,26 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 F = zeros(2)
 data = (inputs=inputs, mod=(m_d=2.0, m_q=0.0))
 outputs, next_index = P.state_space_block!(F, x, data, point, model.elec, model, 1)
 @assert next_index == 3
 ```
 """
-function state_space_block!(F, x, inputs, setpoint_pu, block, m::AbstractStateSpace, idx::Integer)
+function state_space_block!(F, x, inputs, terminal_pu, block, m::AbstractStateSpace,
+        idx::Integer)
     idx_end = idx + n_states(block) - 1
-    out = state_space!(@view(F[idx:idx_end]), x, inputs, setpoint_pu, block, m)
+    out = state_space!(@view(F[idx:idx_end]), x, inputs, terminal_pu, block, m)
     return out, idx_end + 1
 end
 
-# Default functions for state_space! that do not use the setpoint_pu or the full model
-state_space!(F, x, inputs, setpoint_pu, block::AbstractStateSpace, m::AbstractStateSpace) = state_space!(F, x, inputs, block, m)
-state_space!(F, x, inputs, setpoint_pu,  m::AbstractStateSpace) = state_space!(F, x, inputs, m)
+# Default functions for state_space! that do not use the terminal_pu or the full model
+state_space!(F, x, inputs, terminal_pu, block::AbstractStateSpace, m::AbstractStateSpace) =
+    state_space!(F, x, inputs, block, m)
+state_space!(F, x, inputs, terminal_pu,  m::AbstractStateSpace) =
+    state_space!(F, x, inputs, m)
 
 state_space!(F, x, inputs, ::Nothing, block::AbstractStateSpace, m::AbstractStateSpace) = state_space!(F, x, inputs, block, m)
 state_space!(F, x, inputs, block::AbstractStateSpace, m::AbstractStateSpace) = state_space!(F, x, inputs, block)
@@ -189,24 +192,27 @@ struct Jac <: AbstractSolveKind end
 
 ### Dispatch on modeler functions
 # Equilib
-solvekindequations!(F, x, inputs, setpoint_pu, y, m::AbstractStateSpace, ::Equil) =
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, m)
+solvekindequations!(F, x, inputs, terminal_pu, y, m::AbstractStateSpace, ::Equil) =
+    equilibriumequations!(F, x, inputs, terminal_pu, y, m)
 
 solvekindnames(m::AbstractStateSpace, ::Equil) = equilibriumnames(m)
 
-solvekindequations!(F, x, inputs, setpoint_pu, y, m::AbstractStateSpace, ::Jac) =
+solvekindequations!(F, x, inputs, terminal_pu, y, m::AbstractStateSpace, ::Jac) =
     outputequations!(@view(F[n_states(m)+1:end]), x, inputs, y, m)
 
 solvekindnames(m::AbstractStateSpace, ::Jac) = outputnames(m)
 
-solvekindequations!(F, x, inputs, setpoint_pu, y, m::AbstractStateSpace, ::AbstractSolveKind) = nothing
+solvekindequations!(F, x, inputs, terminal_pu, y, m::AbstractStateSpace,
+        ::AbstractSolveKind) = nothing
 
-equilibriumequations!(F, x, inputs, setpoint_pu, y, m::AbstractStateSpace) = nothing
-equilibriumequations!(F, x, inputs, setpoint_pu, y, m::AbstractStateSpace, block::AbstractStateSpace) = nothing
+equilibriumequations!(F, x, inputs, terminal_pu, y, m::AbstractStateSpace) = nothing
+equilibriumequations!(F, x, inputs, terminal_pu, y, m::AbstractStateSpace,
+        block::AbstractStateSpace) = nothing
 
 outputequations!(F, x, inputs, y, m::AbstractStateSpace) = nothing
 
-function _state_space!(F, x, inputs, setpoint_pu::Union{SetpointPU, Nothing}, m::AbstractStateSpace, solvekind::AbstractSolveKind)
+function _state_space!(F, x, inputs, terminal_pu::Union{TerminalValuesPU, Nothing},
+        m::AbstractStateSpace, solvekind::AbstractSolveKind)
     
     # Convert vector states to NamedTuple with keys the statenames (we enforce the same order)
     x_names = statenames(m)
@@ -218,10 +224,10 @@ function _state_space!(F, x, inputs, setpoint_pu::Union{SetpointPU, Nothing}, m:
     index_stsp = n_states(m)
 
     # Call the modeler's state space functions, certain algebr variables can be returned to be used by outputequations or equilibriumequations
-    y = state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, setpoint_pu, m)
+    y = state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, terminal_pu, m)
     
     # Modify output/equilibrium equations
-    solvekindequations!(F, x_nt, inputs_nt, setpoint_pu, y, m, solvekind)
+    solvekindequations!(F, x_nt, inputs_nt, terminal_pu, y, m, solvekind)
 
     return
 
@@ -274,17 +280,17 @@ A, B, C, D = linearize(model, values)
 function linearize(m::AbstractStateSpace, values::NamedTuple)
 
     # Power flow to inputs of state_space function
-    inputs, setpoint_pu = pftoinputs(m, values)
+    inputs, terminal_pu = pftoinputs(m, values)
     inputs_vec = collect(Base.values(inputs))
 
     # Initial values
-    init = orderedinitialvalues(m; setpoint_pu, inputs)
+    init = orderedinitialvalues(m; terminal_pu, inputs)
 
     # Parameters for equilibirum with NonlinearSolve.jl
-    p_equil = (; inputs = inputs_vec, m = m, setpoint_pu)
+    p_equil = (; inputs = inputs_vec, m = m, terminal_pu)
 
     # Initialize problem
-    f!(du, u, p) = _state_space!(du, u, p.inputs, p.setpoint_pu, p.m, Equil())
+    f!(du, u, p) = _state_space!(du, u, p.inputs, p.terminal_pu, p.m, Equil())
     @info "Starting to solve for steady-state solution"
     prob = NonlinearProblem(f!, collect(promote(Base.values(init)...)), p_equil)
     default_error = nothing
@@ -330,7 +336,7 @@ function linearize(m::AbstractStateSpace, values::NamedTuple)
     nb_outputs = n_outputs(m)
 
     h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end],
-        setpoint_pu, m, Jac())
+        terminal_pu, m, Jac())
     jac = zeros(nb_states+nb_outputs, nb_states+nb_inputs)
     x = [equilibrium; inputs_vec]; F = fill(zero(eltype(x)), nb_states+nb_outputs)
     ForwardDiff.jacobian!(jac, h!, F, x)

@@ -254,10 +254,10 @@ largest differences at low frequencies.
 end
 
 statenames(m::SynchronousMachine) = (statenames(m.elec)..., statenames(m.mech)...,statenames(m.gov)...,statenames(m.avr)...)
-function initialvalues(m::SynchronousMachine; inputs, setpoint_pu=nothing, kwargs...)
-    setpoint_pu === nothing && return merge(initialvalues(m.elec),
+function initialvalues(m::SynchronousMachine; inputs, terminal_pu=nothing, kwargs...)
+    terminal_pu === nothing && return merge(initialvalues(m.elec),
         initialvalues(m.mech), initialvalues(m.gov; inputs), initialvalues(m.avr))
-    return _machine_powerflow_state(m, setpoint_pu).state
+    return _machine_powerflow_state(m, terminal_pu).state
 end
 inputnames(m::SynchronousMachine) = (:vd, :vq, :Tm0, :vref_SG)
 outputnames(m::SynchronousMachine) = (:id, :iq)
@@ -265,7 +265,7 @@ elecinputnames(m::SynchronousMachine) = (:vd, :vq)
 
 # Reconstruct the terminal operating point from receiving-bus voltage and
 # terminal power. The larger |Vt|² root is the normal high-voltage branch.
-function _machine_powerflow_state(m::SynchronousMachine, sp::SetpointPU)
+function _machine_powerflow_state(m::SynchronousMachine, sp::TerminalValuesPU)
     e = m.elec
     Vbus = sp.v_ac * cis(sp.θ_ac)
     Sterminal = complex(sp.p_ac, sp.q_ac)
@@ -312,7 +312,7 @@ Port powers are positive into the machine. Delivering 900 MW gives `ac.p = -900`
 
 - `inputs`: Named tuple of bus voltages `vd`, `vq`, fixed turbine torque `Tm0`, and
   effective AVR reference `vref_SG`, on machine bases \\[dimensionless\\].
-- `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\]. Returns `nothing` when `values.ac.q` is `NaN`.
 
 # Notes
@@ -345,7 +345,7 @@ function pftoinputs(m::SynchronousMachine, values::NamedTuple)
         return (; vd=v_bus_d, vq=v_bus_q, Tm0=p_ac,
             vref_SG=m.avr.v_ref), nothing
     end
-    sp = SetpointPU(p_ac=p_ac, q_ac=-values.ac.q / m.elec.S_base,
+    sp = TerminalValuesPU(p_ac=p_ac, q_ac=-values.ac.q / m.elec.S_base,
         θ_ac=values.ac.theta, v_ac=values.ac.v / (m.elec.Vᵃᶜ_base * sqrt(2/3)))
     point = _machine_powerflow_state(m, sp)
     return (; vd=v_bus_d, vq=v_bus_q, Tm0=point.Tm0,
@@ -415,7 +415,7 @@ P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
 model = synchronousmachine(setpoint=point).element_model
 inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.elec
 F = zeros(P.n_states(block))
 P.state_space!(F, x, (inputs.vd, inputs.vq), block; gen=model)
@@ -516,7 +516,7 @@ P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
 model = synchronousmachine(setpoint=point).element_model
 inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.mech
 F = zeros(P.n_states(block))
 P.state_space!(F, x, inputs.Tm0, block; gen=model)
@@ -579,7 +579,7 @@ P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
 model = synchronousmachine(setpoint=point).element_model
 inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.gov
 F = zeros(P.n_states(block))
 P.state_space!(F, x, inputs.Tm0, block; gen=model)
@@ -646,7 +646,7 @@ P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
 model = synchronousmachine(setpoint=point).element_model
 inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.avr
 F = zeros(P.n_states(block))
 electrical = zeros(P.n_states(model.elec))
@@ -712,7 +712,7 @@ P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
 model = synchronousmachine(setpoint=point).element_model
 inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 F = zeros(P.n_states(model))
 P.state_space!(F, x, inputs, model)
 @assert all(isfinite, F)

@@ -54,8 +54,8 @@ end
     @test PI.statenames(block) == (:ξ_vdc_supp, :ξ_P_ac)
     @test PI.n_states(block.support) == 1
     @test PI.n_states(block) == 2
-    @test PI.initialvalues(block; setpoint_pu = PI.SetpointPU()).ξ_vdc_supp == 0.0
-    sp = PI.SetpointPU(p_ac = 0.3, v_dc = 1.05)
+    @test PI.initialvalues(block; terminal_pu = PI.TerminalValuesPU()).ξ_vdc_supp == 0.0
+    sp = PI.TerminalValuesPU(p_ac = 0.3, v_dc = 1.05)
     x = (; ξ_vdc_supp = 0.017, ξ_P_ac = 0.071)
     for kind in (:mmc, :tlc), measured_voltage in (0.97, 1.05, 1.1)
         m = converter(kind).element_model

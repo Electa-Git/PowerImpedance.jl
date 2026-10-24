@@ -79,8 +79,8 @@ statenames(c::TLC) = (
     statenames(c.elec)...
 )
 
-function initialvalues(c::TLC; inputs, setpoint_pu=SetpointPU())
-    elec_init = initialvalues(c.elec; inputs, setpoint_pu)
+function initialvalues(c::TLC; inputs, terminal_pu=TerminalValuesPU())
+    elec_init = initialvalues(c.elec; inputs, terminal_pu)
 
     meas_inputs = (
         vG_d = inputs.vG_d,
@@ -89,17 +89,17 @@ function initialvalues(c::TLC; inputs, setpoint_pu=SetpointPU())
         i_d = elec_init.i_d,
         i_q = elec_init.i_q,
         i_dc = 0.0,             #TODO improve this initialization?
-        θ   = setpoint_pu.θ_ac
+        θ   = terminal_pu.θ_ac
     )
     return (;
         elec_init...,
         initialvalues(c.meas, inputs=meas_inputs)..., 
-        initialvalues(c.sync; setpoint_pu)...,
-        initialvalues(c.outerActive; setpoint_pu)...,
-        initialvalues(c.outerReactive; setpoint_pu)...,
+        initialvalues(c.sync; terminal_pu)...,
+        initialvalues(c.outerActive; terminal_pu)...,
+        initialvalues(c.outerReactive; terminal_pu)...,
         initialvalues(c.innerVoltage; inputs, conv=c)...,
         initialvalues(c.innerCurrent; inputs, conv=c)...,
-        initialvalues(c.mod; inputs, setpoint_pu)...
+        initialvalues(c.mod; inputs, terminal_pu)...
     )
 end
 
@@ -180,7 +180,7 @@ Port powers are positive into the converter. Taking 603 MW from DC and deliverin
 
 - `inputs`: Named tuple of DC voltage `v_dc` and grid-frame AC voltages `vG_d`, `vG_q`,
   on converter bases \\[dimensionless\\].
-- `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\].
 
 # Notes
@@ -217,7 +217,7 @@ function pftoinputs(c::TLC, values::NamedTuple)
     p_dc = values.dc.p / c.elec.Sbase
     
     return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),
-        SetpointPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
+        TerminalValuesPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
 end
 
 # transitional
@@ -260,8 +260,8 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 signals = P.input_signals(model, x, inputs)
 ```
 """
@@ -290,16 +290,17 @@ function outputequations!(F, x, inputs, y, ::TLC)
     return nothing
 end
 
-function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC)
-    result = equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerActive)
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerReactive)
+function equilibriumequations!(F, x, inputs, terminal_pu::TerminalValuesPU, y, c::TLC)
+    result = equilibriumequations!(F, x, inputs, terminal_pu, y, c, c.outerActive)
+    equilibriumequations!(F, x, inputs, terminal_pu, y, c, c.outerReactive)
     return result
 end
 
-function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC, block::OuterActiveVdcControl)
+function equilibriumequations!(F, x, inputs, terminal_pu::TerminalValuesPU, y, c::TLC,
+        block::OuterActiveVdcControl)
     idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
     @assert !isnothing(idx_ξvdc)
-    i_dc_ref = setpoint_pu.p_dc / inputs.v_dc
+    i_dc_ref = terminal_pu.p_dc / inputs.v_dc
     F[idx_ξvdc] = i_dc_ref - y.elec.i_dc
     return y
 end
@@ -318,7 +319,7 @@ Evaluate the full TLC state-space model.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `c`: TLC assembly and electrical bases.
 
@@ -347,30 +348,33 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 F = zeros(P.n_states(model))
 outputs = P.state_space!(F, x, inputs, point, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, c::TLC)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, c::TLC)
     sig_in = input_signals(c, x, inputs)
 
-    meas, i = state_space_block!(F, x, sig_in, setpoint_pu, c.meas, c, 1)
-    sync, i = state_space_block!(F, x, meas, setpoint_pu, c.sync, c, i)
-    pact, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, c.outerActive, c, i)
-    qact, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, c.outerReactive, c, i)
-    vloop, i = state_space_block!(F, x, (; meas, sync, pact, qact), setpoint_pu, c.innerVoltage, c, i)
-    iloop, i = state_space_block!(F, x, (; meas, sync, vloop), setpoint_pu, c.innerCurrent, c, i)
-    mod, i = state_space_block!(F, x, (; meas, iloop), setpoint_pu, c.mod, c, i)
+    meas, i = state_space_block!(F, x, sig_in, terminal_pu, c.meas, c, 1)
+    sync, i = state_space_block!(F, x, meas, terminal_pu, c.sync, c, i)
+    pact, i = state_space_block!(F, x, (; meas, sync), terminal_pu, c.outerActive, c, i)
+    qact, i = state_space_block!(F, x, (; meas, sync), terminal_pu, c.outerReactive, c, i)
+    vloop, i = state_space_block!(F, x, (; meas, sync, pact, qact), terminal_pu,
+        c.innerVoltage, c, i)
+    iloop, i = state_space_block!(F, x, (; meas, sync, vloop), terminal_pu, c.innerCurrent,
+        c, i)
+    mod, i = state_space_block!(F, x, (; meas, iloop), terminal_pu, c.mod, c, i)
 
     elec_in = (
         v_dc = sig_in.v_dc,
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
     )
-    elec, _ = state_space_block!(F, x, (inputs = elec_in, mod = mod), setpoint_pu, c.elec, c, i)
+    elec, _ = state_space_block!(F, x, (inputs = elec_in, mod = mod), terminal_pu, c.elec,
+        c, i)
 
     return (;
         sig_in,

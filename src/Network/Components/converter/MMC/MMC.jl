@@ -66,7 +66,12 @@ $(TYPEDFIELDS)
 end
 
 statenames(c::MMC) = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
-initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control; setpoint_pu)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
+initialvalues(c::MMC; inputs, terminal_pu)  = (;
+    initialvalues(c.meas; inputs)...,
+    initialvalues(c.sync; terminal_pu)...,
+    initialvalues(c.delta_control; inputs, terminal_pu, conv=c)...,
+    initialvalues(c.sigma_control; terminal_pu)...,
+    initialvalues(c.elec; inputs, terminal_pu)...,)
 inputnames(::MMC)                           = (:v_dc, :vG_d, :vG_q)
 outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q) 
 
@@ -87,9 +92,10 @@ $(TYPEDFIELDS)
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFL) = (statenames(c.outer_active)..., statenames(c.outer_reactive)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_active; setpoint_pu)...,
-                                                                initialvalues(c.outer_reactive; setpoint_pu, conv)...,
-                                                                initialvalues(c.occ; inputs, conv)...) 
+initialvalues(c::ΔdqControlGFL; inputs, terminal_pu, conv) = (;
+    initialvalues(c.outer_active; terminal_pu)...,
+    initialvalues(c.outer_reactive; terminal_pu, conv)...,
+    initialvalues(c.occ; inputs, conv)...)
 
 """
 $(TYPEDEF)
@@ -107,9 +113,10 @@ $(TYPEDFIELDS)
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.vi)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; setpoint_pu, conv)...,
-                                                                initialvalues(c.vi; inputs, conv)...,
-                                                                initialvalues(c.occ; inputs, conv)...) 
+initialvalues(c::ΔdqControlGFM; inputs, terminal_pu, conv) = (;
+    initialvalues(c.outer_reactive; terminal_pu, conv)...,
+    initialvalues(c.vi; inputs, conv)...,
+    initialvalues(c.occ; inputs, conv)...)
 
 """
 $(TYPEDEF)
@@ -128,7 +135,10 @@ $(TYPEDFIELDS)
     ccsc::I2 = NoCirculatingCurrentSuppressionControl() # Circulating Current Suppression Control
 end
 statenames(c::ΣdqzControlTEC) = (statenames(c.tec)..., statenames(c.zscc)..., statenames(c.ccsc)...)
-initialvalues(c::ΣdqzControlTEC; setpoint_pu=SetpointPU()) = (; initialvalues(c.tec; setpoint_pu)..., initialvalues(c.zscc)..., initialvalues(c.ccsc)...)
+initialvalues(c::ΣdqzControlTEC; terminal_pu=TerminalValuesPU()) = (;
+    initialvalues(c.tec; terminal_pu)...,
+    initialvalues(c.zscc)...,
+    initialvalues(c.ccsc)...)
 
 """
 $(TYPEDEF)
@@ -146,7 +156,10 @@ $(TYPEDFIELDS)
     ccc::I          # Circulating Current Control
 end
 statenames(c::ΣdqzControlLEC) = (statenames(c.wsigma)..., statenames(c.wdelta)..., statenames(c.ccc)...)
-initialvalues(c::ΣdqzControlLEC; setpoint_pu=SetpointPU()) = (; initialvalues(c.wsigma)..., initialvalues(c.wdelta)..., initialvalues(c.ccc)...)
+initialvalues(c::ΣdqzControlLEC; terminal_pu=TerminalValuesPU()) = (;
+    initialvalues(c.wsigma)...,
+    initialvalues(c.wdelta)...,
+    initialvalues(c.ccc)...)
 
 
 ################## State-space equations #####################
@@ -167,7 +180,7 @@ writing state derivatives into `F`.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `c`: MMC assembly and electrical bases.
 
@@ -186,29 +199,33 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 F = zeros(P.n_states(model))
 outputs = P.state_space!(F, x, inputs, point, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, c::MMC)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, c::MMC)
     # -- Signal Processing ------------------------------------------------------------------------    
     sig_in = input_signals(c, x, inputs)
 
-    meas, i = state_space_block!(F, x, sig_in, setpoint_pu, c.meas, c, 1)
-    sync_out, i = state_space_block!(F, x, meas, setpoint_pu, c.sync, c, i)
+    meas, i = state_space_block!(F, x, sig_in, terminal_pu, c.meas, c, 1)
+    sync_out, i = state_space_block!(F, x, meas, terminal_pu, c.sync, c, i)
 
     # -- Delta and Sigma control ------------------------------------------------------------------
-    out_delta, i = state_space_block!(F, x, (; meas, sync = sync_out), setpoint_pu, c.delta_control, c, i)
-    out_sigma, i = state_space_block!(F, x, (meas = meas, power = (P_ac_f = meas.P_ac_f,), sync = sync_out), setpoint_pu, c.sigma_control, c, i)
+    out_delta, i = state_space_block!(F, x, (; meas, sync = sync_out), terminal_pu,
+        c.delta_control, c, i)
+    out_sigma, i = state_space_block!(F, x,
+        (meas = meas, power = (P_ac_f = meas.P_ac_f,), sync = sync_out), terminal_pu,
+        c.sigma_control, c, i)
 
     # -- Modulation -------------------------------------------------------------------------------
-    out_modulation, i = state_space_block!(F, x, (; meas, out_delta, out_sigma), setpoint_pu, c.modulation, c, i)
+    out_modulation, i = state_space_block!(F, x, (; meas, out_delta, out_sigma),
+        terminal_pu, c.modulation, c, i)
 
     # -- Electrical model -------------------------------------------------------------------------
-    state_space_block!(F, x, (; out_modulation, sig_in, inputs), setpoint_pu, c.elec, c, i)
+    state_space_block!(F, x, (; out_modulation, sig_in, inputs), terminal_pu, c.elec, c, i)
 
     return (; meas)
 end
@@ -231,7 +248,7 @@ into `F`.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `b`: The `ΣdqzControlTEC` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -252,8 +269,8 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = model.sigma_control
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -265,14 +282,15 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, setpoint_pu::SetpointPU, b::ΣdqzControlTEC, c::MMC) 
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)},
+        terminal_pu::TerminalValuesPU, b::ΣdqzControlTEC, c::MMC)
     (; meas) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_Wtot, i = state_space_block!(F, x, meas, setpoint_pu, b.tec, c, 1)
+    out_Wtot, i = state_space_block!(F, x, meas, terminal_pu, b.tec, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_zscc, i = state_space_block!(F, x, (; meas, out_Wtot), setpoint_pu, b.zscc, c, i)
-    out_ccsc, i = state_space_block!(F, x, meas, setpoint_pu, b.ccsc, c, i)
+    out_zscc, i = state_space_block!(F, x, (; meas, out_Wtot), terminal_pu, b.zscc, c, i)
+    out_ccsc, i = state_space_block!(F, x, meas, terminal_pu, b.ccsc, c, i)
 
     return merge(out_ccsc, out_zscc)
 end
@@ -292,7 +310,7 @@ Evaluate MMC summed- and differential-energy control, writing state derivatives 
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `b`: The `ΣdqzControlLEC` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -313,8 +331,8 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = ΣdqzControlLEC(wsigma=ΣEnergyControl(pi_control=PIControl(Kp=0.1, Ki=1.0)), wdelta=ΔEnergyControl(pi_control=PIControl(Kp=0.1, Ki=1.0)), ccc=CirculatingCurrentControl(PIControl(Kp=0.1, Ki=1.0)))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -326,14 +344,18 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, setpoint_pu::SetpointPU, b::ΣdqzControlLEC, c::MMC) 
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)},
+        terminal_pu::TerminalValuesPU, b::ΣdqzControlLEC, c::MMC)
     (; meas, power, sync) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_wsigma, i = state_space_block!(F, x, (; meas, power, sync), setpoint_pu, b.wsigma, c, 1)
-    out_wdelta, i = state_space_block!(F, x, (; meas, power, sync), setpoint_pu, b.wdelta, c, i)
+    out_wsigma, i = state_space_block!(F, x, (; meas, power, sync), terminal_pu, b.wsigma,
+        c, 1)
+    out_wdelta, i = state_space_block!(F, x, (; meas, power, sync), terminal_pu, b.wdelta,
+        c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_ccc, _ = state_space_block!(F, x, (; meas, sync, out_wΣ = out_wsigma, out_wΔ = out_wdelta), setpoint_pu, b.ccc, c, i)
+    out_ccc, _ = state_space_block!(F, x,
+        (; meas, sync, out_wΣ = out_wsigma, out_wΔ = out_wdelta), terminal_pu, b.ccc, c, i)
 
     return out_ccc
 end
@@ -353,7 +375,7 @@ into `F`.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `b`: The `ΔdqControlGFL` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -376,8 +398,8 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = model.delta_control
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -389,15 +411,19 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, b::ΔdqControlGFL, c::MMC)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, b::ΔdqControlGFL, c::MMC)
     (; meas, sync) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_active, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, b.outer_active, c, 1)
-    out_reactive, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, b.outer_reactive, c, i)
+    out_active, i = state_space_block!(F, x, (; meas, sync), terminal_pu, b.outer_active, c,
+        1)
+    out_reactive, i = state_space_block!(F, x, (; meas, sync), terminal_pu,
+        b.outer_reactive, c, i)
 
     # -- Inner Loop -------------------------------------------------------------------------------
     
-    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = (; out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref)), setpoint_pu, b.occ, c, i)
+    out_occ, _= state_space_block!(F, x,
+        (; meas, sync, vloop = (; out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref)),
+        terminal_pu, b.occ, c, i)
 
     return merge(out_active, out_occ)
 end
@@ -417,7 +443,7 @@ into `F`.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `b`: The `ΔdqControlGFM` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -439,8 +465,8 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = ΔdqControlGFM(outer_reactive=OuterReactiveVacControl(), vi=CCVI(), occ=InnerCurrentPIControl())
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -452,15 +478,18 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, b::ΔdqControlGFM, c::MMC)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, b::ΔdqControlGFM, c::MMC)
     (; meas, sync) = inputs
     # -- Outer Loop -------------------------------------------------------------------------------
-    out_reactive, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, b.outer_reactive, c, 1)
+    out_reactive, i = state_space_block!(F, x, (; meas, sync), terminal_pu,
+        b.outer_reactive, c, 1)
 
     # -- Inner Loop -------------------------------------------------------------------------------
-    out_vi, i = state_space_block!(F, x, (; meas, sync, out_reactive), setpoint_pu, b.vi, c, i)
+    out_vi, i = state_space_block!(F, x, (; meas, sync, out_reactive), terminal_pu, b.vi, c,
+        i)
 
-    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = out_vi), setpoint_pu, b.occ, c, i)
+    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = out_vi), terminal_pu, b.occ,
+        c, i)
 
     return out_occ
 end
@@ -486,7 +515,7 @@ Port powers are positive into the converter. Taking 603 MW from DC and deliverin
 
 - `inputs`: Named tuple of DC voltage `v_dc` and grid-frame AC voltages `vG_d`, `vG_q`,
   on converter bases \\[dimensionless\\].
-- `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\].
 
 # Notes
@@ -525,7 +554,7 @@ function pftoinputs(c::MMC, values::NamedTuple)
     vG_q = -v_ac * sin(values.ac.theta)  # q component of the grid voltage in the grid frame
 
     return (v_dc = v_dc, vG_d = vG_d, vG_q = vG_q), 
-        SetpointPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
+        TerminalValuesPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
 end
 
 # transitional
@@ -573,8 +602,8 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 signals = P.input_signals(model, x, inputs)
 ```
 """
@@ -753,25 +782,26 @@ SI_scale(elem::Element{<:MMC}) = SI_scale(elem.element_model)
 
 
 
-equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC) =
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.delta_control)
+equilibriumequations!(F, x, inputs, terminal_pu::TerminalValuesPU, y, c::MMC) =
+    equilibriumequations!(F, x, inputs, terminal_pu, y, c, c.delta_control)
 
 function equilibriumequations!(
-        F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFL)
-    result = equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_active)
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_reactive)
+        F, x, inputs, terminal_pu::TerminalValuesPU, y, c::MMC, b::ΔdqControlGFL)
+    result = equilibriumequations!(F, x, inputs, terminal_pu, y, c, b.outer_active)
+    equilibriumequations!(F, x, inputs, terminal_pu, y, c, b.outer_reactive)
     return result
 end
 
 function equilibriumequations!(
-        F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFM)
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_reactive)
+        F, x, inputs, terminal_pu::TerminalValuesPU, y, c::MMC, b::ΔdqControlGFM)
+    equilibriumequations!(F, x, inputs, terminal_pu, y, c, b.outer_reactive)
 end
 
-function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, ::OuterActiveVdcControl)
+function equilibriumequations!(F, x, inputs, terminal_pu::TerminalValuesPU, y, c::MMC,
+        ::OuterActiveVdcControl)
     idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
     @assert !isnothing(idx_ξvdc)
-    i_dc_ref = setpoint_pu.p_dc / inputs.v_dc
+    i_dc_ref = terminal_pu.p_dc / inputs.v_dc
     F[idx_ξvdc] = i_dc_ref - 3*x.iΣ_z
     return y
 end

@@ -110,8 +110,8 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = FrequencySupportLag(Kω=5.0, ωc=2π*10)
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -177,7 +177,7 @@ Evaluate DC-voltage support lag, writing state derivatives into `F`.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `block`: The `DCVoltageSupportLag` parameters.
 
@@ -200,8 +200,8 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = DCVoltageSupportLag(K=5.0, ωc=2π*10)
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -213,8 +213,9 @@ outputs = P.state_space!(F, x, signals, point, block)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::DCVoltageSupportLag)
-    F[1] = block.ωc * (block.K * (setpoint_pu.v_dc - inputs.meas.v_dc_f) - x.ξ_vdc_supp)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU,
+        block::DCVoltageSupportLag)
+    F[1] = block.ωc * (block.K * (terminal_pu.v_dc - inputs.meas.v_dc_f) - x.ξ_vdc_supp)
     return (; P_ac_support = -x.ξ_vdc_supp)
 end
 
@@ -232,7 +233,7 @@ Evaluate frequency-support response, writing state derivatives into `F`.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `block`: Component block whose equations or metadata are evaluated.
 
@@ -248,8 +249,8 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = FrequencySupportLag(Kω=5.0, ωc=2π*10)
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -261,7 +262,7 @@ outputs = P.state_space!(F, x, signals, point, block)
 @assert all(isfinite, F)
 ```
 """
-state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::AbstractFrequencySupport) =
+state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, block::AbstractFrequencySupport) =
     state_space!(F, x, inputs.sync, block)
 
 pf_dc_droop(::AbstractOuterActiveControl, dcbase, powerbase, global_dict, data) = 0.0
@@ -326,7 +327,8 @@ function statenames(block::OuterActivePowerControl)
     return (statenames(block.support)..., :ξ_P_ac)
 end
 
-function initialvalues(block::OuterActivePowerControl; setpoint_pu=SetpointPU(0, 0, 0, 0))
+function initialvalues(block::OuterActivePowerControl;
+        terminal_pu=TerminalValuesPU(0, 0, 0, 0))
     return (; initialvalues(block.support)...)
 end
 
@@ -345,7 +347,7 @@ Evaluate active-power control and its support dynamics.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `block`: The `OuterActivePowerControl` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -371,8 +373,8 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = OuterActivePowerControl(pi_ctrl=PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -384,13 +386,14 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActivePowerControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU,
+        block::OuterActivePowerControl, conv::AbstractConverter)
     (; meas) = inputs
     ns = n_states(block.support)
-    support = state_space!(@view(F[1:ns]), x, inputs, setpoint_pu, block.support)
+    support = state_space!(@view(F[1:ns]), x, inputs, terminal_pu, block.support)
     P_ac_f = meas.P_ac_f
 
-    Peff_ref = setpoint_pu.p_ac + support.P_ac_support
+    Peff_ref = terminal_pu.p_ac + support.P_ac_support
 
     F[ns + 1] = block.pi_ctrl.Ki * (Peff_ref - P_ac_f)
 
@@ -458,9 +461,9 @@ OuterActiveVdcControl(pi_ctrl::PIControl) = OuterActiveVdcControl(; pi_ctrl)
 statenames(block::OuterActiveVdcControl) =
     (filter_statenames(:v_dc_ctrl_f, block.filter)..., :ξ_v_dc)
 
-function initialvalues(block::OuterActiveVdcControl; setpoint_pu=SetpointPU())
+function initialvalues(block::OuterActiveVdcControl; terminal_pu=TerminalValuesPU())
     return filter_initialvalues(block.filter,
-        filter_statenames(:v_dc_ctrl_f, block.filter), setpoint_pu.v_dc)
+        filter_statenames(:v_dc_ctrl_f, block.filter), terminal_pu.v_dc)
 end
 
 """
@@ -477,7 +480,7 @@ Evaluate DC-voltage PI control.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `block`: The `OuterActiveVdcControl` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -503,8 +506,8 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = OuterActiveVdcControl(pi_ctrl=PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -516,13 +519,14 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, block::OuterActiveVdcControl, conv::AbstractConverter)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU,
+        block::OuterActiveVdcControl, conv::AbstractConverter)
     (; meas) = inputs
     v_dc, idx = filter_step!(F, 1, x, block.filter,
         filter_statenames(:v_dc_ctrl_f, block.filter), meas.v_dc_f)
-    F[idx] = block.pi_ctrl.Ki * (setpoint_pu.v_dc - v_dc)
+    F[idx] = block.pi_ctrl.Ki * (terminal_pu.v_dc - v_dc)
 
-    return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (setpoint_pu.v_dc - v_dc) + x.ξ_v_dc), )
+    return (iΔ_d_ref = -1 * (block.pi_ctrl.Kp * (terminal_pu.v_dc - v_dc) + x.ξ_v_dc), )
 end
 
 inputs(block::OuterActivePowerControl) = (

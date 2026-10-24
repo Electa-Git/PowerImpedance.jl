@@ -199,7 +199,7 @@ function oracle_voltage!(rows, labels)
     model = ParityFixtures.PSCADFixtures.mmc_pq_network().elements.DUT
     reactive = model.delta_control.outer_reactive
     F = zeros(1)
-    sp = PI.SetpointPU(v_ac = 1.2, q_ac = -0.217)
+    sp = PI.TerminalValuesPU(v_ac = 1.2, q_ac = -0.217)
     meas = (; vG_d_f = 0.891, vG_q_f = -0.133, Q_ac_f = -0.178)
     x = (; ξ_Q_ac = -0.087)
     result = PI.state_space!(F, x, (; meas), sp, reactive, model)
@@ -213,7 +213,7 @@ function oracle_droop!(rows, labels)
 
         model = ParityFixtures.Droop.converter(kind).element_model
         block = kind == :mmc ? model.delta_control.outer_active : model.outerActive
-        point = PI.SetpointPU(p_ac = 0.3, v_dc = 1.05)
+        point = PI.TerminalValuesPU(p_ac = 0.3, v_dc = 1.05)
         x = (; ξ_vdc_supp = 0.017, ξ_P_ac = 0.071)
         for (i, voltage) in enumerate((0.97, 1.05, 1.1))
             F = zeros(2)

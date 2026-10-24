@@ -154,7 +154,7 @@ Return the explicitly specified initial states of the component.
 - `e`: Normalized MMC plant parameters.
 - `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 
 # Returns
@@ -181,15 +181,19 @@ initialized. Electrical quantities use converter bases \\[dimensionless\\].
 using PowerImpedance
 P = PowerImpedance
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 model = ElectricalMMC()
-initial = P.initialvalues(model; inputs, setpoint_pu=point)
+initial = P.initialvalues(model; inputs, terminal_pu=point)
 ```
 """
-initialvalues(e::ElectricalMMC; inputs, setpoint_pu) = (; 
-    iΔ_d = (inputs.vG_d * e.turnsRatio * setpoint_pu.p_ac - inputs.vG_q * e.turnsRatio * setpoint_pu.q_ac) / ( (inputs.vG_d * e.turnsRatio)^2 + (inputs.vG_q * e.turnsRatio)^2 ),
-    iΔ_q = (inputs.vG_q * e.turnsRatio * setpoint_pu.p_ac + inputs.vG_d * e.turnsRatio * setpoint_pu.q_ac) / ( (inputs.vG_d * e.turnsRatio)^2 + (inputs.vG_q * e.turnsRatio)^2 ),
-    iΣ_d = setpoint_pu.p_dc / 3 /inputs.v_dc,
+initialvalues(e::ElectricalMMC; inputs, terminal_pu) = (;
+    iΔ_d = (inputs.vG_d * e.turnsRatio * terminal_pu.p_ac -
+        inputs.vG_q * e.turnsRatio * terminal_pu.q_ac) /
+        ( (inputs.vG_d * e.turnsRatio)^2 + (inputs.vG_q * e.turnsRatio)^2 ),
+    iΔ_q = (inputs.vG_q * e.turnsRatio * terminal_pu.p_ac +
+        inputs.vG_d * e.turnsRatio * terminal_pu.q_ac) /
+        ( (inputs.vG_d * e.turnsRatio)^2 + (inputs.vG_q * e.turnsRatio)^2 ),
+    iΣ_d = terminal_pu.p_dc / 3 /inputs.v_dc,
     vCΣ_z = inputs.v_dc)
 
 
@@ -237,8 +241,8 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = model.elec
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))

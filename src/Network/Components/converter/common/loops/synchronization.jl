@@ -34,7 +34,8 @@ statenames(::NoSynchronization) = ()
 
 syncangle(::NoSynchronization, x) = 0.0
 
-state_space!(F, x, meas, setpoint_pu::SetpointPU, block::NoSynchronization, conv::AbstractConverter) = (ω_c = 1.0,)
+state_space!(F, x, meas, terminal_pu::TerminalValuesPU, block::NoSynchronization,
+        conv::AbstractConverter) = (ω_c = 1.0,)
 
 """
 $(TYPEDEF)
@@ -111,8 +112,8 @@ Evaluate PLL filter, PI integrator, and angle state equations.
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]; angle
   signals use \\[rad\\].
-- `::SetpointPU`: Operating-point argument accepted for the common interface and unused
-  by this PLL method.
+- `::TerminalValuesPU`: Operating-point argument accepted for the common interface and
+  unused by this PLL method.
 - `block`: The `PLLSynchronization` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
 
@@ -137,8 +138,8 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -150,7 +151,8 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, meas, ::SetpointPU, block::PLLSynchronization, conv::AbstractConverter)
+function state_space!(F, x, meas, ::TerminalValuesPU, block::PLLSynchronization,
+        conv::AbstractConverter)
     _, vG_q_pll_f = frame_transform(meas.vG_d_f, meas.vG_q_f, (x.Δθ_pll - syncangle(conv.sync, x))) # Ensuring that voltage is in PLL reference frame (it is not the converter reference frame in GFM)
     v_pll, i = filter_step!(F, 1, x, block.filter, filter_statenames(:v_q_pll_f, block.filter), vG_q_pll_f)
     Δω = -block.pi_ctrl.Kp * v_pll + x.ξ_pll
@@ -238,8 +240,8 @@ function statenames(b::VSEWithDamping)
     return (statenames(b.pll)..., :ω_VSM, :Δθ_VSM)
 end
 
-function initialvalues(b::VSEWithDamping; setpoint_pu)
-    return (; initialvalues(b.pll)..., ω_VSM=1, Δθ_VSM=setpoint_pu.θ_ac)
+function initialvalues(b::VSEWithDamping; terminal_pu)
+    return (; initialvalues(b.pll)..., ω_VSM=1, Δθ_VSM=terminal_pu.θ_ac)
 end
 
 """
@@ -256,7 +258,7 @@ Evaluate virtual-swing synchronization with damping, writing state derivatives i
   \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
 - `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]; angle
   signals use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
   angle uses \\[rad\\].
 - `b`: The `VSEWithDamping` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -282,8 +284,8 @@ using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = VSEWithDamping(pll=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 x = merge(x, (ω_VSM=1.0,))
@@ -296,8 +298,9 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, meas, setpoint_pu::SetpointPU, b::VSEWithDamping, conv::AbstractConverter)
-    out_pll, i = state_space_block!(F, x, meas, setpoint_pu, b.pll, conv, 1)
+function state_space!(F, x, meas, terminal_pu::TerminalValuesPU, b::VSEWithDamping,
+        conv::AbstractConverter)
+    out_pll, i = state_space_block!(F, x, meas, terminal_pu, b.pll, conv, 1)
 
     ω_PLL = out_pll.ω_c
 
@@ -306,7 +309,8 @@ function state_space!(F, x, meas, setpoint_pu::SetpointPU, b::VSEWithDamping, co
     ω_VSM = x.ω_VSM
     
     # dω_VSM / dt = ...
-    F[i] = (setpoint_pu.p_ac - P_ac_f - b.K_d * (ω_VSM-ω_PLL) - b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H) 
+    F[i] = (terminal_pu.p_ac - P_ac_f - b.K_d * (ω_VSM-ω_PLL) -
+        b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H)
 
     # dΔθ_VSM/dt
     F[i+1] = conv.elec.ωbase * (ω_VSM-1)

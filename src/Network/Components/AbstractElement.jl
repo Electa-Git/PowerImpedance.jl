@@ -78,7 +78,6 @@ $(TYPEDFIELDS)
    
 end
 
-const SetpointPU = TerminalValuesPU # transitional
 
 """
 $(TYPEDEF)

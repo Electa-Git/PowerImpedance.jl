@@ -15,8 +15,8 @@ include("manual/pscad/validation/classic_fixtures.jl")
     dc = DCPortValues(4, -2//1)
     @test (dc.v, dc.p) === (4.0, -2.0)
     @test PI.current(dc) === -0.5
-    @test PI.SetpointPU === PI.TerminalValuesPU
-    @test PI.TerminalValuesPU() === PI.SetpointPU(0.0, 0.0, 0.0, 1.0, 0.0, 1.0)
+    @test !isdefined(PI, :SetpointPU)
+    @test PI.TerminalValuesPU() === PI.TerminalValuesPU(0.0, 0.0, 0.0, 1.0, 0.0, 1.0)
     @test fieldtypes(PI.TerminalValuesPU) == ntuple(_ -> Float64, 6)
     @test all(name -> name ∉ names(PI),
         (:current, :TerminalValuesPU, :LinearizationCache))

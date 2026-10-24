@@ -42,7 +42,7 @@ function consumer_values(net)
         element.element_model isa Union{PI.MMC, PI.TLC} || continue
         m = element.element_model
         inputs, sp = PI.pftoinputs(m, element.setpoint)
-        seed = PI.orderedinitialvalues(m; inputs, setpoint_pu = sp)
+        seed = PI.orderedinitialvalues(m; inputs, terminal_pu = sp)
         parameters = (; inputs = collect(values(inputs)), sp, m)
         f!(F, x, p) = PI._state_space!(F, x, p.inputs, p.sp, p.m, PI.Equil())
         solution = PI.solve(
@@ -71,7 +71,7 @@ function consumer_values(net::NB.NetworkState, flow)
         PI.is_converter(m) || continue
         point = flow.operating_point[name]
         inputs, sp = PI.pftoinputs(m, point)
-        seed = PI.orderedinitialvalues(m; inputs, setpoint_pu = sp)
+        seed = PI.orderedinitialvalues(m; inputs, terminal_pu = sp)
         parameters = (; inputs = collect(values(inputs)), sp, m)
         f!(F, x, p) = PI._state_space!(F, x, p.inputs, p.sp, p.m, PI.Equil())
         solution = PI.solve(
