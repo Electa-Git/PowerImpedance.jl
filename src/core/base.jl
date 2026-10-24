@@ -128,9 +128,9 @@ function NetworkModel(network::NetworkState, operating_point)::NetworkModel{Comp
     lookup = AdmittanceLookup(admittances, positions)
 
     active = filter(P.is_active, elements)
-    active_indices = [element_indices[name] for name in keys(active)]
+    active_indices = Int[element_indices[name] for name in keys(active)]
     passive = filter(P.is_passive, elements)
-    passive_indices = [element_indices[name] for name in keys(passive)]
+    passive_indices = Int[element_indices[name] for name in keys(passive)]
     grounded_nodes = _grounded_nodes(
         node_indices,
         keys(filter(P.is_source, network.elements)),

@@ -58,6 +58,7 @@ end
         include("NetworkBuilder_test.jl")
         include("ConnectionRegistry_test.jl")
         include("calculation_model_test.jl")
+        include("network_model_test.jl")
         include("numeric_parity_test.jl")
         include("parity_test.jl")
         include("convert_pmacdc_test.jl")

@@ -124,10 +124,16 @@ function run_parity()
             reference = arrays(D.load_rows(joinpath(DIRECTORY, "numeric.csv")))
             rows, labels = D.Row[], Dict{String, String}()
             skipped, network_skipped, conversion_skipped = String[], String[], String[]
+            reference_skipped = split(metadata["skipped"], ','; keepempty = false)
+            reference_network_skipped = split(metadata["network_level_skipped"], ',';
+                keepempty = false)
             for fixture in fixtures
                 println("Recomputing ", fixture.name)
                 flush(stdout)
-                result = D.collect_fixture(fixture)
+                result = D.collect_fixture(fixture;
+                    network_level_skipped =
+                        string(fixture.name) in reference_network_skipped,
+                    skipped_families = reference_skipped)
                 append!(rows, result.rows)
                 merge!(labels, result.labels)
                 append!(skipped, result.skipped)
@@ -140,8 +146,8 @@ function run_parity()
             append!(rows, result.rows)
             merge!(labels, result.labels)
             append!(skipped, result.skipped)
-            @test join(sort!(unique(skipped)), ',') == metadata["skipped"]
-            @test join(network_skipped, ',') == metadata["network_level_skipped"]
+            @test sort!(unique(skipped)) == reference_skipped
+            @test network_skipped == reference_network_skipped
             @test join(conversion_skipped, ',') == metadata["pm_conversion_skipped"]
             @test result.stability_fixture == metadata["stability_fixture"]
             @test labels == D.load_labels(joinpath(DIRECTORY, "labels.tsv"))

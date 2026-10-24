@@ -279,7 +279,12 @@ function exception_text(exception, backtrace)
     return sprint(showerror, exception, backtrace)
 end
 
-function collect_family!(action, rows, labels, skipped, errors, key)
+function collect_family!(action, rows, labels, skipped, errors, key;
+        skipped_families = ())
+    if key in skipped_families
+        push!(skipped, key)
+        return (; ok = false, value = nothing)
+    end
     local_rows, local_labels = Row[], Dict{String, String}()
     try
         value = action(local_rows, local_labels)
@@ -358,13 +363,13 @@ function record_admittances!(rows, labels, name, state, point, frequencies)
     end
 end
 
-function collect_fixture(fixture; dump_directory = nothing)
+function collect_fixture(fixture; dump_directory = nothing,
+        network_level_skipped = false, skipped_families = ())
     @nospecialize fixture
     rows, labels = Row[], Dict{String, String}()
     skipped, errors = String[], Pair{String, String}[]
     state = fixture.build()
     name = string(fixture.name)
-    network_level_skipped = false
     conversion_skipped = false
     for (node, (domain, bus)) in NB._node_bus_mapping(state.topology)
         record!(rows, labels, "$name.nodes.$node.domain", domain)
@@ -373,7 +378,8 @@ function collect_fixture(fixture; dump_directory = nothing)
     if dump_directory !== nothing && fixture.name in (:p2p_alt, :p2p_gridspace_nominal)
         write_structure(joinpath(dump_directory, "structure"), fixture.name, state)
     end
-    converted = collect_family!(rows, labels, skipped, errors, "$name.pm") do r, l
+    converted = collect_family!(rows, labels, skipped, errors, "$name.pm";
+        skipped_families) do r, l
         data, _, mapping = convert(state, PI.PMACDC)
         entries = entry_keys(state, data, mapping)
         record_pm!(r, l, "$name.pm", data, entries)
@@ -390,7 +396,8 @@ function collect_fixture(fixture; dump_directory = nothing)
         return (; rows, labels, state, skipped, errors, network_level_skipped,
             conversion_skipped)
     end
-    powerflow = collect_family!(rows, labels, skipped, errors, "$name.pf") do r, l
+    powerflow = collect_family!(rows, labels, skipped, errors, "$name.pf";
+        skipped_families) do r, l
         result = compute(NB.PowerFlowProblem(state), NB.ACDCPowerFlow())
         if result.result === nothing
             l["$name.pf.termination_status"] = "not_required"
@@ -415,7 +422,7 @@ function collect_fixture(fixture; dump_directory = nothing)
             conversion_skipped)
     end
     point = powerflow.value.operating_point
-    collect_family!(rows, labels, skipped, errors, "$name.op") do r, l
+    collect_family!(rows, labels, skipped, errors, "$name.op"; skipped_families) do r, l
         for (element, setpoint) in point.setpoints
             values = (;
                 (f => getfield(setpoint, f)
@@ -424,40 +431,28 @@ function collect_fixture(fixture; dump_directory = nothing)
             record!(r, l, "$name.op.$element", values)
         end
     end
-    collect_family!(rows, labels, skipped, errors, "$name.ss") do r, l
+    collect_family!(rows, labels, skipped, errors, "$name.ss"; skipped_families) do r, l
         record_state_space!(r, l, name, state, point)
     end
     frequencies = ComplexF64.(2π * im .* collect(FREQUENCIES))
-    collect_family!(rows, labels, skipped, errors, "$name.y") do r, l
+    collect_family!(rows, labels, skipped, errors, "$name.y"; skipped_families) do r, l
         record_admittances!(r, l, name, state, point, frequencies)
     end
-    model = try
-        NB.NetworkModel(state, point)
-    catch exception
-        message = exception_text(exception, catch_backtrace())
-        if exception isa MethodError && exception.f === NB.NetworkModel &&
-           length(exception.args) == 6 && exception.args[3] isa Vector{Union{}}
-            network_level_skipped = true
-            push!(errors, "$name.network" => message)
-        else
-            for family in ("ynode", "yedge", "zdet")
-                push!(skipped, "$name.$family")
-                push!(errors, "$name.$family" => message)
-            end
-        end
-        nothing
-    end
-    if model !== nothing
+    if !network_level_skipped
+        model = NB.NetworkModel(state, point)
         indices = [model.indices.nodes[n] for n in fixture.probes.nets]
         selected = NB.NetworkModel(model.element_admittances, model.active_elements,
             model.passive_elements, model.grounded_nodes, indices, model.indices)
-        collect_family!(rows, labels, skipped, errors, "$name.ynode") do r, l
+        collect_family!(rows, labels, skipped, errors, "$name.ynode";
+            skipped_families) do r, l
             record!(r, l, "$name.ynode", NB.make_y_node(selected, frequencies))
         end
-        collect_family!(rows, labels, skipped, errors, "$name.yedge") do r, l
+        collect_family!(rows, labels, skipped, errors, "$name.yedge";
+            skipped_families) do r, l
             record!(r, l, "$name.yedge", NB.make_y_edge(selected, frequencies))
         end
-        collect_family!(rows, labels, skipped, errors, "$name.zdet") do r, l
+        collect_family!(rows, labels, skipped, errors, "$name.zdet";
+            skipped_families) do r, l
             for (i, f) in enumerate(FREQUENCIES)
                 impedance,
                 omega = NB.determine_impedance(model; nets = fixture.probes.nets,

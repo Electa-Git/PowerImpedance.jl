@@ -4,24 +4,6 @@ include("gs_machines.jl")
 include("gs_controls.jl")
 include("gs_converters.jl")
 
-function NetworkModel(
-    admittances::AdmittanceLookup{T},
-    ::Vector{Union{}},
-    passive_elements::Vector{Int64},
-    grounded_nodes::Vector{Int},
-    retained_nodes::Vector{Int},
-    indices::NetworkLookup,
-) where {T<:Number}
-    return NetworkModel(
-        admittances,
-        Int64[],
-        passive_elements,
-        grounded_nodes,
-        retained_nodes,
-        indices,
-    )
-end
-
 struct _NamedTupleMaterializer{Names} end
 function (::_NamedTupleMaterializer{Names})(values...)::NamedTuple{Names} where {Names}
     return NamedTuple{Names}(values)
