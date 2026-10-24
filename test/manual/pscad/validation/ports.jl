@@ -170,7 +170,7 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
                     P.output_probe!(plan.main, probe, "injection", "kA", (x + 108, y + 72))
                     push!(plan.probes.channels,
                         P.ProbeChannel(probe, :injection_current, bus.name,
-                            "injection_$port", "1", 3, "kA", :out))
+                            "injection_$port", :ac, 3, "kA", :out))
                 end
             end
         end
@@ -195,9 +195,12 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
             bases.dc_voltage===nothing || push!(voltage_buses,port_probe(list,e.name,1).name)
             push!(device_currents,(string(e.name),string(bases.ac_side)))
         end
-        needed=filter(c->c.kind==:injection_current ||
-            c.kind==:voltage && c.bus in voltage_buses ||
-            c.kind==:current && (c.bus in port_buses || c.dim==1 || (c.element,c.side) in device_currents),
+        needed=filter(
+            c->c.kind==:injection_current ||
+               c.kind==:voltage && c.bus in voltage_buses ||
+               c.kind==:current && (c.bus in port_buses || c.dim==1 ||
+                (c.element,
+                    string(terminal_side(list, c.element, c.port))) in device_currents),
             plan.probes.channels)
         retain_recorders!(plan,needed)
     end

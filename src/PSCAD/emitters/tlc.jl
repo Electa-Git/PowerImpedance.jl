@@ -179,11 +179,11 @@ end
 
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.TLC}, context)
     connected = filter(t -> !t.grounded, e.terminals)
-    length(connected) == 2 && any(t -> t.side == 1 && t.bus.domain == 2, connected) &&
-    any(t -> t.side == 2 && t.bus.domain == 1, connected) ||
-        throw(ArgumentError("converter :$(e.name) requires DC side 1 and AC side 2"))
-    dc, ac = only(filter(t -> t.side == 1, connected)),
-    only(filter(t -> t.side == 2, connected))
+    length(connected) == 2 && any(t -> t.port == :dc && t.bus.domain == 2, connected) &&
+    any(t -> t.port == :ac && t.bus.domain == 1, connected) ||
+        throw(ArgumentError("converter :$(e.name) requires DC port :dc and AC port :ac"))
+    dc, ac = only(filter(t -> t.port == :dc, connected)),
+    only(filter(t -> t.port == :ac, connected))
     bus = _ac_bus(e, ac, context)
     _terminal_bus(e, dc, context)
     m = e.model
@@ -242,7 +242,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.TLC}, contex
                signal == "Q_ac_f" ? :converter_q : :converter_diagnostic
         unit = signal == "theta_c" ? "rad" : "pu"
         push!(state.channels, ProbeChannel(
-            probe, kind, bus.name, string(e.name), "2", 1, unit))
+            probe, kind, bus.name, string(e.name), :ac, 1, unit))
         module_signal_stub!(state.main, (point[1] + 54, point[2] + 72 + 36 * (i - 1)), probe, 1)
         px, py = allocate_cell!(state.layout)
         output_probe!(state.main, probe, "converter", unit, (px + 126, py + 72))

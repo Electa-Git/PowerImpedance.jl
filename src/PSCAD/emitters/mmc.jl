@@ -1,17 +1,18 @@
 # Individual MMC blocks provide diagnostic outputs for the probes, which
 # MMC.state_space! does not return.
-function mmc_equilibrium_outputs(m, states, inputs, setpoint_pu)
+function mmc_equilibrium_outputs(m, states, inputs, terminal_pu)
     sig_in = PowerImpedance.input_signals(m, states, inputs)
     F = zeros(PowerImpedance.n_states(m))
     meas, i = PowerImpedance.state_space_block!(
-        F, states, sig_in, setpoint_pu, m.meas, m, 1)
-    sync, i = PowerImpedance.state_space_block!(F, states, meas, setpoint_pu, m.sync, m, i)
+        F, states, sig_in, terminal_pu, m.meas, m, 1)
+    sync, i = PowerImpedance.state_space_block!(F, states, meas, terminal_pu, m.sync, m, i)
     delta, i = PowerImpedance.state_space_block!(
-        F, states, (; meas, sync), setpoint_pu, m.delta_control, m, i)
+        F, states, (; meas, sync), terminal_pu, m.delta_control, m, i)
     sigma, i = PowerImpedance.state_space_block!(F, states,
-        (; meas, power = (; P_ac_f = meas.P_ac_f), sync), setpoint_pu, m.sigma_control, m, i)
+        (; meas, power = (; P_ac_f = meas.P_ac_f), sync),
+        terminal_pu, m.sigma_control, m, i)
     mod, _ = PowerImpedance.state_space_block!(F, states,
-        (; meas, out_delta = delta, out_sigma = sigma), setpoint_pu, m.modulation, m, i)
+        (; meas, out_delta = delta, out_sigma = sigma), terminal_pu, m.modulation, m, i)
     return (; sig_in, meas, sync, delta, sigma, mod)
 end
 
@@ -457,11 +458,11 @@ end
 
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, context)
     connected = filter(t -> !t.grounded, e.terminals)
-    length(connected) == 2 && any(t -> t.side == 1 && t.bus.domain == 2, connected) &&
-    any(t -> t.side == 2 && t.bus.domain == 1, connected) ||
-        throw(ArgumentError("converter :$(e.name) requires DC side 1 and AC side 2"))
-    dc, ac = only(filter(t -> t.side == 1, connected)),
-    only(filter(t -> t.side == 2, connected))
+    length(connected) == 2 && any(t -> t.port == :dc && t.bus.domain == 2, connected) &&
+    any(t -> t.port == :ac && t.bus.domain == 1, connected) ||
+        throw(ArgumentError("converter :$(e.name) requires DC port :dc and AC port :ac"))
+    dc, ac = only(filter(t -> t.port == :dc, connected)),
+    only(filter(t -> t.port == :ac, connected))
     bus = _ac_bus(e, ac, context)
     _terminal_bus(e, dc, context)
     m = e.model
@@ -528,7 +529,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
                signal == "iS_z" ? :converter_sum_current : :converter_diagnostic
         unit = signal == "theta_c" ? "rad" : startswith(signal, "v_Ctot_") ? "kV" : "pu"
         push!(state.channels, ProbeChannel(
-            probe, kind, bus.name, string(e.name), "2", 1, unit))
+            probe, kind, bus.name, string(e.name), :ac, 1, unit))
         module_signal_stub!(state.main, (point[1] + 54, point[2] + 72 + 36 * (i - 1)), probe, 1)
         px, py = allocate_cell!(state.layout)
         output_probe!(state.main, probe, "converter", unit, (px + 126, py + 72))

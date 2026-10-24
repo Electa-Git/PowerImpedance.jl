@@ -15,7 +15,8 @@ const REGISTRY = [
         differences = ["DM midpoint references: two 10 MΩ pole shunts, 20 MΩ differential path"],
         measurements = ["operating_point", "frequency_response"], estimated_nodes = 32),
     (id = "ac_ohl_untransposed", category = :passive, description = "AC overhead line",
-        parent = "passive_ohl_network", factory = () -> PSCADFixtures.passive_ohl_network().classic,
+        parent = "passive_ohl_network",
+            factory = () -> ClassicFixtures.passive_ohl_network(),
         topology = "AC source — 25 km OHL — resistive load",
         physics = ["earth return", "propagation", "phase ordering"],
         dissipativity = "positive conductor/earth loss and resistive termination",
@@ -38,7 +39,8 @@ const REGISTRY = [
             "DM midpoint references: two 10 MΩ pole shunts, 20 MΩ differential path"],
         measurements = ["operating_point", "frequency_response"], estimated_nodes = 40),
     (id = "transformer_yy", category = :passive, description = "YY transformer",
-        parent = "transformer_network", factory = () -> PSCADFixtures.transformer_network().classic,
+        parent = "transformer_network",
+            factory = () -> ClassicFixtures.transformer_network(),
         topology = "AC source — YY T model — resistive load",
         physics = ["turns ratio", "magnetizing current", "T-model response"],
         dissipativity = "positive winding/magnetizing resistance and resistive load",
@@ -46,7 +48,7 @@ const REGISTRY = [
             "power-flow approximation versus explicit T model"], measurements = ["operating_point", "frequency_response"], estimated_nodes = 48),
     (id = "transformer_dyn11", category = :passive, description = "Dyn11 transformer",
         parent = "transformer_network(:ΔY)",
-        factory = () -> PSCADFixtures.transformer_network(organization = :ΔY).classic,
+        factory = () -> ClassicFixtures.transformer_network(organization = :ΔY),
         topology = "AC source — Dyn11 T model — resistive load",
         physics = ["+30 degree secondary shift", "turns ratio", "winding loss"],
         dissipativity = "positive winding/magnetizing resistance and resistive load",
@@ -198,7 +200,7 @@ function dc_sections_parent(parent)
 end
 
 function dc_rlc_network()
-    net = dc_sections_parent(PSCADFixtures.dc_network().classic)
+    net = dc_sections_parent(ClassicFixtures.dc_network())
     # Keep RL and parallel RC as separate supported scalar realizations.
     add!(net, :rc, impedance(z = s -> inv(1 / 10.0 + 1e-6s), pins = 1))
     connect!(net, (:rc, Symbol("1.1")), :DM)
@@ -208,8 +210,8 @@ function dc_rlc_network()
 end
 
 function ac_cable_network()
-    net = PSCADFixtures.small_ac_network().classic
-    replacement = deepcopy(PSCADFixtures.dc_cable_network().classic.elements[:line])
+    net = ClassicFixtures.small_ac_network()
+    replacement = deepcopy(ClassicFixtures.dc_cable_network().elements[:line])
     replacement.element_model.positions = [(-0.5, 1.0), (0.0, 1.0), (0.5, 1.0)]
     replacement.pins = copy(net.elements[:line].pins)
     replacement.input_pins = net.elements[:line].input_pins
@@ -219,7 +221,7 @@ function ac_cable_network()
 end
 
 function dc_mixed_network()
-    net = dc_sections_parent(PSCADFixtures.dc_cable_network().classic)
+    net = dc_sections_parent(ClassicFixtures.dc_cable_network())
     net.elements[:line].element_model.length = 25e3
     ohl = overhead_line(length = 75e3,
         conductors = Conductors(organization = :flat, nᵇ = 2, nˢᵇ = 1,
@@ -241,7 +243,7 @@ function passive_gate(net, entry)
         if model isa PowerImpedance.Source
             continue
         elseif model isa PowerImpedance.Impedance
-            form = P.identify_rlc(element; name).form
+            form = P.identify_rlc(element.element_model; name).form
             form.R !== nothing && form.R > 0 || error("$name has no positive dissipation")
             all(x -> x === nothing || x > 0, (form.L, form.C)) ||
                 error("invalid storage in $name")
@@ -278,7 +280,7 @@ end
 
 # The TLC factory supplies every block; only topology and Q=5 MVAr change.
 function tlc_strong_network(; mode = :pq, scr = 8.0)
-    parent = PSCADFixtures.tlc_case2_network().classic
+    parent = ClassicFixtures.tlc_case2_network()
     net = Network()
     net.voltageBase .= parent.voltageBase
     dut = deepcopy(parent.elements[:DUT])
@@ -341,33 +343,70 @@ end
 # ground gives the same circuit, converter solved point and resistor terminal-1 power,
 # with unchanged components and PSCAD fields.
 function fixture_netlist(net, point)
-    list=P.netlist(net,point)
-    haskey(net.elements,:DC_load) || return list
-    source=only(filter(e->e.name==:G_DC,list.elements))
-    source.setpoint.Vdc==0.0 || error("DC ground reference must be exactly zero")
-    ground_bus=only(source.terminals[findall(t->!t.grounded,source.terminals)]).bus
+    state = PSCADFixtures.state_from_classic(net)
+    ground_reference = haskey(net.elements, :DC_load)
+    ground_net = if ground_reference
+        inputvalues(state.elements.G_DC).v == 0.0 ||
+            error("DC ground reference must be exactly zero")
+        topology = deepcopy(state.topology)
+        connections = filter(row -> row.component != :G_DC, topology.connections)
+        delete!(topology.admittance_orders, :G_DC)
+        topology = NetworkBuilder.NetworkTopology(connections, topology.admittance_orders)
+        elements = Base.structdiff(state.elements, (; G_DC = nothing))
+        state = NetworkBuilder.NetworkState(elements, topology, state.options)
+        net.elements[:G_DC].pins[Symbol("1.1")]
+    else
+        nothing
+    end
+    flow = if point === nothing
+        nothing
+    else
+        result, data, nodes, mapping = point
+        entries = Dict(name => (; pmtype = kind, compkey = index)
+            for (name, (kind, index)) in mapping if haskey(state.elements, name))
+        node_indices = Dict(node => mapping == "gnd" ? (:ground, 0) :
+            (first(mapping) == "bus" ? :ac : :dc, last(mapping))
+            for (group, mapping) in nodes for node in group)
+        topology = deepcopy(state.topology)
+        for i in eachindex(topology.connections.bus)
+            topology.connections.bus[i] = node_indices[topology.connections.net[i]][2]
+        end
+        state = NetworkBuilder.NetworkState(state.elements, topology, state.options)
+        nodes = NetworkBuilder._node_bus_mapping(topology)
+        bases = PowerImpedance.PowerModelsACDC._get_pu_bases(1000,
+            net.voltageBase[1])
+        bases["omega"] = 2π * 50
+        values = PowerImpedance.NetworkBuilder._operating_point(
+            result, bases, state, entries)
+        PowerFlowResult(ACDCPowerFlow(), result, data, nodes, entries, values, (;))
+    end
+    list = P.netlist(state, flow)
+    ground_reference || return list
+    ground_bus = only(b.key for b in list.buses if ground_net in b.nets)
     elements=P.NetlistElement[]
     for e in list.elements
         e.name==:G_DC && continue
         terminals=[t.bus==ground_bus ?
-            P.Terminal(t.element,t.side,t.terminals,fill(:gnd,length(t.nets)),nothing,true) : t
-            for t in e.terminals]
+                   P.Terminal(t.element, t.port, t.terminals,
+                       fill(:gnd, length(t.nets)), nothing, true) : t
+                   for t in e.terminals]
         role=e.name==:DC_load ? :load : e.role
-        push!(elements,P.NetlistElement(e.name,e.pscad,e.element,e.model,terminals,role,e.setpoint))
+        push!(elements, P.NetlistElement(
+            e.name, e.pscad, e.model, e.ports, terminals, role, e.values))
     end
     op=list.operating_point
     operating_point=P.OperatingPointRecord(
         Dict(k=>v for (k,v) in op.bus_states if k!=ground_bus),
         Dict(k=>v for (k,v) in op.branch_flows if k!=:G_DC),
-        Dict(k=>v for (k,v) in op.setpoints if k!=:G_DC),op.slack_bus,op.bases)
+        Dict(k=>v for (k,v) in op.values if k!=:G_DC),op.slack_bus,op.bases)
     return P.Netlist(filter(b->b.key!=ground_bus,list.buses),elements,operating_point,
         list.voltageBase,list.frequency)
 end
 
 # The fixture supplies the MMC and every controller; only the terminal network changes.
 function mmc_grid_network(; mode = :pq, scr = 8.0)
-    parent = PSCADFixtures.mmc_network(mode).state
-    dut = deepcopy(parent.elements.DUT)
+    parent = ClassicFixtures.mmc_network(mode)
+    dut = deepcopy(parent.elements[:DUT])
     elec = dut.element_model.elec
     voltage = elec.vAC_base / elec.turnsRatio
     power = mode == :vdc ? -600.0 : 600.0
@@ -376,7 +415,7 @@ function mmc_grid_network(; mode = :pq, scr = 8.0)
     net = Network()
     net.voltageBase[1] = voltage / sqrt(2)
     add!(net, :DUT, dut)
-    add!(net, :G3, deepcopy(parent.elements.G_AC))
+    add!(net, :G3, deepcopy(parent.elements[:G_AC]))
     add!(net, :G_DC, dc_source(setpoint=Setpoint(Vdc=mode == :vdc ? 0.0 : elec.vDC_base)))
     impedance_magnitude = (voltage * sqrt(3/2))^2 / elec.Sbase / scr
     resistance = impedance_magnitude / sqrt(101)
@@ -404,10 +443,15 @@ function mmc_grid_network(; mode = :pq, scr = 8.0)
 end
 
 function active_device(kind)
-    kind==:gfm && return deepcopy(PSCADFixtures.mmc_gfm_network().state.elements.DUT)
-    kind==:compensated && return deepcopy(PSCADFixtures.mmc_compensated_network().state.elements.DUT)
-    kind==:disabled && return deepcopy(PSCADNetworks.p2p_builder(1.).elements.c2)
-    kind==:machine && return deepcopy(PSCADFixtures.sm_network().state.elements.sg1)
+    kind==:gfm && return deepcopy(ClassicFixtures.mmc_gfm_network().elements[:DUT])
+    kind==:compensated &&
+        return deepcopy(ClassicFixtures.mmc_compensated_network().elements[:DUT])
+    if kind == :disabled
+        namespace = PSCADNetworks.load_through(joinpath(pkgdir(PowerImpedance),
+            "examples/P2P_HVDC_ALT.jl"), :ohl_to_ugc)
+        return deepcopy(Base.invokelatest(namespace.ohl_to_ugc, 1.0).c2)
+    end
+    kind==:machine && return deepcopy(ClassicFixtures.sm_network().elements[:sg1])
     throw(ArgumentError("unknown active device $kind"))
 end
 

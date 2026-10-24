@@ -129,6 +129,6 @@ voltage_probe_name(bus) = "V_$bus"
 """
 $(TYPEDSIGNATURES)
 
-Return the current-probe name `I_<element>_<side>` for `element` and `side`.
+Return the current-probe name `I_<element>_<port>` for `element` and `port`.
 """
-current_probe_name(element, side) = "I_$(element)_$side"
+current_probe_name(element, port::Symbol) = "I_$(element)_$port"

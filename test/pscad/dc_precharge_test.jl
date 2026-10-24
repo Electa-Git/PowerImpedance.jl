@@ -1,11 +1,12 @@
 module PSCADDCPrechargeTests
+import ..PSCADFixtures
 using Test, PowerImpedance
 using ..PSCADFixtures
 const P = PowerImpedance.PSCAD
 
 @testset "DC island pre-charge detection and components" begin
     fixture = PSCADFixtures.mmc_vdc_network()
-    list = P.netlist(fixture.classic, power_flow(fixture.classic))
+    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
     buses = P._dc_precharge_buses(list)
     @test length(buses) == 2 # Vdc MMC and its remote PQ MMC, joined by the cable
     plan = P.build_plan(list; settings = P.SimulationSettings(source_ramp = 0.0))
@@ -20,15 +21,17 @@ const P = PowerImpedance.PSCAD
     @test all(c -> Dict(c.params)["PU"] == "0", taps)
     for bus in buses
         channels = filter(c -> c.kind == :voltage && c.bus == bus.name, plan.probes.channels)
-        @test Set(c.side for c in channels) == Set(("P", "N"))
-        @test only(filter(c -> c.side == "P", channels)).name == P.voltage_probe_name(bus.name * "_P")
-        @test only(filter(c -> c.side == "N", channels)).name == P.voltage_probe_name(bus.name * "_N")
+        @test Set(c.pole for c in channels) == Set(("P", "N"))
+        @test only(filter(c -> c.pole == "P", channels)).name ==
+              P.voltage_probe_name(bus.name * "_P")
+        @test only(filter(c -> c.pole == "N", channels)).name ==
+              P.voltage_probe_name(bus.name * "_N")
     end
     dc_probes = P.ProbeManifest(filter(c -> c.kind == :voltage &&
         c.bus in Set(b.name for b in buses), plan.probes.channels), nothing)
     times = collect(0.0:250e-6:0.3)
     channels = PowerImpedance.OrderedDict(c.name => fill(
-        (c.side == "P" ? 1 : -1) * only(filter(b -> b.name == c.bus, buses)).vm_pu *
+        (c.pole == "P" ? 1 : -1) * only(filter(b -> b.name == c.bus, buses)).vm_pu *
         only(filter(b -> b.name == c.bus, buses)).base_kV, length(times)) for c in dc_probes.channels)
     model = PSCADModel("precharge.pscx", "precharge", list, dc_probes,
         P.SimulationSettings(), list.operating_point, (;))
@@ -86,17 +89,18 @@ const P = PowerImpedance.PSCAD
     # Adding a source remotely suppresses the entire connected island, not just
     # the local converter bus. A source on a separate island must not suppress it.
     original = only(filter(e -> e.name == :G_DC,
-        P.netlist(PSCADFixtures.mmc_pq_network().classic, nothing).elements))
+        P.netlist(PSCADFixtures.mmc_pq_network(), nothing).elements))
     remote = last(buses).key
-    terminal = P.Terminal(:stiff, 1, [1], [:remote], remote, false)
-    stiff = P.NetlistElement(:stiff, "stiff", original.element, original.model,
-        [terminal], :source, original.setpoint)
+    terminal = P.Terminal(:stiff, :dc, [:dc], [:remote], remote, false)
+    stiff = P.NetlistElement(:stiff, "stiff", original.model, original.ports,
+        [terminal], :source, original.values)
     supplied = P.Netlist(list.buses, [list.elements; stiff], list.operating_point, list.voltageBase, list.frequency)
     @test isempty(P._dc_precharge_buses(supplied))
     isolated_key = P.BusKey(2, maximum(b.key.index for b in buses) + 1)
     isolated = P.Bus(isolated_key, "isolated", [:isolated], :dc, 400., 1., nothing, nothing)
-    isolated_source = P.NetlistElement(:stiff, "stiff", original.element, original.model,
-        [P.Terminal(:stiff, 1, [1], [:isolated], isolated_key, false)], :source, original.setpoint)
+    isolated_source = P.NetlistElement(:stiff, "stiff", original.model, original.ports,
+        [P.Terminal(:stiff, :dc, [:dc], [:isolated], isolated_key, false)], :source,
+            original.values)
     separated = P.Netlist([list.buses; isolated], [list.elements; isolated_source],
         list.operating_point, list.voltageBase, list.frequency)
     @test P._dc_precharge_buses(separated) == buses
@@ -104,12 +108,12 @@ const P = PowerImpedance.PSCAD
     @test_throws ArgumentError P._dc_precharge_buses(P.Netlist(unsolved, list.elements,
         list.operating_point, list.voltageBase, list.frequency))
     # Permanent DC-clamped and PQ-only islands never acquire startup sources.
-    clamped = PSCADFixtures.mmc_pq_network().classic
+    clamped = PSCADFixtures.mmc_pq_network()
     @test isempty(P._dc_precharge_buses(P.netlist(clamped, nothing)))
-    @test !P._sets_dc_voltage(clamped.elements[:DUT].element_model)
-    @test P._sets_dc_voltage(fixture.classic.elements[:DUT].element_model)
-    @test P._sets_dc_voltage(PSCADFixtures.tlc_case1_network().classic.elements[:DUT].element_model)
-    @test !P._sets_dc_voltage(PSCADFixtures.tlc_case2_network().classic.elements[:DUT].element_model)
+    @test !P._sets_dc_voltage(clamped.elements[:DUT])
+    @test P._sets_dc_voltage(fixture.elements[:DUT])
+    @test P._sets_dc_voltage(PSCADFixtures.tlc_case1_network().elements[:DUT])
+    @test !P._sets_dc_voltage(PSCADFixtures.tlc_case2_network().elements[:DUT])
     passive = filter(e -> !P._sets_dc_voltage(e.model), list.elements)
     @test isempty(P._dc_precharge_buses(P.Netlist(list.buses, passive,
         list.operating_point, list.voltageBase, list.frequency)))

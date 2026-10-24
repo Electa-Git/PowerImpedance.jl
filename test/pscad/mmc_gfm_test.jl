@@ -1,4 +1,5 @@
 module PSCADMMCGFMTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures, ..PSCADTopology
 using ..PSCADTLCTests: evaluate
@@ -12,8 +13,8 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
 
 @testset "GFM MMC plans and equations" begin
     fixture = PSCADFixtures.mmc_gfm_network()
-    for network in (fixture.classic, fixture.state)
-        pf = network isa Network ? power_flow(network) : NetworkBuilder.solve(network).powerflow
+    for network in (fixture,)
+        pf = NetworkBuilder.solve(network)
         list = P.netlist(network, pf)
         plan = P.build_plan(list; settings = SETTINGS)
         e = only(filter(e -> e.name == :DUT, list.elements))
@@ -37,7 +38,7 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         @test m.modulation.delay1.timeDelay == 200e-6
         residual = zeros(length(eq.states))
         PI._state_space!(residual, collect(values(eq.states)), collect(values(eq.inputs)),
-            eq.setpoint_pu, m, PI.Equil())
+            eq.terminal_pu, m, PI.Equil())
         @test maximum(abs, residual) <= 1e-6
         @test eq.outputs.sync.ω_c == eq.states.ω_VSM
         @test Dict(p.name => p.default for p in modules["VSM_DUT"].parameters)["theta0"] == eq.states.Δθ_VSM
@@ -77,7 +78,7 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
             swing = omega < 1 ? m.sync : PI.VSEWithDamping(H = 3.0, K_d = 47.0,
                 K_ω = 12.0, ω_ref = 1.015, pll = m.sync.pll)
             F = zeros(PI.n_states(swing))
-            owned = PI.state_space!(F, x, meas, eq.setpoint_pu, swing, m)
+            owned = PI.state_space!(F, x, meas, eq.terminal_pu, swing, m)
             pll_def = P.converter_pll("PLL_EQ", e, displaced, m.sync.pll)
             pll_signals = Dict{String, Any}("vG_d_f" => meas.vG_d_f, "vG_q_f" => meas.vG_q_f,
                 "theta_vsm_rel" => vsm_angle, "theta_pll_rel" => pll_angle)
@@ -141,7 +142,7 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         meas = merge(eq.outputs.meas, (; Q_ac_f = -0.18, i_d_f = 0.51, i_q_f = -0.12))
         inputs = (; meas, sync = (; ω_c = 1.02))
         F = zeros(PI.n_states(m.delta_control))
-        owned = PI.state_space!(F, eq.states, inputs, eq.setpoint_pu, m.delta_control, m)
+        owned = PI.state_space!(F, eq.states, inputs, eq.terminal_pu, m.delta_control, m)
         signals = Dict{String, Any}(string(k) => v for (k, v) in pairs(meas))
         signals["omega_c"] = 1.02
         qout = evaluate(diagnostic(modules["QCTRL_DUT"], ["qrate"]), signals)
@@ -189,8 +190,10 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
             @test only(table.within_tolerance) == (abs(frequency - 1) <= 1e-3)
         end
         empty_channels = PI.OrderedDict{String, Vector{Float64}}()
-        @test_throws ArgumentError compare_operating_point(synthetic_result(times, empty_channels; probes), model)
-        bad = P.ProbeChannel(channel.name, channel.kind, channel.bus, channel.element, channel.side, 1, "rad")
+        @test_throws ArgumentError compare_operating_point(
+            synthetic_result(times, empty_channels; probes), model)
+        bad = P.ProbeChannel(channel.name, channel.kind, channel.bus,
+            channel.element, channel.port, 1, "rad")
         bad_probes = P.ProbeManifest([bad], nothing)
         bad_model = PSCADModel("synthetic.pscx", "synthetic", list, bad_probes, SETTINGS, list.operating_point, (;))
         channels = PI.OrderedDict("DUT_omega_c" => ones(length(times)))
@@ -203,17 +206,17 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
         model = PSCADModel("synthetic.pscx", "synthetic", list, probes, SETTINGS, list.operating_point, (;))
         channels = PI.OrderedDict{String, Vector{Float64}}()
         flow = list.operating_point.branch_flows[:DUT]
-        ac = only(filter(t -> t.side == 2 && !t.grounded, e.terminals))
+        ac = only(filter(t -> t.port == :ac && !t.grounded, e.terminals))
         bus = only(filter(b -> b.key == ac.bus, list.buses))
         point = list.operating_point.bus_states[ac.bus]
         voltage = sqrt(2) * bus.base_kV * point.vm_pu * cis(point.va_rad)
-        dc = only(filter(t -> t.side == 1 && !t.grounded, e.terminals))
+        dc = only(filter(t -> t.port == :dc && !t.grounded, e.terminals))
         dbus = only(filter(b -> b.key == dc.bus, list.buses))
         vdc = 2dbus.base_kV * list.operating_point.bus_states[dc.bus].vm_pu
         for c in probes.channels
             if c.kind == :voltage && c.dim == 3
                 add_three_phase!(channels, c.name, times, voltage)
-            elseif c.kind == :current && c.side == "2"
+            elseif c.kind == :current && c.port in (:side2, :ac)
                 add_three_phase!(channels, c.name, times, 2complex(flow.pt, -flow.qt)/(3conj(voltage)))
             else
                 value = c.kind == :converter_p ? flow.pt/m.elec.Sbase :
@@ -222,7 +225,7 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
                         c.kind == :converter_sum_current ? flow.pf*m.elec.vDC_base/(3m.elec.Sbase*vdc) :
                         c.kind == :machine_speed ? 1.0 :
                         c.kind == :current ? flow.pf/vdc :
-                        c.kind == :voltage ? (c.side == "P" ? vdc/2 : -vdc/2) : 1.0
+                        c.kind == :voltage ? (c.pole == "P" ? vdc/2 : -vdc/2) : 1.0
                 channels[c.name] = fill(value, length(times))
             end
         end

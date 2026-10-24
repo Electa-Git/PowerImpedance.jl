@@ -1,4 +1,5 @@
 module PSCADConnectivityTests
+import ..PSCADFixtures
 using Test, PowerImpedance
 using ..PSCADFixtures
 const P = PowerImpedance.PSCAD
@@ -173,28 +174,28 @@ end
         organization = :ΔY),
         PSCADFixtures.dc_network, PSCADFixtures.dc_cable_network,
         PSCADFixtures.sm_network, PSCADFixtures.tlc_case1_network, PSCADFixtures.tlc_case2_network)
-        classic, builder = factory()
-        for network in (classic, builder)
+        builder = factory()
+        for network in (builder,)
             nonlinear = any(
-                e -> e.element_model isa
+                e -> e isa
                      Union{PowerImpedance.SynchronousMachine, PowerImpedance.TLC},
-                values(classic.elements))
+                values(builder.elements))
             pf = nonlinear ?
-                 network isa Network ? power_flow(network) :
-                 NetworkBuilder.solve(network).powerflow : nothing
+                 network isa Network ? PSCADFixtures.solved_powerflow(network) :
+                 NetworkBuilder.solve(network) : nothing
             plan = P.build_plan(P.netlist(network, pf))
             @test P.check_connectivity(plan) === nothing
         end
     end
 end
 @testset "PSCAD isolated ideal-meter ground paths" begin
-    classic, _ = PSCADFixtures.transformer_network()
+    classic = PSCADFixtures.transformer_network()
     plan = P.build_plan(P.netlist(classic, nothing))
     @test P.check_connectivity(plan) === nothing
     broken = deepcopy(plan.main)
     part = only(filter(c -> get(Dict(c.params), "Name", "") == "load_R", broken.components))
     meter = only(filter(
-        c -> c.defn == "master:ammeter" && Dict(c.params)["Name"] == "I_load_1",
+        c -> c.defn == "master:ammeter" && Dict(c.params)["Name"] == "I_load_side1",
         broken.components))
     function replace_end!(pin, node)
         wire = only(filter(w -> pin in w.vertices, broken.wires))
@@ -205,12 +206,12 @@ end
             node === nothing ? "master:ground" : "master:nodelabel",
             node === nothing ? Pair{String, String}[] : ["Name" => node], old.x, old.y, old.orient)
     end
-    replace_end!((part.x, part.y), "I_load_1_node")
+    replace_end!((part.x, part.y), "I_load_side1_node")
     replace_end!((part.x + 36, part.y), nothing)
     replace_end!((meter.x, meter.y), "B2")
-    replace_end!((meter.x + 36, meter.y), "I_load_1_node")
+    replace_end!((meter.x + 36, meter.y), "I_load_side1_node")
     line_meter = only(filter(
-        c -> c.defn == "master:ammeter" && Dict(c.params)["Name"] == "I_line_2",
+        c -> c.defn == "master:ammeter" && Dict(c.params)["Name"] == "I_line_side2",
         broken.components))
     rejects(broken, (line_meter.x, line_meter.y))
     err = try
@@ -219,8 +220,8 @@ end
     catch e
         e
     end
-    @test occursin("I_line_2", sprint(showerror, err))
-    @test occursin("I_load_1", sprint(showerror, err))
+    @test occursin("I_line_side2", sprint(showerror, err))
+    @test occursin("I_load_side1", sprint(showerror, err))
     @test occursin("isolated part", sprint(showerror, err))
 
     three = deepcopy(broken)
@@ -232,7 +233,7 @@ end
     three.components[i] = P.ComponentPlan(label.defn, ["Name" => "extra_meter_node"],
         label.x, label.y, label.orient)
     P.component!(three, "ammeter", (2808, 180), ["Name" => "I_return_1"])
-    P.stub!(three, (2808, 180), "I_load_1_node"; direction = -1)
+    P.stub!(three, (2808, 180), "I_load_side1_node"; direction = -1)
     P.stub!(three, (2844, 180), "extra_meter_node")
     rejects(three, (line_meter.x, line_meter.y))
     @test_throws ArgumentError P.check_connectivity(three, "three_meters")
@@ -263,7 +264,8 @@ end
     P.stub!(source_return, (324, 108), "source"; direction = -1)
     P.stub!(source_return, (360, 108), "return")
     for (x, left, right, signal) in ((540, "return", nothing, "I_return_1"),
-        (756, "source", "middle", "I_branch_1"), (972, "middle", "island", "I_branch_2"))
+        (756, "source", "middle", "I_branch_side1"), (
+            972, "middle", "island", "I_branch_side2"))
         P.component!(source_return, "ammeter", (x, 108), ["Name" => signal])
         P.stub!(source_return, (x, 108), left; direction = -1)
         P.stub!(source_return, (x + 36, 108), right)

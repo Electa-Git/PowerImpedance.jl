@@ -71,7 +71,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
         @warn "PSCAD overhead line :$(e.name), length $(tl.length) m, time step $(context.settings.time_step) s: PSCAD aborts if the travel time is below the step; a smaller step or a longer section is needed."
     end
     c, g = tl.conductors, tl.groundwires
-    length(e.terminals) == 2 && [t.side for t in e.terminals] == [1, 2] ||
+    length(e.terminals) == 2 && [t.port for t in e.terminals] == [:side1, :side2] ||
         throw(ArgumentError("overhead line :$(e.name) must have two fully connected sides"))
     left, right = e.terminals
     !left.grounded && !right.grounded ||

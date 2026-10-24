@@ -186,7 +186,7 @@ function ztool_measurement_plan(list, settings, requests)
     state = P.PlanState(plan.main, plan.lines, plan.wrappers, plan.modules, layout,
         plan.probes.channels, plan.main.used)
     dc_labels = Dict(b.key => (b.name * "_P", b.name * "_N") for b in list.buses if b.kind == :dc)
-    terminals = Dict{Tuple{Symbol, Int}, Tuple{Vararg{String}}}()
+    terminals = Dict{Tuple{Symbol, Symbol}, Tuple{Vararg{String}}}()
     context = (; settings, dc_labels, ztool_terminals = terminals)
     replacements = Dict{String, Any}[]
     for scan in scans
@@ -194,7 +194,7 @@ function ztool_measurement_plan(list, settings, requests)
         old_labels = P.ComponentPlan[]
         if terminal !== nothing
             channel = only(filter(c -> c.kind == :current && c.element == string(probe.element) &&
-                c.side == string(probe.side), plan.probes.channels))
+                c.port == probe.port, plan.probes.channels))
             meter = only(filter(c -> c isa P.ComponentPlan && c.defn == "master:ammeter" &&
                 get(Dict(c.params), "Name", "") == channel.name, plan.main.components))
             pins = [(meter.x, meter.y), (meter.x + 36, meter.y)]
@@ -206,7 +206,7 @@ function ztool_measurement_plan(list, settings, requests)
             bus_name = bus.kind == :dc ? first(dc_labels[bus.key]) : bus.name
             bus_name = get(plan.main.aliases, lowercase(bus_name), bus_name)
             inner = only(filter(c -> Dict(c.params)["Name"] != bus_name, old_labels))
-            terminals[(probe.element, probe.side)] = bus.kind == :dc ?
+            terminals[(probe.element, probe.port)] = bus.kind == :dc ?
                 (Dict(inner.params)["Name"], last(dc_labels[bus.key])) : (Dict(inner.params)["Name"],)
             output_points = [(c.x, c.y) for c in plan.main.components if c isa P.ComponentPlan &&
                 c.defn in ("master:pgb", "master:datalabel") && get(Dict(c.params), "Name", "") == channel.name]
@@ -332,9 +332,12 @@ function prepare_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"), libr
         definition = merge(definition, (; settings, scan = requested, reference))
     end
     (; ports, settings, scan, reference) = definition
-    requests = [p.element === nothing ? ZToolProbe(p.kind, p.name; bus = p.bus.name,
-            perturbation = scan.perturbation) : ZToolProbe(p.kind, p.name;
-            element = p.element, side = p.side, perturbation = scan.perturbation) for p in ports]
+    requests = [p.element === nothing ?
+                ZToolProbe(p.kind, p.name; bus = p.bus.name,
+                    perturbation = scan.perturbation) :
+                ZToolProbe(p.kind, p.name;
+                    element = p.element, port = terminal_port(list, p.element, p.side),
+                    perturbation = scan.perturbation) for p in ports]
     mkpath(directory)
     topology = ztool_topology(ports)
     topology === nothing || write(joinpath(directory, "topology.txt"), topology)

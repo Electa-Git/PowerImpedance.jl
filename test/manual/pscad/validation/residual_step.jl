@@ -24,7 +24,7 @@ function exported_termination(net, project)
     text = read(project, String)
     resistance = exported_passive(text, "Grid_R", "resistor", "R", "ohm")
     inductance = exported_passive(text, "Grid_L", "inductor", "L", "H")
-    form = P.identify_rlc(net.elements[:Grid]).form
+    form = P.identify_rlc(net.elements[:Grid].element_model).form
     form.topology == :series && form.C === nothing || error("unsupported grid termination")
     isapprox(resistance, form.R; rtol = 1e-8) &&
         isapprox(inductance, form.L; rtol = 1e-8) || error("exported grid differs from fixture")

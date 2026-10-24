@@ -1,4 +1,5 @@
 module PSCADMMCNoControlTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures
 using ..PSCADTLCTests: evaluate
@@ -8,7 +9,7 @@ const PI = PowerImpedance
 
 @testset "MMC optional Sigma controls follow the owned equations" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture.classic, power_flow(fixture.classic))
+    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
     original = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(original)
     m = original.model
@@ -46,7 +47,7 @@ const PI = PowerImpedance
                 v_dc_f = eq.outputs.meas.v_dc_f))
             expected = PI.state_space!(zeros(PI.n_states(sigma)), states,
                 (; meas, power = (; P_ac_f = 0.43), sync = eq.outputs.sync),
-                eq.setpoint_pu, sigma, model)
+                eq.terminal_pu, sigma, model)
             outputs = evaluate(definition, signals)
             @test outputs["vMS_d_ref"] ≈ expected.vMΣ_d_ref_c atol = 1e-6
             @test outputs["vMS_q_ref"] ≈ expected.vMΣ_q_ref_c atol = 1e-6

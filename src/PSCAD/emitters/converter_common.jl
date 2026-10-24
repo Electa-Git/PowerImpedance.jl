@@ -92,15 +92,15 @@ function converter_equilibrium(e)
         !(active.filter isa PowerImpedance.NoFilter) && not_exportable(e, active)
     active isa PowerImpedance.OuterActivePowerControl &&
         active.support isa PowerImpedance.DCVoltageSupportLag && not_exportable(e, active.support)
-    inputs, setpoint_pu = PowerImpedance.pftoinputs(m, e.setpoint)
-    vector = PowerImpedance._steady_state(e.element, e.setpoint)
+    inputs, terminal_pu = PowerImpedance.pftoinputs(m, e.values)
+    vector = PowerImpedance.steady_state(m, e.values)
     states = NamedTuple{PowerImpedance.statenames(m)}(Tuple(vector))
     outputs = PowerImpedance.state_space!(
-        zeros(length(vector)), states, inputs, setpoint_pu, m)
+        zeros(length(vector)), states, inputs, terminal_pu, m)
     if m isa PowerImpedance.MMC
-        outputs = mmc_equilibrium_outputs(m, states, inputs, setpoint_pu)
+        outputs = mmc_equilibrium_outputs(m, states, inputs, terminal_pu)
     end
-    return (; states, inputs, setpoint_pu, outputs)
+    return (; states, inputs, terminal_pu, outputs)
 end
 
 function not_exportable(e, block)
@@ -293,7 +293,7 @@ function converter_vsm(name, e, equilibrium, block::PowerImpedance.VSEWithDampin
     parameters = ModuleParameterPlan[]
     inputs = [("P_ac_f", 1), ("omega_pll", 1)]
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
-    for (n, v, unit) in (("p_reference", equilibrium.setpoint_pu.p_ac, ""),
+    for (n, v, unit) in (("p_reference", equilibrium.terminal_pu.p_ac, ""),
         ("omega_reference", block.ω_ref, ""), ("Kd", block.K_d, ""),
         ("Kw", block.K_ω, ""), ("inv2H", 1 / (2block.H), ""),
         ("wbase", e.model.elec.ωbase, ""),
@@ -382,7 +382,7 @@ function converter_active(name, e, equilibrium, block::PowerImpedance.OuterActiv
     parameters = ModuleParameterPlan[]
     graph = BlockGraph(ControlBlock[Import("P_ac_f", Signal("P_ac_f")), Import("omega_c", Signal("omega_c"))])
     converter_frequency_support!(graph, parameters, block.support, equilibrium, e)
-    converter_parameter!(parameters, "reference", equilibrium.setpoint_pu.p_ac)
+    converter_parameter!(parameters, "reference", equilibrium.terminal_pu.p_ac)
     append!(graph.nodes,
         ControlBlock[Import("reference", Signal("reference")),
             Sum([Signal("reference"), Signal("support"), Signal("P_ac_f")], [1, 1, -1], Signal("error"))])
@@ -395,7 +395,7 @@ end
 function converter_active(name, e, equilibrium, block::PowerImpedance.OuterActiveVdcControl)
     block.filter isa PowerImpedance.NoFilter || not_exportable(e, block)
     parameters = ModuleParameterPlan[]
-    converter_parameter!(parameters, "reference", equilibrium.setpoint_pu.v_dc)
+    converter_parameter!(parameters, "reference", equilibrium.terminal_pu.v_dc)
     graph = BlockGraph(ControlBlock[
         Import("v_dc_f", Signal("v_dc_f")), Import("reference", Signal("reference")),
         Sum([Signal("reference"), Signal("v_dc_f")], [1, -1], Signal("error"))])
@@ -416,7 +416,7 @@ function converter_voltage_support!(
         graph, parameters, block::PowerImpedance.VoltageSupportLag, equilibrium, e)
     block.ωc > 0 || not_exportable(e, block)
     converter_parameter!(parameters, "vac_reference",
-        equilibrium.setpoint_pu.v_ac * PowerImpedance.voltage_filter_ratio(e.model))
+        equilibrium.terminal_pu.v_ac * PowerImpedance.voltage_filter_ratio(e.model))
     k = converter_parameter!(parameters, "supportK", block.K)
     t = converter_parameter!(parameters, "supportT", 1 / block.ωc, "s")
     y0 = converter_parameter!(parameters, "support0", equilibrium.states.ξ_vac_supp)
@@ -442,7 +442,7 @@ function converter_reactive(name, e, equilibrium, block::PowerImpedance.OuterRea
     graph = BlockGraph(ControlBlock[Import(n, Signal(n))
                                     for n in ("Q_ac_f", "vG_d_f", "vG_q_f")])
     converter_voltage_support!(graph, parameters, block.support, equilibrium, e)
-    converter_parameter!(parameters, "reference", equilibrium.setpoint_pu.q_ac)
+    converter_parameter!(parameters, "reference", equilibrium.terminal_pu.q_ac)
     append!(graph.nodes,
         ControlBlock[Import("reference", Signal("reference")),
             Sum([Signal("reference"), Signal("support"), Signal("Q_ac_f")], [1, 1, -1], Signal("error"))])
@@ -457,7 +457,7 @@ function converter_reactive(name, e, equilibrium, block::PowerImpedance.OuterRea
     block.filter isa PowerImpedance.NoFilter || not_exportable(e, block)
     parameters = ModuleParameterPlan[]
     converter_parameter!(parameters, "vac_reference",
-        equilibrium.setpoint_pu.v_ac * PowerImpedance.voltage_filter_ratio(e.model))
+        equilibrium.terminal_pu.v_ac * PowerImpedance.voltage_filter_ratio(e.model))
     # VacControl measures voltage magnitude with square/sqrt blocks and
     # uses separate proportional and integral paths.
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for n in ("vG_d_f", "vG_q_f")])

@@ -73,18 +73,20 @@ using LinearAlgebra
 
     transformed = impedance(z = s -> Diagonal([R + s * L, 1 / (s * C), R + s * L]),
         pins = 3, transformation = true)
-    @test pscad.identify_rlc(transformed)[1].conductors == [1, 3]
-    @test pscad.identify_rlc(transformed)[2].form.C ≈ C
+    @test pscad.identify_rlc(transformed.element_model)[1].conductors == [1, 3]
+    @test pscad.identify_rlc(transformed.element_model)[2].form.C ≈ C
     coupled = impedance(z = s -> [R + s * L 0.1 0; 0.1 R + s * L 0; 0 0 R + s * L],
         pins = 3, transformation = true)
-    @test_throws ArgumentError("coupled impedance matrix") pscad.identify_rlc(coupled)
+    @test_throws ArgumentError("coupled impedance matrix") pscad.identify_rlc(
+        coupled.element_model)
 
     constant = pscad.identify_rlc(2 + 3im)
     @test constant.constant
     @test constant.form.R == 2.0
     @test constant.form.L == 3 / (2π * 50)
     @test constant.form.C === nothing
-    @test pscad.identify_rlc(impedance(z = 2 + 3im, pins = 3, transformation = true)).conductors ==
+    @test pscad.identify_rlc(impedance(z = 2 + 3im, pins = 3,
+        transformation = true).element_model).conductors ==
           [1, 2, 3]
     @test_throws ArgumentError pscad.identify_rlc(Inf)
 

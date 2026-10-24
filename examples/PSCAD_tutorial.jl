@@ -111,8 +111,7 @@ connections = (
 
 state = NetworkBuilder.define(elements, connections;
     options = (; voltageBase = voltage_base))
-network = NetworkBuilder.solve(state).network
-powerflow = power_flow(network)
+powerflow = compute(PowerFlowProblem(state), ACDCPowerFlow())
 
 # `solve(state).network` gives the corresponding scalar `Network`.
 # Calling `power_flow` explicitly retains solved bus voltages for comparison
@@ -134,7 +133,7 @@ settings = PowerImpedance.PSCAD.SimulationSettings(;
     sample_step = 100e-6,
     frequency = 50.0,
     source_ramp = 0.05)
-model = export_pscad(network;
+model = export_pscad(state;
     path = joinpath(export_directory, "tutorial.pscx"),
     powerflow,
     settings)
@@ -262,14 +261,14 @@ reused = compute(model, PSCADRun(); options = (;
 # `Z_tool.pslx`, `tutorial_scan.pscx`, `tutorial_scan.pswx`, and `Scan_options`
 # frequency tables. Open the workspace to view the project with its library.
 
-scan_model = export_pscad(network;
+scan_model = export_pscad(state;
     path = joinpath(export_directory, "tutorial_scan.pscx"),
     powerflow,
     settings,
     ztool_probes = [
         ZToolProbe(:ac, "load_scan";
             element = :load,
-            side = 1)])
+            port = :side1)])
 
 # Z-tool 0.1.52 requires a multiple of eight frequencies for its input tables.
 # These eight frequencies use separate single-tone injections at 1 % voltage.

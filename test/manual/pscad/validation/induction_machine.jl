@@ -1,6 +1,6 @@
 # Retain the reference circuit, with the element names used by device measurements.
 function induction_machine_network()
-    parent = PSCADFixtures.im_network().classic
+    parent = ClassicFixtures.im_network()
     names = Dict(:im1 => :DUT, :imp => :Grid, :g1 => :G3)
     net = Network()
     net.voltageBase .= parent.voltageBase
@@ -27,7 +27,8 @@ end
 function induction_machine_reference(net, list, frequencies)
     elements = NamedTuple{Tuple(keys(net.elements))}(
         Tuple(deepcopy(element) for element in values(net.elements)))
-    connections = [(node = node, element = e.name, side = t.side, terminal = k)
+    connections = [(node = node, element = e.name,
+                       side = terminal_side(list, e.name, t.port), terminal = k)
                    for e in list.elements for t in e.terminals if !t.grounded
                    for (k, node) in enumerate(t.nets)]
     builder = NetworkBuilder.define(elements, connections)

@@ -5,8 +5,9 @@ const NB=PI.NetworkBuilder
 include("pscad/fixtures.jl")
 function voltage_fixture(reactive)
     fixture=PSCADFixtures.mmc_pq_network()
-    state=fixture.state
-    original, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, state)
+    state=fixture
+    circuit = PSCADFixtures._mmc_circuit(:pq)
+    original, rows = circuit.elements, circuit.rows
     e=deepcopy(original.DUT)
     m=e.element_model
     e=PI.mmc(; m.elec, m.meas, m.sync, m.sigma_control, m.modulation,
@@ -40,8 +41,8 @@ function equilibrium(m, terminal_values)
 end
 
 function vac_grid(fixture, converter)
-    state = fixture.state
-    elements, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, state)
+    state = fixture
+    (; elements, rows) = PSCADFixtures._tlc_circuit(false)
     # Keep the original plant and give VAC a separate converter bus. This is
     # the 0.1 H grid reactor used by PSCADFixtures.tlc_vac_network.
     grid = impedance(z = s -> 0.1s, pins = 3, transformation = true)
@@ -131,8 +132,8 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0),
             support = VoltageSupportLag(K = 5.0, ωc = 2.0)))
             fixture=PSCADFixtures.tlc_network(false)
-            state=fixture.state
-            elements, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, state)
+            state=fixture
+            (; elements, rows) = PSCADFixtures._tlc_circuit(false)
             e=deepcopy(elements.DUT)
             m=e.element_model
             e=PI.tlc(elec = m.elec, meas = m.meas, sync = m.sync,
@@ -187,8 +188,8 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
     @testset "TLC VAC operating points with P and Vdc control" begin
         for vdc_control in (false, true)
             fixture = PSCADFixtures.tlc_network(vdc_control)
-            state = fixture.state
-            original = fixture.classic.elements[:DUT]
+            state = fixture
+            original = PSCADFixtures._tlc_circuit(vdc_control).elements.DUT
             m = original.element_model
             element = PI.tlc(elec = m.elec, meas = m.meas, sync = m.sync,
                 outerActive = m.outerActive,
@@ -220,7 +221,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
     end
     @testset "MMC without voltage support" begin
         fixture=PSCADFixtures.mmc_pq_network()
-        model=fixture.state.elements.DUT
+        model=fixture.elements.DUT
         reactive=model.delta_control.outer_reactive
         F=zeros(1)
         sp=PI.SetpointPU(v_ac = 1.2, q_ac = -0.217)

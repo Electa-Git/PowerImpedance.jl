@@ -3,6 +3,7 @@ using Test, PowerImpedance
 const PI = PowerImpedance
 include("parity/fixtures.jl")
 using .ParityFixtures: PSCADFixtures
+include("manual/pscad/validation/classic_fixtures.jl")
 
 @testset "Physical terminal values" begin
     ac = ACPortValues(2, 1//4, 3, 4f0)
@@ -62,7 +63,7 @@ end
     for (factory, name) in ((PSCADFixtures.mmc_pq_network, :DUT),
             (PSCADFixtures.tlc_case1_network, :DUT),
             (PSCADFixtures.sm_network, :sg1), (PSCADFixtures.im_network, :im1))
-        network = factory().classic
+        network = getfield(ClassicFixtures, nameof(factory))()
         power_flow(network)
         element = network.elements[name]
         model = element.element_model

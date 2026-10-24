@@ -6,12 +6,14 @@ const POWER_FLOW_ATOL = 1e-5
 const DYNAMIC_ATOL = 1e-6
 
 include("pscad/fixtures.jl")
+include("manual/pscad/validation/classic_fixtures.jl")
 
 @testset "Induction machine power flow and dynamic steady state" begin
     for (sbase, rt, lt) in ((1000.0, 0.0, 0.0), (2000.0, 0.0, 0.0),
             (1000.0, 0.017, 0.0), (1000.0, 0.0, 0.04), (2000.0, 0.017, 0.04))
-        pair = PSCADFixtures.im_network(elec = ElectricalIM(S_base = sbase,
-            r_s = 0.01, rt = rt, lt = lt))
+        elec = ElectricalIM(S_base = sbase, r_s = 0.01, rt = rt, lt = lt)
+        pair = (; classic = ClassicFixtures.im_network(; elec),
+            state = PSCADFixtures.im_network(; elec))
         for representation in (:classic, :builder)
             @testset "$representation S_base=$sbase rt=$rt lt=$lt" begin
                 if representation === :classic
@@ -30,7 +32,7 @@ include("pscad/fixtures.jl")
                     inputs, pu = PI.pftoinputs(m, point)
                 end
                 @test result["termination_status"] == PI.MOI.LOCALLY_SOLVED
-                x = NamedTuple{PI.statenames(m)}(state)
+                x = NamedTuple{PI.statenames(m)}(Tuple(state))
                 current = zeros(2)
                 PI.outputequations!(current, x, inputs, nothing, m)
                 power = complex(inputs.vd, -inputs.vq) *

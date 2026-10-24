@@ -38,10 +38,14 @@ end
 
 system_ports(id)=id=="ieee14" ? [(:MMC1,2),(:MMC4,2)] : [(:c1,2),(:c2,2)]
 
-function system_extra_currents(id,list)
-    return [(e.name,t.side) for e in list.elements if e.model isa PowerImpedance.Transformer ||
-        id in ("p2p_redesigned","p2p_original") && (e.model isa PowerImpedance.Overhead_line && e.element.input_pins==2 ||
-            startswith(string(e.name),"Z_g")) for t in e.terminals]
+function system_extra_currents(id, list)
+    return [(e.name, terminal_side(list, e.name, t.port))
+            for e in list.elements
+            if e.model isa PowerImpedance.Transformer ||
+               id in ("p2p_redesigned", "p2p_original") &&
+               (e.model isa PowerImpedance.Overhead_line &&
+                length(e.ports.side1.terminals)==2 ||
+                startswith(string(e.name), "Z_g")) for t in e.terminals]
 end
 
 function complete_system(id,net)
@@ -171,9 +175,12 @@ function composed_reference(c::CompleteSystem,spec;time_step=nothing,forms=nothi
     return Dict(name=>cat(rows...;dims=3) for (name,rows) in values)
 end
 
-function system_current_samples(result,model,element,side)
-    probe=only(filter(p->p.kind==:current && p.element==string(element) && p.side==string(side),model.probes.channels))
-    probe.orientation in (:into,:out) || error("missing system current orientation")
+function system_current_samples(result, model, element, side)
+    probe=only(filter(
+        p->p.kind==:current && p.element==string(element) &&
+           p.port==terminal_port(model.netlist, element, side),
+        model.probes.channels))
+    probe.orientation in (:into, :out) || error("missing system current orientation")
     sign=probe.orientation==:into ? 1 : -1
     return probe.dim==1 ? reshape(sign.*result.channels[probe.name],:,1) : sign.*fixed_dq(result.time,probe_samples(result,probe))
 end
@@ -189,10 +196,12 @@ function system_samples(m::SystemACVoltage,result,model,c,voltage)
     probe=only(filter(p->p.kind==:voltage && p.bus==bus,model.probes.channels))
     return fixed_dq(result.time,probe_samples(result,probe))
 end
-function system_samples(m::SystemDCVoltage,result,model,c,voltage)
-    bus=port_probe(model.netlist,m.element,m.side).name
-    poles=[only(filter(p->p.kind==:voltage && p.bus==bus && p.side==pole,model.probes.channels)) for pole in ("P","N")]
-    return reshape(result.channels[poles[1].name]-result.channels[poles[2].name],:,1)
+function system_samples(m::SystemDCVoltage, result, model, c, voltage)
+    bus=port_probe(model.netlist, m.element, m.side).name
+    poles=[only(filter(p->p.kind==:voltage && p.bus==bus && p.pole==pole,
+        model.probes.channels))
+           for pole in ("P", "N")]
+    return reshape(result.channels[poles[1].name]-result.channels[poles[2].name], :, 1)
 end
 
 function composed_samples(result,model,spec,c::CompleteSystem)
@@ -202,9 +211,11 @@ function composed_samples(result,model,spec,c::CompleteSystem)
         push!(voltages,fixed_dq(result.time,probe_samples(result,vp)))
         ip=only(filter(p->p.kind==:injection_current && p.bus==bus.name,model.probes.channels))
         ip.orientation==:out || error("system injection must point out of its source")
-        push!(drives,fixed_dq(result.time,probe_samples(result,ip)))
-        for p in filter(p->p.kind==:current && p.bus==bus.name,model.probes.channels)
-            branches["$port:$(p.element):$(p.side)"]=system_current_samples(result,model,Symbol(p.element),parse(Int,p.side))
+        push!(drives, fixed_dq(result.time, probe_samples(result, ip)))
+        for p in filter(p->p.kind==:current && p.bus==bus.name, model.probes.channels)
+            side = terminal_side(model.netlist, p.element, p.port)
+            key = "$port:$(p.element):$side"
+            branches[key] = system_current_samples(result, model, Symbol(p.element), side)
         end
     end
     voltage=reduce(hcat,voltages);drive=reduce(hcat,drives)
@@ -212,10 +223,12 @@ function composed_samples(result,model,spec,c::CompleteSystem)
     clamps=Dict(string(n)=>vec(system_samples(SystemDCVoltage("",n,1),result,model,c,voltage)) for n in c.devices)
     source_clamps=Dict{String,Matrix{Float64}}()
     for e in model.netlist.elements
-        e.model isa PowerImpedance.Source && e.element.input_pins==2 || continue
-        bus=port_probe(model.netlist,e.name,1)
-        probe=only(filter(p->p.kind==:voltage && p.bus==bus.name,model.probes.channels))
-        source_clamps[string(e.name)]=fixed_dq(result.time,probe_samples(result,probe))./e.setpoint.Vac
+        e.model isa PowerImpedance.Source && PowerImpedance.isac(first(e.ports).domain) ||
+            continue
+        bus=port_probe(model.netlist, e.name, 1)
+        probe=only(filter(p->p.kind==:voltage && p.bus==bus.name, model.probes.channels))
+        source_clamps[string(e.name)]=fixed_dq(result.time, probe_samples(result, probe)) ./
+                                      inputvalues(e.model).v
     end
     return (;voltage,current=zeros(size(voltage)),drive,drive_base=spec.current_bases,outputs,branches,clamps,source_clamps,
         device_voltages=Dict{String,Matrix{Float64}}())
@@ -232,7 +245,7 @@ function exported_composed_passives(c::CompleteSystem,project,list)
     text=read(project,String);forms=Dict{Symbol,P.RLCForm}()
     for (name,e) in c.net.elements
         e.element_model isa PowerImpedance.Impedance || continue
-        original=P.identify_rlc(e;name).form
+        original=P.identify_rlc(e.element_model;name).form
         item=only(filter(x->x.name==name,list.elements))
         fields=map(((:R,"resistor","R","ohm"),(:L,"inductor","L","H"),(:C,"capacitor","C","uF"))) do (field,kind,key,unit)
             value=getproperty(original,field)

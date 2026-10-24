@@ -1,6 +1,7 @@
 module ParityData
 using PowerImpedance, LinearAlgebra, Printf, SHA, Logging
 include("fixtures.jl")
+include("../pscad/probe_names.jl")
 using .ParityFixtures
 const PI = PowerImpedance
 const NB = PI.NetworkBuilder
@@ -193,7 +194,7 @@ function write_structure(directory, fixture, state)
 end
 
 function oracle_voltage!(rows, labels)
-    model = ParityFixtures.PSCADFixtures.mmc_pq_network().state.elements.DUT
+    model = ParityFixtures.PSCADFixtures.mmc_pq_network().elements.DUT
     reactive = model.delta_control.outer_reactive
     F = zeros(1)
     sp = PI.SetpointPU(v_ac = 1.2, q_ac = -0.217)
@@ -221,6 +222,65 @@ function oracle_droop!(rows, labels)
             record!(rows, labels, "oracle.droop_$kind.order$order.case$i.outputs", outputs)
         end
     end
+end
+
+function pscad_operating_point!(rows, labels, name, state)
+    P = PI.PSCAD
+    data, bases, mapping = convert(state, PI.PMACDC)
+    # The frozen synthetic runs used bounded AC bus voltages.
+    result = NB.solve_acdcpf(data, PI._PM.ACPPowerModel,
+        NB.powerflow_optimizer(state.options), (; bus_voltage = true);
+        setting = NB.powerflow_setting(state.options))
+    point = NB._operating_point(result, bases, state, mapping)
+    pf = PI.PowerFlowResult(NB.ACDCPowerFlow(), result, data,
+        NB._node_bus_mapping(state.topology), mapping, point, (;))
+    list = P.netlist(state, pf)
+    plan = P.build_plan(list)
+    names = PSCADProbeNames.name_map(list, plan.probes).names
+    frozen = load_labels(joinpath(@__DIR__, "../reference/v2/labels.tsv"))
+    voltage_order = String[]
+    index = 1
+    while haskey(frozen, "pscad_op.$name.$index.quantity")
+        quantity = frozen["pscad_op.$name.$index.quantity"]
+        if quantity in ("voltage_rms", "voltage_dc")
+            label = frozen["pscad_op.$name.$index.name"]
+            push!(voltage_order, get(names, label, label))
+        end
+        index += 1
+    end
+    voltages = filter(c -> c.kind == :voltage, plan.probes.channels)
+    voltage_name(c) = c.pole === nothing ? c.name : P.voltage_probe_name(c.bus)
+    Set(voltage_order) == Set(voltage_name(c) for c in voltages) ||
+        error("frozen voltage channels differ for $name")
+    sort!(voltages; by = c -> findfirst(==(voltage_name(c)), voltage_order),
+        alg = Base.Sort.MergeSort)
+    ordered = [filter(c -> c.kind != :voltage, plan.probes.channels); voltages]
+    probes = P.ProbeManifest(ordered, plan.probes.reference_bus)
+    settings = P.SimulationSettings(sample_step = 250e-6)
+    model = PI.PSCADModel("synthetic.pscx", "synthetic", list, probes,
+        settings, list.operating_point, (;))
+    times = collect(0.0:250e-6:0.3)
+    channels = PI.OrderedDict{String, Vector{Float64}}()
+    for (index, channel) in enumerate(probes.channels)
+        if channel.dim == 3
+            for phase in 1:3
+                angle = 0.01index - 2π * (phase - 1) / 3
+                channels["$(channel.name):$phase"] = (1.0 + index) .*
+                                                     cos.(2π * 50 .* times .+ angle)
+            end
+        else
+            channels[channel.name] = fill(1.0 + index, length(times))
+        end
+    end
+    result = PI.PSCADResult(PI.PSCADRun(), times, channels, probes,
+        settings, (;), (;))
+    table = PI.compare_operating_point(result, model)
+    for (i, row) in enumerate(table)
+        record!(rows, labels, "pscad_op.$name.$i", NamedTuple(row))
+    end
+    println("PSCAD synthetic fixture=", name, " channels=",
+        join((c.name for c in probes.channels), ','))
+    return names
 end
 
 function exception_text(exception, backtrace)
@@ -256,6 +316,14 @@ function collect_oracles()
     collect_family!(rows, labels, skipped, errors, "oracle.droop") do r, l
         oracle_droop!(r, l)
     end
+    pscad_name_maps = Dict{String, Dict{String, String}}()
+    for name in (:small_ac, :sm, :mmc_pq, :tlc_case2)
+        result = collect_family!(rows, labels, skipped, errors, "pscad_op.$name") do r, l
+            build = getfield(ParityFixtures.PSCADFixtures, Symbol(name, "_network"))
+            pscad_operating_point!(r, l, string(name), build())
+        end
+        result.ok && (pscad_name_maps[string(name)] = result.value)
+    end
     result = collect_family!(rows, labels, skipped, errors, "stability.mmc_vdc") do r, l
         fixture = only(f for f in ParityFixtures.FIXTURES if f.name == :mmc_vdc)
         builder, element, direction = fixture.build(), :DUT, :dc
@@ -274,7 +342,7 @@ function collect_oracles()
         record!(r, l, "stability.mmc_vdc", fields)
     end
     stability_fixture = result.ok ? "mmc_vdc" : ""
-    return (; rows, labels, skipped, errors, stability_fixture)
+    return (; rows, labels, skipped, errors, stability_fixture, pscad_name_maps)
 end
 
 # Frozen Setpoint powers are absorbed by induction machines and converter DC ports.

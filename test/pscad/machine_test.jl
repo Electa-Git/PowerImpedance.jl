@@ -1,4 +1,5 @@
 module PSCADMachineTests
+import ..PSCADFixtures
 using Test, PowerImpedance
 using ..PSCADFixtures: sm_network
 const P = PowerImpedance.PSCAD
@@ -195,22 +196,20 @@ end
 
 @testset "PSCAD synchronous machine plan" begin
     @test P.SM_IRON_LOSS_RESISTANCE_PU == 1.0e6
-    classic, state = sm_network()
-    pf = power_flow(classic)
+    state = sm_network()
     solved = NetworkBuilder.solve(state)
-    classic_netlist = P.netlist(classic, pf)
-    builder_netlist = P.netlist(state, solved.powerflow)
+    list = P.netlist(state, solved)
     settings = P.SimulationSettings(simulation_time = 5.0)
     plans = [P.build_plan(n; name = "sm", settings)
-             for n in (classic_netlist, builder_netlist)]
-    @test !isempty(builder_netlist.operating_point.bus_states)
+             for n in (list,)]
+    @test !isempty(list.operating_point.bus_states)
     @test_throws ArgumentError P.build_plan(P.netlist(state, nothing))
-    for (plan, net, netlist) in zip(plans, (classic, solved.network),
-        (classic_netlist, builder_netlist))
+    for (plan, net, netlist) in zip(plans, (state,), (list,))
         element = net.elements[:sg1]
-        effective, _ = PowerImpedance.pftoinputs(element.element_model, element.setpoint)
-        equilibrium = NamedTuple{PowerImpedance.statenames(element.element_model)}(
-            PowerImpedance._steady_state(element))
+        values = netlist.operating_point.values[:sg1]
+        effective, _ = PowerImpedance.pftoinputs(element, values)
+        equilibrium = NamedTuple{PowerImpedance.statenames(element)}(
+            Tuple(steady_state(element, values)))
         machine = parameters(plan.main, "sync_machine")
         @test machine["Name"] == "sg1"
         @test machine["Cnfg"] == "1"
@@ -297,12 +296,12 @@ end
         @test only(filter(p -> p.name == "Tm0", gov.parameters)).default == effective.Tm0
         defaults = Dict(p.name => p.default for p in avr.parameters)
         @test defaults["vref"] ≈ equilibrium.v_f +
-              element.element_model.elec.La_d*equilibrium.v_df /
-              (element.element_model.elec.Rf_d*element.element_model.avr.K_A)
+              element.elec.La_d*equilibrium.v_df /
+              (element.elec.Rf_d*element.avr.K_A)
         @test defaults["Verror0"] == effective.vref_SG-defaults["Vt0"]
-        @test defaults["Vreg0"] == element.element_model.avr.K_A*defaults["Verror0"]
-        @test effective.Tm0 ≈ element.setpoint.Pac/element.element_model.elec.S_base +
-              element.element_model.elec.Ra*(equilibrium.i_d^2+equilibrium.i_q^2)
+        @test defaults["Vreg0"] == element.avr.K_A*defaults["Verror0"]
+        @test effective.Tm0 ≈ values.ac.p/element.elec.S_base +
+              element.elec.Ra*(equilibrium.i_d^2+equilibrium.i_q^2)
         @test isempty(components(avr.canvas, "const"))
         @test parameters(gov.canvas, "const")["Value"] == "1.0"
         for definition in plan.modules
@@ -339,7 +338,7 @@ end
         @test length(plan.probes.channels) ==
               length(unique(c.name for c in plan.probes.channels))
         @test Set(c.name for c in plan.probes.channels) == Set([
-            "V_Bus2", "I_g2_1", "I_sg1_1", "sg1_P", "sg1_Q", "sg1_Vt", "sg1_speed",
+            "V_Bus2", "I_g2_ac", "I_sg1_ac", "sg1_P", "sg1_Q", "sg1_Vt", "sg1_speed",
             "sg1_Ef0", "sg1_Ef", "sg1_Tm_init"])
         @test P.check_connectivity(plan) === nothing
         meter = only(filter(c -> Dict(c.params)["Name"] == "sg1_Vt_abc",
@@ -354,7 +353,7 @@ end
         avr_instance = only(filter(c -> c.defn == "sm:AVR_sg1", instances))
         @test pin_signal(plan.main, (avr_instance.x - 54, avr_instance.y)) == "sg1_Vt_meas"
         @test defaults["Vt0"] == netlist.operating_point.branch_flows[:sg1].terminal_voltage_kV *
-              sqrt(3) / element.element_model.elec.Vᵃᶜ_base
+              sqrt(3) / element.elec.Vᵃᶜ_base
         @test Dict(first(components(avr.canvas, "realpole")).params)["YO"] == "Vt0"
         blocks = voltage_measurement_blocks(plan.main)
         @test [c.defn for c in blocks] == "master:" .* [
@@ -366,7 +365,7 @@ end
             @test measured_voltage_pu(plan.main, phases) ≈ magnitude rtol = 1e-9
         end
     end
-    flow = classic_netlist.operating_point.branch_flows[:sg1]
+    flow = list.operating_point.branch_flows[:sg1]
     # Terminal and bus voltages differ across rt+j*lt; neither may replace the other.
     terminal_voltage = flow.terminal_voltage_kV * cis(flow.terminal_angle_rad)
     current = conj(complex(flow.pg, flow.qg) / (3terminal_voltage))
@@ -375,15 +374,16 @@ end
     @test flow.pf ≈ flow.pg - 3abs2(current) * real(z) rtol = 1e-8
     # Raw solved reactive power includes its feasibility residual; an analytically
     # balanced replacement would change this reference.
-    branch_index = string(pf[4][:sg1][2])
-    @test flow.qf == -Float64(pf[1]["solution"]["branch"][branch_index]["qt"]) * 1000
-    @test flow.terminal_voltage_kV != only(classic_netlist.buses).vm_pu * 380 / sqrt(3)
+    branch_index = string(solved.elem2comp[:sg1].compkey)
+    @test flow.qf ==
+          -Float64(solved.result["solution"]["branch"][branch_index]["qt"]) * 1000
+    @test flow.terminal_voltage_kV != only(list.buses).vm_pu * 380 / sqrt(3)
     machine = parameters(plans[1].main, "sync_machine")
     @test machine["VT"] == P.pscad_value(abs(terminal_voltage) * sqrt(3) / 380; unit = "pu")
     @test machine["Pheta"] == P.pscad_value(angle(terminal_voltage) + π / 2; unit = "rad")
     @test machine["Q0"] == P.pscad_value(flow.qg; unit = "MVAR")
-    @test builder_netlist.operating_point.branch_flows[:sg1].pg ≈ flow.pg
-    @test builder_netlist.operating_point.branch_flows[:sg1].qg ≈ flow.qg
+    @test list.operating_point.branch_flows[:sg1].pg ≈ flow.pg
+    @test list.operating_point.branch_flows[:sg1].qg ≈ flow.qg
 end
 
 end

@@ -160,7 +160,7 @@ function composed_descriptor(c)
         e.element_model isa PowerImpedance.Source && continue
         name in c.devices && continue
         e.element_model isa PowerImpedance.Impedance || error("descriptor requires a lumped RLC branch: $name")
-        form = P.identify_rlc(e; name).form
+        form = P.identify_rlc(e.element_model; name).form
         m = e.input_pins
         h = passive_incidence(c,e)*[I(m); -I(m)]
         rot = m == 2 ? [0. 2π*50; -2π*50 0.] : zeros(m,m)
@@ -259,7 +259,7 @@ function exported_composed_passives(c, project, list)
             verify_composed_cable(project,list)
             continue
         end
-        original=P.identify_rlc(e;name).form
+        original=P.identify_rlc(e.element_model;name).form
         item=only(filter(x->x.name==name,list.elements))
         fields=map(((:R,"resistor","R","ohm"),(:L,"inductor","L","H"),(:C,"capacitor","C","uF"))) do (field,kind,key,unit)
             value=getproperty(original,field)

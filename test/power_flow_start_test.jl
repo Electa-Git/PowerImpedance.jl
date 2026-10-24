@@ -3,6 +3,7 @@ using PowerImpedance, Test
 const PI = PowerImpedance
 const NB = PI.NetworkBuilder
 include("pscad/fixtures.jl")
+include("manual/pscad/validation/classic_fixtures.jl")
 
 function model(data, builder)
     refs = [PI._PMACDC.add_ref_dcgrid!, PI._PMACDC.ref_add_pst!,
@@ -13,7 +14,7 @@ function model(data, builder)
 end
 
 @testset "Converter apparent-current start" begin
-    state = PSCADFixtures.tlc_network(false).state
+    state = PSCADFixtures.tlc_network(false)
     data, _, _ = convert(state, PI.PMACDC)
     converter = only(values(data["convdc"]))
     converter["P_g"] = -3.2e-6
@@ -30,7 +31,8 @@ end
 
 @testset "Converged primal starts and changed targets" begin
     for representation in (:classic, :builder)
-        pair = PSCADFixtures.tlc_network(false)
+        pair = (; classic = ClassicFixtures.tlc_network(false),
+            state = PSCADFixtures.tlc_network(false))
         network = representation === :classic ? pair.classic : pair.state
         flow() = representation === :classic ? first(power_flow(network)) :
                  compute(PowerFlowProblem(network), ACDCPowerFlow()).result

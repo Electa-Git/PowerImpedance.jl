@@ -29,7 +29,8 @@
         r=380^2/(3p)
         reactive=q>0 ? inv(s*380^2/(3q*2π*50)) : s*3abs(q)/(380^2*2π*50)
         expected=inv(inv(r)+reactive)
-        @test V.P.identify_rlc(ieee.elements[name];name).form.topology == :parallel
+        @test V.P.identify_rlc(ieee.elements[name].element_model; name).form.topology ==
+              :parallel
         # Physical scalar impedance remains independently evaluable.
         @test ieee.elements[name].element_model.value(s)[1,1] ≈ expected
     end

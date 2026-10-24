@@ -42,7 +42,7 @@ function experiment_instance!(canvas, definition, project, point, prefix)
 end
 
 fixture = PSCADFixtures.mmc_pq_network()
-for (representation, network) in (("classic", fixture.classic), ("builder", fixture.state))
+for (representation, network) in (("builder", fixture),)
     name = "mmc_pq_" * representation
     model = export_pscad(network; path = joinpath(EXPERIMENTS, name * ".pscx"),
         settings = SETTINGS, dc_reference = :none)
@@ -84,13 +84,13 @@ for (representation, network) in (("classic", fixture.classic), ("builder", fixt
         residual = zeros(length(x))
         PowerImpedance._state_space!(
             residual, collect(values(x)), collect(values(equilibrium.inputs)),
-            equilibrium.setpoint_pu, converter.model, PowerImpedance.Equil())
+            equilibrium.terminal_pu, converter.model, PowerImpedance.Equil())
         println(io, "equilibrium_residual_max\t", maximum(abs, residual), "\tmodel_rate\t0")
     end
 end
 
 # Reuse the solved current-API fixture for the isolated module parameters.
-list = P.netlist(fixture.classic, power_flow(fixture.classic))
+list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
 element = only(filter(e -> e.model isa PowerImpedance.MMC, list.elements))
 equilibrium = P.converter_equilibrium(element)
 short_settings = P.SimulationSettings(simulation_time = 0.1,
@@ -105,11 +105,8 @@ for delayed in (false, true)
     model = PowerImpedance.MMC(; m.meas, m.sync, m.delta_control, m.sigma_control,
         modulation = PowerImpedance.UncompensatedModulation(
             timeDelay = delay, padeOrderNum = 3, padeOrderDen = 3), m.elec)
-    component = PowerImpedance.Element(
-        element_model = model, input_pins = 1, output_pins = 2,
-        transformation = false, setpoint = element.setpoint)
-    e = P.NetlistElement(element.name, element.pscad, component, model,
-        element.terminals, element.role, element.setpoint)
+    e = P.NetlistElement(element.name, element.pscad, model,
+        electricalconnections(model), element.terminals, element.role, element.values)
     # Known constant global references initialize exact-delay histories. In the
     # delayed case Δ steps from zero at 0.02 s; Σ remains constant in global dq.
     delta = PowerImpedance.phase_compensated_dq([delayed ? 0.0 : -0.2, 0.0], m.elec.ωbase *

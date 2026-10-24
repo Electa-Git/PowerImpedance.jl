@@ -9,8 +9,7 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0,
 for (case, factory) in (("tlc_case1", PSCADFixtures.tlc_case1_network),
     ("tlc_case2", PSCADFixtures.tlc_case2_network))
     fixture = factory()
-    for (representation, network) in (("classic", fixture.classic), (
-        "builder", fixture.state))
+    for (representation, network) in (("builder", fixture),)
         name = case * "_" * representation
         model = export_pscad(network; path = joinpath(EXPERIMENTS, name * ".pscx"),
             settings = SETTINGS, dc_reference = :none)

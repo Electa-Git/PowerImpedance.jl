@@ -8,7 +8,7 @@ const DYNAMIC_ATOL = 1e-6
 const POWER_FLOW_ATOL = 1e-3
 
 function terminal_quantities(m, inputs, state)
-    x = NamedTuple{PI.statenames(m)}(state)
+    x = NamedTuple{PI.statenames(m)}(Tuple(state))
     Vbus = complex(inputs.vd, -inputs.vq)
     Igen = conj(cis(-x.θ_sg) * complex(x.i_d, x.i_q))
     Vterminal = Vbus + complex(m.elec.rt, m.elec.lt) * Igen
@@ -101,8 +101,10 @@ end
 end
 
 include("pscad/fixtures.jl")
+include("manual/pscad/validation/classic_fixtures.jl")
 @testset "Synchronous machine power-flow and dynamic equilibrium agree" begin
-    fixture = PSCADFixtures.sm_network()
+    fixture = (; classic = ClassicFixtures.sm_network(),
+        state = PSCADFixtures.sm_network())
     pf_classic = power_flow(fixture.classic)
     solved_builder = NB.solve(fixture.state)
     for representation in (:classic, :builder)

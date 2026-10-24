@@ -140,8 +140,10 @@ end
         spec = V.fixture(id).category == :device ? V.passive_settings() : first(V.scan_definition(id, net, list))
         ports = V.ztool_ports(id, net, list, spec)
         requests = [p.element === nothing ? ZToolProbe(p.kind, p.name; bus = p.bus.name) :
-            ZToolProbe(p.kind, p.name; element = p.element, side = p.side) for p in ports]
-        plan, replacements = V.ztool_measurement_plan(list, P.SimulationSettings(), requests)
+                    ZToolProbe(p.kind, p.name; element = p.element,
+                        port = V.terminal_port(list, p.element, p.side)) for p in ports]
+        plan,
+        replacements = V.ztool_measurement_plan(list, P.SimulationSettings(), requests)
         @test length(replacements) == count(p -> p.element !== nothing, ports)
         before = closed_source_graph(plan)
         scan = ZToolScan(frequencies = V.ZTOOL_FREQUENCIES, multi_frequency = true, snapshot_time = 8)
@@ -251,7 +253,8 @@ end
             P._export_project(list, before_path, "scan", settings, false, (;), :midpoint_resistors, ZToolProbe[], nothing)
             spec = first(V.scan_definition("passive_ac_rlc", net, list))
             ports = V.ztool_ports("passive_ac_rlc", net, list, spec)
-            requests = [ZToolProbe(p.kind, p.name; element = p.element, side = p.side) for p in ports]
+            requests = [ZToolProbe(p.kind, p.name; element = p.element,
+                            port = V.terminal_port(list, p.element, p.side)) for p in ports]
             plan, _ = V.ztool_measurement_plan(list, settings, requests)
             V.ztool_disconnect_sources!(plan, list, ports, ZToolScan(snapshot_time = 8))
             P._write_project(plan, joinpath(directory, "measurement.pscx"))

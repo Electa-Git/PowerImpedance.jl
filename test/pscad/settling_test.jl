@@ -1,12 +1,13 @@
 module PSCADSettlingTests
+import ..PSCADFixtures
 using Test, PowerImpedance
 using ..PSCADFixtures: small_ac_network, dc_network, sm_network, tlc_case1_network
 using ..PSCADResultsTests: synthetic_result, add_three_phase!
 const P = PowerImpedance.PSCAD
 
 @testset "PSCAD comparison settling" begin
-    classic, _ = small_ac_network()
-    list = P.netlist(classic, power_flow(classic))
+    classic = small_ac_network()
+    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     probes = P.build_plan(list).probes
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
         P.SimulationSettings(), list.operating_point, (;))
@@ -16,7 +17,7 @@ const P = PowerImpedance.PSCAD
     current = voltage / (400 + 0.19 + 2π * 50 * 0.0122im)
     add_three_phase!(channels, "V_B1", times, sqrt(2) * voltage)
     add_three_phase!(channels, "V_B2", times, sqrt(2) * 400current)
-    for name in ("I_source_1", "I_line_1", "I_line_2", "I_load_1")
+    for name in ("I_source_ac", "I_line_side1", "I_line_side2", "I_load_side1")
         add_three_phase!(channels, name, times, sqrt(2) * current)
     end
     result = synthetic_result(times, channels)
@@ -34,10 +35,10 @@ const P = PowerImpedance.PSCAD
     # The window mean agrees with the reference despite a 0.4% current change.
     ramped = deepcopy(channels)
     for index in 1:3
-        ramped["I_line_2:$index"] .*= 1 .+ 0.04 .* (times .- 0.200125)
+        ramped["I_line_side2:$index"] .*= 1 .+ 0.04 .* (times .- 0.200125)
     end
     ramp_result = synthetic_result(times, ramped)
-    row = only(filter(r -> r.name == "I_line_2",
+    row = only(filter(r -> r.name == "I_line_side2",
         compare_operating_point(ramp_result, model)))
     @test row.error < 1e-7
     @test row.settling ≈ 0.004 atol = 1e-12
@@ -49,21 +50,21 @@ const P = PowerImpedance.PSCAD
 
     growing = deepcopy(channels)
     for index in 1:3
-        growing["I_line_2:$index"] .*= exp.(4times) .*
+        growing["I_line_side2:$index"] .*= exp.(4times) .*
                                       (1 .+ 0.3 .* sin.(2π * 5 .* times))
     end
     table = compare_operating_point(synthetic_result(times, growing), model)
     @test length(table) == 7
     @test all(isfinite, table.pscad)
-    @test !only(filter(r -> r.name == "I_line_2", table)).within_tolerance
-    @test only(filter(r -> r.name == "I_line_2", table)).settling > 0.002
+    @test !only(filter(r -> r.name == "I_line_side2", table)).within_tolerance
+    @test only(filter(r -> r.name == "I_line_side2", table)).settling > 0.002
 
     # Relative angles cross +/-180 degrees between halves; wrap their change.
     states = copy(model.operating_point.bus_states)
     b1, b2 = list.buses
     states[b2.key] = merge(states[b2.key], (; va_rad = states[b1.key].va_rad + π))
     point = P.OperatingPointRecord(states, model.operating_point.branch_flows,
-        model.operating_point.setpoints, model.operating_point.slack_bus,
+        model.operating_point.values, model.operating_point.slack_bus,
         model.operating_point.bases)
     voltage_probes = P.ProbeManifest(filter(c -> c.kind == :voltage, probes.channels), "B1")
     angle_model = PSCADModel(model.project_path, model.project_name, list,
@@ -91,8 +92,8 @@ const P = PowerImpedance.PSCAD
 end
 
 @testset "PSCAD differential DC voltage settling" begin
-    classic, _ = dc_network()
-    list = P.netlist(classic, power_flow(classic))
+    classic = dc_network()
+    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     probes = P.ProbeManifest(filter(c -> c.kind == :voltage && c.bus == "D1",
         P.build_plan(list).probes.channels), nothing)
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
@@ -116,8 +117,8 @@ end
 end
 
 @testset "PSCAD rating-based settling near zero" begin
-    classic, _ = tlc_case1_network()
-    list = P.netlist(classic, power_flow(classic))
+    classic = tlc_case1_network()
+    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     probes = P.ProbeManifest(filter(c -> c.kind in (:converter_p, :converter_q),
         P.build_plan(list).probes.channels), nothing)
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
@@ -149,10 +150,10 @@ end
 end
 
 @testset "PSCAD machine phasor settling" begin
-    classic, _ = sm_network()
-    list = P.netlist(classic, power_flow(classic))
+    classic = sm_network()
+    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     plan = P.build_plan(list)
-    probes = P.ProbeManifest(filter(c -> c.kind == :voltage || c.name == "I_sg1_1",
+    probes = P.ProbeManifest(filter(c -> c.kind == :voltage || c.name == "I_sg1_ac",
         plan.probes.channels), plan.probes.reference_bus)
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
         P.SimulationSettings(), list.operating_point, (;))
@@ -168,7 +169,7 @@ end
     channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
     add_three_phase!(channels, "V_Bus2", times, sqrt(2) * voltage)
     for index in 1:3
-        channels["I_sg1_1:$index"] = sqrt(2) .* real.(current .* cis.(angles) .*
+        channels["I_sg1_ac:$index"] = sqrt(2) .* real.(current .* cis.(angles) .*
                                                    cis.(2π * 50 .* times .- 2π * (index - 1) / 3))
     end
     table = compare_operating_point(synthetic_result(times, channels), model)
@@ -189,8 +190,8 @@ end
 end
 
 @testset "PSCAD machine speed settling" begin
-    classic, _ = sm_network()
-    list = P.netlist(classic, power_flow(classic))
+    classic = sm_network()
+    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     probes = P.ProbeManifest(filter(c -> c.kind == :machine_speed,
         P.build_plan(list).probes.channels), nothing)
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,

@@ -33,7 +33,7 @@
     pair = PSCADFixtures.im_network()
     settings = P.SimulationSettings(simulation_time = 10.0, time_step = 1e-6,
         sample_step = 250e-6, source_ramp = 0.05)
-    for (kind, network) in pairs(pair)
+    for (kind, network) in ((:builder, pair),)
         name = "im_" * string(kind)
         path = joinpath(only(ARGS), name * ".pscx")
         model = export_pscad(network; path, settings)
@@ -66,8 +66,8 @@
         @test P.check_geometry(path) === nothing
         @test P.check_connectivity(plan) === nothing
         summary = P.read_project_summary(path)
-        @test Set(summary.pgbs) == Set(["V_machine_", "V_grid_", "I_g1_1", "I_im1_1",
-            "I_imp_1", "I_imp_2", "im1_speed", "im1_Te", "im1_Tm"])
+        @test Set(summary.pgbs) == Set(["V_machine_", "V_grid_", "I_g1_ac", "I_im1_ac",
+            "I_imp_side1", "I_imp_side2", "im1_speed", "im1_Te", "im1_Tm"])
         load = only(root.xpath("./definitions/Definition[@name='LOAD_im1']"))
         for (key, value) in (("T_0", "0.9"), ("A", "0.0"), ("B", "0.0"), ("C", "1.0"))
             @test pyconvert(String, load.xpath("string(./form/category/parameter[@name='$key']/value)")) == value

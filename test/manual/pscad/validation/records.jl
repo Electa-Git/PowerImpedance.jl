@@ -4,7 +4,8 @@ digest(path) = bytes2hex(open(sha256, path))
 
 function probe_record(c)
     return Dict("name"=>c.name, "quantity"=>string(c.kind), "bus"=>something(c.bus, ""),
-        "element"=>something(c.element, ""), "side"=>something(c.side, ""),
+        "element"=>something(c.element, ""), "side"=>(c.pole === nothing ?
+            (c.port === nothing ? "" : string(c.port)) : c.pole),
         "components"=>c.dim, "unit"=>c.unit,
         "orientation"=>string(something(c.orientation, :none)))
 end
@@ -12,8 +13,12 @@ end
 function recorded_probes(channels, reference_bus)
     optional(value) = isempty(value) ? nothing : value
     probes = [P.ProbeChannel(c["name"], Symbol(c["quantity"]), optional(c["bus"]),
-                  optional(c["element"]), optional(c["side"]), c["components"], c["unit"],
-                  get(c, "orientation", "none") == "none" ? nothing : Symbol(c["orientation"]))
+                  optional(c["element"]),
+                  c["side"] in ("", "P", "N") ? nothing : Symbol(c["side"]),
+                  c["components"], c["unit"],
+                  get(c, "orientation", "none") == "none" ? nothing :
+                  Symbol(c["orientation"]);
+                  pole = c["side"] in ("P", "N") ? c["side"] : nothing)
               for c in channels]
     return P.ProbeManifest(probes, reference_bus)
 end
@@ -72,7 +77,7 @@ function source_record()
     append!(paths, ["test/pscad/networks.jl", "examples/P2P_HVDC_ALT.jl",
             "src/Network/NetworkBuilder/gs_converters.jl", "src/Network/Components/machine/SynchronousMachine.jl"])
     append!(paths, ["src/Network/Components/machine/InductionMachine.jl",
-        "src/PSCAD/emitters/induction_machine.jl", "src/core/base.jl"])
+        "src/PSCAD/emitters/induction_machine.jl", "src/Network/NetworkBuilder/model.jl"])
     return [Dict("path" => path, "sha256" => digest(joinpath(REPOSITORY, path)))
             for path in paths]
 end

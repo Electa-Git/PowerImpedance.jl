@@ -4,7 +4,7 @@ using ..PSCADValidationTests: V, phase_wave
 const P = PowerImpedance.PSCAD
 
 @testset "Induction-machine circuit, SI reference and scan settings" begin
-    parent = V.PSCADFixtures.im_network().classic
+    parent = V.ClassicFixtures.im_network()
     net = V.fixture("induction_machine").factory()
     names = Dict(:im1 => :DUT, :imp => :Grid, :g1 => :G3)
     @test net.voltageBase == parent.voltageBase
@@ -46,7 +46,7 @@ const P = PowerImpedance.PSCAD
     B = dut.B ./ bases.voltage_inputs'
     C = dut.C .* bases.current_outputs
     D = dut.D .* bases.current_outputs ./ bases.voltage_inputs'
-    resistance = P.identify_rlc(net.elements[:Grid]).form.R
+    resistance = P.identify_rlc(net.elements[:Grid].element_model).form.R
     @test resistance == 0.01
     closed = dut.A - B * ((I + resistance * D) \ (resistance * C))
     roots = eigvals(closed)
@@ -56,7 +56,7 @@ const P = PowerImpedance.PSCAD
     @test screen["most_positive_located_real_per_s"] ≈ maximum(real, roots) atol = 1e-10
     @test -1 / maximum(real, roots) ≈ 0.1497042845 rtol = 1e-6
     # The independently built state uses the same SI get_y API as adm_IM_test.jl.
-    state = V.PSCADFixtures.im_network().state
+    state = V.PSCADFixtures.im_network()
     native = compute(LinearizationProblem(state), AdmittanceLinearization()).network_model
     expected = NetworkBuilder.get_y(native, :im1, ComplexF64.(2π * im .* spec.frequencies))
     @test reference ≈ expected rtol = 1e-9 atol = 1e-12
@@ -120,7 +120,9 @@ function induction_recordings(net, list, spec; amplitude_scale = 1.0)
         end
         vp = only(filter(c -> c.kind == :voltage && c.bus == only(spec.buses).name, plan.probes.channels))
         ip = only(filter(c -> c.kind == :current && c.element == "DUT", plan.probes.channels))
-        gp = only(filter(c -> c.kind == :current && c.element == "Grid" && c.side == "1", plan.probes.channels))
+        gp = only(filter(
+            c -> c.kind == :current && c.element == "Grid" && c.port == :side1,
+                plan.probes.channels))
         dp = only(filter(c -> c.kind == :injection_current, plan.probes.channels))
         channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
         for (probe, dq) in ((vp, voltage), (ip, current), (gp, grid), (dp, drive))
@@ -175,7 +177,9 @@ end
             @test haskey(raw, "readout_checks") && !haskey(record, "residual_step_refinement")
         end
         bad = deepcopy(results[axis])
-        gp = only(filter(c -> c.kind == :current && c.element == "Grid" && c.side == "1", models[axis].probes.channels))
+        gp = only(filter(
+            c -> c.kind == :current && c.element == "Grid" && c.port == :side1,
+            models[axis].probes.channels))
         for phase in 1:3
             bad.channels[gp.name * ":" * string(phase)] .*= 0.99
         end

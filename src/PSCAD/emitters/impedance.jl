@@ -1,5 +1,5 @@
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Impedance}, context)
-    length(e.terminals) == 2 && [t.side for t in e.terminals] == [1, 2] ||
+    length(e.terminals) == 2 && [t.port for t in e.terminals] == [:side1, :side2] ||
         throw(ArgumentError("impedance :$(e.name) must have two fully connected sides"))
     left, right = e.terminals
     left.grounded && right.grounded &&
@@ -13,7 +13,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Impedance}, 
     right_bus = _terminal_bus(e, right, context)
     right_bus === nothing || right_bus.kind == left_bus.kind ||
         throw(ArgumentError("impedance :$(e.name) mixes AC and DC terminal representations"))
-    record = identify_rlc(e.element; name = e.name)
+    record = identify_rlc(e.model; name = e.name)
     record isa AbstractVector &&
         throw(ArgumentError("impedance :$(e.name) has distinct per-conductor diagonal groups; PSCAD export is not implemented yet"))
     record.constant &&

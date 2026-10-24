@@ -6,13 +6,10 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Source}, con
     bus = _terminal_bus(e, terminal, context)
     bus.kind == :dc && return dc_source!(state, e, terminal, bus, context)
     # Solved bus voltages set source magnitudes. Linear builder networks
-    # use source setpoints because they have no solved power flow.
+    # use source inputs because they have no solved power flow.
     magnitude, angle = if bus.vm_pu === nothing
-        ismissing(e.setpoint.Vac) &&
-            throw(ArgumentError("element :$(e.name) is missing setpoint.Vac"))
-        ismissing(e.setpoint.θac) &&
-            throw(ArgumentError("element :$(e.name) is missing setpoint.θac"))
-        e.setpoint.Vac * sqrt(3 / 2), e.setpoint.θac
+        values = PowerImpedance.inputvalues(e.model)
+        values.v * sqrt(3 / 2), values.theta
     else
         bus.vm_pu * bus.base_kV * sqrt(3), bus.va_rad
     end
@@ -37,9 +34,7 @@ end
 # The orient-0 source terminal NA (-36, 0) has positive polarity.
 function dc_source!(state, e, terminal, bus, context)
     magnitude = if bus.vm_pu === nothing
-        ismissing(e.setpoint.Vdc) &&
-            throw(ArgumentError("element :$(e.name) is missing setpoint.Vdc"))
-        e.setpoint.Vdc / 2
+        PowerImpedance.inputvalues(e.model).v / 2
     else
         bus.vm_pu * bus.base_kV
     end

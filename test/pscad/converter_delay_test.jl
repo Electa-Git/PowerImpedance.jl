@@ -1,4 +1,5 @@
 module PSCADConverterDelayTests
+import ..PSCADFixtures
 using Test, PowerImpedance
 using ..PSCADFixtures
 using ..PSCADMMCTests: converter_element, with_modulation
@@ -22,8 +23,8 @@ const P = PowerImpedance.PSCAD
     for (kind, factory) in ((:tlc, PSCADFixtures.tlc_case2_network),
         (:uncompensated, PSCADFixtures.mmc_pq_network),
         (:compensated, PSCADFixtures.mmc_compensated_network))
-        network = factory().classic
-        list = P.netlist(network, power_flow(network))
+        network = factory()
+        list = P.netlist(network, PSCADFixtures.solved_powerflow(network))
         e = only(filter(e -> e.name == :DUT, list.elements))
         eq = P.converter_equilibrium(e)
         for tau in (0.0, dt, 4dt, 2.5dt, dt/2)

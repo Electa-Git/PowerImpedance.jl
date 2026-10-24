@@ -3,22 +3,41 @@ using PowerImpedance
 include("ieee9_network.jl")
 
 # transitional
-function builder_elements_and_rows(classic, state)
-    names = keys(state.elements)
-    elements = NamedTuple{names}(Tuple(deepcopy(classic.elements[name]) for name in names))
-    rows = map(collect(state.topology.connections)) do row
-        model = elements[row.component].element_model
-        side = findfirst(==(row.port), NetworkBuilder._legacy_port_names(model))
-        labels = row.frame == :dq ? (:d, :q) :
-            electricalconnections(model)[row.port].terminals
-        terminal = findfirst(==(row.terminal), labels)
-        (; node = row.net, element = row.component, side, terminal)
+function state_from_classic(network)
+    elements = (; (name => element for (name, element) in network.elements)...)
+    rows = NamedTuple{(:node, :element, :side, :terminal),
+        Tuple{Symbol, Symbol, Int, Int}}[]
+    for (name, element) in pairs(elements)
+        ports = electricalconnections(element.element_model)
+        for (side, count) in ((1, PowerImpedance.nip(element)),
+            (2, PowerImpedance.nop(element))), terminal in 1:count
+            node = get(element.pins, Symbol("$side.$terminal"), Symbol())
+            node == Symbol() && continue
+            if length(ports) == 1 && side == 2
+                PowerImpedance.isgroundnet(node) ||
+                    throw(ArgumentError("one-port device :$name requires ground"))
+                continue
+            end
+            push!(rows, (; node, element = name, side, terminal))
+        end
     end
-    return elements, rows
+    return NetworkBuilder.define(elements, rows;
+        options = (; voltageBase = network.voltageBase[1]))
+end
+
+function solved_powerflow(state)
+    NB = NetworkBuilder
+    data, bases, mapping = convert(state, PowerImpedance.PMACDC)
+    result = NB.solve_acdcpf(data, PowerImpedance._PM.ACPPowerModel,
+        NB.powerflow_optimizer(state.options), NB.is_bounded_options(state.options);
+        setting = NB.powerflow_setting(state.options))
+    point = NB._operating_point(result, bases, state, mapping)
+    return PowerFlowResult(NB.ACDCPowerFlow(), result, data,
+        NB._node_bus_mapping(state.topology), mapping, point, (;))
 end
 
 # The 220 kV case from adm_IM_test.jl, with independent elements in each representation.
-function im_network(; elec = ElectricalIM(r_s = 0.01),
+function _im_circuit(; elec = ElectricalIM(r_s = 0.01),
         mech = MechanicalIM(T_0 = 0.9, A = 0.0, B = 0.0, C = 1.0, m = 0))
     voltage = 220 / sqrt(3)
     elements = (;
@@ -30,37 +49,11 @@ function im_network(; elec = ElectricalIM(r_s = 0.01),
             for (element, side, bus) in ((:im1, 1, "machine_"), (:imp, 1, "machine_"),
                 (:imp, 2, "grid_"), (:g1, 1, "grid_"))
             for (terminal, suffix) in enumerate(("d", "q"))]
-    state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
+    return (; elements, rows, options = (;
         voltageBase = voltage, power_flow = (; is_bounded = (; bus_voltage = true))))
-    classic = Network()
-    classic.voltageBase[1] = voltage
-    for (name, element) in pairs(elements)
-        add!(classic, name, element)
-    end
-    for row in rows
-        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
-    end
-    for name in (:g1, :im1), terminal in 1:2
-        connect!(classic, (name, Symbol("2.$terminal")), :gnd)
-    end
-    connect!(classic)
-    return (; classic, state)
 end
 
-"""
-    small_ac_network()
-
-Return classic and builder representations of a balanced circuit at 50 \\[Hz\\].
-The source is 380 \\[kV\\] line-to-line RMS, the series branch is 0.19 \\[Ω\\]
-with 0.0122 \\[H\\], and the shunt load is 400 \\[Ω\\] per phase.
-Source setpoints use phase-peak voltage with zero cosine-reference angle.
-
-# Returns
-
-- `classic`: Classic network with phase-RMS voltage base `380/sqrt(3)` \\[kV\\].
-- `state`: Builder network with the same circuit and voltage base.
-"""
-function small_ac_network()
+function _small_ac_circuit()
     voltage = 380 / sqrt(3)
     elements = (;
         source = ac_source(; pins = 3, transformation = true,
@@ -73,37 +66,11 @@ function small_ac_network()
             for (terminal, suffix) in enumerate(("d", "q"))]
     append!(rows, [(node = :gnd, element = :load, side = 2, terminal = terminal)
                    for terminal in 1:2])
-    state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
+    return (; elements, rows, options = (;
         voltageBase = voltage))
-    classic = Network()
-    classic.voltageBase[1] = voltage
-    for (name, element) in pairs(elements)
-        add!(classic, name, element)
-    end
-    for row in rows
-        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
-    end
-    for terminal in 1:2
-        connect!(classic, (:source, Symbol("2.$terminal")), :gnd)
-    end
-    connect!(classic)
-    return (; classic, state)
 end
 
-"""
-    sm_network()
-
-Return classic and builder representations of the circuit in `test/adm_SM_test.jl`.
-The synchronous machine supplies 900 \\[MW\\] at a 380 \\[kV\\] slack bus,
-with the native `rt`/`lt` branch and default AVR, governor and steam turbine.
-Its requested voltage is 1.000177992 \\[pu\\] before power flow.
-
-# Returns
-
-- `classic`: Classic machine network.
-- `state`: Builder network with the same circuit.
-"""
-function sm_network()
+function _sm_circuit()
     voltage = 380 / sqrt(3)
     elements = (;
         sg1 = synchronousmachine(;
@@ -114,38 +81,11 @@ function sm_network()
     rows = [(node = Symbol("Bus2" * suffix), element, side = 1, terminal)
             for element in (:sg1, :g2)
             for (terminal, suffix) in enumerate(("d", "q"))]
-    state = NetworkBuilder.define(deepcopy(elements), rows;
-        options = (; voltageBase = voltage))
-    classic = Network()
-    classic.voltageBase[1] = voltage
-    for (name, element) in pairs(elements)
-        add!(classic, name, element)
-    end
-    for row in rows
-        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
-    end
-    for name in (:sg1, :g2), (terminal, suffix) in enumerate(("d", "q"))
-
-        connect!(classic, (name, Symbol("2.$terminal")), Symbol("gnd" * suffix))
-    end
-    connect!(classic)
-    return (; classic, state)
+    return (; elements, rows, options = (; voltageBase = voltage))
 end
 
-"""
-    passive_ohl_network()
-
-Return the small AC circuit with the `tl1` overhead line from
-`examples/P2P_HVDC_ALT.jl` replacing its series impedance.
-
-# Returns
-
-- `classic`: Classic network with a 25 \\[km\\] line and phase-RMS base
-  `380/sqrt(3)` \\[kV\\].
-- `state`: Builder network with the same circuit and voltage base.
-"""
-function passive_ohl_network()
-    classic, state = small_ac_network()
+function _passive_ohl_circuit()
+    circuit = _small_ac_circuit()
     tl1 = overhead_line(length = 25e3,
         conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1,
             Rᵈᶜ = 0.063,
@@ -160,75 +100,20 @@ function passive_ohl_network()
             dᵍˢᵃᵍ = 10
         ),
         earth_parameters = (1, 1, 100), transformation = true)
-    # Both representations retain the fixture's designator and connectivity. Their
-    # elements are separate because solving classic may mutate setpoints.
-    tl1.symbol = :line
-    tl1.pins = copy(classic.elements[:line].pins)
-    classic.elements[:line] = tl1
-    elements, rows = builder_elements_and_rows(classic, state)
-    builder = NetworkBuilder.define(elements, rows;
-        options = (; voltageBase = 380 / sqrt(3)))
-    return (; classic, state = builder)
+    elements = merge(circuit.elements, (; line = tl1))
+    return (; elements, circuit.rows, circuit.options)
 end
 
-"""
-    transformer_network(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
-
-Return classic and builder circuits with a 380/150 \\[kV\\] line-to-line
-transformer and a 400 \\[Ω\\] per-phase secondary load.
-
-# Arguments
-
-- `organization`: Winding connection. Default: `:YY`.
-- `Rₘ`: Primary magnetizing resistance \\[Ω\\]. Default: `1e6`.
-- `Lₘ`: Primary magnetizing inductance \\[H\\]. Default: `1000.0`.
-
-# Returns
-
-- `classic`: Classic network with phase-RMS base `380/sqrt(3)` \\[kV\\].
-- `state`: Builder network with the same circuit and voltage base.
-
-# Notes
-
-Winding values from `Transformer_test.jl` are `Rₚ = 10` \\[Ω\\],
-`Lₚ = 0.1` \\[H\\], `Rₛ = 1` \\[Ω\\] and `Lₛ = 0.05` \\[H\\].
-The default magnetizing current is about 1% of load current. Values
-`Rₘ = 1e4` \\[Ω\\] and `Lₘ = 10` \\[H\\] reproduce the stress case,
-whose magnetizing current exposes the power-flow pi approximation of the T-model.
-"""
-function transformer_network(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
-    classic, state = small_ac_network()
+function _transformer_circuit(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
+    circuit = _small_ac_circuit()
     winding = transformer(; pins = 3, transformation = true, organization,
         n = 380 / 150, Rₚ = 10.0, Lₚ = 0.1, Rₛ = 1.0, Lₛ = 0.05,
         Rₘ, Lₘ, Cₜ = 0.0, Cₛ = 0.0)
-    winding.symbol = :line
-    winding.pins = copy(classic.elements[:line].pins)
-    classic.elements[:line] = winding
-    elements, rows = builder_elements_and_rows(classic, state)
-    builder = NetworkBuilder.define(elements, rows;
-        options = (; voltageBase = 380 / sqrt(3)))
-    return (; classic, state = builder)
+    elements = merge(circuit.elements, (; line = winding))
+    return (; elements, circuit.rows, circuit.options)
 end
 
-"""
-    dc_network()
-
-Return classic and builder representations of a DC circuit with sources at
-320 and 318 \\[kV\\] pole-to-ground and a differential series branch
-with resistance 2 \\[Ω\\] and inductance 0.05 \\[H\\].
-
-# Returns
-
-- `classic`: Classic DC network with voltage base 320 \\[kV\\].
-- `state`: Builder network with the same circuit and voltage base.
-
-# Notes
-
-An independent AC slack island supports power flow; a 400 \\[Ω\\] AC shunt
-permits builder reconstruction. Grounded DC shunts become nonzero-voltage
-buses in this solver and are omitted from the fixture.
-"""
-function dc_network()
+function _dc_circuit()
     elements = (;
         ac = ac_source(; pins = 3, transformation = true,
             setpoint = Setpoint(Vac = 320sqrt(2), θac = 0.0)),
@@ -243,39 +128,12 @@ function dc_network()
         (:line, 1, :D1), (:line, 2, :D2))
         push!(rows, (; node, element, side, terminal = 1))
     end
-    state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
+    return (; elements, rows, options = (;
         voltageBase = 320.0))
-    classic = Network()
-    classic.voltageBase[1] = 320.0
-    for (name, element) in pairs(elements)
-        add!(classic, name, element)
-    end
-    for row in rows
-        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
-    end
-    for (name, count) in ((:ac, 2), (:from, 1), (:to, 1)), k in 1:count
-
-        connect!(classic, (name, Symbol("2.$k")), :gnd)
-    end
-    connect!(classic)
-    return (; classic, state)
 end
 
-"""
-    dc_cable_network()
-
-Return the DC circuit with the two-position `ugc` cable from
-`examples/P2P_HVDC_ALT.jl` as its 50 \\[km\\] branch. Cable-layer data and
-earth resistivity 100 \\[Ω·m\\] come from that example.
-Both ends use the differential transform and grounded internal-conductor elimination.
-
-# Returns
-
-- `classic`: Classic DC cable network.
-- `state`: Builder network with the same circuit.
-"""
-function dc_cable_network()
-    classic, state = dc_network()
+function _dc_cable_circuit()
+    circuit = _dc_circuit()
     ugc = cable(
         length = 50e3,
         positions = [(-0.5, 1), (0.5, 1)],
@@ -288,40 +146,34 @@ function dc_cable_network()
         earth_parameters = (1, 1, 100.0),
         transformation = true
     )
-    ugc.symbol = :line
-    ugc.pins = copy(classic.elements[:line].pins)
-    classic.elements[:line] = ugc
-    elements, rows = builder_elements_and_rows(classic, state)
-    builder = NetworkBuilder.define(elements, rows; options = state.options)
-    return (; classic, state = builder)
+    elements = merge(circuit.elements, (; line = ugc))
+    return (; elements, circuit.rows, circuit.options)
 end
 """
     tlc_case1_network()
 
-Return classic and builder circuits with the case-1 Vdc/Q controls from
+Return a network state with the case-1 Vdc/Q controls from
 `test/adm_TLC_test.jl`. Ratings are 100 \\[MVA\\], 220 \\[kV\\] AC and
 640 \\[kV\\] pole-to-pole DC, with a 10 \\[km\\] cable and 0.5 \\[s\\]
 voltage-support lag.
 
 # Returns
 
-- `classic`: Classic TLC network.
-- `state`: Builder network with the same circuit.
+- Network state with the stated circuit.
 """
 tlc_case1_network() = tlc_network(true)
 
 """
     tlc_case2_network()
 
-Return classic and builder circuits with case-2 P/Q controls and a
+Return a network state with case-2 P/Q controls and a
 0.5 \\[s\\] frequency-support lag. Use the case-1 electrical data and
 10 \\[km\\] cable to keep converter-mode comparisons on the same circuit.
 The case-2 admittance circuit in `test/adm_TLC_test.jl` connects its DC source directly.
 
 # Returns
 
-- `classic`: Classic TLC network.
-- `state`: Builder network with the same circuit.
+- Network state with the stated circuit.
 """
 tlc_case2_network() = tlc_network(false)
 
@@ -330,7 +182,7 @@ function tlc_vac_network()
         PowerImpedance.OuterReactiveVacControl(pi_ctrl = PowerImpedance.PIControl(Kp = 0.0, Ki = 100.0)))
 end
 
-function tlc_network(vdc_control, reactive = nothing)
+function _tlc_circuit(vdc_control, reactive = nothing)
     zbase = 220.0^2 / 100.0
     elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08zbase / (2π * 50), Rᵣ = 0.0008zbase,
         Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = 640.0)
@@ -397,22 +249,8 @@ function tlc_network(vdc_control, reactive = nothing)
             (node = :DC1, element = :CableDC12, side = 1, terminal = 1),
             (node = :DC2, element = :CableDC12, side = 2, terminal = 1),
             (node = :DC2, element = :G_DC, side = 1, terminal = 1)])
-    state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
+    return (; elements, rows, options = (;
         voltageBase = 220 / sqrt(3)))
-    classic = Network()
-    classic.voltageBase[1] = 220 / sqrt(3)
-    for (name, element) in pairs(elements)
-        add!(classic, name, element)
-    end
-    for row in rows
-        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
-    end
-    for (element, count) in ((:G3, 2), (:G_DC, 1)), terminal in 1:count
-
-        connect!(classic, (element, Symbol("2.$terminal")), :gnd)
-    end
-    connect!(classic)
-    return (; classic, state)
 end
 
 # Electrical and Δ/CCSC gains: local/GFL-MMC/PQ-Mode/GFL_MMC_Validation.pscx:621–644.
@@ -425,7 +263,7 @@ mmc_pf_network() = mmc_network(:pf)
 mmc_qv_network() = mmc_network(:qv)
 mmc_vac_network() = mmc_network(:vac)
 
-function mmc_network(mode)
+function _mmc_circuit(mode)
     PI = PowerImpedance
     voltage = 380 / sqrt(3)
     zbase = 333.0^2 / 1000.0
@@ -473,7 +311,7 @@ function mmc_network(mode)
         # DVC saved project supplies current, not a stiff voltage (2565–2573).
         # Its Julia validation supplies that DC side with a remote PQ MMC and
         # 60 km cable: DC_Voltage_Control.jl:62–104,126–133.
-        remote = deepcopy(mmc_pq_network().classic.elements[:DUT])
+        remote = deepcopy(_mmc_circuit(:pq).elements.DUT)
         remote.setpoint = Setpoint(Pac = -608.3578, Qac = -200.0,
             Vac = 380sqrt(2 / 3), Vdc = 800 * 1.00009, Pdc = -608.3578)
         dc_cable = cable(length = 60e3, positions = [(-0.5, 1.0), (0.5, 1.0)],
@@ -515,28 +353,13 @@ function mmc_network(mode)
         append!(rows, [(node = :DC, element, side = 1, terminal = 1)
                        for element in (:DUT, :G_DC)])
     end
-    state = NetworkBuilder.define(deepcopy(elements), rows; options = (;
+    return (; elements, rows, options = (;
         voltageBase = voltage))
-    classic = Network()
-    classic.voltageBase[1] = voltage
-    for (name, element) in pairs(elements)
-        add!(classic, name, element)
-    end
-    for row in rows
-        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
-    end
-    sources = mode == :vdc ? ((:G_AC, 2), (:G_SEND, 2)) : ((:G_AC, 2), (:G_DC, 1))
-    for (element, count) in sources, terminal in 1:count
-
-        connect!(classic, (element, Symbol("2.$terminal")), :gnd)
-    end
-    connect!(classic)
-    return (; classic, state)
 end
 
 # Modular GFM fixture: test/adm_MMC_test.jl:58–193, build_mmc_grid(). Saved PSCAD
 # primitives are cited in fixtures/mmc_gfm_saved_fragments.xml.
-function mmc_gfm_network()
+function _mmc_gfm_circuit()
     Pmmc, Qmmc = 0.7 * 1060, 0.0
     Vm, Vdc = 400 / sqrt(3), 640.0
     elec = PowerImpedance.ElectricalMMC(
@@ -650,45 +473,12 @@ function mmc_gfm_network()
             for (terminal, axis) in enumerate(("d", "q"))]
     append!(rows, [(node = :DC, element, side = 1, terminal = 1)
                   for element in (:DUT, :G_DC)])
-    state = NetworkBuilder.define(deepcopy(elements), rows; options = (; voltageBase = Vm))
-    classic = Network()
-    classic.voltageBase[1] = Vm
-    for (name, element) in pairs(elements)
-        add!(classic, name, element)
-    end
-    for row in rows
-        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
-    end
-    for (element, count) in ((:G3, 2), (:G_DC, 1)), terminal in 1:count
-        connect!(classic, (element, Symbol("2.$terminal")), :gnd)
-    end
-    connect!(classic)
-    return (; classic, state)
+    return (; elements, rows, options = (; voltageBase = Vm))
 end
 
 
 # test/adm_MMC_compensated_test.jl:53–190, build_mmc_grid().
-"""
-    mmc_compensated_network()
-
-Return classic and builder representations of the compensated MMC circuit.
-The Δ-energy PI gains are `Kp = 0.5544`, `Ki = 5.94` with `k = 1`.
-Plant ratings are 1060 \\[MVA\\], 320/400 \\[kV\\] line-to-line RMS and
-640 \\[kV\\] DC.
-
-# Returns
-
-- `classic`: Classic compensated MMC network.
-- `state`: Builder network with the same circuit.
-
-# Notes
-
-The +3ωbase triplen notch/PI frame gives poles
-``-12.550944 ± j940.716108`` \\[s⁻¹\\]. Excluding slow stable OCC filter poles,
-the least-damped pair is ``-4.873459 ± j10.339475`` \\[s⁻¹\\] without gain scaling.
-The opposite triplen rotation gives ``+0.115752 ± j942.538554`` \\[s⁻¹\\].
-"""
-function mmc_compensated_network()
+function _mmc_compensated_circuit()
     Pmmc, Qmmc = 0.7 * 1060, 0.0
     Vm, Vdc = 400 / sqrt(3), 640.0
     elec = PowerImpedance.ElectricalMMC(
@@ -788,20 +578,169 @@ function mmc_compensated_network()
             for (terminal, axis) in enumerate(("d", "q"))]
     append!(rows, [(node = :DC, element, side = 1, terminal = 1)
                   for element in (:DUT, :G_DC)])
-    state = NetworkBuilder.define(deepcopy(elements), rows; options = (; voltageBase = Vm))
-    classic = Network()
-    classic.voltageBase[1] = Vm
-    for (name, element) in pairs(elements)
-        add!(classic, name, element)
-    end
-    for row in rows
-        connect!(classic, (row.element, Symbol("$(row.side).$(row.terminal)")), row.node)
-    end
-    for (element, count) in ((:G3, 2), (:G_DC, 1)), terminal in 1:count
-        connect!(classic, (element, Symbol("2.$terminal")), :gnd)
-    end
-    connect!(classic)
-    return (; classic, state)
+    return (; elements, rows, options = (; voltageBase = Vm))
+end
+
+function im_network(; elec = ElectricalIM(r_s = 0.01),
+        mech = MechanicalIM(T_0 = 0.9, A = 0.0, B = 0.0, C = 1.0, m = 0))
+    (; elements, rows, options) = _im_circuit(; elec, mech)
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+"""
+    small_ac_network()
+
+Return a network state for a balanced circuit at 50 \\[Hz\\].
+The source is 380 \\[kV\\] line-to-line RMS, the series branch is 0.19 \\[Ω\\]
+with 0.0122 \\[H\\], and the shunt load is 400 \\[Ω\\] per phase.
+Source setpoints use phase-peak voltage with zero cosine-reference angle.
+
+# Returns
+
+- Network state with the stated circuit and voltage base.
+"""
+function small_ac_network()
+    (; elements, rows, options) = _small_ac_circuit()
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+"""
+    sm_network()
+
+Return a network state for the circuit in `test/adm_SM_test.jl`.
+The synchronous machine supplies 900 \\[MW\\] at a 380 \\[kV\\] slack bus,
+with the native `rt`/`lt` branch and default AVR, governor and steam turbine.
+Its requested voltage is 1.000177992 \\[pu\\] before power flow.
+
+# Returns
+
+- Network state with the stated circuit.
+"""
+function sm_network()
+    (; elements, rows, options) = _sm_circuit()
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+"""
+    passive_ohl_network()
+
+Return the small AC circuit with the `tl1` overhead line from
+`examples/P2P_HVDC_ALT.jl` replacing its series impedance.
+
+# Returns
+
+- Network state with the stated circuit and voltage base.
+"""
+function passive_ohl_network()
+    (; elements, rows, options) = _passive_ohl_circuit()
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+"""
+    transformer_network(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
+
+Return a network state with a 380/150 \\[kV\\] line-to-line
+transformer and a 400 \\[Ω\\] per-phase secondary load.
+
+# Arguments
+
+- `organization`: Winding connection. Default: `:YY`.
+- `Rₘ`: Primary magnetizing resistance \\[Ω\\]. Default: `1e6`.
+- `Lₘ`: Primary magnetizing inductance \\[H\\]. Default: `1000.0`.
+
+# Returns
+
+- Network state with the stated circuit and voltage base.
+
+# Notes
+
+Winding values from `Transformer_test.jl` are `Rₚ = 10` \\[Ω\\],
+`Lₚ = 0.1` \\[H\\], `Rₛ = 1` \\[Ω\\] and `Lₛ = 0.05` \\[H\\].
+The default magnetizing current is about 1% of load current. Values
+`Rₘ = 1e4` \\[Ω\\] and `Lₘ = 10` \\[H\\] reproduce the stress case,
+whose magnetizing current exposes the power-flow pi approximation of the T-model.
+"""
+function transformer_network(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
+    (; elements, rows, options) = _transformer_circuit(; organization, Rₘ, Lₘ)
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+"""
+    dc_network()
+
+Return a network state for a DC circuit with sources at
+320 and 318 \\[kV\\] pole-to-ground and a differential series branch
+with resistance 2 \\[Ω\\] and inductance 0.05 \\[H\\].
+
+# Returns
+
+- Network state with the stated circuit and voltage base.
+
+# Notes
+
+An independent AC slack island supports power flow; a 400 \\[Ω\\] AC shunt
+permits builder reconstruction. Grounded DC shunts become nonzero-voltage
+buses in this solver and are omitted from the fixture.
+"""
+function dc_network()
+    (; elements, rows, options) = _dc_circuit()
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+"""
+    dc_cable_network()
+
+Return the DC circuit with the two-position `ugc` cable from
+`examples/P2P_HVDC_ALT.jl` as its 50 \\[km\\] branch. Cable-layer data and
+earth resistivity 100 \\[Ω·m\\] come from that example.
+Both ends use the differential transform and grounded internal-conductor elimination.
+
+# Returns
+
+- Network state with the stated circuit.
+"""
+function dc_cable_network()
+    (; elements, rows, options) = _dc_cable_circuit()
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+function tlc_network(vdc_control, reactive = nothing)
+    (; elements, rows, options) = _tlc_circuit(vdc_control, reactive)
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+function mmc_network(mode)
+    (; elements, rows, options) = _mmc_circuit(mode)
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+function mmc_gfm_network()
+    (; elements, rows, options) = _mmc_gfm_circuit()
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
+end
+
+"""
+    mmc_compensated_network()
+
+Return a network state for the compensated MMC circuit.
+The Δ-energy PI gains are `Kp = 0.5544`, `Ki = 5.94` with `k = 1`.
+Plant ratings are 1060 \\[MVA\\], 320/400 \\[kV\\] line-to-line RMS and
+640 \\[kV\\] DC.
+
+# Returns
+
+- Network state with the stated circuit.
+
+# Notes
+
+The +3ωbase triplen notch/PI frame gives poles
+``-12.550944 ± j940.716108`` \\[s⁻¹\\]. Excluding slow stable OCC filter poles,
+the least-damped pair is ``-4.873459 ± j10.339475`` \\[s⁻¹\\] without gain scaling.
+The opposite triplen rotation gives ``+0.115752 ± j942.538554`` \\[s⁻¹\\].
+"""
+function mmc_compensated_network()
+    (; elements, rows, options) = _mmc_compensated_circuit()
+    return NetworkBuilder.define(deepcopy(elements), rows; options)
 end
 
 end

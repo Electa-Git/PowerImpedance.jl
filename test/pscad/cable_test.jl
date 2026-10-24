@@ -5,20 +5,19 @@ using ..PSCADPlanTests: plan_shape, counts, check_layout
 const P = PowerImpedance.PSCAD
 
 @testset "PSCAD short cable warning" begin
-    classic, _ = dc_cable_network()
-    classic.elements[:line].element_model.length = 100.0
+    state = dc_cable_network()
+    state.elements[:line].length = 100.0
     settings = P.SimulationSettings(time_step = 10e-6)
     @test_logs (:warn, r"cable :line, length 100.0 m, time step 1.0e-5 s: PSCAD aborts if the travel time is below the step") begin
-        P.build_plan(P.netlist(classic, nothing); settings)
+        P.build_plan(P.netlist(state, nothing); settings)
     end
 end
 
 @testset "PSCAD cable row and DC interfaces" begin
-    classic, builder = dc_cable_network()
-    list = P.netlist(classic, nothing)
+    state = dc_cable_network()
+    builder = state
+    list = P.netlist(state, nothing)
     plan = P.build_plan(list; name = "dc_cable")
-    @test plan_shape(plan) ==
-          plan_shape(P.build_plan(P.netlist(builder, nothing); name = "dc_cable"))
     @test length(plan.lines) == length(plan.wrappers) == 1
     row, wrapper = only(plan.lines), only(plan.wrappers)
     @test row isa P.CableDefinitionPlan
@@ -96,7 +95,7 @@ end
             if i == 1
                 meter = only(filter(
                     c -> c.defn == "master:ammeter" &&
-                         Dict(c.params)["Name"] == "I_line_$side",
+                         Dict(c.params)["Name"] == "I_line_side$side",
                     plan.main.components))
                 @test (meter.x, meter.y) ==
                       (port[1] + (direction == -1 ? -36 : 0), port[2] - 36)
@@ -104,13 +103,13 @@ end
         end
     end
     probes = filter(c -> c.element == "line", plan.probes.channels)
-    @test [(c.name, c.side, c.dim, c.unit) for c in probes] ==
-          [("I_line_1", "1", 1, "kA"), ("I_line_2", "2", 1, "kA")]
+    @test [(c.name, c.port, c.dim, c.unit) for c in probes] ==
+          [("I_line_side1", :side1, 1, "kA"), ("I_line_side2", :side2, 1, "kA")]
     check_layout(plan, 10)
-    cable = classic.elements[:line].element_model
+    cable = state.elements[:line]
     cable.eliminate = false
     caught = try
-        P.build_plan(P.netlist(classic, nothing))
+        P.build_plan(P.netlist(state, nothing))
     catch e
         e
     end
@@ -121,7 +120,7 @@ end
     # The fourth donor slot exercises material pairs beyond the first three layers.
     cable.conductors[:C4] = Conductor(rᵢ = 0.07256, rₒ = 0.074, ρ = 1.8e-7, μᵣ = 400.0)
     cable.insulators[:I4] = Insulator(rᵢ = 0.074, rₒ = 0.08, ϵᵣ = 4.0, μᵣ = 2.0)
-    fourth = Dict(first(only(P.build_plan(P.netlist(classic, nothing)).lines).cables).params)
+    fourth = Dict(first(only(P.build_plan(P.netlist(state, nothing)).lines).cables).params)
     @test all(fourth[k] == v
     for (k, v) in Dict("LL" => "7", "CONNAM4" => "C4", "R8" => "0.074 [m]",
         "R9" => "0.08 [m]", "RHOO" => "1.8E-7 [ohm*m]", "PERMO" => "400.0", "EPS4" => "4.0",
@@ -129,16 +128,13 @@ end
 end
 
 @testset "PSCAD cable AC phase connections" begin
-    classic, _ = small_ac_network()
-    dc, _ = dc_cable_network()
-    model = deepcopy(dc.elements[:line].element_model)
+    state = small_ac_network()
+    dc = dc_cable_network()
+    model = deepcopy(dc.elements[:line])
     model.positions = [(-0.5, 1.0), (0.0, 1.0), (0.5, 1.0)]
-    line = PowerImpedance.Element(; element_model = model, input_pins = 3, output_pins = 3,
-        transformation = true)
-    line.symbol = :line
-    line.pins = copy(classic.elements[:line].pins)
-    classic.elements[:line] = line
-    plan = P.build_plan(P.netlist(classic, nothing))
+    state = NetworkBuilder.NetworkState(merge(state.elements, (; line = model)),
+        state.topology, state.options)
+    plan = P.build_plan(P.netlist(state, nothing))
     @test length(only(plan.lines).cables) == 3
     @test Dict(only(plan.lines).frephase)["FS"] == "0.5 [Hz]"
     @test Dict(only(plan.wrappers).params)["Freq"] == "50.0 [Hz]"
@@ -152,8 +148,8 @@ end
             plan.main.components) == 2
     end
     check_layout(plan, 9)
-    line.element_model.type = :aerial
-    aerial = Dict(first(only(P.build_plan(P.netlist(classic, nothing)).lines).cables).params)
+    model.type = :aerial
+    aerial = Dict(first(only(P.build_plan(P.netlist(state, nothing)).lines).cables).params)
     @test aerial["OHC"] == "1"
     @test aerial["Y"] == "0.0 [m]"
     @test aerial["Y2"] == "1.0 [m]"

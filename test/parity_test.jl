@@ -9,12 +9,11 @@ finally
 end
 const D = ParityData
 const DIRECTORY = joinpath(@__DIR__, "reference/v2")
-# PSCAD export on models restores recomputation of pscad_op.
 const STORED_ONLY = (
     keys = Set("oracle.droop_$kind.order$order.$dataset"
         for kind in (:mmc, :tlc), order in (0, 2),
             dataset in ("x", "y.1", "y.2", "y.3")),
-    families = ("pscad_op",),
+    families = (),
 )
 
 stored_only(name) = name in STORED_ONLY.keys ||
@@ -177,6 +176,12 @@ function run_parity()
             @test join(conversion_skipped, ',') == metadata["pm_conversion_skipped"]
             @test result.stability_fixture == metadata["stability_fixture"]
             reference_labels = D.load_labels(joinpath(DIRECTORY, "labels.tsv"))
+            for (key, label) in reference_labels
+                parts = split(key, '.')
+                first(parts) == "pscad_op" && last(parts) == "name" || continue
+                names = result.pscad_name_maps[parts[2]]
+                reference_labels[key] = get(names, label, label)
+            end
             filter!(pair -> !stored_only(first(pair)), reference_labels)
             @test labels == reference_labels
             compare_numeric(reference, rows)

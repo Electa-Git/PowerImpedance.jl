@@ -17,7 +17,7 @@ function composed_samples(result, model, spec, c)
         agg=zeros(length(result.time),2)
         for p in ips
             cur=composed_current(result,model,p)
-            key="$(port):$(p.element):$(p.side)";branches[key]=cur
+            key="$(port):$(p.element):$(p.port)";branches[key]=cur
             if !(Symbol(p.element) in c.grids)
                 agg+=cur
             end
@@ -42,21 +42,30 @@ function composed_samples(result, model, spec, c)
         vp=only(filter(p->p.kind==:voltage && p.bus==bus,model.probes.channels))
         device_voltages[string(name)*"_Y"]=fixed_dq(result.time,probe_samples(result,vp))
         if length(spec.axes)==2
-            ip=only(filter(p->p.kind==:current && p.element==string(name) && p.side==string(b.ac_side),model.probes.channels))
-            outputs[string(name)*"_Y"]=composed_current(result,model,ip)
+            ip=only(filter(
+                p->p.kind==:current && p.element==string(name) && p.port==:ac,
+                    model.probes.channels))
+            outputs[string(name) * "_Y"]=composed_current(result, model, ip)
         end
         b.dc_voltage===nothing && continue
-        bus=port_probe(model.netlist,name,1).name
-        poles=[only(filter(p->p.kind==:voltage && p.bus==bus && p.side==pole,model.probes.channels)) for pole in ("P","N")]
+        bus=port_probe(model.netlist, name, 1).name
+        poles=[only(filter(p->p.kind==:voltage && p.bus==bus && p.pole==pole,
+            model.probes.channels))
+               for pole in ("P", "N")]
         clamps[string(name)]=result.channels[poles[1].name]-result.channels[poles[2].name]
     end
     if haskey(c.net.elements,:CableDC)
         outputs["DC_voltage_Z"]=hcat([clamps[string(n)] for n in c.devices]...)
         currents=Matrix{Float64}[]
-        for side in ("1","2")
-            p=only(filter(p->p.kind==:current && p.element=="CableDC" && p.side==side,model.probes.channels))
-            p.orientation in (:into,:out) || error("missing DC cable current orientation")
-            push!(currents,reshape((p.orientation==:into ? 1 : -1).*result.channels[p.name],:,1))
+        for side in ("1", "2")
+            p=only(filter(
+                p->p.kind==:current && p.element=="CableDC" &&
+                   p.port==terminal_port(model.netlist, :CableDC, side),
+                model.probes.channels))
+            p.orientation in (:into, :out) || error("missing DC cable current orientation")
+            push!(currents, reshape(
+                (p.orientation==:into ? 1 : -1) .*
+                result.channels[p.name], :, 1))
         end
         outputs["DC_current_T"]=reduce(hcat,currents)
     end

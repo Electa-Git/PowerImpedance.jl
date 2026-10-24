@@ -220,7 +220,8 @@ end
                         exports = mktempdir()
                         cases = [( (; project_name = name,
                             netlist = (; elements = [], buses = []),
-                            operating_point = (; bus_states = Dict())), nothing, 0.01)
+                            operating_point = (; bus_states = Dict(:fixture => nothing))),
+                            nothing, 0.01)
                             for name in ("run_error", "first_pass", "comparison_error", "last_pass")]
                         PSCADRun() = nothing
                         function compute(model, run; options)

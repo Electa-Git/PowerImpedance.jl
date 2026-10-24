@@ -1,4 +1,5 @@
 module PSCADMMCEnergyTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures, ..PSCADTopology
 using ..PSCADTLCTests: evaluate
@@ -25,9 +26,8 @@ end
 
 @testset "compensated MMC LEC, CCC and physical compensated modulation" begin
     fixture = PSCADFixtures.mmc_compensated_network()
-    for network in (fixture.classic, fixture.state)
-        pf = network isa Network ? power_flow(network) :
-             NetworkBuilder.solve(network).powerflow
+    for network in (fixture,)
+        pf = NetworkBuilder.solve(network)
         list = P.netlist(network, pf)
         plan = P.build_plan(list; settings = SETTINGS)
         e = only(filter(e -> e.name == :DUT, list.elements))
@@ -66,7 +66,7 @@ end
               6
         residual = zeros(length(eq.states))
         PI._state_space!(residual, collect(values(eq.states)), collect(values(eq.inputs)),
-            eq.setpoint_pu, m, PI.Equil())
+            eq.terminal_pu, m, PI.Equil())
         @test maximum(abs, residual) <= 1e-6
 
         # Every rate, including the notch's two states and rotating PI states, is compared
@@ -94,7 +94,7 @@ end
             displaced = merge(eq, (; states = x, outputs = merge(eq.outputs, (; meas))))
             inputs = (; meas, power = (; P_ac_f = meas.P_ac_f), sync = (; ω_c = frequency))
             F = zeros(PI.n_states(m.sigma_control))
-            owned = PI.state_space!(F, x, inputs, eq.setpoint_pu, m.sigma_control, m)
+            owned = PI.state_space!(F, x, inputs, eq.terminal_pu, m.sigma_control, m)
             def = P.mmc_sigma("LEC_EQ", e, displaced, transforms)
             signals = merge(arm_signals(x, m, 0.0),
                 Dict(
@@ -201,7 +201,7 @@ end
         F = zeros(PI.n_states(m.sigma_control))
         owned = PI.state_space!(F, live_states,
             (; meas = (; v_dc_f = 1.0), power = (; P_ac_f = 0.7), sync = eq.outputs.sync),
-            eq.setpoint_pu, m.sigma_control, m)
+            eq.terminal_pu, m.sigma_control, m)
         for time in (0.0, 0.05, 0.2 - SETTINGS.time_step, 0.2)
             phases = (-2m.elec.ωbase*time) .+ (0.0, -2π/3, 2π/3)
             currents = (0.11 .* cos.(phases) .- 0.07 .* sin.(phases) .+ 0.24) .*
@@ -330,17 +330,17 @@ end
         times = collect(0.0:250e-6:0.3)
         channels = PI.OrderedDict{String, Vector{Float64}}()
         flow = list.operating_point.branch_flows[:DUT]
-        ac = only(filter(t -> t.side == 2 && !t.grounded, e.terminals))
+        ac = only(filter(t -> t.port == :ac && !t.grounded, e.terminals))
         bus = only(filter(b -> b.key == ac.bus, list.buses))
         point = list.operating_point.bus_states[ac.bus]
         voltage = sqrt(2)*bus.base_kV*point.vm_pu*cis(point.va_rad)
-        dc = only(filter(t -> t.side == 1 && !t.grounded, e.terminals))
+        dc = only(filter(t -> t.port == :dc && !t.grounded, e.terminals))
         dbus = only(filter(b -> b.key == dc.bus, list.buses))
         vdc = 2dbus.base_kV*list.operating_point.bus_states[dc.bus].vm_pu
         for c in probes.channels
             if c.kind == :voltage && c.dim == 3
                 add_three_phase!(channels, c.name, times, voltage)
-            elseif c.kind == :current && c.side == "2"
+            elseif c.kind == :current && c.port in (:side2, :ac)
                 add_three_phase!(channels, c.name, times, 2complex(flow.pt, -flow.qt)/(3conj(voltage)))
             else
                 value = c.kind == :converter_p ? flow.pt/m.elec.Sbase :
@@ -350,7 +350,7 @@ end
                         flow.pf*m.elec.vDC_base/(3m.elec.Sbase*vdc) :
                         c.kind == :machine_speed ? 1.0 :
                         c.kind == :current ? flow.pf/vdc :
-                        c.kind == :voltage ? (c.side == "P" ? vdc/2 : -vdc/2) : 1.0
+                        c.kind == :voltage ? (c.pole == "P" ? vdc/2 : -vdc/2) : 1.0
                 channels[c.name] = fill(value, length(times))
             end
         end

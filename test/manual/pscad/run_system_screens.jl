@@ -21,7 +21,7 @@ function run_system_screens(;directory=get(ENV,"SYSTEM_SCREEN_DATA",joinpath(V.R
         activity="construction"
         try
             net=V.fixture(id).factory()
-            static=V.PSCADNetworks.inventory(P.netlist(net,nothing))
+            static=V.PSCADNetworks.inventory(V.fixture_netlist(net,nothing))
             record["inventory"]=Dict(string(k)=>v for (k,v) in pairs(static))
             record["inventory"]["static_electrical_partitions"]=pop!(record["inventory"],"subsystems")
             activity="power flow"

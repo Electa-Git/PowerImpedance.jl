@@ -1,4 +1,5 @@
 module PSCADDCEquivalenceTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures: dc_network
 const P = PowerImpedance
@@ -22,8 +23,9 @@ const P = PowerImpedance
 end
 
 @testset "DC fixture solved power and pole circuit" begin
-    classic, _ = dc_network()
-    result, data, _, elem2comp = power_flow(classic)
+    classic = dc_network()
+    pf = PSCADFixtures.solved_powerflow(classic)
+    result, data, elem2comp = pf.result, pf.data, pf.elem2comp
     @test string(result["termination_status"]) == "LOCALLY_SOLVED"
     _, index = elem2comp[:line]
     branch = data["branchdc"][string(index)]

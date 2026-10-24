@@ -8,11 +8,11 @@ const YY_MAGNETIZING_CURRENT_PERCENT = 1e-3
 const TRANSFORMER_BASE_MVA = 1000
 
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Transformer}, context)
-    length(e.terminals) == 2 && [t.side for t in e.terminals] == [1, 2] &&
+    length(e.terminals) == 2 && [t.port for t in e.terminals] == [:side1, :side2] &&
     all(t -> !t.grounded, e.terminals) ||
         throw(ArgumentError("transformer :$(e.name) requires two connected AC sides"))
     t = transformer_si(e.model)
-    e.model.pins == 3 && t.organization in (:YY, :ΔY) ||
+    e.ports.side1.domain === PowerImpedance.ACABC && t.organization in (:YY, :ΔY) ||
         throw(ArgumentError("transformer :$(e.name) supports only three-phase YY or ΔY"))
     for field in (:R_p, :L_p, :R_s, :L_s, :C_t, :C_s)
         value = getproperty(t, field)

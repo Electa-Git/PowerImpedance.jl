@@ -9,6 +9,7 @@ let previous_threads = BLAS.get_num_threads()
     end
 end
 include("../pscad/topology.jl")
+include("../pscad/probe_names.jl")
 const P = PowerImpedance.PSCAD
 const ETREE = pyimport("lxml.etree")
 const SOURCE_COMMIT = "a1a7fb71d6ac189ddf06d58e2817dc4197dd4031"
@@ -17,7 +18,7 @@ const DIRECTORY = normpath(joinpath(@__DIR__, "../pscad/fixtures"))
 function export_fixture(fixture, directory)
     state = fixture.build()
     machine = any(
-        e -> e.element_model isa Union{PowerImpedance.SynchronousMachine,
+        e -> e isa Union{PowerImpedance.SynchronousMachine,
             PowerImpedance.InductionMachine},
         values(state.elements))
     settings = P.SimulationSettings(simulation_time = machine ? 5.0 : 0.3,
@@ -30,7 +31,8 @@ function export_fixture(fixture, directory)
     probes = sort!([c.name
                     for c in model.probes.channels
                     if startswith(c.name, "V_") || startswith(c.name, "I_")])
-    return (; graphs, probes, path)
+    mapping = PSCADProbeNames.name_map(model.netlist, model.probes)
+    return (; graphs, probes, path, mapping)
 end
 
 function read_probes(path)
@@ -64,11 +66,20 @@ function run_parity()
                         @test reference["commit"] == SOURCE_COMMIT
                         fresh = export_fixture(fixture, directory)
                         @test Set(keys(reference["canvases"])) == Set(keys(fresh.graphs))
+                        rewritten = 0
                         for (canvas, graph) in fresh.graphs
                             expected = reference["canvases"][canvas]
+                            rewritten += PSCADProbeNames.map_graph!(
+                                expected, fresh.mapping.names)
                             @test PSCADTopology.equivalent(expected, graph)
                         end
-                        @test probes[string(fixture.name)] == fresh.probes
+                        old_probes = probes[string(fixture.name)]
+                        mapped = sort!([get(fresh.mapping.names, p, p) for p in old_probes])
+                        @test mapped == fresh.probes
+                        count = sum(p -> haskey(fresh.mapping.names, p), old_probes)
+                        println("PSCAD names fixture=", fixture.name,
+                            " graph=", rewritten, " probes=", count,
+                            " truncated=", fresh.mapping.truncated)
                     end
                 end
             end

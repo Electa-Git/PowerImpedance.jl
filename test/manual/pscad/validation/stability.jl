@@ -60,7 +60,7 @@ function stability_gate(net, entry)
     entry.category == :device || error("no complete-network gate for $(entry.id)")
     dut=net.elements[:DUT]
     bases=device_bases(dut.element_model.elec)
-    form=P.identify_rlc(net.elements[:Grid]; name=:Grid).form
+    form=P.identify_rlc(net.elements[:Grid].element_model; name=:Grid).form
     grid_y(s)=PowerImpedance.get_y(net.elements[:Grid],s)[1:2,1:2]
     inductance = something(form.L, 0.0)
     rotation = iszero(inductance) ? zeros(2, 2) :

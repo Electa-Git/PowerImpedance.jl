@@ -11,8 +11,16 @@ function phase_twin(net, list)
             setpoint = deepcopy(original.setpoint), limits = deepcopy(original.limits)))
     end
     for entry in list.elements, terminal in entry.terminals, phase in 1:3
-        bus = terminal.grounded ? "gnd" : only(filter(b -> b.key == terminal.bus, list.buses)).name
-        connect!(twin, (entry.name, Symbol(terminal.side, ".", phase)), Symbol(bus, "_", phase))
+        bus = terminal.grounded ? "gnd" :
+              only(filter(b -> b.key == terminal.bus, list.buses)).name
+        connect!(twin,
+            (entry.name,
+                Symbol(
+                    terminal.grounded && length(entry.ports) == 1 ? 2 :
+                    terminal_side(list, entry.name, terminal.port),
+                    ".",
+                    phase)),
+            Symbol(bus, "_", phase))
     end
     connect!(twin)
     # Each model is copied without reconstructing parameters; every terminal's
@@ -21,8 +29,14 @@ function phase_twin(net, list)
         original, copy = net.elements[entry.name], twin.elements[entry.name]
         repr(original.element_model) == repr(copy.element_model) || error("phase twin model differs")
         for terminal in entry.terminals, phase in 1:3
-            bus = terminal.grounded ? "gnd" : only(filter(b -> b.key == terminal.bus, list.buses)).name
-            copy.pins[Symbol(terminal.side, ".", phase)] == Symbol(bus, "_", phase) ||
+
+            bus = terminal.grounded ? "gnd" :
+                  only(filter(b -> b.key == terminal.bus, list.buses)).name
+            copy.pins[Symbol(
+                terminal.grounded && length(entry.ports) == 1 ? 2 :
+                terminal_side(list, entry.name, terminal.port),
+                ".",
+                phase)] == Symbol(bus, "_", phase) ||
                 error("phase twin incidence differs")
         end
     end

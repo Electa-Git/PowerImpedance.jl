@@ -1,4 +1,5 @@
 module PSCADMMCTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures
 using ..PSCADTLCTests: evaluate
@@ -10,9 +11,8 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
     sample_step = 250e-6, source_ramp = 0.0)
 
 function converter_element(e, m)
-    element = PI.Element(; element_model = m, input_pins = 1, output_pins = 2,
-        transformation = false, setpoint = e.setpoint, limits = e.element.limits)
-    return P.NetlistElement(e.name, e.pscad, element, m, e.terminals, e.role, e.setpoint)
+    return P.NetlistElement(e.name, e.pscad, m, electricalconnections(m),
+        e.terminals, e.role, e.values)
 end
 function with_modulation(m, modulation)
     return PI.MMC(; m.meas, m.sync, m.delta_control, m.sigma_control, modulation, m.elec)
@@ -20,7 +20,7 @@ end
 
 @testset "MMC live feedback and DC-divisor handover" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture.classic, power_flow(fixture.classic))
+    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(e)
     plan = P.build_plan(list; settings = SETTINGS)
@@ -61,7 +61,7 @@ end
         @test signals["iS_z"] == 0.0
         live_meas = NamedTuple{keys(eq.outputs.meas)}(ntuple(_ -> 0.0, length(eq.outputs.meas)))
         delta = PI.state_space!(zeros(PI.n_states(e.model.delta_control)), eq.states,
-            (; meas = live_meas, sync = eq.outputs.sync), eq.setpoint_pu,
+            (; meas = live_meas, sync = eq.outputs.sync), eq.terminal_pu,
             e.model.delta_control, e.model)
         @test signals["vM_d_ref"] ≈ delta.vMΔ_d_ref_c
         @test signals["vM_q_ref"] ≈ delta.vMΔ_q_ref_c
@@ -73,7 +73,7 @@ end
         sigma = PI.state_space!(zeros(4), live_states,
             (; meas = merge(live_meas, (; v_dc_f = signals["v_dc_divisor"])),
                 power = (; P_ac_f = 0.0), sync = eq.outputs.sync),
-            eq.setpoint_pu, e.model.sigma_control, e.model)
+            eq.terminal_pu, e.model.sigma_control, e.model)
         @test signals["vMS_z_ref"] ≈ sigma.vMΣ_z_ref - signals["v_dc_divisor"] / 2 atol=1e-6
     end
 
@@ -91,7 +91,7 @@ end
         end
         expected = PI.state_space!(zeros(4), live_states,
             (; meas = merge(eq.outputs.meas, (; P_ac_f = 0.43)), power = (; P_ac_f = 0.43), sync = eq.outputs.sync),
-            eq.setpoint_pu, e.model.sigma_control, e.model)
+            eq.terminal_pu, e.model.sigma_control, e.model)
         measured = evaluate(modules["SIGMA_DUT"], signals, sample_time)
         @test measured["vMS_z_ref"] ≈ expected.vMΣ_z_ref + (0.27 - eq.outputs.meas.v_dc_f) / 2 atol=1e-6
         @test measured["iS_z"] ≈ current
@@ -161,16 +161,15 @@ end
 @testset "MMC plans, topology and solved initialization" begin
     fixture = PSCADFixtures.mmc_pq_network()
     plans = P.ProjectPlan[]
-    for network in (fixture.classic, fixture.state)
-        pf = network isa Network ? power_flow(network) :
-             NetworkBuilder.solve(network).powerflow
+    for network in (fixture,)
+        pf = NetworkBuilder.solve(network)
         list = P.netlist(network, pf)
         e = only(filter(e -> e.model isa PI.MMC, list.elements))
         equilibrium = P.converter_equilibrium(e)
         residual = zeros(length(equilibrium.states))
         PI._state_space!(residual, collect(values(equilibrium.states)),
             collect(values(equilibrium.inputs)),
-            equilibrium.setpoint_pu, e.model, PI.Equil())
+            equilibrium.terminal_pu, e.model, PI.Equil())
         @test maximum(abs, residual) <= 1e-6
         @test equilibrium.outputs.meas.P_ac_f ≈ 0.6
         @test equilibrium.outputs.meas.Q_ac_f ≈ 0.2
@@ -278,16 +277,12 @@ end
         @test signals["vM_d_ref"] ≈ y.delta.vMΔ_d_ref_c
         @test signals["vM_q_ref"] ≈ y.delta.vMΔ_q_ref_c
     end
-    for (a, b) in zip(plans[1].modules, plans[2].modules)
-        @test a.name == b.name
-        @test Float64[p.default for p in a.parameters] ≈
-              Float64[p.default for p in b.parameters]
-    end
+
 end
 
 @testset "Module electrical parameters require finite literals" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture.classic, power_flow(fixture.classic))
+    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
     plan = P.build_plan(list; settings = SETTINGS)
     for (module_name, defn, field, invalid) in (
         ("MMC_DUT", "inductor", "L", "armL"),
@@ -316,7 +311,7 @@ end
 
 @testset "MMC Σ control against owned equations" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture.classic, power_flow(fixture.classic))
+    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(e)
     transforms = (; abc = "network:ABC_DQ", dq = "network:DQ_ABC")
@@ -341,7 +336,8 @@ end
         definition = P.mmc_sigma("SIGMA", e, (; states = x), transforms)
         measured = evaluate(definition, signals)
         expected = PI.state_space!(zeros(4), x,
-            (; meas = eq.outputs.meas, power = (; P_ac_f = 0.6), sync = eq.outputs.sync), eq.setpoint_pu,
+            (; meas = eq.outputs.meas, power = (; P_ac_f = 0.6),
+                sync = eq.outputs.sync), eq.terminal_pu,
             e.model.sigma_control, e.model)
         @test measured["iS_z"] ≈ x.iΣ_z
         @test measured["vMS_d_ref"] ≈ expected.vMΣ_d_ref_c
@@ -362,7 +358,7 @@ end
 
 @testset "MMC modulation and R12 arm assembly" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture.classic, power_flow(fixture.classic))
+    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     transforms = (; abc = "network:ABC_DQ", dq = "network:DQ_ABC")
     for delay in (0.0, 200e-6)
@@ -430,7 +426,7 @@ end
 
 @testset "MMC arm equations projected onto the current harmonic model" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture.classic, power_flow(fixture.classic))
+    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(e)
     b = e.model.elec
@@ -494,9 +490,8 @@ end
 
 @testset "MMC synthetic comparison rows" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    for network in (fixture.classic, fixture.state)
-        pf = network isa Network ? power_flow(network) :
-             NetworkBuilder.solve(network).powerflow
+    for network in (fixture,)
+        pf = NetworkBuilder.solve(network)
         list = P.netlist(network, pf)
         plan = P.build_plan(list; settings = SETTINGS)
         e = only(filter(e -> e.model isa PI.MMC, list.elements))
@@ -513,11 +508,12 @@ end
         channels = PI.OrderedDict{String, Vector{Float64}}()
         flow = list.operating_point.branch_flows[:DUT]
         arms = filter(c -> c.kind == :converter_arm_voltage, probes.channels)
-        dc = only(filter(c -> c.kind == :current && c.side == "1", probes.channels))
+        dc = only(filter(c -> c.kind == :current && c.port in (:side1, :dc),
+            probes.channels))
         for c in probes.channels
             if c.kind == :voltage
                 add_three_phase!(channels, c.name, times, 380sqrt(2 / 3))
-            elseif c.kind == :current && c.side == "2"
+            elseif c.kind == :current && c.port in (:side2, :ac)
                 v = 380sqrt(2 / 3)
                 add_three_phase!(channels, c.name, times, 2complex(flow.pt, -flow.qt) /
                                                           (3v))
@@ -541,7 +537,7 @@ end
         @test count(==(:converter_p), table.quantity) == 2
         @test count(==(:converter_q), table.quantity) == 2
         @test P._dc_converter_current_bases(list) ==
-              Dict(t.bus => 1.25 for t in e.terminals if t.side == 1)
+              Dict(t.bus => 1.25 for t in e.terminals if t.port == :dc)
         rows = filter(r -> r.quantity == :converter_arm_voltage, table)
         @test Set(rows.name) == Set(c.name for c in arms)
         @test all(r -> r.pscad ≈ 800.0 && r.powerflow == 800.0, rows)
@@ -568,12 +564,12 @@ end
         end
 
         # Capacitors use the solved pole-to-pole bus voltage, not the rated base.
-        key = only(t.bus for t in e.terminals if t.side == 1)
+        key = only(t.bus for t in e.terminals if t.port == :dc)
         point = list.operating_point
         bus_states = copy(point.bus_states)
         bus_states[key] = merge(bus_states[key], (; vm_pu = 0.9bus_states[key].vm_pu))
         operating_point = P.OperatingPointRecord(bus_states, point.branch_flows,
-            point.setpoints, point.slack_bus, point.bases)
+            point.values, point.slack_bus, point.bases)
         reference = PSCADModel(model.project_path, model.project_name, list, probes,
             SETTINGS, operating_point, model.provenance)
         rows = filter(r -> r.quantity == :converter_arm_voltage,
@@ -654,7 +650,7 @@ end
             wrong_units = P.ProbeManifest(
                 [c.name == name ?
                  P.ProbeChannel(c.name, c.kind, c.bus, c.element,
-                     c.side, c.dim, unit, c.orientation) : c for c in probes.channels],
+                     c.port, c.dim, unit, c.orientation) : c for c in probes.channels],
                 probes.reference_bus)
             reference = PSCADModel(model.project_path, model.project_name, list,
                 wrong_units, SETTINGS, point, model.provenance)

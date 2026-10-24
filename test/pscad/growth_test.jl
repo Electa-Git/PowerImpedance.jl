@@ -44,12 +44,16 @@
         isapprox(ratio,round(ratio)) && isodd(round(Int,ratio))
     end
     @test variants[3].spec.tone_peak_pu==5e-8
-    probes=P.ProbeChannel[P.ProbeChannel("precharge_dc_open",:precharge_command,nothing,nothing,nothing,1,"pu")]
-    append!(probes,[P.ProbeChannel("m_$(half)_$phase",:converter_diagnostic,nothing,"c1","2",1,"pu")
-        for half in ("u","l") for phase in ("a","b","c")])
-    channels=Dict(p.name=>fill(p.kind==:precharge_command ? 0. : .5,length(time)) for p in probes)
-    model=(;probes=(;channels=probes))
-    @test V.system_growth_internal_quality((;time,channels),model)["passed"]
+    probes=P.ProbeChannel[P.ProbeChannel(
+        "precharge_dc_open", :precharge_command, nothing, nothing, nothing, 1, "pu")]
+    append!(probes,
+        [P.ProbeChannel(
+             "m_$(half)_$phase", :converter_diagnostic, nothing, "c1", :ac, 1, "pu")
+         for half in ("u", "l") for phase in ("a", "b", "c")])
+    channels=Dict(p.name=>fill(p.kind==:precharge_command ? 0.0 : 0.5, length(time))
+    for p in probes)
+    model=(; probes = (; channels = probes))
+    @test V.system_growth_internal_quality((; time, channels), model)["passed"]
     channels["m_u_a"][200]=1.01
     @test !V.system_growth_internal_quality((;time,channels),model)["passed"]
     channels["m_u_a"][200]=.5;channels["precharge_dc_open"][200]=1.

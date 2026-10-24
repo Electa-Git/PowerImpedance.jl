@@ -3,7 +3,7 @@ function scan_samples(result, model, spec)
     for (port, bus) in enumerate(spec.buses)
         if spec.dimension == 1
             poles = [only(filter(
-                         c -> c.kind == :voltage && c.bus == bus.name && c.side == pole,
+                         c -> c.kind == :voltage && c.bus == bus.name && c.pole == pole,
                          model.probes.channels)) for pole in ("P", "N")]
             voltage = reshape(
                 result.channels[poles[1].name] -
@@ -16,7 +16,8 @@ function scan_samples(result, model, spec)
         element, side = spec.currents[port]
         probe = only(filter(
             c -> c.kind == (spec.quantity == "Z" ? :injection_current : :current) &&
-                 c.element == element && c.side == side,
+                 c.element == element && c.port == (spec.quantity == "Z" ? :ac :
+                     terminal_port(model.netlist, element, side)),
             model.probes.channels))
         current = spec.dimension == 1 ? reshape(result.channels[probe.name], :, 1) :
                   spec.dimension == 3 ? probe_samples(result, probe) :
@@ -42,8 +43,10 @@ function scan_samples(result, model, spec)
         if spec.dc_voltage_base_kV===nothing
             return (; voltage,current,input,output,input_base,output_base,drive,drive_base=spec.current_bases)
         end
-        poles=[only(filter(c->c.kind==:voltage && c.bus==port_probe(model.netlist,:DUT,1).name && c.side==pole,
-            model.probes.channels)) for pole in ("P","N")]
+        poles=[only(filter(
+                   c->c.kind==:voltage && c.bus==port_probe(model.netlist, :DUT, 1).name &&
+                      c.pole==pole,
+                   model.probes.channels)) for pole in ("P", "N")]
         dc_voltage=result.channels[poles[1].name]-result.channels[poles[2].name]
         return (; voltage,current,input,output,input_base,output_base,drive,drive_base=spec.current_bases,dc_voltage)
     end

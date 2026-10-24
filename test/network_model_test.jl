@@ -7,7 +7,7 @@ include("pscad/fixtures.jl")
 @testset "Active elements on ideal sources" begin
     for name in (:mmc_pq, :sm)
         @testset "$name" begin
-            state = getfield(PSCADFixtures, Symbol(name, "_network"))().state
+            state = getfield(PSCADFixtures, Symbol(name, "_network"))()
             powerflow = compute(PowerFlowProblem(state), ACDCPowerFlow())
             @test powerflow.result["termination_status"] == PI.MOI.LOCALLY_SOLVED
             model = NB.NetworkModel(state, powerflow.operating_point)
@@ -21,7 +21,7 @@ include("pscad/fixtures.jl")
 end
 
 @testset "Back-to-back converters without passive elements" begin
-    original = PSCADFixtures.mmc_vdc_network().state
+    original = PSCADFixtures.mmc_vdc_network()
     elements = Base.structdiff(original.elements, (; CableDC = original.elements.CableDC))
     connections = (
         NB.Bus(:AC; ports = ((:DUT, :ac), (:G_AC, :ac))),
@@ -70,7 +70,7 @@ end
     ))
     dq_model = NB.NetworkModel(dq, OperatingPoint())
     abc_model = NB.NetworkModel(abc, OperatingPoint())
-    cable = PSCADFixtures.dc_cable_network().state.elements.line
+    cable = PSCADFixtures.dc_cable_network().elements.line
     for s in ComplexF64.(2π * im .* (1.0, 50.0, 1000.0))
         transformed = PI.abcd_to_y(PI.transformation_dq(
             PI.eval_abcd(branch, s + 100π * im), PI.eval_abcd(branch, s - 100π * im)))
@@ -88,7 +88,7 @@ end
 end
 
 @testset "Active models require named terminal values" begin
-    state = PSCADFixtures.mmc_pq_network().state
+    state = PSCADFixtures.mmc_pq_network()
     @test_throws r"missing active element :DUT" NB.NetworkModel(state, OperatingPoint())
     invalid = OperatingPoint(Dict(:DUT => (ac = ACPortValues(0.0, 0.0, 0.0, 0.0),)))
     @test_throws r"element :DUT" NB.NetworkModel(state, invalid)
@@ -114,7 +114,7 @@ end
     @test NB.topology_role(z, ac, (:side2,)) == :shunt
     @test NB.topology_role(ac_source().element_model, ac, ()) == :source
     @test NB.topology_role(
-        PSCADFixtures.mmc_pq_network().state.elements.DUT, ac, ()) == :converter
+        PSCADFixtures.mmc_pq_network().elements.DUT, ac, ()) == :converter
     @test NB.topology_role(synchronousmachine().element_model, ac, ()) == :machine
     @test NB.topology_role(inductionmachine().element_model, ac, ()) == :machine
     @test NB.topology_role(transformer().element_model, ac, ()) == :transformer

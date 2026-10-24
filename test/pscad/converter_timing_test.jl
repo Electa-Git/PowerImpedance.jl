@@ -1,4 +1,5 @@
 module PSCADConverterTimingTests
+import ..PSCADFixtures
 using Test, PowerImpedance
 using ..PSCADFixtures
 using ..PSCADTLCTests: evaluate
@@ -14,8 +15,8 @@ end
 @testset "Converter phase boundaries and coherent angle snapshots" begin
     for factory in (PSCADFixtures.tlc_case2_network, PSCADFixtures.mmc_pq_network,
         PSCADFixtures.mmc_gfm_network, PSCADFixtures.mmc_compensated_network)
-        network = factory().classic
-        list = P.netlist(network, power_flow(network))
+        network = factory()
+        list = P.netlist(network, PSCADFixtures.solved_powerflow(network))
         e = only(filter(e -> e.name == :DUT, list.elements))
         eq = P.converter_equilibrium(e)
         gfm = e.model.sync isa PowerImpedance.VSEWithDamping

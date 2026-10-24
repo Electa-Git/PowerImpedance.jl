@@ -2282,24 +2282,14 @@ end
 end
 
 function replace_model(fixture, name; replacements...)
-    state = fixture.state
-    element = fixture.classic.elements[name]
-    model = element.element_model
+    model = fixture.elements[name]
     fields = merge(
         NamedTuple{fieldnames(typeof(model))}(
             Tuple(getfield(model, f) for f in fieldnames(typeof(model)))),
-        (; replacements...))
+        (; replacements..., cache = PI.LinearizationCache()))
     replacement = Base.typename(typeof(model)).wrapper(values(fields)...)
-    # Element's model parameter changes with the selected converter blocks.
-    updated = PI.Element(;
-        input_pins = element.input_pins + element.transformation,
-        output_pins = element.output_pins + element.transformation,
-        element_model = replacement, setpoint = deepcopy(element.setpoint),
-        limits = deepcopy(element.limits), transformation = element.transformation,
-        connection = element.connection)
-    elements, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, state)
-    elements = merge(elements, NamedTuple{(name,)}((updated,)))
-    return NB.define(elements, rows; options = state.options)
+    elements = merge(fixture.elements, NamedTuple{(name,)}((replacement,)))
+    return NB.NetworkState(elements, fixture.topology, fixture.options)
 end
 
 function no_control()
@@ -2312,7 +2302,7 @@ end
 
 function filter_fixture(kind)
     fixture = PSCADFixtures.mmc_pq_network()
-    meas = fixture.classic.elements[:DUT].element_model.meas
+    meas = fixture.elements.DUT.meas
     fields = NamedTuple{fieldnames(typeof(meas))}(
         Tuple(getfield(meas, f) for f in fieldnames(typeof(meas))))
     fields = merge(fields, (;
@@ -2357,45 +2347,45 @@ function register(name, build, source; kwargs...)
     SOURCES[name] = source
 end
 
-register(:im, () -> PSCADFixtures.im_network().state,
+register(:im, () -> PSCADFixtures.im_network(),
     "test/pscad/fixtures.jl:im_network")
-register(:small_ac, () -> PSCADFixtures.small_ac_network().state,
+register(:small_ac, () -> PSCADFixtures.small_ac_network(),
     "test/pscad/fixtures.jl:small_ac_network")
-register(:sm, () -> PSCADFixtures.sm_network().state,
+register(:sm, () -> PSCADFixtures.sm_network(),
     "test/pscad/fixtures.jl:sm_network")
-register(:passive_ohl, () -> PSCADFixtures.passive_ohl_network().state,
+register(:passive_ohl, () -> PSCADFixtures.passive_ohl_network(),
     "test/pscad/fixtures.jl:passive_ohl_network")
-register(:transformer_yy, () -> PSCADFixtures.transformer_network().state,
+register(:transformer_yy, () -> PSCADFixtures.transformer_network(),
     "test/pscad/fixtures.jl:transformer_network")
 register(
-    :transformer_dy, () -> PSCADFixtures.transformer_network(; organization = :ΔY).state,
+    :transformer_dy, () -> PSCADFixtures.transformer_network(; organization = :ΔY),
     "test/pscad/fixtures.jl:transformer_network")
-register(:dc, () -> PSCADFixtures.dc_network().state,
+register(:dc, () -> PSCADFixtures.dc_network(),
     "test/pscad/fixtures.jl:dc_network")
-register(:dc_cable, () -> PSCADFixtures.dc_cable_network().state,
+register(:dc_cable, () -> PSCADFixtures.dc_cable_network(),
     "test/pscad/fixtures.jl:dc_cable_network")
-register(:tlc_case1, () -> PSCADFixtures.tlc_case1_network().state,
+register(:tlc_case1, () -> PSCADFixtures.tlc_case1_network(),
     "test/pscad/fixtures.jl:tlc_case1_network")
-register(:tlc_case2, () -> PSCADFixtures.tlc_case2_network().state,
+register(:tlc_case2, () -> PSCADFixtures.tlc_case2_network(),
     "test/pscad/fixtures.jl:tlc_case2_network")
-register(:tlc_vac, () -> PSCADFixtures.tlc_vac_network().state,
+register(:tlc_vac, () -> PSCADFixtures.tlc_vac_network(),
     "test/pscad/fixtures.jl:tlc_vac_network")
-register(:mmc_pq, () -> PSCADFixtures.mmc_pq_network().state,
+register(:mmc_pq, () -> PSCADFixtures.mmc_pq_network(),
     "test/pscad/fixtures.jl:mmc_pq_network")
-register(:mmc_vdc, () -> PSCADFixtures.mmc_vdc_network().state,
+register(:mmc_vdc, () -> PSCADFixtures.mmc_vdc_network(),
     "test/pscad/fixtures.jl:mmc_vdc_network")
-register(:mmc_pf, () -> PSCADFixtures.mmc_pf_network().state,
+register(:mmc_pf, () -> PSCADFixtures.mmc_pf_network(),
     "test/pscad/fixtures.jl:mmc_pf_network")
-register(:mmc_qv, () -> PSCADFixtures.mmc_qv_network().state,
+register(:mmc_qv, () -> PSCADFixtures.mmc_qv_network(),
     "test/pscad/fixtures.jl:mmc_qv_network")
-register(:mmc_vac, () -> PSCADFixtures.mmc_vac_network().state,
+register(:mmc_vac, () -> PSCADFixtures.mmc_vac_network(),
     "test/pscad/fixtures.jl:mmc_vac_network")
-register(:mmc_gfm, () -> PSCADFixtures.mmc_gfm_network().state,
+register(:mmc_gfm, () -> PSCADFixtures.mmc_gfm_network(),
     "test/pscad/fixtures.jl:mmc_gfm_network")
-register(:mmc_compensated, () -> PSCADFixtures.mmc_compensated_network().state,
+register(:mmc_compensated, () -> PSCADFixtures.mmc_compensated_network(),
     "test/pscad/fixtures.jl:mmc_compensated_network")
 register(:mmc_no_control, no_control, "test/pscad/mmc_no_control_test.jl")
-register(:mmc_energy, () -> PSCADFixtures.mmc_compensated_network().state,
+register(:mmc_energy, () -> PSCADFixtures.mmc_compensated_network(),
     "test/pscad/mmc_energy_test.jl")
 register(:ieee39, IEEE39.build, "test/NetworkBuilder_test.jl:1312-2515";
     elim_elements = [:STATCOM])

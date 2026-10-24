@@ -228,7 +228,7 @@ end
     @test_throws ArgumentError V.native_reference_check(spec,reference[:,:,1:1],frozen)
     invalid=copy(reference);invalid[1]=NaN
     @test_throws ArgumentError V.native_reference_check(spec,invalid,frozen)
-    net=V.ac_rl_network();list=P.netlist(net,power_flow(net))
+    net=V.ac_rl_network();list=V.fixture_netlist(net,power_flow(net))
     actual_spec,actual_reference=V.applicable_scan("passive_ac_rlc",net,list)
     mktempdir() do dir
         path=joinpath(dir,V.reference_filename(actual_spec))
@@ -265,10 +265,11 @@ end
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"
         powerflow = entry.id == "ieee9_bus_impedance" ? power_flow(net) : nothing
-        @test P.check_connectivity(P.build_plan(P.netlist(net, powerflow))) === nothing
+        @test P.check_connectivity(P.build_plan(V.fixture_netlist(net, powerflow))) ===
+              nothing
     end
     net = V.ac_rl_network()
-    list = P.netlist(net, power_flow(net))
+    list = V.fixture_netlist(net, power_flow(net))
     baseline, _ = V.passive_plan(list, "passive_ac_rlc", :baseline)
     for axis in (:baseline, :d, :q)
         plan, settings = V.passive_plan(list, "passive_ac_rlc", axis)
@@ -323,7 +324,7 @@ end
 
 @testset "passive_ac_rlc native reference through measurement and file output" begin
     net = V.ac_rl_network()
-    list = P.netlist(net, power_flow(net))
+    list = V.fixture_netlist(net, power_flow(net))
     spec = V.passive_settings()
     time = collect(0.0:spec.sample_step:spec.simulation_time)
     a = net.elements[:grid_a].setpoint
@@ -427,7 +428,7 @@ end
 @testset "Every passive-element port construction and native reduction" begin
     for entry in filter(e->e.category == :passive,V.REGISTRY)
         net=entry.factory()
-        list=P.netlist(net, power_flow(net))
+        list=V.fixture_netlist(net, power_flow(net))
         spec, reference=V.scan_definition(entry.id, net, list)
         @test all(isfinite, reference)
         @test size(reference)==(
@@ -476,7 +477,7 @@ end
             if spec.dimension==1
                 for pole in ("P", "N")
                     probe=only(filter(
-                        c->c.kind==:voltage && c.bus==bus.name && c.side==pole,
+                        c->c.kind==:voltage && c.bus==bus.name && c.pole==pole,
                         baseline.probes.channels))
                     channels[probe.name]=fill((pole=="P" ? 1 : -1)*voltage[first(indices)]/2, 3)
                 end
@@ -488,7 +489,11 @@ end
                 end
             end
             element, side=spec.currents[port]
-            probe=only(filter(c->c.element==element && c.side==side, baseline.probes.channels))
+            probe=only(filter(
+                c->c.element==element &&
+                   c.port==(spec.quantity=="Z" ? :ac :
+                            V.terminal_port(list, element, side)),
+                baseline.probes.channels))
             direction = probe.orientation == (spec.quantity == "Y" ? :into : :out) ? 1 : -1
             if spec.dimension==1
                 channels[probe.name]=fill(direction * current[first(indices)], 3)
@@ -512,8 +517,8 @@ end
 end
 
 @testset "Native Dyn11 rotation acts on both voltage and current sides" begin
-    yy=V.PSCADFixtures.transformer_network().classic.elements[:line]
-    dy=V.PSCADFixtures.transformer_network(organization = :ΔY).classic.elements[:line]
+    yy=V.ClassicFixtures.transformer_network().elements[:line]
+    dy=V.ClassicFixtures.transformer_network(organization = :ΔY).elements[:line]
     rotation=[cos(π/6) sin(π/6); -sin(π/6) cos(π/6)]
     transform=[Matrix{Float64}(I, 2, 2) zeros(2, 2); zeros(2, 2) rotation]
     for f in (1.0, 42.0, 1000.0)
@@ -564,7 +569,7 @@ end
     synthetic_maximum = 0.0
     for id in ("ac_ohl_untransposed", "ac_cable_coaxial", "ieee9_bus_impedance")
         net = V.fixture(id).factory()
-        list = P.netlist(net, power_flow(net))
+        list = V.fixture_netlist(net, power_flow(net))
         spec, native = V.applicable_scan(id, net, list)
         @test spec.dimension == 3
         if id in ("ac_ohl_untransposed", "ac_cable_coaxial")
@@ -666,7 +671,8 @@ end
                 vp = only(filter(c -> c.kind == :voltage && c.bus == bus.name, plan.probes.channels))
                 owner, side = spec.currents[port]
                 ip = only(filter(c -> c.kind == (spec.quantity == "Y" ? :current : :injection_current) &&
-                    c.element == owner && c.side == side, plan.probes.channels))
+                    c.element == owner && c.port == (spec.quantity == "Y" ?
+                        V.terminal_port(list,owner,side) : :ac), plan.probes.channels))
                 sign = ip.orientation == (spec.quantity == "Y" ? :into : :out) ? 1 : -1
                 for phase in 1:3
                     channels[vp.name * ":" * string(phase)] = voltage[:, indices[phase]]
@@ -703,7 +709,9 @@ end
     end
     @info "abc full-probe synthetic recovery" maximum_frobenius_error = synthetic_maximum
     net = V.fixture("dc_cable_ohl").factory()
-    spec, reference = V.applicable_scan("dc_cable_ohl", net, P.netlist(net, power_flow(net)))
+    spec,
+    reference = V.applicable_scan("dc_cable_ohl", net, V.fixture_netlist(net,
+        power_flow(net)))
     @test spec.window_starts == (6.0, 7.0)
     @test spec.simulation_time == 8.0
     @test V.step_definition(spec, 1000.0).window_starts == (6.0, 6.1)
@@ -726,7 +734,7 @@ end
         output = decaying + drive * ones(3)')) for k in 1:3]
     @test V.scan_quality(time, bad, bad_runs, spec)["baseline_dc_drift"] > 1e-3
     net = V.fixture("ieee9_bus_impedance").factory()
-    list = V.P.netlist(net, power_flow(net))
+    list = V.fixture_netlist(net, power_flow(net))
     twin = V.phase_twin(net, list)
     a = cis(2π / 3)
     plus = ComplexF64[1, a^2, a]
@@ -810,8 +818,9 @@ end
     gate=V.stability_gate(net,V.fixture("tlc_pq_freq_support"))
     @test gate["status"]=="passed"
     @test gate["most_positive_located_real_per_s"]≈-1.991781088 rtol=1e-6
-    list=P.netlist(net,point); original,reference=V.applicable_scan("tlc_pq_freq_support",net,list)
-    @test reference[:,:,1]≈PowerImpedance.get_y(net.elements[:DUT],2π*im)[2:3,2:3]
+    list=V.fixture_netlist(net, point);
+    original, reference=V.applicable_scan("tlc_pq_freq_support", net, list)
+    @test reference[:, :, 1]≈PowerImpedance.get_y(net.elements[:DUT], 2π*im)[2:3, 2:3]
     @test original.drive=="current" && original.active
     @test original.time_step==2.5e-6 && original.tone_peak_pu==5e-5
     for band in (original,V.step_definition(original,18.0),V.step_definition(original,1000.0))
@@ -824,7 +833,7 @@ end
     @test V.step_definition(original,1.0).window_starts==(8.0,9.0)
     @test V.step_definition(original,1000.0).time_step==1.25e-6
     @test V.band_sample_step(original)≈20e-6
-    form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+    form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
     @test 220^2/100/hypot(form.R,2π*50*form.L)≈8
     @test 2π*50*form.L/form.R≈10
     frequencies=[1.0,7.0,137.0,1000.0]
@@ -860,20 +869,27 @@ end
                 end
             end
         end
-        voltage_abc=phase_wave(time,voltage);current_abc=phase_wave(time,current);drive_abc=phase_wave(time,drive)
-        channels=PowerImpedance.OrderedDict{String,Vector{Float64}}()
-        vp=only(filter(c->c.kind==:voltage && c.bus==only(spec.buses).name,plan.probes.channels))
-        ip=only(filter(c->c.kind==:current && c.element=="DUT" && c.side=="2",plan.probes.channels))
-        dp=only(filter(c->c.kind==:injection_current,plan.probes.channels))
+        voltage_abc=phase_wave(time, voltage);
+        current_abc=phase_wave(time, current);
+        drive_abc=phase_wave(time, drive)
+        channels=PowerImpedance.OrderedDict{String, Vector{Float64}}()
+        vp=only(filter(c->c.kind==:voltage && c.bus==only(spec.buses).name,
+            plan.probes.channels))
+        ip=only(filter(c->c.kind==:current && c.element=="DUT" && c.port==:ac,
+            plan.probes.channels))
+        dp=only(filter(c->c.kind==:injection_current, plan.probes.channels))
         @test ip.orientation==:out && dp.orientation==:out
         for phase in 1:3
             channels[vp.name*":"*string(phase)]=voltage_abc[:,phase]
             channels[ip.name*":"*string(phase)]=-current_abc[:,phase]
             channels[dp.name*":"*string(phase)]=drive_abc[:,phase]
         end
-        for pole in ("P","N")
-            probe=only(filter(c->c.kind==:voltage && c.bus==V.port_probe(list,:DUT,1).name && c.side==pole,plan.probes.channels))
-            channels[probe.name]=fill(pole=="P" ? 320.0 : -320.0,length(time))
+        for pole in ("P", "N")
+            probe=only(filter(
+                c->c.kind==:voltage && c.bus==V.port_probe(list, :DUT, 1).name &&
+                   c.pole==pole,
+                plan.probes.channels))
+            channels[probe.name]=fill(pole=="P" ? 320.0 : -320.0, length(time))
         end
         models[axis]=P.PSCADModel("synthetic.pscx",plan.name,list,plan.probes,settings,list.operating_point,(;))
         results[axis]=P.PSCADResult(PSCADRun(),time,channels,plan.probes,settings,(;),(;))
@@ -903,7 +919,7 @@ end
         @test parent.setpoint==dut.setpoint
         point=power_flow(net);list=V.fixture_netlist(net,point)
         bases=V.device_bases(dut.element_model.elec)
-        form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+        form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
         @test (bases.ac_voltage*sqrt(3/2))^2/bases.power/hypot(form.R,2π*50*form.L)≈scr
         @test 2π*50*form.L/form.R≈10
         B=dut.B./bases.voltage_inputs';C=dut.C.*bases.current_outputs
@@ -954,7 +970,8 @@ end
         end
         plan,settings=V.scan_plan(list,spec,"baseline")
         @test P.check_connectivity(plan)===nothing
-        probe=only(filter(c->c.kind==:current && c.element=="DUT" && c.side==string(bases.ac_side),plan.probes.channels))
+        probe=only(filter(c->c.kind==:current && c.element=="DUT" && c.port==:ac,
+            plan.probes.channels))
         @test probe.orientation==:out
     end
 end
@@ -983,11 +1000,14 @@ end
                 end
             end
         end
-        channels=PowerImpedance.OrderedDict{String,Vector{Float64}}()
-        vp=only(filter(c->c.kind==:voltage && c.bus==only(spec.buses).name,plan.probes.channels))
-        ip=only(filter(c->c.kind==:current && c.element=="DUT" && c.side=="1",plan.probes.channels))
-        dp=only(filter(c->c.kind==:injection_current,plan.probes.channels))
-        for (probe,wave) in ((vp,phase_wave(time,voltage)),(ip,phase_wave(time,-current)),(dp,phase_wave(time,drive)))
+        channels=PowerImpedance.OrderedDict{String, Vector{Float64}}()
+        vp=only(filter(c->c.kind==:voltage && c.bus==only(spec.buses).name,
+            plan.probes.channels))
+        ip=only(filter(c->c.kind==:current && c.element=="DUT" && c.port==:ac,
+            plan.probes.channels))
+        dp=only(filter(c->c.kind==:injection_current, plan.probes.channels))
+        for (probe, wave) in ((vp, phase_wave(time, voltage)),
+            (ip, phase_wave(time, -current)), (dp, phase_wave(time, drive)))
             for phase in 1:3
                 channels[probe.name*":"*string(phase)]=wave[:,phase]
             end
@@ -1009,7 +1029,7 @@ end
     for (id,mode,scr) in (("mmc_pq",:pq,8.),("mmc_pf_q",:pf,8.),("mmc_p_qv",:qv,8.),
         ("mmc_p_vac",:vac,8.),("mmc_vdc_q",:vdc,8.),("mmc_pq_weak_grid",:pq,2.5))
         net=V.fixture(id).factory()
-        parent=V.PSCADFixtures.mmc_network(mode).classic.elements[:DUT]
+        parent=V.ClassicFixtures.mmc_network(mode).elements[:DUT]
         dut=net.elements[:DUT];m=dut.element_model
         @test repr(m)==repr(parent.element_model)
         @test dut.limits==parent.limits
@@ -1020,7 +1040,7 @@ end
         if mode==:vac
             @test m.delta_control.outer_reactive.filter isa PowerImpedance.NoFilter
         end
-        form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+        form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
         @test 380^2/1000/hypot(form.R,2π*50*form.L)≈scr
         @test 2π*50*form.L/form.R≈10
         @test dut.setpoint.Pac==(mode==:vdc ? -600. : 600.)
@@ -1058,13 +1078,16 @@ end
             @test all(e.name!=:G_DC for e in list.elements)
             load=only(filter(e->e.name==:DC_load,list.elements))
             @test load.terminals[2].grounded
-            @test P.identify_rlc(net.elements[:DC_load];name=:DC_load).form.R≈800^2/600
+            @test P.identify_rlc(net.elements[:DC_load].element_model; name =
+                :DC_load).form.R≈800^2/600
         end
         for axis in ["baseline";spec.axes]
             plan,_=V.scan_plan(list,spec,axis)
             @test P.check_connectivity(plan)===nothing
-            @test count(c->c isa P.ModuleInstancePlan && occursin(":CurrentPort_",c.defn),plan.main.components)==1
-            probe=only(filter(c->c.kind==:current && c.element=="DUT" && c.side=="2",plan.probes.channels))
+            @test count(c->c isa P.ModuleInstancePlan && occursin(":CurrentPort_", c.defn),
+                plan.main.components)==1
+            probe=only(filter(c->c.kind==:current && c.element=="DUT" && c.port==:ac,
+                plan.probes.channels))
             @test probe.orientation==:out
             if mode==:vdc
                 @test count(c -> c isa P.ComponentPlan && c.defn == "master:source_1", plan.main.components) == 2
@@ -1128,7 +1151,7 @@ end
 @testset "TLC controls, grid and physical DC termination" begin
     for (id,scr) in (("tlc_pf_q",8.0),("tlc_p_qv",8.0),("tlc_p_vac",8.0),("tlc_vdc_q",8.0),("tlc_pq_weak_grid",2.5))
         net=V.fixture(id).factory()
-        form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+        form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
         @test 220^2/100/hypot(form.R,2π*50*form.L)≈scr
         @test 2π*50*form.L/form.R≈10
         m=net.elements[:DUT].element_model
@@ -1146,8 +1169,9 @@ end
         else
             @test m.outerActive isa PowerImpedance.OuterActiveVdcControl
             @test m.outerActive.pi_ctrl.Kp==5 && m.outerActive.pi_ctrl.Ki==5
-            @test !haskey(net.elements,:CableDC12)
-            @test P.identify_rlc(net.elements[:DC_load];name=:DC_load).form.R≈640^2/70
+            @test !haskey(net.elements, :CableDC12)
+            @test P.identify_rlc(net.elements[:DC_load].element_model; name =
+                :DC_load).form.R≈640^2/70
         end
     end
     # The DC load is physical, not an ideal voltage clamp. Its PF-only remote zero
@@ -1174,7 +1198,7 @@ end
     end
     # Independent unreduced complete descriptor retains the DC algebraic node.
     e=net.elements[:DUT];el=e.element_model.elec;n=size(e.A,1)
-    form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+    form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
     rotation=real.((inv(PowerImpedance.get_y(net.elements[:Grid],0.0im)[1:2,1:2])-form.R*I)/form.L)
     ac=Matrix{Float64}(I,2,2)
     # Use native per-unit variables for the independent descriptor so tiny SI
@@ -1424,9 +1448,10 @@ using Test,PowerImpedance
 include("../manual/pscad/validation/validation.jl")
 const V=PSCADValidation
 @testset "Bus5 extra-bin construction and retained half-step model" begin
-    net=V.fixture("ieee9_bus_impedance").factory();list=V.P.netlist(net,power_flow(net))
-    base,_=V.applicable_scan("ieee9_bus_impedance",net,list)
-    spec,reference=V.resonance_spec(net,list,base)
+    net=V.fixture("ieee9_bus_impedance").factory();
+    list=V.fixture_netlist(net, power_flow(net))
+    base, _=V.applicable_scan("ieee9_bus_impedance", net, list)
+    spec, reference=V.resonance_spec(net, list, base)
     @test length(spec.buses)==1 && only(spec.buses).name=="Bus5"
     @test spec.currents==[("injection_1","1")]
     @test size(reference)==(3,3,40)
@@ -1493,14 +1518,19 @@ end
     @test all(maximum(abs,m[:,:,k]-y)<1e-9 for m in extracted.matrices for k in eachindex(f))
 end
 @testset "Resonance recorder selection leaves the circuit intact" begin
-    net=V.fixture("ieee9_bus_impedance").factory();list=V.P.netlist(net,power_flow(net))
-    base,_=V.applicable_scan("ieee9_bus_impedance",net,list);spec,_=V.resonance_spec(net,list,base)
-    selected,_=V.scan_plan(list,spec,"p1_a")
-    full,_=V.scan_plan(list,merge(spec,(;protocol="abc_resonance_all_probes")),"p1_a")
-    discarded=filter(c->c isa V.P.ComponentPlan && c.defn=="master:pgb" &&
-        !(Dict(c.params)["Name"] in Set(p.name for p in selected.probes.channels)),full.main.components)
-    labelpoints=Set((c.x-36,c.y) for c in discarded)
-    recording_wires=Set(((c.x-36,c.y),(c.x,c.y)) for c in discarded)
+    net=V.fixture("ieee9_bus_impedance").factory();
+    list=V.fixture_netlist(net, power_flow(net))
+    base, _=V.applicable_scan("ieee9_bus_impedance", net, list);
+    spec, _=V.resonance_spec(net, list, base)
+    selected, _=V.scan_plan(list, spec, "p1_a")
+    full,
+    _=V.scan_plan(list, merge(spec, (; protocol = "abc_resonance_all_probes")), "p1_a")
+    discarded=filter(
+        c->c isa V.P.ComponentPlan && c.defn=="master:pgb" &&
+           !(Dict(c.params)["Name"] in Set(p.name for p in selected.probes.channels)),
+        full.main.components)
+    labelpoints=Set((c.x-36, c.y) for c in discarded)
+    recording_wires=Set(((c.x-36, c.y), (c.x, c.y)) for c in discarded)
     keep(c)=!(c isa V.P.ComponentPlan && (c.defn=="master:pgb" ||
         c.defn=="master:datalabel" && (c.x,c.y) in labelpoints))
     # Only recorder assemblies change; electrical components and connections remain fixed.
@@ -1822,10 +1852,13 @@ end
     spec = (; time_step = 2.5e-6, frequency = 50.0, frequencies = [100.0, 700.0],
         buses = [(; name = "AC")], axes = ["p1_d", "p1_q"],
         window_starts = (1.0, 2.0), window_duration = 1.0)
-    probes = V.P.ProbeManifest([
-        V.P.ProbeChannel("dut", :current, "AC", "DUT", "2", 3, "kA", :out),
-        V.P.ProbeChannel("grid", :current, "AC", "Grid", "1", 3, "kA", :into),
-        V.P.ProbeChannel("drive", :injection_current, "AC", "injection_1", "1", 3, "kA", :out)], nothing)
+    probes = V.P.ProbeManifest(
+        [
+            V.P.ProbeChannel("dut", :current, "AC", "DUT", :ac, 3, "kA", :out),
+            V.P.ProbeChannel("grid", :current, "AC", "Grid", :side1, 3, "kA", :into),
+            V.P.ProbeChannel(
+                "drive", :injection_current, "AC", "injection_1", :ac, 3, "kA", :out)],
+        nothing)
     model = (; probes)
     wave(dq) = hcat([dq[:,1] .* cos.(2π*50 .* times .+ phase) +
         dq[:,2] .* sin.(2π*50 .* times .+ phase) for phase in (0, -2π/3, 2π/3)]...)
@@ -2008,8 +2041,8 @@ function synthetic_bus_run(bus,axis;spec=bus.spec,omit_shunt=false)
             abc=abc_wave(times,samples)
             for phase in 1:3;channels[probe.name*":"*string(phase)]=abc[:,phase];end
         else
-            channels[probe.name]=fill(probe.kind==:voltage && probe.side=="P" ? 320. :
-                probe.kind==:voltage && probe.side=="N" ? -320. : 0.,length(times))
+            channels[probe.name]=fill(probe.kind==:voltage && probe.pole=="P" ? 320. :
+                probe.kind==:voltage && probe.pole=="N" ? -320. : 0.,length(times))
         end
     end
     model=P.PSCADModel("synthetic.pscx",plan.name,bus.list,plan.probes,settings,bus.list.operating_point,(;))
@@ -2074,7 +2107,7 @@ end
     @test !quality["valid"] && "drive_amplitude_error" in quality["invalid_reasons"]
     unsettled=deepcopy(results["p1_d"])
     for phase in 1:3
-        unsettled.channels["I_C1_2:$phase"][unsettled.time.>=2.] .*= 1.2
+        unsettled.channels["I_C1_ac:$phase"][unsettled.time.>=2.] .*= 1.2
     end
     mktempdir() do directory
         changed=copy(results);changed["p1_d"]=unsettled
@@ -2140,11 +2173,15 @@ end
         buses=[(;name="A"),(;name="B")],frequencies=fs,phases=zeros(2),frequency=50.,time_step=2.5e-6,
         voltage_bases=ones(4),current_bases=ones(4),tone_peak_pu=1e-4,drive="current",window_starts=(1.,2.),window_duration=1.)
     probes=P.ProbeChannel[]
-    for (port,bus) in enumerate(("A","B"))
-        push!(probes,P.ProbeChannel("v$port",:voltage,bus,nothing,nothing,3,"kV"))
-        push!(probes,P.ProbeChannel("dut$port",:current,bus,"DUT$port","2",3,"kA",:out))
-        push!(probes,P.ProbeChannel("grid$port",:current,bus,"Grid$port","1",3,"kA",:into))
-        push!(probes,P.ProbeChannel("drive$port",:injection_current,bus,"injection_$port","1",3,"kA",:out))
+    for (port, bus) in enumerate(("A", "B"))
+        push!(probes, P.ProbeChannel("v$port", :voltage, bus, nothing, nothing, 3, "kV"))
+        push!(probes, P.ProbeChannel(
+            "dut$port", :current, bus, "DUT$port", :ac, 3, "kA", :out))
+        push!(probes, P.ProbeChannel(
+            "grid$port", :current, bus, "Grid$port", :side1, 3, "kA", :into))
+        push!(probes,
+            P.ProbeChannel("drive$port", :injection_current, bus,
+                "injection_$port", :ac, 3, "kA", :out))
     end
     model=(;probes=P.ProbeManifest(probes,nothing))
     models=Dict(axis=>model for axis in ["baseline";spec.axes])
@@ -2211,12 +2248,18 @@ end
         @test P.check_connectivity(measured_plan)===nothing
         @test all(p.kind in (:voltage,:current,:injection_current) for p in measured_plan.probes.channels)
         @test length(measured_plan.probes.channels)<length(plan.probes.channels)
-        @test !any(p.kind==:voltage && p.bus==V.port_probe(list,:G_A,1).name for p in measured_plan.probes.channels)
-        @test !any(p.kind==:current && p.element=="Grid_A" && p.side=="2" for p in measured_plan.probes.channels)
-        @test count(x->x isa P.ComponentPlan && x.defn=="master:ammeter",measured_plan.main.components)==
-            count(x->x isa P.ComponentPlan && x.defn=="master:ammeter",plan.main.components)
-        passives(canvas)=[(x.defn,x.params,x.x,x.y,x.orient) for x in canvas.components
-            if x isa P.ComponentPlan && x.defn in ("master:resistor","master:inductor","master:capacitor")]
+        @test !any(p.kind==:voltage && p.bus==V.port_probe(list, :G_A, 1).name
+        for p in measured_plan.probes.channels)
+        @test !any(p.kind==:current && p.element=="Grid_A" && p.port==:side2
+        for p in measured_plan.probes.channels)
+        @test count(x->x isa P.ComponentPlan && x.defn=="master:ammeter",
+            measured_plan.main.components) ==
+              count(x->x isa P.ComponentPlan && x.defn=="master:ammeter",
+                  plan.main.components)
+        passives(canvas)=[(x.defn, x.params, x.x, x.y, x.orient)
+                          for x in canvas.components
+                          if x isa P.ComponentPlan && x.defn in (
+            "master:resistor", "master:inductor", "master:capacitor")]
         @test passives(measured_plan.main)==passives(plan.main)
         plain=V.composed_reference(c,spec)
         @test size(plain["aggregate_Y"])==(2,2,23)
@@ -2396,9 +2439,12 @@ end
         @test all(p.kind in (:voltage,:current,:injection_current) for p in measured.probes.channels)
         for name in c.devices
             b=V.device_bases(net.elements[name].element_model.elec)
-            @test any(p->p.kind==:voltage && p.bus==V.port_probe(list,name,b.ac_side).name,measured.probes.channels)
-            @test any(p->p.kind==:current && p.element==string(name) && p.side==string(b.ac_side),measured.probes.channels)
-            @test net.elements[Symbol("D_",name)].setpoint.Vdc==b.dc_voltage
+            @test any(
+                p->p.kind==:voltage && p.bus==V.port_probe(list, name, b.ac_side).name,
+                measured.probes.channels)
+            @test any(p->p.kind==:current && p.element==string(name) && p.port==:ac,
+                measured.probes.channels)
+            @test net.elements[Symbol("D_", name)].setpoint.Vdc==b.dc_voltage
         end
         mktempdir() do directory
             project=passive_project(plan,joinpath(directory,"actual.pscx"))
@@ -2579,14 +2625,15 @@ end
                 elseif probe.kind==:injection_current
                     d
                 else
-                    inward=currents[(probe.element,probe.side)]
+                    inward=currents[(probe.element,
+                        string(V.terminal_side(list, probe.element, probe.port)))]
                     probe.orientation==:into ? inward : -inward
                 end
                 abc=abc_wave(times,samples)
                 for phase in 1:3;channels[probe.name*":"*string(phase)]=abc[:,phase];end
             else
-                channels[probe.name]=fill(probe.kind==:voltage && probe.side=="P" ? 400. :
-                    probe.kind==:voltage && probe.side=="N" ? -400. : 0.,length(times))
+                channels[probe.name]=fill(probe.kind==:voltage && probe.pole=="P" ? 400. :
+                    probe.kind==:voltage && probe.pole=="N" ? -400. : 0.,length(times))
             end
         end
         models[axis]=P.PSCADModel("remote.pscx",plan.name,list,plan.probes,settings,list.operating_point,(;))
@@ -2705,18 +2752,31 @@ end
             @test last(gate["contours"])["frequency_band_Hz"]==[1e-6,1e6]
             @test last(gate["contours"])["frequency_count"]==12001
             @test last(gate["contours"])["return_difference_min"]≈frozen["wide_contour"]["return_difference_min"] rtol=1e-9
-            cross=vcat(vec(refs["aggregate_Y"][1:2,3:4,:]),vec(refs["aggregate_Y"][3:4,1:2,:])).*(380^2/1000)
-            @test minimum(abs,cross)≈frozen["DC_transfer"]["cross_AC_Y_min_pu"] rtol=1e-9
-            @test maximum(abs,cross)≈frozen["DC_transfer"]["cross_AC_Y_max_pu"] rtol=1e-9
-            @test count(>=(.02),abs.(cross))==62
-            @test maximum(abs,V.scale_response(refs["DC_voltage_Z"],V.composed_target_spec(spec,c,"DC_voltage_Z")))≈frozen["DC_transfer"]["max_DC_voltage_transfer_pu"] rtol=1e-9
-            @test maximum(abs,V.scale_response(refs["DC_current_T"],V.composed_target_spec(spec,c,"DC_current_T")))≈frozen["DC_transfer"]["max_DC_cable_current_transfer_pu"] rtol=1e-9
-            for side in ("1","2")
-                @test any(p->p.kind==:current && p.element=="CableDC" && p.side==side,measured.probes.channels)
+            cross=vcat(vec(refs["aggregate_Y"][1:2, 3:4, :]),
+                vec(refs["aggregate_Y"][3:4, 1:2, :])) .*
+                  (380^2/1000)
+            @test minimum(abs, cross)≈frozen["DC_transfer"]["cross_AC_Y_min_pu"] rtol=1e-9
+            @test maximum(abs, cross)≈frozen["DC_transfer"]["cross_AC_Y_max_pu"] rtol=1e-9
+            @test count(>=(0.02), abs.(cross))==62
+            @test maximum(abs,
+                V.scale_response(refs["DC_voltage_Z"], V.composed_target_spec(spec, c,
+                    "DC_voltage_Z")))≈
+                        frozen["DC_transfer"]["max_DC_voltage_transfer_pu"] rtol=1e-9
+            @test maximum(abs,
+                V.scale_response(refs["DC_current_T"], V.composed_target_spec(spec, c,
+                    "DC_current_T")))≈
+                        frozen["DC_transfer"]["max_DC_cable_current_transfer_pu"] rtol=1e-9
+            for side in ("1", "2")
+                @test any(
+                    p->p.kind==:current && p.element=="CableDC" &&
+                       p.port==V.terminal_port(list, :CableDC, side),
+                    measured.probes.channels)
             end
-            for device in c.devices, pole in ("P","N")
-                bus=V.port_probe(list,device,1).name
-                @test any(p->p.kind==:voltage && p.bus==bus && p.side==pole,measured.probes.channels)
+            for device in c.devices, pole in ("P", "N")
+
+                bus=V.port_probe(list, device, 1).name
+                @test any(p->p.kind==:voltage && p.bus==bus && p.pole==pole,
+                    measured.probes.channels)
             end
         else
             @test net.elements[:C1].element_model isa PowerImpedance.SynchronousMachine
@@ -2821,9 +2881,9 @@ function dc_pair_synthetic(net,list,c,spec,axis;bad_port=false,dc_drift=false)
             for phase in 1:3;channels[p.name*":"*string(phase)]=abc[:,phase];end
         elseif p.kind==:voltage
             dcport=findfirst(name->V.port_probe(list,name,1).name==p.bus,c.devices)
-            channels[p.name]=(p.side=="P" ? .5 : -.5).*dc_voltage[:,dcport]
+            channels[p.name]=(p.pole=="P" ? .5 : -.5).*dc_voltage[:,dcport]
         elseif p.kind==:current && p.element=="CableDC"
-            inward=dc_current[:,parse(Int,p.side)]
+            inward=dc_current[:,V.terminal_side(list,p.element,p.port)]
             channels[p.name]=p.orientation==:into ? inward : -inward
         else
             channels[p.name]=zeros(n)

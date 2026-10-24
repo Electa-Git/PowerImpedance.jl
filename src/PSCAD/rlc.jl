@@ -184,21 +184,18 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Identify impedance in its original conductor coordinates. Read
-`element_model.value` directly because a dq-transformed ABCD model does not
-represent the original conductor impedance.
+Identify impedance in its original conductor coordinates from the model's value.
 
 # Arguments
 
-- `element`: Impedance element.
-- `name`: Designator for fit errors. Default: `element.symbol`.
+- `model`: Impedance model.
+- `name`: Designator for fit errors. Default: `:impedance`.
 - `kw`: Additional keywords for [`identify_rlc`](@ref).
 
 # Returns
 
 - The RLC record or grouped records returned by [`identify_rlc`](@ref).
 """
-function identify_rlc(element::PowerImpedance.Element{<:PowerImpedance.Impedance};
-        name = element.symbol, kw...)
-    return identify_rlc(element.element_model.value; name, kw...)
+function identify_rlc(model::PowerImpedance.Impedance; name = :impedance, kw...)
+    return identify_rlc(model.value; name, kw...)
 end

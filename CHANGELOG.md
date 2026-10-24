@@ -46,6 +46,11 @@
 
 ### Changed
 
+- **Breaking:** `export_pscad` accepts only a `NetworkState`, with an optional
+  `PowerFlowResult` through `powerflow`.
+- **Breaking:** PSCAD current probes use `I_<element>_<port>`, such as `I_c1_ac`.
+- **Breaking:** `ZToolProbe` takes a named `port` instead of an integer `side`.
+
 - **Breaking:** the black-box MMC takes `ac_control`, `dc_control`, `powerflow`
   in physical units (MW, MVAr, AC phase-peak kV and DC pole-to-pole kV), and `limits`
   instead of controller objects. Its scan is read at the solved terminal values.
@@ -87,6 +92,8 @@
   pole-to-pole voltage; callers that halved it must stop halving.
 
 ### Removed
+
+- Remove `export_pscad(::Network)` and classic network PSCAD netlists.
 
 - Remove the old controller types `Controller`, `PI_control`, `VSE_old`, `CCQSEM`
   and `FFVI`, and the black-box MMC droop options `:vdc_droop` and `:vac_supp`,

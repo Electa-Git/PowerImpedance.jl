@@ -1,4 +1,5 @@
 module PSCADZToolTests
+import ..PSCADFixtures
 using Test, PowerImpedance, SHA
 using ..PSCADFixtures: small_ac_network, dc_network, passive_ohl_network,
                        dc_cable_network, transformer_network, mmc_pq_network,
@@ -40,13 +41,14 @@ channel_values(plan) = [Tuple(getfield(c, f) for f in fieldnames(P.ProbeChannel)
 
 @testset "Z-tool probe arguments" begin
     @test ZToolProbe(:ac, "scan"; bus = :B1).perturbation == 0.01
-    @test ZToolProbe(:dc, "scan"; element = :line, side = 1).kind == :dc
+    @test_throws r"pass port" ZToolProbe(:dc, "old"; element = :line, side = 1)
+    @test ZToolProbe(:dc, "scan"; element = :line, port = :side1).kind == :dc
     for name in ("", "1scan", "scan-point", "scan point", "é", "a"^31)
         @test_throws ArgumentError ZToolProbe(:ac, name; bus = :B1)
     end
-    for kwargs in ((;), (; element = :line), (; side = 1),
-        (; bus = :B1, element = :line, side = 1), (; element = :line, side = 0),
-        (; element = :line, side = true), (; element = 4, side = 1), (; bus = 1),
+    for kwargs in ((;), (; element = :line), (; port = :side1),
+        (; bus = :B1, element = :line, port = :side1), (; element = :line, port = 0),
+        (; element = :line, port = true), (; element = 4, port = :side1), (; bus = 1),
         (; bus = :B1, voltage = NaN), (; bus = :B1, voltage = Inf),
         (; bus = :B1, voltage = 0), (; bus = :B1, voltage = -1),
         (; bus = :B1, voltage = true), (; bus = :B1, perturbation = -0.01),
@@ -61,17 +63,17 @@ channel_values(plan) = [Tuple(getfield(c, f) for f in fieldnames(P.ProbeChannel)
 end
 
 @testset "Z-tool placement and current orientation" begin
-    for (factory, kind, element, side) in ((small_ac_network, :ac, :line, 1),
-        (dc_network, :dc, :line, 1), (passive_ohl_network, :ac, :line, 2),
-        (dc_cable_network, :dc, :line, 2), (transformer_network, :ac, :line, 1))
-        classic, state = factory()
-        for input in (classic, state)
+    for (factory, kind, element, port) in ((small_ac_network, :ac, :line, :side1),
+        (dc_network, :dc, :line, :side1), (passive_ohl_network, :ac, :line, :side2),
+        (dc_cable_network, :dc, :line, :side2), (transformer_network, :ac, :line, :side1))
+        state = factory()
+        for input in (state,)
             n = P.netlist(input, nothing)
             e = only(filter(e -> e.name == element, n.elements))
-            terminal = only(filter(t -> t.side == side, e.terminals))
+            terminal = only(filter(t -> t.port == port, e.terminals))
             bus = only(filter(b -> b.key == terminal.bus, n.buses))
             baseline = P.build_plan(n)
-            probes = [ZToolProbe(kind, "series_scan"; element, side, voltage = 300),
+            probes = [ZToolProbe(kind, "series_scan"; element, port, voltage = 300),
                 ZToolProbe(kind, "shunt_scan"; bus = bus.name, voltage = 300)]
             plan = P.build_plan(n; ztool_probes = probes)
             @test P.check_connectivity(plan) === nothing
@@ -100,14 +102,14 @@ end
 
 @testset "Z-tool active terminals preserve electrical paths" begin
     for (factory, terminals) in (
-        (sm_network, ((:ac, :sg1, 1), (:ac, :g2, 1))),
-        (mmc_pq_network, ((:ac, :DUT, 2), (:dc, :DUT, 1), (:dc, :G_DC, 1))),
-        (tlc_case1_network, ((:ac, :DUT, 2), (:dc, :DUT, 1))))
-        network = factory().classic
-        list = P.netlist(network, power_flow(network))
+        (sm_network, ((:ac, :sg1, :ac), (:ac, :g2, :ac))),
+        (mmc_pq_network, ((:ac, :DUT, :ac), (:dc, :DUT, :dc), (:dc, :G_DC, :dc))),
+        (tlc_case1_network, ((:ac, :DUT, :ac), (:dc, :DUT, :dc))))
+        network = factory()
+        list = P.netlist(network, PSCADFixtures.solved_powerflow(network))
         baseline = P.build_plan(list)
-        probes = [ZToolProbe(kind, "scan_$i"; element, side)
-                  for (i, (kind, element, side)) in enumerate(terminals)]
+        probes = [ZToolProbe(kind, "scan_$i"; element, port)
+                  for (i, (kind, element, port)) in enumerate(terminals)]
         plan = P.build_plan(list; ztool_probes = probes)
         modules = Dict(m.name => m for m in plan.modules)
         before = PSCADTopology.electrical_graph(baseline.main, modules)
@@ -119,21 +121,24 @@ end
 end
 
 @testset "Z-tool placement errors and solved voltage" begin
-    classic, _ = small_ac_network()
+    classic = small_ac_network()
     n = P.netlist(classic, nothing)
     build(probes) = P.build_plan(n; ztool_probes = probes)
     for (probe, message) in (
-        (ZToolProbe(:ac, "s"; element = :absent, side = 1), "unknown element :absent"),
-        (ZToolProbe(:ac, "s"; element = :line, side = 7), "unknown side 7 on element :line"),
-        (ZToolProbe(:ac, "s"; element = :load, side = 2), "element :load side 2 is grounded"),
+        (ZToolProbe(:ac, "s"; element = :absent, port = :side1), "unknown element :absent"),
+        (ZToolProbe(:ac, "s"; element = :line, port = :absent),
+            "unknown port :absent on element :line"),
+        (ZToolProbe(:ac, "s"; element = :load, port = :side2),
+            "element :load port :side2 is grounded"),
         (ZToolProbe(:ac, "s"; bus = :absent), "unknown bus absent"),
-        (ZToolProbe(:dc, "s"; element = :line, side = 1), "at element :line side 1"),
+        (ZToolProbe(:dc, "s"; element = :line, port = :side1),
+            "at element :line port :side1"),
         (ZToolProbe(:ac, "s"; bus = :B1), "specify voltage in kV"))
         @test_throws message build([probe])
     end
     @test_throws ArgumentError build([1])
     for name in ("a"^30, "scan")
-        plan = build([ZToolProbe(:ac, name; element = :line, side = 1, voltage = 300),
+        plan = build([ZToolProbe(:ac, name; element = :line, port = :side1, voltage = 300),
             ZToolProbe(:ac, name == "scan" ? "scan_terminal" : "other"; bus = :B2, voltage = 300)])
         @test P.check_connectivity(plan) === nothing
     end
@@ -141,16 +146,16 @@ end
         ZToolProbe(:ac, "scan"; bus = :B1, voltage = 300),
         ZToolProbe(:ac, "SCAN"; bus = :B2, voltage = 300)])
     @test_throws r"already has a scan probe" build([
-        ZToolProbe(:ac, "scan"; element = :line, side = 1, voltage = 300),
-        ZToolProbe(:ac, "other"; element = :line, side = 1, voltage = 300)])
-    for name in ("B1", "line", "I_line_1", "V_B1")
+        ZToolProbe(:ac, "scan"; element = :line, port = :side1, voltage = 300),
+        ZToolProbe(:ac, "other"; element = :line, port = :side1, voltage = 300)])
+    for name in ("B1", "line", "I_line_side1", "V_B1")
         @test_throws r"name is already used" build([ZToolProbe(:ac, name; bus = :B1, voltage = 300)])
     end
-    dc, _ = dc_network()
+    dc = dc_network()
     @test_throws r"ac probe on dc bus D1" P.build_plan(P.netlist(dc, nothing);
         ztool_probes = [ZToolProbe(:ac, "s"; bus = :D1)])
     for (network, kind, name, scale) in ((classic, :ac, "B1", sqrt(2)), (dc, :dc, "D1", 2))
-        solved = P.netlist(network, power_flow(network))
+        solved = P.netlist(network, PSCADFixtures.solved_powerflow(network))
         bus = only(filter(b -> b.name == name, solved.buses))
         plan = P.build_plan(solved; ztool_probes = [ZToolProbe(kind, "s"; bus = bus.key)])
         scan = only(filter(c -> startswith(c.defn, "Z_tool:"), plan.main.components))

@@ -83,10 +83,12 @@ end
         @test Set(keys(sampled.outputs))==Set(keys(refs))
         @test all(size(sampled.outputs[target],2)==size(refs[target],1) for target in keys(refs))
         for name in c.devices
-            element=net.elements[name];b=V.device_bases(element.element_model.elec)
-            bus=V.port_probe(list,name,b.ac_side).name
-            vp=only(filter(p->p.kind==:voltage && p.bus==bus,plan.probes.channels))
-            ip=only(filter(p->p.kind==:current && p.element==string(name) && p.side==string(b.ac_side),plan.probes.channels))
+            element=net.elements[name];
+            b=V.device_bases(element.element_model.elec)
+            bus=V.port_probe(list, name, b.ac_side).name
+            vp=only(filter(p->p.kind==:voltage && p.bus==bus, plan.probes.channels))
+            ip=only(filter(p->p.kind==:current && p.element==string(name) && p.port==
+                :ac, plan.probes.channels))
             v0=element.setpoint.Vac*cis(element.setpoint.θac)
             i0=-2complex(element.setpoint.Pac,-element.setpoint.Qac)/(3conj(v0))
             for (probe,value) in ((vp,v0),(ip,(ip.orientation==:out ? -1 : 1)*i0))

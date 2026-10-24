@@ -122,11 +122,11 @@ end
 
 function branch_samples(result, model)
     current = only(filter(
-        c -> c.kind == :current && c.element == "branch" && c.side == "1",
+        c -> c.kind == :current && c.element == "branch" && c.port == :side1,
         model.probes.channels))
     voltage = only(filter(c -> c.kind == :voltage && c.bus == current.bus, model.probes.channels))
     other_current = only(filter(
-        c -> c.kind == :current && c.element == "branch" && c.side == "2",
+        c -> c.kind == :current && c.element == "branch" && c.port == :side2,
         model.probes.channels))
     other_voltage = only(filter(c -> c.kind == :voltage && c.bus == other_current.bus, model.probes.channels))
     return (voltage = fixed_dq(result.time, probe_samples(result, voltage)),
@@ -319,7 +319,7 @@ function refresh_references(id; directory = joinpath(ROOT, "data", id))
     cp(analysis,joinpath(history,"analysis"))
     projects = Dict(p["path"]=>p["sha256"] for p in record["projects"])
     all(digest(joinpath(directory,path))==hash for (path,hash) in projects) || error("project hash changed")
-    net = fixture(id).factory(); list = P.netlist(net,power_flow(net))
+    net = fixture(id).factory(); list = fixture_netlist(net,power_flow(net))
     spec, reference = applicable_scan(id,net,list;definition=record["frequency_response"])
     model, result = stored_axis(record,scan_prefix(spec)*"baseline",list,spec,directory)
     rows_a = compare_operating_point(result,model)

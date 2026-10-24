@@ -90,7 +90,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Cable}, cont
         throw(ArgumentError("cable :$(e.name) requires 1 to 4 ordered C1/I1 through C4/I4 layer pairs"))
     all(p -> isfinite(p[1]) && isfinite(p[2]) && p[2] > 0, cable.positions) ||
         throw(ArgumentError("cable :$(e.name) requires finite positions with positive depth or height"))
-    length(e.terminals) == 2 && [t.side for t in e.terminals] == [1, 2] &&
+    length(e.terminals) == 2 && [t.port for t in e.terminals] == [:side1, :side2] &&
     all(t -> !t.grounded, e.terminals) ||
         throw(ArgumentError("cable :$(e.name) requires two fully connected nongrounded sides"))
     buses = [_terminal_bus(e, t, context) for t in e.terminals]

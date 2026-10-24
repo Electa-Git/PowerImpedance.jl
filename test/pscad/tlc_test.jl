@@ -1,4 +1,5 @@
 module PSCADTLCTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures
 const P = PowerImpedance.PSCAD
@@ -187,14 +188,14 @@ end
 @testset "TLC solved-state modules and controller equations" begin
     for factory in (PSCADFixtures.tlc_case1_network, PSCADFixtures.tlc_case2_network)
         fixture = factory()
-        pf = power_flow(fixture.classic)
-        netlist = P.netlist(fixture.classic, pf)
+        pf = PSCADFixtures.solved_powerflow(fixture)
+        netlist = P.netlist(fixture, pf)
         e = only(filter(e -> e.model isa PI.TLC, netlist.elements))
         equilibrium = P.converter_equilibrium(e)
         residual = zeros(length(equilibrium.states))
         PI._state_space!(residual, collect(values(equilibrium.states)),
             collect(values(equilibrium.inputs)),
-            equilibrium.setpoint_pu, e.model, PI.Equil())
+            equilibrium.terminal_pu, e.model, PI.Equil())
         @test maximum(abs, residual) <= 1e-6
         settings = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
             sample_step = 40e-6, source_ramp = 0.05)
@@ -380,8 +381,8 @@ end
             PI.Chebyshev(), (), states, 0.0, e)
         @test_throws ArgumentError P.converter_active("unsupported", e, equilibrium, PI.NoOuterActiveControl())
         # Both representations retain the same converter rating and flow signs.
-        solved = NetworkBuilder.solve(fixture.state)
-        builder = P.netlist(fixture.state, solved.powerflow)
+        solved = NetworkBuilder.solve(fixture)
+        builder = P.netlist(fixture, solved)
         # Independent power-flow solves agree at the existing equilibrium
         # solver's absolute tolerance, including the near-zero case-1 P.
         @test abs(builder.operating_point.branch_flows[:DUT].pt -

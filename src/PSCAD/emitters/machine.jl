@@ -84,7 +84,7 @@ end
 
 function machine_probe!(state, e, bus, kind, suffix, unit)
     name = pscad_name(e.pscad * "_" * suffix; used = state.used)
-    push!(state.channels, ProbeChannel(name, kind, bus.name, string(e.name), "1", 1, unit))
+    push!(state.channels, ProbeChannel(name, kind, bus.name, string(e.name), :ac, 1, unit))
     return Signal(name)
 end
 
@@ -102,7 +102,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     flow !== nothing && haskey(flow, :terminal_voltage_kV) ||
         throw(ArgumentError("machine :$(e.name) requires solved terminal operating-point data"))
     voltage_pu = flow.terminal_voltage_kV * sqrt(3) / elec.Vᵃᶜ_base
-    inputs, _ = PowerImpedance.pftoinputs(machine, e.setpoint)
+    inputs, _ = PowerImpedance.pftoinputs(machine, e.values)
     torque_pu = inputs.Tm0
     s2m, l2n, time = Signal.([pscad_name(e.pscad * suffix; used = state.used)
                               for suffix in ("_S2M", "_L2N", "_time")])

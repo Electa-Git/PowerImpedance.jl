@@ -31,13 +31,13 @@ function write_reference(model, directory = EXPERIMENTS)
         for element in filter(e -> e.model isa PowerImpedance.AbstractConverter, model.netlist.elements)
             eq = P.converter_equilibrium(element)
             x, y, m = eq.states, eq.outputs, element.model
-            for quantity in fieldnames(typeof(eq.setpoint_pu))
+            for quantity in fieldnames(typeof(eq.terminal_pu))
                 row(element.name, "reference_" * string(quantity),
-                    getproperty(eq.setpoint_pu, quantity),
+                    getproperty(eq.terminal_pu, quantity),
                     quantity == :θ_ac ? "rad" : "pu")
             end
             row(element.name, "reference_v_ac_measured_side",
-                eq.setpoint_pu.v_ac * PowerImpedance.voltage_filter_ratio(m), "pu")
+                eq.terminal_pu.v_ac * PowerImpedance.voltage_filter_ratio(m), "pu")
             for (quantity, value) in pairs(y.meas)
                 row(element.name, quantity, value, quantity == :θ_f ? "rad" : "pu")
             end
@@ -58,7 +58,7 @@ function write_reference(model, directory = EXPERIMENTS)
             residual = zeros(length(x))
             PowerImpedance._state_space!(
                 residual, collect(values(x)), collect(values(eq.inputs)),
-                eq.setpoint_pu, m, PowerImpedance.Equil())
+                eq.terminal_pu, m, PowerImpedance.Equil())
             row(element.name, "equilibrium_residual_max", maximum(abs, residual), "model_rate")
         end
     end
@@ -82,7 +82,7 @@ function write_case(name, network, settings, dc_reference, directory = EXPERIMEN
 end
 
 fixture = PSCADFixtures.mmc_compensated_network()
-for (suffix, network) in (("classic", fixture.classic), ("builder", fixture.state))
+for (suffix, network) in (("builder", fixture),)
     write_case("mmc_compensated_" * suffix, network, COMPENSATED_SETTINGS, :none)
 end
 
@@ -93,7 +93,7 @@ for (stem, factory, reference) in (("mmc_pq", PSCADFixtures.mmc_pq_network, :non
     ("mmc_vac", PSCADFixtures.mmc_vac_network, :none),
     ("mmc_vdc", PSCADFixtures.mmc_vdc_network, :midpoint_resistors))
     fixture = factory()
-    for (suffix, network) in (("classic", fixture.classic), ("builder", fixture.state))
+    for (suffix, network) in (("builder", fixture),)
         write_case(stem * "_" * suffix, network, SETTINGS, reference, MMC_RECHECK)
     end
 end

@@ -1,4 +1,5 @@
 module PSCADResultsTests
+import ..PSCADFixtures
 using Test, PowerImpedance
 const P = PowerImpedance.PSCAD
 const FIXTURES = normpath(joinpath(@__DIR__, "../data/pscad"))
@@ -96,8 +97,9 @@ end
 end
 
 @testset "PSCAD operating-point comparison" begin
-    classic, state = small_ac_network()
-    netlist = P.netlist(classic, power_flow(classic))
+    classic = small_ac_network()
+    state = classic
+    netlist = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     plan = P.build_plan(netlist)
     model = PSCADModel("synthetic.pscx", "synthetic", netlist, plan.probes,
         P.SimulationSettings(), netlist.operating_point, (source = :fixture,))
@@ -112,7 +114,7 @@ end
     offset = cis(0.52)
     add_three_phase!(channels, "V_B1", times, sqrt(2) * source_voltage * offset)
     add_three_phase!(channels, "V_B2", times, sqrt(2) * receiving_voltage * offset)
-    for name in ("I_source_1", "I_line_1", "I_line_2", "I_load_1")
+    for name in ("I_source_ac", "I_line_side1", "I_line_side2", "I_load_side1")
         add_three_phase!(channels, name, times, sqrt(2) * current * offset)
     end
     result = synthetic_result(times, channels; probes = plan.probes)
@@ -125,28 +127,30 @@ end
     @test count(==(:current_rms), comparison.quantity) == 4
     @test only(comparison.name[comparison.quantity .== :voltage_angle]) == "V_B2"
     @test isapprox(
-        only(comparison.pscad[(comparison.quantity .== :current_rms) .& (comparison.name .== "I_load_1")]),
+        only(comparison.pscad[(comparison.quantity .==
+            :current_rms) .& (comparison.name .== "I_load_side1")]),
         abs(current); rtol = 1e-12)
     @test isapprox(abs(receiving_voltage) * sqrt(3), 379.80216745; atol = 1e-7)
     @test isapprox(abs(current), 0.548197209; atol = 1e-9)
     doubled = deepcopy(channels)
     for index in 1:3
-        doubled["I_line_2:$index"] .*= 2
+        doubled["I_line_side2:$index"] .*= 2
     end
     failed = compare_operating_point(synthetic_result(times, doubled), model)
-    @test failed.name[.!failed.within_tolerance] == ["I_line_2"]
+    @test failed.name[.!failed.within_tolerance] == ["I_line_side2"]
     # Both terminal power records must remain distinct, including receiving reactive
     # power. These independent records deliberately differ.
     flows = copy(model.operating_point.branch_flows)
     flows[:line] = (pf = 120.0, qf = 30.0, pt = -90.0, qt = -40.0)
     point = P.OperatingPointRecord(model.operating_point.bus_states, flows,
-        model.operating_point.setpoints, model.operating_point.slack_bus, model.operating_point.bases)
+        model.operating_point.values, model.operating_point.slack_bus,
+            model.operating_point.bases)
     sides_model = PSCADModel(model.project_path, model.project_name, model.netlist,
         model.probes, model.settings, point, model.provenance)
     sides = compare_operating_point(result, sides_model)
-    @test only(sides.powerflow[sides.name .== "I_line_1"]) ==
+    @test only(sides.powerflow[sides.name .== "I_line_side1"]) ==
           hypot(120, 30) / (3 * source_voltage)
-    @test only(sides.powerflow[sides.name .== "I_line_2"]) ==
+    @test only(sides.powerflow[sides.name .== "I_line_side2"]) ==
           hypot(90, 40) / (3 * (netlist.buses[2].vm_pu * netlist.buses[2].base_kV))
     voltage_manifest = P.ProbeManifest(filter(c -> c.kind == :voltage, model.probes.channels), "B1")
     voltage_model = PSCADModel(model.project_path, model.project_name, model.netlist,
@@ -165,23 +169,23 @@ end
 end
 
 @testset "PSCAD DC operating-point comparison" begin
-    classic, _ = dc_network()
-    list = P.netlist(classic, power_flow(classic))
+    classic = dc_network()
+    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     plan = P.build_plan(list)
     model = PSCADModel("dc.pscx", "dc", list, plan.probes,
         P.SimulationSettings(), list.operating_point, (; source = :fixture))
     times = collect(0.0:250e-6:0.3)
     channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
     add_three_phase!(channels, "V_BUS1", times, 320sqrt(2) * cis(0.23))
-    add_three_phase!(channels, "I_ac_1", times, 0.8sqrt(2) * cis(0.23))
-    add_three_phase!(channels, "I_ac_load_1", times, 0.8sqrt(2) * cis(0.23))
+    add_three_phase!(channels, "I_ac_ac", times, 0.8sqrt(2) * cis(0.23))
+    add_three_phase!(channels, "I_ac_load_side1", times, 0.8sqrt(2) * cis(0.23))
     for (bus, voltage) in (("D1", 320.0), ("D2", 318.0))
         # Common-mode offset cancels in the differential voltage. Integer-cycle
         # ripple averages to zero, exercising the actual scalar window means.
         channels["V_$(bus)_P"] = voltage .+ 1.7 .+ 0.4 .* cos.(2π * 50 .* times)
         channels["V_$(bus)_N"] = -voltage .+ 1.7 .+ 0.3 .* sin.(2π * 50 .* times)
     end
-    for name in ("I_from_1", "I_to_1", "I_line_1", "I_line_2")
+    for name in ("I_from_dc", "I_to_dc", "I_line_side1", "I_line_side2")
         channels[name] = -2.0 .+ 0.2 .* cos.(2π * 50 .* times)
     end
     result = synthetic_result(times, channels; probes = plan.probes)
@@ -194,9 +198,9 @@ end
     @test maximum(comparison.error) < 1e-8
     perturbed = deepcopy(channels)
     perturbed["V_D2_P"] .+= 20.0
-    perturbed["I_line_2"] .*= 1.1
+    perturbed["I_line_side2"] .*= 1.1
     failed = compare_operating_point(synthetic_result(times, perturbed), model)
-    @test Set(failed.name[.!failed.within_tolerance]) == Set(["V_D2", "I_line_2"])
+    @test Set(failed.name[.!failed.within_tolerance]) == Set(["V_D2", "I_line_side2"])
     missing = copy(channels)
     delete!(missing, "V_D1_N")
     @test_throws ArgumentError compare_operating_point(synthetic_result(times, missing), model)
@@ -209,7 +213,8 @@ end
     flows = copy(list.operating_point.branch_flows)
     delete!(flows, :from)
     point = P.OperatingPointRecord(list.operating_point.bus_states, flows,
-        list.operating_point.setpoints, list.operating_point.slack_bus, list.operating_point.bases)
+        list.operating_point.values, list.operating_point.slack_bus,
+            list.operating_point.bases)
     partial = PSCADModel(model.project_path, model.project_name, list, plan.probes,
         model.settings, point, model.provenance)
     @test count(==(:current_dc), compare_operating_point(result, partial).quantity) == 3
@@ -218,13 +223,13 @@ end
 @testset "PSCAD converter-connected DC current comparison" begin
     times = collect(0.0:250e-6:0.3)
     station_currents = Dict(
-        "I_G_DC_1" => (7.837e-5, 2.66e-13),
-        "I_DUT_1" => (-9.956e-5, 1.83e-14),
-        "I_CableDC12_1" => (9.956e-5, 1.83e-14),
-        "I_CableDC12_2" => (7.837e-5, 2.66e-13))
-    for network in tlc_case1_network()
-        solved = network isa Network ? power_flow(network) :
-                 NetworkBuilder.solve(network).powerflow
+        "I_G_DC_dc" => (7.837e-5, 2.66e-13),
+        "I_DUT_dc" => (-9.956e-5, 1.83e-14),
+        "I_CableDC12_side1" => (9.956e-5, 1.83e-14),
+        "I_CableDC12_side2" => (7.837e-5, 2.66e-13))
+    for network in (tlc_case1_network(),)
+        solved = network isa Network ? PSCADFixtures.solved_powerflow(network) :
+                 NetworkBuilder.solve(network)
         list = P.netlist(network, solved)
         plan = P.build_plan(list)
         dc_buses = Set(b.name for b in list.buses if b.kind == :dc)
@@ -243,7 +248,7 @@ end
             bus = only(filter(b -> b.name == probe.bus, list.buses))
             e = only(filter(e -> string(e.name) == probe.element, list.elements))
             field = e.model isa PowerImpedance.Source ? :pgdc :
-                    probe.side == "1" ? :pf : :pt
+                    probe.port in (:side1, :dc) ? :pf : :pt
             flow = list.operating_point.branch_flows[e.name]
             list.operating_point.branch_flows[e.name] = merge(flow,
                 NamedTuple{(field,)}((-reference * 2bus.base_kV * bus.vm_pu,)))
@@ -291,19 +296,20 @@ end
         @test P._dc_converter_current_bases(disconnected) == Dict(terminal.bus => base)
 
         remote_bus = only(filter(b -> b.kind == :dc && b.key != terminal.bus, list.buses))
-        second_terminals = [P.Terminal(:DUT2, t.side, t.terminals, t.nets,
+        second_terminals = [P.Terminal(:DUT2, t.port, t.terminals, t.nets,
                                 t.bus == terminal.bus ? remote_bus.key : t.bus, t.grounded)
                             for t in converter.terminals]
-        same_base = P.NetlistElement(:DUT2, "DUT2", converter.element, converter.model,
-            second_terminals, converter.role, converter.setpoint)
+        same_base = P.NetlistElement(:DUT2, "DUT2", converter.model, converter.ports,
+            second_terminals, converter.role, converter.values)
         shared = P.Netlist(list.buses, [list.elements; same_base], list.operating_point,
             list.voltageBase, list.frequency)
         @test P._dc_converter_current_bases(shared) ==
               Dict(b.key => base for b in list.buses if b.kind == :dc)
         different_element = tlc(elec = PowerImpedance.ElectricalTLC(Sbase = 200.0,
             vDCbase = 640.0))
-        different_base = P.NetlistElement(:DUT2, "DUT2", different_element,
-            different_element.element_model, second_terminals, converter.role, converter.setpoint)
+        different_base = P.NetlistElement(:DUT2, "DUT2", different_element.element_model,
+            electricalconnections(different_element.element_model), second_terminals,
+            converter.role, converter.values)
         mixed = P.Netlist(
             list.buses, [list.elements; different_base], list.operating_point,
             list.voltageBase, list.frequency)
@@ -318,11 +324,12 @@ end
 
     # Converter-free DC components use relative normalization for nonzero means and the
     # absolute rule at zero.
-    classic, _ = dc_network()
-    list = P.netlist(classic, power_flow(classic))
+    classic = dc_network()
+    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     @test isempty(P._dc_converter_current_bases(list))
     plan = P.build_plan(list)
-    probes = P.ProbeManifest(filter(c -> c.name == "I_line_1", plan.probes.channels), nothing)
+    probes = P.ProbeManifest(filter(c -> c.name == "I_line_side1",
+        plan.probes.channels), nothing)
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
         P.SimulationSettings(), list.operating_point, (; source = :fixture))
     probe = only(probes.channels)
@@ -388,8 +395,8 @@ end
 end
 
 @testset "PSCAD machine network-side comparison policy" begin
-    classic, _ = sm_network()
-    netlist = P.netlist(classic, power_flow(classic))
+    classic = sm_network()
+    netlist = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     plan = P.build_plan(netlist)
     model = PSCADModel("synthetic.pscx", "synthetic", netlist, plan.probes,
         P.SimulationSettings(), netlist.operating_point, (source = :fixture,))
@@ -417,7 +424,7 @@ end
     @test Set(comparison.quantity) == Set([:voltage_rms, :current_rms,
         :machine_p, :machine_q, :machine_voltage, :machine_speed])
     for quantity in (:machine_p, :machine_q, :machine_voltage)
-        @test only(filter(r -> r.quantity == quantity, comparison)).name == "I_sg1_1"
+        @test only(filter(r -> r.quantity == quantity, comparison)).name == "I_sg1_ac"
     end
     vt = only(filter(r -> r.quantity == :machine_voltage, comparison))
     @test vt.pscad ≈ flow.terminal_voltage_kV rtol = 1e-8
@@ -459,7 +466,7 @@ end
         (-2sqrt(2) * cis(angle - lag), -complex(3voltage * 2 * 0.8, 3voltage * 2 * 0.6)))
         measured = deepcopy(channels)
         add_three_phase!(measured, "V_Bus2", times, sqrt(2) * voltage * cis(angle))
-        add_three_phase!(measured, "I_sg1_1", times, current)
+        add_three_phase!(measured, "I_sg1_ac", times, current)
         table = compare_operating_point(synthetic_result(times, measured), model)
         @test only(filter(r -> r.quantity == :machine_p, table)).pscad ≈ real(expected)
         @test only(filter(r -> r.quantity == :machine_q, table)).pscad ≈ imag(expected)
@@ -469,14 +476,14 @@ end
     flows = copy(model.operating_point.branch_flows)
     flows[:sg1] = merge(flow, (pf = 600.0, qf = 0.0))
     point = P.OperatingPointRecord(model.operating_point.bus_states, flows,
-        model.operating_point.setpoints, model.operating_point.slack_bus,
+        model.operating_point.values, model.operating_point.slack_bus,
         model.operating_point.bases)
     reference = PSCADModel(model.project_path, model.project_name, netlist,
         plan.probes, model.settings, point, model.provenance)
     for (power, error, accepted) in ((609.0 + 9im, 0.009, true),
         (591.0 - 9im, 0.009, true), (611.0 + 11im, 0.011, false))
         measured = deepcopy(channels)
-        add_three_phase!(measured, "I_sg1_1", times, sqrt(2) * conj(power / (3voltage)))
+        add_three_phase!(measured, "I_sg1_ac", times, sqrt(2) * conj(power / (3voltage)))
         table = compare_operating_point(synthetic_result(times, measured), reference)
         for quantity in (:machine_p, :machine_q)
             row = only(filter(r -> r.quantity == quantity, table))
@@ -486,20 +493,20 @@ end
     end
     index = findfirst(e -> e.name == :sg1, netlist.elements)
     e = netlist.elements[index]
-    rated = deepcopy(e.element)
-    rated.element_model = SynchronousMachine(
+    rated = SynchronousMachine(
         ElectricalSM(Vᵃᶜ_base = 380.0, S_base = 2000.0),
         e.model.mech, e.model.avr, e.model.gov, e.model.limits, e.model.powerflow,
         PowerImpedance.LinearizationCache())
     elements = copy(netlist.elements)
-    elements[index] = P.NetlistElement(e.name, e.pscad, rated, rated.element_model,
-        e.terminals, e.role, e.setpoint)
+    elements[index] = P.NetlistElement(e.name, e.pscad, rated, electricalconnections(rated),
+        e.terminals, e.role, e.values)
     rated_netlist = P.Netlist(
         netlist.buses, elements, point, netlist.voltageBase, netlist.frequency)
     rated_model = PSCADModel(model.project_path, model.project_name, rated_netlist,
         plan.probes, model.settings, point, model.provenance)
     measured = deepcopy(channels)
-    add_three_phase!(measured, "I_sg1_1", times, sqrt(2) * conj((609.0 + 9im) / (3voltage)))
+    add_three_phase!(measured, "I_sg1_ac", times, sqrt(2) *
+                                                  conj((609.0 + 9im) / (3voltage)))
     rated_table = compare_operating_point(synthetic_result(times, measured), rated_model)
     for quantity in (:machine_p, :machine_q)
         @test only(filter(r -> r.quantity == quantity, rated_table)).error ≈ 0.0045
@@ -508,7 +515,7 @@ end
     # Known exported R = 0.37544 ohm and L = 0.0298765659 H. Measured bus current is in
     # kA; their voltage drop reconstructs phase RMS terminal kV.
     measured = deepcopy(channels)
-    add_three_phase!(measured, "I_sg1_1", times, sqrt(2) * (2.0 - 1im))
+    add_three_phase!(measured, "I_sg1_ac", times, sqrt(2) * (2.0 - 1im))
     expected_terminal = abs(voltage + (0.37544 + 2π * 50 * 0.0298765659im) * (2.0 - 1im))
     table = compare_operating_point(synthetic_result(times, measured), model)
     @test only(filter(r -> r.quantity == :machine_voltage, table)).pscad ≈ expected_terminal rtol = 1e-12
@@ -529,7 +536,7 @@ end
         @test row.within_tolerance == expected
         @test row.error ≈ abs(speed - 1)
     end
-    for name in ("sg1_speed", "V_Bus2:2", "I_sg1_1:3")
+    for name in ("sg1_speed", "V_Bus2:2", "I_sg1_ac:3")
         missing = copy(channels)
         delete!(missing, name)
         @test_throws ArgumentError compare_operating_point(synthetic_result(times, missing), model)
@@ -592,8 +599,8 @@ end
 end
 
 @testset "PSCAD TLC power signs, units and rating normalization" begin
-    classic, _ = tlc_case2_network()
-    netlist = P.netlist(classic, power_flow(classic))
+    classic = tlc_case2_network()
+    netlist = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
     settings = P.SimulationSettings(source_ramp = 0.05)
     plan = P.build_plan(netlist; settings)
     model = PSCADModel("synthetic.pscx", "synthetic", netlist, plan.probes,
@@ -604,14 +611,15 @@ end
     flow = netlist.operating_point.branch_flows[:DUT]
     @test flow.pt == -flow.pgrid
     @test flow.qt == -flow.qgrid
-    @test flow.pt ≈ converter.setpoint.Pac
-    @test flow.qt ≈ converter.setpoint.Qac
+    @test flow.pt ≈ converter.values.ac.p
+    @test flow.qt ≈ converter.values.ac.q
     for channel in plan.probes.channels
         bus = only(filter(b -> b.name == channel.bus, netlist.buses))
         voltage = bus.base_kV * bus.vm_pu
         if channel.kind == :voltage
             if bus.kind == :dc
-                channels[channel.name] = fill(channel.side == "P" ? voltage : -voltage, length(times))
+                channels[channel.name] = fill(channel.pole == "P" ? voltage : -voltage,
+                    length(times))
             else
                 add_three_phase!(channels, channel.name, times, sqrt(2) * voltage *
                                                                 cis(bus.va_rad))
@@ -621,11 +629,11 @@ end
             f = netlist.operating_point.branch_flows[e.name]
             if bus.kind == :dc
                 key = e.model isa PowerImpedance.Source ? :pgdc :
-                      channel.side == "1" ? :pf : :pt
+                      channel.port in (:side1, :dc) ? :pf : :pt
                 channels[channel.name] = fill(haskey(f, key) ? f[key] / (2voltage) : 0.0, length(times))
             else
                 keys = e.model isa PowerImpedance.Source ? (:pg, :qg) :
-                       channel.side == "1" ? (:pf, :qf) : (:pt, :qt)
+                       channel.port in (:side1, :dc) ? (:pf, :qf) : (:pt, :qt)
                 current = sqrt(2) * conj(complex(f[keys[1]], f[keys[2]]) /
                                (3voltage * cis(bus.va_rad)))
                 add_three_phase!(channels, channel.name, times, current)
@@ -640,12 +648,13 @@ end
     end
     table = compare_operating_point(synthetic_result(times, channels), model)
     @test all(table.within_tolerance)
-    @test count(r -> r.name == "I_DUT_2" && r.quantity in (:converter_p, :converter_q), table) ==
+    @test count(r -> r.name == "I_DUT_ac" && r.quantity in (:converter_p, :converter_q),
+        table) ==
           2
     for quantity in (:converter_p, :converter_q)
-        row = only(filter(r -> r.quantity == quantity && r.name == "I_DUT_2", table))
+        row = only(filter(r -> r.quantity == quantity && r.name == "I_DUT_ac", table))
         @test row.powerflow == (quantity == :converter_p ? flow.pt : flow.qt)
-        internal = only(filter(r -> r.quantity == quantity && r.name != "I_DUT_2", table))
+        internal = only(filter(r -> r.quantity == quantity && r.name != "I_DUT_ac", table))
         @test internal.powerflow == row.powerflow / 100.0
         @test internal.pscad ≈ internal.powerflow
     end
@@ -653,12 +662,12 @@ end
     solved_voltage = ac_bus.vm_pu * ac_bus.base_kV * cis(ac_bus.va_rad)
     for deviation in (0.009, 0.011)
         measured = deepcopy(channels)
-        add_three_phase!(measured, "I_DUT_2", times,
+        add_three_phase!(measured, "I_DUT_ac", times,
             sqrt(2) * conj(complex(flow.pt + 100deviation, flow.qt - 100deviation) /
                  (3solved_voltage)))
         changed = compare_operating_point(synthetic_result(times, measured), model)
         for quantity in (:converter_p, :converter_q)
-            row = only(filter(r -> r.quantity == quantity && r.name == "I_DUT_2", changed))
+            row = only(filter(r -> r.quantity == quantity && r.name == "I_DUT_ac", changed))
             @test row.error ≈ deviation
             @test row.within_tolerance == (deviation < 0.01)
         end
@@ -692,8 +701,8 @@ end
 
     # Both 640 kV DC ends put case 1 near zero P. A 117 W discrepancy must
     # use the 100 MVA rating rather than the approximately 3.2 kW reference.
-    case1, _ = tlc_case1_network()
-    list1 = P.netlist(case1, power_flow(case1))
+    case1 = tlc_case1_network()
+    list1 = P.netlist(case1, PSCADFixtures.solved_powerflow(case1))
     flow1 = list1.operating_point.branch_flows[:DUT]
     rating = only(filter(e -> e.name == :DUT, list1.elements)).model.elec.Sbase
     internal_probes = P.ProbeManifest(

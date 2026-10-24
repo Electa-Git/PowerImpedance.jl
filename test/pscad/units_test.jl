@@ -123,5 +123,5 @@ using PowerImpedance
     @test pscad.bus_name([:d, :q]) === nothing
     @test pscad.bus_name(Symbol[]) === nothing
     @test pscad.voltage_probe_name("B1") == "V_B1"
-    @test pscad.current_probe_name("line1", 2) == "I_line1_2"
+    @test pscad.current_probe_name("line1", :side2) == "I_line1_side2"
 end

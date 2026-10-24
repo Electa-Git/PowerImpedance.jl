@@ -56,7 +56,7 @@ function coupled_network(id)
             composed_ac!(net,source,1,src);composed_ac!(net,source,2,:gnd)
             composed_ac!(net,grid,1,bus);composed_ac!(net,grid,2,src)
         end
-        cable=deepcopy(PSCADFixtures.dc_cable_network().classic.elements[:line])
+        cable=deepcopy(ClassicFixtures.dc_cable_network().elements[:line])
         cable.element_model.length=25e3
         add!(net,:CableDC,cable)
         connect!(net,(:CableDC,Symbol("1.1")),:DC_C1)

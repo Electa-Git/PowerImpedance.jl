@@ -4,6 +4,7 @@ const PI = PowerImpedance
 const NB = PI.NetworkBuilder
 const PSC = PI.PSCAD
 include("pscad/fixtures.jl")
+include("manual/pscad/validation/classic_fixtures.jl")
 
 function constraint_tolerance(options)
     attribute = PI.JuMP.MOI.RawOptimizerAttribute("constr_viol_tol")
@@ -21,7 +22,8 @@ end
 
 
 function tlc_qv_fixture()
-    fixture = PSCADFixtures.tlc_network(false)
+    fixture = (; classic = ClassicFixtures.tlc_network(false),
+        state = PSCADFixtures.tlc_network(false))
     e = fixture.classic.elements[:DUT]
     m = e.element_model
     converter = tlc(; m.elec, m.meas, m.sync, m.outerActive,
@@ -30,8 +32,7 @@ function tlc_qv_fixture()
         m.innerVoltage, m.innerCurrent, m.mod, e.setpoint, e.limits)
     converter.symbol, converter.pins = e.symbol, copy(e.pins)
     fixture.classic.elements[:DUT] = converter
-    elements, rows = PSCADFixtures.builder_elements_and_rows(fixture.classic, fixture.state)
-    state = NB.define(elements, rows; options = fixture.state.options)
+    state = PSCADFixtures.state_from_classic(fixture.classic)
     return (; fixture.classic, state)
 end
 
@@ -143,14 +144,13 @@ end
 
 function check_setpoints(one, two, data, voltage_base, tolerance)
     @test keys(one) == keys(two)
-    for name in keys(one), field in fieldnames(Setpoint)
-        x, y = getfield(one[name], field), getfield(two[name], field)
-        if ismissing(x) || ismissing(y)
-            @test isequal(x, y)
-        else
-            base = field in (:Pac, :Qac, :Pdc) ? data["baseMVA"] :
-                   field === :Vac ? sqrt(2) * voltage_base :
-                   field === :Vdc ? data["dcpol"] * voltage_base : 1.0
+    for name in keys(one)
+        @test keys(one[name]) == keys(two[name])
+        for port in keys(one[name]), field in fieldnames(typeof(one[name][port]))
+            x, y = getfield(one[name][port], field), getfield(two[name][port], field)
+            base = field in (:p, :q) ? data["baseMVA"] :
+                   field === :v ? (port === :ac ? sqrt(2) : data["dcpol"]) *
+                       voltage_base : 1.0
             @test abs(x - y) / base <= tolerance
         end
     end
@@ -184,7 +184,7 @@ end
         @test keys(x) == keys(y)
         @test norm(collect(values(x)) - collect(values(y)), Inf) / one.data["baseMVA"] <= tolerance
     end
-    check_setpoints(a.operating_point.setpoints, b.operating_point.setpoints,
+    check_setpoints(a.operating_point.values, b.operating_point.values,
         one.data, state.options.voltageBase, tolerance)
     @test keys(a.operating_point.bus_states) == keys(b.operating_point.bus_states)
     for key in keys(a.operating_point.bus_states)
@@ -201,12 +201,12 @@ end
     for n in (:c1, :c2)
         i = string(one.elem2comp[n].compkey)
         point = one.operating_point[n]
-        @test point.Qac ==
+        @test point.ac.q ==
               -one.result["solution"]["convdc"][i]["qgrid"] * one.data["baseMVA"]
-        @test point.Qac > 1e-6
+        @test point.ac.q > 1e-6
         e = only(filter(e -> e.name == n, a.elements))
-        @test e.setpoint == point
-        @test PI.pftoinputs(e.model, e.setpoint)[2].q_ac == point.Qac / e.model.elec.Sbase
+        @test e.values == point
+        @test PI.pftoinputs(e.model, e.values)[2].q_ac == point.ac.q / e.model.elec.Sbase
     end
 end
 
@@ -230,9 +230,9 @@ function pscad_export_after_explicit_power_flow(factories)
             for factory in factories
                 state = factory()
                 tolerance = constraint_tolerance(state.options)
-                fresh = NB.build_network(state.elements, state.topology, state.options)
+                fresh = deepcopy(state)
                 solved = deepcopy(fresh)
-                pf = power_flow(solved)
+                pf = compute(PowerFlowProblem(solved), ACDCPowerFlow())
                 mktempdir() do directory
                     mkpath(joinpath(directory, "fresh"))
                     mkpath(joinpath(directory, "solved"))
@@ -245,7 +245,7 @@ function pscad_export_after_explicit_power_flow(factories)
                     c = PI.export_pscad(solved; settings,
                         path = joinpath(directory, "reused", "repeated.pscx"))
                     @test a.operating_point.branch_flows == b.operating_point.branch_flows
-                    @test a.operating_point.setpoints == b.operating_point.setpoints
+                    @test a.operating_point.values == b.operating_point.values
                     @test a.operating_point.bus_states == b.operating_point.bus_states
                     pc = Base.get_extension(PI, :PowerImpedancePSCADExt).PythonCall
                     etree = pc.pyimport("lxml.etree")
@@ -260,8 +260,8 @@ function pscad_export_after_explicit_power_flow(factories)
                         x.model isa Union{PI.MMC, PI.TLC} || continue
                         @test PSC.converter_equilibrium(x) == PSC.converter_equilibrium(y)
                         reused = only(filter(e -> e.name == x.name, c.netlist.elements))
-                        first_q = PSC.converter_equilibrium(x).setpoint_pu.q_ac
-                        second_q = PSC.converter_equilibrium(reused).setpoint_pu.q_ac
+                        first_q = PSC.converter_equilibrium(x).terminal_pu.q_ac
+                        second_q = PSC.converter_equilibrium(reused).terminal_pu.q_ac
                         system_base = a.operating_point.bases.S_MVA
                         @test abs(first_q - second_q) <=
                               tolerance * system_base / x.model.elec.Sbase
@@ -386,11 +386,15 @@ function repeated_converter_power_flow(cases)
 end
 
 pscad_export_after_explicit_power_flow((
-    () -> PSCADFixtures.mmc_pq_network().state,
-    () -> PSCADFixtures.tlc_network(false).state))
+    () -> PSCADFixtures.mmc_pq_network(),
+    () -> PSCADFixtures.tlc_network(false)))
 
-repeated_converter_power_flow((("MMC PQ", PSCADFixtures.mmc_pq_network),
-    ("TLC PQ", () -> PSCADFixtures.tlc_network(false)),
+repeated_converter_power_flow((
+    ("MMC PQ", () -> (; classic = ClassicFixtures.mmc_pq_network(),
+        state = PSCADFixtures.mmc_pq_network())),
+    ("TLC PQ", () -> (; classic = ClassicFixtures.tlc_network(false),
+        state = PSCADFixtures.tlc_network(false))),
     ("TLC Q-V", tlc_qv_fixture),
-    ("TLC Vdc", () -> PSCADFixtures.tlc_network(true))))
+    ("TLC Vdc", () -> (; classic = ClassicFixtures.tlc_network(true),
+        state = PSCADFixtures.tlc_network(true)))))
 end

@@ -1,19 +1,21 @@
 module PSCADDCOverheadLineTests
+import ..PSCADFixtures
 using Test, PowerImpedance
 using ..PSCADFixtures
 const P = PowerImpedance.PSCAD
 
 function network()
-    classic, state = PSCADFixtures.dc_cable_network()
+    classic = PSCADFixtures.dc_cable_network()
+    state = classic
     line = overhead_line(length = 75e3,
         conductors = Conductors(organization = :flat, nᵇ = 2, nˢᵇ = 1,
             Rᵈᶜ = 0.0266, rᶜ = 0.0224, yᵇᶜ = 18.0, Δxᵇᶜ = 7.3, dˢᵃᵍ = 6.0),
         groundwires = Groundwires(nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
             Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0),
         earth_parameters = (1, 1, 100), transformation = true)
-    elements, rows = PSCADFixtures.builder_elements_and_rows(classic, state)
-    return PowerImpedance.NetworkBuilder.define(merge(elements, (; line)),
-        rows; options = state.options)
+    elements = merge(state.elements, (; line = line.element_model))
+    return PowerImpedance.NetworkBuilder.NetworkState(elements, state.topology,
+        state.options)
 end
 
 @testset "Two-pole overhead line material and terminal order" begin
@@ -51,7 +53,7 @@ end
         end
         @test node(ports[2]) == "D$(side)_N"
         meter = only(filter(c -> c.defn == "master:ammeter" &&
-            Dict(c.params)["Name"] == "I_line_$side", plan.main.components))
+            Dict(c.params)["Name"] == "I_line_side$side", plan.main.components))
         meter_ports = first.(P.component_ports(meter, Dict()))
         @test node(ports[1]) == node(meter_ports[side == 1 ? 2 : 1])
         @test node(meter_ports[side == 1 ? 1 : 2]) == "D$(side)_P"

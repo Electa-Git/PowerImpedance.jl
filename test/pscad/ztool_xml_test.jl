@@ -1,4 +1,5 @@
 module PSCADZToolXMLTests
+import ..PSCADFixtures
 using Test, PowerImpedance, PythonCall, SHA
 using ..PSCADFixtures, ..PSCADTopology
 const P = PowerImpedance.PSCAD
@@ -27,12 +28,13 @@ end
     library = etree.parse(LIBRARY).getroot()
     for (factory, kind, busname) in ((PSCADFixtures.small_ac_network, :ac, "B2"),
         (PSCADFixtures.dc_network, :dc, "D2"))
-        for input in factory()
+        for input in (factory(),)
             mktempdir() do directory
                 ac = kind == :ac
-                series = ac ? ZToolProbe(kind, "series_scan"; element = :line, side = 1,
+                series = ac ?
+                         ZToolProbe(kind, "series_scan"; element = :line, port = :side1,
                     voltage = 300, perturbation = 0.02, vac_control = true, f_control = true) :
-                    ZToolProbe(kind, "series_scan"; element = :line, side = 1,
+                    ZToolProbe(kind, "series_scan"; element = :line, port = :side1,
                         voltage = 640, perturbation = 0.02, vdc_control = true)
                 probes = [series, ZToolProbe(kind, "shunt_scan"; bus = busname, voltage = ac ? 300 : 636)]
                 path = joinpath(directory, "scanned.pscx")
@@ -122,7 +124,7 @@ end
 end
 
 @testset "Failed project write leaves no Z-tool companion files" begin
-    classic, _ = PSCADFixtures.small_ac_network()
+    classic = PSCADFixtures.small_ac_network()
     netlist = P.netlist(classic, nothing)
     probes = [ZToolProbe(:ac, "scan"; bus = :B1, voltage = 300)]
     mktempdir() do directory
@@ -144,7 +146,7 @@ end
     os.getlogin, clock.time = globals["login"], globals["timestamp"]
     try
         for factory in (PSCADFixtures.small_ac_network, PSCADFixtures.dc_network)
-            for input in factory()
+            for input in (factory(),)
                 mktempdir() do directory
                     models = map(("default", "empty")) do option
                         path = joinpath(mkpath(joinpath(directory, option)), "network.pscx")

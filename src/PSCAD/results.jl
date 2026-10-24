@@ -258,9 +258,10 @@ I_{ref} = \\frac{|S|}{3V_{LN}},
 ```
 
 where ``S = P + \\mathrm{j}Q`` uses \\[MW, MVAr\\], ``V_{LN}`` is phase RMS
-voltage \\[kV\\], and ``I_{ref}`` is in \\[kA\\]. Series sides use `(pf, qf)`
-and `(pt, qt)`, respectively. Sources use `(pg, qg)`. Shunt power follows from
-input admittance and solved bus voltage. AC angles use the manifest reference bus.
+voltage \\[kV\\], and ``I_{ref}`` is in \\[kA\\]. Series ports `side1` and `side2`
+use `(pf, qf)` and `(pt, qt)`, respectively. Sources use `(pg, qg)`. Shunt power
+follows from input admittance and solved bus voltage. AC angles use the manifest
+reference bus.
 
 DC voltage is the window mean of `V_P - V_N`, compared with twice the solved
 pole-to-ground voltage. DC current magnitude is the absolute P-pole mean,
@@ -283,11 +284,11 @@ S = \\frac{1}{2}\\sum_k V_k I_k^*,
 
 where ``V_k`` and ``I_k`` are peak phasors \\[kV, kA\\], with current directed
 from device to bus. Compare with terminal `pf/qf` for the machine or
-`-pgrid/-qgrid` at converter side 2. Normalize power error by the device rating
+`-pgrid/-qgrid` at converter port `ac`. Normalize power error by the device rating
 (`elec.S_base` for machines, `elec.Sbase` for converters) \\[MVA\\], with tolerance
 `0.01`. Filtered converter `P_ac_f/Q_ac_f` use that rating as their per-unit base
 and an absolute error tolerance of `0.01`. The sine q basis gives
-`Q_ac = -v_q*i_d + v_d*i_q`, so its reference is `setpoint.Qac/Sbase`, equal to
+`Q_ac = -v_q*i_d + v_d*i_q`, so its reference is `values.ac.q/Sbase`, equal to
 `-qgrid/Sbase`.
 
 Reconstruct the machine terminal voltage as
@@ -307,7 +308,7 @@ DC voltage, frequency and angle channels, remain diagnostic outputs.
 
 MMC `:converter_arm_voltage` rows compare capacitor cycle means with solved
 pole-to-pole DC voltage \\[kV\\] using relative error and `rtol_v`.
-For `:converter_dc_current_identity` rows, compare signed side-1 DC current with
+For `:converter_dc_current_identity` rows, compare signed DC-port current with
 `3*mean(iS_z)*Sbase/vDC_base` \\[kA\\]. Normalize their difference by
 `max(abs(reference), Sbase/vDC_base)` and use `rtol_i`. These rows use MMC signal
 probe names. Their `powerflow` column contains the reference computed from
@@ -361,7 +362,7 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
             e = only(filter(e -> string(e.name) == channel.element, model.netlist.elements))
             e.model isa PowerImpedance.MMC ||
                 throw(ArgumentError("MMC probe $(channel.name) belongs to another model"))
-            dc = only(filter(t -> t.side == 1 && !t.grounded, e.terminals))
+            dc = only(filter(t -> t.port == :dc && !t.grounded, e.terminals))
             if channel.kind == :converter_arm_voltage
                 bus = only(filter(b -> b.key == dc.bus, model.netlist.buses))
                 _, point = _comparison_bus(model, bus.name)
@@ -376,7 +377,7 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                     throw(ArgumentError("MMC circulating current probe $(channel.name) must use pu"))
                 current = only(filter(
                     c -> c.kind == :current && c.element == channel.element &&
-                         c.side == "1",
+                         c.port == :dc,
                     model.probes.channels))
                 current.dim == 1 && _probe_present(current, result.channels) ||
                     throw(ArgumentError("missing PSCAD MMC DC current probe $(current.name)"))
@@ -440,18 +441,18 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
             throw(ArgumentError("$(dc ? "DC comparison requires scalar" : "AC comparison requires three-phase") probe $(channel.name)"))
         if channel.kind == :voltage
             if dc
-                channel.side in ("P", "N") ||
+                channel.pole in ("P", "N") ||
                     throw(ArgumentError("DC voltage probe $(channel.name) must identify its pole"))
                 partner = findfirst(
                     c -> c.kind == :voltage && c.bus == bus.name &&
-                         c.side == (channel.side == "P" ? "N" : "P"),
+                         c.pole == (channel.pole == "P" ? "N" : "P"),
                     model.probes.channels)
                 partner === nothing &&
                     throw(ArgumentError("missing opposite-pole voltage probe at $(bus.name)"))
                 other = model.probes.channels[partner]
                 other.dim == 1 && _probe_present(other, result.channels) ||
                     throw(ArgumentError("missing PSCAD scalar probe $(other.name)"))
-                channel.side == "N" && continue
+                channel.pole == "N" && continue
                 actual = map(state -> state[channel.name].mean - state[other.name].mean, states)
                 add_row(:voltage_dc, voltage_probe_name(bus.name), actual, 2voltage, rtol_v)
                 continue
@@ -480,12 +481,13 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
             element_index === nothing &&
                 throw(ArgumentError("missing power-flow element $(channel.element)"))
             e = model.netlist.elements[element_index]
-            any(t -> string(t.side) == channel.side && t.bus == bus.key, e.terminals) ||
-                throw(ArgumentError("missing terminal $(channel.element) side $(channel.side) at $(bus.name)"))
+            any(t -> t.port == channel.port && t.bus == bus.key, e.terminals) ||
+                throw(ArgumentError("missing terminal $(channel.element) " *
+                                    "port :$(channel.port) at $(bus.name)"))
             flow = get(model.operating_point.branch_flows, e.name, nothing)
             if dc
                 field = e.model isa PowerImpedance.Source ? :pgdc :
-                        channel.side == "1" ? :pf : :pt
+                        channel.port in (:side1, :dc) ? :pf : :pt
                 (flow === nothing || !haskey(flow, field)) && continue
                 voltage > 0 ||
                     throw(ArgumentError("current comparison requires positive bus voltage"))
@@ -496,11 +498,14 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 continue
             end
             flow === nothing &&
-                throw(ArgumentError("missing power-flow current data for :$(e.name) side $(channel.side)"))
+                throw(ArgumentError("missing power-flow current data for :$(e.name) " *
+                                    "port :$(channel.port)"))
             fields = e.model isa PowerImpedance.Source ? (:pg, :qg) :
-                     channel.side == "1" ? (:pf, :qf) : (:pt, :qt)
+                     e.role == :converter ? (:pt, :qt) :
+                     channel.port in (:side1, :ac) ? (:pf, :qf) : (:pt, :qt)
             all(field -> haskey(flow, field), fields) ||
-                throw(ArgumentError("missing power-flow terminal powers for :$(e.name) side $(channel.side)"))
+                throw(ArgumentError("missing power-flow terminal powers for :$(e.name) " *
+                                    "port :$(channel.port)"))
             voltage > 0 ||
                 throw(ArgumentError("current comparison requires positive bus voltage"))
             current = hypot(flow[fields[1]], flow[fields[2]]) / (3 * voltage)

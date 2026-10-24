@@ -273,10 +273,12 @@ function system_growth_channels(result,model,c)
     columns=Vector{ComplexF64}[];labels=String[];bases=Float64[];reference=ComplexF64[]
     for name in c.devices
         b=device_bases(c.net.elements[name].element_model.elec)
-        bus=port_probe(model.netlist,name,b.ac_side).name
-        voltage=only(filter(p->p.kind==:voltage && p.bus==bus,model.probes.channels))
-        current=only(filter(p->p.kind==:current && p.element==string(name) && p.side==string(b.ac_side),model.probes.channels))
-        entry=only(filter(e->e.name==name,model.netlist.elements))
+        bus=port_probe(model.netlist, name, b.ac_side).name
+        voltage=only(filter(p->p.kind==:voltage && p.bus==bus, model.probes.channels))
+        current=only(filter(
+            p->p.kind==:current && p.element==string(name) && p.port==:ac,
+                model.probes.channels))
+        entry=only(filter(e->e.name==name, model.netlist.elements))
         equilibrium=P.converter_equilibrium(entry)
         output=zeros(3)
         PowerImpedance.outputequations!(output,equilibrium.states,nothing,equilibrium.inputs,entry.model)
@@ -373,9 +375,11 @@ function system_growth_recorders!(plan,list)
     row=0
     for half in ("u","l"),phase in ("a","b","c"),quantity in ("m","i")
         signal=quantity=="m" ? "m_$(half)_$phase" : "i_$(half)_solved_$phase"
-        row+=1;unit=quantity=="m" ? "pu" : "kA"
-        P.output_probe!(definition.canvas,signal,"growth_c1",unit,(recorder_x,72row))
-        push!(plan.probes.channels,P.ProbeChannel(signal,:converter_diagnostic,nothing,"c1","2",1,unit))
+        row+=1;
+        unit=quantity=="m" ? "pu" : "kA"
+        P.output_probe!(definition.canvas, signal, "growth_c1", unit, (recorder_x, 72row))
+        push!(plan.probes.channels,
+            P.ProbeChannel(signal, :converter_diagnostic, nothing, "c1", :ac, 1, unit))
     end
     return nothing
 end

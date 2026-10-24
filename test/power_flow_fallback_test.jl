@@ -10,7 +10,8 @@ using PowerImpedance, Test
     Logging.global_logger(ConsoleLogger(stderr, Logging.Error))
     PI._PMACDC.silence()
     include(joinpath(pkgdir(PI), "test/pscad/fixtures.jl"))
-    witness = PSCADFixtures.small_ac_network().classic
+    include(joinpath(pkgdir(PI), "test/manual/pscad/validation/classic_fixtures.jl"))
+    witness = ClassicFixtures.small_ac_network()
     witness_result = first(power_flow(witness))
     witness_setpoints = Dict(n => e.setpoint for (n, e) in witness.elements)
     const force_status = Ref(true)
@@ -28,14 +29,14 @@ using PowerImpedance, Test
         return result
     end
     @testset "Feasible points retain their status and skip fallback" begin
-        net = PSCADFixtures.small_ac_network().classic
+        net = ClassicFixtures.small_ac_network()
         result = first(@test_logs (:warn, r"termination status ITERATION_LIMIT.*maximum primal constraint violation") min_level=Logging.Warn power_flow(net))
         @test result["termination_status"] == PI.MOI.ITERATION_LIMIT
         @test result["primal_feasible"]
         @test result["solution"] == witness_result["solution"]
         @test solve_calls[] == 1
 
-        state = PSCADFixtures.small_ac_network().state
+        state = PSCADFixtures.small_ac_network()
         data = first(convert(state, PI.PMACDC))
         original = deepcopy(data)
         options = (; power_flow = (; optimizer = (; constr_viol_tol = 1e-7)))
@@ -90,7 +91,7 @@ using PowerImpedance, Test
     end
 
     @testset "Native relaxation rejects violated constraints" begin
-        net = PSCADFixtures.small_ac_network().classic
+        net = ClassicFixtures.small_ac_network()
         # An isolated PV generator prescribes nonzero active power, while its
         # bus balance requires zero: relaxation cannot make this case feasible.
         add!(net, :isolated, synchronousmachine(;
@@ -115,7 +116,7 @@ using PowerImpedance, Test
     end
     @testset "Accepted fallback updates setpoints" begin
         fallback_mode[] = :accepted
-        net = PSCADFixtures.small_ac_network().classic
+        net = ClassicFixtures.small_ac_network()
         result = first(power_flow(net))
         @test result === witness_result
         @test result["termination_status"] == PI.MOI.LOCALLY_SOLVED
@@ -124,7 +125,7 @@ using PowerImpedance, Test
     end
     @testset "Unsuccessful fallback preserves setpoints" begin
         fallback_mode[] = :failed
-        net = PSCADFixtures.small_ac_network().classic
+        net = ClassicFixtures.small_ac_network()
         declared = Dict(n => e.setpoint for (n, e) in net.elements)
         error = try
             power_flow(net)

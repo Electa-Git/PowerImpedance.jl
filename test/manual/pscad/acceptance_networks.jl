@@ -47,9 +47,9 @@ function write_reference(model)
             bus, point = P._comparison_bus(model, channel.bus)
             flow = model.operating_point.branch_flows[e.name]
             field = e.model isa PowerImpedance.Source ? :pgdc :
-                channel.side == "1" ? :pf : :pt
+                channel.port in (:side1, :dc) ? :pf : :pt
             reference = abs(flow[field]) / (2point.vm_pu * bus.base_kV)
-            row(channel.element, "I_dc_side_" * channel.side, reference, "kA")
+            row(channel.element, "I_dc_" * string(channel.port), reference, "kA")
         end
     end
 end
@@ -59,7 +59,9 @@ function export_case(name, network; settings = RECORD_SETTINGS,
     path = joinpath(OUTPUT, name * ".pscx")
     isfile(path) && rm(path)
     started = time_ns()
-    model = Base.invokelatest(export_pscad, network; path, settings)
+    state = network isa Network ? PSCADFixtures.state_from_classic(network) : network
+    powerflow = network isa Network ? PSCADFixtures.solved_powerflow(state) : nothing
+    model = Base.invokelatest(export_pscad, state; path, settings, powerflow)
     elapsed = (time_ns() - started) * 1e-9
     write_reference(model)
     counts = PSCADNetworks.inventory(model.netlist)

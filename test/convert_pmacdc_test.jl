@@ -110,7 +110,7 @@ end
     NB = PI.NetworkBuilder
     for factory in (ConversionSourceFixtures.PSCADFixtures.mmc_pq_network,
             ConversionSourceFixtures.PSCADFixtures.tlc_case1_network)
-        original = factory().state
+        original = factory()
         for p_dc in (-0.25, 0.0, 0.25)
             model = withinputs(original.elements.DUT; powerflow = (; p_dc))
             elements = merge(original.elements, (; DUT = model))
@@ -132,7 +132,7 @@ end
 end
 
 @testset "Solved source terminal values" begin
-    state = ConversionSourceFixtures.PSCADFixtures.mmc_pq_network().state
+    state = ConversionSourceFixtures.PSCADFixtures.mmc_pq_network()
     powerflow = compute(PowerFlowProblem(state), ACDCPowerFlow())
     point = powerflow.operating_point
     @test point[:G_AC].ac.v == 380sqrt(2/3)

@@ -289,15 +289,17 @@ function time_domain_samples(result,model,c)
     end
     for name in sort(c.devices)
         b=device_bases(c.net.elements[name].element_model.elec)
-        p=only(filter(p->p.kind==:current&&p.element==string(name)&&p.side==string(b.ac_side),model.probes.channels))
-        data=composed_current(result,model,p)
-        append!(columns,[data[:,1],data[:,2]])
+        p=only(filter(p->p.kind==:current&&p.element==string(name)&&p.port==:ac,
+            model.probes.channels))
+        data=composed_current(result, model, p)
+        append!(columns, [data[:, 1], data[:, 2]])
     end
     for (name,e) in sort!(collect(c.net.elements);by=first)
         e.element_model isa PowerImpedance.Impedance || continue
-        p=only(filter(p->p.kind==:current&&p.element==string(name)&&p.side=="1",model.probes.channels))
-        data=composed_current(result,model,p)
-        append!(columns,[data[:,1],data[:,2]])
+        p=only(filter(p->p.kind==:current&&p.element==string(name)&&p.port==:side1,
+            model.probes.channels))
+        data=composed_current(result, model, p)
+        append!(columns, [data[:, 1], data[:, 2]])
     end
     ip=only(filter(p->p.kind==:injection_current,model.probes.channels))
     ip.orientation==:out || error("time-domain injection orientation is missing")

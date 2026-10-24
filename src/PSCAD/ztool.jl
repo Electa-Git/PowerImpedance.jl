@@ -5,7 +5,7 @@ const ZTOOL_SHA256 = "5924f4fbb112a110457b531016a9bd5c8f61125903044eb78d331feb60
 """
 $(TYPEDEF)
 
-Request a Z-tool scan block in a PSCAD export. Use `element` and `side` for a
+Request a Z-tool scan block in a PSCAD export. Use `element` and `port` for a
 series connection, or `bus` for an open shunt. `kind` is `:ac` or `:dc`.
 Names are case-insensitively unique ASCII PSCAD identifiers, at most 30 characters.
 
@@ -26,8 +26,8 @@ struct ZToolProbe
     name::String
     "Optional element designator for series placement."
     element::Union{Nothing, Symbol}
-    "Optional element side for series placement."
-    side::Union{Nothing, Int}
+    "Optional named port for series placement."
+    port::Union{Nothing, Symbol}
     "Optional PSCAD bus name or topology key for shunt placement."
     bus::Union{Nothing, String, BusKey}
     "Optional AC phase peak or DC pole-to-pole voltage \\[kV\\]."
@@ -41,21 +41,25 @@ struct ZToolProbe
     "DC voltage control flag."
     vdc_control::Bool
 
-    function ZToolProbe(kind, name; element = nothing, side = nothing, bus = nothing,
+    function ZToolProbe(kind, name; element = nothing, port = nothing, bus = nothing,
+            side = nothing,
             voltage = nothing, perturbation = 0.01, vac_control = nothing,
             f_control = nothing, vdc_control = nothing)
         kind isa Symbol && kind in (:ac, :dc) ||
             throw(ArgumentError("Z-tool probe $name: kind must be :ac or :dc"))
         name isa AbstractString && name == pscad_name(name) ||
             throw(ArgumentError("Z-tool probe $name: invalid PSCAD name"))
-        series = element !== nothing && side !== nothing && bus === nothing
-        shunt = element === nothing && side === nothing && bus !== nothing
+        side === nothing || throw(ArgumentError(
+            "Z-tool probe $name: pass port as a Symbol instead of side"))
+        series = element !== nothing && port !== nothing && bus === nothing
+        shunt = element === nothing && port === nothing && bus !== nothing
         series || shunt || throw(ArgumentError(
-            "Z-tool probe $name: specify element and side, or bus alone"))
+            "Z-tool probe $name: specify element and port, or bus alone"))
         element === nothing || element isa Union{Symbol, AbstractString} ||
             throw(ArgumentError("Z-tool probe $name: element must be a designator"))
-        side === nothing || (side isa Integer && !(side isa Bool) && 0 < side <= typemax(Int)) ||
-            throw(ArgumentError("Z-tool probe $name: invalid side $side for element $element"))
+        port === nothing || port isa Symbol ||
+            throw(ArgumentError(
+                "Z-tool probe $name: pass port as a Symbol for element $element"))
         bus === nothing || bus isa Union{Symbol, AbstractString, BusKey} ||
             throw(ArgumentError("Z-tool probe $name: invalid bus $bus"))
         for (field, value) in ((:voltage, voltage), (:perturbation, perturbation))
@@ -73,7 +77,7 @@ struct ZToolProbe
                 throw(ArgumentError("Z-tool probe $name: $field does not apply to $kind"))
         end
         return new(kind, String(name), element === nothing ? nothing : Symbol(element),
-            side, bus isa Union{Symbol, AbstractString} ? string(bus) : bus,
+            port, bus isa Union{Symbol, AbstractString} ? string(bus) : bus,
             voltage === nothing ? nothing : Float64(voltage), Float64(perturbation),
             something(vac_control, false), something(f_control, false),
             something(vdc_control, false))
@@ -84,7 +88,7 @@ function _resolve_ztool_probes(netlist, probes)
     all(p -> p isa ZToolProbe, probes) ||
         throw(ArgumentError("ztool_probes must contain ZToolProbe values"))
     names = _NameReservations()
-    terminals = Set{Tuple{Symbol, Int}}()
+    terminals = Set{Tuple{Symbol, Symbol}}()
     return map(probes) do probe
         fail(reason) = throw(ArgumentError("Z-tool probe $(probe.name): $reason"))
         probe.name in names && fail("duplicate PSCAD name")
@@ -95,12 +99,13 @@ function _resolve_ztool_probes(netlist, probes)
             index = findfirst(e -> e.name == probe.element, netlist.elements)
             index === nothing && fail("unknown element :$(probe.element)")
             e = netlist.elements[index]
-            index = findfirst(t -> t.side == probe.side, e.terminals)
-            index === nothing && fail("unknown side $(probe.side) on element :$(e.name)")
+            index = findfirst(t -> t.port == probe.port, e.terminals)
+            index === nothing && fail("unknown port :$(probe.port) on element :$(e.name)")
             t = e.terminals[index]
-            t.grounded && fail("element :$(e.name) side $(t.side) is grounded")
-            key = (e.name, t.side)
-            key in terminals && fail("element :$(e.name) side $(t.side) already has a scan probe")
+            t.grounded && fail("element :$(e.name) port :$(t.port) is grounded")
+            key = (e.name, t.port)
+            key in terminals && fail(
+                "element :$(e.name) port :$(t.port) already has a scan probe")
             push!(terminals, key)
             t
         end
@@ -113,7 +118,8 @@ function _resolve_ztool_probes(netlist, probes)
         bus = netlist.buses[index]
         (probe.kind == :dc) == (bus.kind == :dc) || fail(
             "$(probe.kind) probe on $(bus.kind) bus $(bus.name)" *
-            (terminal === nothing ? "" : " at element :$(probe.element) side $(probe.side)"))
+            (terminal === nothing ? "" :
+             " at element :$(probe.element) port :$(probe.port)"))
         voltage = if probe.voltage !== nothing
             probe.voltage
         elseif bus.vm_pu !== nothing
@@ -128,7 +134,7 @@ end
 
 function _terminal_labels(e, terminal, context)
     terminal.grounded && return (nothing,)
-    replacement = get(context.ztool_terminals, (e.name, terminal.side), nothing)
+    replacement = get(context.ztool_terminals, (e.name, terminal.port), nothing)
     replacement === nothing || return replacement
     bus = context.buses[terminal.bus]
     return bus.kind == :dc ? context.dc_labels[bus.key] : (bus.name,)
@@ -155,7 +161,7 @@ function _emit_ztool_probe!(state, scan, context)
     labels = dc ? context.dc_labels[bus.key] : (bus.name,)
     stub!(state.main, (point[1] - width, point[2]), first(labels); direction = -1)
     if terminal !== nothing
-        inner = context.ztool_terminals[(probe.element, probe.side)]
+        inner = context.ztool_terminals[(probe.element, probe.port)]
         stub!(state.main, (point[1] + width, point[2]), first(inner))
     end
     dc && stub!(state.main, (point[1], point[2] + 36), last(labels))

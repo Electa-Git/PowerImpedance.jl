@@ -1,7 +1,20 @@
+function terminal_port(list, element, side)
+    entry = only(filter(e -> e.name == Symbol(element), list.elements))
+    index = side isa Integer ? side : parse(Int, side)
+    return PowerImpedance.NetworkBuilder._legacy_port_names(entry.model)[index]
+end
+
+function terminal_side(list, element, port)
+    entry = only(filter(e -> e.name == Symbol(element), list.elements))
+    return findfirst(==(port),
+        PowerImpedance.NetworkBuilder._legacy_port_names(entry.model))
+end
+
 # Frozen measurement definitions use the native element/network physics.
 function port_probe(list, element, side)
     entry = only(filter(e -> e.name == element, list.elements))
-    terminal = only(filter(t -> t.side == side, entry.terminals))
+    port = terminal_port(list, element, side)
+    terminal = only(filter(t -> t.port == port && !t.grounded, entry.terminals))
     return only(filter(b -> b.key == terminal.bus, list.buses))
 end
 

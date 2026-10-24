@@ -84,61 +84,53 @@ end
             PSCADFixtures.mmc_vdc_network, PSCADFixtures.mmc_pf_network,
             PSCADFixtures.mmc_qv_network, PSCADFixtures.mmc_vac_network)
         fixture = factory()
-        pf = power_flow(fixture.classic)
-        # transitional
-        classic = [(; name, element, model = element.element_model,
-            setpoint = element.setpoint) for (name, element) in fixture.classic.elements]
-        solved = NB.solve(fixture.state)
-        builder = NB.NetworkModel(fixture.state, solved.operating_point)
+        solved = NB.solve(fixture)
+        builder = NB.NetworkModel(fixture, solved.operating_point)
         @test Set(keys(builder.indices.elements)) == Set(name
-            for (name, model) in pairs(fixture.state.elements) if !PI.is_source(model))
-        for e in classic
-            e.model isa Union{PI.MMC, PI.TLC} || continue
-            saved = e.element._equilibrium
-            @test saved !== nothing
-            vector = PI._steady_state(e.element)
-            equilibrium = P.converter_equilibrium(e)
-            @test isequal(collect(values(equilibrium.states)), vector)
-            @test e.element._equilibrium === saved
-            @test isequal(collect(values(P.converter_equilibrium(e).states)), vector)
-            @test e.element._equilibrium === saved
-            residual = zeros(length(vector))
-            PI._state_space!(residual, vector, collect(values(equilibrium.inputs)),
-                equilibrium.setpoint_pu, e.model, PI.Equil())
-            @test maximum(abs, residual) <= 1e-6
-        end
-        for (name, model) in pairs(fixture.state.elements)
-            PI.is_converter(model) || continue
-            point = solved.operating_point[name]
+            for (name, model) in pairs(fixture.elements) if !PI.is_source(model))
+        list = P.netlist(fixture, solved)
+        for e in list.elements
+            PI.is_converter(e.model) || continue
+            model = e.model
+            point = e.values
             saved = model.cache.state
             @test saved !== nothing
+            retained = copy(saved)
             vector = steady_state(model, point)
-            @test isequal(vector, saved)
+            @test vector === saved
+            equilibrium = P.converter_equilibrium(e)
+            @test isequal(collect(values(equilibrium.states)), retained)
             @test model.cache.state === saved
-            @test isequal(steady_state(model, point), vector)
+            @test isequal(collect(values(P.converter_equilibrium(e).states)), retained)
+            @test model.cache.state === saved
+            @test isequal(vector, retained)
+            @test model.cache.state === saved
+            @test isequal(steady_state(model, point), retained)
             @test model.cache.state === saved
             inputs, sp = PI.pftoinputs(model, point)
             residual = zeros(length(vector))
             PI._state_space!(residual, vector, collect(values(inputs)), sp,
                 model, PI.Equil())
             @test maximum(abs, residual) <= 1e-6
-            @test model === fixture.state.elements[name]
-            @test model !== fixture.classic.elements[name].element_model
-            @test fixture.classic.elements[name]._equilibrium !== nothing
+            @test model === fixture.elements[e.name]
         end
-        # The accessor obtains a fresh element's state once and then reuses it.
-        # transitional
-        name = first(name for (name, model) in pairs(fixture.state.elements)
+        name = first(name for (name, model) in pairs(fixture.elements)
             if PI.is_converter(model))
-        element = factory().classic.elements[name]
-        converter = (; name, element, model = element.element_model,
-            setpoint = fixture.classic.elements[name].setpoint)
-        @test converter.element._equilibrium === nothing
+        entry = only(filter(e -> e.name == name, list.elements))
+        original = entry.model.cache.state
+        fresh = PI.Parameters.reconstruct(deepcopy(fixture.elements[name]);
+            cache = PI.LinearizationCache())
+        @test fresh !== entry.model
+        converter = P.NetlistElement(name, entry.pscad, fresh, entry.ports,
+            entry.terminals, entry.role, entry.values)
+        @test fresh.cache.state === nothing
         initial = P.converter_equilibrium(converter)
-        saved = converter.element._equilibrium
+        saved = fresh.cache.state
         @test saved !== nothing
         @test isequal(P.converter_equilibrium(converter).states, initial.states)
-        @test converter.element._equilibrium === saved
+        @test fresh.cache.state === saved
+        @test fresh.cache.state !== entry.model.cache.state
+        @test entry.model.cache.state === original
     end
 end
 end
