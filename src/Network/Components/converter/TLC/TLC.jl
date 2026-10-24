@@ -34,7 +34,7 @@ State order follows measurement, synchronization, outer active and reactive
 controls, inner voltage and current controls, modulation, and the electrical
 plant. `state_space!` evaluates the blocks in this dependency order.
 """
-struct TLC{
+@with_kw struct TLC{
     E<:ElectricalTLC,
     Meas<:Measurement,
     Sync<:AbstractSynchronization,
@@ -64,6 +64,8 @@ struct TLC{
     limits::Limits
     "Power-flow seeds on converter bases \\[dimensionless\\]."
     powerflow::NamedTuple
+    "Retained terminal values, converged state and linearization matrices."
+    cache::LinearizationCache = LinearizationCache()
 end
 
 statenames(c::TLC) = (
@@ -164,13 +166,13 @@ equilibriumnames(::TLC) = ()
 """
 $(TYPEDSIGNATURES)
 
-Convert a power-flow setpoint into normalized TLC inputs.
+Convert physical terminal values into normalized TLC inputs.
 
 # Arguments
 
 - `c`: TLC assembly and electrical bases.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\].
+- `values`: NamedTuple with `ac` and `dc` port values in
+  \\[kV\\], \\[rad\\], \\[MW\\] and \\[MVAr\\].
 
 # Returns
 
@@ -195,24 +197,29 @@ power base. DC voltage is divided by the pole-to-pole DC base.
 using PowerImpedance
 P = PowerImpedance
 model = tlc().element_model
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0, Pdc=100.0, Vdc=640.0)
-inputs, point_pu = P.pftoinputs(model, point)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),
+    dc = DCPortValues(640.0, 100.0))
+inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
-function pftoinputs(c::TLC, setpoint::Setpoint)
+function pftoinputs(c::TLC, values::NamedTuple)
     vACbase = c.elec.vACbase
-    v_ac = setpoint.Vac / vACbase
-    v_bus_d = v_ac * cos(setpoint.θac)
-    v_bus_q = -v_ac * sin(setpoint.θac)
-    v_dc = setpoint.Vdc / c.elec.vDCbase
+    v_ac = values.ac.v / vACbase
+    v_bus_d = v_ac * cos(values.ac.theta)
+    v_bus_q = -v_ac * sin(values.ac.theta)
+    v_dc = values.dc.v / c.elec.vDCbase
 
-    p_ac = setpoint.Pac / c.elec.Sbase
-    q_ac = setpoint.Qac / c.elec.Sbase
-    p_dc = setpoint.Pdc / c.elec.Sbase
+    p_ac = values.ac.p / c.elec.Sbase
+    q_ac = values.ac.q / c.elec.Sbase
+    p_dc = values.dc.p / c.elec.Sbase
     
     return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),
-        SetpointPU(p_ac, q_ac, setpoint.θac, v_ac, p_dc, v_dc)
+        SetpointPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
 end
+
+# transitional
+pftoinputs(c::TLC, setpoint::Setpoint) =
+    pftoinputs(c, _terminal_values(c, setpoint))
 
 """
 $(TYPEDSIGNATURES)
@@ -447,7 +454,7 @@ function tlc(;
     seeds = _withinputs(defaults, _CONVERTER_POWERFLOW_INPUTS,
         powerflow, "powerflow")
     conv = TLC(elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent,
-        mod, limits, seeds)
+        mod, limits, seeds, LinearizationCache())
 
     return Element(
         input_pins = 1,
@@ -651,3 +658,9 @@ powerflow_targets(model::TLC) = merge(model.powerflow, _powerflow_references(mod
 
 bases(model::TLC) = BaseValues(S = model.elec.Sbase, v_ac = model.elec.vACbase,
     v_dc = model.elec.vDCbase, omega = model.elec.ωbase)
+
+function _withinputs(model::TLC, declarations::NamedTuple, changes, path)
+    configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
+        model, declarations, changes, path)
+    return Parameters.reconstruct(configured; cache = LinearizationCache())
+end

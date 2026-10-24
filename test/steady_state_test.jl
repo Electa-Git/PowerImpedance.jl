@@ -8,11 +8,14 @@ const P = PI.PSCAD
 struct RecordedState <: PI.AbstractStateSpace
     seeds::Base.RefValue{Int}
     fail::Base.RefValue{Bool}
+    cache::PI.LinearizationCache
 end
 PI.statenames(::RecordedState) = (:x,)
 PI.inputnames(::RecordedState) = (:u,)
 PI.outputnames(::RecordedState) = (:y,)
-PI.pftoinputs(::RecordedState, setpoint::PI.Setpoint) = ((; u=setpoint.Pac), nothing)
+PI._terminal_values(::RecordedState, sp::Setpoint) =
+    (ac = ACPortValues(1.0, 0.0, sp.Pac, 0.0),)
+PI.pftoinputs(::RecordedState, values::NamedTuple) = ((; u=values.ac.p), nothing)
 function PI.initialvalues(model::RecordedState; kwargs...)
     model.seeds[] += 1
     model.fail[] && error("initialization failure")
@@ -25,7 +28,7 @@ end
 PI.outputequations!(F, x, inputs, y, ::RecordedState) = (F[1] = y.y)
 
 @testset "Core retained steady state lifecycle" begin
-    model = RecordedState(Ref(0), Ref(false))
+    model = RecordedState(Ref(0), Ref(false), PI.LinearizationCache())
     first_point = Setpoint(Pac=1.25)
     second_point = Setpoint(Pac=1.5)
     element = PI.Element(; element_model=model, input_pins=1, output_pins=1,
@@ -64,7 +67,7 @@ PI.outputequations!(F, x, inputs, y, ::RecordedState) = (F[1] = y.y)
     @test_throws ArgumentError PI._steady_state(element)
     model.fail[] = false
     @test PI._steady_state(element, second_point) == [1.5]
-    replacement = RecordedState(Ref(0), Ref(false))
+    replacement = RecordedState(Ref(0), Ref(false), PI.LinearizationCache())
     element.element_model = replacement
     @test_throws ArgumentError PI._steady_state(element)
     @test PI._steady_state(element, second_point) == [1.5]

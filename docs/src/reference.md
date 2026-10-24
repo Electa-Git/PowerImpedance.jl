@@ -18,6 +18,11 @@ Component ports are declared by `Port`, `ACDQ`, `ACABC`, `DC_CM` and
 `bases` and `limits`. Control references and converter or machine power-flow seeds use
 the model bases. Source inputs use physical units.
 
+Terminal operating points use `ACPortValues` and `DCPortValues`, keyed by port name
+in a NamedTuple. `linearize(model, values)` computes the state-space matrices and
+stores the converged state. `steady_state(model, values)` reuses that state when
+the terminal values compare equal with `isequal`.
+
 ```@autodocs
 Modules = [PowerImpedance]
 Public = true

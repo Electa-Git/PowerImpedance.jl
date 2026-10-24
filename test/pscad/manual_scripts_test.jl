@@ -200,7 +200,7 @@ end
         @testset "$(basename(path))" begin
             @test isempty(unresolved_globals(expression, namespace))
             if basename(path) == "acceptance.jl"
-                for name in ("SimulationSettings", "steady_state")
+                for name in ("SimulationSettings",)
                     qualified = "PowerImpedance.PSCAD.$name"
                     @test occursin(qualified, source)
                     original = Meta.parseall(replace(source, qualified => name))

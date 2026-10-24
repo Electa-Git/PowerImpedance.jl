@@ -60,6 +60,7 @@ include("core/util.jl")
 include("core/logging.jl")
 
 # Including all components    
+include("Network/Components/operating_values.jl")
 include("Network/Components/AbstractElement.jl")
 include("Network/Components/AbstractStateSpace.jl")
 include("Network/Components/ports.jl")

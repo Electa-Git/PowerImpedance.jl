@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add `ACPortValues` and `DCPortValues`, and `linearize` and `steady_state` for
+  state-space component models.
+
 - Declare named electrical ports for component models with `Port`, `ACDQ`, `ACABC`
   and `DC_CM`.
 - Declare configurable inputs with `Input`, `inputs` and `inputvalues`. Configure

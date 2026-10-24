@@ -33,7 +33,7 @@ const P = PowerImpedance.PSCAD
             m = e.model
             altered = kind == :tlc ? converter_element(e, TLC(m.elec, m.meas, m.sync,
                 m.outerActive, m.outerReactive, m.innerVoltage, m.innerCurrent, block,
-                m.limits, m.powerflow)) :
+                m.limits, m.powerflow, PowerImpedance.LinearizationCache())) :
                 converter_element(e, with_modulation(m, block))
             build() = kind == :tlc ? P.tlc_modulation("MOD", altered, eq, transforms, settings) :
                 P.mmc_modulation("MOD", altered, eq, transforms, settings)

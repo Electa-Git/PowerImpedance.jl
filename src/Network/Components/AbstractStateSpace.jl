@@ -1,3 +1,7 @@
+export linearize, steady_state
+
+is_converter(::AbstractStateSpace) = false
+
 
 
 
@@ -233,9 +237,8 @@ the electrical linearization.
 
 # Arguments
 
-- `elem`: Network element containing the component model and operating point.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\].
+- `m`: State-space component model.
+- `values`: NamedTuple keyed by port name with `ACPortValues` and `DCPortValues`.
 
 # Returns
 
@@ -252,9 +255,9 @@ f(x_0,u_0)=0,\\quad A=\\left.\\frac{\\partial f}{\\partial x}\\right|_0,\\quad B
 ```
 
 Electrical inputs ``u_e`` exclude auxiliary reference inputs, which remain fixed during
-differentiation. A successful solve retains a copy of the converged state on the
-element; the returned matrices are stored by `update!`. Converter solves retry with a
-trust-region algorithm after a failed default solve.
+differentiation. Each call recomputes and stores the terminal values, state and
+matrices in the model cache. Converter solves retry with a trust-region algorithm
+after a failed default solve.
 
 # Errors
 
@@ -265,21 +268,16 @@ trust-region algorithm after a failed default solve.
 
 ```julia
 using PowerImpedance
-P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-element = synchronousmachine(setpoint=point)
-A, B, C, D = P.update(element, point)
+model = synchronousmachine().element_model
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
+A, B, C, D = linearize(model, values)
 ```
 """
-function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpace}
-    
-    
-    m = elem.element_model
-    elem._equilibrium = nothing
+function linearize(m::AbstractStateSpace, values::NamedTuple)
 
     # Power flow to inputs of state_space function
-    inputs, setpoint_pu = pftoinputs(m, setpoint)
-    inputs_vec = collect(values(inputs))
+    inputs, setpoint_pu = pftoinputs(m, values)
+    inputs_vec = collect(Base.values(inputs))
 
     # Initial values
     init = orderedinitialvalues(m; setpoint_pu, inputs)
@@ -290,18 +288,19 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     # Initialize problem
     f!(du, u, p) = _state_space!(du, u, p.inputs, p.setpoint_pu, p.m, Equil())
     @info "Starting to solve for steady-state solution"
-    prob = NonlinearProblem(f!, collect(promote(values(init)...)), p_equil)
+    prob = NonlinearProblem(f!, collect(promote(Base.values(init)...)), p_equil)
     default_error = nothing
     sol = try
         solve(prob; maxiters = 20, abstol = 1e-6, reltol = 1e-6)
     catch exception
-        is_converter(elem) || rethrow()
+        is_converter(m) || rethrow()
         default_error = exception
         nothing
     end
-    if is_converter(elem) && (sol === nothing || !SciMLBase.successful_retcode(sol))
+    if is_converter(m) && (sol === nothing || !SciMLBase.successful_retcode(sol))
         retry = try
-            solve(prob, NonlinearSolve.TrustRegion(); maxiters = 20, abstol = 1e-6, reltol = 1e-6)
+            solve(prob, NonlinearSolve.TrustRegion();
+                maxiters = 20, abstol = 1e-6, reltol = 1e-6)
         catch
             nothing
         end
@@ -312,7 +311,7 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
         end
     end
 
-    name = isdefined(elem, :symbol) ? string(elem.symbol) : string(nameof(typeof(m)))
+    name = string(nameof(typeof(m)))
 
     if SciMLBase.successful_retcode(sol)
         @info "$name steady-state solution found!"
@@ -332,7 +331,8 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     nb_addit_inputs = nb_inputs - nb_elec_inputs
     nb_outputs = n_outputs(m)
 
-    h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end], setpoint_pu, m, Jac())
+    h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end],
+        setpoint_pu, m, Jac())
     jac = zeros(nb_states+nb_outputs, nb_states+nb_inputs)
     x = [equilibrium; inputs_vec]; F = fill(zero(eltype(x)), nb_states+nb_outputs)
     ForwardDiff.jacobian!(jac, h!, F, x)
@@ -342,8 +342,54 @@ function update(elem::Element{T}, setpoint::Setpoint) where {T<:AbstractStateSpa
     C = jac[nb_states+1:end, 1:nb_states]
     D = jac[nb_states+1:end, nb_states+1:end-nb_addit_inputs]
 
-    elem._equilibrium = (m, setpoint, copy(equilibrium))
+    m.cache.values = values
+    m.cache.state = equilibrium
+    m.cache.A, m.cache.B, m.cache.C, m.cache.D = A, B, C, D
     return A,B,C,D 
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Return the converged state at the supplied terminal values, reusing the model cache
+when the values compare equal with `isequal`. Otherwise, call [`linearize`](@ref).
+
+# Arguments
+
+- `model`: State-space component model.
+- `values`: NamedTuple keyed by port name with `ACPortValues` and `DCPortValues`.
+
+# Returns
+
+- Cached state vector in `statenames(model)` order and the model's state coordinates.
+  Repeated calls with equal values return the same vector object. Changes to this
+  vector also change the cached state.
+
+# Errors
+
+- Propagates equilibrium-solve and differentiation errors from `linearize`.
+
+# Examples
+
+```julia
+model = synchronousmachine().element_model
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
+x = steady_state(model, values)
+@assert steady_state(model, values) === x
+```
+"""
+function steady_state(model::AbstractStateSpace, values::NamedTuple)
+    isequal(model.cache.values, values) || linearize(model, values)
+    return model.cache.state
+end
+
+# transitional
+function update(elem::Element{<:AbstractStateSpace}, setpoint::Setpoint)
+    m = elem.element_model
+    elem._equilibrium = nothing
+    A, B, C, D = linearize(m, _terminal_values(m, setpoint))
+    elem._equilibrium = (m, setpoint, copy(m.cache.state))
+    return A, B, C, D
 end
 
 """

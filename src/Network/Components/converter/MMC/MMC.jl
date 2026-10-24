@@ -61,6 +61,8 @@ $(TYPEDFIELDS)
     limits::Limits = Limits()
     "Power-flow seeds on converter bases \\[dimensionless\\]."
     powerflow::NamedTuple = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
+    "Retained terminal values, converged state and linearization matrices."
+    cache::LinearizationCache = LinearizationCache()
 end
 
 statenames(c::MMC) = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
@@ -469,14 +471,14 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Convert a physical power-flow operating point to normalized external inputs and internal
-setpoint data.
+Convert physical terminal values to normalized external inputs and internal
+terminal data.
 
 # Arguments
 
 - `c`: MMC assembly and electrical bases.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\].
+- `values`: NamedTuple with `ac` and `dc` port values in
+  \\[kV\\], \\[rad\\], \\[MW\\] and \\[MVAr\\].
 
 # Returns
 
@@ -504,23 +506,28 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=380sqrt(2/3), θac=0.0, Pdc=100.0, Vdc=640.0)
-inputs, point_pu = P.pftoinputs(model, point)
+values = (ac = ACPortValues(380sqrt(2/3), 0.0, 100.0, 0.0),
+    dc = DCPortValues(640.0, 100.0))
+inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
-function pftoinputs(c::MMC, setpoint::Setpoint) 
-    v_ac  = setpoint.Vac / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
-    v_dc = setpoint.Vdc / c.elec.vDC_base
-    p_ac = setpoint.Pac / c.elec.Sbase
-    q_ac = setpoint.Qac / c.elec.Sbase
-    p_dc = setpoint.Pdc / c.elec.Sbase
+function pftoinputs(c::MMC, values::NamedTuple)
+    v_ac = values.ac.v / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
+    v_dc = values.dc.v / c.elec.vDC_base
+    p_ac = values.ac.p / c.elec.Sbase
+    q_ac = values.ac.q / c.elec.Sbase
+    p_dc = values.dc.p / c.elec.Sbase
     
-    vG_d = v_ac * cos(setpoint.θac)   # d component of the grid voltage in the grid frame  
-    vG_q = -v_ac * sin(setpoint.θac)  # q component of the grid voltage in the grid frame
+    vG_d = v_ac * cos(values.ac.theta)   # d component of the grid voltage in the grid frame
+    vG_q = -v_ac * sin(values.ac.theta)  # q component of the grid voltage in the grid frame
 
     return (v_dc = v_dc, vG_d = vG_d, vG_q = vG_q), 
-        SetpointPU(p_ac, q_ac, setpoint.θac, v_ac, p_dc, v_dc)
+        SetpointPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
 end
+
+# transitional
+pftoinputs(c::MMC, setpoint::Setpoint) =
+    pftoinputs(c, _terminal_values(c, setpoint))
 
 """
 $(TYPEDSIGNATURES)
@@ -668,7 +675,7 @@ function mmc(;
         input_pins = 1,
         output_pins = 2,
         element_model = MMC(meas, sync, delta_control, sigma_control, modulation, elec,
-            limits, seeds),
+            limits, seeds, LinearizationCache()),
         transformation = false; 
         connection,
         setpoint,
@@ -895,3 +902,9 @@ powerflow_targets(model::MMC) = merge(model.powerflow, _powerflow_references(mod
 
 bases(model::MMC) = BaseValues(S = model.elec.Sbase, v_ac = model.elec.vAC_base,
     v_dc = model.elec.vDC_base, omega = model.elec.ωbase)
+
+function _withinputs(model::MMC, declarations::NamedTuple, changes, path)
+    configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
+        model, declarations, changes, path)
+    return Parameters.reconstruct(configured; cache = LinearizationCache())
+end

@@ -236,7 +236,7 @@ unchanged and requires a separate power-flow solve.
 The PSCAD admittance comparison has aggregate error below 1%, with the
 largest differences at low frequencies.
 """
-struct SynchronousMachine <: AbstractStateSpace
+@with_kw struct SynchronousMachine <: AbstractStateSpace
     "Machine electrical subsystem."
     elec::ElectricalSM
     "Machine mechanical subsystem."
@@ -249,6 +249,8 @@ struct SynchronousMachine <: AbstractStateSpace
     limits::Limits
     "Power-flow seeds on machine bases \\[dimensionless\\]."
     powerflow::NamedTuple
+    "Retained terminal values, converged state and linearization matrices."
+    cache::LinearizationCache = LinearizationCache()
 end
 
 statenames(m::SynchronousMachine) = (statenames(m.elec)..., statenames(m.mech)...,statenames(m.gov)...,statenames(m.avr)...)
@@ -296,21 +298,21 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Convert a physical power-flow operating point to normalized external inputs and internal
-setpoint data.
+Convert physical terminal values to normalized external inputs and internal
+terminal data.
 
 # Arguments
 
 - `m`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\].
+- `values`: NamedTuple with an `ac` port value in
+  \\[kV\\], \\[rad\\], \\[MW\\] and \\[MVAr\\].
 
 # Returns
 
 - `inputs`: Named tuple of bus voltages `vd`, `vq`, fixed turbine torque `Tm0`, and
   effective AVR reference `vref_SG`, on machine bases \\[dimensionless\\].
 - `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
-  and the angle uses \\[rad\\]. Returns `nothing` when `Qac` is missing.
+  and the angle uses \\[rad\\]. Returns `nothing` when `values.ac.q` is `NaN`.
 
 # Notes
 
@@ -321,7 +323,7 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
 power base. A complete operating point determines fixed turbine and AVR references from
-the terminal power-flow solution; otherwise `Tm0=Pac/S_base` and the configured AVR
+the terminal power-flow solution; otherwise `Tm0=values.ac.p/S_base` and the configured AVR
 reference is retained.
 
 # Examples
@@ -330,24 +332,33 @@ reference is retained.
 using PowerImpedance
 P = PowerImpedance
 model = synchronousmachine().element_model
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0, Pdc=100.0, Vdc=640.0)
-inputs, point_pu = P.pftoinputs(model, point)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
+inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
-function pftoinputs(m::SynchronousMachine, setpoint::Setpoint)
-    v_bus_d = setpoint.Vac * cos(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
-    v_bus_q = -setpoint.Vac * sin(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
-    p_ac = setpoint.Pac / m.elec.S_base
-    if ismissing(setpoint.Qac)
+function pftoinputs(m::SynchronousMachine, values::NamedTuple)
+    v_bus_d = values.ac.v * cos(values.ac.theta) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
+    v_bus_q = -values.ac.v * sin(values.ac.theta) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
+    p_ac = values.ac.p / m.elec.S_base
+    if isnan(values.ac.q)
         return (; vd=v_bus_d, vq=v_bus_q, Tm0=p_ac,
             vref_SG=m.avr.v_ref), nothing
     end
-    sp = SetpointPU(p_ac=p_ac, q_ac=setpoint.Qac / m.elec.S_base,
-        θ_ac=setpoint.θac, v_ac=setpoint.Vac / (m.elec.Vᵃᶜ_base * sqrt(2/3)))
+    sp = SetpointPU(p_ac=p_ac, q_ac=values.ac.q / m.elec.S_base,
+        θ_ac=values.ac.theta, v_ac=values.ac.v / (m.elec.Vᵃᶜ_base * sqrt(2/3)))
     point = _machine_powerflow_state(m, sp)
     return (; vd=v_bus_d, vq=v_bus_q, Tm0=point.Tm0,
         vref_SG=point.vref_SG), sp
 end
+
+_terminal_values(::SynchronousMachine, sp::Setpoint) = (
+    ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
+        coalesce(sp.Pac, NaN), coalesce(sp.Qac, NaN)),
+)
+
+# transitional
+pftoinputs(m::SynchronousMachine, setpoint::Setpoint) =
+    pftoinputs(m, _terminal_values(m, setpoint))
 
 
 function outputequations!(F, x, inputs, y, gen::SynchronousMachine)
@@ -788,7 +799,7 @@ function synchronousmachine(; elec = ElectricalSM(), mech = MechanicalSM(),
     defaults = map(input -> input.default, _MACHINE_POWERFLOW_INPUTS)
     seeds = _withinputs(defaults, _MACHINE_POWERFLOW_INPUTS,
         powerflow, "powerflow")
-    gen = SynchronousMachine(elec, mech, avr, gov, Limits(), seeds)
+    gen = SynchronousMachine(elec, mech, avr, gov, Limits(), seeds, LinearizationCache())
     # Transformation property set to false, as model is natively defined in dq-frame. TODO: Fix this; outpins 0 bcs oneport, kept for legacy
     elem = Element(input_pins = 2, output_pins = 2, element_model = gen, transformation = false; connection, setpoint)
     return elem
@@ -950,3 +961,9 @@ inputs(model::SynchronousMachine) = (
 
 bases(model::SynchronousMachine) = BaseValues(S = model.elec.S_base,
     v_ac = model.elec.Vᵃᶜ_base * sqrt(2/3), omega = model.elec.ωn)
+
+function _withinputs(model::SynchronousMachine, declarations::NamedTuple, changes, path)
+    configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
+        model, declarations, changes, path)
+    return Parameters.reconstruct(configured; cache = LinearizationCache())
+end

@@ -78,29 +78,8 @@ $(TYPEDFIELDS)
    
 end
 
-"""
-$(TYPEDEF)
+const SetpointPU = TerminalValuesPU # transitional
 
-Store an internal AC/DC operating point normalized by the component bases
-\\[dimensionless\\]. Angles remain in \\[rad\\].
-
-$(TYPEDFIELDS)
-"""
-@with_kw struct SetpointPU # Per-unitized setpoint used internally
-    "AC active power on the component base \\[dimensionless\\]."
-    p_ac::Float64 = 0
-    "AC reactive power on the component base \\[dimensionless\\]."
-    q_ac::Float64 = 0
-    "AC voltage angle \\[rad\\]."
-    θ_ac::Float64 = 0
-    "AC phase-voltage amplitude on the component base \\[dimensionless\\]."
-    v_ac::Float64 = 1
-    
-    "DC active power on the component base \\[dimensionless\\]."
-    p_dc::Float64 = 0
-    "Pole-to-pole DC voltage on the component base \\[dimensionless\\]."
-    v_dc::Float64 = 1
-end
 """
 $(TYPEDEF)
 

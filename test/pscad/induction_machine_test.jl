@@ -127,7 +127,8 @@ end
     e = only(filter(e -> e.name == :im1, classic_nl.elements))
     modified = deepcopy(e.element)
     modified.element_model = InductionMachine(ElectricalIM(r_s = 0.023, rt = 0.017,
-        l_sl = 0.21, lt = 0.04, r_r = 0.031, l_rl = 0.19, l_m = 1.72), MechanicalIM(H = 5.0))
+        l_sl = 0.21, lt = 0.04, r_r = 0.031, l_rl = 0.19, l_m = 1.72),
+        MechanicalIM(H = 5.0), PowerImpedance.LinearizationCache())
     changed = copy(classic_nl.elements)
     changed[findfirst(x -> x.name == :im1, changed)] = P.NetlistElement(e.name, e.pscad,
         modified, modified.element_model, e.terminals, e.role, e.setpoint)

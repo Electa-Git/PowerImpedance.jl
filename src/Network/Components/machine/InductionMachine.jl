@@ -95,11 +95,13 @@ conversion at the interface.
 
 $(TYPEDFIELDS)
 """
-struct InductionMachine <: AbstractStateSpace
+@with_kw struct InductionMachine <: AbstractStateSpace
     "Machine electrical subsystem."
     elec::ElectricalIM
     "Machine mechanical subsystem."
     mech::MechanicalIM
+    "Retained terminal values, converged state and linearization matrices."
+    cache::LinearizationCache = LinearizationCache()
 end
 """
 $(TYPEDSIGNATURES)
@@ -130,7 +132,7 @@ im = inductionmachine(
 """
 function inductionmachine(; elec = ElectricalIM(), mech = MechanicalIM(), setpoint = Setpoint(), connection = true)
 
-    indm = InductionMachine(elec,mech)
+    indm = InductionMachine(elec, mech, LinearizationCache())
 
     return Element(
         input_pins = 3,
@@ -155,14 +157,14 @@ outputnames(::InductionMachine) = (:id,:iq)
 """
 $(TYPEDSIGNATURES)
 
-Convert a physical power-flow operating point to normalized external inputs and internal
-setpoint data.
+Convert physical terminal values to normalized external inputs and internal
+terminal data.
 
 # Arguments
 
 - `m`: Induction-machine electrical and mechanical blocks.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\].
+- `values`: NamedTuple with an `ac` port value in
+  \\[kV\\], \\[rad\\], \\[MW\\] and \\[MVAr\\].
 
 # Returns
 
@@ -186,23 +188,32 @@ power base.
 using PowerImpedance
 P = PowerImpedance
 model = inductionmachine().element_model
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0, Pdc=100.0, Vdc=640.0)
-inputs, point_pu = P.pftoinputs(model, point)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
+inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
-function pftoinputs(m::InductionMachine, setpoint::Setpoint)
+function pftoinputs(m::InductionMachine, values::NamedTuple)
 
     Sbase = m.elec.S_base
     Vacbase_LL = m.elec.Vac_base
     Vac_base_phpk = sqrt(2/3)* Vacbase_LL
-    v_bus_d = setpoint.Vac*cos(setpoint.θac) / Vac_base_phpk
+    v_bus_d = values.ac.v*cos(values.ac.theta) / Vac_base_phpk
 
-    v_bus_q = -setpoint.Vac*sin(setpoint.θac) / (Vac_base_phpk) # Inputs are in dq-lagging
+    v_bus_q = -values.ac.v*sin(values.ac.theta) / (Vac_base_phpk) # Inputs are in dq-lagging
 
-    sp = setpoint
-    sp_pu = SetpointPU(p_ac = sp.Pac/Sbase, q_ac = sp.Qac/Sbase, θ_ac= sp.θac, v_ac = sp.Vac/Vac_base_phpk)
+    sp_pu = SetpointPU(p_ac = values.ac.p/Sbase, q_ac = values.ac.q/Sbase,
+        θ_ac = values.ac.theta, v_ac = values.ac.v/Vac_base_phpk)
     return NamedTuple{inputnames(m)}((v_bus_d,v_bus_q)), sp_pu
 end
+
+_terminal_values(::InductionMachine, sp::Setpoint) = (
+    ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
+        coalesce(sp.Pac, NaN), coalesce(sp.Qac, NaN)),
+)
+
+# transitional
+pftoinputs(m::InductionMachine, setpoint::Setpoint) =
+    pftoinputs(m, _terminal_values(m, setpoint))
 
 function outputequations!(F,x,inputs,y,m::InductionMachine)
 
@@ -532,3 +543,9 @@ inputs(::InductionMachine) = (;)
 
 bases(model::InductionMachine) = BaseValues(S = model.elec.S_base,
     v_ac = model.elec.Vac_base * sqrt(2/3), omega = model.elec.ωn)
+
+function _withinputs(model::InductionMachine, declarations::NamedTuple, changes, path)
+    configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
+        model, declarations, changes, path)
+    return Parameters.reconstruct(configured; cache = LinearizationCache())
+end

@@ -5,6 +5,14 @@ Define the state-space interface shared by modular converter models.
 """
 abstract type AbstractConverter <: AbstractStateSpace end
 
+is_converter(::AbstractConverter) = true
+
+_terminal_values(::AbstractConverter, sp::Setpoint) = (
+    ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
+        coalesce(sp.Pac, NaN), coalesce(sp.Qac, NaN)),
+    dc = DCPortValues(coalesce(sp.Vdc, NaN), coalesce(sp.Pdc, NaN)),
+)
+
 
 
 

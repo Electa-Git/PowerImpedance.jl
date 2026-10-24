@@ -17,13 +17,14 @@ one_step_modulation(::PowerImpedance.CompensatedModulation, dt) =
     PowerImpedance.CompensatedModulation(timeDelay = dt, padeOrderNum = 3, padeOrderDen = 3)
 function one_step_model(m::PowerImpedance.MMC, dt)
     return PowerImpedance.MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
-        one_step_modulation(m.modulation, dt), m.elec, m.limits, m.powerflow)
+        one_step_modulation(m.modulation, dt), m.elec, m.limits, m.powerflow,
+        PowerImpedance.LinearizationCache())
 end
 function one_step_model(m::PowerImpedance.TLC, dt)
     return PowerImpedance.TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
         m.innerVoltage, m.innerCurrent,
         PowerImpedance.DelayModulation(timeDelay = dt, padeOrderNum = 3, padeOrderDen = 3),
-        m.limits, m.powerflow)
+        m.limits, m.powerflow, PowerImpedance.LinearizationCache())
 end
 modulation_states(m::PowerImpedance.MMC) = PowerImpedance.statenames(m.modulation)
 modulation_states(m::PowerImpedance.TLC) = PowerImpedance.statenames(m.mod)

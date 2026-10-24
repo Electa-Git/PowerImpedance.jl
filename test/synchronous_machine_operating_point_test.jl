@@ -25,7 +25,8 @@ end
         electrical = ElectricalSM(Vᵃᶜ_base=vbase, S_base=sbase, Ra=Ra, rt=rt, lt=lt,
             L23_d=0.01, L23_q=0.02)
         m = SynchronousMachine(electrical, MechanicalSM(), AVRSM(v_ref=1.2, K_A=gain),
-            GovernorSM(), PI.Limits(), (p = 0.0, q = 0.0, v = 1.0))
+            GovernorSM(), PI.Limits(), (p = 0.0, q = 0.0, v = 1.0),
+            PI.LinearizationCache())
         # Independent fixture starts at the machine terminal, not the bus.
         Vterminal = v * cis(θ)
         Igen = conj(complex(p, q) / Vterminal)
@@ -77,7 +78,8 @@ end
 
 @testset "Synchronous machine without a complete power-flow point" begin
     m = SynchronousMachine(ElectricalSM(), MechanicalSM(), AVRSM(v_ref=1.03),
-        GovernorSM(), PI.Limits(), (p = 0.0, q = 0.0, v = 1.0))
+        GovernorSM(), PI.Limits(), (p = 0.0, q = 0.0, v = 1.0),
+        PI.LinearizationCache())
     sp = Setpoint(Pac=50.0, Vac=220sqrt(2/3), θac=0.12)
     inputs, pu = PI.pftoinputs(m, sp)
     @test pu === nothing
