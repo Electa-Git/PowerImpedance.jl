@@ -81,7 +81,7 @@ function consumer_values(net::NB.NetworkState, flow)
         residual = zeros(length(solution.u))
         f!(residual, solution.u, parameters)
         @test norm(residual, Inf) <= 1e-6
-        @test sp.q_ac == point.ac.q / m.elec.Sbase
+        @test sp.q_ac == -point.ac.q / m.elec.Sbase
         converters[name] = (; state = copy(solution.u), A = copy(m.cache.A),
             B = copy(m.cache.B), C = copy(m.cache.C), D = copy(m.cache.D),
             y = NB.get_y(model, name, ComplexF64.(2π * im .* [1.0, 100.0, 5000.0])))
@@ -91,8 +91,8 @@ function consumer_values(net::NB.NetworkState, flow)
     fill!(y, model.element_admittances[model.active_elements], s)
     nodes = sort!(collect(keys(model.indices.nodes)); by = n -> model.indices.nodes[n])
     # transitional
-    setpoints = Dict(name => Setpoint(Pac = point.ac.p, Qac = point.ac.q,
-        Vac = point.ac.v, θac = point.ac.theta, Pdc = -point.dc.p, Vdc = point.dc.v)
+    setpoints = Dict(name => Setpoint(Pac = -point.ac.p, Qac = -point.ac.q,
+        Vac = point.ac.v, θac = point.ac.theta, Pdc = point.dc.p, Vdc = point.dc.v)
         for (name, point) in flow.operating_point.values
         if PI.is_converter(net.elements[name]))
     return (; converters, y, nodes, omega, setpoints)
@@ -202,11 +202,11 @@ end
         i = string(one.elem2comp[n].compkey)
         point = one.operating_point[n]
         @test point.ac.q ==
-              -one.result["solution"]["convdc"][i]["qgrid"] * one.data["baseMVA"]
-        @test point.ac.q > 1e-6
+              one.result["solution"]["convdc"][i]["qgrid"] * one.data["baseMVA"]
+        @test -point.ac.q > 1e-6
         e = only(filter(e -> e.name == n, a.elements))
         @test e.values == point
-        @test PI.pftoinputs(e.model, e.values)[2].q_ac == point.ac.q / e.model.elec.Sbase
+        @test PI.pftoinputs(e.model, e.values)[2].q_ac == -point.ac.q / e.model.elec.Sbase
     end
 end
 
@@ -325,9 +325,9 @@ function repeated_converter_power_flow(cases)
                     @test declared == map(inputvalues, state.elements)
                     for name in keys(two.setpoints)
                         point = flow.operating_point[name]
-                        @test two.setpoints[name] == Setpoint(Pac = point.ac.p,
-                            Qac = point.ac.q, θac = point.ac.theta, Vac = point.ac.v,
-                            Pdc = -point.dc.p, Vdc = point.dc.v)
+                        @test two.setpoints[name] == Setpoint(Pac = -point.ac.p,
+                            Qac = -point.ac.q, θac = point.ac.theta, Vac = point.ac.v,
+                            Pdc = point.dc.p, Vdc = point.dc.v)
                     end
                 end
                 @test one.nodes == two.nodes

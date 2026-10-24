@@ -73,8 +73,8 @@ end
 $(TYPEDEF)
 
 Store a component model, its ports, connections and solved terminal values.
-Powers injected into the bus use \\[MW, MVAr\\], angles \\[rad\\], AC voltages phase peak
-\\[kV\\], and DC source and converter voltages pole-to-pole \\[kV\\].
+Powers flowing into the component use \\[MW, MVAr\\], angles \\[rad\\], AC voltages
+phase peak \\[kV\\], and DC source and converter voltages pole-to-pole \\[kV\\].
 Retain the supplied model.
 
 $(TYPEDFIELDS)
@@ -225,7 +225,7 @@ function _branch_flow(model::PowerImpedance.InductionMachine,
     # Induction-machine pg/qg are powers absorbed at its AC terminal.
     states = NamedTuple{PowerImpedance.statenames(model)}(
         Tuple(PowerImpedance.steady_state(model, values)))
-    return (pf = -values.ac.p, qf = -values.ac.q, speed_pu = states.ω_r)
+    return (pf = values.ac.p, qf = values.ac.q, speed_pu = states.ω_r)
 end
 
 function _branch_flow(model::PowerImpedance.SynchronousMachine,
@@ -252,7 +252,7 @@ function _branch_flow(model::Union{PowerImpedance.TLC, PowerImpedance.MMC},
     # external ammeter points toward the bus. The DC port absorbs pdc.
     return (pgrid = Float64(solution["pgrid"]) * 1000,
         qgrid = Float64(solution["qgrid"]) * 1000,
-        pdc = -values.dc.p, pf = -values.dc.p, pt = values.ac.p, qt = values.ac.q)
+        pdc = values.dc.p, pf = values.dc.p, pt = -values.ac.p, qt = -values.ac.q)
 end
 
 function _netlist(elements, topology, voltage_base, frequency, supplied_pf)

@@ -66,7 +66,8 @@ const _BLACKBOX_MMC_INPUTS = (
         p_ac = Input(-10.0; unit = "MW", description = "AC active-power target"),
         q_ac = Input(3.0; unit = "MVAr", description = "AC reactive-power target"),
         v_ac = Input(333.0; unit = "kV", description = "AC phase-peak voltage target"),
-        p_dc = Input(100.0; unit = "MW", description = "DC active-power seed"),
+        p_dc = Input(100.0; unit = "MW",
+            description = "DC power into the converter; 603 MW in gives p_dc = 603"),
         v_dc = Input(640.0; unit = "kV", description = "DC pole-to-pole voltage target"),
     ),
 )
@@ -372,18 +373,19 @@ Store the classic power-flow result in the model's terminal cache.
 
 # Returns
 
-- Stored `(ac, dc)` port values. Their powers are injected into the buses.
+- Stored `(ac, dc)` port values. Powers are positive into the converter.
 
 # Notes
 
 The classic caller passes the negative solved reactive injection as `Qac`.
-The cache stores `q = -Qac`, which is the scan's reactive-power argument.
+The cache stores `p = -Pac`, `q = Qac` and `dc.p = Pdc`, positive into the converter.
+Scan evaluation negates both AC powers to recover the solved bus injections.
 """
 function update!(converter::Blackbox_MMC, Vm, θ, Pac, Qac, Vdc, Pdc)
     # Operating point from power flow
     converter.cache.values = (
-        ac = ACPortValues(Vm, θ, Pac, -Qac), # Correction for reactive power sign
-        dc = DCPortValues(Vdc, -Pdc),
+        ac = ACPortValues(Vm, θ, -Pac, Qac),
+        dc = DCPortValues(Vdc, Pdc),
     )
 end
 
@@ -406,7 +408,7 @@ Evaluate the imported admittance at the cached solved terminal values.
 # Notes
 
 ```math
-Y=T(\\theta)^{-1}Y_{scan}(V_{pu},p,q,f)T(\\theta),\\qquad
+Y=T(\\theta)^{-1}Y_{scan}(V_{pu},-p,-q,f)T(\\theta),\\qquad
 V_{pu}=\\frac{v}{\\sqrt{2/3}V_{LL,b}},\\qquad f=\\Re\\frac{s}{2\\pi\\mathrm{j}},
 ```
 
@@ -419,7 +421,8 @@ T(\\theta)=\\begin{bmatrix}
 ```
 
 Here `v` is the solved AC phase-peak voltage \\[kV\\], `V_LL,b` is `vACbase`
-\\[kV\\], and `p` \\[MW\\] and `q` \\[MVAr\\] are solved AC bus injections.
+\\[kV\\], and `p` \\[MW\\] and `q` \\[MVAr\\] are solved powers into the converter.
+The scan receives the solved active- and reactive-power injections into the AC bus.
 The imported interpolant uses linear extrapolation outside the sampled intervals.
 DC voltage is not an interpolation axis.
 
@@ -443,7 +446,7 @@ function eval_parameters(converter::Blackbox_MMC, s::Complex)
     # Operating point from power flow
     Vpu = ac.v / (sqrt(2/3) * converter.vACbase) # Convert from LN-PK to pu
     # Interpolate Y-parameters at given operating point and frequency
-    Y1 = converter.itp(Vpu, ac.p, ac.q, real(s / (2pi * 1im)))
+    Y1 = converter.itp(Vpu, -ac.p, -ac.q, real(s / (2pi * 1im)))
     # Transform into global dq frame
     TdqDC_0 = [1 0 0; 0 cos(ac.theta) -sin(ac.theta); 0 sin(ac.theta) cos(ac.theta)]
     return inv(TdqDC_0) * Y1 * TdqDC_0
@@ -504,6 +507,8 @@ $(TYPEDSIGNATURES)
 Return `nothing`. The scan-based MMC has no model power base.
 """
 bases(::Blackbox_MMC) = nothing
+
+limits(model::Blackbox_MMC) = model.limits
 
 electricalconnections(::Blackbox_MMC) = (ac = Port(ACDQ), dc = Port(DC_CM))
 
@@ -690,7 +695,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Convert solved powers and voltages to values injected into each bus.
+Convert solved powers and voltages to port values positive into the converter.
+Taking 603 MW from DC and delivering 600 MW to AC gives `dc.p = 603` and `ac.p = -600`.
 
 # Arguments
 
@@ -703,10 +709,10 @@ Convert solved powers and voltages to values injected into each bus.
 
 # Returns
 
-- `ac`: `ACPortValues` in phase-peak \\[kV\\], \\[rad\\], injected \\[MW\\]
-  and injected \\[MVAr\\].
-- `dc`: `DCPortValues` in pole-to-pole \\[kV\\] and injected \\[MW\\].
-  A converter inverting from DC to AC has `dc.p < 0`.
+- `ac`: `ACPortValues` in phase-peak \\[kV\\], \\[rad\\], \\[MW\\] into the converter
+  and \\[MVAr\\] into the converter.
+- `dc`: `DCPortValues` in pole-to-pole \\[kV\\] and \\[MW\\] into the converter.
+  A converter inverting from DC to AC has `dc.p > 0`.
 """
 function transform(elemresult, busresult::NamedTuple, global_dict,
         model::Blackbox_MMC, ::Type{PMACDC}, ::Type{PIACDC})
@@ -714,9 +720,9 @@ function transform(elemresult, busresult::NamedTuple, global_dict,
     dc = busresult.dc
     return (
         ac = ACPortValues(ac["vm"] * global_dict["V"] / 1e3 * sqrt(2), ac["va"],
-            -elemresult["pgrid"] * global_dict["S"] / 1e6,
-            -elemresult["qgrid"] * global_dict["S"] / 1e6),
+            elemresult["pgrid"] * global_dict["S"] / 1e6,
+            elemresult["qgrid"] * global_dict["S"] / 1e6),
         dc = DCPortValues(dc["vm"] * (dcpol * global_dict["V"] / 1e3),
-            -elemresult["pdc"] * global_dict["S"] / 1e6),
+            elemresult["pdc"] * global_dict["S"] / 1e6),
     )
 end

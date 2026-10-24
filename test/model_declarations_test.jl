@@ -122,14 +122,14 @@ end
     converter = gfl()
     configured_converter = component(converter; limits = PI.Limits(P_max = 0.8),
         delta_control = (outer_active = (p_ref = 0.3,),),
-        powerflow = (v_ac = 1.02, p_dc = -0.4))
+        powerflow = (v_ac = 1.02, p_dc = 0.4))
     @test inputs(configured_converter) == inputs(converter)
     @test inputs(configured_converter).delta_control.outer_active.p_ref.default === 0.0
     @test inputs(configured_converter).powerflow.v_ac.default === 1.0
     @test inputvalues(configured_converter).delta_control.outer_active.p_ref === 0.3
     @test inputvalues(configured_converter).powerflow === configured_converter.powerflow
     @test inputvalues(configured_converter).powerflow ===
-        (p_ac = 0.0, q_ac = 0.0, v_ac = 1.02, p_dc = -0.4, v_dc = 1.0)
+        (p_ac = 0.0, q_ac = 0.0, v_ac = 1.02, p_dc = 0.4, v_dc = 1.0)
     @test inputvalues(converter) == declared_defaults(inputs(converter))
 
     machine = synchronousmachine().element_model
@@ -305,14 +305,19 @@ end
     @test configured.elec === model.elec
     @test_throws r"delta_control.outer_active.p_reff" withinputs(model;
         delta_control = (outer_active = (p_reff = 0.1,),))
+    @test withinputs(OuterActivePowerControl(); p_ref = 1).p_ref === 1.0
+    promoted = withinputs(model; delta_control = (outer_active = (p_ref = 1,),))
+    @test promoted.delta_control.outer_active.p_ref === 1.0
     @test_throws r"delta_control.outer_active.p_ref" withinputs(model;
-        delta_control = (outer_active = (p_ref = 1,),))
+        delta_control = (outer_active = (p_ref = "1",),))
     @test_throws r"delta_control.outer_active.support.v_dc_ref" withinputs(model;
         delta_control = (outer_active = (support = (v_dc_ref = "1.0",),),))
     @test_throws r"delta_control.outer_active" withinputs(model;
         delta_control = (outer_active = 0.1,))
     @test_throws r"unknown" withinputs(model; unknown = 0.0)
-    @test_throws r"powerflow.p_ac" withinputs(model; powerflow = (p_ac = 1,))
+    promoted = withinputs(model; powerflow = (p_dc = 1,))
+    @test promoted.powerflow.p_dc === 1.0
+    @test_throws r"powerflow.p_ac" withinputs(model; powerflow = (p_ac = "1",))
     changed_limits = PI.Limits(P_min = -0.7, P_max = 0.8, Q_min = -0.3, Q_max = 0.4)
     configured = component(model; limits = changed_limits,
         delta_control = (outer_active = (p_ref = 0.4,),))
@@ -344,10 +349,16 @@ end
         avr = (v_ref = 1.04,), powerflow = (p = 0.2,))
     @test seeded.avr.v_ref === 1.04
     @test seeded.powerflow == (p = 0.2, q = 0.0, v = 1.0)
+    machine = synchronousmachine().element_model
+    promoted = withinputs(machine; avr = (v_ref = 1,), powerflow = (p = 1,))
+    @test promoted.avr.v_ref === 1.0
+    @test promoted.powerflow.p === 1.0
+    @test_throws r"avr.v_ref" withinputs(machine; avr = (v_ref = "1",))
+    @test_throws r"powerflow.p" withinputs(machine; powerflow = (p = "1",))
 end
 
 @testset "Power-flow reference ownership" begin
-    seeds = (p_ac = 0.51, q_ac = 0.52, v_ac = 1.03, p_dc = -0.54, v_dc = 1.05)
+    seeds = (p_ac = 0.51, q_ac = 0.52, v_ac = 1.03, p_dc = 0.54, v_dc = 1.05)
     for (active, active_values) in (
             (NoOuterActiveControl(), (;)),
             (OuterActivePowerControl(p_ref = 0.11), (p_ac = 0.11,)),
@@ -429,7 +440,7 @@ end
             outerReactive = OuterReactiveVacControl()).element_model)
         configured = with_logger(NullLogger()) do
             withinputs(model; powerflow = (p_ac = 0.2, q_ac = 0.1,
-                v_ac = 1.04, p_dc = -0.3, v_dc = 1.05))
+                v_ac = 1.04, p_dc = 0.3, v_dc = 1.05))
         end
         @test PI.pftoinputs(configured, point) == PI.pftoinputs(model, point)
     end
@@ -463,7 +474,10 @@ end
     end
     for model in passive_models(3)
         @test bases(model) === nothing
+        @test limits(model) === nothing
     end
+    @test limits(inductionmachine().element_model) === nothing
+    @test limits(Undeclared()) === nothing
     @test bases(ac_source().element_model) === nothing
     @test bases(dc_source().element_model) === nothing
     requested = PI.Limits(P_min = -10.0, P_max = 10.0, Q_min = -5.0, Q_max = 5.0)

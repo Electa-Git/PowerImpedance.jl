@@ -120,9 +120,9 @@ end
             b = bases(model)
             p_ac = PI.powerflow_targets(model).p_ac * b.S
             fallback = model isa MMC ? p_ac : -p_ac
-            expected = (iszero(p_dc) ? fallback : -p_dc * b.S) / data["baseMVA"]
+            expected = (iszero(p_dc) ? fallback : p_dc * b.S) / data["baseMVA"]
             @test entry["Pdcset"] === expected
-            configured = NB._configured_model(model, Setpoint(Pdc = -p_dc * b.S),
+            configured = NB._configured_model(model, Setpoint(Pdc = p_dc * b.S),
                 limits(model))
             @test configured.powerflow.p_dc === p_dc
             retained = NB._configured_model(model, Setpoint(), limits(model))
@@ -136,14 +136,14 @@ end
     powerflow = compute(PowerFlowProblem(state), ACDCPowerFlow())
     point = powerflow.operating_point
     @test point[:G_AC].ac.v == 380sqrt(2/3)
-    @test point[:G_AC].ac.p == -600.0
-    @test point[:G_AC].ac.q == -200.0
+    @test point[:G_AC].ac.p == 600.0
+    @test point[:G_AC].ac.q == 200.0
     @test point[:G_DC].dc.v == 800.0
     path = joinpath(@__DIR__, "reference/v2/numeric.csv")
     line = only(line for line in eachline(path)
         if startswith(line, "mmc_pq.pf.gendc.G_DC.pgdc,"))
     reference_pgdc = parse(Float64, split(line, ',')[5])
-    @test point[:G_DC].dc.p == reference_pgdc * 1000
+    @test point[:G_DC].dc.p == -reference_pgdc * 1000
 end
 
 

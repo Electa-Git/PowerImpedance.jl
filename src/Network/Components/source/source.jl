@@ -411,6 +411,8 @@ inputs(::Source, ::DCDomain) = _DC_SOURCE_INPUTS
 
 bases(::Source) = nothing
 
+limits(model::Source) = model.limits
+
 
 pmtype(model::Source, rows) = is_three_phase(model) ? "gen" : "gendc"
 
@@ -499,7 +501,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Return source port values with powers injected into the bus.
+Return source port powers positive into the source. Delivering 900 MW gives `p = -900`.
+Reactive power follows the same rule.
 """
 function transform(elemresult, busresult::NamedTuple, global_dict,
         model::Source, ::Type{PMACDC}, ::Type{PIACDC})
@@ -512,12 +515,12 @@ function transform(elemresult, busresult, global_dict,
     p = elemresult["pg"] * global_dict["S"] / 1e6
     q = elemresult["qg"] * global_dict["S"] / 1e6
     v = (bus["vm"] * global_dict["V"] / 1e3) * sqrt(2)
-    return (ac = ACPortValues(v, bus["va"], p, q),)
+    return (ac = ACPortValues(v, bus["va"], -p, -q),)
 end
 
 function transform(elemresult, busresult, global_dict,
         ::DCDomain, ::Type{PMACDC}, ::Type{PIACDC})
     p = elemresult["pgdc"] * global_dict["S"] / 1e6
     v = busresult.dc["vm"] * (dcpol * global_dict["V"] / 1e3)
-    return (dc = DCPortValues(v, p),)
+    return (dc = DCPortValues(v, -p),)
 end

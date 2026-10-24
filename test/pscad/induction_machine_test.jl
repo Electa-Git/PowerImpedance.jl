@@ -72,8 +72,8 @@ end
         flow = nl.operating_point.branch_flows[:im1]
         states = NamedTuple{PowerImpedance.statenames(e.model)}(
             Tuple(steady_state(e.model, e.values)))
-        @test flow.pf ≈ -e.values.ac.p
-        @test flow.qf ≈ -e.values.ac.q
+        @test flow.pf ≈ e.values.ac.p
+        @test flow.qf ≈ e.values.ac.q
         @test abs(flow.pf - 915.754) / e.model.elec.S_base < 0.01
         @test abs(flow.qf - 881.512) / e.model.elec.S_base < 0.01
         @test 0.97 < flow.speed_pu == states.ω_r < 1.0

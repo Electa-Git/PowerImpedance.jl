@@ -473,7 +473,8 @@ $(TYPEDSIGNATURES)
 
 Convert physical terminal values to normalized external inputs and internal
 terminal data.
-Port powers are injected into each bus. DC-to-AC inversion has `values.dc.p < 0`.
+Port powers are positive into the converter. Taking 603 MW from DC and delivering
+600 MW to AC gives `dc.p = 603` and `ac.p = -600`.
 
 # Arguments
 
@@ -496,7 +497,7 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
-power base, with DC power negated to get the power taken from the DC bus.
+power base, with AC powers negated to get the powers delivered to the AC bus.
 DC voltage is divided by the pole-to-pole DC base.
 
 # Examples
@@ -508,17 +509,17 @@ model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
     sigma_control=ΣdqzControlTEC()).element_model
-values = (ac = ACPortValues(380sqrt(2/3), 0.0, 100.0, 0.0),
-    dc = DCPortValues(640.0, -100.0))
+values = (ac = ACPortValues(380sqrt(2/3), 0.0, -100.0, 0.0),
+    dc = DCPortValues(640.0, 100.0))
 inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
 function pftoinputs(c::MMC, values::NamedTuple)
     v_ac = values.ac.v / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
     v_dc = values.dc.v / c.elec.vDC_base
-    p_ac = values.ac.p / c.elec.Sbase
-    q_ac = values.ac.q / c.elec.Sbase
-    p_dc = -values.dc.p / c.elec.Sbase
+    p_ac = -values.ac.p / c.elec.Sbase
+    q_ac = -values.ac.q / c.elec.Sbase
+    p_dc = values.dc.p / c.elec.Sbase
     
     vG_d = v_ac * cos(values.ac.theta)   # d component of the grid voltage in the grid frame
     vG_q = -v_ac * sin(values.ac.theta)  # q component of the grid voltage in the grid frame
@@ -914,6 +915,8 @@ powerflow_targets(model::MMC) = merge(model.powerflow, _powerflow_references(mod
 bases(model::MMC) = BaseValues(S = model.elec.Sbase, v_ac = model.elec.vAC_base,
     v_dc = model.elec.vDC_base, omega = model.elec.ωbase)
 
+limits(model::MMC) = model.limits
+
 function _withinputs(model::MMC, declarations::NamedTuple, changes, path)
     configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
         model, declarations, changes, path)
@@ -932,7 +935,7 @@ function convert!(data, conv::MMC, ::Type{PMACDC}, component_key,
     p_ac = target.p_ac * b.S
     q_ac = target.q_ac * b.S
     v_ac = target.v_ac * b.v_ac
-    p_dc = -target.p_dc * b.S
+    p_dc = target.p_dc * b.S
     v_dc = target.v_dc * b.v_dc
     lm = limits(conv)
     ac_bus = ports.ac

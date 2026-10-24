@@ -106,12 +106,13 @@ Return the component's stored operating limits.
 
 # Arguments
 
-- `model`: Component model with a `limits::Limits` field.
+- `model`: Component model.
 
 # Returns
 
 - Stored `Limits`. MMC power limits use converter bases \\[dimensionless\\]. TLC,
   black-box MMC, synchronous-machine and source limits use \\[MW\\] and \\[MVAr\\].
-  These conventions match the existing model calculations.
+  These conventions match the existing model calculations. Models without stored
+  limits, including passives and induction machines, return `nothing`.
 """
-limits(model) = model.limits
+limits(::Any) = nothing

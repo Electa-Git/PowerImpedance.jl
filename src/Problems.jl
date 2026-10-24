@@ -18,8 +18,11 @@ _default_backend(formulation::Type) = get(_FORMULATION_BACKENDS, formulation, PI
 $(TYPEDEF)
 
 Store physical terminal values by element and port name.
-Port powers are injected into each bus. An induction machine running as a motor
-has `ac.p < 0`. A converter inverting from DC to AC has `dc.p < 0`.
+Power and current flowing into the component through each port are positive.
+A source or synchronous machine delivering 900 MW has `ac.p = -900`. An induction
+motor drawing 916 MW has `ac.p = 916`. A converter taking 603 MW from DC and
+delivering 600 MW to AC has `dc.p = 603` and `ac.p = -600`. Reactive power follows
+the same rule, including for the black-box MMC. Admittances use `Y = I_in / V`.
 
 Each entry is a NamedTuple of `ACPortValues` or `DCPortValues`. Access values with
 `point[:c1].ac.p`, `point[:c1].dc.v`, or `get(point, :c1, nothing)`. `keys` returns

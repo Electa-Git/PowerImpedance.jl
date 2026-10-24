@@ -245,7 +245,7 @@ end
         "gendc" => Dict("1" => Dict()),
         "busdc" => Dict("1" => Dict("basekVdc" => 400.0),
             "2" => Dict("basekVdc" => 400.0)))
-    dc_values = (; dc = DCPortValues(824.0, 200.0))
+    dc_values = (; dc = DCPortValues(824.0, -200.0))
     dc_pf = PowerFlowResult(NB.ACDCPowerFlow(), dc_result, dc_data,
         NB._node_bus_mapping(dc_state.topology),
         Dict(:branch => ("branchdc", 1), :source => ("gendc", 1)),
@@ -273,8 +273,8 @@ end
         NB.Bus(:DC; ports = ((:converter, :dc),)),
         NB.Bus(:AC; ports = ((:converter, :ac),)));
         options = (; voltageBase = 320.0))
-    conv_values = (ac = ACPortValues(1.02 * 320 * sqrt(2), 0.1, 320.0, -80.0),
-        dc = DCPortValues(0.99 * 2 * 320, -300.0))
+    conv_values = (ac = ACPortValues(1.02 * 320 * sqrt(2), 0.1, -320.0, 80.0),
+        dc = DCPortValues(0.99 * 2 * 320, 300.0))
     conv_result = Dict("solution" => Dict(
         "bus" => Dict("1" => Dict("vm" => 1.02, "va" => 0.1)),
         "busdc" => Dict("1" => Dict("vm" => 0.99)),

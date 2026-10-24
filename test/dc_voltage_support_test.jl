@@ -130,7 +130,7 @@ end
         @test F[findfirst(==(:ξ_vdc_supp), PI.statenames(m))] == 0.0
         @test abs(outputs.meas.P_ac_f - sp.p_ac) <= 1e-6
         @test sp.v_dc == point.dc.v / 640.0
-        K > 0 && @test abs(point.ac.p - 50.0) > 30.0
+        K > 0 && @test abs(-point.ac.p - 50.0) > 30.0
         println((; kind, K, Vdc = point.dc.v, Pac = point.ac.p, residual = norm(F, Inf)))
     end
 end

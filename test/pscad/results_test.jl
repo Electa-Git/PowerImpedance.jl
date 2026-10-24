@@ -611,8 +611,8 @@ end
     flow = netlist.operating_point.branch_flows[:DUT]
     @test flow.pt == -flow.pgrid
     @test flow.qt == -flow.qgrid
-    @test flow.pt ≈ converter.values.ac.p
-    @test flow.qt ≈ converter.values.ac.q
+    @test flow.pt ≈ -converter.values.ac.p
+    @test flow.qt ≈ -converter.values.ac.q
     for channel in plan.probes.channels
         bus = only(filter(b -> b.name == channel.bus, netlist.buses))
         voltage = bus.base_kV * bus.vm_pu

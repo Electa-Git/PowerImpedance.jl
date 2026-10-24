@@ -300,7 +300,7 @@ end
               (element.elec.Rf_d*element.avr.K_A)
         @test defaults["Verror0"] == effective.vref_SG-defaults["Vt0"]
         @test defaults["Vreg0"] == element.avr.K_A*defaults["Verror0"]
-        @test effective.Tm0 ≈ values.ac.p/element.elec.S_base +
+        @test effective.Tm0 ≈ -values.ac.p/element.elec.S_base +
               element.elec.Ra*(equilibrium.i_d^2+equilibrium.i_q^2)
         @test isempty(components(avr.canvas, "const"))
         @test parameters(gov.canvas, "const")["Value"] == "1.0"

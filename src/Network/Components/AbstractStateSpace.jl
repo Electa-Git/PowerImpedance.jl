@@ -267,7 +267,7 @@ after a failed default solve.
 ```julia
 using PowerImpedance
 model = synchronousmachine().element_model
-values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 A, B, C, D = linearize(model, values)
 ```
 """
@@ -371,7 +371,7 @@ when the values compare equal with `isequal`. Otherwise, call [`linearize`](@ref
 
 ```julia
 model = synchronousmachine().element_model
-values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 x = steady_state(model, values)
 @assert steady_state(model, values) === x
 ```

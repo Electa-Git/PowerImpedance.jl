@@ -137,13 +137,13 @@ include("manual/pscad/validation/classic_fixtures.jl")
         @test actual.Vterminal ≈ Vt_pf atol=POWER_FLOW_ATOL rtol=0
         @test abs(actual.Vterminal) ≈ abs(Vt_pf) atol=POWER_FLOW_ATOL rtol=0
         @test inputs.vref_SG != m.avr.v_ref
-        @test inputs.Tm0 > point.ac.p/m.elec.S_base
+        @test inputs.Tm0 > -point.ac.p/m.elec.S_base
         F = zeros(16)
         PI._state_space!(F, state, collect(values(inputs)), pu, m, PI.Equil())
         @test norm(F, Inf) <= DYNAMIC_ATOL
         @test state ≈ collect(values(PI.orderedinitialvalues(m; inputs, setpoint_pu=pu))) atol=DYNAMIC_ATOL
         # A changed operating point recomputes references from its own phasors.
-        next_sp = (ac = ACPortValues(point.ac.v, 0.2, 700.0, 40.0),)
+        next_sp = (ac = ACPortValues(point.ac.v, 0.2, -700.0, -40.0),)
         next_state = steady_state(m, next_sp)
         next_inputs, _ = PI.pftoinputs(m, next_sp)
         next_actual = terminal_quantities(m, next_inputs, next_state)

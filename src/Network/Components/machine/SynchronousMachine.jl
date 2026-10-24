@@ -300,7 +300,7 @@ $(TYPEDSIGNATURES)
 
 Convert physical terminal values to normalized external inputs and internal
 terminal data.
-Port powers are injected into the bus.
+Port powers are positive into the machine. Delivering 900 MW gives `ac.p = -900`.
 
 # Arguments
 
@@ -323,9 +323,9 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
-power base. A complete operating point determines fixed turbine and AVR references from
-the terminal power-flow solution; otherwise `Tm0=values.ac.p/S_base` and the configured AVR
-reference is retained.
+power base after negation. A complete operating point determines fixed turbine and AVR
+references from the terminal power-flow solution; otherwise `Tm0=-values.ac.p/S_base`
+and the configured AVR reference is retained.
 
 # Examples
 
@@ -333,19 +333,19 @@ reference is retained.
 using PowerImpedance
 P = PowerImpedance
 model = synchronousmachine().element_model
-values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
 function pftoinputs(m::SynchronousMachine, values::NamedTuple)
     v_bus_d = values.ac.v * cos(values.ac.theta) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
     v_bus_q = -values.ac.v * sin(values.ac.theta) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
-    p_ac = values.ac.p / m.elec.S_base
+    p_ac = -values.ac.p / m.elec.S_base
     if isnan(values.ac.q)
         return (; vd=v_bus_d, vq=v_bus_q, Tm0=p_ac,
             vref_SG=m.avr.v_ref), nothing
     end
-    sp = SetpointPU(p_ac=p_ac, q_ac=values.ac.q / m.elec.S_base,
+    sp = SetpointPU(p_ac=p_ac, q_ac=-values.ac.q / m.elec.S_base,
         θ_ac=values.ac.theta, v_ac=values.ac.v / (m.elec.Vᵃᶜ_base * sqrt(2/3)))
     point = _machine_powerflow_state(m, sp)
     return (; vd=v_bus_d, vq=v_bus_q, Tm0=point.Tm0,
@@ -354,7 +354,7 @@ end
 
 _terminal_values(::SynchronousMachine, sp::Setpoint) = (
     ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
-        coalesce(sp.Pac, NaN), coalesce(sp.Qac, NaN)),
+        -coalesce(sp.Pac, NaN), -coalesce(sp.Qac, NaN)),
 )
 
 # transitional
@@ -970,6 +970,8 @@ inputs(model::SynchronousMachine) = (
 bases(model::SynchronousMachine) = BaseValues(S = model.elec.S_base,
     v_ac = model.elec.Vᵃᶜ_base * sqrt(2/3), omega = model.elec.ωn)
 
+limits(model::SynchronousMachine) = model.limits
+
 function _withinputs(model::SynchronousMachine, declarations::NamedTuple, changes, path)
     configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
         model, declarations, changes, path)
@@ -1071,7 +1073,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Return AC port values with powers injected into the bus.
+Return AC port powers positive into the machine. Delivering 900 MW gives `ac.p = -900`.
 """
 function transform(elemresult, busresult::NamedTuple, global_dict,
         model::SynchronousMachine, ::Type{PMACDC}, ::Type{PIACDC})
@@ -1085,5 +1087,5 @@ function transform(elemresult, busresult::NamedTuple, global_dict,
             global_dict["V"] / 1e3) * sqrt(2)
     θ = acbusresult["va"]
 
-    return (ac = ACPortValues(Vm, θ, Pgen, Qgen),)
+    return (ac = ACPortValues(Vm, θ, -Pgen, -Qgen),)
 end

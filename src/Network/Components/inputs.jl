@@ -3,7 +3,7 @@ export Input, inputs, inputvalues, withinputs, component
 """
 $(TYPEDEF)
 
-Describe a configurable input value, its accepted type, unit and description.
+Describe a configurable input value, its declared type, unit and description.
 
 $(TYPEDFIELDS)
 """
@@ -12,7 +12,7 @@ struct Input{V, T}
     default::V
     "Physical unit, or an empty string for an unspecified unit."
     unit::String
-    "Accepted Julia type."
+    "Declared Julia type."
     type::Type{T}
     "Description of the input quantity."
     description::String
@@ -27,7 +27,7 @@ Construct an input declaration from a default value.
 
 - `default`: Declared default value.
 - `unit`: Unit label. Default: `""`.
-- `type`: Accepted Julia type. Default: `typeof(default)`.
+- `type`: Declared Julia type. Default: `typeof(default)`.
 - `description`: Description of the input. Default: `""`.
 
 # Returns
@@ -48,7 +48,8 @@ const _CONVERTER_POWERFLOW_INPUTS = (
     q_ac = Input(0.0; unit = "pu", description = "AC reactive-power seed"),
     v_ac = Input(1.0; unit = "pu", description = "AC-voltage power-flow seed"),
     p_dc = Input(0.0; unit = "pu",
-        description = "DC power injected into the bus on the converter base"),
+        description = "DC power into the converter on its base; " *
+            "603 MW in gives p_dc = 603/Sbase"),
     v_dc = Input(1.0; unit = "pu", description = "DC-voltage power-flow seed"),
 )
 
@@ -99,9 +100,12 @@ end
 inputvalues(value, ::Input) = value
 
 function _withinputs(value, declaration::Input, changed, path)
-    changed isa declaration.type ||
+    try
+        return convert(declaration.type, changed)
+    catch error
+        error isa InterruptException && rethrow()
         throw(ArgumentError("Input $path requires $(declaration.type)."))
-    return changed
+    end
 end
 
 function _withinputs(model, declarations::NamedTuple, changes, path)
@@ -128,7 +132,7 @@ Return a copy with the supplied nested input values.
 
 - `model`: Component model or control block.
 - `nested...`: Partial NamedTuples following the field names in `inputs(model)`.
-  Input types must match their declarations. Untouched blocks are reused by identity.
+  Values are converted to their declared types. Untouched blocks are reused by identity.
 
 # Returns
 
@@ -141,12 +145,13 @@ The seed is stored. `powerflow_targets` selects the loop reference for that quan
 
 # Errors
 
-- Throws `ArgumentError` naming the full input path for an unknown key or wrong type.
+- Throws `ArgumentError` naming the full input path for an unknown key or a value
+  that cannot be converted.
 
 # Examples
 
 ```julia
-withinputs(OuterActivePowerControl(); p_ref = 0.2)
+withinputs(OuterActivePowerControl(); p_ref = 1)  # Stores 1.0.
 ```
 """
 function withinputs(model; nested...)
@@ -213,6 +218,6 @@ Select converter power-flow targets from loop references and stored seeds.
 
 - NamedTuple `(p_ac, q_ac, v_ac, p_dc, v_dc)` on converter bases
   \\[dimensionless\\]. Loop references replace owned quantities. `p_dc` uses its seed
-  for power injected into the DC bus.
+  for power flowing into the converter through its DC port.
 """
 function powerflow_targets end

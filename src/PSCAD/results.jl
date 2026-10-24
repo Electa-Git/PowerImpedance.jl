@@ -288,7 +288,7 @@ from device to bus. Compare with terminal `pf/qf` for the machine or
 (`elec.S_base` for machines, `elec.Sbase` for converters) \\[MVA\\], with tolerance
 `0.01`. Filtered converter `P_ac_f/Q_ac_f` use that rating as their per-unit base
 and an absolute error tolerance of `0.01`. The sine q basis gives
-`Q_ac = -v_q*i_d + v_d*i_q`, so its reference is `values.ac.q/Sbase`, equal to
+`Q_ac = -v_q*i_d + v_d*i_q`, so its reference is `-values.ac.q/Sbase`, equal to
 `-qgrid/Sbase`.
 
 Reconstruct the machine terminal voltage as

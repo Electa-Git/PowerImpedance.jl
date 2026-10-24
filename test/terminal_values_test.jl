@@ -27,7 +27,7 @@ empty_cache(cache) = all(f -> getfield(cache, f) === nothing, fieldnames(typeof(
 
 @testset "Solved port powers and frozen Setpoint inputs" begin
     path = joinpath(@__DIR__, "reference/v2/numeric.csv")
-    for (name, element) in ((:im, :im1), (:mmc_pq, :DUT), (:tlc_case1, :DUT))
+    for (name, element) in ((:im, :im1), (:sm, :sg1), (:mmc_pq, :DUT), (:tlc_case1, :DUT))
         @testset "$name" begin
             fixture = only(filter(f -> f.name == name, ParityFixtures.FIXTURES))
             network = fixture.build()
@@ -41,10 +41,14 @@ empty_cache(cache) = all(f -> getfield(cache, f) === nothing, fieldnames(typeof(
                 if startswith(line, prefix))
             frozen = Setpoint(; fields...)
             if model isa PI.InductionMachine
+                @test values.ac.p === frozen.Pac
+                @test values.ac.q === frozen.Qac
+            else
                 @test values.ac.p === -frozen.Pac
                 @test values.ac.q === -frozen.Qac
-            else
-                @test values.dc.p === -frozen.Pdc
+                if model isa Union{MMC, TLC}
+                    @test values.dc.p === frozen.Pdc
+                end
             end
             inputs, pu = PI.pftoinputs(model, values)
             old_inputs, old_pu = PI.pftoinputs(model, frozen)
@@ -109,7 +113,7 @@ end
 
 @testset "Configured cache ownership" begin
     model = synchronousmachine().element_model
-    model.cache.values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
+    model.cache.values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
     configured = withinputs(model; avr = (v_ref = 1.02,))
     @test configured.avr.v_ref === 1.02
     @test model.avr.v_ref === 1.01
@@ -129,7 +133,7 @@ end
     model = synchronousmachine(avr = AVRSM(v_ref = 1.07)).element_model
     point = Setpoint(Vac = 220sqrt(2/3), θac = 0.17, Pac = 100.0)
     input, pu = PI.pftoinputs(model, point)
-    values = (ac = ACPortValues(point.Vac, point.θac, point.Pac, NaN),)
+    values = (ac = ACPortValues(point.Vac, point.θac, -point.Pac, NaN),)
     direct, direct_pu = PI.pftoinputs(model, values)
     @test input === direct
     @test pu === direct_pu === nothing

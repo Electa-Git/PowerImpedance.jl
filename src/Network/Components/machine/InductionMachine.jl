@@ -159,7 +159,7 @@ $(TYPEDSIGNATURES)
 
 Convert physical terminal values to normalized external inputs and internal
 terminal data.
-Port powers are injected into the bus. An induction motor has `values.ac.p < 0`.
+Port powers are positive into the machine. A motor drawing 916 MW has `ac.p = 916`.
 
 # Arguments
 
@@ -181,7 +181,7 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
-power base after negation to get the machine's absorbed powers.
+power base to get the machine's absorbed powers.
 
 # Examples
 
@@ -189,7 +189,7 @@ power base after negation to get the machine's absorbed powers.
 using PowerImpedance
 P = PowerImpedance
 model = inductionmachine().element_model
-values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
 inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
@@ -202,14 +202,14 @@ function pftoinputs(m::InductionMachine, values::NamedTuple)
 
     v_bus_q = -values.ac.v*sin(values.ac.theta) / (Vac_base_phpk) # Inputs are in dq-lagging
 
-    sp_pu = SetpointPU(p_ac = -values.ac.p/Sbase, q_ac = -values.ac.q/Sbase,
+    sp_pu = SetpointPU(p_ac = values.ac.p/Sbase, q_ac = values.ac.q/Sbase,
         θ_ac = values.ac.theta, v_ac = values.ac.v/Vac_base_phpk)
     return NamedTuple{inputnames(m)}((v_bus_d,v_bus_q)), sp_pu
 end
 
 _terminal_values(::InductionMachine, sp::Setpoint) = (
     ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
-        -coalesce(sp.Pac, NaN), -coalesce(sp.Qac, NaN)),
+        coalesce(sp.Pac, NaN), coalesce(sp.Qac, NaN)),
 )
 
 # transitional
@@ -615,8 +615,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Return AC port values with powers injected into the bus.
-An induction machine running as a motor has `ac.p < 0`.
+Return AC port powers positive into the machine. A motor drawing 916 MW has `ac.p = 916`.
+Reactive power follows the same rule.
 """
 function transform(elemresult, busresult::NamedTuple, global_dict,
         model::InductionMachine, ::Type{PMACDC}, ::Type{PIACDC})
@@ -630,5 +630,5 @@ function transform(elemresult, busresult::NamedTuple, global_dict,
             global_dict["V"] / 1e3) * sqrt(2)
     θ = acbusresult["va"]
 
-    return (ac = ACPortValues(Vm, θ, -Pgen, -Qgen),)
+    return (ac = ACPortValues(Vm, θ, Pgen, Qgen),)
 end

@@ -3,8 +3,10 @@ export ACPortValues, DCPortValues
 """
 $(TYPEDEF)
 
-Store physical terminal values at an AC port. Powers are injected into the bus.
-An induction machine running as a motor has `p < 0`.
+Store physical terminal values at an AC port. Power flowing into the component is
+positive, as for the current in `Y = I_in / V`. A source or synchronous machine
+delivering 900 MW has `p = -900`. An induction motor drawing 916 MW has `p = 916`.
+A converter delivering 600 MW to AC has `p = -600`. Reactive power follows the same rule.
 Real arguments are converted to `Float64`. Use `NaN` for unknown reactive power.
 
 $(TYPEDFIELDS)
@@ -20,17 +22,18 @@ struct ACPortValues
     v::Float64
     "Voltage angle \\[rad\\]."
     theta::Float64
-    "Active power injected into the bus \\[MW\\]."
+    "Active power flowing into the component \\[MW\\]."
     p::Float64
-    "Reactive power injected into the bus \\[MVAr\\], or `NaN` when unknown."
+    "Reactive power flowing into the component \\[MVAr\\], or `NaN` when unknown."
     q::Float64
 end
 
 """
 $(TYPEDEF)
 
-Store physical terminal values at a DC port. Power is injected into the bus.
-A converter inverting from DC to AC has `p < 0`.
+Store physical terminal values at a DC port. Power flowing into the component is
+positive, as for the current in `Y = I_in / V`. A source delivering 900 MW has
+`p = -900`. A converter taking 603 MW from DC has `p = 603`.
 Real arguments are converted to `Float64`.
 
 $(TYPEDFIELDS)
@@ -44,7 +47,7 @@ DCPortValues(640.0, 100.0)
 struct DCPortValues
     "Pole-to-pole voltage \\[kV\\]."
     v::Float64
-    "Active power injected into the bus \\[MW\\]."
+    "Active power flowing into the component \\[MW\\]."
     p::Float64
 end
 
@@ -52,6 +55,8 @@ end
 $(TYPEDSIGNATURES)
 
 Return the AC peak-current magnitude from terminal power and voltage.
+Port powers are positive into the component. The magnitude is unsigned.
+A source delivering 900 MW has `p = -900`. A motor drawing 916 MW has `p = 916`.
 
 # Arguments
 
@@ -72,15 +77,16 @@ current(values::ACPortValues) = 2hypot(values.p, values.q) / (3values.v)
 """
 $(TYPEDSIGNATURES)
 
-Return the DC current from terminal power and voltage.
+Return the DC current from terminal power and voltage, positive into the component.
+A converter taking 603 MW from DC has `p = 603` and positive current.
 
 # Arguments
 
-- `values`: DC port voltage \\[kV\\] and injected power \\[MW\\].
+- `values`: DC port voltage \\[kV\\] and power flowing into the component \\[MW\\].
 
 # Returns
 
-- Current injected into the bus \\[kA\\].
+- Current flowing into the component \\[kA\\].
 
 # Notes
 

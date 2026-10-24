@@ -241,7 +241,7 @@ end
         b = bases(model)
         @test PowerImpedance.powerflow_targets(model) == (
             p_ac = 120.0 / b.S, q_ac = 30.0 / b.S, v_ac = 210.0 / b.v_ac,
-            p_dc = -point.Pdc / b.S, v_dc = 630.0 / b.v_dc)
+            p_dc = point.Pdc / b.S, v_dc = 630.0 / b.v_dc)
         @test limits(model) == converter.limits
         @test model.cache !== converter.element_model.cache
         @test state.topology.connections.port == [:dc, :ac, :ac]

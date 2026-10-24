@@ -102,7 +102,7 @@ function parity_powerflow_numbers(powerflow, prefix)
         end
     end
     point = powerflow.operating_point[:sm1].ac
-    for (field, value) in pairs((Pac = point.p, Qac = point.q, θac = point.theta,
+    for (field, value) in pairs((Pac = -point.p, Qac = -point.q, θac = point.theta,
             Vac = point.v))
         numbers["$prefix.operating_point.sm1.$field"] = value
     end

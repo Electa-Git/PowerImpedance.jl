@@ -345,11 +345,14 @@ function collect_oracles()
     return (; rows, labels, skipped, errors, stability_fixture, pscad_name_maps)
 end
 
-# Frozen Setpoint powers are absorbed by induction machines and converter DC ports.
+# Frozen Setpoint powers enter induction machines and converter DC ports.
 const SETPOINT_POWER_SIGNS = (
-    InductionMachine = (ac = -1, dc = 1),
-    MMC = (ac = 1, dc = -1),
-    TLC = (ac = 1, dc = -1),
+    Source = (ac = -1, dc = -1),
+    SynchronousMachine = (ac = -1, dc = 1),
+    InductionMachine = (ac = 1, dc = 1),
+    MMC = (ac = -1, dc = 1),
+    TLC = (ac = -1, dc = 1),
+    Blackbox_MMC = (ac = -1, dc = 1),
 )
 
 function record_operating_point!(rows, labels, name, state, point)

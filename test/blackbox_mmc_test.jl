@@ -13,8 +13,8 @@ const SCAN_Y = ComplexF64[1+2im 2-im 3+im; 4+im 5+3im 6-im; 7-im 8+im 9+2im]
     end
     model = P.Blackbox_MMC(; itp = interpolant, vACbase = 380.0)
     @test_throws ArgumentError P.eval_parameters(model, 2π * im * 73.0)
-    values = (ac = ACPortValues(315.0, 0.37, 24.0, -7.0),
-        dc = DCPortValues(635.0, -24.5))
+    values = (ac = ACPortValues(315.0, 0.37, -24.0, 7.0),
+        dc = DCPortValues(635.0, 24.5))
     response! = NB.build(model, values, :dq)
     @test model.cache.values === values
     s = 2π * im * 73.0
@@ -31,8 +31,8 @@ const SCAN_Y = ComplexF64[1+2im 2-im 3+im; 4+im 5+3im 6-im; 7-im 8+im 9+2im]
     @test P.eval_abcd(model, s) == expected
 
     classic = P.Blackbox_MMC(; itp = interpolant)
-    P.update!(classic, values.ac.v, values.ac.theta, values.ac.p, -values.ac.q,
-        values.dc.v, -values.dc.p)
+    P.update!(classic, values.ac.v, values.ac.theta, -values.ac.p, values.ac.q,
+        values.dc.v, values.dc.p)
     @test classic.cache.values === values
     @test P.eval_parameters(classic, s) == actual
     @test classic.powerflow == model.powerflow
@@ -86,6 +86,10 @@ end
         @test_throws ArgumentError withinputs(model; dc_control = invalid)
     end
     @test_throws ArgumentError withinputs(model; powerflow = (unknown = 0.0,))
+    @test_throws r"ac_control" withinputs(model; ac_control = 1)
+    @test_throws r"dc_control" withinputs(model; dc_control = 1)
+    @test_throws r"powerflow.p_dc" withinputs(model; powerflow = (p_dc = "1",))
+    @test withinputs(model; powerflow = (p_dc = 1,)).powerflow.p_dc === 1.0
 end
 
 @testset "Model and classic power-flow conversion" begin
@@ -154,12 +158,12 @@ end
     op = result.operating_point[:mmc]
     @test keys(op) == (:ac, :dc)
     @test op.ac isa ACPortValues && op.dc isa DCPortValues
-    @test op.ac.p ≈ 10.0
-    @test op.ac.q ≈ 3.0
+    @test op.ac.p ≈ -10.0
+    @test op.ac.q ≈ -3.0
     @test op.ac.v ≈ ac.v
     @test op.ac.theta ≈ ac.theta
     @test op.dc.v ≈ dc.v
-    @test op.dc.p < 0.0
+    @test op.dc.p > 0.0
     frequency_model = NB.NetworkModel(state, result.operating_point)
     @test model.cache.values === op
     @test model.powerflow.p_ac === 10.0
@@ -167,14 +171,14 @@ end
     actual = NB.get_y(frequency_model, :mmc, [s])[:, :, 1]
     @test actual == P.eval_parameters(model, s)
     @test arguments[] == (op.ac.v / (sqrt(2/3) * model.vACbase),
-        op.ac.p, op.ac.q, real(s / (2π * im)))
+        -op.ac.p, -op.ac.q, real(s / (2π * im)))
     @test NB.sortedcomponentconnections(state.topology, :mmc).port == [:dc, :ac, :ac]
     elemresult = Dict("pgrid" => -0.01, "qgrid" => -0.003, "pdc" => 0.0101)
     buses = (ac = Dict("vm" => 1.0, "va" => 0.12), dc = Dict("vm" => 1.6))
     physical = P.transform(elemresult, buses, Dict("V" => 200e3, "S" => 1e9),
         model, P.PMACDC, P.PIACDC)
-    @test physical.ac.p == 10.0 && physical.ac.q == 3.0
-    @test physical.dc.p == -10.1 && physical.dc.v == 640.0
+    @test physical.ac.p == -10.0 && physical.ac.q == -3.0
+    @test physical.dc.p == 10.1 && physical.dc.v == 640.0
 end
 
 @testset "Scan-file construction" begin

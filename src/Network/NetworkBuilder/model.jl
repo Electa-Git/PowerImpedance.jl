@@ -57,7 +57,8 @@ Store solved MMC port values and construct its frequency-admittance function.
 
 - `model`: Scan-based MMC model.
 - `values`: AC/DC terminal values in phase-peak or pole-to-pole \\[kV\\],
-  angles in \\[rad\\], injected active power in \\[MW\\] and reactive power in \\[MVAr\\].
+  angles in \\[rad\\], active power in \\[MW\\] and reactive power in \\[MVAr\\].
+  Powers are positive into the component.
 - `frame`: Network coordinate frame.
 
 # Returns

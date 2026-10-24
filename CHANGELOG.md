@@ -55,9 +55,10 @@
   in physical units (MW, MVAr, AC phase-peak kV and DC pole-to-pole kV), and `limits`
   instead of controller objects. Its scan is read at the solved terminal values.
 
-- **Breaking:** port values are powers injected into the bus at every port. For
-  induction machines and the DC side of converters, this is the opposite sign of
-  the former `Setpoint` fields.
+- **Breaking:** port powers and currents are positive into the component, with
+  admittances using `Y = I_in / V`. Source, synchronous-machine and converter AC
+  powers negate the former `Setpoint` fields. Induction-machine AC and converter
+  DC powers retain their signs. Converter `powerflow.p_dc` is positive into the converter.
 
 - **Breaking:** `solve(state)` returns a `PowerFlowResult`.
 

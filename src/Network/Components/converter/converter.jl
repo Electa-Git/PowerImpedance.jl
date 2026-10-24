@@ -9,8 +9,8 @@ is_converter(::AbstractConverter) = true
 
 _terminal_values(::AbstractConverter, sp::Setpoint) = (
     ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
-        coalesce(sp.Pac, NaN), coalesce(sp.Qac, NaN)),
-    dc = DCPortValues(coalesce(sp.Vdc, NaN), -coalesce(sp.Pdc, NaN)),
+        -coalesce(sp.Pac, NaN), -coalesce(sp.Qac, NaN)),
+    dc = DCPortValues(coalesce(sp.Vdc, NaN), coalesce(sp.Pdc, NaN)),
 )
 
 
@@ -118,8 +118,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Return AC and DC port values with powers injected into each bus.
-A converter inverting from DC to AC has `dc.p < 0`.
+Return AC and DC port powers positive into the converter. Taking 603 MW from DC
+and delivering 600 MW to AC gives `dc.p = 603` and `ac.p = -600`.
 """
 function transform(elemresult, busresult::NamedTuple, global_dict,
         model::AbstractConverter, ::Type{PMACDC}, ::Type{PIACDC})
@@ -138,9 +138,9 @@ function transform(elemresult, busresult::NamedTuple, global_dict,
         (dcpol * global_dict["V"] / 1e3)
     Pac = -elemresult["pgrid"] * global_dict["S"] / 1e6
     # User and stored Setpoints use AC power injected into the bus. PowerModels
-    # pgrid/qgrid are absorbed; pftoinputs divides the injected powers by Sbase
-    # to obtain the model's internal pu references, without another sign change.
+    # pgrid/qgrid are absorbed; port values use their signs and pftoinputs negates
+    # AC powers to obtain the model's internal pu references.
     Qac = -elemresult["qgrid"] * global_dict["S"] / 1e6
 
-    return (ac = ACPortValues(Vm, θ, Pac, Qac), dc = DCPortValues(Vdc, -Pdc))
+    return (ac = ACPortValues(Vm, θ, -Pac, -Qac), dc = DCPortValues(Vdc, Pdc))
 end
