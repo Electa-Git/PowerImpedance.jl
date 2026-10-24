@@ -505,7 +505,7 @@ admittance.
 
 # Arguments
 
-- `elem`: Network element containing the component model and operating point.
+- `model`: Component model with electrical base quantities.
 
 # Returns
 
@@ -526,19 +526,27 @@ for explicit use; core `eval_y` does not automatically apply them to induction m
 ```julia
 using PowerImpedance
 P = PowerImpedance
-element = inductionmachine()
-scale = P.SI_scale(element)
+model = inductionmachine().element_model
+scale = P.SI_scale(model)
 ```
 """
-function SI_scale(elem::Element{<:InductionMachine})
-    elec = elem.element_model.elec
+function SI_scale(model::InductionMachine)
+    elec = model.elec
     Ybase = elec.S_base / elec.Vac_base^2 
     scale = fill(Ybase,2,2)
     
     return scale
 end
 
+# transitional
+SI_scale(elem::Element{<:InductionMachine}) = SI_scale(elem.element_model)
+
 electricalconnections(::InductionMachine) = (ac = Port(ACDQ),)
+
+is_inductionmachine(::InductionMachine) = true
+is_passive(::InductionMachine) = false
+admittance_order(::InductionMachine) = ((:ac, :d), (:ac, :q))
+
 inputs(::InductionMachine) = (;)
 
 bases(model::InductionMachine) = BaseValues(S = model.elec.S_base,

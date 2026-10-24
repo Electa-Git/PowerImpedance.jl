@@ -441,3 +441,9 @@ function eval_parameters(converter :: Blackbox_MMC, s :: Complex)
 end
 
 electricalconnections(::Blackbox_MMC) = (ac = Port(ACDQ), dc = Port(DC_CM))
+
+is_source(::Blackbox_MMC) = false
+is_converter(::Blackbox_MMC) = true
+is_generator(::Blackbox_MMC) = false
+is_inductionmachine(::Blackbox_MMC) = false
+is_passive(::Blackbox_MMC) = false

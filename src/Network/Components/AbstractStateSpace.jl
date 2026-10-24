@@ -1,7 +1,5 @@
 export linearize, steady_state
 
-is_converter(::AbstractStateSpace) = false
-
 
 
 

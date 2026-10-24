@@ -709,7 +709,7 @@ admittance.
 
 # Arguments
 
-- `elem`: Network element containing the component model and operating point.
+- `model`: Component model with electrical base quantities.
 
 # Returns
 
@@ -731,13 +731,19 @@ Rows use current bases `(I_dc, n*I_ac, n*I_ac)` and columns use voltage bases
 ```julia
 using PowerImpedance
 P = PowerImpedance
-element = inductionmachine()
-scale = P.SI_scale(element)
+model = mmc(sync = PLLSynchronization(),
+    delta_control = ΔdqControlGFL(outer_active = OuterActivePowerControl(),
+        outer_reactive = OuterReactiveQControl(), occ = InnerCurrentPIControl()),
+    sigma_control = ΣdqzControlTEC()).element_model
+scale = P.SI_scale(model)
 ```
 """
-function SI_scale(elem::Element{<:MMC})
-    return _mmc_si_scale!(ones(3, 3), elem.element_model.elec)
+function SI_scale(model::MMC)
+    return _mmc_si_scale!(ones(3, 3), model.elec)
 end
+
+# transitional
+SI_scale(elem::Element{<:MMC}) = SI_scale(elem.element_model)
 
 
 ############################  Power-flow integration MMC ############################
@@ -869,6 +875,9 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
 end
 
 electricalconnections(::MMC) = (ac = Port(ACDQ), dc = Port(DC_CM))
+
+is_passive(::MMC) = false
+admittance_order(::MMC) = ((:dc, :dc), (:ac, :d), (:ac, :q))
 
 inputs(model::MMC) = (
     delta_control = inputs(model.delta_control),

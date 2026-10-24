@@ -402,6 +402,9 @@ electricalconnections(model::Source) = electricalconnections(model, model.domain
 electricalconnections(::Source, ::ACABCDomain) = (ac = Port(ACABC),)
 electricalconnections(::Source, ::DCDomain) = (dc = Port(DC_CM),)
 
+is_source(::Source) = true
+is_passive(::Source) = false
+
 inputs(model::Source) = inputs(model, model.domain)
 inputs(::Source, ::ACABCDomain) = _AC_SOURCE_INPUTS
 inputs(::Source, ::DCDomain) = _DC_SOURCE_INPUTS

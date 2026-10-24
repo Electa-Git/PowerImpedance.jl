@@ -66,6 +66,7 @@ include("Network/Components/AbstractStateSpace.jl")
 include("Network/Components/ports.jl")
 include("Network/Components/inputs.jl")
 include("Network/Components/bases.jl")
+include("Network/Components/predicates.jl")
 
 # Impedance
 include("Network/Components/impedance/impedance.jl")

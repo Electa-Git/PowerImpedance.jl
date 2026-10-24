@@ -845,7 +845,7 @@ Return the factors that convert per-unit machine admittance to siemens.
 
 # Arguments
 
-- `elem`: Network element containing the component model and operating point.
+- `model`: Component model with electrical base quantities.
 
 # Returns
 
@@ -857,23 +857,26 @@ Return the factors that convert per-unit machine admittance to siemens.
 Y_{ij}^{SI}=Y_{ij}^{pu}\\frac{I_{b,i}}{V_{b,j}}.
 ```
 
-The common entry is `S_base/Vac_base²` \\[S\\], using the three-phase power base
+The common entry is `S_base/Vᵃᶜ_base²` \\[S\\], using the three-phase power base
 in \\[MVA\\] and line-to-line RMS voltage base in \\[kV\\]. These factors are returned
-for explicit use; core `eval_y` does not automatically apply them to induction machines.
+for explicit use by the network admittance calculation.
 
 # Examples
 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-element = synchronousmachine()
-scale = P.SI_scale(element)
+model = synchronousmachine().element_model
+scale = P.SI_scale(model)
 ```
 """
-function SI_scale(elem::Element{<:SynchronousMachine})
-    elec = elem.element_model.elec
+function SI_scale(model::SynchronousMachine)
+    elec = model.elec
     return fill(elec.S_base / elec.Vᵃᶜ_base^2, 2, 2)
 end
+
+# transitional
+SI_scale(elem::Element{<:SynchronousMachine}) = SI_scale(elem.element_model)
 
 
 pmtype(::Element{<:SynchronousMachine}) = "gen"
@@ -952,6 +955,10 @@ function transform(elemresult, busresult, global_dict, elem::Element{<:Synchrono
 end
 
 electricalconnections(::SynchronousMachine) = (ac = Port(ACDQ),)
+
+is_generator(::SynchronousMachine) = true
+is_passive(::SynchronousMachine) = false
+admittance_order(::SynchronousMachine) = ((:ac, :d), (:ac, :q))
 
 inputs(::AVRSM) = (v_ref = _AVR_VOLTAGE_INPUT,)
 inputs(model::SynchronousMachine) = (

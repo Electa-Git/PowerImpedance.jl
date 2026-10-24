@@ -476,7 +476,7 @@ admittance.
 
 # Arguments
 
-- `elem`: Network element containing the component model and operating point.
+- `model`: Component model with electrical base quantities.
 
 # Returns
 
@@ -496,12 +496,12 @@ Rows follow `(:i_dc, :i_d, :i_q)` and columns follow `(:v_dc, :vG_d, :vG_q)`.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-element = inductionmachine()
-scale = P.SI_scale(element)
+model = tlc().element_model
+scale = P.SI_scale(model)
 ```
 """
-function SI_scale(elem::Element{<:TLC})
-    elec = elem.element_model.elec
+function SI_scale(model::TLC)
+    elec = model.elec
 
     vACbase = elec.vACbase
     iACbase = 2 * elec.Sbase / (3 * vACbase)
@@ -519,6 +519,9 @@ function SI_scale(elem::Element{<:TLC})
 
     return scale
 end
+
+# transitional
+SI_scale(elem::Element{<:TLC}) = SI_scale(elem.element_model)
 ############################  Power-flow integration TLC ############################
 
 
@@ -642,6 +645,9 @@ function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global
 end
 
 electricalconnections(::TLC) = (ac = Port(ACDQ), dc = Port(DC_CM))
+
+is_passive(::TLC) = false
+admittance_order(::TLC) = ((:dc, :dc), (:ac, :d), (:ac, :q))
 
 inputs(model::TLC) = (
     sync = inputs(model.sync),

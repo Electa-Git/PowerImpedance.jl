@@ -49,6 +49,7 @@ end
         include("tlc_initialization_test.jl")
         include("dc_voltage_support_test.jl")
         include("model_declarations_test.jl")
+        include("model_predicates_test.jl")
         include("terminal_values_test.jl")
         include("adm_SM_test.jl")
         include("synchronous_machine_operating_point_test.jl")
