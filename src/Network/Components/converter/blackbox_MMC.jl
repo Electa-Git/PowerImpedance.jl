@@ -359,7 +359,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Store the classic power-flow result in the model's terminal cache.
+Store physical power-flow values in the model's terminal cache.
 
 # Arguments
 
@@ -377,7 +377,6 @@ Store the classic power-flow result in the model's terminal cache.
 
 # Notes
 
-The classic caller passes the negative solved reactive injection as `Qac`.
 The cache stores `p = -Pac`, `q = Qac` and `dc.p = Pdc`, positive into the converter.
 Scan evaluation negates both AC powers to recover the solved bus injections.
 """
@@ -531,23 +530,9 @@ islinear(::Blackbox_MMC) = false
 """
 $(TYPEDSIGNATURES)
 
-Return `false` for a classic scan-based MMC that requires power flow.
-"""
-islinear(::Element{<:Blackbox_MMC}) = false
-
-"""
-$(TYPEDSIGNATURES)
-
 Return the PowerModelsACDC converter table name, `"convdc"`.
 """
 pmtype(::Blackbox_MMC, rows) = "convdc"
-
-"""
-$(TYPEDSIGNATURES)
-
-Return `"convdc"` for the classic scan-based MMC element.
-"""
-pmtype(::Element{<:Blackbox_MMC}) = "convdc"
 
 """
 $(TYPEDSIGNATURES)
@@ -649,47 +634,6 @@ function convert!(data, model::Blackbox_MMC, ::Type{PMACDC}, component_key,
     busdc["Vdcmin"] = 0.9 * busdc["Vdc"]
     data["busdc"][string(dc_bus)] = set_bus_type_dc(busdc, convdc["type_dc"])
     return nothing
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-Write the classic element's MMC data using its model and `(ac, dc)` bus pair.
-Power and voltage units follow the model-level conversion. Return `nothing`.
-"""
-convert!(data, elem::Element{<:Blackbox_MMC}, ::Type{PMACDC}, key, buses, gd) =
-    convert!(data, elem.element_model, PMACDC,
-        (name = elem.symbol, index = key, pmtype = "convdc"),
-        (ac = buses[1], dc = buses[2]), gd)
-
-"""
-$(TYPEDSIGNATURES)
-
-Add the classic MMC buses and component index, then write its power-flow data.
-
-# Arguments
-
-- `data`: PowerModelsACDC data.
-- `elem`: Classic element containing a `Blackbox_MMC`.
-- `PMACDC`: PowerModelsACDC data representation.
-- `nodes2bus`, `bus2nodes`: Node/bus mappings.
-- `elem2comp`, `comp2elem`: Element/component mappings.
-- `global_dict`: Network voltage \\[V\\] and impedance \\[Ω\\] bases.
-
-# Returns
-
-- `nothing`. Data and mappings are updated in place.
-"""
-function convert!(data, elem::Element{<:Blackbox_MMC}, ::Type{PMACDC},
-        nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-    # Busses interface (dc_bus --> 1.1 & ac_bus --> 2.1 and 2.2)
-    dc_node = make_node(elem, 1)
-    ac_nodes = make_node(elem, 2) #Similar AC bus
-    dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_node, global_dict)
-    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-    # Interface element
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
-    return convert!(data, elem, PMACDC, key, (ac_bus, dc_bus), global_dict)
 end
 
 """

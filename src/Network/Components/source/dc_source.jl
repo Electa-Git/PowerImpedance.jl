@@ -1,25 +1,5 @@
 export dc_source
 
-#= function dc_source(; args...)
-	source = Source()
-	transformation = false
-	connection = true
-	elem_args = (;transformation, connection)
-	for (key, val) in pairs(args)
-		if in(key, propertynames(source))
-			setfield!(source, key, val)
-		elseif in(key, fieldnames(Element))
-			merge(elem_args, NamedTuple{key}(val))
-		else
-			throw(ArgumentError("Source does not have a property $(key)."))
-		end
-	end
-	make_abcd(source)
-
-	return Element(input_pins = source.pins, output_pins = source.pins,
-		element_value = source,
-		transformation = transformation, connection = connection)
-end =#
 """
 $(TYPEDSIGNATURES)
 

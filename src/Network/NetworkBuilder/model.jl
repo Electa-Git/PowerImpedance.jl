@@ -111,7 +111,7 @@ Map element and node names to integer frequency-model indices.
 $(TYPEDFIELDS)
 """
 struct NetworkLookup
-    "Element name to admittance index."
+    "Component name to admittance index."
     elements::Dict{Symbol, Int}
     "Node name to nodal-matrix index."
     nodes::Dict{Symbol, Int}
@@ -125,7 +125,7 @@ Store the linearized frequency-domain representation of one network.
 $(TYPEDFIELDS)
 """
 struct NetworkModel{T <: Number}
-    "Element admittance functions and their nodal positions."
+    "Component admittance functions and their nodal positions."
     element_admittances::AdmittanceLookup{T}
     "Indices of active elements."
     active_elements::Vector{Int}
@@ -135,7 +135,7 @@ struct NetworkModel{T <: Number}
     grounded_nodes::Vector{Int}
     "Default retained-node indices for active-network responses."
     retained_nodes::Vector{Int}
-    "Element and node name lookup tables."
+    "Component and node name lookup tables."
     indices::NetworkLookup
 end
 

@@ -109,6 +109,17 @@
 
 ### Removed
 
+- **Breaking:** remove the classic network API: `Network`, `@network`, `add!`,
+  `connect!`, `disconnect!`, `composite_element`, `power_flow`, and the classic
+  solvers `make_abcd`, `make_y`, `make_z`, `determine_impedance`, `make_y_matrix`,
+  `make_y_edge`, `make_y_node` and `check_stability`. The NetworkBuilder solvers
+  and `check_stability(::NetworkState, ...)` remain available.
+- **Breaking:** remove `Element` and `Setpoint` and their methods.
+- **Breaking:** remove old topology rows and the `transformation`/`connection` grammar.
+  Declare topology with `Bus` and `Net`.
+- **Breaking:** remove `PowerFlowResult.active_setpoint_values`. Use
+  `result.operating_point.values`.
+
 - Remove `export_pscad(::Network)` and classic network PSCAD netlists.
 
 - Remove the old controller types `Controller`, `PI_control`, `VSE_old`, `CCQSEM`

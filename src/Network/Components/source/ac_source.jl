@@ -1,25 +1,5 @@
 export ac_source
 
-#= function ac_source(; pins=1, args...)
-	source = Source()
-	transformation = false
-    connection = true
-	for (key, val) in pairs(args)
-		if in(key, propertynames(source))
-			setfield!(source, key, val)
-		elseif (key == :transformation)
-			transformation = val
-		else
-			throw(ArgumentError("Source does not have a property $(key)."))
-		end
-	end
-	A,B,C,D = make_abcd(source, pins)
-
-	return Element(;input_pins = pins, output_pins = pins,
-		element_model = source, A,B,C,D, 
-		transformation = transformation, connection = connection)
-end
- =#
 """
 $(TYPEDSIGNATURES)
 

@@ -77,7 +77,7 @@ struct ProbeChannel
     kind::Symbol
     "Bus name, when applicable."
     bus::Union{Nothing, String}
-    "Element name, when applicable."
+    "Component name, when applicable."
     element::Union{Nothing, String}
     "Electrical port name for element channels, when applicable."
     port::Union{Nothing, Symbol}

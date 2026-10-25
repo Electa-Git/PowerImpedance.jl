@@ -12,6 +12,4 @@
 @gridconstructor P.Conductors P.Conductors
 @gridconstructor P.Groundwires P.Groundwires
 @gridconstructor P.Overhead_line P.Overhead_line
-@gridconstructor P.Setpoint P.Setpoint
-@gridconstructor P.TerminalValuesPU P.TerminalValuesPU
 @gridconstructor P.Limits P.Limits

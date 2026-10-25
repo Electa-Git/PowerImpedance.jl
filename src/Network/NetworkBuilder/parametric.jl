@@ -1,8 +1,8 @@
-include("gs_components.jl")
-include("gs_passives.jl")
-include("gs_machines.jl")
-include("gs_controls.jl")
-include("gs_converters.jl")
+include("components.jl")
+include("passives.jl")
+include("machines.jl")
+include("controls.jl")
+include("converters.jl")
 
 struct _NamedTupleMaterializer{Names} end
 function (::_NamedTupleMaterializer{Names})(values...)::NamedTuple{Names} where {Names}

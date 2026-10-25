@@ -73,24 +73,6 @@ struct PowerFlowResult{F, R, D, N, E, G} <: AbstractProblemResult
     diagnostics::G
 end
 
-function Base.getproperty(result::PowerFlowResult, field::Symbol)
-    field === :active_setpoint_values && return getfield(result, :operating_point).values
-    return getfield(result, field)
-end
-
-function Base.propertynames(::PowerFlowResult, private::Bool = false)
-    return (
-        :formulation,
-        :result,
-        :data,
-        :nodes2bus,
-        :elem2comp,
-        :operating_point,
-        :diagnostics,
-        :active_setpoint_values
-    )
-end
-
 """
 $(TYPEDEF)
 

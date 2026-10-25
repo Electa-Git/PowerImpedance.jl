@@ -18,7 +18,7 @@ function determine_impedance(lanw::NetworkModel; nets::AbstractVector{Symbol},
     isempty(nets) &&
         throw(ArgumentError("Impedance cannot be determined from nonexistent nets."))
 
-    ## Element integer ids
+    ## Component integer ids
     elim_elemidvec = getindex.(Ref(lanw.indices.elements), elim_elements)
     elemidvec = setdiff(1:length(lanw.element_admittances), elim_elemidvec)
 

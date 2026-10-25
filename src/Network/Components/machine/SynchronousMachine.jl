@@ -352,16 +352,6 @@ function pftoinputs(m::SynchronousMachine, values::NamedTuple)
         vref_SG=point.vref_SG), sp
 end
 
-_terminal_values(::SynchronousMachine, sp::Setpoint) = (
-    ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
-        -coalesce(sp.Pac, NaN), -coalesce(sp.Qac, NaN)),
-)
-
-# transitional
-pftoinputs(m::SynchronousMachine, setpoint::Setpoint) =
-    pftoinputs(m, _terminal_values(m, setpoint))
-
-
 function outputequations!(F, x, inputs, y, gen::SynchronousMachine)
     
     theta_grid = 0; # The angle of the global dq reference frame TODO: Check if this is correct
@@ -412,9 +402,9 @@ machine bases \\[dimensionless\\].
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 model = synchronousmachine()
-inputs, point_pu = P.pftoinputs(model, point)
+inputs, point_pu = P.pftoinputs(model, values)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.elec
 F = zeros(P.n_states(block))
@@ -513,9 +503,9 @@ angle \\[rad\\].
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 model = synchronousmachine()
-inputs, point_pu = P.pftoinputs(model, point)
+inputs, point_pu = P.pftoinputs(model, values)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.mech
 F = zeros(P.n_states(block))
@@ -576,9 +566,9 @@ normalized \\[dimensionless\\].
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 model = synchronousmachine()
-inputs, point_pu = P.pftoinputs(model, point)
+inputs, point_pu = P.pftoinputs(model, values)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.gov
 F = zeros(P.n_states(block))
@@ -643,9 +633,9 @@ derivatives. Voltages use machine bases \\[dimensionless\\]; time constants use 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 model = synchronousmachine()
-inputs, point_pu = P.pftoinputs(model, point)
+inputs, point_pu = P.pftoinputs(model, values)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.avr
 F = zeros(P.n_states(block))
@@ -709,9 +699,9 @@ dynamics, writing state derivatives into `F`.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 model = synchronousmachine()
-inputs, point_pu = P.pftoinputs(model, point)
+inputs, point_pu = P.pftoinputs(model, values)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 F = zeros(P.n_states(model))
 P.state_space!(F, x, inputs, model)
@@ -807,14 +797,6 @@ end
 
 
 
-function eval_parameters(elem :: Element, s :: Complex)
-    # numerical
-    I = Matrix{Complex}(Diagonal([1 for dummy in 1:size(elem.A,1)]))
-    Y = (elem.C*inv(s*I-elem.A))*elem.B + elem.D
-
-    return Y
-end
-
 # This did not work!
 # function eval_abcd(gen :: SynchronousMachine, s :: Complex)
 #     Y = eval_parameters(gen,s)
@@ -869,84 +851,7 @@ function SI_scale(model::SynchronousMachine)
     return fill(elec.S_base / elec.Vᵃᶜ_base^2, 2, 2)
 end
 
-# transitional
-SI_scale(elem::Element{<:SynchronousMachine}) = SI_scale(elem.element_model)
 
-
-pmtype(::Element{<:SynchronousMachine}) = "gen"
-
-function convert!(data,elem::Element{<:SynchronousMachine},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-
-    # Find the nodes not connected to the ground
-    ac_nodes = make_non_ground_node(elem, bus2nodes)
-    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-    
-
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
-    return convert!(data, elem, PMACDC, key, (ac_bus,), global_dict)
-end
-
-function convert!(data, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, key_branch, (ac_bus,), global_dict)
-    machine = elem.element_model
-    interm_bus = add_interm_bus_ac!(data, global_dict)
-    
-    
-
-    _initialize_gen_entry!(data, key_branch, interm_bus, elem, global_dict)
-
-    # key_branch = length(data["branch"]) + 1
-    key_branch_str = string(key_branch)
-
-    data["branch"][key_branch_str] = Dict{String, Any}()
-    branch = data["branch"][key_branch_str]
-    branch["f_bus"] = interm_bus
-    branch["t_bus"] = ac_bus
-    branch["source_id"] = Any["branch", key_branch]
-    branch["index"] = key_branch
-    branch["rate_a"] = 1
-    branch["rate_b"] = 1
-    branch["rate_c"] = 1
-    branch["br_status"] = 1
-    branch["angmin"] = ang_min
-    branch["angmax"] = ang_max
-    branch["transformer"] = false
-    branch["tap"] = 1
-    branch["shift"] = 0
-    branch["c_rating_a"] = 1
-    branch["br_r"] = machine.elec.rt * (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
-    branch["br_x"] = machine.elec.lt * (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
-    branch["g_fr"] = 0
-    branch["b_fr"] = 0
-    branch["g_to"] = 0
-    branch["b_to"] = 0
-
-    bus = data["bus"][string(interm_bus)]
-    if isapprox(elem.limits.P_max, elem.setpoint.Pac)
-        data["bus"][string(interm_bus)] = set_bus_type(bus, 1)
-    else
-        data["bus"][string(interm_bus)] = set_bus_type(bus, 2)
-    end
-
-    gen = data["gen"][key_branch_str]
-    data["bus"][string(interm_bus)]["vm"] = gen["vg"]
-    data["bus"][string(interm_bus)]["vmin"] = 0.9 * gen["vg"]
-    data["bus"][string(interm_bus)]["vmax"] = 1.1 * gen["vg"]
-    return nothing
-end
-
-function transform(elemresult, busresult, global_dict, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, ::Type{PIACDC})
-			
-    acbusresult = busresult[1]
-    Pgen = elemresult["pg"] * global_dict["S"] / 1e6 #MW
-    Qgen = elemresult["qg"] * global_dict["S"] / 1e6 #MVAr
-    Vm =
-        (acbusresult["vm"] *
-            global_dict["V"] / 1e3) * sqrt(2) # Convert the LN-RMS voltage coming from the PF to LN-PK
-    θ = acbusresult["va"]
-
-    setpoint = Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
-    return setpoint
-end
 
 electricalconnections(::SynchronousMachine) = (ac = Port(ACDQ),)
 

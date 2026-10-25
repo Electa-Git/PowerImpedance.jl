@@ -113,13 +113,11 @@ function _element_call(f, name::Symbol)
     end
 end
 
-_topology_model(model) = model
-
 function _port(elements, name, port)
     haskey(elements, name) ||
         throw(ArgumentError("topology references missing element :$name"))
     ports = _element_call(name) do
-        P.electricalconnections(_topology_model(elements[name]))
+        P.electricalconnections(elements[name])
     end
     haskey(ports, port) ||
         throw(ArgumentError("element :$name has no port :$port"))
@@ -223,7 +221,7 @@ Expand bus and net declarations with deterministic bus numbering per domain.
 
 - `elements`: Named tuple of component models.
 - `connections`: Tuple or vector of `Bus` and `Net` declarations.
-- `exclude`: Element names to omit. Default: `()`.
+- `exclude`: Component names to omit. Default: `()`.
 
 # Returns
 
@@ -297,7 +295,7 @@ function NetworkTopology(elements::NamedTuple, connections::Union{Tuple, Abstrac
     end
     orders = Dict{Symbol, Vector{Tuple{Symbol, Symbol}}}()
     for name in unique(stored.component)
-        model = _topology_model(elements[name])
+        model = elements[name]
         orders[name] = _element_call(name) do
             _frame_order(model, get(frames, name, :dc))
         end
@@ -347,24 +345,12 @@ end
 function _resolved_topology_domains(rows)
     sets = _DisjointSet{Tuple{Symbol, Symbol}}()
     net_ports = Dict{Symbol, Vector{Tuple{Symbol, Symbol}}}()
-    element_ports = Dict{Symbol, Vector{Tuple{Symbol, Symbol}}}()
     for row in rows
         key = (row.component, row.port)
         _find!(sets, key)
         push!(get!(net_ports, row.net, Tuple{Symbol, Symbol}[]), key)
-        if iszero(row.domain)
-            push!(get!(element_ports, row.component, Tuple{Symbol, Symbol}[]), key)
-        end
     end
     for ports in values(net_ports)
-        for port in Iterators.drop(ports, 1)
-            _union!(sets, first(ports), port)
-        end
-    end
-    # transitional
-    # A one-conductor impedance or line has no intrinsic AC/DC marker. Its two
-    # physical sides must nevertheless belong to one electrical domain.
-    for ports in values(element_ports)
         for port in Iterators.drop(ports, 1)
             _union!(sets, first(ports), port)
         end
@@ -393,80 +379,11 @@ function _resolved_topology_domains(rows)
     end
 end
 
-_connected(model) = true
-
 function _excluded_names(elements, exclude)
     for name in exclude
         haskey(elements, name) ||
             throw(ArgumentError("excluded element :$name is missing"))
     end
     return Tuple(name for name in keys(elements)
-        if name ∈ exclude || !_connected(elements[name]))
+        if name ∈ exclude)
 end
-
-# transitional
-_topology_model(element::P.Element) = element.element_model
-_connected(element::P.Element) = element.connection
-
-# transitional
-_legacy_port_names(model::P.AbstractElementModel) = keys(P.electricalconnections(model))
-"""
-$(TYPEDSIGNATURES)
-
-Return converter port names in the classic side order: DC, AC.
-"""
-_legacy_port_names(::Union{P.AbstractConverter, P.Blackbox_MMC}) = (:dc, :ac)
-
-# transitional
-"""
-$(TYPEDSIGNATURES)
-
-Return the numerical electrical domain of a direct model's declared port.
-"""
-_legacy_domain(model::P.AbstractElementModel, port) =
-    _domain_number(port.domain)
-function _legacy_domain(model::Union{P.Impedance, P.Transmission_line}, port)
-    return P.is_three_phase(model) ? 1 : 0
-end
-
-# transitional
-function _expand!(rows, elements, supplied::NamedTuple, excluded)
-    Set(keys(supplied)) == Set((:node, :element, :side, :terminal)) ||
-        throw(ArgumentError("old topology rows require (node, element, side, terminal)"))
-    supplied.node isa Symbol && supplied.element isa Symbol ||
-        throw(ArgumentError("old topology node and element must be symbols"))
-    supplied.side isa Integer && supplied.side > 0 ||
-        throw(ArgumentError("old topology side must be a positive integer"))
-    supplied.terminal isa Integer && supplied.terminal > 0 ||
-        throw(ArgumentError("old topology terminal must be a positive integer"))
-    name = supplied.element
-    haskey(elements, name) ||
-        throw(ArgumentError("topology references missing element :$name"))
-    name ∈ excluded && return rows
-    row = _element_call(name) do
-        _legacy_row(elements[name], supplied)
-    end
-    push!(rows, row)
-    return rows
-end
-
-# transitional
-function _legacy_row(element::P.Element, row)
-    model = element.element_model
-    names = _legacy_port_names(model)
-    row.side <= length(names) ||
-        throw(ArgumentError("no externally connected side $(row.side)"))
-    port = names[row.side]
-    description = P.electricalconnections(model)[port]
-    frame = element.transformation && P.isac(description.domain) ?
-        :dq : _frame(description.domain)
-    labels = frame == :dq ? (:d, :q) : description.terminals
-    count = row.side == 1 ? P.nip(element) : P.nop(element)
-    row.terminal <= min(count, length(labels)) ||
-        throw(ArgumentError("side $(row.side) has no terminal $(row.terminal)"))
-    return (; net = row.node, component = row.element, port,
-        terminal = labels[row.terminal], domain = _legacy_domain(model, description), frame)
-end
-
-# transitional
-"Return the Classic network pin name associated with a side and terminal."

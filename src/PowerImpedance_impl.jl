@@ -61,7 +61,7 @@ include("core/logging.jl")
 
 # Including all components    
 include("Network/Components/operating_values.jl")
-include("Network/Components/AbstractElement.jl")
+include("Network/Components/types.jl")
 include("Network/Components/AbstractStateSpace.jl")
 include("Network/Components/ports.jl")
 include("Network/Components/inputs.jl")
@@ -110,15 +110,7 @@ include("Network/Components/machine/machine.jl")
 include("Network/Components/machine/SynchronousMachine.jl")
 include("Network/Components/machine/InductionMachine.jl")
 
-# Including network
-include("Network/Network.jl")
-
-# Refactoring attempt
-# include("core/base.jl")
-# include("core/convert.jl")
-
-# New power flow
-include("Network/power_flow.jl")
+include("Network/powermodels_data.jl")
 
 # Common semantic layer (proto-PowerBlocks grammar)
 include("Grammar.jl")
@@ -168,16 +160,7 @@ import .NetworkBuilder: determine_impedance, make_loopgain
 import .NetworkBuilder: PowerFlowProblem, ACDCPowerFlow
 import .NetworkBuilder: LinearizationProblem, AdmittanceLinearization
 export PowerFlowProblem, ACDCPowerFlow, LinearizationProblem, AdmittanceLinearization
-
-# Including network solvers
-include("Network/Solvers/make_abcd.jl")
-include("Network/Solvers/make_y.jl")
-include("Network/Solvers/make_z.jl")
-include("Network/Solvers/determine_impedance.jl")
-include("Network/Solvers/make_y_matrix.jl")
-include("Network/Solvers/make_y_edge.jl")
-include("Network/Solvers/make_y_node.jl")
-include("Network/Solvers/stability.jl")
+export determine_impedance, check_stability
 
 # Including tools
 include("Tools/abcd_parameters.jl")

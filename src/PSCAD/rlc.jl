@@ -119,7 +119,7 @@ Try the fewest components first, preferring series at equal component count.
   points from 0.1 to 1e5.
 - `rtol`: Maximum relative impedance error at every sample. Default: `1e-6`.
 - `atol`: Impedance floor in the error denominator \\[Ω\\]. Default: `1e-12`.
-- `name`: Element designator for fit errors. Default: `:unnamed`.
+- `name`: Component designator for fit errors. Default: `:unnamed`.
 
 # Returns
 

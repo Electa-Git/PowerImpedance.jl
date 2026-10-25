@@ -220,9 +220,6 @@ function pftoinputs(c::TLC, values::NamedTuple)
         TerminalValuesPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
 end
 
-# transitional
-pftoinputs(c::TLC, setpoint::Setpoint) =
-    pftoinputs(c, _terminal_values(c, setpoint))
 
 """
 $(TYPEDSIGNATURES)
@@ -519,8 +516,6 @@ function SI_scale(model::TLC)
     return scale
 end
 
-# transitional
-SI_scale(elem::Element{<:TLC}) = SI_scale(elem.element_model)
 ############################  Power-flow integration TLC ############################
 
 
@@ -540,108 +535,6 @@ pf_acq_droop(block::OuterReactiveQControl) =
         enabled = 1,
         kq = block.support.K,
     ) : (enabled = 0, kq = 0.0)
-
-function pf_vdcset_pu(conv::TLC, elem::Element, global_dict, data)
-    return elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
-end
-
-function pf_pacset_mw(conv::TLC, elem::Element)
-    return elem.setpoint.Pac
-end
-
-function pf_pdcset_mw(conv::TLC, elem::Element)
-    return !iszero(elem.setpoint.Pdc) ? elem.setpoint.Pdc : -elem.setpoint.Pac
-end
-
-function convert!(data,elem::Element{<:TLC},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-
-    dc_node = make_node(elem, 1)
-    ac_nodes = make_node(elem, 2)
-    dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_node, global_dict)
-    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
-    return convert!(data, elem, PMACDC, key, (ac_bus, dc_bus), global_dict)
-end
-
-function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global_dict)
-    conv = elem.element_model
-    ac_bus = buses[1]
-    dc_bus = buses[2]
-    key_str = string(key)
-
-    data["convdc"][key_str] = Dict{String, Any}()
-    convdc = data["convdc"][key_str]
-
-    convdc["busdc_i"] = dc_bus
-    convdc["busac_i"] = ac_bus
-    convdc["source_id"] = Any["convdc", key]
-    convdc["status"] = 1
-    convdc["index"] = key
-    convdc["basekVac"] = global_dict["V"] / 1e3
-
-    convdc["type_ac"] = pf_type_ac(conv.outerReactive)
-    convdc["Vtar"] = (elem.setpoint.Vac/sqrt(2)) / ( global_dict["V"] / 1e3) # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages, PowerImpedance uses amplitude
-    if convdc["type_ac"] == 2
-        data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
-        data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
-    end
-
-    convdc["type_dc"] = pf_type_dc(conv.outerActive)
-
-    droop = pf_acq_droop(conv.outerReactive)
-    convdc["acq_droop"] = droop.enabled
-    convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
-
-    convdc["droop"] = pf_dc_droop(conv.outerActive, conv.elec.vDCbase, conv.elec.Sbase, global_dict, data)
-    convdc["Vdcset"] = pf_vdcset_pu(conv, elem, global_dict, data)
-    convdc["Pacset"] = -pf_pacset_mw(conv, elem)
-    convdc["Pdcset"] = pf_pdcset_mw(conv, elem)
-    convdc["dVdcSet"] = 0.0
-
-    convdc["islcc"] = 0
-    convdc["transformer"] = 0
-    convdc["rtf"] = 0.0
-    convdc["xtf"] = 0.0
-    convdc["tm"] = 1.0
-    convdc["filter"] = 0
-    convdc["bf"] = 0.0
-    convdc["reactor"] = 1
-
-    zbase = global_dict["Z"]
-    convdc["rc"] = (conv.elec.Rᵣ*conv.elec.zACbase) / zbase
-    convdc["xc"] = (conv.elec.Lᵣ*conv.elec.lACbase) * global_dict["omega"] / zbase
-
-    convdc["Vmmax"] = 1.1 * convdc["Vtar"]
-    convdc["Vmmin"] = 0.9 * convdc["Vtar"]
-    convdc["Imax"] = 1.1 * max(abs(elem.limits.P_min), abs(elem.limits.P_max), abs(elem.setpoint.Pac)) / max(elem.setpoint.Vac / sqrt(2), eps())
-
-    convdc["P_g"] = elem.setpoint.Pac
-    convdc["Q_g"] = elem.setpoint.Qac
-
-    convdc["LossA"] = 0.0
-    convdc["LossB"] = 0.0
-    convdc["LossCrec"] = 0.0
-    convdc["LossCinv"] = 0.0
-
-    convdc["Qacmax"] = elem.limits.Q_max
-    convdc["Qacmin"] = elem.limits.Q_min
-    convdc["Pacmax"] = elem.limits.P_max
-    convdc["Pacmin"] = elem.limits.P_min
-
-    if data["bus"][string(ac_bus)]["bus_type"] == 1
-        data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
-        data["bus"][string(ac_bus)]["vmin"] = 0.9 * data["bus"][string(ac_bus)]["vm"]
-        data["bus"][string(ac_bus)]["vmax"] = 1.1 * data["bus"][string(ac_bus)]["vm"]
-    end
-
-    data["busdc"][string(dc_bus)]["Vdc"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
-    data["busdc"][string(dc_bus)]["Vdcmax"] = 1.1 * data["busdc"][string(dc_bus)]["Vdc"]
-    data["busdc"][string(dc_bus)]["Vdcmin"] = 0.9 * data["busdc"][string(dc_bus)]["Vdc"]
-    data["busdc"][string(dc_bus)] = set_bus_type_dc(data["busdc"][string(dc_bus)], convdc["type_dc"])
-
-    return nothing
-end
 
 electricalconnections(::TLC) = (ac = Port(ACDQ), dc = Port(DC_CM))
 

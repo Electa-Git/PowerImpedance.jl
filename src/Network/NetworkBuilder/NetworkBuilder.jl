@@ -63,29 +63,7 @@ include("roles.jl")
 
 ##### Builder state
 
-"""
-$(TYPEDEF)
-
-Store one materialized NetworkBuilder system with numeric component models,
-topology, and numerical options.
-
-Construct systems with [`define`](@ref) rather than calling this type directly.
-
-$(TYPEDFIELDS)
-"""
-mutable struct NetworkState
-    "Materialized component models indexed by name."
-    elements::NamedTuple
-    "Net-component incidence relation."
-    topology::NetworkTopology
-    "Numerical and power-flow options."
-    options::NamedTuple
-    "Converged primal point for repeated solves of this mapped topology."
-    powerflow_start::P._PowerFlowStart
-end
-
-NetworkState(elements::NamedTuple, topology::NetworkTopology, options::NamedTuple) =
-    NetworkState(elements, topology, options, P._PowerFlowStart())
+include("powerflow.jl")
 
 function Base.show(io::IO, bs::NetworkState)
     println(io, "\n Network implemented via NetworkState \n",
@@ -105,7 +83,7 @@ Construct a [`NetworkState`](@ref) or a lazy space of network states.
 - `elements`: Named tuple of component models or component Gridspaces.
 - `connections`: Tuple or vector of `Bus` and `Net` declarations.
 - `options`: Builder and power-flow options. Default: `(;)`.
-- `exclude`: Element names to omit, with an informational message. Default: `()`.
+- `exclude`: Component names to omit, with an informational message. Default: `()`.
 
 # Returns
 
@@ -148,99 +126,12 @@ function _define_network(
         name ∈ referenced ||
             throw(ArgumentError("element :$name is not referenced by the topology"))
         model = _element_call(name) do
-            _configured_model(elements[name])
+            elements[name]::P.AbstractElementModel
         end
         model
     end
     return NetworkState(NamedTuple{names}(models), topology, options)
 end
-
-"""
-$(TYPEDSIGNATURES)
-
-Return a direct component model for network construction.
-"""
-_configured_model(model::P.AbstractElementModel) = model
-
-# transitional
-function _configured_model(element::P.Element)
-    return _configured_model(element.element_model, element.setpoint, element.limits)
-end
-
-# transitional
-"""
-$(TYPEDSIGNATURES)
-
-Retain a direct model whose inputs already store its power-flow targets and limits.
-The classic `point` and `limits` arguments do not replace these stored values.
-"""
-_configured_model(model::P.AbstractElementModel, point, limits) =
-    model
-
-# transitional
-function _configured_model(model::P.Source, point, limits)
-    return _configured_source(model, point, limits, model.domain)
-end
-
-# transitional
-function _configured_source(model, point, limits, ::P.ACABCDomain)
-    current = P.inputvalues(model)
-    return P.component(model; limits, v = coalesce(point.Vac, current.v),
-        theta = coalesce(point.θac, current.theta), p = coalesce(point.Pac, current.p),
-        q = coalesce(point.Qac, current.q))
-end
-
-# transitional
-function _configured_source(model, point, limits, ::P.DCDomain)
-    current = P.inputvalues(model)
-    return P.component(model; limits, v = coalesce(point.Vdc, current.v),
-        p = coalesce(point.Pdc, current.p))
-end
-
-# transitional
-function _configured_model(model::P.AbstractConverter, point, limits)
-    b = P.bases(model)
-    current = P.powerflow_targets(model)
-    targets = (p_ac = coalesce(point.Pac, current.p_ac * b.S) / b.S,
-        q_ac = coalesce(point.Qac, current.q_ac * b.S) / b.S,
-        v_ac = coalesce(point.Vac, current.v_ac * b.v_ac) / b.v_ac,
-        p_dc = coalesce(point.Pdc, current.p_dc * b.S) / b.S,
-        v_dc = coalesce(point.Vdc, current.v_dc * b.v_dc) / b.v_dc)
-    refs = (p_ref = targets.p_ac, q_ref = targets.q_ac,
-        v_ac_ref = targets.v_ac, v_dc_ref = targets.v_dc)
-    changes = _legacy_reference_inputs(model, P.inputs(model), refs)
-    seeds = Base.structdiff(targets, P._powerflow_references(model))
-    return P.component(model; limits, changes..., powerflow = seeds)
-end
-
-# transitional
-function _legacy_reference_inputs(block, declarations::NamedTuple, refs)
-    changes = (;)
-    for (key, declaration) in pairs(declarations)
-        value = _legacy_reference_input(getfield(block, key), declaration, key, refs)
-        value === nothing && continue
-        changes = merge(changes, NamedTuple{(key,)}((value,)))
-    end
-    return changes
-end
-
-# transitional
-_legacy_reference_input(value, ::P.Input, key, refs) = get(refs, key, nothing)
-function _legacy_reference_input(block, declarations::NamedTuple, key, refs)
-    changes = _legacy_reference_inputs(block, declarations, refs)
-    return isempty(changes) ? nothing : changes
-end
-
-# transitional
-function _configured_model(model::P.SynchronousMachine, point, limits)
-    b = P.bases(model)
-    current = P.inputvalues(model).powerflow
-    powerflow = (p = coalesce(point.Pac, current.p * b.S) / b.S,
-        q = coalesce(point.Qac, current.q * b.S) / b.S,
-        v = coalesce(point.Vac, current.v * b.v_ac) / b.v_ac)
-    return P.component(model; limits, powerflow)
-end
-
 
 """
 $(TYPEDSIGNATURES)
@@ -292,7 +183,6 @@ function solve(builder::NetworkState)
 end
 
 include("model.jl")
-include("powerflow.jl")
 include("results.jl")
 include("../Solvers/admittance.jl")
 include("../Solvers/impedance.jl")

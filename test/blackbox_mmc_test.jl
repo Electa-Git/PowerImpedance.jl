@@ -107,14 +107,9 @@ end
         @testset "$ac_control/$dc_control" begin
             model = P.Blackbox_MMC(; ac_control, dc_control, powerflow = seeds,
                 limits = lm, Rₘₑ = 1.2, ω₀ = 100π)
-            element = P.Element(element_model = model, input_pins = 1, output_pins = 2)
-            direct, classic = deepcopy(initial), deepcopy(initial)
+            direct = deepcopy(initial)
             P.convert!(direct, model, P.PMACDC,
                 (name = :mmc, index = 7, pmtype = "convdc"), (ac = 2, dc = 3), gd)
-            P.convert!(classic, element, P.PMACDC, 7, (2, 3), gd)
-            for group in ("convdc", "bus", "busdc")
-                @test isequal(direct[group], classic[group])
-            end
             conv = direct["convdc"]["7"]
             @test conv["type_ac"] == (ac_control == :pv ? 2 : 1)
             @test conv["type_dc"] == (dc_control == :vdc ? 2 : 1)

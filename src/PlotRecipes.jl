@@ -182,9 +182,8 @@ function _validate_harmonic_response(result::FrequencyResponseResult, entries)
         "the response has $count frequency slices but $(length(stored_frequencies)) coordinates",
     ),
     )
-    # The classic impedance calculation stores its physically real angular-frequency
-    # axis in a ComplexF64 vector. Accept that representation only when every
-    # imaginary part is exactly zero, then normalize at the plotting boundary.
+    # Accept complex storage of a real angular-frequency axis only when every
+    # imaginary part is exactly zero.
     all(
         value -> value isa Number && isfinite(value) && isreal(value),
         stored_frequencies

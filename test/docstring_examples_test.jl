@@ -154,7 +154,7 @@ end
             (inductionmachine, PI.InductionMachine, (;)),
         )
         removed = (pins = 3, transformation = true, connection = false,
-            setpoint = Setpoint())
+            setpoint = nothing)
         for (constructor, target, kwargs) in constructors
             @testset "$constructor" begin
                 @test constructor(; kwargs...) isa target

@@ -195,15 +195,6 @@ function pftoinputs(m::InductionMachine, values::NamedTuple)
     return NamedTuple{inputnames(m)}((v_bus_d,v_bus_q)), sp_pu
 end
 
-_terminal_values(::InductionMachine, sp::Setpoint) = (
-    ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
-        coalesce(sp.Pac, NaN), coalesce(sp.Qac, NaN)),
-)
-
-# transitional
-pftoinputs(m::InductionMachine, setpoint::Setpoint) =
-    pftoinputs(m, _terminal_values(m, setpoint))
-
 function outputequations!(F,x,inputs,y,m::InductionMachine)
 
     F[1] = x.i_d #Load convention (implemented like this)
@@ -251,9 +242,9 @@ derivatives include stator/rotor loss, synchronous-frame coupling, and slip term
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
 model = inductionmachine()
-inputs, point_pu = P.pftoinputs(model, point)
+inputs, point_pu = P.pftoinputs(model, values)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.elec
 F = zeros(P.n_states(block))
@@ -330,9 +321,9 @@ Torques and rotor speed use machine bases \\[dimensionless\\]; ``H`` uses \\[s\\
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
 model = inductionmachine()
-inputs, point_pu = P.pftoinputs(model, point)
+inputs, point_pu = P.pftoinputs(model, values)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.mech
 F = zeros(P.n_states(block))
@@ -380,9 +371,9 @@ derivatives into `F`.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
 model = inductionmachine()
-inputs, point_pu = P.pftoinputs(model, point)
+inputs, point_pu = P.pftoinputs(model, values)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 F = zeros(P.n_states(model))
 P.state_space!(F, x, inputs, model)
@@ -405,84 +396,6 @@ function state_space!(F, x, inputs,indm::InductionMachine)
     state_space!(@view(F[index:index_end]), x, τ_e, indm.mech; indm)
     index = index_end + 1
 
-end
-
-pmtype(elem::Element{<:InductionMachine}) = "im"
-
-function  convert!(data, elem::Element{<:InductionMachine}, ::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-
-    ### MAKE BUSES OUT OF THE NODES
-    # Find the nodes not connected to the ground
-    ac_nodes = make_non_ground_node(elem, bus2nodes) 
-    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "im")
-
-    return convert!(data, elem, PMACDC, key, (ac_bus,), global_dict)
-end
-
-
-function convert!(data, elem::Element{<:InductionMachine}, ::Type{PMACDC}, key, (ac_bus,), global_dict)
-
-    # Check if AC or DC source (second one not implemented)
-    # is_three_phase(elem) ? nothing : error("DC sources are currently not implemented")
-
-    
-    key_str = string(key)
-    data["im"][key_str] = Dict{String, Any}()
-
-    indm = elem.element_model
-    elec = indm.elec
-    mech = indm.mech
-    Sbase = global_dict["S"]
-    Vbase = global_dict["V"]
-    impscale = ((elec.Vac_base)^2/elec.S_base)/global_dict["Z"]
-    # Convert torque from the machine MVA base to the network VA base.
-    T_0 = mech.T_0 * elec.S_base * 1e6 / Sbase
-    # Power flow initial values
-    data["im"][key_str]["P_ag"] = T_0
-    data["im"][key_str]["Q_ag"] = 0.0
-    data["im"][key_str]["status"] = 1
-    data["im"][key_str]["im_bus"] = ac_bus
-
-    # Power flow limits (not used in power flow)
-    data["im"][key_str]["Pacmin"] = 0.9 * T_0 #/ Sbase
-    data["im"][key_str]["Vmmin"] = 0.9 # Should be extended with local_base/global_base but we do not care (not used in PF)
-    data["im"][key_str]["Vmmax"] = 1.1
-    data["im"][key_str]["Pacmax"] = 1.1 * T_0 #/ Sbase
-    data["im"][key_str]["Pacrated"] = T_0 #/ Sbase
-
-    # Power flow elements
-    data["im"][key_str]["x_m"] = elec.l_m * impscale # In per unit equal
-    data["im"][key_str]["x_rl"] = elec.l_rl * impscale
-    data["im"][key_str]["x_sl"] = (elec.l_sl + elec.lt) * impscale
-    data["im"][key_str]["r_r"] = elec.r_r * impscale
-    data["im"][key_str]["r_s"] = (elec.r_s + elec.rt) * impscale
-
-    # Torque parameters
-    data["im"][key_str]["torque"] =  Dict{String, Any}()
-    data["im"][key_str]["torque"]["T_0"] = T_0
-    data["im"][key_str]["torque"]["A"] = mech.A
-    data["im"][key_str]["torque"]["B"] = mech.B
-    data["im"][key_str]["torque"]["C"] = mech.C
-    data["im"][key_str]["torque"]["m"] = mech.m
-   
-    return nothing
-    
-end
-
-function transform(elemresult, busresult, global_dict, elem::Element{<:InductionMachine}, ::Type{PMACDC}, ::Type{PIACDC})
-			
-    acbusresult = busresult[1]
-    Pgen = elemresult["pg"] * global_dict["S"] / 1e6 #MW
-    Qgen = elemresult["qg"] * global_dict["S"] / 1e6 #MVAr
-    Vm =
-        (acbusresult["vm"] *
-            global_dict["V"] / 1e3) * sqrt(2) # Convert the LN-RMS voltage coming from the PF to LN-PK
-    θ = acbusresult["va"]
-
-    setpoint = Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
-    return setpoint
 end
 
 ##################### SI Scaling ######################################
@@ -527,8 +440,6 @@ function SI_scale(model::InductionMachine)
     return scale
 end
 
-# transitional
-SI_scale(elem::Element{<:InductionMachine}) = SI_scale(elem.element_model)
 
 electricalconnections(::InductionMachine) = (ac = Port(ACDQ),)
 

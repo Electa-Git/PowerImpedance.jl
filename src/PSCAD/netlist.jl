@@ -55,7 +55,7 @@ Omit unconnected terminals. A fully grounded port has `bus = nothing`.
 $(TYPEDFIELDS)
 """
 struct Terminal
-    "Element designator."
+    "Component designator."
     element::Symbol
     "Electrical port name."
     port::Symbol

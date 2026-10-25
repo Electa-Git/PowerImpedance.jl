@@ -93,7 +93,7 @@ function P.compute(
 )
     network = _assert_numeric_powerflow_network(problem.network)
     data, global_dict, element_mapping = convert(network, P.PMACDC)
-    P._prepare_power_flow_start!(network.powerflow_start, data,
+    _prepare_power_flow_start!(network.powerflow_start, data,
         (element_mapping, collect(network.topology.connections)))
     result = solve_acdcpf(
         data,

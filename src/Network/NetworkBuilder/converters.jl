@@ -4,9 +4,13 @@
 @gridconstructor P.ΣEnergyControl P.ΣEnergyControl
 @gridconstructor P.ΔEnergyControl P.ΔEnergyControl
 @gridconstructor P.NoZeroSequenceCurrentControl P.NoZeroSequenceCurrentControl
-@gridconstructor P.NoCirculatingCurrentSuppressionControl P.NoCirculatingCurrentSuppressionControl
+@gridconstructor(
+    P.NoCirculatingCurrentSuppressionControl, P.NoCirculatingCurrentSuppressionControl
+)
 @gridconstructor P.ZeroSequenceCurrentControl P.ZeroSequenceCurrentControl
-@gridconstructor P.CirculatingCurrentSuppressionControl P.CirculatingCurrentSuppressionControl
+@gridconstructor(
+    P.CirculatingCurrentSuppressionControl, P.CirculatingCurrentSuppressionControl
+)
 @gridconstructor P.CirculatingCurrentControl P.CirculatingCurrentControl
 @gridconstructor P.UncompensatedModulation P.UncompensatedModulation
 @gridconstructor P.CompensatedModulation P.CompensatedModulation

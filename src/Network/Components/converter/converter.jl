@@ -7,15 +7,6 @@ abstract type AbstractConverter <: AbstractStateSpace end
 
 is_converter(::AbstractConverter) = true
 
-_terminal_values(::AbstractConverter, sp::Setpoint) = (
-    ac = ACPortValues(coalesce(sp.Vac, NaN), coalesce(sp.θac, NaN),
-        -coalesce(sp.Pac, NaN), -coalesce(sp.Qac, NaN)),
-    dc = DCPortValues(coalesce(sp.Vdc, NaN), coalesce(sp.Pdc, NaN)),
-)
-
-
-
-
 # Evaluating the admittance of the converter
 function eval_abcd(converter :: AbstractConverter, s :: Complex)
     return eval_y(converter, s)
@@ -24,51 +15,6 @@ end
 function eval_y(converter :: AbstractConverter, s :: Complex)
     Y = eval_parameters(converter, s)
     return Y
-end
-
-pmtype(::Element{<:AbstractConverter}) = "convdc"
-
-function convert!(data,elem::Element{<:AbstractConverter},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-
-    # Busses interface (dc_bus --> 1.1 & ac_bus --> 2.1 and 2.2)
-    dc_node = make_node(elem, 1) 
-    ac_nodes = make_node(elem,2) #Similar AC bus
-    dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_node, global_dict)
-    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-    
-    # Interface element
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
-    return convert!(data, elem, PMACDC, key, (ac_bus, dc_bus), global_dict)
-end
-
-function transform(elemresult, busresult, global_dict, element::Element{<:AbstractConverter}, ::Type{PMACDC}, ::Type{PIACDC})
-    
-    acbusresult = busresult[1] # AC bus
-    dcbusresult = busresult[2] # DC bus
-
-    Pdc = elemresult["pdc"] * global_dict["S"] / 1e6
-    Vm =
-        (acbusresult["vm"] * global_dict["V"] / 1e3) *
-        sqrt(2)
-    θ = acbusresult["va"]
-    Vdc =
-        dcbusresult["vm"] *
-        (dcpol * global_dict["V"] / 1e3) # data["dcpol"] should be here. const dcpol in powerflow.jl
-    Pac = -elemresult["pgrid"] * global_dict["S"] / 1e6
-    # User and stored Setpoints use AC power injected into the bus. PowerModels
-    # pgrid/qgrid are absorbed; pftoinputs divides the injected powers by Sbase
-    # to obtain the model's internal pu references, without another sign change.
-    Qac = -elemresult["qgrid"] * global_dict["S"] / 1e6
-
-    setpoint = Setpoint(Pac = Pac, Qac = Qac, θac = θ, Vac = Vm, Vdc = Vdc, Pdc = Pdc)
-
-    # if element.element_model isa AbstractStateSpace
-    #     update!(element, element.element_model, setpoint)
-    # else
-    #     update!(element.element_model, Vm, θ, Pac, Qac, Vdc, Pdc)
-    # end
-
-    return setpoint
 end
 
 function timeDelayPadeMatrices(padeOrderNum,padeOrderDen,t_delay,numberVars)
@@ -134,12 +80,11 @@ function transform(elemresult, busresult::NamedTuple, global_dict,
     θ = acbusresult["va"]
     Vdc =
         dcbusresult["vm"] *
-        # data["dcpol"] should be here. const dcpol in powerflow.jl
+        # data["dcpol"] should be here. const dcpol in powermodels_data.jl
         (dcpol * global_dict["V"] / 1e3)
     Pac = -elemresult["pgrid"] * global_dict["S"] / 1e6
-    # User and stored Setpoints use AC power injected into the bus. PowerModels
-    # pgrid/qgrid are absorbed; port values use their signs and pftoinputs negates
-    # AC powers to obtain the model's internal pu references.
+    # PowerModels pgrid/qgrid are absorbed; port values use their signs and
+    # pftoinputs negates AC powers to obtain the model's internal pu references.
     Qac = -elemresult["qgrid"] * global_dict["S"] / 1e6
 
     return (ac = ACPortValues(Vm, θ, -Pac, -Qac), dc = DCPortValues(Vdc, Pdc))
