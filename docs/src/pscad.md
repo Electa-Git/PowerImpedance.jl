@@ -73,6 +73,10 @@ accept topology `BusKey` values. Names must be unique ASCII PSCAD identifiers
 of at most 30 characters. Grounded terminals and repeated scans of the same
 terminal raise an error.
 
+Export reserves bus identifiers first and checks name collisions without regard to case.
+It appends `_2`, then higher numeric suffixes as needed, so a source named `ac`
+on bus `ac` becomes `ac_2`.
+
 For DC probes, `A1` and `A2` connect to the positive pole. `B1` connects to
 the negative pole of the same bus. `V0_peak` is the full pole-to-pole DC
 voltage because the block measures and injects voltage relative to `B1`.
