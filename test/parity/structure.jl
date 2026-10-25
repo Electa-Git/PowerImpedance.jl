@@ -154,48 +154,6 @@ function plain_dump(io, path, value)
     end
 end
 
-function structure_rows(value, path = "", rows = Tuple{String, String, String}[])
-    type = string(typeof(value))
-    if value isa Function
-        push!(rows, (path, type, ""))
-    elseif value isa Number
-        formatted = value isa AbstractFloat ? @sprintf("%.17g", value) : repr(value)
-        push!(rows, (path, type, formatted))
-    elseif value isa Union{Symbol, AbstractString, Type, Nothing, Missing}
-        push!(rows, (path, type, repr(value)))
-    elseif value isa AbstractArray
-        for index in CartesianIndices(value)
-            structure_rows(value[index], "$path[$(join(Tuple(index), ','))]", rows)
-        end
-        isempty(value) && push!(rows, (path, type, repr(value)))
-    elseif value isa Tuple
-        for (i, item) in enumerate(value)
-            structure_rows(item, "$path.$i", rows)
-        end
-    elseif parentmodule(typeof(value)) === PI || value isa NamedTuple
-        for field in fieldnames(typeof(value))
-            structure_rows(getfield(value, field), "$path.$field", rows)
-        end
-    else
-        push!(rows, (path, type, ""))
-    end
-    return rows
-end
-
-function write_structure(directory, fixture, state)
-    mkpath(directory)
-    open(joinpath(directory, "$(fixture).tsv"), "w") do io
-        println(io, "path\ttype\tvalue")
-        for name in (:c1, :c2), field in (:element_model, :setpoint, :limits)
-
-            element = state.elements[name]
-            for row in structure_rows(getfield(element, field), "$fixture.$name.$field")
-                println(io, join(row, '\t'))
-            end
-        end
-    end
-end
-
 function oracle_voltage!(rows, labels)
     model = ParityFixtures.PSCADFixtures.mmc_pq_network().elements.DUT
     reactive = model.delta_control.outer_reactive
@@ -424,9 +382,6 @@ function collect_fixture(fixture; dump_directory = nothing,
     for (node, (domain, bus)) in NB._node_bus_mapping(state.topology)
         record!(rows, labels, "$name.nodes.$node.domain", domain)
         record!(rows, labels, "$name.nodes.$node.bus", bus)
-    end
-    if dump_directory !== nothing && fixture.name in (:p2p_alt, :p2p_gridspace_nominal)
-        write_structure(joinpath(dump_directory, "structure"), fixture.name, state)
     end
     converted = collect_family!(rows, labels, skipped, errors, "$name.pm";
         skipped_families) do r, l

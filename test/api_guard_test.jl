@@ -12,8 +12,6 @@ const ALLOWED = Dict(
     "ext/PowerImpedancePSCADExt/rowdefn.jl" => (r"\betree\.Element\b",),
     # Constructor rejection checks must spell the removed keywords.
     "test/docstring_examples_test.jl" => (r"transformation *=", r"connection *="),
-    # write_structure is used only by the excluded frozen reference generator.
-    "test/parity/structure.jl" => (r"element_model",),
 )
 
 # Stored calculations and exports retain the names used by their frozen source.

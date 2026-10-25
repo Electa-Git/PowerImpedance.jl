@@ -7,8 +7,7 @@ include("../pscad/fixtures.jl")
 module IEEE39
 using PowerImpedance
 using PowerImpedance.NetworkBuilder
-# Copied from test/NetworkBuilder_test.jl:70-216.
-# Rewritten from `examples/IEEE39bus.jl:18`.
+# Copied from test/NetworkBuilder_test.jl:70-216 at a1a7fb7.
 function calc_RLC(P, Q, V, component)
     P=P*1e6
     Q=Q*1e6
@@ -2044,7 +2043,7 @@ register(:mmc_compensated, () -> PSCADFixtures.mmc_compensated_network(),
 register(:mmc_no_control, no_control, "test/pscad/mmc_no_control_test.jl")
 register(:mmc_energy, () -> PSCADFixtures.mmc_compensated_network(),
     "test/pscad/mmc_energy_test.jl")
-register(:ieee39, IEEE39.build, "test/NetworkBuilder_test.jl:1312-2515";
+register(:ieee39, IEEE39.build, "test/NetworkBuilder_test.jl:1312-2515 at a1a7fb7";
     elim_elements = [:STATCOM])
 register(:droop_mmc, () -> Droop.droop_network(:mmc),
     "test/dc_voltage_support_test.jl:9-47";
