@@ -92,9 +92,11 @@ variables:
 
 
 .julia_heavy_resources:
+  # The runner limits build containers to 6 GiB.
+  # A memory request above this limit makes the pod invalid.
   variables:
     KUBERNETES_CPU_REQUEST: "4"
-    KUBERNETES_MEMORY_REQUEST: "8Gi"
+    KUBERNETES_MEMORY_REQUEST: "6Gi"
 
 
 .julia_plotting_precompile:
