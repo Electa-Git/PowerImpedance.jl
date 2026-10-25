@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add a legend for the glyphs in standalone and PlotBuilder network diagrams.
 - Declare electrical ports with `Port`, `ACDQ`, `ACABC`, `DC_CM` and
   `electricalconnections`, and connect them with `NetworkBuilder.Bus` and `Net`.
 - Declare configurable inputs with `Input` and `inputs`, read configured values

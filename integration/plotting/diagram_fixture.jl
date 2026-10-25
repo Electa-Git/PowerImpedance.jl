@@ -144,3 +144,7 @@ function diagram_powerflow_fixture(network)
         (termination_status = :fixture,)
     )
 end
+
+function diagram_legend_labels(view)
+    return [entry.label[] for entry in last(only(view.plots.legend.entrygroups[]))]
+end

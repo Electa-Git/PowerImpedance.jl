@@ -70,7 +70,9 @@ function _explicit_positions(model::DiagramModel, supplied)
     for (raw_key, value) in pairs(supplied)
         key = _external_position_key(raw_key)
         haskey(model.key_to_vertex, key) || throw(
-            ArgumentError("explicit positions contain unknown diagram key $(repr(raw_key))"),
+            ArgumentError(
+                "explicit positions contain unknown diagram key $(repr(raw_key))",
+            ),
         )
         haskey(copied, key) && throw(
             ArgumentError("explicit positions specify $(repr(raw_key)) more than once"),
@@ -79,7 +81,9 @@ function _explicit_positions(model::DiagramModel, supplied)
     end
     missing = [key for key in model.vertex_keys if !haskey(copied, key)]
     isempty(missing) || throw(
-        ArgumentError("explicit positions are incomplete; missing $(join(repr.(missing), ", "))"),
+        ArgumentError(
+            "explicit positions are incomplete; missing $(join(repr.(missing), ", "))",
+        ),
     )
     return copied
 end
@@ -114,6 +118,20 @@ function _component_lookup(model)
     return Dict(component.key => component for component in model.components)
 end
 
+function _edge_appearance(component, style)
+    color = if component.active === false
+        style.inactive_color
+    elseif component.role == :dc_branch
+        style.dc_bus_color
+    elseif component.role == :converter
+        style.converter_color
+    else
+        style.line_color
+    end
+    linewidth = component.role in (:ac_branch, :dc_branch) ? 2.4f0 : 1.8f0
+    return (; color, linewidth)
+end
+
 function _edge_style(model, style)
     components = _component_lookup(model)
     colors = Any[]
@@ -122,39 +140,32 @@ function _edge_style(model, style)
         left = model.vertex_keys[Graphs.src(edge)]
         right = model.vertex_keys[Graphs.dst(edge)]
         component_key = left isa ComponentKey ? left : right
-        component = components[component_key]
-        color = if component.active === false
-            style.inactive_color
-        elseif component.role == :dc_branch
-            style.dc_bus_color
-        elseif component.role == :converter
-            style.converter_color
-        else
-            style.line_color
-        end
-        push!(colors, color)
-        push!(widths, component.role in (:ac_branch, :dc_branch) ? 2.4f0 : 1.8f0)
+        appearance = _edge_appearance(components[component_key], style)
+        push!(colors, appearance.color)
+        push!(widths, appearance.linewidth)
     end
     return colors, widths
 end
 
 _bus_label(key::BusKey) = "$(key.domain == 1 ? "AC" : "DC") $(key.bus)"
 
-function _bus_plot!(axis, descriptor, position, style)
+function _bus_appearance(descriptor, style)
     halfwidth = 0.13f0
     if descriptor.key.domain == 1
-        points = [position - Makie.Vec2f(halfwidth, 0),
-            position + Makie.Vec2f(halfwidth, 0)]
-        return Makie.linesegments!(axis, points; color = style.ac_bus_color, linewidth = 8)
+        points = [Makie.Point2f(-halfwidth, 0), Makie.Point2f(halfwidth, 0)]
+        return points, (; color = style.ac_bus_color, linewidth = 8)
     end
     offset = 0.025f0
     points = [
-        position - Makie.Vec2f(halfwidth, offset),
-        position + Makie.Vec2f(halfwidth, -offset),
-        position - Makie.Vec2f(halfwidth, -offset),
-        position + Makie.Vec2f(halfwidth, offset)
+        Makie.Point2f(-halfwidth, -offset), Makie.Point2f(halfwidth, -offset),
+        Makie.Point2f(-halfwidth, offset), Makie.Point2f(halfwidth, offset)
     ]
-    return Makie.linesegments!(axis, points; color = style.dc_bus_color, linewidth = 4)
+    return points, (; color = style.dc_bus_color, linewidth = 4)
+end
+
+function _bus_plot!(axis, descriptor, position, style)
+    points, appearance = _bus_appearance(descriptor, style)
+    return Makie.linesegments!(axis, Ref(position) .+ points; appearance...)
 end
 
 function _component_appearance(component, style)
@@ -179,7 +190,8 @@ function _component_appearance(component, style)
 end
 
 function _component_plot!(axis, component, position, style)
-    marker, markersize, color, strokecolor, strokewidth = _component_appearance(component, style)
+    marker, markersize, color, strokecolor, strokewidth =
+        _component_appearance(component, style)
     return Makie.scatter!(
         axis,
         [position];
@@ -189,6 +201,62 @@ function _component_plot!(axis, component, position, style)
         strokecolor,
         strokewidth
     )
+end
+
+function _diagram_legend!(figure, axis, model, style)
+    elements = Any[]
+    labels = String[]
+    for (domain, label) in ((1, "AC bus"), (2, "DC bus"))
+        index = findfirst(bus -> bus.key.domain == domain, model.buses)
+        index === nothing && continue
+        points, appearance = _bus_appearance(model.buses[index], style)
+        diameter = 2 * maximum(point -> abs(point[1]), points)
+        sample = [Makie.Point2f(0.5, 0.5) + point / diameter for point in points]
+        push!(elements, [Makie.LineElement(; points = sample[i:(i + 1)], appearance...)
+                         for i in 1:2:length(sample)])
+        push!(labels, label)
+    end
+    for (role, label) in (
+        (:ac_branch, "AC branch"), (:dc_branch, "DC branch"),
+        (:transformer, "Transformer"), (:converter, "Converter"),
+        (:source, "Source"), (:machine, "Machine"), (:load, "Load"),
+        (:shunt, "Shunt"), (:generic, "Other component"), (:inactive, "Out of service")
+    )
+        index = findfirst(model.components) do component
+            return role == :inactive ? component.active === false :
+                   component.active !== false && component.role == role
+        end
+        index === nothing && continue
+        component = model.components[index]
+        element = if role in (:ac_branch, :dc_branch)
+            Makie.LineElement(; _edge_appearance(component, style)...)
+        else
+            marker, markersize, color, strokecolor, strokewidth =
+                _component_appearance(component, style)
+            Makie.MarkerElement(; marker, markersize, color, strokecolor, strokewidth)
+        end
+        push!(elements, element)
+        push!(labels, label)
+    end
+    isempty(elements) && return nothing
+
+    cell = Makie.GridLayoutBase.gridcontent(axis)
+    column = last(cell.span.cols)
+    available_height = axis.layoutobservables.suggestedbbox[].widths[2]
+    gap = 16
+    legend = Makie.Legend(
+        cell.parent[cell.span.rows, column + 1], elements, labels;
+        patchsize = (32, 26), tellheight = false,
+        labelcolor = style.label_color, backgroundcolor = style.background
+    )
+    Makie.colgap!(cell.parent, column, gap)
+    width, height = size(figure.scene)
+    legend_width, legend_height = legend.layoutobservables.autosize[]
+    Makie.resize!(
+        figure, width + ceil(Int, legend_width + gap),
+        height + ceil(Int, max(0, legend_height - available_height))
+    )
+    return legend
 end
 
 function _entity_details(model::DiagramModel, key::BusKey)
@@ -302,6 +370,7 @@ function _render_diagram_on_axis!(
         )
     end
 
+    legend = _diagram_legend!(figure, axis, model, style)
     highlight = Makie.Observable(Makie.Point2f[])
     highlight_plot = Makie.scatter!(
         axis,
@@ -322,7 +391,8 @@ function _render_diagram_on_axis!(
         components = component_plots,
         bus_labels = bus_labels,
         component_labels = component_labels,
-        highlight = highlight_plot
+        highlight = highlight_plot,
+        legend = legend
     )
     view = NetworkDiagram(
         figure,
@@ -351,7 +421,7 @@ function _render_diagram_on_axis!(
 end
 
 function _diagram_plots(view::NetworkDiagram)
-    return Any[
+    plots = Any[
         view.plots.graph,
         view.plots.buses...,
         view.plots.components...,
@@ -359,6 +429,8 @@ function _diagram_plots(view::NetworkDiagram)
         view.plots.component_labels...,
         view.plots.highlight
     ]
+    view.plots.legend === nothing || push!(plots, view.plots.legend.scene)
+    return plots
 end
 
 function _render_diagram(

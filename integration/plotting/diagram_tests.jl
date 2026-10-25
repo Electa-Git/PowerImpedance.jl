@@ -157,6 +157,43 @@
     view = diagram(network, enriched; interactive = false)
     @test view.figure isa Makie.Figure
     @test view.axis isa Makie.Axis
+    @test view.plots.legend isa Makie.Legend
+    @test diagram_legend_labels(view) == [
+        "AC bus", "DC bus", "AC branch", "DC branch", "Converter", "Source",
+        "Machine", "Load", "Out of service"
+    ]
+    axis_cell = view.axis.layoutobservables.gridcontent[]
+    legend_cell = view.plots.legend.layoutobservables.gridcontent[]
+    @test legend_cell.parent === axis_cell.parent
+    @test legend_cell.span.rows == axis_cell.span.rows
+    legend_column = last(axis_cell.span.cols) + 1
+    @test legend_cell.span.cols == legend_column:legend_column
+    @test view.plots.legend.scene in DiagramExtension._diagram_plots(view)
+    @test size(view.figure.scene, 1) > DiagramExtension._DEFAULT_STYLE.figure_size[1]
+    @test size(view.figure.scene, 2) >= DiagramExtension._DEFAULT_STYLE.figure_size[2]
+    Makie.update_state_before_display!(view.figure)
+    axis_box = view.axis.layoutobservables.computedbbox[]
+    legend_box = view.plots.legend.layoutobservables.computedbbox[]
+    @test axis_box.origin[1] + axis_box.widths[1] < legend_box.origin[1]
+    entries = last(only(view.plots.legend.entrygroups[]))
+    @test length(entries[1].elements) == 1
+    @test length(entries[2].elements) == 2
+    @test all(element -> element isa Makie.LineElement, entries[2].elements)
+    for (label, element_name) in (
+        ("Converter", :converter), ("Source", :ac_grid), ("Machine", :machine),
+        ("Load", :ac_shunt), ("Out of service", :ac_parallel)
+    )
+        entry = only(entry for entry in entries if entry.label[] == label)
+        element = only(entry.elements)
+        index = findfirst(item -> item.key.element == element_name, view.model.components)
+        glyph = view.plots.components[index]
+        @test element isa Makie.MarkerElement
+        @test Makie.to_spritemarker(element.marker[]) == glyph.marker[]
+        @test Makie.Vec2f(element.markersize[]) == glyph.markersize[]
+        @test Makie.to_color(element.markercolor[]) == glyph.color[]
+        @test Makie.to_color(element.markerstrokecolor[]) == glyph.strokecolor[]
+        @test element.markerstrokewidth[] == glyph.strokewidth[]
+    end
     @test length(view.plots.buses) == length(view.model.buses)
     @test length(view.plots.components) == length(view.model.components)
     @test Graphs.nv(view.model.graph) ==
@@ -236,6 +273,8 @@ end
     model = DiagramExtension.project_diagram(network)
     @test only(model.components).role == :generic
     @test haskey(model.key_to_vertex, DiagramExtension.ComponentKey(:unknown))
+    view = diagram(network; interactive = false)
+    @test diagram_legend_labels(view) == ["DC bus", "Other component"]
 end
 
 @testset "GraphMakie diagram transformer and omission roles" begin
@@ -268,6 +307,8 @@ end
         network.options,
         network.powerflow_start
     )
+    view = diagram(network; interactive = false)
+    @test diagram_legend_labels(view) == ["AC bus", "Transformer", "Source"]
     model = DiagramExtension.project_diagram(disconnected)
     @test only(component.role
     for component in model.components
@@ -276,4 +317,41 @@ end
         diagnostic -> diagnostic.kind == :disconnected &&
                       diagnostic.entity == DiagramExtension.ComponentKey(:isolated),
         model.diagnostics)
+end
+
+@testset "GraphMakie diagram passive and empty legends" begin
+    network = PowerImpedance.NetworkBuilder.define(
+        (; branch = impedance(z = 2.0, conductors = 1),
+            shunt = impedance(z = 10.0, conductors = 1)),
+        (
+            PowerImpedance.NetworkBuilder.Bus(:left; ports = ((:branch, :side1),)),
+            PowerImpedance.NetworkBuilder.Bus(:right; ports = (
+                (:branch, :side2), (:shunt, :side1)
+            )),
+            PowerImpedance.NetworkBuilder.Bus(:gnd; ports = ((:shunt, :side2),))
+        )
+    )
+    view = diagram(network; interactive = false, style = (; dc_bus_color = :red))
+    @test diagram_legend_labels(view) == ["DC bus", "DC branch", "Shunt"]
+    entries = last(only(view.plots.legend.entrygroups[]))
+    @test all(element -> element.linecolor[] == :red, first(entries).elements)
+    @test only(entries[2].elements).linecolor[] == :red
+
+    hybrid = diagram_hybrid_network()
+    active_view = diagram(hybrid; interactive = false)
+    @test diagram_legend_labels(active_view) == [
+        "AC bus", "DC bus", "AC branch", "DC branch", "Converter", "Source",
+        "Machine", "Shunt"
+    ]
+    inactive = diagram_powerflow_fixture(hybrid)
+    inactive.data["convdc"]["1"]["status"] = 0
+    inactive_view = diagram(hybrid, inactive; interactive = false)
+    @test "Converter" ∉ diagram_legend_labels(inactive_view)
+    @test count(==("Out of service"), diagram_legend_labels(inactive_view)) == 1
+
+    empty_network = PowerImpedance.NetworkBuilder.define((;), ())
+    empty_view = diagram(empty_network; interactive = false)
+    @test empty_view.plots.legend === nothing
+    @test !any(content -> content isa Makie.Legend, empty_view.figure.content)
+    @test size(empty_view.figure.scene) == DiagramExtension._DEFAULT_STYLE.figure_size
 end

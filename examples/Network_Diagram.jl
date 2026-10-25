@@ -2,6 +2,7 @@
 #
 # Network diagrams are an optional GraphMakie extension. The active Makie
 # backend owns display and export; `diagram` only builds and returns a figure.
+# A legend beside the diagram identifies the glyphs for its buses, branches and components.
 
 using PowerImpedance
 using PowerImpedance.NetworkBuilder: Bus, define

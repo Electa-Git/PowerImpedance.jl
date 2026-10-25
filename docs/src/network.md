@@ -244,10 +244,11 @@ diagram_view = ui.artifacts[:network_diagram]
 ```
 
 This form retains PlotBuilder's responsive layout, reset-view button, status
-line, and SVG export button. Network diagrams intentionally have no logarithmic
-axis control or legend, and the diagram canvas uses the full available content
-width. By default, `figure_size = :auto` fits the initial window to the resolved
-network-layout aspect; pass an explicit `(width, height)` tuple to override it.
+line, and SVG export button. A legend beside the axis identifies each type of bus,
+branch and component shown, and the figure grows to keep the diagram size.
+Network diagrams have no logarithmic axis control. By default,
+`figure_size = :auto` fits the initial diagram area to the aspect of the resolved
+layout. Pass an explicit `(width, height)` tuple to override it.
 `diagram_view` is the same extension-owned handle returned by `diagram`,
 including `selected` and `details`. Use `graph_layout` for a NetworkLayout
 algorithm because PlotBuilder reserves `layout` for its page layout.
