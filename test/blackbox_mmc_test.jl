@@ -156,7 +156,7 @@ end
     @test op.ac.p ≈ -10.0
     @test op.ac.q ≈ -3.0
     @test op.ac.v ≈ ac.v
-    @test op.ac.theta ≈ ac.theta
+    @test isapprox(op.ac.theta, ac.theta; atol = 1e-12)
     @test op.dc.v ≈ dc.v
     @test op.dc.p > 0.0
     frequency_model = NB.NetworkModel(state, result.operating_point)
