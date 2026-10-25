@@ -56,11 +56,18 @@ function source_record()
              if endswith(file, ".jl") || file == "Project.toml"]
     append!(paths,
         ["test/pscad/fixtures.jl", "test/pscad/ieee9_network.jl",
-            "src/Network/Solvers/make_y.jl", "src/Network/Solvers/make_z.jl",
+            "src/Network/Solvers/admittance.jl", "src/Network/Solvers/impedance.jl",
+            "src/Network/NetworkBuilder/NetworkBuilder.jl",
+            "src/Network/NetworkBuilder/topology.jl",
+            "src/Network/NetworkBuilder/powerflow.jl",
+            "src/Network/NetworkBuilder/results.jl",
             "src/Network/Components/source/source.jl", "src/Network/Components/transformer/transformer.jl",
             "src/Network/Components/transmission_line/cable.jl", "src/Network/Components/transmission_line/overhead_line.jl",
             "src/Network/Components/transmission_line/blackbox_line.jl",
-            "src/Network/Components/AbstractElement.jl", "src/Network/Components/AbstractStateSpace.jl",
+            "src/Network/Components/operating_values.jl",
+            "src/Network/Components/inputs.jl", "src/Problems.jl", "src/PSCAD/netlist.jl",
+            "src/Network/Components/ports.jl", "src/Network/Components/predicates.jl",
+            "src/Network/Components/AbstractStateSpace.jl",
             "src/Network/Components/converter/common/kernels/delay.jl",
             "src/Network/Components/converter/common/loops/synchronization.jl",
             "src/PSCAD/PSCAD.jl", "src/Tools/abcd_parameters.jl",
@@ -75,7 +82,8 @@ function source_record()
     append!(paths, ["src/Network/Components/converter/MMC/" * file for file in
         ("MMC.jl", "electrical.jl", "modulation.jl", "inner_current.jl", "energy.jl")])
     append!(paths, ["test/pscad/networks.jl", "examples/P2P_HVDC_ALT.jl",
-            "src/Network/NetworkBuilder/gs_converters.jl", "src/Network/Components/machine/SynchronousMachine.jl"])
+            "src/Network/NetworkBuilder/converters.jl",
+            "src/Network/Components/machine/SynchronousMachine.jl"])
     append!(paths, ["src/Network/Components/machine/InductionMachine.jl",
         "src/PSCAD/emitters/induction_machine.jl", "src/Network/NetworkBuilder/model.jl"])
     return [Dict("path" => path, "sha256" => digest(joinpath(REPOSITORY, path)))
@@ -138,7 +146,12 @@ function preparation_record(entry, gate, models; directory)
             entry.estimated_nodes,
         "live_node_limit_exclusive" => native_node_limit(entry.id), "julia_version" => string(VERSION),
         "export_commit" => readchomp(`git -C $REPOSITORY rev-parse HEAD`),
-        "source_files" => source_record(), "pscad_version_observed" => "not_run",
+        "source_files" => source_record(),
+        "harness_revisions" => [Dict("purpose" => "direct component models and named ports",
+            "source_file_list" =>
+                "manifests written before this change cannot be verified against the " *
+                "new source-file list")],
+        "pscad_version_observed" => "not_run",
         "compiler_observed" => "not_run", "model_differences" => entry.differences,
         "status" => "prepared_station_pending", "operating_point_tolerances" => "existing compare_operating_point defaults",
         "time_domain_tolerances" => Dict("rms" => 0.05, "peak" => 0.1, "gain" => 0.05,

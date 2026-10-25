@@ -107,6 +107,21 @@ function unresolved_globals(expression, namespace)
                 visit(first(signature.args), bound)
                 foreach(argument -> annotations(argument, inner), signature.args[2:end])
                 visit(body, inner)
+            elseif head == :let
+                bindings, body = arguments
+                inner = copy(bound)
+                declarations = bindings.head == :block ? bindings.args : [bindings]
+                for binding in declarations
+                    binding isa LineNumberNode && continue
+                    if binding isa Symbol
+                        visit(binding, inner)
+                        bind!(inner, binding)
+                    else
+                        visit(last(binding.args), inner)
+                        bind!(inner, first(binding.args))
+                    end
+                end
+                visit(body, definitions!(inner, body))
             elseif head == :->
                 parameters, body = arguments
                 inner = definitions!(bind!(copy(bound), parameters), body)
@@ -377,6 +392,14 @@ end
                 "value = (; label = unknown); label"), namespace) == [:label, :unknown]
             @test unresolved_globals(Meta.parseall(
                 "callback = function (item); item; end; item"), namespace) == [:item]
+        end
+        @testset "Let bindings" begin
+            source = "value = let model = 1; b = model + 1; (; b); end"
+            @test isempty(unresolved_globals(Meta.parseall(source), namespace))
+            @test unresolved_globals(Meta.parseall(source * "; model; b"), namespace) ==
+                [:b, :model]
+            @test unresolved_globals(Meta.parseall(replace(source,
+                "model = 1" => "model = unknown")), namespace) == [:unknown]
         end
         for (source, names) in (
             ("@missing_macro abs(unknown)", [Symbol("@missing_macro"), :unknown]),

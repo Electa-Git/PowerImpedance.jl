@@ -149,7 +149,7 @@ for (model, reference_state, rtol_v) in cases
         reference = model
         if isempty(model.operating_point.bus_states)
             list = PowerImpedance.PSCAD.netlist(reference_state,
-                PSCADFixtures.solved_powerflow(reference_state))
+                compute(PowerFlowProblem(reference_state), ACDCPowerFlow()))
             reference = PSCADModel(model.project_path, model.project_name, list,
                 model.probes, model.settings, list.operating_point, model.provenance)
         end
@@ -226,7 +226,7 @@ if !converters_only
         stress_state = PSCADFixtures.transformer_network(; Rₘ = 1e4, Lₘ = 10.0)
         stress_model = export_pscad(stress_state;
             path = joinpath(exports, "transformer_yy_stress.pscx"),
-            powerflow = PSCADFixtures.solved_powerflow(stress_state))
+            powerflow = compute(PowerFlowProblem(stress_state), ACDCPowerFlow()))
         stress = compute(stress_model, PSCADRun();
             options = (; remote, simulation_time = 0.3, time_step = 50e-6,
                 sample_step = 250e-6, verbosity = 1))

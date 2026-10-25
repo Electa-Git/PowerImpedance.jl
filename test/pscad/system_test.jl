@@ -3,14 +3,14 @@
     original=V.fixture("p2p_original").factory()
     @test length(redesigned.elements)==10
     @test length(original.elements)==8
-    @test redesigned.elements[:ugc].element_model.length==25e3
-    @test redesigned.elements[:ohl].element_model.length==75e3
+    @test redesigned.elements[:ugc].length==25e3
+    @test redesigned.elements[:ohl].length==75e3
     for id in V.SYSTEM_PORT_IDS
-        @test all(e.element_model.transposition==:none for e in values(V.fixture(id).factory().elements)
-            if e.element_model isa Overhead_line)
+        @test all(e.transposition==:none for e in values(V.fixture(id).factory().elements)
+            if e isa Overhead_line)
     end
     for name in (:c1,:c2)
-        m=redesigned.elements[name].element_model
+        m=redesigned.elements[name]
         @test m.elec.turnsRatio==333/380
         @test m.elec.Rₑ*m.elec.zAC_base-m.elec.Rₐᵣₘ*(640^2/1000)/2 ≈ 1.10889
         @test m.modulation.delay1.timeDelay==25e-6
@@ -18,27 +18,26 @@
         @test m.delta_control.occ.activate_ω_c_multiplication
         @test m.delta_control.occ.filter.order==2
         @test m.delta_control.occ.filter.ωc==2π*500
-        @test original.elements[name].element_model.modulation.delay1.timeDelay==200e-6
+        @test original.elements[name].modulation.delay1.timeDelay==200e-6
     end
 end
 
 @testset "System transfer matrices use native incidence and units" begin
     for id in ("p2p_redesigned","p2p_ac_grids")
-        net=V.fixture(id).factory();point=power_flow(net)
+        net=V.fixture(id).factory();point=compute(PowerFlowProblem(net), ACDCPowerFlow())
         c=V.complete_system(id,net);list=V.fixture_netlist(net,point)
         spec=merge(V.system_spec(id,list),(;frequencies=[7.,137.],phases=[0.,0.]))
         @test length(c.ports)==2
         @test length(c.nodes)>4
-        @test all(n ∉ c.nodes for n in values(net.elements[:g1].pins))
+        @test all(n ∉ c.nodes for n in V.component_nets(net, :g1))
         refs=V.composed_reference(c,spec)
         @test size(refs["direct_Z"])==(4,4,2)
         @test all(haskey(refs,"Z_p$(p)_p$q") for p in 1:2 for q in 1:2)
         @test all(haskey(refs,"AC_I_"*string(n)) && haskey(refs,"DC_I_"*string(n)) for n in c.devices)
         # Independent native network assembly, followed by explicit current drive.
-        names=Symbol[n for (n,e) in net.elements if !(e.element_model isa PowerImpedance.Source)]
-        dictionary=Dict{Symbol,Array{Union{Symbol,Int}}}(:node_list=>Union{Symbol,Int}[c.nodes...],:element_list=>Union{Symbol,Int}[names...])
+        names=Symbol[n for (n,e) in pairs(net.elements) if !(e isa PowerImpedance.Source)]
         for (k,f) in enumerate(spec.frequencies)
-            y=PowerImpedance.make_y(net,dictionary,ComplexF64(2π*im*f))
+            y=V.nodal_admittance(net, c.nodes, ComplexF64(2π*im*f); elements=names)
             for (node,resistance) in c.dc_references
                 j=only(findall(==(node),c.nodes));y[j,j]+=inv(resistance)
             end
@@ -51,12 +50,12 @@ end
             end
             for name in c.devices
                 e=net.elements[name]
-                pins=[e.pins[Symbol("1.1")],e.pins[Symbol("2.1")],e.pins[Symbol("2.2")]]
+                nodes=V.component_nets(net, name)
                 local_voltage=zeros(ComplexF64,3,4)
-                for (row,node) in enumerate(pins)
+                for (row,node) in enumerate(nodes)
                     j=findfirst(==(node),c.nodes);j===nothing || (local_voltage[row,:]=voltage[j,:])
                 end
-                current=PowerImpedance.get_y(e,ComplexF64(2π*im*f))*local_voltage
+                current=V.physical_y(e,ComplexF64(2π*im*f))*local_voltage
                 @test refs["AC_I_"*string(name)][:,:,k] ≈ current[2:3,:] rtol=1e-9
                 @test refs["DC_I_"*string(name)][:,:,k] ≈ current[1:1,:] rtol=1e-9
             end
@@ -84,13 +83,14 @@ end
         @test all(size(sampled.outputs[target],2)==size(refs[target],1) for target in keys(refs))
         for name in c.devices
             element=net.elements[name];
-            b=V.device_bases(element.element_model.elec)
-            bus=V.port_probe(list, name, b.ac_side).name
+            b=V.device_bases(element.elec)
+            bus=V.port_probe(list, name, b.ac_port).name
             vp=only(filter(p->p.kind==:voltage && p.bus==bus, plan.probes.channels))
             ip=only(filter(p->p.kind==:current && p.element==string(name) && p.port==
                 :ac, plan.probes.channels))
-            v0=element.setpoint.Vac*cis(element.setpoint.θac)
-            i0=-2complex(element.setpoint.Pac,-element.setpoint.Qac)/(3conj(v0))
+            v0=point.operating_point[name].ac.v*cis(point.operating_point[name].ac.theta)
+            i0=2complex(point.operating_point[name].ac.p,
+                -point.operating_point[name].ac.q)/(3conj(v0))
             for (probe,value) in ((vp,v0),(ip,(ip.orientation==:out ? -1 : 1)*i0))
                 for (j,phase) in enumerate((0.,-2π/3,2π/3))
                     channels[probe.name*":"*string(j)]=real.(value.*cis.(2π*50 .*time .+phase))
@@ -164,7 +164,9 @@ end
 end
 
 @testset "Original P2P opposite circular roots" begin
-    net=V.fixture("p2p_original").factory();power_flow(net)
+    net=V.fixture("p2p_original").factory()
+    point=compute(PowerFlowProblem(net), ACDCPowerFlow())
+    NetworkBuilder.NetworkModel(net, point.operating_point)
     c=V.complete_system("p2p_original",net);functions=V.composed_device_functions(c)
     modes=V.system_growth_reference(c)
     @test length(modes)==2

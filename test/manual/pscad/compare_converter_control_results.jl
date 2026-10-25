@@ -37,7 +37,7 @@ end
 function compare_case(name, network)
     println("Reading ", name)
     flush(stdout)
-    pf = PSCADFixtures.solved_powerflow(network)
+    pf = compute(PowerFlowProblem(network), ACDCPowerFlow())
     list = P.netlist(network, pf)
     mmc = startswith(name, "mmc_")
     ramp = name == "mmc_pq_default_ramp" || startswith(name, "tlc_vac") ?

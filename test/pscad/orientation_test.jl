@@ -7,30 +7,30 @@ const P=PowerImpedance.PSCAD
 
 @testset "Probe orientation metadata and AC cable connection" begin
     fixtures = [
-        (V.ClassicFixtures.small_ac_network(),
+        (V.PSCADFixtures.small_ac_network(),
             Dict("I_source_ac"=>:into, "I_line_side1"=>:into, "I_line_side2"=>:into,
                 "I_load_side1"=>:into)),
-        (V.ClassicFixtures.passive_ohl_network(),
+        (V.PSCADFixtures.passive_ohl_network(),
             Dict("I_line_side1"=>:into, "I_line_side2"=>:into)),
-        (V.ClassicFixtures.dc_network(),
+        (V.PSCADFixtures.dc_network(),
             Dict("I_from_dc"=>:into, "I_to_dc"=>:into, "I_line_side1"=>:into,
                 "I_line_side2"=>:into)),
-        (V.ClassicFixtures.dc_cable_network(),
+        (V.PSCADFixtures.dc_cable_network(),
             Dict("I_line_side1"=>:into, "I_line_side2"=>:into)),
         (V.fixture("dc_cable_ohl").factory(),
             Dict("I_line_side1"=>:into, "I_line_side2"=>:into, "I_ohl_side1"=>:into,
                 "I_ohl_side2"=>:into)),
-        (V.ClassicFixtures.transformer_network(),
+        (V.PSCADFixtures.transformer_network(),
             Dict("I_line_side1"=>:into, "I_line_side2"=>:into)),
-        (V.ClassicFixtures.transformer_network(; organization = :ΔY),
+        (V.PSCADFixtures.transformer_network(; organization = :ΔY),
             Dict("I_line_side1"=>:into, "I_line_side2"=>:into)),
-        (V.ClassicFixtures.sm_network(), Dict("I_sg1_ac"=>:into, "I_g2_ac"=>:into)),
-        (V.ClassicFixtures.tlc_case1_network(), Dict("I_DUT_dc"=>:into, "I_DUT_ac"=>:into)),
-        (V.ClassicFixtures.mmc_pq_network(), Dict("I_DUT_dc"=>:into, "I_DUT_ac"=>:into))]
+        (V.PSCADFixtures.sm_network(), Dict("I_sg1_ac"=>:into, "I_g2_ac"=>:into)),
+        (V.PSCADFixtures.tlc_case1_network(), Dict("I_DUT_dc"=>:into, "I_DUT_ac"=>:into)),
+        (V.PSCADFixtures.mmc_pq_network(), Dict("I_DUT_dc"=>:into, "I_DUT_ac"=>:into))]
     for (net, expected) in fixtures
         # Active emitter initialization needs the solved point; passive network fixtures
         # use the same retained operating-point data.
-        list=V.fixture_netlist(net, power_flow(net))
+        list=V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         plan=P.build_plan(list)
         for (name, direction) in expected
             @test only(filter(c->c.name==name,plan.probes.channels)).orientation==direction
@@ -46,7 +46,7 @@ const P=PowerImpedance.PSCAD
     @test_throws ArgumentError P.ProbeChannel(
         "V", :voltage, "B", nothing, nothing, 3, "kV", :into)
     net=V.fixture("ac_cable_coaxial").factory()
-    list=V.fixture_netlist(net, power_flow(net))
+    list=V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     spec,_=V.scan_definition("ac_cable_coaxial",net,list)
     plan,settings=V.scan_plan(list,spec,"baseline")
     meter=only(filter(c->c isa P.ComponentPlan && c.defn=="master:ammeter" &&
@@ -90,14 +90,14 @@ const P=PowerImpedance.PSCAD
     @test V.matrix_change(A,B;epsilon=.01)==V.matrix_change(D.*A,D.*B;epsilon=.01)
 
     # Metadata addition must not reinterpret the signed acceptance equations.
-    for (network, element, side) in ((V.ClassicFixtures.sm_network(), "sg1", "1"),
-        (V.ClassicFixtures.tlc_case2_network(), "DUT", "2"),
-        (V.ClassicFixtures.mmc_pq_network(), "DUT", "2"))
-        nl=V.fixture_netlist(network, power_flow(network));
+    for (network, element, component_port) in ((V.PSCADFixtures.sm_network(), "sg1", "ac"),
+        (V.PSCADFixtures.tlc_case2_network(), "DUT", "ac"),
+        (V.PSCADFixtures.mmc_pq_network(), "DUT", "ac"))
+        nl=V.fixture_netlist(network, compute(PowerFlowProblem(network), ACDCPowerFlow()));
         pl=P.build_plan(nl)
         c=only(filter(
             p->p.kind==:current && p.element==element &&
-               p.port==V.terminal_port(nl, element, side),
+               p.port==Symbol(component_port),
             pl.probes.channels))
         v=only(filter(p->p.kind==:voltage && p.bus==c.bus, pl.probes.channels))
         times=collect(0.0:250e-6:0.3)
@@ -123,16 +123,16 @@ const P=PowerImpedance.PSCAD
     end
 end
 
-@testset "Injection meter pins and recorded direction" begin
+@testset "Injection meter terminals and recorded direction" begin
     net=V.fixture("synchronous_machine").factory()
-    list=V.fixture_netlist(net,power_flow(net))
+    list=V.fixture_netlist(net,compute(PowerFlowProblem(net), ACDCPowerFlow()))
     spec,_=V.applicable_scan("synchronous_machine",net,list)
     plan,_=V.scan_plan(list,spec,"baseline")
     source=only(filter(m->startswith(m.name,"CurrentPort_"),plan.modules))
     for meter in filter(c->c.defn=="master:ammeter",source.canvas.components)
-        pins=first.(P.component_ports(meter,Dict()))
+        terminals=first.(P.component_ports(meter,Dict()))
         @test meter.orient==4
-        labels=map(pins) do pin
+        labels=map(terminals) do pin
             wire=only(filter(w->pin in w.vertices,source.canvas.wires))
             endpoint=only(filter(!=(pin),wire.vertices))
             label=only(filter(c->c.defn=="master:nodelabel" &&

@@ -191,16 +191,17 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
         for e in list.elements
             e.model isa Union{PowerImpedance.TLC,PowerImpedance.MMC,PowerImpedance.SynchronousMachine} || continue
             bases=device_bases(e.model.elec)
-            push!(voltage_buses,port_probe(list,e.name,bases.ac_side).name)
-            bases.dc_voltage===nothing || push!(voltage_buses,port_probe(list,e.name,1).name)
-            push!(device_currents,(string(e.name),string(bases.ac_side)))
+            push!(voltage_buses,port_probe(list,e.name,bases.ac_port).name)
+            bases.dc_voltage===nothing || push!(voltage_buses,port_probe(list,e.name,
+                :dc).name)
+            push!(device_currents,(string(e.name),string(bases.ac_port)))
         end
         needed=filter(
             c->c.kind==:injection_current ||
                c.kind==:voltage && c.bus in voltage_buses ||
                c.kind==:current && (c.bus in port_buses || c.dim==1 ||
                 (c.element,
-                    string(terminal_side(list, c.element, c.port))) in device_currents),
+                    string(c.port)) in device_currents),
             plan.probes.channels)
         retain_recorders!(plan,needed)
     end

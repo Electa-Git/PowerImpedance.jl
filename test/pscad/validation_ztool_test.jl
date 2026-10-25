@@ -136,12 +136,12 @@ end
             ("passive_ac_rlc", 2), ("passive_dc_rlc", 2),
             ("ac_ohl_untransposed", 1), ("transformer_dyn11", 1), ("ieee9_bus_impedance", 0))
         net = V.fixture(id).factory()
-        list = V.fixture_netlist(net, power_flow(net))
+        list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         spec = V.fixture(id).category == :device ? V.passive_settings() : first(V.scan_definition(id, net, list))
         ports = V.ztool_ports(id, net, list, spec)
         requests = [p.element === nothing ? ZToolProbe(p.kind, p.name; bus = p.bus.name) :
                     ZToolProbe(p.kind, p.name; element = p.element,
-                        port = V.terminal_port(list, p.element, p.side)) for p in ports]
+                        port = Symbol(p.port)) for p in ports]
         plan,
         replacements = V.ztool_measurement_plan(list, P.SimulationSettings(), requests)
         @test length(replacements) == count(p -> p.element !== nothing, ports)
@@ -175,7 +175,7 @@ end
 @testset "Pilot settings and complete SI reference" begin
     for id in ("induction_machine", "mmc_gfm_lec_compensated")
         net = V.fixture(id).factory()
-        list = V.fixture_netlist(net, power_flow(net))
+        list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         definition = V.ztool_definition(id, net, list)
         scan = definition.scan
         @test length(scan.frequencies) == 16 && scan.multi_frequency
@@ -189,8 +189,9 @@ end
         if id == "mmc_gfm_lec_compensated"
             @test size(definition.reference) == (3, 3, 16)
             dut = net.elements[:DUT]
-            e = dut.element_model.elec
-            expected = dut.C * ((2π * im * 40I - dut.A) \ dut.B) + dut.D
+            e = dut.elec
+            expected =
+                dut.cache.C * ((2π * im * 40I - dut.cache.A) \ dut.cache.B) + dut.cache.D
             expected .*= [e.Sbase / e.vDC_base, 2e.Sbase / (3e.vAC_base) * e.turnsRatio,
                 2e.Sbase / (3e.vAC_base) * e.turnsRatio]
             expected ./= [e.vDC_base e.vAC_base e.vAC_base]
@@ -203,7 +204,7 @@ end
         end
     end
     net = V.fixture("mmc_gfm_weak_grid").factory()
-    list = V.fixture_netlist(net, power_flow(net))
+    list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     definition = V.ztool_definition("mmc_gfm_weak_grid", net, list)
     @test definition.screen["status"] == "failed"
     @test definition.scan.multi_frequency && length(definition.scan.frequencies) == 16
@@ -239,7 +240,7 @@ end
     end
     mktempdir() do directory
         net = V.fixture("passive_ac_rlc").factory()
-        list = V.fixture_netlist(net, power_flow(net))
+        list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         settings = P.SimulationSettings()
         before_path = joinpath(mkpath(joinpath(directory, "before")), "scan.pscx")
         after_path = joinpath(mkpath(joinpath(directory, "after")), "scan.pscx")
@@ -254,7 +255,7 @@ end
             spec = first(V.scan_definition("passive_ac_rlc", net, list))
             ports = V.ztool_ports("passive_ac_rlc", net, list, spec)
             requests = [ZToolProbe(p.kind, p.name; element = p.element,
-                            port = V.terminal_port(list, p.element, p.side)) for p in ports]
+                            port = Symbol(p.port)) for p in ports]
             plan, _ = V.ztool_measurement_plan(list, settings, requests)
             V.ztool_disconnect_sources!(plan, list, ports, ZToolScan(snapshot_time = 8))
             P._write_project(plan, joinpath(directory, "measurement.pscx"))

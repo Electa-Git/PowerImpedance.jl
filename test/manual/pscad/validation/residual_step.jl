@@ -2,7 +2,7 @@
 # response column. Positive-delay fixtures retain the raw comparison.
 const RESIDUAL_STEP_IDS = ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid"]
 residual_step_eligible(id, net) = id in RESIDUAL_STEP_IDS &&
-    interface_step_eligible(net.elements[:DUT].element_model)
+    interface_step_eligible(net.elements[:DUT])
 
 # Read the exact scalar fields emitted in these fixtures, including units.
 # These values are never estimated from measured responses.
@@ -22,18 +22,21 @@ end
 
 function exported_termination(net, project)
     text = read(project, String)
-    resistance = exported_passive(text, "Grid_R", "resistor", "R", "ohm")
-    inductance = exported_passive(text, "Grid_L", "inductor", "L", "H")
-    form = P.identify_rlc(net.elements[:Grid].element_model).form
+    list = fixture_netlist(net, nothing)
+    grid = only(filter(e -> e.name == :Grid, list.elements)).pscad
+    resistance = exported_passive(text, grid * "_R", "resistor", "R", "ohm")
+    inductance = exported_passive(text, grid * "_L", "inductor", "L", "H")
+    form = P.identify_rlc(net.elements[:Grid]).form
     form.topology == :series && form.C === nothing || error("unsupported grid termination")
     isapprox(resistance, form.R; rtol = 1e-8) &&
         isapprox(inductance, form.L; rtol = 1e-8) || error("exported grid differs from fixture")
     dc_resistance = nothing
     if haskey(net.elements, :DC_load)
-        poles = [exported_passive(text, "DC_load_$(pole)_R", "resistor", "R", "ohm")
+        load = only(filter(e -> e.name == :DC_load, list.elements)).pscad
+        poles = [exported_passive(text, "$(load)_$(pole)_R", "resistor", "R", "ohm")
                  for pole in ("P", "N")]
         r = sum(poles) # Differential DC path contains both pole resistors.
-        expected = inv(real(PowerImpedance.get_y(net.elements[:DC_load], 0.0im)[1,1]))
+        expected = inv(real(physical_y(net.elements[:DC_load], 0.0im)[1,1]))
         isapprox(r, expected; rtol = 1e-8) || error("exported DC load differs from fixture")
         dc_resistance = r
     end
@@ -303,7 +306,7 @@ function reanalyse_residual_step(ids; data_root, output_root = joinpath(ROOT, "d
         inputs = Dict{String, String}[]
         record["analysis_inputs"] = inputs
         net = fixture(id).factory()
-        list = fixture_netlist(net, power_flow(net))
+        list = fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         residual_step_eligible(id, net) || error("fixture no longer has zero modulation delay")
         spec, reference = applicable_scan(id, net, list; definition = record["frequency_response"])
         frozen = read_response(joinpath(directory, reference_filename(spec)), length(spec.axes), spec.frequencies)

@@ -1,42 +1,27 @@
-# Phase-coordinate references reuse native component ABCD and native make_z.
+# Phase-coordinate references reuse native component ABCD and network assembly.
 # No component formula or source regularization is reimplemented here.
 function phase_twin(net, list)
-    twin = Network()
-    twin.voltageBase .= net.voltageBase
-    for (name, original) in net.elements
-        original.transformation && original.input_pins == original.output_pins == 2 ||
-            error("phase twin requires passive three-phase two-ports")
-        add!(twin, name, PowerImpedance.Element(element_model = deepcopy(original.element_model),
-            input_pins = 3, output_pins = 3, transformation = false,
-            setpoint = deepcopy(original.setpoint), limits = deepcopy(original.limits)))
-    end
-    for entry in list.elements, terminal in entry.terminals, phase in 1:3
+    elements = deepcopy(net.elements)
+    topology = NetworkBuilder.Bus[]
+    for entry in list.elements, terminal in entry.terminals
+        length(entry.ports) == 1 && terminal.grounded && continue
         bus = terminal.grounded ? "gnd" :
-              only(filter(b -> b.key == terminal.bus, list.buses)).name
-        connect!(twin,
-            (entry.name,
-                Symbol(
-                    terminal.grounded && length(entry.ports) == 1 ? 2 :
-                    terminal_side(list, entry.name, terminal.port),
-                    ".",
-                    phase)),
-            Symbol(bus, "_", phase))
+            only(filter(b -> b.key == terminal.bus, list.buses)).name
+        push!(topology, NetworkBuilder.Bus(Symbol(bus, "_");
+            ports = ((entry.name, terminal.port),), domain = ACABC))
     end
-    connect!(twin)
+    twin = NetworkBuilder.define(elements, topology; options = net.options)
     # Each model is copied without reconstructing parameters; every terminal's
     # three phases replay its original bus incidence (including source/load grounds).
     for entry in list.elements
-        original, copy = net.elements[entry.name], twin.elements[entry.name]
-        repr(original.element_model) == repr(copy.element_model) || error("phase twin model differs")
-        for terminal in entry.terminals, phase in 1:3
-
+        original, copied = net.elements[entry.name], twin.elements[entry.name]
+        repr(original) == repr(copied) || error("phase twin model differs")
+        for terminal in entry.terminals
+            length(entry.ports) == 1 && terminal.grounded && continue
             bus = terminal.grounded ? "gnd" :
-                  only(filter(b -> b.key == terminal.bus, list.buses)).name
-            copy.pins[Symbol(
-                terminal.grounded && length(entry.ports) == 1 ? 2 :
-                terminal_side(list, entry.name, terminal.port),
-                ".",
-                phase)] == Symbol(bus, "_", phase) ||
+                only(filter(b -> b.key == terminal.bus, list.buses)).name
+            port_nets(twin, entry.name, terminal.port) ==
+                [Symbol(bus, "_", phase) for phase in (:a, :b, :c)] ||
                 error("phase twin incidence differs")
         end
     end
@@ -45,14 +30,8 @@ end
 
 function phase_network_z(twin, buses, frequency; floating_stars = false)
     floating_stars && return floating_star_network_z(twin, buses, frequency)
-    inputs = [Symbol(b.name, "_", phase) for b in buses for phase in 1:3]
-    nodes = unique([n for e in values(twin.elements) for n in values(e.pins)])
-    grounds = filter(n -> startswith(string(n), "gnd_"), nodes)
-    order = [inputs; setdiff(nodes, [inputs; grounds])]
-    topology = Dict{Symbol, Array{Union{Symbol, Int}}}(:node_list => order,
-        :element_list => collect(keys(twin.elements)), :output_list => grounds)
-    return PowerImpedance.make_z(twin, topology, copy(inputs), copy(grounds),
-        ComplexF64(im * 2π * frequency))
+    inputs = [Symbol(b.name, "_", phase) for b in buses for phase in (:a, :b, :c)]
+    return driven_impedance(twin, inputs, ComplexF64(im * 2π * frequency))
 end
 
 function applicable_scan(id, net, list; definition = nothing)
@@ -70,7 +49,7 @@ function applicable_scan(id, net, list; definition = nothing)
             reference = cat((phase_network_z(twin, spec.buses, f; floating_stars = true) for f in frequencies)...; dims = 3)
         else
             reference = cat((PowerImpedance.abcd_to_y(
-                eval_abcd(net.elements[:line].element_model, ComplexF64(im*2π*f)))
+                eval_abcd(net.elements[:line], ComplexF64(im*2π*f)))
                 for f in frequencies)...; dims = 3)
         end
         bound = maximum(sum(abs.(scale_response(reference, spec)); dims = 3))
@@ -136,24 +115,40 @@ function response_rows(spec, actual, reference; kwargs...)
     return comparison_rows(spec.frequencies, actual, reference; kwargs...)
 end
 
-# Diagnostic only: the Impedance ABCD cache stores one evaluated matrix. Native
-# conversions and native make_z retain physics and topology.
+# Diagnostic only: native ABCD/Y conversions retain physics and terminal ordering.
 function projected_admittance_z(net, list, spec, frequency)
-    evaluated = deepcopy(net)
-    for (name, original) in net.elements
-        original.element_model isa PowerImpedance.Source && continue
+    nodes = setdiff(unique(net.topology.connections.net), clamped_nodes(net))
+    matrix = zeros(ComplexF64, length(nodes), length(nodes))
+    for (name, original) in pairs(net.elements)
+        original isa PowerImpedance.Source && continue
         projected = PowerImpedance.transformation_dq(
-            PowerImpedance.abcd_to_y(eval_abcd(original.element_model, ComplexF64(im*2π*(frequency+50)))),
-            PowerImpedance.abcd_to_y(eval_abcd(original.element_model, ComplexF64(im*2π*(frequency-50)))))
+            PowerImpedance.abcd_to_y(eval_abcd(original,
+                ComplexF64(im*2π*(frequency+50)))),
+            PowerImpedance.abcd_to_y(eval_abcd(original,
+                ComplexF64(im*2π*(frequency-50)))))
         abcd = PowerImpedance.y_to_abcd(projected)
         isapprox(PowerImpedance.abcd_to_y(abcd), projected; rtol = 1e-10, atol = 1e-12) ||
             error("projected admittance cache does not preserve its matrix")
-        evaluated.elements[name] = PowerImpedance.Element(
-            element_model = PowerImpedance.Impedance(ABCD = abcd),
-            input_pins = 2, output_pins = 2, transformation = false,
-            pins = copy(original.pins), symbol = name)
+        local_nodes = component_nets(net, name)
+        for (r, node) in enumerate(local_nodes), (c, other) in enumerate(local_nodes)
+            row, column = findfirst(==(node), nodes), findfirst(==(other), nodes)
+            row === nothing || column === nothing ||
+                (matrix[row, column] += projected[r, c])
+        end
     end
-    return scan_reference(evaluated, list, merge(spec, (; frequencies = [frequency])))[:, :, 1]
+    inputs = reduce(vcat, [b.nets for b in spec.buses])
+    drive = zeros(ComplexF64, length(nodes), length(inputs))
+    for (column, node) in enumerate(inputs)
+        row = findfirst(==(node), nodes)
+        row === nothing || (drive[row, column] = 1)
+    end
+    voltage = matrix \ drive
+    response = zeros(ComplexF64, length(inputs), length(inputs))
+    for (row, node) in enumerate(inputs)
+        index = findfirst(==(node), nodes)
+        index === nothing || (response[row, :] = voltage[index, :])
+    end
+    return response
 end
 
 function dq_approximation(id, net, list, directory)
@@ -171,7 +166,7 @@ function dq_approximation(id, net, list, directory)
             for f in spec.frequencies)...; dims = 3)
         order = "native network reduction of projected element ABCD versus projected element phase Y; ideal sources unchanged"
     else
-        model = net.elements[:line].element_model
+        model = net.elements[:line]
         alternative = cat((PowerImpedance.transformation_dq(
             PowerImpedance.abcd_to_y(eval_abcd(model, ComplexF64(im*2π*(f+50)))),
             PowerImpedance.abcd_to_y(eval_abcd(model, ComplexF64(im*2π*(f-50)))))
@@ -209,31 +204,23 @@ end
 # path is removed while external Ct/Cs ground/bridge paths remain. Q = I - 11'/3 exactly
 # eliminates the two floating neutral voltages for these identical phase windings.
 # Near-ideal Xl and Im1 use the emitter values; leakage is split symmetrically. PSCAD
-# project, geometry and package formulas remain unchanged. Native make_y assembles the
+# project, geometry and package formulas remain unchanged. Native assembly retains the
 # remaining elements; ideal source buses are voltage-clamped.
 function floating_star_network_z(net, buses, frequency)
     s = ComplexF64(im * 2π * frequency)
-    inputs = [Symbol(b.name, "_", phase) for b in buses for phase in 1:3]
-    grounds = [node for e in values(net.elements) for node in values(e.pins)
-        if startswith(string(node), "gnd_")]
-    append!(grounds, [node for e in values(net.elements)
-        if e.element_model isa PowerImpedance.Source for node in values(e.pins)])
-    nodes = setdiff(unique([node for e in values(net.elements) for node in values(e.pins)]), grounds)
-    other_elements = [name for (name, e) in net.elements
-        if !(e.element_model isa Union{PowerImpedance.Source, PowerImpedance.Transformer})]
-    topology = Dict{Symbol, Array{Union{Symbol, Int}}}(:node_list => nodes,
-        :element_list => other_elements)
-    admittance = PowerImpedance.make_y(net, topology, s)
-    for e in values(net.elements)
-        e.element_model isa PowerImpedance.Transformer || continue
-        winding = floating_star_transformer_y(e.element_model, s)
-        for (pin, node) in e.pins, (other_pin, other_node) in e.pins
-            row = findfirst(==(node), nodes)
-            column = findfirst(==(other_node), nodes)
+    inputs = [Symbol(b.name, "_", phase) for b in buses for phase in (:a, :b, :c)]
+    nodes = setdiff(unique(net.topology.connections.net), clamped_nodes(net))
+    other_elements = [name for (name, e) in pairs(net.elements)
+        if !(e isa Union{PowerImpedance.Source, PowerImpedance.Transformer})]
+    admittance = nodal_admittance(net, nodes, s; elements = other_elements)
+    for (name, e) in pairs(net.elements)
+        e isa PowerImpedance.Transformer || continue
+        winding = floating_star_transformer_y(e, s)
+        local_nodes = component_nets(net, name)
+        for (r, node) in enumerate(local_nodes), (c, other) in enumerate(local_nodes)
+            row, column = findfirst(==(node), nodes), findfirst(==(other), nodes)
             row === nothing || column === nothing ||
-                (admittance[row, column] += winding[
-                    PowerImpedance._admittance_index(e, pin, 3),
-                    PowerImpedance._admittance_index(e, other_pin, 3)])
+                (admittance[row, column] += winding[r, c])
         end
     end
     drive = zeros(ComplexF64, length(nodes), length(inputs))

@@ -11,9 +11,10 @@ function ztool_references(id, record, directory; net = nothing)
         active_case = record["active"] && id in ztool_component_ids()
         if active_case && net === nothing
             net = fixture(id).factory()
-            power_flow(net)
+            point = compute(PowerFlowProblem(net), ACDCPowerFlow())
+            NetworkBuilder.NetworkModel(net, point.operating_point)
         end
-        eligible = active_case && interface_step_eligible(net.elements[:DUT].element_model)
+        eligible = active_case && interface_step_eligible(net.elements[:DUT])
         path = joinpath(directory, "suite_reference.toml")
         suite = isfile(path) ? TOML.parsefile(path) : Dict{String, Any}()
         policy = get(suite, "reference", eligible ? "discrete_realization" : "plain_model")
@@ -41,29 +42,30 @@ function ztool_ports(id, net, list, spec)
     entry = fixture(id)
     entry.category in (:passive, :device) || throw(ArgumentError("$id is outside the component sweep"))
     if entry.category == :device
-        bases = device_bases(net.elements[:DUT].element_model.elec)
-        ac = (; kind = :ac, name = "AC_scan", element = :DUT, side = bases.ac_side,
-            bus = port_probe(list, :DUT, bases.ac_side), measured_side = 2,
+        bases = device_bases(net.elements[:DUT].elec)
+        ac = (; kind = :ac, name = "AC_scan", element = :DUT, port = bases.ac_port,
+            bus = port_probe(list, :DUT, bases.ac_port), measured_side = 2,
             voltage = fill(bases.ac_voltage, 2), current = fill(bases.ac_current, 2))
         bases.dc_voltage === nothing && return [ac]
-        return [(; kind = :dc, name = "DC_scan", element = :DUT, side = 1,
-                bus = port_probe(list, :DUT, 1), measured_side = 2,
+        return [(; kind = :dc, name = "DC_scan", element = :DUT, port = :dc,
+                bus = port_probe(list, :DUT, :dc), measured_side = 2,
                 voltage = [bases.dc_voltage], current = [bases.power / bases.dc_voltage]), ac]
     elseif id == "ieee9_bus_impedance"
         # Bus1 is an ideal-source bus with zero Z. Bus5 has a finite local admittance.
         bus = last(spec.buses)
         voltage = sqrt(2) * bus.base_kV * something(bus.vm_pu, 1.0)
-        return [(; kind = :ac, name = "Bus_scan", element = nothing, side = nothing,
+        return [(; kind = :ac, name = "Bus_scan", element = nothing, port = nothing,
             bus, measured_side = 1, voltage = fill(voltage, 2),
             current = fill(2000 / (3voltage), 2))]
     end
-    terminals = id == "passive_ac_rlc" ? [("branch", "1"), ("branch", "2")] : spec.currents
-    return map(enumerate(terminals)) do (index, (element, side))
-        bus = port_probe(list, Symbol(element), parse(Int, side))
+    terminals = id == "passive_ac_rlc" ? [("branch", "side1"), ("branch",
+        "side2")] : spec.currents
+    return map(enumerate(terminals)) do (index, (element, port))
+        bus = port_probe(list, Symbol(element), Symbol(port))
         dc = bus.kind == :dc
         voltage = bus.base_kV * something(bus.vm_pu, 1.0) * (dc ? 2 : sqrt(2))
         (; kind = dc ? :dc : :ac, name = "Port$index", element = Symbol(element),
-            side = parse(Int, side), bus, measured_side = 2,
+            port = Symbol(port), bus, measured_side = 2,
             voltage = fill(voltage, dc ? 1 : 2),
             current = fill(dc ? 1000 / voltage : 2000 / (3voltage), dc ? 1 : 2))
     end
@@ -74,7 +76,7 @@ ztool_axes(ports) = ["$(p.name)-$(p.measured_side)_$axis" for p in ports
 
 function ztool_topology(ports)
     length(ports) == 1 && return nothing
-    names = ["$(p.name)-$side" for p in ports for side in 1:2]
+    names = ["$(p.name)-$port" for p in ports for port in 1:2]
     matrix = zeros(Int, length(names), length(names))
     for i in eachindex(ports)
         matrix[2i - 1, 2i - 1] = 1
@@ -92,7 +94,7 @@ function ztool_reference(id, net, list, spec, ports, frequencies)
         return cat((physical_y(net.elements[:DUT], ComplexF64(2π * im * f))
                     for f in frequencies)...; dims = 3)
     elseif id == "passive_ac_rlc"
-        return cat((PowerImpedance.get_y(net.elements[:branch], ComplexF64(2π * im * f))
+        return cat((physical_y(net.elements[:branch], ComplexF64(2π * im * f))
                     for f in frequencies)...; dims = 3)
     elseif id == "ieee9_bus_impedance"
         z = scan_reference(net, list, merge(spec, (; frequencies)))
@@ -197,10 +199,12 @@ function ztool_measurement_plan(list, settings, requests)
                 c.port == probe.port, plan.probes.channels))
             meter = only(filter(c -> c isa P.ComponentPlan && c.defn == "master:ammeter" &&
                 get(Dict(c.params), "Name", "") == channel.name, plan.main.components))
-            pins = first.(P.component_ports(meter, Dict()))
-            meter_wires = filter(w -> any(p -> p in w.vertices, pins), plan.main.wires)
+            meter_ports = first.(P.component_ports(meter, Dict()))
+            meter_wires = filter(w -> any(p -> p in w.vertices, meter_ports),
+                plan.main.wires)
             length(meter_wires) == 2 || error("terminal meter needs two labelled stubs: $(channel.name)")
-            endpoints = [only(filter(p -> p ∉ pins, w.vertices)) for w in meter_wires]
+            endpoints = [only(filter(p -> p ∉ meter_ports,
+                w.vertices)) for w in meter_wires]
             append!(old_labels, [only(filter(c -> c isa P.ComponentPlan && c.defn == "master:nodelabel" &&
                 (c.x, c.y) == point, plan.main.components)) for point in endpoints])
             bus_name = bus.kind == :dc ? first(dc_labels[bus.key]) : bus.name
@@ -242,9 +246,9 @@ function ztool_disconnect_sources!(plan, list, ports, scan)
         channel = only(filter(c -> c.kind == :current && c.element == string(source.name), plan.probes.channels))
         meter = only(filter(c -> c isa P.ComponentPlan && c.defn == "master:ammeter" &&
             get(Dict(c.params), "Name", "") == channel.name, plan.main.components))
-        pins = first.(P.component_ports(meter, Dict()))
+        terminals = first.(P.component_ports(meter, Dict()))
         labels = Int[]
-        for wire in plan.main.wires, pin in pins
+        for wire in plan.main.wires, pin in terminals
             pin in wire.vertices || continue
             point = only(filter(!=(pin), wire.vertices))
             for (index, component) in enumerate(plan.main.components)
@@ -315,7 +319,7 @@ function prepare_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"), libr
     ispath(directory) && return ztool_load(directory; id)
     P._require_extension()
     net = fixture(id).factory()
-    point = power_flow(net)
+    point = compute(PowerFlowProblem(net), ACDCPowerFlow())
     list = fixture_netlist(net, point)
     definition = ztool_definition(id, net, list)
     requested = scan
@@ -336,7 +340,7 @@ function prepare_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"), libr
                 ZToolProbe(p.kind, p.name; bus = p.bus.name,
                     perturbation = scan.perturbation) :
                 ZToolProbe(p.kind, p.name;
-                    element = p.element, port = terminal_port(list, p.element, p.side),
+                    element = p.element, port = Symbol(p.port),
                     perturbation = scan.perturbation) for p in ports]
     mkpath(directory)
     topology = ztool_topology(ports)
@@ -377,8 +381,8 @@ function prepare_ztool(id; directory = joinpath(ROOT, "data", id, "ztool"), libr
         "replaced_terminal_readouts" => replacements,
         "excluded_sides" => [Dict("name" => p.name * "-" * string(3 - p.measured_side),
             "reason" => any(o -> o["bus"] == p.bus.name, openings) ?
-                "source feed disconnected; only the element side is compared" :
-                "only the element or selected bus side is compared") for p in ports],
+                "source feed disconnected; only the element port is compared" :
+                "only the element or selected bus port is compared") for p in ports],
         "suite_decay_time_margin" => definition.declared_decay_times,
         "perturbation_reason" => requested === nothing ?
             "at most 0.0001 pu per tone; eight simultaneous tones; reference current bound at most 0.004 pu" :
@@ -472,7 +476,7 @@ function ztool_phase_projection(id, record, directory)
     frequencies = record["arguments"]["freq"]
     if !isfile(path)
         net = fixture(id).factory()
-        list = fixture_netlist(net, power_flow(net))
+        list = fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         if id == "ieee9_bus_impedance"
             twin = phase_twin(net, list)
             bus = only(filter(b -> b.name == only(record["ports"])["bus"], list.buses))
@@ -483,7 +487,7 @@ function ztool_phase_projection(id, record, directory)
             reference = cat((PowerImpedance.transformation_dq(phase_y(f + 50), phase_y(f - 50))[1:2, 1:2]
                 for f in frequencies)...; dims = 3)
         else
-            model = net.elements[:line].element_model
+            model = net.elements[:line]
             reference = cat((PowerImpedance.transformation_dq(
                 PowerImpedance.abcd_to_y(eval_abcd(model, ComplexF64(2π * im * (f + 50)))),
                 PowerImpedance.abcd_to_y(eval_abcd(model, ComplexF64(2π * im * (f - 50)))))

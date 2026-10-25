@@ -1,17 +1,13 @@
 # Retain the reference circuit, with the element names used by device measurements.
 function induction_machine_network()
-    parent = ClassicFixtures.im_network()
+    parent = PSCADFixtures._im_circuit()
     names = Dict(:im1 => :DUT, :imp => :Grid, :g1 => :G3)
-    net = Network()
-    net.voltageBase .= parent.voltageBase
-    for (name, element) in parent.elements
-        add!(net, names[name], deepcopy(element))
-    end
-    for (node, pins) in parent.nets, (element, pin) in pins
-        connect!(net, (names[element], pin), node)
-    end
-    connect!(net)
-    return net
+    elements = (; (names[name] => deepcopy(model)
+        for (name, model) in pairs(parent.elements))...)
+    topology = [NetworkBuilder.Bus(bus.name;
+        ports = [(names[name], port) for (name, port) in bus.ports], domain = ACDQ)
+        for bus in parent.rows]
+    return NetworkBuilder.define(elements, topology; options = parent.options)
 end
 
 function device_bases(e::PowerImpedance.ElectricalIM)
@@ -19,23 +15,14 @@ function device_bases(e::PowerImpedance.ElectricalIM)
     current = 2e.S_base / (3voltage)
     return (voltage_inputs = fill(voltage, 2), current_outputs = fill(current, 2),
         ac_voltage = voltage, ac_current = current, dc_voltage = nothing,
-        power = e.S_base, ac_side = 1, ac_indices = 1:2)
+        power = e.S_base, ac_port = :ac, ac_indices = 1:2)
 end
 
 # Use the same frequency-model API and SI scaling as adm_IM_test.jl. Replay the
 # written circuit's dq connections and retain its solved machine setpoint.
 function induction_machine_reference(net, list, frequencies)
-    elements = NamedTuple{Tuple(keys(net.elements))}(
-        Tuple(deepcopy(element) for element in values(net.elements)))
-    connections = [(node = node, element = e.name,
-                       side = terminal_side(list, e.name, t.port), terminal = k)
-                   for e in list.elements for t in e.terminals if !t.grounded
-                   for (k, node) in enumerate(t.nets)]
-    builder = NetworkBuilder.define(elements, connections)
-    # transitional
-    point = PowerImpedance.OperatingPoint(Dict(:DUT =>
-        PowerImpedance._terminal_values(builder.elements.DUT, net.elements[:DUT].setpoint)))
-    model = NetworkBuilder.NetworkModel(builder, point)
+    point = OperatingPoint(list.operating_point.values)
+    model = NetworkBuilder.NetworkModel(net, point)
     return NetworkBuilder.get_y(model, :DUT, ComplexF64.(2π * im .* frequencies))
 end
 
@@ -51,7 +38,7 @@ function induction_machine_scan(net, list, spec)
         station_budget_seconds = 1800, estimated_station_seconds = 1800))
     reference = scan_reference(net, list, spec)
     impedance = [inv(reference[:, :, k] +
-        PowerImpedance.get_y(net.elements[:Grid], ComplexF64(2π * im * f))[1:2, 1:2])
+        physical_y(net.elements[:Grid], ComplexF64(2π * im * f))[1:2, 1:2])
         for (k, f) in enumerate(frequencies)]
     vbase, ibase = first(spec.voltage_bases), first(spec.current_bases)
     voltage = cat((z * (ibase / vbase) for z in impedance)...; dims = 3)
@@ -91,11 +78,11 @@ function induction_machine_crosscheck(path; directory)
     measured = cat((transpose(reshape(
         parse.(ComplexF64, replace.(row[2:end], "(" => "")), 2, 2)) for row in rows)...; dims = 3)
     net = fixture("induction_machine").factory()
-    list = fixture_netlist(net, power_flow(net))
+    list = fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     reference = induction_machine_reference(net, list, frequencies)
     errors = [norm(reference[:, :, k] - measured[:, :, k]) / norm(measured[:, :, k])
               for k in eachindex(frequencies)]
-    bases = device_bases(net.elements[:DUT].element_model.elec)
+    bases = device_bases(net.elements[:DUT].elec)
     report = Dict("diagnostic_only" => true, "data_file" => abspath(path),
         "data_sha256" => digest(path), "frequency_count" => length(frequencies),
         "frequency_band_Hz" => [minimum(frequencies), maximum(frequencies)],

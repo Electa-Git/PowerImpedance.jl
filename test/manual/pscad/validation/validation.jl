@@ -1,13 +1,12 @@
 module PSCADValidation
 
 using PowerImpedance, LinearAlgebra, Statistics, Dates, SHA, TOML, Printf
-using PowerImpedance: TYPEDSIGNATURES
+using PowerImpedance: TYPEDSIGNATURES, eval_abcd
 
 const P = PowerImpedance.PSCAD
 const ROOT = @__DIR__
 const REPOSITORY = normpath(joinpath(ROOT, "../../../.."))
 include("../../../pscad/fixtures.jl")
-include("classic_fixtures.jl")
 include("../../../pscad/networks.jl")
 include("fixtures.jl")
 include("stability.jl")

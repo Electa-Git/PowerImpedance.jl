@@ -11,83 +11,89 @@ const COUPLED_AGGREGATE_BASES = Dict("two_tlc_shared_bus"=>(power_MVA=200.,volta
     "two_mmc_dc_cable"=>(power_MVA=1000.,voltage_LL_kV=380.),
     "mmc_rc_shunt"=>(power_MVA=1000.,voltage_LL_kV=380.))
 
-function composed_ac!(net,name,side,bus)
-    for t in 1:2
-        connect!(net,(name,Symbol("$side.$t")),bus==:gnd ? :gnd : Symbol("$(bus)_$t"))
-    end
-end
-
 function coupled_network(id)
-    id in [SHARED_BUS_SHUNT_IDS;COUPLED_LINE_CONVERTER_IDS;MACHINE_DC_COUPLING_IDS] || error("coupled-circuit fixture is not registered: $id")
-    net=Network();tlc_pair=id=="two_tlc_shared_bus";vll=tlc_pair ? 220. : 380.
-    net.voltageBase[1]=vll/sqrt(3)
-    devices=id in ("two_tlc_shared_bus","two_mmc_shared_bus","mmc_gfm_gfl_shared_bus","machine_mmc_shared_bus","two_mmc_dc_cable") ? [:C1,:C2] : [:C1]
-    for name in devices
-        d=if tlc_pair
-            deepcopy(tlc_strong_network(mode=name==:C1 ? :pq : :qv).elements[:DUT])
+    elements = (;)
+    topology = NetworkBuilder.Bus[]
+    tlc_pair=id=="two_tlc_shared_bus";vll=tlc_pair ? 220. : 380.
+    for name in (id in ("mmc_pi_line","mmc_rc_shunt") ? [:C1] : [:C1,:C2])
+        d = if tlc_pair
+            deepcopy(tlc_strong_network(mode=name==:C1 ? :pf : :qv).elements.DUT)
         elseif id=="machine_mmc_shared_bus" && name==:C1
             active_device(:machine)
         elseif id=="mmc_gfm_gfl_shared_bus" && name==:C1
             active_device(:gfm)
         else
-            deepcopy(mmc_grid_network(mode=id=="two_mmc_dc_cable" && name==:C1 ? :vdc : id=="two_mmc_shared_bus" && name==:C2 ? :qv : :pq).elements[:DUT])
+            deepcopy(mmc_grid_network(mode=id=="two_mmc_dc_cable" && name==:C1 ?
+                :vdc : id=="two_mmc_shared_bus" && name==:C2 ? :qv : :pq).elements.DUT)
         end
-        bases=device_bases(d.element_model.elec)
-        add!(net,name,d);composed_ac!(net,name,bases.ac_side,id=="mmc_pi_line" ? :Remote : id=="two_mmc_dc_cable" ? name : :AC)
-        if bases.dc_voltage===nothing
-            composed_ac!(net,name,2,:gnd)
-            continue
-        elseif id=="two_mmc_dc_cable"
-            connect!(net,(name,Symbol("1.1")),Symbol("DC_",name))
-            continue
-        end
-        dc=Symbol("D_",name);bus=Symbol("DC_",name)
-        add!(net,dc,dc_source(setpoint=Setpoint(Vdc=bases.dc_voltage)))
-        connect!(net,(dc,Symbol("1.1")),bus);connect!(net,(dc,Symbol("2.1")),:gnd)
-        connect!(net,(name,Symbol("1.1")),bus)
+        b=device_bases(d.elec)
+        elements = merge(elements, (; name => d))
+        bus = id=="mmc_pi_line" ? :Remote : id=="two_mmc_dc_cable" ? name : :AC
+        push!(topology, NetworkBuilder.Bus(bus; ports = ((name, :ac),), domain = ACDQ))
+        b.dc_voltage === nothing && continue
+        bus=Symbol("DC_",name)
+        push!(topology, NetworkBuilder.Bus(bus; ports = ((name, :dc),)))
+        id=="two_mmc_dc_cable" && continue
+        dc=Symbol("D_",name)
+        elements = merge(elements, (; dc => dc_source(v = b.dc_voltage)))
+        push!(topology, NetworkBuilder.Bus(bus; ports = ((dc, :dc),)))
     end
-    rating=tlc_pair ? 100. : id=="mmc_gfm_gfl_shared_bus" ? 2060. : id=="machine_mmc_shared_bus" ? 2000. : 1000.
+    rating=tlc_pair ? 100. : id=="mmc_gfm_gfl_shared_bus" ? 2060. :
+        id=="machine_mmc_shared_bus" ? 2000. : 1000.
     r=vll^2/rating/8/sqrt(101);l=10r/(2π*50)
     if id=="two_mmc_dc_cable"
         for (suffix,bus) in ((:A,:C1),(:B,:C2))
             source=Symbol("G_",suffix);grid=Symbol("Grid_",suffix);src=Symbol("Src_",suffix)
-            add!(net,source,ac_source(pins=3,transformation=true,setpoint=Setpoint(Vac=vll*sqrt(2/3))))
-            add!(net,grid,impedance(z=s->r+l*s,pins=3,transformation=true))
-            composed_ac!(net,source,1,src);composed_ac!(net,source,2,:gnd)
-            composed_ac!(net,grid,1,bus);composed_ac!(net,grid,2,src)
+            elements = merge(elements, (; source => ac_source(v = vll*sqrt(2/3)),
+                grid => impedance(z = s -> r+l*s, conductors = 3)))
+            push!(topology, NetworkBuilder.Bus(src;
+                ports = ((source, :ac), (grid, :side2)), domain = ACDQ))
+            push!(topology, NetworkBuilder.Bus(bus;
+                ports = ((grid, :side1),), domain = ACDQ))
         end
-        cable=deepcopy(ClassicFixtures.dc_cable_network().elements[:line])
-        cable.element_model.length=25e3
-        add!(net,:CableDC,cable)
-        connect!(net,(:CableDC,Symbol("1.1")),:DC_C1)
-        connect!(net,(:CableDC,Symbol("2.1")),:DC_C2)
-        connect!(net)
-        return net
-    end
-    add!(net,:G_A,ac_source(pins=3,transformation=true,setpoint=Setpoint(Vac=vll*sqrt(2/3))))
-    add!(net,:Grid_A,impedance(z=s->r+l*s,pins=3,transformation=true))
-    composed_ac!(net,:G_A,1,:Src);composed_ac!(net,:G_A,2,:gnd)
-    composed_ac!(net,:Grid_A,1,:AC);composed_ac!(net,:Grid_A,2,:Src)
-    if id=="mmc_rc_shunt"
-        add!(net,:Filter,impedance(z=s->2.0 + inv(s*5e-6),pins=3,transformation=true))
-        composed_ac!(net,:Filter,1,:AC);composed_ac!(net,:Filter,2,:gnd)
-    elseif id=="mmc_pi_line"
-        add!(net,:Line,impedance(z=s->2.0+.02s,pins=3,transformation=true))
-        composed_ac!(net,:Line,1,:AC);composed_ac!(net,:Line,2,:Remote)
-        for (name,bus) in ((:Cnear,:AC),(:Cfar,:Remote))
-            add!(net,name,impedance(z=s->inv(2e-6*s),pins=3,transformation=true))
-            composed_ac!(net,name,1,bus);composed_ac!(net,name,2,:gnd)
+        cable=deepcopy(PSCADFixtures.dc_cable_network().elements.line)
+        cable.length=25e3
+        elements = merge(elements, (; CableDC = cable))
+        append!(topology, [
+            NetworkBuilder.Bus(:DC_C1; ports = ((:CableDC, :side1),)),
+            NetworkBuilder.Bus(:DC_C2; ports = ((:CableDC, :side2),))])
+    else
+        elements = merge(elements, (; G_A = ac_source(v = vll*sqrt(2/3)),
+            Grid_A = impedance(z = s -> r+l*s, conductors = 3)))
+        append!(topology, [
+            NetworkBuilder.Bus(:Src; ports = ((:G_A, :ac), (:Grid_A, :side2)),
+                domain = ACDQ),
+            NetworkBuilder.Bus(:AC; ports = ((:Grid_A, :side1),), domain = ACDQ)])
+        if id=="mmc_rc_shunt"
+            elements = merge(elements,
+                (; Filter = impedance(z = s -> 2.0 + inv(s*5e-6), conductors = 3)))
+            append!(topology, [
+                NetworkBuilder.Bus(:AC; ports = ((:Filter, :side1),), domain = ACDQ),
+                NetworkBuilder.Bus(:gnd; ports = ((:Filter, :side2),), domain = ACDQ)])
+        elseif id=="mmc_pi_line"
+            elements = merge(elements,
+                (; Line = impedance(z = s -> 2.0+.02s, conductors = 3)))
+            append!(topology, [
+                NetworkBuilder.Bus(:AC; ports = ((:Line, :side1),), domain = ACDQ),
+                NetworkBuilder.Bus(:Remote; ports = ((:Line, :side2),), domain = ACDQ)])
+            for (name,bus) in ((:Cnear,:AC),(:Cfar,:Remote))
+                elements = merge(elements,
+                    (; name => impedance(z = s -> inv(2e-6*s), conductors = 3)))
+                append!(topology, [
+                    NetworkBuilder.Bus(bus; ports = ((name, :side1),), domain = ACDQ),
+                    NetworkBuilder.Bus(:gnd; ports = ((name, :side2),), domain = ACDQ)])
+            end
         end
     end
-    connect!(net)
-    return net
+    return NetworkBuilder.define(elements, topology;
+        options = (; voltageBase = vll/sqrt(3)))
 end
 
 function coupled_circuit(id,net)
     devices=filter(n->haskey(net.elements,n),[:C1,:C2])
     grids=id=="two_mmc_dc_cable" ? [:Grid_A,:Grid_B] : [:Grid_A]
-    ports=id=="two_mmc_dc_cable" ? [(:C1,2),(:C2,2)] : id=="mmc_pi_line" ? [(:Line,1)] :
-        [(:C1,device_bases(net.elements[:C1].element_model.elec).ac_side)]
+    ports=id=="two_mmc_dc_cable" ? [(:C1,:ac),(:C2,:ac)] :
+        id=="mmc_pi_line" ? [(:Line,:side1)] : [(:C1,:ac)]
     return composed_circuit(net,devices,grids,ports)
 end
 
@@ -101,7 +107,8 @@ function coupled_spec(id,list; local_scan=false)
         id=="two_tlc_shared_bus" ? 0.0004508893578873102 : id=="two_mmc_shared_bus" ? 0.000255889219949928 :
         id=="mmc_gfm_gfl_shared_bus" ? 0.0006924416531567809 : id=="mmc_pi_line" ? 0.0007118962353546502 : id=="machine_mmc_shared_bus" ? .0006705809970911343 :
         id=="two_mmc_dc_cable" ? .0005452727356004889 : 0.00047389717632280974
-    ports=id=="two_mmc_dc_cable" ? [(:C1,2),(:C2,2)] : id=="mmc_pi_line" ? [(:Line,1)] : [(:C1,id=="machine_mmc_shared_bus" ? 1 : 2)]
+    ports=id=="two_mmc_dc_cable" ? [(:C1,:ac),(:C2,:ac)] : id=="mmc_pi_line" ? [(:Line,
+        :side1)] : [(:C1,:ac)]
     np=2length(ports);h=id in MACHINE_DC_COUPLING_IDS ? 1.25e-6 : 2.5e-6;start=id=="machine_mmc_shared_bus" ? 64. : 16.
     bands=local_scan ? (id=="mmc_pi_line" ? [collect(1:43)] : [collect(1:20),collect(21:39)]) : Vector{Int}[]
     return (id=id,quantity="Y",dimension=2,buses=[port_probe(list,p...) for p in ports],currents=[(string(p[1]),string(p[2])) for p in ports],
@@ -161,7 +168,7 @@ function composed_reference_transport!(refs,c,spec,label)
 end
 
 function composed_reference_files!(record,c,spec,directory,forms; verify=false)
-    discrete=any(interface_step_eligible(c.net.elements[n].element_model) for n in c.devices)
+    discrete=any(interface_step_eligible(c.net.elements[n]) for n in c.devices)
     for (label,h) in (discrete ? (("plain",nothing),("discrete",spec.time_step)) : (("plain",nothing),))
         refs=composed_reference(c,spec;time_step=h,forms=label=="discrete" ? forms : nothing)
         composed_reference_transport!(refs,c,spec,label)
@@ -189,7 +196,9 @@ function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
     id in COUPLED_LINE_CONVERTER_IDS && require_committed_coupled_line_converter()
     id in MACHINE_DC_COUPLING_IDS && require_committed_machine_dc_coupling()
     remote===nothing && (remote=RemoteConfig())
-    entry=fixture(id);net=entry.factory();point=power_flow(net);c=coupled_circuit(id,net)
+    entry=fixture(id);net=entry.factory();point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());
+    NetworkBuilder.NetworkModel(net, point.operating_point);c=coupled_circuit(id,net)
     gate=composed_stability(c)
     gate["status"]=="passed" || @warn "$id composed stability result: $(gate["status"])" stability=gate
     # Fresh preparation excludes retained runs, reference tables and proposal exports.
@@ -205,7 +214,7 @@ function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
     record["aggregate_bases"]=Dict("power_MVA"=>spec.power_base_MVA,"voltage_kVpeak"=>spec.voltage_bases,"current_kApeak"=>spec.current_bases)
     individual_bases=Dict{String,Any}()
     for n in c.devices
-        bases=device_bases(net.elements[n].element_model.elec)
+        bases=device_bases(net.elements[n].elec)
         individual_bases[string(n)]=Dict("voltage_kVpeak"=>bases.ac_voltage,
             "current_kApeak"=>bases.ac_current,"power_MVA"=>bases.power)
     end
@@ -222,7 +231,9 @@ function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
         record["precharge"]=Dict("buses"=>[b.name for b in P._dc_precharge_buses(list)],
             "release_s"=>.2,"pole_voltage_kV"=>[b.vm_pu*b.base_kV for b in P._dc_precharge_buses(list)])
     end
-    record["qualification_reference"]=any(interface_step_eligible(net.elements[n].element_model) for n in c.devices) ? "composed_discrete_realization" : "plain_model"
+    record["qualification_reference"]=
+        any(interface_step_eligible(net.elements[n]) for n in c.devices) ?
+            "composed_discrete_realization" : "plain_model"
     record["qualification_status"]="station_pending"
     record["fresh_generation"]="coupled-circuit fresh generation; no prior projects, references or native completions reused"
     write_operating_point(joinpath(directory,"operating_point.tsv"),first(allmodels).second)
@@ -236,7 +247,7 @@ end
 
 function composed_witnesses!(group_record,c,spec,step_spec,column,main,half,amp,
         models,checks,output)
-    residual=any(interface_step_eligible(c.net.elements[n].element_model) for n in c.devices)
+    residual=any(interface_step_eligible(c.net.elements[n]) for n in c.devices)
     forms=exported_composed_passives(c,models.main.project_path,models.main.netlist)
     forms==exported_composed_passives(c,models.half.project_path,models.half.netlist) || error("half-step passives changed")
     pred=residual ? composed_predicted_columns(c,spec,column,forms) : nothing
@@ -254,7 +265,8 @@ function composed_witnesses!(group_record,c,spec,step_spec,column,main,half,amp,
         raw["passed"] &= raw["valid"];raw["quality"]=b.quality
         selected=raw;reproduction=Dict{String,Any}()
         device=findfirst(n->target==string(n)*"_Y",c.devices)
-        device_residual=device!==nothing && interface_step_eligible(c.net.elements[c.devices[device]].element_model)
+        device_residual=device!==nothing &&
+            interface_step_eligible(c.net.elements[c.devices[device]])
         use_residual=false
         if residual
             pm=pred[target];ph=predhalf[target]
@@ -325,7 +337,7 @@ function run_composed_group!(record,c,list,spec;directory,remote,deadline)
     end
     forms=exported_composed_passives(c,models["baseline"].project_path,list)
     composed_reference_files!(record,c,spec,directory,forms;verify=true)
-    residual=any(interface_step_eligible(c.net.elements[n].element_model) for n in c.devices)
+    residual=any(interface_step_eligible(c.net.elements[n]) for n in c.devices)
     qualifying=nothing
     for label in (residual ? ("plain","discrete") : ("plain",))
         refs=composed_frozen_references(directory,spec,c,label)
@@ -383,7 +395,8 @@ function run_composed(id;remote=RemoteConfig(),directory=joinpath(ROOT,"data",id
     time()<deadline || error("composed station runtime budget exhausted")
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")));verify_inputs(directory,record)
     record["fixture_id"]==id || error("composed fixture mismatch")
-    net=fixture(id).factory();point=power_flow(net);c=coupled_circuit(id,net)
+    net=fixture(id).factory();point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+    NetworkBuilder.NetworkModel(net, point.operating_point);c=coupled_circuit(id,net)
     gate=composed_stability(c);record["stability"]=gate
     gate["status"]=="passed" || @warn "$id composed stability result: $(gate["status"])" stability=gate
     list=fixture_netlist(net,point)
@@ -491,7 +504,9 @@ function prepare_shunt_local_witness(;directory=joinpath(ROOT,"data","mmc_rc_shu
     record["local_repeat_prior_results"]=Dict("coarse_status"=>coarse_status,"local_status"=>local_status)
     coarse_status=="passed" || @warn "mmc_rc_shunt earlier coarse comparison result: $coarse_status"
     all(==("passed"),values(local_status)) || @warn "mmc_rc_shunt earlier local comparison results: $local_status"
-    net=coupled_network("mmc_rc_shunt");point=power_flow(net);list=fixture_netlist(net,point);c=coupled_circuit("mmc_rc_shunt",net)
+    net=coupled_network("mmc_rc_shunt");point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());list=fixture_netlist(net,
+        point);c=coupled_circuit("mmc_rc_shunt",net)
     stability=composed_stability(c);record["stability"]=stability
     stability["status"]=="passed" || @warn "mmc_rc_shunt composed stability result: $(stability["status"])" stability
     native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))["passed"] || error("operating point changed")

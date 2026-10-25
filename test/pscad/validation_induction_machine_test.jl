@@ -4,26 +4,26 @@ using ..PSCADValidationTests: V, phase_wave
 const P = PowerImpedance.PSCAD
 
 @testset "Induction-machine circuit, SI reference and scan settings" begin
-    parent = V.ClassicFixtures.im_network()
+    parent = V.PSCADFixtures.im_network()
     net = V.fixture("induction_machine").factory()
     names = Dict(:im1 => :DUT, :imp => :Grid, :g1 => :G3)
-    @test net.voltageBase == parent.voltageBase
+    @test net.options == parent.options
     @test Set(keys(net.elements)) == Set(values(names))
-    for (name, element) in parent.elements
+    for (name, element) in pairs(parent.elements)
         actual = net.elements[names[name]]
-        @test repr(actual.element_model) == repr(element.element_model)
-        @test actual.setpoint == element.setpoint
-        @test actual.pins == element.pins
+        @test repr(actual) == repr(element)
+        @test inputvalues(actual) == inputvalues(element)
+        @test V.component_nets(net, names[name]) == V.component_nets(parent, name)
     end
-    list = V.fixture_netlist(net, power_flow(net))
+    list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     spec, reference = V.applicable_scan("induction_machine", net, list)
     dut = net.elements[:DUT]
-    bases = V.device_bases(dut.element_model.elec)
+    bases = V.device_bases(dut.elec)
     @test bases.ac_voltage ≈ 220sqrt(2 / 3)
     @test bases.ac_current ≈ 1000sqrt(2) / (sqrt(3) * 220)
     @test bases.ac_current / bases.ac_voltage ≈ 1000 / 220^2
     @test spec.protocol == "dq_active" && spec.drive == "current" && spec.quantity == "Y"
-    @test spec.currents == [("DUT", "1")] && spec.axes == ["p1_d", "p1_q"]
+    @test spec.currents == [("DUT", "ac")] && spec.axes == ["p1_d", "p1_q"]
     @test !spec.dc_clamped && spec.dc_voltage_base_kV === nothing
     @test length(spec.frequencies) == 29 && issorted(spec.frequencies)
     @test all(f -> f in spec.frequencies, (0.5, 1.5, 48.0, 49.0, 51.0, 52.0, 1000.0))
@@ -43,12 +43,12 @@ const P = PowerImpedance.PSCAD
     @test first(spec.window_starts) - spec.injection_time >=
           spec.settling["decay_times"] / spec.settling["decay_per_s"]
     # A resistive grid has no storage. Eliminating terminal voltage gives this ODE.
-    B = dut.B ./ bases.voltage_inputs'
-    C = dut.C .* bases.current_outputs
-    D = dut.D .* bases.current_outputs ./ bases.voltage_inputs'
-    resistance = P.identify_rlc(net.elements[:Grid].element_model).form.R
+    B = dut.cache.B ./ bases.voltage_inputs'
+    C = dut.cache.C .* bases.current_outputs
+    D = dut.cache.D .* bases.current_outputs ./ bases.voltage_inputs'
+    resistance = P.identify_rlc(net.elements[:Grid]).form.R
     @test resistance == 0.01
-    closed = dut.A - B * ((I + resistance * D) \ (resistance * C))
+    closed = dut.cache.A - B * ((I + resistance * D) \ (resistance * C))
     roots = eigvals(closed)
     screen = spec.machine_stability
     @test screen["status"] == "passed" && screen["nyquist_closed_RHP_count"] == 0
@@ -61,7 +61,8 @@ const P = PowerImpedance.PSCAD
     expected = NetworkBuilder.get_y(native, :im1, ComplexF64.(2π * im .* spec.frequencies))
     @test reference ≈ expected rtol = 1e-9 atol = 1e-12
     for (k, f) in enumerate(spec.frequencies)
-        @test reference[:, :, k] ≈ C * ((2π * im * f * I - dut.A) \ B) + D rtol = 1e-10
+        @test reference[:, :,
+            k] ≈ C * ((2π * im * f * I - dut.cache.A) \ B) + D rtol = 1e-10
     end
     for f in (0.5, 1.5, 49.0, 1000.0)
         finer = V.step_definition(spec, f)
@@ -106,7 +107,7 @@ function induction_recordings(net, list, spec; amplitude_scale = 1.0)
             for (k, f) in enumerate(spec.frequencies)
                 source = zeros(ComplexF64, 2)
                 source[j] = amplitude_scale * spec.tone_peak_pu * spec.current_bases[j]
-                yg = PowerImpedance.get_y(net.elements[:Grid], ComplexF64(2π * im * f))[1:2, 1:2]
+                yg = V.physical_y(net.elements[:Grid], ComplexF64(2π * im * f))[1:2, 1:2]
                 v = (reference[:, :, k] + yg) \ (V.injection_readout_factor(f, spec) * source)
                 i, ig = reference[:, :, k] * v, yg * v
                 for row in 1:2
@@ -142,7 +143,7 @@ end
 
 @testset "Induction-machine measured Y and required refinements" begin
     net = V.fixture("induction_machine").factory()
-    list = V.fixture_netlist(net, power_flow(net))
+    list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     original, _ = V.applicable_scan("induction_machine", net, list)
     spec = merge(original, (; frequencies = [0.5, 1.5, 49.0, 750.0, 1000.0], phases = zeros(5),
         window_starts = (0.0, 2.0), simulation_time = 4.0, injection_time = 0.0))

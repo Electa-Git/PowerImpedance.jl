@@ -76,7 +76,8 @@ function prepare_resonance_fixture(;directory=joinpath(ROOT,"data","ieee9_bus_im
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")))
     history=mkpath(joinpath(directory,"history","resonance-"*Dates.format(now(UTC),"yyyymmddTHHMMSS")))
     cp(joinpath(directory,"manifest.toml"),joinpath(history,"manifest.toml"))
-    net=fixture("ieee9_bus_impedance").factory();list=fixture_netlist(net,power_flow(net))
+    net=fixture("ieee9_bus_impedance").factory();list=fixture_netlist(net,
+        compute(PowerFlowProblem(net), ACDCPowerFlow()))
     base,_=applicable_scan("ieee9_bus_impedance",net,list;definition=record["frequency_response"])
     spec,reference=resonance_spec(net,list,base)
     scan_plan(list,spec,"baseline") # Validate before replacing prepared artifacts.

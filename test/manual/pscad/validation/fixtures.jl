@@ -16,7 +16,7 @@ const REGISTRY = [
         measurements = ["operating_point", "frequency_response"], estimated_nodes = 32),
     (id = "ac_ohl_untransposed", category = :passive, description = "AC overhead line",
         parent = "passive_ohl_network",
-            factory = () -> ClassicFixtures.passive_ohl_network(),
+            factory = () -> PSCADFixtures.passive_ohl_network(),
         topology = "AC source — 25 km OHL — resistive load",
         physics = ["earth return", "propagation", "phase ordering"],
         dissipativity = "positive conductor/earth loss and resistive termination",
@@ -40,7 +40,7 @@ const REGISTRY = [
         measurements = ["operating_point", "frequency_response"], estimated_nodes = 40),
     (id = "transformer_yy", category = :passive, description = "YY transformer",
         parent = "transformer_network",
-            factory = () -> ClassicFixtures.transformer_network(),
+            factory = () -> PSCADFixtures.transformer_network(),
         topology = "AC source — YY T model — resistive load",
         physics = ["turns ratio", "magnetizing current", "T-model response"],
         dissipativity = "positive winding/magnetizing resistance and resistive load",
@@ -48,7 +48,7 @@ const REGISTRY = [
             "power-flow approximation versus explicit T model"], measurements = ["operating_point", "frequency_response"], estimated_nodes = 48),
     (id = "transformer_dyn11", category = :passive, description = "Dyn11 transformer",
         parent = "transformer_network(:ΔY)",
-        factory = () -> ClassicFixtures.transformer_network(organization = :ΔY),
+        factory = () -> PSCADFixtures.transformer_network(organization = :ΔY),
         topology = "AC source — Dyn11 T model — resistive load",
         physics = ["+30 degree secondary shift", "turns ratio", "winding loss"],
         dissipativity = "positive winding/magnetizing resistance and resistive load",
@@ -156,94 +156,105 @@ function fixture(id)
     return REGISTRY[index]
 end
 
-function ac_rl_network()
-    voltage = 380 / sqrt(3)
-    net = Network()
-    net.voltageBase[1] = voltage
-    add!(net,
-        :grid_a,
-        ac_source(pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = voltage * sqrt(2), θac = 0.0)))
-    add!(net,
-        :grid_b,
-        ac_source(pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = 0.98voltage * sqrt(2), θac = -0.01)))
-    add!(net, :branch, impedance(z = s -> 20.0 + 0.05s, pins = 3, transformation = true))
-    for (terminal, axis) in enumerate(("d", "q"))
-        for (element, side, bus) in ((:grid_a, 1, "A"), (:grid_b, 1, "B"),
-            (:branch, 1, "A"), (:branch, 2, "B"))
-            connect!(net, (element, Symbol("$side.$terminal")), Symbol(bus * axis))
-        end
-        for source in (:grid_a, :grid_b)
-            connect!(net, (source, Symbol("2.$terminal")), Symbol("gnd" * axis))
-        end
-    end
-    connect!(net)
-    return net
+function port_nets(state, name, port)
+    rows = NetworkBuilder.sortedcomponentconnections(state.topology, name;
+        withground = true)
+    return collect(filter(row -> row.port == port, rows).net)
 end
 
-# Construct the intended extension with existing add!/connect! operations.
+function component_nets(state, name)
+    return collect(NetworkBuilder.sortedcomponentconnections(state.topology, name;
+        withground = true).net)
+end
+
+function passive_dimension(model)
+    domain = first(electricalconnections(model)).domain
+    return PowerImpedance.isac(domain) ? 2 : 1
+end
+
+function fixture_topology(state; exclude = ())
+    topology = NetworkBuilder.Bus[]
+    for name in keys(state.elements)
+        name in exclude && continue
+        rows = NetworkBuilder.sortedcomponentconnections(state.topology, name;
+            withground = true)
+        for port in unique(rows.port)
+            row = first(filter(row -> row.port == port, rows))
+            bus = row.domain == 2 ? row.net :
+                Symbol(chop(string(row.net); tail = length(string(row.terminal))))
+            domain = row.frame == :dq ? ACDQ : row.frame == :abc ? ACABC : DC_CM
+            push!(topology, NetworkBuilder.Bus(bus; ports = ((name, port),), domain))
+        end
+    end
+    return topology
+end
+
+function ac_rl_network()
+    voltage = 380 / sqrt(3)
+    elements = (;
+        grid_a = ac_source(v = voltage * sqrt(2), theta = 0.0),
+        grid_b = ac_source(v = 0.98voltage * sqrt(2), theta = -0.01),
+        branch = impedance(z = s -> 20.0 + 0.05s, conductors = 3))
+    topology = (
+        NetworkBuilder.Bus(:A; ports = ((:grid_a, :ac), (:branch, :side1)),
+            domain = ACDQ),
+        NetworkBuilder.Bus(:B; ports = ((:grid_b, :ac), (:branch, :side2)),
+            domain = ACDQ))
+    return NetworkBuilder.define(elements, topology; options = (; voltageBase = voltage))
+end
+
 # Replaying connectivity avoids merging the original D2 source net into DM.
 function dc_sections_parent(parent)
-    net = Network()
-    net.voltageBase .= parent.voltageBase
-    for (name, element) in parent.elements
-        add!(net, name, deepcopy(element))
-    end
-    for (node, pins) in parent.nets, pin in pins
-
-        target = pin == (:line, Symbol("2.1")) ? :DM : node
-        connect!(net, pin, target)
-    end
-    connect!(net)
-    return net
+    topology = [NetworkBuilder.Bus(
+        bus.ports == [(:line, :side2)] ? :DM : bus.name;
+        ports = bus.ports, domain = bus.domain) for bus in fixture_topology(parent)]
+    return NetworkBuilder.define(deepcopy(parent.elements), topology;
+        options = parent.options)
 end
 
 function dc_rlc_network()
-    net = dc_sections_parent(ClassicFixtures.dc_network())
+    parent = dc_sections_parent(PSCADFixtures.dc_network())
     # Keep RL and parallel RC as separate supported scalar realizations.
-    add!(net, :rc, impedance(z = s -> inv(1 / 10.0 + 1e-6s), pins = 1))
-    connect!(net, (:rc, Symbol("1.1")), :DM)
-    connect!(net, (:rc, Symbol("2.1")), :D2)
-    connect!(net)
-    return net
+    elements = merge(parent.elements,
+        (; rc = impedance(z = s -> inv(1 / 10.0 + 1e-6s), conductors = 1)))
+    topology = fixture_topology(parent)
+    append!(topology, [NetworkBuilder.Bus(:DM; ports = ((:rc, :side1),)),
+        NetworkBuilder.Bus(:D2; ports = ((:rc, :side2),))])
+    return NetworkBuilder.define(elements, topology; options = parent.options)
 end
 
 function ac_cable_network()
-    net = ClassicFixtures.small_ac_network()
-    replacement = deepcopy(ClassicFixtures.dc_cable_network().elements[:line])
-    replacement.element_model.positions = [(-0.5, 1.0), (0.0, 1.0), (0.5, 1.0)]
-    replacement.pins = copy(net.elements[:line].pins)
-    replacement.input_pins = net.elements[:line].input_pins
-    replacement.output_pins = net.elements[:line].output_pins
-    net.elements[:line] = replacement
-    return net
+    parent = PSCADFixtures._small_ac_circuit()
+    replacement = deepcopy(PSCADFixtures.dc_cable_network().elements.line)
+    replacement.positions = [(-0.5, 1.0), (0.0, 1.0), (0.5, 1.0)]
+    return NetworkBuilder.define(merge(parent.elements, (; line = replacement)),
+        parent.rows; options = parent.options)
 end
 
 function dc_mixed_network()
-    net = dc_sections_parent(ClassicFixtures.dc_cable_network())
-    net.elements[:line].element_model.length = 25e3
+    parent = dc_sections_parent(PSCADFixtures.dc_cable_network())
+    parent.elements.line.length = 25e3
     ohl = overhead_line(length = 75e3,
         conductors = Conductors(organization = :flat, nᵇ = 2, nˢᵇ = 1,
             Rᵈᶜ = 0.0266, rᶜ = 0.0224, yᵇᶜ = 18.0, Δxᵇᶜ = 7.3, dˢᵃᵍ = 6.0),
         groundwires = Groundwires(nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
             Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0),
-        earth_parameters = (1, 1, 100), transformation = true)
-    add!(net, :ohl, ohl)
-    connect!(net, (:ohl, Symbol("1.1")), :DM)
-    connect!(net, (:ohl, Symbol("2.1")), :D2)
-    connect!(net)
-    return net
+        earth_parameters = (1, 1, 100))
+    topology = fixture_topology(parent)
+    append!(topology, [NetworkBuilder.Bus(:DM; ports = ((:ohl, :side1),)),
+        NetworkBuilder.Bus(:D2; ports = ((:ohl, :side2),))])
+    return NetworkBuilder.define(merge(parent.elements, (; ohl)), topology;
+        options = parent.options)
 end
 
 function passive_gate(net, entry)
     evidence = String[]
-    for (name, element) in net.elements
-        model = element.element_model
+    for (name, element) in pairs(net.elements)
+        model = element
         if model isa PowerImpedance.Source
             continue
         elseif model isa PowerImpedance.Impedance
-            form = P.identify_rlc(element.element_model; name).form
+            form = P.identify_rlc(element; name).form
             form.R !== nothing && form.R > 0 || error("$name has no positive dissipation")
             all(x -> x === nothing || x > 0, (form.L, form.C)) ||
                 error("invalid storage in $name")
@@ -280,11 +291,8 @@ end
 
 # The TLC factory supplies every block; only topology and Q=5 MVAr change.
 function tlc_strong_network(; mode = :pq, scr = 8.0)
-    parent = ClassicFixtures.tlc_case2_network()
-    net = Network()
-    net.voltageBase .= parent.voltageBase
-    dut = deepcopy(parent.elements[:DUT])
-    m = dut.element_model
+    parent = PSCADFixtures.tlc_case2_network()
+    m = deepcopy(parent.elements.DUT)
     # fixtures.jl:tlc_network supplies plant/PLL/current loops and P-f gains. The mode
     # mapping supplies Q-V gains 20/100 and VAC gains 0/100 (NoFilter).
     active = mode in (:pq, :pf) ? m.outerActive :
@@ -301,40 +309,44 @@ function tlc_strong_network(; mode = :pq, scr = 8.0)
     mode in (:pq, :pf, :qv, :vac, :vdc) || error("unknown TLC fixture mode $mode")
     # A resistive DC load consumes power: Vdc-control case rectifies from AC.
     power = mode == :vdc ? -70.0 : 70.0
-    dut = tlc(elec=m.elec, meas=m.meas, sync=m.sync, outerActive=active,
+    model = tlc(elec=m.elec, meas=m.meas, sync=m.sync, outerActive=active,
         outerReactive=reactive, innerVoltage=m.innerVoltage,
-        innerCurrent=m.innerCurrent, mod=m.mod, limits=dut.limits,
-        setpoint=Setpoint(Pac=power,Qac=5.0,Vac=220sqrt(2/3),Pdc=power,Vdc=640.0))
-    add!(net, :DUT, dut)
-    for name in (:G3, :G_DC)
-        add!(net, name, deepcopy(parent.elements[name]))
-    end
+        innerCurrent=m.innerCurrent, mod=m.mod, limits=limits(m))
+    b = bases(model)
+    active_inputs = mode == :vdc ? (; v_dc_ref = 640.0 / b.v_dc) :
+        (; p_ref = power / b.S)
+    active_seeds = mode == :vdc ? (; p_ac = power / b.S) :
+        (; v_dc = 640.0 / b.v_dc)
+    reactive_inputs = mode == :vac ? (; v_ac_ref = 220sqrt(2/3) / b.v_ac) :
+        mode == :qv ? (; q_ref = 5.0 / b.S,
+            support = (; v_ac_ref = 220sqrt(2/3) / b.v_ac)) : (; q_ref = 5.0 / b.S)
+    reactive_seeds = mode == :vac ? (; q_ac = 5.0 / b.S) : mode == :qv ? (;) :
+        (; v_ac = 220sqrt(2/3) / b.v_ac)
+    dut = component(model; outerActive = active_inputs, outerReactive = reactive_inputs,
+        powerflow = (; active_seeds..., reactive_seeds..., p_dc = power / b.S))
     z = 220.0^2 / 100.0 / scr
     resistance = z/sqrt(101)
     inductance = 10resistance/(2π*50)
-    add!(net, :Grid, impedance(z=s->resistance+inductance*s, pins=3, transformation=true))
-    for terminal in 1:2
-        for (element, side, bus) in ((:DUT,2,"AC"), (:Grid,1,"AC"), (:Grid,2,"Grid"), (:G3,1,"Grid"))
-            connect!(net, (element, Symbol("$side.$terminal")), Symbol(bus*string(terminal)))
-        end
-        connect!(net, (:G3,Symbol("2.$terminal")), :gnd)
-    end
-    connect!(net, (:DUT,Symbol("1.1")), :DC)
+    elements = (; DUT = dut, G3 = deepcopy(parent.elements.G3),
+        G_DC = dc_source(v = mode == :vdc ? 0.0 : 640.0),
+        Grid = impedance(z = s -> resistance+inductance*s, conductors = 3))
+    topology = NetworkBuilder.Bus[
+        NetworkBuilder.Bus(:AC; ports = ((:DUT, :ac), (:Grid, :side1)), domain = ACDQ),
+        NetworkBuilder.Bus(:Grid; ports = ((:Grid, :side2), (:G3, :ac)), domain = ACDQ),
+        NetworkBuilder.Bus(:DC; ports = ((:DUT, :dc),))]
     if mode == :vdc
         # The PF-only zero-voltage reference draws zero power. `fixture_netlist` replaces
         # it with ground; emitters/impedance.jl:emit! supplies the grounded R/2 pole
         # resistors.
-        net.elements[:G_DC] = dc_source(setpoint=Setpoint(Vdc=0.0))
-        add!(net, :DC_load, impedance(z=s->640.0^2/70.0,pins=1))
-        connect!(net, (:DC_load,Symbol("1.1")), :DC)
-        connect!(net, (:DC_load,Symbol("2.1")), :DC_zero)
-        connect!(net, (:G_DC,Symbol("1.1")), :DC_zero)
+        elements = merge(elements,
+            (; DC_load = impedance(z = s -> 640.0^2/70.0, conductors = 1)))
+        append!(topology, [
+            NetworkBuilder.Bus(:DC; ports = ((:DC_load, :side1),)),
+            NetworkBuilder.Bus(:DC_zero; ports = ((:DC_load, :side2), (:G_DC, :dc)))])
     else
-        connect!(net, (:G_DC,Symbol("1.1")), :DC)
+        push!(topology, NetworkBuilder.Bus(:DC; ports = ((:G_DC, :dc),)))
     end
-    connect!(net, (:G_DC,Symbol("2.1")), :gnd)
-    connect!(net)
-    return net
+    return NetworkBuilder.define(elements, topology; options = parent.options)
 end
 
 # PF represents a DC resistor as a two-bus branch with a remote 0 V reference. PSCAD's
@@ -342,46 +354,13 @@ end
 # dc_source! requires positive Vdc. Replacing only that ideal zero-voltage source with
 # ground gives the same circuit, converter solved point and resistor terminal-1 power,
 # with unchanged components and PSCAD fields.
-function fixture_netlist(net, point)
-    state = PSCADFixtures.state_from_classic(net)
-    ground_reference = haskey(net.elements, :DC_load)
-    ground_net = if ground_reference
-        inputvalues(state.elements.G_DC).v == 0.0 ||
-            error("DC ground reference must be exactly zero")
-        topology = deepcopy(state.topology)
-        connections = filter(row -> row.component != :G_DC, topology.connections)
-        delete!(topology.admittance_orders, :G_DC)
-        topology = NetworkBuilder.NetworkTopology(connections, topology.admittance_orders)
-        elements = Base.structdiff(state.elements, (; G_DC = nothing))
-        state = NetworkBuilder.NetworkState(elements, topology, state.options)
-        net.elements[:G_DC].pins[Symbol("1.1")]
-    else
-        nothing
-    end
-    flow = if point === nothing
-        nothing
-    else
-        result, data, nodes, mapping = point
-        entries = Dict(name => (; pmtype = kind, compkey = index)
-            for (name, (kind, index)) in mapping if haskey(state.elements, name))
-        node_indices = Dict(node => mapping == "gnd" ? (:ground, 0) :
-            (first(mapping) == "bus" ? :ac : :dc, last(mapping))
-            for (group, mapping) in nodes for node in group)
-        topology = deepcopy(state.topology)
-        for i in eachindex(topology.connections.bus)
-            topology.connections.bus[i] = node_indices[topology.connections.net[i]][2]
-        end
-        state = NetworkBuilder.NetworkState(state.elements, topology, state.options)
-        nodes = NetworkBuilder._node_bus_mapping(topology)
-        bases = PowerImpedance.PowerModelsACDC._get_pu_bases(1000,
-            net.voltageBase[1])
-        bases["omega"] = 2π * 50
-        values = PowerImpedance.NetworkBuilder._operating_point(
-            result, bases, state, entries)
-        PowerFlowResult(ACDCPowerFlow(), result, data, nodes, entries, values, (;))
-    end
-    list = P.netlist(state, flow)
-    ground_reference || return list
+function fixture_netlist(state, point = compute(PowerFlowProblem(state), ACDCPowerFlow()))
+    point === nothing || NetworkBuilder.NetworkModel(state, point.operating_point)
+    list = P.netlist(state, point)
+    haskey(state.elements, :DC_load) || return list
+    inputvalues(state.elements.G_DC).v == 0.0 ||
+        error("DC ground reference must be exactly zero")
+    ground_net = only(port_nets(state, :G_DC, :dc))
     ground_bus = only(b.key for b in list.buses if ground_net in b.nets)
     elements=P.NetlistElement[]
     for e in list.elements
@@ -405,78 +384,75 @@ end
 
 # The fixture supplies the MMC and every controller; only the terminal network changes.
 function mmc_grid_network(; mode = :pq, scr = 8.0)
-    parent = ClassicFixtures.mmc_network(mode)
-    dut = deepcopy(parent.elements[:DUT])
-    elec = dut.element_model.elec
+    parent = PSCADFixtures.mmc_network(mode)
+    model = deepcopy(parent.elements.DUT)
+    elec = model.elec
+    b = bases(model)
     voltage = elec.vAC_base / elec.turnsRatio
     power = mode == :vdc ? -600.0 : 600.0
-    dut.setpoint = Setpoint(Pac=power, Qac=200.0, Vac=voltage,
-        Vdc=elec.vDC_base, Pdc=power)
-    net = Network()
-    net.voltageBase[1] = voltage / sqrt(2)
-    add!(net, :DUT, dut)
-    add!(net, :G3, deepcopy(parent.elements[:G_AC]))
-    add!(net, :G_DC, dc_source(setpoint=Setpoint(Vdc=mode == :vdc ? 0.0 : elec.vDC_base)))
+    active_inputs = mode == :vdc ? (; v_dc_ref = elec.vDC_base / b.v_dc) :
+        (; p_ref = power / b.S)
+    active_seeds = mode == :vdc ? (; p_ac = power / b.S) :
+        (; v_dc = elec.vDC_base / b.v_dc)
+    reactive_inputs = mode == :vac ? (; v_ac_ref = voltage / b.v_ac) :
+        mode == :qv ? (; q_ref = 200.0 / b.S,
+            support = (; v_ac_ref = voltage / b.v_ac)) : (; q_ref = 200.0 / b.S)
+    reactive_seeds = mode == :vac ? (; q_ac = 200.0 / b.S) : mode == :qv ? (;) :
+        (; v_ac = voltage / b.v_ac)
+    dut = component(model; delta_control = (; outer_active = active_inputs,
+            outer_reactive = reactive_inputs),
+        powerflow = (; active_seeds..., reactive_seeds..., p_dc = power / b.S))
     impedance_magnitude = (voltage * sqrt(3/2))^2 / elec.Sbase / scr
     resistance = impedance_magnitude / sqrt(101)
     inductance = 10resistance / (2π*50)
-    add!(net, :Grid, impedance(z=s->resistance+inductance*s, pins=3, transformation=true))
-    for terminal in 1:2
-        for (element, side, bus) in ((:DUT,2,"AC"), (:Grid,1,"AC"), (:Grid,2,"Grid"), (:G3,1,"Grid"))
-            connect!(net, (element, Symbol("$side.$terminal")), Symbol(bus*string(terminal)))
-        end
-        connect!(net, (:G3,Symbol("2.$terminal")), :gnd)
-    end
-    connect!(net, (:DUT,Symbol("1.1")), :DC)
+    elements = (; DUT = dut, G3 = deepcopy(parent.elements.G_AC),
+        G_DC = dc_source(v = mode == :vdc ? 0.0 : elec.vDC_base),
+        Grid = impedance(z = s -> resistance+inductance*s, conductors = 3))
+    topology = NetworkBuilder.Bus[
+        NetworkBuilder.Bus(:AC; ports = ((:DUT, :ac), (:Grid, :side1)), domain = ACDQ),
+        NetworkBuilder.Bus(:Grid; ports = ((:Grid, :side2), (:G3, :ac)), domain = ACDQ),
+        NetworkBuilder.Bus(:DC; ports = ((:DUT, :dc),))]
     if mode == :vdc
         resistance_dc = elec.vDC_base^2 / abs(power)
-        add!(net, :DC_load, impedance(z=s->resistance_dc,pins=1))
-        connect!(net, (:DC_load,Symbol("1.1")), :DC)
-        connect!(net, (:DC_load,Symbol("2.1")), :DC_zero)
-        connect!(net, (:G_DC,Symbol("1.1")), :DC_zero)
+        elements = merge(elements,
+            (; DC_load = impedance(z = s -> resistance_dc, conductors = 1)))
+        append!(topology, [
+            NetworkBuilder.Bus(:DC; ports = ((:DC_load, :side1),)),
+            NetworkBuilder.Bus(:DC_zero; ports = ((:DC_load, :side2), (:G_DC, :dc)))])
     else
-        connect!(net, (:G_DC,Symbol("1.1")), :DC)
+        push!(topology, NetworkBuilder.Bus(:DC; ports = ((:G_DC, :dc),)))
     end
-    connect!(net, (:G_DC,Symbol("2.1")), :gnd)
-    connect!(net)
-    return net
+    return NetworkBuilder.define(elements, topology;
+        options = (; voltageBase = voltage / sqrt(2)))
 end
 
 function active_device(kind)
-    kind==:gfm && return deepcopy(ClassicFixtures.mmc_gfm_network().elements[:DUT])
+    kind==:gfm && return deepcopy(PSCADFixtures.mmc_gfm_network().elements[:DUT])
     kind==:compensated &&
-        return deepcopy(ClassicFixtures.mmc_compensated_network().elements[:DUT])
+        return deepcopy(PSCADFixtures.mmc_compensated_network().elements[:DUT])
     if kind == :disabled
-        namespace = PSCADNetworks.load_through(joinpath(pkgdir(PowerImpedance),
-            "examples/P2P_HVDC_ALT.jl"), :ohl_to_ugc)
-        return deepcopy(Base.invokelatest(namespace.ohl_to_ugc, 1.0).c2)
+        m = system_original_p2p_network().elements.c2
+        b = bases(m)
+        return component(m; powerflow = (; p_dc = 0.0 / b.S))
     end
-    kind==:machine && return deepcopy(ClassicFixtures.sm_network().elements[:sg1])
+    kind==:machine && return deepcopy(PSCADFixtures.sm_network().elements[:sg1])
     throw(ArgumentError("unknown active device $kind"))
 end
 
 function active_device_network(kind; scr=8.)
     dut=active_device(kind)
-    bases=device_bases(dut.element_model.elec)
-    net=Network();net.voltageBase[1]=bases.ac_voltage/sqrt(2)
-    add!(net,:DUT,dut)
-    add!(net,:G3,ac_source(pins=3,transformation=true,setpoint=Setpoint(Vac=bases.ac_voltage)))
-    z=(bases.ac_voltage*sqrt(3/2))^2/bases.power/scr
+    b=device_bases(dut.elec)
+    z=(b.ac_voltage*sqrt(3/2))^2/b.power/scr
     resistance=z/sqrt(101);inductance=10resistance/(2π*50)
-    add!(net,:Grid,impedance(z=s->resistance+inductance*s,pins=3,transformation=true))
-    for terminal in 1:2
-        for (element,side,bus) in ((:DUT,bases.ac_side,"AC"),(:Grid,1,"AC"),(:Grid,2,"Grid"),(:G3,1,"Grid"))
-            connect!(net,(element,Symbol("$side.$terminal")),Symbol(bus*string(terminal)))
-        end
-        connect!(net,(:G3,Symbol("2.$terminal")),:gnd)
-        bases.dc_voltage===nothing && connect!(net,(:DUT,Symbol("2.$terminal")),:gnd)
+    elements = (; DUT = dut, G3 = ac_source(v = b.ac_voltage),
+        Grid = impedance(z = s -> resistance+inductance*s, conductors = 3))
+    topology = NetworkBuilder.Bus[
+        NetworkBuilder.Bus(:AC; ports = ((:DUT, :ac), (:Grid, :side1)), domain = ACDQ),
+        NetworkBuilder.Bus(:Grid; ports = ((:Grid, :side2), (:G3, :ac)), domain = ACDQ)]
+    if b.dc_voltage !== nothing
+        elements = merge(elements, (; G_DC = dc_source(v = b.dc_voltage)))
+        push!(topology, NetworkBuilder.Bus(:DC; ports = ((:DUT, :dc), (:G_DC, :dc))))
     end
-    if bases.dc_voltage!==nothing
-        add!(net,:G_DC,dc_source(setpoint=Setpoint(Vdc=bases.dc_voltage)))
-        connect!(net,(:DUT,Symbol("1.1")),:DC)
-        connect!(net,(:G_DC,Symbol("1.1")),:DC)
-        connect!(net,(:G_DC,Symbol("2.1")),:gnd)
-    end
-    connect!(net)
-    return net
+    return NetworkBuilder.define(elements, topology;
+        options = (; voltageBase = b.ac_voltage/sqrt(2)))
 end

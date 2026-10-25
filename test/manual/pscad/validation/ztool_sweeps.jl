@@ -31,7 +31,7 @@ function main(arguments)
             end
         else
             net = V.fixture(id).factory()
-            list = V.fixture_netlist(net, V.power_flow(net))
+            list = V.fixture_netlist(net, V.compute(PowerFlowProblem(net), ACDCPowerFlow()))
             definition = V.ztool_definition(id, net, list)
             estimate = V.ztool_estimate(definition)
             println(id, '\t', estimate.estimated_minutes, '\t', estimate.low_minutes,

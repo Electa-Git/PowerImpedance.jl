@@ -162,7 +162,7 @@ function system_polarized_burst_graph(spec)
 end
 
 function system_exact_modulation_y(e)
-    m=e.element_model;names=PowerImpedance.statenames(m)
+    m=e;names=PowerImpedance.statenames(m)
     delayed=Set(PowerImpedance.statenames(m.modulation))
     d=findall(in(delayed),collect(names));r=setdiff(1:length(names),d)
     tau=m.modulation.delay1.timeDelay
@@ -170,8 +170,10 @@ function system_exact_modulation_y(e)
     b=device_bases(m.elec);n=length(r)
     function response(s)
         g=only(scalar.C*((s*I-scalar.A)\scalar.B)+scalar.D)
-        feedback=vcat(e.A[r,d],e.C[:,d])*((s*I-e.A[d,d])\hcat(e.A[d,r],e.B[d,:]))
-        z=[e.A[r,r] e.B[r,:];e.C[:,r] e.D]+feedback*((exp(-s*tau)+1)/(g+1))
+        feedback=vcat(e.cache.A[r,d],e.cache.C[:,d])*((s*I-e.cache.A[d,
+            d])\hcat(e.cache.A[d,r],e.cache.B[d,:]))
+        z=[e.cache.A[r,r] e.cache.B[r,:];e.cache.C[:,
+            r] e.cache.D]+feedback*((exp(-s*tau)+1)/(g+1))
         y=z[n+1:end,1:n]*((s*I-z[1:n,1:n])\z[1:n,n+1:end])+z[n+1:end,n+1:end]
         return y.*b.current_outputs./b.voltage_inputs'
     end
@@ -184,7 +186,7 @@ function system_growth_sensitivity(c,modes)
     dc=Set(node for bus in list.buses if bus.kind==:dc for node in bus.nets)
     early=CompleteSystem(c.net,c.devices,c.grids,filter(!in(dc),c.nodes),c.ports,Dict{Symbol,Float64}(),c.measurands)
     exact=Dict(n=>system_exact_modulation_y(c.net.elements[n]) for n in c.devices)
-    discrete=any(interface_step_eligible(c.net.elements[n].element_model) for n in c.devices)
+    discrete=any(interface_step_eligible(c.net.elements[n]) for n in c.devices)
     main_functions=discrete ? composed_device_functions(c;time_step=GROWTH_STEPS.main) : functions
     half_functions=discrete ? composed_device_functions(c;time_step=GROWTH_STEPS.half) : functions
     return [begin
@@ -211,7 +213,9 @@ function system_growth_sensitivity(c,modes)
 end
 
 function system_growth_setup(id)
-    entry=fixture(id);net=entry.factory();point=power_flow(net);c=complete_system(id,net)
+    entry=fixture(id);net=entry.factory();point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());
+    NetworkBuilder.NetworkModel(net, point.operating_point);c=complete_system(id,net)
     modes=system_growth_reference(c)
     id=="p2p_original" && length(modes)!=2 && error("both original P2P circular modes must be located")
     sensitivity=system_growth_sensitivity(c,modes)
@@ -272,8 +276,8 @@ end
 function system_growth_channels(result,model,c)
     columns=Vector{ComplexF64}[];labels=String[];bases=Float64[];reference=ComplexF64[]
     for name in c.devices
-        b=device_bases(c.net.elements[name].element_model.elec)
-        bus=port_probe(model.netlist, name, b.ac_side).name
+        b=device_bases(c.net.elements[name].elec)
+        bus=port_probe(model.netlist, name, b.ac_port).name
         voltage=only(filter(p->p.kind==:voltage && p.bus==bus, model.probes.channels))
         current=only(filter(
             p->p.kind==:current && p.element==string(name) && p.port==:ac,
@@ -307,7 +311,8 @@ end
 function run_system_growth(id;directory,remote,deadline)
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")));verify_inputs(directory,record)
     record["fixture_id"]==id || error("system growth fixture differs")
-    net=fixture(id).factory();point=power_flow(net);c=complete_system(id,net)
+    net=fixture(id).factory();point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+    NetworkBuilder.NetworkModel(net, point.operating_point);c=complete_system(id,net)
     modes=system_growth_reference(c);list=fixture_netlist(net,point);spec=system_growth_spec(id,list,modes)
     native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))["passed"] || error("system growth operating point changed")
     reference=complex.(record["growth_reference_real_per_s"],2π.*record["growth_reference_signed_Hz"])

@@ -13,11 +13,11 @@ function scan_samples(result, model, spec)
             samples = probe_samples(result, probe)
             voltage = spec.dimension == 3 ? samples : fixed_dq(result.time, samples)
         end
-        element, side = spec.currents[port]
+        element, component_port = spec.currents[port]
         probe = only(filter(
             c -> c.kind == (spec.quantity == "Z" ? :injection_current : :current) &&
                  c.element == element && c.port == (spec.quantity == "Z" ? :ac :
-                     terminal_port(model.netlist, element, side)),
+                     Symbol(component_port)),
             model.probes.channels))
         current = spec.dimension == 1 ? reshape(result.channels[probe.name], :, 1) :
                   spec.dimension == 3 ? probe_samples(result, probe) :
@@ -43,7 +43,8 @@ function scan_samples(result, model, spec)
             return (; voltage,current,input,output,input_base,output_base,drive,drive_base=spec.current_bases)
         end
         poles=[only(filter(
-                   c->c.kind==:voltage && c.bus==port_probe(model.netlist, :DUT, 1).name &&
+                   c->c.kind==:voltage && c.bus==port_probe(model.netlist, :DUT,
+                       :dc).name &&
                       c.pole==pole,
                    model.probes.channels)) for pole in ("P", "N")]
         dc_voltage=result.channels[poles[1].name]-result.channels[poles[2].name]
@@ -383,7 +384,7 @@ function run_fixture(id; remote = RemoteConfig(),
     record["fixture_id"] == id || error("fixture mismatch")
     entry = fixture(id)
     net = entry.factory()
-    point = power_flow(net)
+    point = compute(PowerFlowProblem(net), ACDCPowerFlow())
     gate = stability_gate(net, entry)
     record["stability"] = gate
     gate["status"] == "passed" || @warn "$(entry.id) complete-network stability result: $(gate["status"])" stability=gate

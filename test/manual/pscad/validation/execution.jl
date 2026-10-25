@@ -14,7 +14,8 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
         end
     end
     net = entry.factory()
-    point = power_flow(net)
+    point = compute(PowerFlowProblem(net), ACDCPowerFlow())
+    NetworkBuilder.NetworkModel(net, point.operating_point)
     gate = stability_gate(net, entry)
     gate["status"] == "passed" || @warn "$(entry.id) complete-network stability result: $(gate["status"])" stability=gate
     list = fixture_netlist(net, point)
@@ -77,8 +78,11 @@ function prepare_fixture(id; directory = joinpath(ROOT, "data", id), definition 
     if spec.dimension == 3
         record["dq_approximation_table"] = [dq_approximation(id, net, list, directory)]
         record["phase_reference_provenance"] = id == "ieee9_bus_impedance" ?
-            "transformation=false twin: identical copied physical models and replayed a/b/c terminal bus incidence; native make_z ideal-source equations; local Bus1/Bus5 3x3 blocks" :
-            "native eval_abcd(element.element_model,s), then abcd_to_y; into-element terminal currents; a/b/c phase order"
+            "ACABC twin: identical copied physical models and replayed a/b/c terminal " *
+                "bus incidence; native make_z ideal-source equations; local Bus1/Bus5 " *
+                "3x3 blocks" :
+            "native eval_abcd(element,s), then abcd_to_y; into-element terminal " *
+                "currents; a/b/c phase order"
     elseif id == "dc_cable_ohl"
         record["settling"] = Dict("observed_envelope_time_constant_s"=>1/2.1,
             "tail_fit_interval_s"=>[0.6, 3.0], "decay_per_s"=>2.1,
@@ -275,7 +279,7 @@ end
 function reanalyse_fixture(id; directory = joinpath(ROOT, "data", id))
     record = manifest_lists!(TOML.parsefile(joinpath(directory, "manifest.toml")))
     net = fixture(id).factory()
-    list = fixture_netlist(net, power_flow(net))
+    list = fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     spec, _ = applicable_scan(id, net, list; definition = record["frequency_response"])
     reference = read_response(joinpath(directory, reference_filename(spec)), length(spec.axes), spec.frequencies)
     models, results = Dict{String, P.PSCADModel}(), Dict{String, P.PSCADResult}()
@@ -325,7 +329,8 @@ function refresh_references(id; directory = joinpath(ROOT, "data", id))
     cp(analysis,joinpath(history,"analysis"))
     projects = Dict(p["path"]=>p["sha256"] for p in record["projects"])
     all(digest(joinpath(directory,path))==hash for (path,hash) in projects) || error("project hash changed")
-    net = fixture(id).factory(); list = fixture_netlist(net,power_flow(net))
+    net = fixture(id).factory(); list = fixture_netlist(net,
+        compute(PowerFlowProblem(net), ACDCPowerFlow()))
     spec, reference = applicable_scan(id,net,list;definition=record["frequency_response"])
     model, result = stored_axis(record,scan_prefix(spec)*"baseline",list,spec,directory)
     rows_a = compare_operating_point(result,model)

@@ -90,7 +90,7 @@ for (representation, network) in (("builder", fixture),)
 end
 
 # Reuse the solved current-API fixture for the isolated module parameters.
-list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
+list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
 element = only(filter(e -> e.model isa PowerImpedance.MMC, list.elements))
 equilibrium = P.converter_equilibrium(element)
 short_settings = P.SimulationSettings(simulation_time = 0.1,

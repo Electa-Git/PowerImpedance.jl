@@ -1,5 +1,6 @@
 module PSCADValidationTests
 using Test, PowerImpedance, LinearAlgebra, TOML, SHA
+using PowerImpedance: eval_abcd
 include("../manual/pscad/validation/validation.jl")
 const V = PSCADValidation
 const P = PowerImpedance.PSCAD
@@ -228,7 +229,8 @@ end
     @test_throws ArgumentError V.native_reference_check(spec,reference[:,:,1:1],frozen)
     invalid=copy(reference);invalid[1]=NaN
     @test_throws ArgumentError V.native_reference_check(spec,invalid,frozen)
-    net=V.ac_rl_network();list=V.fixture_netlist(net,power_flow(net))
+    net=V.ac_rl_network();list=V.fixture_netlist(net,compute(PowerFlowProblem(net),
+        ACDCPowerFlow()))
     actual_spec,actual_reference=V.applicable_scan("passive_ac_rlc",net,list)
     mktempdir() do dir
         path=joinpath(dir,V.reference_filename(actual_spec))
@@ -264,12 +266,13 @@ end
     for entry in filter(e->e.category == :passive,V.REGISTRY)
         net = entry.factory()
         @test V.passive_gate(net, entry)["status"] == "passed"
-        powerflow = entry.id == "ieee9_bus_impedance" ? power_flow(net) : nothing
+        powerflow = entry.id == "ieee9_bus_impedance" ? compute(PowerFlowProblem(net),
+            ACDCPowerFlow()) : nothing
         @test P.check_connectivity(P.build_plan(V.fixture_netlist(net, powerflow))) ===
               nothing
     end
     net = V.ac_rl_network()
-    list = V.fixture_netlist(net, power_flow(net))
+    list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     baseline, _ = V.passive_plan(list, "passive_ac_rlc", :baseline)
     for axis in (:baseline, :d, :q)
         plan, settings = V.passive_plan(list, "passive_ac_rlc", axis)
@@ -324,14 +327,14 @@ end
 
 @testset "passive_ac_rlc native reference through measurement and file output" begin
     net = V.ac_rl_network()
-    list = V.fixture_netlist(net, power_flow(net))
+    list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     spec = V.passive_settings()
     time = collect(0.0:spec.sample_step:spec.simulation_time)
-    a = net.elements[:grid_a].setpoint
-    b = net.elements[:grid_b].setpoint
-    voltage_a = [a.Vac*cos(a.θac), -a.Vac*sin(a.θac)]
-    voltage_b = [b.Vac*cos(b.θac), -b.Vac*sin(b.θac)]
-    current_0 = PowerImpedance.get_y(net.elements[:branch], ComplexF64(0)) *
+    a = inputvalues(net.elements[:grid_a])
+    b = inputvalues(net.elements[:grid_b])
+    voltage_a = [a.v*cos(a.theta), -a.v*sin(a.theta)]
+    voltage_b = [b.v*cos(b.theta), -b.v*sin(b.theta)]
+    current_0 = V.physical_y(net.elements[:branch], ComplexF64(0)) *
                 [voltage_a; voltage_b]
     reference = V.reference_admittance(net)
     models, results = Dict{String, P.PSCADModel}(), Dict{String, P.PSCADResult}()
@@ -428,7 +431,7 @@ end
 @testset "Every passive-element port construction and native reduction" begin
     for entry in filter(e->e.category == :passive,V.REGISTRY)
         net=entry.factory()
-        list=V.fixture_netlist(net, power_flow(net))
+        list=V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         spec, reference=V.scan_definition(entry.id, net, list)
         @test all(isfinite, reference)
         @test size(reference)==(
@@ -436,12 +439,12 @@ end
         @test spec.travel_lower_bound_s==0 || spec.time_step<spec.travel_lower_bound_s
         @test inv(spec.sample_step*(maximum(spec.frequencies)+50))>=40
         if entry.id in ("passive_dc_rlc", "dc_cable_ohl")
-            @test net.elements[:line].pins[Symbol("2.1")] ==
-                  net.elements[entry.id == "passive_dc_rlc" ? :rc : :ohl].pins[Symbol("1.1")]
-            @test net.elements[:to].pins[Symbol("1.1")] ==
-                  net.elements[entry.id == "passive_dc_rlc" ? :rc : :ohl].pins[Symbol("2.1")]
-            @test net.elements[:to].pins[Symbol("1.1")] !=
-                  net.elements[:line].pins[Symbol("2.1")]
+            @test only(V.port_nets(net, :line, :side2)) ==
+                  only(V.port_nets(net, entry.id == "passive_dc_rlc" ? :rc : :ohl, :side1))
+            @test only(V.port_nets(net, :to, :dc)) ==
+                  only(V.port_nets(net, entry.id == "passive_dc_rlc" ? :rc : :ohl, :side2))
+            @test only(V.port_nets(net, :to, :dc)) !=
+                  only(V.port_nets(net, :line, :side2))
         elseif entry.id=="ieee9_bus_impedance"
             @test maximum(abs, reference[1:2, :, :])<1e-10
             @test maximum(abs, reference[:, 1:2, :])<1e-10
@@ -488,11 +491,11 @@ end
                     channels[probe.name * ":" * string(phase)]=abc[:, phase]
                 end
             end
-            element, side=spec.currents[port]
+            element, component_port=spec.currents[port]
             probe=only(filter(
                 c->c.element==element &&
                    c.port==(spec.quantity=="Z" ? :ac :
-                            V.terminal_port(list, element, side)),
+                            Symbol(component_port)),
                 baseline.probes.channels))
             direction = probe.orientation == (spec.quantity == "Y" ? :into : :out) ? 1 : -1
             if spec.dimension==1
@@ -517,13 +520,13 @@ end
 end
 
 @testset "Native Dyn11 rotation acts on both voltage and current sides" begin
-    yy=V.ClassicFixtures.transformer_network().elements[:line]
-    dy=V.ClassicFixtures.transformer_network(organization = :ΔY).elements[:line]
+    yy=V.PSCADFixtures.transformer_network().elements[:line]
+    dy=V.PSCADFixtures.transformer_network(organization = :ΔY).elements[:line]
     rotation=[cos(π/6) sin(π/6); -sin(π/6) cos(π/6)]
     transform=[Matrix{Float64}(I, 2, 2) zeros(2, 2); zeros(2, 2) rotation]
     for f in (1.0, 42.0, 1000.0)
-        yyy=PowerImpedance.get_y(yy, ComplexF64(im*2π*f))
-        ydy=PowerImpedance.get_y(dy, ComplexF64(im*2π*f))
+        yyy=V.physical_y(yy, ComplexF64(im*2π*f))
+        ydy=V.physical_y(dy, ComplexF64(im*2π*f))
         @test ydy≈transform*yyy*transform' rtol=1e-10 atol=1e-12
     end
     @test rotation*[1.0, 0.0] ≈ [cos(π/6), -sin(π/6)]
@@ -569,7 +572,7 @@ end
     synthetic_maximum = 0.0
     for id in ("ac_ohl_untransposed", "ac_cable_coaxial", "ieee9_bus_impedance")
         net = V.fixture(id).factory()
-        list = V.fixture_netlist(net, power_flow(net))
+        list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         spec, native = V.applicable_scan(id, net, list)
         @test spec.dimension == 3
         if id in ("ac_ohl_untransposed", "ac_cable_coaxial")
@@ -588,26 +591,26 @@ end
         @test spec.sample_step*maximum(spec.frequencies) <= 1/40
         if id == "ieee9_bus_impedance"
             twin = V.phase_twin(net, list)
-            @test all(!e.transformation && e.input_pins == e.output_pins == 3 for e in values(twin.elements))
-            for (name, element) in net.elements
-                @test repr(element.element_model) == repr(twin.elements[name].element_model)
-                @test element.setpoint == twin.elements[name].setpoint
-                @test PowerImpedance.get_abcd(twin.elements[name], ComplexF64(im*2π*137)) ≈
-                      eval_abcd(element.element_model, ComplexF64(im*2π*137))
+            @test all(row.frame == :abc for row in twin.topology.connections)
+            for (name, element) in pairs(net.elements)
+                @test repr(element) == repr(twin.elements[name])
+                @test inputvalues(element) == inputvalues(twin.elements[name])
+                @test eval_abcd(twin.elements[name], ComplexF64(im*2π*137)) ≈
+                      eval_abcd(element, ComplexF64(im*2π*137))
             end
             @test maximum(abs, native[1:3, :, :]) < 1e-10
             @test maximum(abs, native[:, 1:3, :]) < 1e-10
             legacy, _ = V.scan_definition(id, net, list)
-            incidence_before = [copy(e.pins) for e in values(net.elements)]
+            incidence_before = copy(net.topology.connections)
             diagnostic = V.projected_admittance_z(net, list, legacy, 237.0)
             @test size(diagnostic) == (4, 4)
             @test maximum(abs, diagnostic[1:2, :]) < 1e-10
             @test all(isfinite, diagnostic)
-            @test incidence_before == [e.pins for e in values(net.elements)]
+            @test incidence_before == net.topology.connections
         else
             for (k, f) in enumerate(spec.frequencies)
                 @test native[:, :, k] ≈ PowerImpedance.abcd_to_y(
-                    eval_abcd(net.elements[:line].element_model, ComplexF64(im*2π*f)))
+                    eval_abcd(net.elements[:line], ComplexF64(im*2π*f)))
             end
         end
         baseline_plan, settings = V.scan_plan(list, spec, "baseline")
@@ -669,10 +672,10 @@ end
             for (port, bus) in enumerate(spec.buses)
                 indices = (3port-2):3port
                 vp = only(filter(c -> c.kind == :voltage && c.bus == bus.name, plan.probes.channels))
-                owner, side = spec.currents[port]
+                owner, component_port = spec.currents[port]
                 ip = only(filter(c -> c.kind == (spec.quantity == "Y" ? :current : :injection_current) &&
                     c.element == owner && c.port == (spec.quantity == "Y" ?
-                        V.terminal_port(list,owner,side) : :ac), plan.probes.channels))
+                        Symbol(component_port) : :ac), plan.probes.channels))
                 sign = ip.orientation == (spec.quantity == "Y" ? :into : :out) ? 1 : -1
                 for phase in 1:3
                     channels[vp.name * ":" * string(phase)] = voltage[:, indices[phase]]
@@ -711,7 +714,7 @@ end
     net = V.fixture("dc_cable_ohl").factory()
     spec,
     reference = V.applicable_scan("dc_cable_ohl", net, V.fixture_netlist(net,
-        power_flow(net)))
+        compute(PowerFlowProblem(net), ACDCPowerFlow())))
     @test spec.window_starts == (6.0, 7.0)
     @test spec.simulation_time == 8.0
     @test V.step_definition(spec, 1000.0).window_starts == (6.0, 6.1)
@@ -734,21 +737,21 @@ end
         output = decaying + drive * ones(3)')) for k in 1:3]
     @test V.scan_quality(time, bad, bad_runs, spec)["baseline_dc_drift"] > 1e-3
     net = V.fixture("ieee9_bus_impedance").factory()
-    list = V.fixture_netlist(net, power_flow(net))
+    list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     twin = V.phase_twin(net, list)
     a = cis(2π / 3)
     plus = ComplexF64[1, a^2, a]
     minus = conj(plus)
     for e in values(net.elements)
-        e.element_model isa PowerImpedance.Transformer || continue
-        model = e.element_model
+        e isa PowerImpedance.Transformer || continue
+        model = e
         for frequency in (1.0, 50.0, 1000.0)
             s = ComplexF64(im * 2π * frequency)
             grounded = PowerImpedance.abcd_to_y(eval_abcd(model, s))
             floating = V.floating_star_transformer_y(model, s; regularization = false)
-            for side in 1:2, sequence in (plus, minus)
+            for component_port in 1:2, sequence in (plus, minus)
                 excitation = zeros(ComplexF64, 6)
-                excitation[(3side-2):3side] = sequence
+                excitation[(3component_port-2):3component_port] = sequence
                 @test floating * excitation ≈ grounded * excitation rtol = 1e-11 atol = 1e-12
             end
             # Only the externally grounded/bridging capacitors pass zero sequence;
@@ -759,7 +762,7 @@ end
             @test floating * excitation ≈ capacitance * excitation atol = 1e-11
         end
     end
-    buses = [V.port_probe(list, :g1, 1), V.port_probe(list, :l5, 1)]
+    buses = [V.port_probe(list, :g1, :ac), V.port_probe(list, :l5, :side1)]
     response = V.phase_network_z(twin, buses, 50.0; floating_stars = true)
     @test maximum(abs, response[1:3, :, :]) == 0
     @test all(isfinite, response) && norm(response[4:6, 4:6]) > 0
@@ -814,13 +817,15 @@ end
 end
 
 @testset "TLC port current drive, native reference and synthetic dq recovery" begin
-    net=V.fixture("tlc_pq_freq_support").factory(); point=power_flow(net)
+    net=V.fixture("tlc_pq_freq_support").factory(); point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow())
+    NetworkBuilder.NetworkModel(net, point.operating_point)
     gate=V.stability_gate(net,V.fixture("tlc_pq_freq_support"))
     @test gate["status"]=="passed"
     @test gate["most_positive_located_real_per_s"]≈-1.991781088 rtol=1e-6
     list=V.fixture_netlist(net, point);
     original, reference=V.applicable_scan("tlc_pq_freq_support", net, list)
-    @test reference[:, :, 1]≈PowerImpedance.get_y(net.elements[:DUT], 2π*im)[2:3, 2:3]
+    @test reference[:, :, 1]≈V.physical_y(net.elements[:DUT], 2π*im)[2:3, 2:3]
     @test original.drive=="current" && original.active
     @test original.time_step==2.5e-6 && original.tone_peak_pu==5e-5
     for band in (original,V.step_definition(original,18.0),V.step_definition(original,1000.0))
@@ -833,7 +838,7 @@ end
     @test V.step_definition(original,1.0).window_starts==(8.0,9.0)
     @test V.step_definition(original,1000.0).time_step==1.25e-6
     @test V.band_sample_step(original)≈20e-6
-    form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
+    form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
     @test 220^2/100/hypot(form.R,2π*50*form.L)≈8
     @test 2π*50*form.L/form.R≈10
     frequencies=[1.0,7.0,137.0,1000.0]
@@ -886,7 +891,7 @@ end
         end
         for pole in ("P", "N")
             probe=only(filter(
-                c->c.kind==:voltage && c.bus==V.port_probe(list, :DUT, 1).name &&
+                c->c.kind==:voltage && c.bus==V.port_probe(list, :DUT, :dc).name &&
                    c.pole==pole,
                 plan.probes.channels))
             channels[probe.name]=fill(pole=="P" ? 320.0 : -320.0, length(time))
@@ -915,24 +920,27 @@ end
     for (id,kind,scr) in (("mmc_gfm_vsm",:gfm,8.),("mmc_gfm_lec_compensated",:compensated,8.),
         ("mmc_pq_no_energy_control",:disabled,8.),("synchronous_machine",:machine,8.),("mmc_gfm_weak_grid",:gfm,2.5))
         parent=V.active_device(kind);net=V.fixture(id).factory();dut=net.elements[:DUT]
-        @test repr(parent.element_model)==repr(dut.element_model)
-        @test parent.setpoint==dut.setpoint
-        point=power_flow(net);list=V.fixture_netlist(net,point)
-        bases=V.device_bases(dut.element_model.elec)
-        form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
+        @test repr(parent)==repr(dut)
+        @test inputvalues(parent)==inputvalues(dut)
+        point=compute(PowerFlowProblem(net), ACDCPowerFlow());list=V.fixture_netlist(net,
+            point)
+        bases=V.device_bases(dut.elec)
+        form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
         @test (bases.ac_voltage*sqrt(3/2))^2/bases.power/hypot(form.R,2π*50*form.L)≈scr
         @test 2π*50*form.L/form.R≈10
-        B=dut.B./bases.voltage_inputs';C=dut.C.*bases.current_outputs
-        D=dut.D.*bases.current_outputs./bases.voltage_inputs'
+        B=dut.cache.B./bases.voltage_inputs';C=dut.cache.C.*bases.current_outputs
+        D=dut.cache.D.*bases.current_outputs./bases.voltage_inputs'
         ix=bases.ac_indices;B=B[:,ix];C=C[ix,:];D=D[ix,ix]
         @test iszero(D)
-        rotation=real.((inv(PowerImpedance.get_y(net.elements[:Grid],0.0im)[1:2,1:2])-form.R*I)/form.L)
+        rotation=real.((inv(V.physical_y(net.elements[:Grid],0.0im)[1:2,
+            1:2])-form.R*I)/form.L)
         # Independent ODE: differentiate grid KCL ig=-C*x and eliminate only
         # terminal voltage. This has no algebraic-infinity classification.
-        closed=dut.A-B*((I+form.L*C*B)\(form.L*C*dut.A+form.R*C+form.L*rotation*C))
+        closed=dut.cache.A-B*((I+form.L*C*B)\
+            (form.L*C*dut.cache.A+form.R*C+form.L*rotation*C))
         poles=eigvals(closed)
         gate=V.stability_gate(net,V.fixture(id))
-        @test length(gate["poles_real_per_s"])==size(dut.A,1)
+        @test length(gate["poles_real_per_s"])==size(dut.cache.A,1)
         @test gate["most_positive_located_real_per_s"]≈maximum(real,poles) rtol=1e-3 atol=1e-8
         if id=="mmc_gfm_weak_grid"
             @test maximum(real,poles)>0
@@ -943,21 +951,22 @@ end
         @test maximum(real,poles)<-1e-7
         @test gate["status"]=="passed" && gate["nyquist_closed_RHP_count"]==0
         spec,reference=V.applicable_scan(id,net,list)
-        @test spec.currents==[("DUT",string(bases.ac_side))]
+        @test spec.currents==[("DUT",string(bases.ac_port))]
         @test spec.dc_clamped==(kind!=:machine)
         @test spec.time_step==(kind==:compensated ? 1e-6 : 2.5e-6)
         for f in (1.,75.,1000.)
             z=ComplexF64(2π*im*f);full=V.physical_y(dut,z)
-            @test C*((z*I-dut.A)\B)+D≈full[ix,ix] rtol=1e-10 atol=1e-12
+            @test C*((z*I-dut.cache.A)\B)+D≈full[ix,ix] rtol=1e-10 atol=1e-12
             @test reference[:,:,only(findall(==(f),spec.frequencies))]≈full[ix,ix]
         end
         if kind==:disabled
-            @test dut.element_model.sigma_control.tec isa PowerImpedance.NoTotalEnergyControl
-            @test dut.element_model.sigma_control.zscc isa PowerImpedance.NoZeroSequenceCurrentControl
-            @test dut.element_model.sigma_control.ccsc isa PowerImpedance.CirculatingCurrentSuppressionControl
+            @test dut.sigma_control.tec isa PowerImpedance.NoTotalEnergyControl
+            @test dut.sigma_control.zscc isa PowerImpedance.NoZeroSequenceCurrentControl
+            @test dut.sigma_control.ccsc isa
+                PowerImpedance.CirculatingCurrentSuppressionControl
         elseif kind==:compensated
-            @test dut.element_model.sigma_control isa PowerImpedance.ΣdqzControlLEC
-            @test dut.element_model.modulation isa PowerImpedance.CompensatedModulation
+            @test dut.sigma_control isa PowerImpedance.ΣdqzControlLEC
+            @test dut.modulation isa PowerImpedance.CompensatedModulation
         elseif kind==:machine
             @test spec.window_starts==(62.,64.) && spec.simulation_time==66.
             @test spec.window_duration==2.
@@ -966,7 +975,9 @@ end
             @test V.step_definition(spec,1000.).time_step==1.25e-6
             @test first(spec.window_starts)>=1-12/gate["most_positive_located_real_per_s"]
             @test !haskey(net.elements,:G_DC)
-            @test V.physical_y(dut,2π*im)≈PowerImpedance.get_y(dut,2π*im)*(1000/380^2)
+            cache=dut.cache
+            per_unit=cache.C*((2π*im*I-cache.A)\cache.B)+cache.D
+            @test V.physical_y(dut,2π*im)≈per_unit*(1000/380^2)
         end
         plan,settings=V.scan_plan(list,spec,"baseline")
         @test P.check_connectivity(plan)===nothing
@@ -977,7 +988,8 @@ end
 end
 
 @testset "Machine current-drive dq recovery without a DC port" begin
-    net=V.fixture("synchronous_machine").factory();list=V.fixture_netlist(net,power_flow(net))
+    net=V.fixture("synchronous_machine").factory();list=V.fixture_netlist(net,
+        compute(PowerFlowProblem(net), ACDCPowerFlow()))
     original,_=V.applicable_scan("synchronous_machine",net,list)
     spec=merge(original,(frequencies=[1.,75.,1000.],phases=zeros(3),
         window_starts=(0.,2.),simulation_time=4.,injection_time=0.))
@@ -1029,9 +1041,9 @@ end
     for (id,mode,scr) in (("mmc_pq",:pq,8.),("mmc_pf_q",:pf,8.),("mmc_p_qv",:qv,8.),
         ("mmc_p_vac",:vac,8.),("mmc_vdc_q",:vdc,8.),("mmc_pq_weak_grid",:pq,2.5))
         net=V.fixture(id).factory()
-        parent=V.ClassicFixtures.mmc_network(mode).elements[:DUT]
-        dut=net.elements[:DUT];m=dut.element_model
-        @test repr(m)==repr(parent.element_model)
+        parent=V.PSCADFixtures.mmc_network(mode).elements[:DUT]
+        dut=net.elements[:DUT];m=dut
+        @test repr(m)==repr(parent)
         @test dut.limits==parent.limits
         @test m.modulation isa PowerImpedance.UncompensatedModulation
         @test m.sigma_control.tec isa PowerImpedance.TotalEnergyControl
@@ -1040,12 +1052,14 @@ end
         if mode==:vac
             @test m.delta_control.outer_reactive.filter isa PowerImpedance.NoFilter
         end
-        form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
+        form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
         @test 380^2/1000/hypot(form.R,2π*50*form.L)≈scr
         @test 2π*50*form.L/form.R≈10
-        @test dut.setpoint.Pac==(mode==:vdc ? -600. : 600.)
-        @test dut.setpoint.Qac==200. && dut.setpoint.Vdc==800.
-        point=power_flow(net);list=V.fixture_netlist(net,point)
+        targets=PowerImpedance.powerflow_targets(dut);b=PowerImpedance.bases(dut)
+        @test targets.p_ac * b.S==(mode==:vdc ? -600. : 600.)
+        @test targets.q_ac * b.S==200. && targets.v_dc * b.v_dc==800.
+        point=compute(PowerFlowProblem(net), ACDCPowerFlow());list=V.fixture_netlist(net,
+            point)
         spec,reference=V.applicable_scan(id,net,list)
         bases=V.device_bases(m.elec)
         @test spec.voltage_bases≈fill(380sqrt(2/3),2)
@@ -1057,12 +1071,12 @@ end
         @test V.scan_record(spec)["power_base_MVA"]==1000.
         # Verify state-space SI scaling against native full three-port Y,
         # including both transformer cross terms and the DC-current factor.
-        B=dut.B./bases.voltage_inputs';C=dut.C.*bases.current_outputs
-        D=dut.D.*bases.current_outputs./bases.voltage_inputs'
+        B=dut.cache.B./bases.voltage_inputs';C=dut.cache.C.*bases.current_outputs
+        D=dut.cache.D.*bases.current_outputs./bases.voltage_inputs'
         for f in (1.,75.,1000.)
             z=ComplexF64(2π*im*f)
-            y=PowerImpedance.get_y(dut,z)
-            @test C*((z*I-dut.A)\B)+D≈y rtol=1e-11 atol=1e-12
+            y=V.physical_y(dut,z)
+            @test C*((z*I-dut.cache.A)\B)+D≈y rtol=1e-11 atol=1e-12
             k=only(findall(==(f),spec.frequencies))
             if mode==:vdc
                 # Independent full-node KCL with the physical resistor.
@@ -1078,7 +1092,7 @@ end
             @test all(e.name!=:G_DC for e in list.elements)
             load=only(filter(e->e.name==:DC_load,list.elements))
             @test load.terminals[2].grounded
-            @test P.identify_rlc(net.elements[:DC_load].element_model; name =
+            @test P.identify_rlc(net.elements[:DC_load]; name =
                 :DC_load).form.R≈800^2/600
         end
         for axis in ["baseline";spec.axes]
@@ -1100,7 +1114,8 @@ end
         end
     end
     # The 1e-6 pu DC clamp limit must use the MMC's 800 kV base.
-    net=V.fixture("mmc_pq").factory();list=V.fixture_netlist(net,power_flow(net))
+    net=V.fixture("mmc_pq").factory();list=V.fixture_netlist(net,
+        compute(PowerFlowProblem(net), ACDCPowerFlow()))
     original,_=V.applicable_scan("mmc_pq",net,list)
     spec=merge(original,(frequencies=[7.],window_starts=(0.,1.),window_duration=1.,))
     time=collect(0.:.001:2.);wave=cos.(2π*7*time)
@@ -1151,10 +1166,10 @@ end
 @testset "TLC controls, grid and physical DC termination" begin
     for (id,scr) in (("tlc_pf_q",8.0),("tlc_p_qv",8.0),("tlc_p_vac",8.0),("tlc_vdc_q",8.0),("tlc_pq_weak_grid",2.5))
         net=V.fixture(id).factory()
-        form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
+        form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
         @test 220^2/100/hypot(form.R,2π*50*form.L)≈scr
         @test 2π*50*form.L/form.R≈10
-        m=net.elements[:DUT].element_model
+        m=net.elements[:DUT]
         @test m.innerVoltage isa PowerImpedance.NoInnerVoltageControl
         @test m.sync isa PowerImpedance.PLLSynchronization
         if id in ("tlc_pf_q","tlc_pq_weak_grid")
@@ -1170,16 +1185,18 @@ end
             @test m.outerActive isa PowerImpedance.OuterActiveVdcControl
             @test m.outerActive.pi_ctrl.Kp==5 && m.outerActive.pi_ctrl.Ki==5
             @test !haskey(net.elements, :CableDC12)
-            @test P.identify_rlc(net.elements[:DC_load].element_model; name =
+            @test P.identify_rlc(net.elements[:DC_load]; name =
                 :DC_load).form.R≈640^2/70
         end
     end
     # The DC load is physical, not an ideal voltage clamp. Its PF-only remote zero
     # reference is replaced by the emitter's grounded DC terminal.
-    net=V.fixture("tlc_vdc_q").factory();point=power_flow(net)
-    @test string(point[1]["termination_status"])=="LOCALLY_SOLVED"
-    @test net.elements[:DUT].setpoint.Vdc≈640
-    @test net.elements[:DUT].setpoint.Pdc≈-70
+    net=V.fixture("tlc_vdc_q").factory();point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow())
+    NetworkBuilder.NetworkModel(net, point.operating_point)
+    @test string(point.result["termination_status"])=="LOCALLY_SOLVED"
+    @test point.operating_point[:DUT].dc.v≈640
+    @test point.operating_point[:DUT].dc.p≈-70
     list=V.fixture_netlist(net,point)
     @test all(e.name!=:G_DC for e in list.elements)
     load=only(filter(e->e.name==:DC_load,list.elements))
@@ -1189,7 +1206,7 @@ end
     @test spec.time_step==0.625e-6 && spec.window_starts==(8.,9.)
     @test V.step_definition(spec,18.0).time_step==0.3125e-6
     for (k,f) in enumerate(spec.frequencies)
-        y=PowerImpedance.get_y(net.elements[:DUT],ComplexF64(2π*im*f))
+        y=V.physical_y(net.elements[:DUT],ComplexF64(2π*im*f))
         g=70/640^2
         # Direct 3-node KCL solve, independent of the Schur reference formula.
         voltage=vcat(-(y[1,1]+g)\y[1:1,2:3],Matrix{ComplexF64}(I,2,2))
@@ -1197,17 +1214,17 @@ end
         @test norm(reference[:,:,k]-y[2:3,2:3])>0
     end
     # Independent unreduced complete descriptor retains the DC algebraic node.
-    e=net.elements[:DUT];el=e.element_model.elec;n=size(e.A,1)
-    form=P.identify_rlc(net.elements[:Grid].element_model;name=:Grid).form
-    rotation=real.((inv(PowerImpedance.get_y(net.elements[:Grid],0.0im)[1:2,1:2])-form.R*I)/form.L)
+    e=net.elements[:DUT];el=e.elec;n=size(e.cache.A,1)
+    form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
+    rotation=real.((inv(V.physical_y(net.elements[:Grid],0.0im)[1:2,1:2])-form.R*I)/form.L)
     ac=Matrix{Float64}(I,2,2)
     # Use native per-unit variables for the independent descriptor so tiny SI
     # conductances do not spoil the generalized eigenvalue backward error.
     zbase=el.vACbase/el.iACbase
     dc_conductance_pu=(70/640^2)*el.vDCbase/el.iDCbase
-    full=[e.A zeros(n,2) e.B;
+    full=[e.cache.A zeros(n,2) e.cache.B;
         zeros(2,n) -form.R/zbase*ac-form.L/zbase*rotation zeros(2,1) ac;
-        e.C vcat(zeros(1,2),ac) e.D+diagm([dc_conductance_pu,0.,0.])]
+        e.cache.C vcat(zeros(1,2),ac) e.cache.D+diagm([dc_conductance_pu,0.,0.])]
     storage=diagm([ones(n);fill(form.L/zbase,2);zeros(3)])
     pencil=schur(full,storage)
     # Algebraic constraints have beta=0 in QZ. Round-off can report a finite
@@ -1295,31 +1312,31 @@ end
 
 @testset "One-step realization reference keeps the native comparison separate" begin
     for id in ("mmc_pq", "mmc_vdc_q", "mmc_gfm_lec_compensated", "tlc_pq_freq_support", "tlc_vdc_q")
-        net = V.fixture(id).factory(); list = V.fixture_netlist(net, power_flow(net))
+        net = V.fixture(id).factory(); list = V.fixture_netlist(net,
+            compute(PowerFlowProblem(net), ACDCPowerFlow()))
         spec, native = V.applicable_scan(id, net, list)
         if id == "mmc_gfm_lec_compensated"
-            el = net.elements[:DUT]; m = el.element_model
+            el = net.elements[:DUT]; m = el
             @test !V.interface_step_eligible(m) # existing fixture has positive delay
-            el.element_model = MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
+            values = m.cache.values
+            el = MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
                 CompensatedModulation(), m.elec, m.limits, m.powerflow,
                 PowerImpedance.LinearizationCache())
-            PowerImpedance.update!(el, el.setpoint)
+            linearize(el, values)
+            net.elements = merge(net.elements, (; DUT = el))
         end
         if id == "tlc_vdc_q"
-            el = net.elements[:DUT]; m = el.element_model
-            net.elements[:DUT] = PowerImpedance.Element(element_model =
-                TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
-                    m.innerVoltage, m.innerCurrent, NoModulation(), m.limits,
-                    m.powerflow, PowerImpedance.LinearizationCache()),
-                input_pins = 1, output_pins = 2, setpoint = el.setpoint,
-                limits = el.limits, pins = deepcopy(el.pins), symbol = :DUT)
-            el = net.elements[:DUT]
-            PowerImpedance.update!(el, el.setpoint)
+            el = net.elements[:DUT]; m = el
+            replacement = TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
+                m.innerVoltage, m.innerCurrent, NoModulation(), m.limits,
+                m.powerflow, PowerImpedance.LinearizationCache())
+            linearize(replacement, m.cache.values)
+            net.elements = merge(net.elements, (; DUT = replacement))
         end
         short = merge(spec, (; frequencies = [18.0, 1000.0]))
-        original = deepcopy(net.elements[:DUT].A)
+        original = deepcopy(net.elements[:DUT].cache.A)
         realization = V.interface_step_reference(net, short)
-        @test net.elements[:DUT].A == original
+        @test net.elements[:DUT].cache.A == original
         if id == "tlc_pq_freq_support"
             @test realization === nothing # positive 200 us model delay
             continue
@@ -1328,11 +1345,9 @@ end
         @test all(isfinite, realization)
         delayed = deepcopy(net)
         el = delayed.elements[:DUT]
-        delayed.elements[:DUT] = PowerImpedance.Element(element_model =
-            V.one_step_model(el.element_model, short.time_step),
-            input_pins = 1, output_pins = 2, setpoint = el.setpoint, limits = el.limits)
-        el = delayed.elements[:DUT]
-        PowerImpedance.update!(el, el.setpoint)
+        replacement = V.one_step_model(el, short.time_step)
+        linearize(replacement, el.cache.values)
+        delayed.elements = merge(delayed.elements, (; DUT = replacement))
         rational = cat((V.device_port_y(delayed, ComplexF64(im*2π*f)) for f in short.frequencies)...; dims = 3)
         # At these small steps the independent 3/3 rational evaluation is
         # indistinguishable from exact transport, including DC Schur reduction.
@@ -1365,7 +1380,8 @@ end
         @test settling["window_starts_s"] == [16.,17.]
         @test settling["simulation_time_s"] == 18.
     end
-    net = V.fixture("tlc_pq_freq_support").factory(); list = V.fixture_netlist(net, power_flow(net))
+    net = V.fixture("tlc_pq_freq_support").factory(); list = V.fixture_netlist(net,
+        compute(PowerFlowProblem(net), ACDCPowerFlow()))
     spec, native = V.applicable_scan("tlc_pq_freq_support", net, list)
     frozen = V.scan_record(spec); frozen["time_step"] = 1.25e-6
     fine, reference = V.applicable_scan("tlc_pq_freq_support", net, list; definition = frozen)
@@ -1449,7 +1465,7 @@ include("../manual/pscad/validation/validation.jl")
 const V=PSCADValidation
 @testset "Bus5 extra-bin construction and retained half-step model" begin
     net=V.fixture("ieee9_bus_impedance").factory();
-    list=V.fixture_netlist(net, power_flow(net))
+    list=V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     base, _=V.applicable_scan("ieee9_bus_impedance", net, list)
     spec, reference=V.resonance_spec(net, list, base)
     @test length(spec.buses)==1 && only(spec.buses).name=="Bus5"
@@ -1519,7 +1535,7 @@ end
 end
 @testset "Resonance recorder selection leaves the circuit intact" begin
     net=V.fixture("ieee9_bus_impedance").factory();
-    list=V.fixture_netlist(net, power_flow(net))
+    list=V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     base, _=V.applicable_scan("ieee9_bus_impedance", net, list);
     spec, _=V.resonance_spec(net, list, base)
     selected, _=V.scan_plan(list, spec, "p1_a")
@@ -1888,7 +1904,7 @@ end
         net = V.fixture(id).factory()
         @test V.residual_step_eligible(id, net) == (id in ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid"])
         id in ["mmc_pq", "mmc_pf_q", "mmc_p_qv", "mmc_p_vac", "mmc_vdc_q", "mmc_pq_weak_grid"] || continue
-        list = V.fixture_netlist(net, power_flow(net))
+        list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         spec, _ = V.applicable_scan(id, net, list)
         short = merge(spec, (; frequencies = [750.0, 1000.0], phases = [0.0, -π]))
         plan, _ = V.scan_plan(list, short, "p1_q")
@@ -1991,9 +2007,15 @@ end
 # shunt from either aggregate Y or recorded KCL observably wrong.
 function two_device_bus()
     net=V.coupled_network("two_tlc_shared_bus")
-    add!(net,:Filter,impedance(z=s->2.0+inv(5e-6*s),pins=3,transformation=true))
-    V.composed_ac!(net,:Filter,1,:AC);V.composed_ac!(net,:Filter,2,:gnd);connect!(net)
-    point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit("two_tlc_shared_bus",net)
+    topology = V.fixture_topology(net)
+    append!(topology, [
+        NetworkBuilder.Bus(:AC; ports = ((:Filter, :side1),), domain = ACDQ),
+        NetworkBuilder.Bus(:gnd; ports = ((:Filter, :side2),), domain = ACDQ)])
+    net = NetworkBuilder.define(merge(net.elements,
+        (; Filter = impedance(z = s -> 2.0+inv(5e-6*s), conductors = 3))),
+        topology; options = net.options)
+    point=compute(PowerFlowProblem(net), ACDCPowerFlow());list=V.fixture_netlist(net,
+        point);c=V.coupled_circuit("two_tlc_shared_bus",net)
     spec=merge(V.coupled_spec("two_tlc_shared_bus",list),(;frequencies=[7.,137.],phases=[0.,-π],
         window_starts=(1.,2.),window_duration=1.,simulation_time=3.,injection_time=0.,tone_peak_pu=1e-4))
     scale=spec.current_bases[1]/spec.voltage_bases[1]
@@ -2125,9 +2147,8 @@ end
 end
 
 @testset "Heterogeneous devices retain original bases beside the aggregate rating" begin
-    net=Network()
-    add!(net,:C1,V.active_device(:gfm))
-    add!(net,:C2,deepcopy(V.mmc_grid_network(mode=:pq).elements[:DUT]))
+    net=(; elements=(; C1=V.active_device(:gfm),
+        C2=deepcopy(V.mmc_grid_network(mode=:pq).elements[:DUT])))
     bases=V.COUPLED_AGGREGATE_BASES["mmc_gfm_gfl_shared_bus"]
     vb=bases.voltage_LL_kV*sqrt(2/3);ib=2bases.power_MVA/(3vb)
     spec=(;quantity="Y",axes=["p1_d","p1_q"],voltage_bases=fill(vb,2),current_bases=fill(ib,2))
@@ -2204,7 +2225,8 @@ end
         end
         results[axis]=(;time=times,channels)
     end
-    circuit=(;net=(;elements=Dict{Symbol,Any}()),devices=Symbol[],grids=[:Grid1,:Grid2],ports=[(:DUT1,2),(:DUT2,2)])
+    circuit=(;net=(;elements=Dict{Symbol,Any}()),devices=Symbol[],grids=[:Grid1,:Grid2],
+        ports=[(:DUT1,:ac),(:DUT2,:ac)])
     refs=Dict("aggregate_Y"=>cat(known,known;dims=3),
         "direct_Z"=>cat((z*direct_readout(f,spec,4) for f in fs)...;dims=3))
     mktempdir() do directory
@@ -2230,7 +2252,8 @@ end
         "tlc_transformer_line"=>52,"machine_mmc_shared_bus"=>55,"two_mmc_dc_cable"=>96,"mmc_rc_shunt"=>55)
     for (id,right,amp) in (("two_tlc_shared_bus",-1.9916375342503203,.0004508893578873102),
             ("mmc_rc_shunt",-10.953699604677505,.00047389717632280974))
-        net=V.coupled_network(id);point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit(id,net)
+        net=V.coupled_network(id);point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+            list=V.fixture_netlist(net,point);c=V.coupled_circuit(id,net)
         gate=V.composed_stability(c)
         @test gate["status"]=="passed"
         @test gate["most_positive_located_real_per_s"]≈right rtol=1e-5
@@ -2248,7 +2271,7 @@ end
         @test P.check_connectivity(measured_plan)===nothing
         @test all(p.kind in (:voltage,:current,:injection_current) for p in measured_plan.probes.channels)
         @test length(measured_plan.probes.channels)<length(plan.probes.channels)
-        @test !any(p.kind==:voltage && p.bus==V.port_probe(list, :G_A, 1).name
+        @test !any(p.kind==:voltage && p.bus==V.port_probe(list, :G_A, :ac).name
         for p in measured_plan.probes.channels)
         @test !any(p.kind==:current && p.element=="Grid_A" && p.port==:side2
         for p in measured_plan.probes.channels)
@@ -2266,11 +2289,12 @@ end
         if id=="two_tlc_shared_bus"
             @test plain["aggregate_Y"]≈plain["C1_Y"]+plain["C2_Y"]
             for name in c.devices
-                @test !V.interface_step_eligible(net.elements[name].element_model)
-                @test net.elements[name].element_model.mod.delay.timeDelay==200e-6
+                @test !V.interface_step_eligible(net.elements[name])
+                @test net.elements[name].mod.delay.timeDelay==200e-6
             end
             # Preserve every native state, including an injected unstable mode.
-            net.elements[:C1].A[1,:].=0;net.elements[:C1].A[:,1].=0;net.elements[:C1].A[1,1]=10.
+            net.elements[:C1].cache.A[1,:].=0;net.elements[:C1].cache.A[:,1].=0;
+                net.elements[:C1].cache.A[1,1]=10.
             @test maximum(real,V.composed_descriptor(c).poles)>0
             @test V.composed_stability(c)["status"]=="failed"
             continue
@@ -2296,7 +2320,7 @@ end
             # Independent single-device reduction plus analytic RC and grid.
             for (k,f) in enumerate(spec.frequencies)
                 s=ComplexF64(im*2π*f);e=net.elements[:C1]
-                isolated=Network();isolated.elements[:DUT]=e
+                isolated=(;elements=(;DUT=e))
                 yy=V.interface_step_reference(isolated,merge(spec,(;frequencies=[f])))[:,:,1]
                 sh=V.composed_passive_y(net.elements[:Filter],forms[:Filter],s)[1:2,1:2]
                 gy=V.composed_passive_y(net.elements[:Grid_A],forms[:Grid_A],s)[1:2,1:2]
@@ -2337,27 +2361,29 @@ end
 
 
 @testset "Internal lumped nodes use the same reduction and local device voltage" begin
-    parent=V.coupled_network("mmc_rc_shunt");net=Network();net.voltageBase[1]=380/sqrt(3)
-    for name in (:C1,:G_A,:Grid_A,:D_C1)
-        add!(net,name,deepcopy(parent.elements[name]))
-    end
-    V.composed_ac!(net,:C1,2,:Remote);V.composed_ac!(net,:G_A,1,:Src)
-    V.composed_ac!(net,:G_A,2,:gnd);V.composed_ac!(net,:Grid_A,1,:AC);V.composed_ac!(net,:Grid_A,2,:Src)
-    connect!(net,(:C1,Symbol("1.1")),:DC);connect!(net,(:D_C1,Symbol("1.1")),:DC)
-    connect!(net,(:D_C1,Symbol("2.1")),:gnd)
-    add!(net,:Line,impedance(z=s->2.0+.02s,pins=3,transformation=true))
-    V.composed_ac!(net,:Line,1,:AC);V.composed_ac!(net,:Line,2,:Remote)
-    for (name,bus) in ((:Cnear,:AC),(:Cfar,:Remote))
-        add!(net,name,impedance(z=s->inv(2e-6*s),pins=3,transformation=true))
-        V.composed_ac!(net,name,1,bus);V.composed_ac!(net,name,2,:gnd)
-    end
-    connect!(net);point=power_flow(net);list=V.fixture_netlist(net,point)
-    c=V.composed_circuit(net,[:C1],[:Grid_A],[(:Line,1)])
+    parent=V.coupled_network("mmc_rc_shunt")
+    elements = merge((; (name => deepcopy(parent.elements[name])
+            for name in (:C1,:G_A,:Grid_A,:D_C1))...),
+        (; Line = impedance(z = s -> 2.0+.02s, conductors = 3),
+            Cnear = impedance(z = s -> inv(2e-6*s), conductors = 3),
+            Cfar = impedance(z = s -> inv(2e-6*s), conductors = 3)))
+    topology = (
+        NetworkBuilder.Bus(:Remote; ports = ((:C1,:ac),(:Line,:side2),(:Cfar,:side1)),
+            domain = ACDQ),
+        NetworkBuilder.Bus(:Src; ports = ((:G_A,:ac),(:Grid_A,:side2)), domain = ACDQ),
+        NetworkBuilder.Bus(:AC; ports = ((:Grid_A,:side1),(:Line,:side1),(:Cnear,:side1)),
+            domain = ACDQ),
+        NetworkBuilder.Bus(:gnd; ports = ((:Cnear,:side2),(:Cfar,:side2)), domain = ACDQ),
+        NetworkBuilder.Bus(:DC; ports = ((:C1,:dc),(:D_C1,:dc))))
+    net = NetworkBuilder.define(elements, topology; options = (; voltageBase=380/sqrt(3)))
+    point=compute(PowerFlowProblem(net), ACDCPowerFlow());list=V.fixture_netlist(net,point)
+    c=V.composed_circuit(net,[:C1],[:Grid_A],[(:Line,:side1)])
     @test length(c.nodes)==4
     gate=V.composed_stability(c)
     @test gate["status"]=="passed" && gate["descriptor_native_residual"]<1e-10
     @test gate["most_positive_located_real_per_s"]≈-10.9540877 rtol=1e-6
-    spec=merge(V.coupled_spec("mmc_rc_shunt",list),(;buses=[V.port_probe(list,:Line,1)],frequencies=[237.,367.],phases=[0.,-π]))
+    spec=merge(V.coupled_spec("mmc_rc_shunt",list),(;buses=[V.port_probe(list,:Line,
+        :side1)],frequencies=[237.,367.],phases=[0.,-π]))
     plan,_=V.scan_plan(list,spec,"baseline")
     mktempdir() do directory
         project=passive_project(plan,joinpath(directory,"pi.pscx"))
@@ -2375,7 +2401,7 @@ end
             @test refs["aggregate_Y"][:,:,k]≈aggregate rtol=1e-10
             @test refs["C1_Y"][:,:,k]≈yd rtol=1e-10
             @test refs["direct_Z"][:,:,k]≈inv(aggregate+grid) rtol=1e-10
-            b=V.device_bases(net.elements[:C1].element_model.elec)
+            b=V.device_bases(net.elements[:C1].elec)
             expected=V.injection_readout_factor(f,spec).*spec.current_bases[1].*
                 [local_voltage./b.ac_voltage;(yd*local_voltage)./b.ac_current]
             @test predicted["C1_Y"][:,1,k]≈expected rtol=1e-10
@@ -2395,7 +2421,8 @@ end
                 41.05810094572044,34.467198177827676,.0007118962353546502),
             ("mmc_gfm_gfl_shared_bus",-.0006283185308747,26.3847297623963,50.49689963194021,
                 26.38423668513727,26.38493241075408,.0006924416531567809))
-        net=V.fixture(id).factory();point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit(id,net)
+        net=V.fixture(id).factory();point=compute(PowerFlowProblem(net),
+            ACDCPowerFlow());list=V.fixture_netlist(net,point);c=V.coupled_circuit(id,net)
         spec=V.coupled_spec(id,list);gate=V.composed_stability(c)
         @test gate["status"]=="passed"
         @test gate["most_positive_located_real_per_s"]≈right rtol=1e-9
@@ -2413,9 +2440,9 @@ end
         @test V.check_recorder_sampling(spec)==25
         @test V.check_recorder_sampling(V.composed_step_spec(spec,7.))==25
         @test V.COUPLED_NATIVE_NODES[id]==(id=="mmc_pi_line" ? 67 : 77)
-        @test net.voltageBase[1]==380/sqrt(3)
+        @test net.options.voltageBase==380/sqrt(3)
         @test spec.power_base_MVA==(id=="two_mmc_shared_bus" ? 2000. : id=="mmc_gfm_gfl_shared_bus" ? 2060. : 1000.)
-        grid=PowerImpedance.get_y(net.elements[:Grid_A],ComplexF64(1.))
+        grid=V.physical_y(net.elements[:Grid_A],ComplexF64(1.))
         rating=id=="mmc_gfm_gfl_shared_bus" ? 2060. : 1000.
         r=380^2/rating/8/sqrt(101);l=10r/(2π*50);q=I(2)+[0. 2π*50;-2π*50 0.]
         @test grid[1:2,1:2]≈inv(r*I(2)+l*q) rtol=1e-12
@@ -2438,13 +2465,13 @@ end
             count(x->x isa P.ComponentPlan && x.defn=="master:ammeter",plan.main.components)
         @test all(p.kind in (:voltage,:current,:injection_current) for p in measured.probes.channels)
         for name in c.devices
-            b=V.device_bases(net.elements[name].element_model.elec)
+            b=V.device_bases(net.elements[name].elec)
             @test any(
-                p->p.kind==:voltage && p.bus==V.port_probe(list, name, b.ac_side).name,
+                p->p.kind==:voltage && p.bus==V.port_probe(list, name, b.ac_port).name,
                 measured.probes.channels)
             @test any(p->p.kind==:current && p.element==string(name) && p.port==:ac,
                 measured.probes.channels)
-            @test net.elements[Symbol("D_", name)].setpoint.Vdc==b.dc_voltage
+            @test inputvalues(net.elements[Symbol("D_", name)]).v==b.dc_voltage
         end
         mktempdir() do directory
             project=passive_project(plan,joinpath(directory,"actual.pscx"))
@@ -2452,19 +2479,19 @@ end
             functions=V.composed_device_functions(c;time_step=spec.time_step)
             native=V.composed_device_functions(c)
             for name in c.devices
-                e=net.elements[name];b=V.device_bases(e.element_model.elec)
-                changed=V.interface_step_eligible(e.element_model)
+                e=net.elements[name];b=V.device_bases(e.elec)
+                changed=V.interface_step_eligible(e)
                 @test changed==(id!="mmc_gfm_gfl_shared_bus" || name==:C2)
                 for f in (7.,137.,750.)
                     s=ComplexF64(im*2π*f)
                     if changed
-                        isolated=Network();isolated.elements[:DUT]=e
+                        isolated=(;elements=(;DUT=e))
                         independent=V.interface_step_reference(isolated,merge(spec,(;frequencies=[f])))[:,:,1]
                         @test functions[name](s)[b.ac_indices,b.ac_indices]≈independent rtol=1e-12
                         @test norm(functions[name](s)-native[name](s))>1e-8
                     else
                         @test functions[name](s)==native[name](s)
-                        @test e.element_model.modulation.delay1.timeDelay==200e-6
+                        @test e.modulation.delay1.timeDelay==200e-6
                     end
                 end
             end
@@ -2476,11 +2503,11 @@ end
                     @test refs["direct_Z"][:,:,k]≈inv(refs["C1_Y"][:,:,k]+refs["C2_Y"][:,:,k]+gy) rtol=1e-12
                 end
             else
-                @test length(c.nodes)==4 && c.ports==[(:Line,1)]
+                @test length(c.nodes)==4 && c.ports==[(:Line,:side1)]
                 @test forms[:Line].R==2. && forms[:Line].L==.02
                 @test forms[:Cnear].C≈2e-6 && forms[:Cfar].C≈2e-6
-                @test only(spec.buses).name==V.port_probe(list,:Line,1).name
-                @test only(spec.buses).name!=V.port_probe(list,:C1,2).name
+                @test only(spec.buses).name==V.port_probe(list,:Line,:side1).name
+                @test only(spec.buses).name!=V.port_probe(list,:C1,:ac).name
                 local_spec=V.coupled_spec(id,list;local_scan=true)
                 @test local_spec.frequencies==collect(357.:.5:378.)
                 @test local_spec.tone_peak_pu==2.4385006018880013e-5
@@ -2520,7 +2547,7 @@ end
         if id=="mmc_gfm_gfl_shared_bus"
             @test occursin("equilibrium",spec.settling["scope"])
             @test occursin("400-to-380",only(filter(x->occursin("equilibrium",x),V.fixture(id).differences)))
-            b=V.device_bases(net.elements[:C1].element_model.elec)
+            b=V.device_bases(net.elements[:C1].elec)
             @test b.power==1060. && b.dc_voltage==640.
             @test b.ac_voltage≈400sqrt(2/3)
         end
@@ -2528,7 +2555,9 @@ end
 end
 
 @testset "Composed machine and zero-delay converter use separate step rules" begin
-    net=V.coupled_network("machine_mmc_shared_bus");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit("machine_mmc_shared_bus",net)
+    net=V.coupled_network("machine_mmc_shared_bus");point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());list=V.fixture_netlist(net,
+        point);c=V.coupled_circuit("machine_mmc_shared_bus",net)
     spec=merge(V.coupled_spec("machine_mmc_shared_bus",list),(;frequencies=[750.,1000.],phases=[0.,-π]))
     step=V.composed_step_spec(spec,1000.)
     plan,_=V.scan_plan(list,spec,"baseline")
@@ -2584,7 +2613,9 @@ end
 end
 
 @testset "Near-end scan retains remote converter V/I and local departure gates" begin
-    net=V.coupled_network("mmc_pi_line");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit("mmc_pi_line",net)
+    net=V.coupled_network("mmc_pi_line");point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());list=V.fixture_netlist(net,
+        point);c=V.coupled_circuit("mmc_pi_line",net)
     spec=merge(V.coupled_spec("mmc_pi_line",list),(;frequencies=[7.,137.],phases=[0.,-π],
         window_starts=(1.,2.),window_duration=1.,simulation_time=3.,injection_time=0.,
         tone_peak_pu=1e-4,recorder_scope="measurement"))
@@ -2596,21 +2627,23 @@ end
     remote=(yl+cf+yd)\yl;aggregate=cn+yl-yl*remote;z=inv(aggregate+yg)
     times=collect(0.:spec.sample_step:spec.simulation_time)
     models=Dict{String,P.PSCADModel}();results=Dict{String,P.PSCADResult}()
-    remote_bus=V.port_probe(list,:C1,2).name
+    remote_bus=V.port_probe(list,:C1,:ac).name
     for axis in ["baseline";spec.axes]
         plan,settings=V.scan_plan(list,spec,axis)
         v=zeros(length(times),2);u=copy(v);d=copy(v)
-        currents=Dict((element,side)=>copy(v) for (element,side) in
-            (("C1","2"),("Cnear","1"),("Cfar","1"),("Line","1"),("Grid_A","1")))
+        currents=Dict((element,component_port)=>copy(v) for (element,component_port) in
+            (("C1","ac"),("Cnear","side1"),("Cfar","side1"),("Line","side1"),("Grid_A",
+                "side1")))
         if axis!="baseline"
             column=only(findall(==(axis),spec.axes))
             for (k,f) in enumerate(spec.frequencies)
                 drive=zeros(ComplexF64,2);drive[column]=spec.tone_peak_pu*spec.current_bases[column]*cis(spec.phases[k])
                 near=V.injection_readout_factor(f,spec)*z*drive;far=remote*near
                 pairs=[(v,near),(u,far),(d,recorded_drive(drive,spec)),
-                    (currents[("C1","2")],yd*far),(currents[("Cnear","1")],cn*near),
-                    (currents[("Cfar","1")],cf*far),(currents[("Line","1")],yl*(near-far)),
-                    (currents[("Grid_A","1")],yg*near)]
+                    (currents[("C1","ac")],yd*far),(currents[("Cnear","side1")],cn*near),
+                    (currents[("Cfar","side1")],cf*far),(currents[("Line","side1")],
+                        yl*(near-far)),
+                    (currents[("Grid_A","side1")],yg*near)]
                 for (samples,phasor) in pairs, row in 1:2
                     samples[:,row].+=real.(phasor[row].*cis.(2π*f.*times))
                 end
@@ -2626,7 +2659,7 @@ end
                     probe.orientation==:into ? -d : d
                 else
                     inward=currents[(probe.element,
-                        string(V.terminal_side(list, probe.element, probe.port)))]
+                        string(probe.port))]
                     probe.orientation==:into ? inward : -inward
                 end
                 abc=abc_wave(times,samples)
@@ -2650,7 +2683,7 @@ end
         @test norm(run.device_voltages["C1_Y"]-run.voltage)>1e-3
         @test haskey(run.outputs,"C1_Y")
         bad_voltages=Dict(k=>copy(v) for (k,v) in run.device_voltages)
-        bad_voltages["C1_Y"][:,1].+=.02V.device_bases(net.elements[:C1].element_model.elec).ac_voltage
+        bad_voltages["C1_Y"][:,1].+=.02V.device_bases(net.elements[:C1].elec).ac_voltage
         bad=merge(run,(;device_voltages=bad_voltages))
         individual=V.composed_quality(times,base,[bad],spec,c,"C1_Y";columns=[1])
         @test !individual["valid"] && "input_departure_pu" in individual["invalid_reasons"]
@@ -2684,7 +2717,8 @@ end
             Dict("root_real"=>-.19784817439781593,"tone_peak_pu"=>.0006705809970911343,
                 "cond_max"=>42.233865753530495,"cond_refined_f_Hz"=>49.996516662233596,"cond_refined_max"=>42.23563695814419,
                 "discrete_reference"=>Dict("cond_sampled_max"=>42.23450947495588))
-        net=V.fixture(id).factory();point=power_flow(net);list=V.fixture_netlist(net,point)
+        net=V.fixture(id).factory();point=compute(PowerFlowProblem(net),
+            ACDCPowerFlow());list=V.fixture_netlist(net,point)
         c=V.coupled_circuit(id,net);spec=V.coupled_spec(id,list);gate=V.composed_stability(c)
         @test gate["status"]=="passed"
         @test gate["most_positive_located_real_per_s"]≈frozen["root_real"] rtol=1e-9
@@ -2723,8 +2757,10 @@ end
             @test length(c.nodes)==6 && length(c.ports)==2 && length(spec.axes)==4
             @test length(c.dc_references)==2 && all(==(2e7),values(c.dc_references))
             @test length(P._dc_precharge_buses(list))==2
-            @test !any(e.element_model isa PowerImpedance.Source && e.input_pins==1 for e in values(net.elements))
-            @test net.elements[:CableDC].element_model.length==25e3
+            @test !any(e isa PowerImpedance.Source &&
+                PowerImpedance.isdc(first(electricalconnections(e)).domain) for
+                    e in values(net.elements))
+            @test net.elements[:CableDC].length==25e3
             sources=filter(x->x isa P.ComponentPlan && x.defn=="master:source_1",plan.main.components)
             breakers=filter(x->x isa P.ComponentPlan && x.defn=="master:breaker1",plan.main.components)
             @test length(sources)==4 && length(breakers)==4
@@ -2741,9 +2777,11 @@ end
                     expected[indices,indices]+=V.physical_y(net.elements[name],ComplexF64(z))
                 end
                 for (name,indices) in ((:Grid_A,1:2),(:Grid_B,3:4))
-                    expected[indices,indices]+=PowerImpedance.get_y(net.elements[name],ComplexF64(z))[1:2,1:2]
+                    expected[indices,indices]+=V.physical_y(net.elements[name],
+                        ComplexF64(z))[1:2,1:2]
                 end
-                expected[5:6,5:6]+=PowerImpedance.get_y(net.elements[:CableDC],ComplexF64(z))+I(2)/2e7
+                expected[5:6,5:6]+=V.physical_y(net.elements[:CableDC],
+                    ComplexF64(z))+I(2)/2e7
                 @test V.composed_nodal(c,z,functions)≈expected rtol=1e-13
             end
             nonfinite=Dict(name=>(z->fill(ComplexF64(NaN),3,3)) for name in c.devices)
@@ -2766,28 +2804,30 @@ end
                 V.scale_response(refs["DC_current_T"], V.composed_target_spec(spec, c,
                     "DC_current_T")))≈
                         frozen["DC_transfer"]["max_DC_cable_current_transfer_pu"] rtol=1e-9
-            for side in ("1", "2")
+            for component_port in ("side1", "side2")
                 @test any(
                     p->p.kind==:current && p.element=="CableDC" &&
-                       p.port==V.terminal_port(list, :CableDC, side),
+                       p.port==Symbol(component_port),
                     measured.probes.channels)
             end
             for device in c.devices, pole in ("P", "N")
 
-                bus=V.port_probe(list, device, 1).name
+                bus=V.port_probe(list, device, :dc).name
                 @test any(p->p.kind==:voltage && p.bus==bus && p.pole==pole,
                     measured.probes.channels)
             end
         else
-            @test net.elements[:C1].element_model isa PowerImpedance.SynchronousMachine
-            b=V.device_bases(net.elements[:C1].element_model.elec)
-            @test b.power==1000. && b.ac_side==1 && b.dc_voltage===nothing
+            @test net.elements[:C1] isa PowerImpedance.SynchronousMachine
+            b=V.device_bases(net.elements[:C1].elec)
+            @test b.power==1000. && b.ac_port==:ac && b.dc_voltage===nothing
             @test spec.power_base_MVA==2000.
             @test isempty(c.dc_references)
             @test gate["descriptor_native_residual"]<1e-10
             for f in (7.,137.,1000.)
                 s=ComplexF64(im*2π*f)
-                @test V.physical_y(net.elements[:C1],s)≈PowerImpedance.get_y(net.elements[:C1],s)*(1000/380^2) rtol=1e-13
+                cache=net.elements[:C1].cache
+                per_unit=cache.C*((s*I-cache.A)\cache.B)+cache.D
+                @test V.physical_y(net.elements[:C1],s)≈per_unit*(1000/380^2) rtol=1e-13
             end
             roots=[-0.197848174398, -0.505043508764, -0.556037275142, -0.556037275142, -0.677090835342, -0.677090835342, -0.99071859314, -1.22745914574, -5.03878595255, -8.83912810113, -8.83912810113, -9.95933156807, -10.3954069054, -10.9519683927, -10.9519683927, -14.0706176343, -14.0706176343, -16.3174413701, -16.3174413701, -19.6875986198, -23.1732754543, -28.2453019593, -29.2722119223, -43.954456081, -43.954456081, -50.0133992244, -147.500439893, -147.500439893, -504.092563463, -504.092563463, -570.663616705, -570.663616705, -629.5652126, -629.5652126, -721.232531646, -721.232531646, -735.140066216, -735.140066216]
             @test sort(gate["poles_real_per_s"];rev=true)≈roots rtol=1e-9
@@ -2880,10 +2920,10 @@ function dc_pair_synthetic(net,list,c,spec,axis;bad_port=false,dc_drift=false)
             abc=abc_wave(times,samples)
             for phase in 1:3;channels[p.name*":"*string(phase)]=abc[:,phase];end
         elseif p.kind==:voltage
-            dcport=findfirst(name->V.port_probe(list,name,1).name==p.bus,c.devices)
+            dcport=findfirst(name->V.port_probe(list,name,:dc).name==p.bus,c.devices)
             channels[p.name]=(p.pole=="P" ? .5 : -.5).*dc_voltage[:,dcport]
         elseif p.kind==:current && p.element=="CableDC"
-            inward=dc_current[:,V.terminal_side(list,p.element,p.port)]
+            inward=dc_current[:,findfirst(==(p.port), (:side1, :side2))]
             channels[p.name]=p.orientation==:into ? inward : -inward
         else
             channels[p.name]=zeros(n)
@@ -2901,7 +2941,9 @@ function dc_pair_synthetic(net,list,c,spec,axis;bad_port=false,dc_drift=false)
 end
 
 @testset "DC pair full recorder extraction, rectangular transfers and independent gates" begin
-    net=V.coupled_network("two_mmc_dc_cable");point=power_flow(net);list=V.fixture_netlist(net,point);c=V.coupled_circuit("two_mmc_dc_cable",net)
+    net=V.coupled_network("two_mmc_dc_cable");point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());list=V.fixture_netlist(net,
+        point);c=V.coupled_circuit("two_mmc_dc_cable",net)
     spec=merge(V.coupled_spec("two_mmc_dc_cable",list),(;frequencies=[7.,137.],phases=[0.,-π],
         window_starts=(1.,2.),window_duration=1.,simulation_time=3.,injection_time=0.,tone_peak_pu=1e-4))
     models=Dict{String,P.PSCADModel}();results=Dict{String,P.PSCADResult}();refs=nothing
@@ -3115,7 +3157,7 @@ include_string(@__MODULE__,source[first(first_line):first(last_line)-1])
 @testset "Invalid composed group persists KCL results and runs repeats" begin
     mktempdir() do directory
         record=Dict{String,Any}();spec=(;id="two_tlc_shared_bus",protocol="composed_coarse",axes=["p1_d","p1_q"],tone_peak_pu=.001)
-        circuit=(;devices=[:C1],net=(;elements=Dict(:C1=>(;element_model=nothing))))
+        circuit=(;devices=[:C1],net=(;elements=(;C1=nothing)))
         empty!(attempts)
         group=@test_logs (:warn,r"two_tlc_shared_bus frequency-response results:.*invalid_measurement") run_composed_group!(record,circuit,nothing,spec;directory,remote=nothing,deadline=Inf)
         saved=TOML.parsefile(joinpath(directory,"manifest.toml"))["groups"][spec.protocol]
@@ -3257,7 +3299,7 @@ end
         data = mkpath(joinpath(directory, "evidence"))
         fixture_dir = mkpath(joinpath(data, "ac_ohl_untransposed"))
         net = V.fixture("ac_ohl_untransposed").factory()
-        list = V.fixture_netlist(net, power_flow(net))
+        list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         spec, reference = V.applicable_scan("ac_ohl_untransposed", net, list)
         analysis_dir = mkpath(joinpath(fixture_dir, "analysis", spec.protocol))
         V.write_response(joinpath(fixture_dir, V.reference_filename(spec)), 1.01reference, spec.frequencies)

@@ -32,19 +32,20 @@ modulation_states(m::PowerImpedance.TLC) = PowerImpedance.statenames(m.mod)
 # Exact one-step modulation feedback uses the same carrier correction and delay-state
 # Schur replacement as interface_step_reference.
 function one_step_full_y(original,h)
-    interface_step_eligible(original.element_model) || return s->physical_y(original,s)
+    interface_step_eligible(original) || return s->physical_y(original,s)
     isfinite(h) && h>0 || error("interface reference requires a positive finite step")
-    e=PowerImpedance.Element(element_model=one_step_model(original.element_model,h),input_pins=original.input_pins,output_pins=original.output_pins,
-        transformation=original.transformation,setpoint=original.setpoint,limits=original.limits)
-    e.symbol=original.symbol;PowerImpedance.update!(e,original.setpoint)
-    names=PowerImpedance.statenames(e.element_model);delayed=Set(modulation_states(e.element_model))
+    e=one_step_model(original,h)
+    linearize(e, original.cache.values)
+    names=PowerImpedance.statenames(e);delayed=Set(modulation_states(e))
     d=findall(in(delayed),collect(names));r=setdiff(1:length(names),d)
     pade=PowerImpedance.PadeDelay(timeDelay=h,padeOrderNum=3,padeOrderDen=3)
-    base=device_bases(e.element_model.elec);n=length(r)
+    base=device_bases(e.elec);n=length(r)
     function response(s)
         gp=only(pade.C*((s*I-pade.A)\pade.B)+pade.D)
-        effect=vcat(e.A[r,d],e.C[:,d])*((s*I-e.A[d,d])\hcat(e.A[d,r],e.B[d,:]))
-        eff=[e.A[r,r] e.B[r,:];e.C[:,r] e.D]+effect*((exp(-s*h)+1)/(gp+1))
+        effect=vcat(e.cache.A[r,d],e.cache.C[:,d])*((s*I-e.cache.A[d,
+            d])\hcat(e.cache.A[d,r],e.cache.B[d,:]))
+        eff=[e.cache.A[r,r] e.cache.B[r,:];e.cache.C[:,
+            r] e.cache.D]+effect*((exp(-s*h)+1)/(gp+1))
         y=eff[n+1:end,1:n]*((s*I-eff[1:n,1:n])\eff[1:n,n+1:end])+eff[n+1:end,n+1:end]
         return y.*base.current_outputs./base.voltage_inputs'
     end
@@ -53,18 +54,18 @@ end
 
 function interface_step_reference(net, spec; dc_conductance = nothing)
     original = net.elements[:DUT]
-    interface_step_eligible(original.element_model) || return nothing
+    interface_step_eligible(original) || return nothing
     dt = spec.time_step
     isfinite(dt) && dt > 0 || error("interface reference requires a positive finite step")
     full_y = one_step_full_y(original, dt)
-    bases = device_bases(original.element_model.elec)
+    bases = device_bases(original.elec)
     matrices = Matrix{ComplexF64}[]
     for frequency in spec.frequencies
         s = ComplexF64(im * 2π * frequency)
         y = full_y(s)
         if haskey(net.elements, :DC_load)
             g = dc_conductance === nothing ?
-                PowerImpedance.get_y(net.elements[:DC_load], s)[1,1] : dc_conductance
+                physical_y(net.elements[:DC_load], s)[1,1] : dc_conductance
             y = y[2:3,2:3] - y[2:3,1:1] * ((y[1,1]+g) \ y[1:1,2:3])
         else
             y = y[bases.ac_indices, bases.ac_indices]

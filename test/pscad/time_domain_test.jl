@@ -123,7 +123,8 @@ end
 
 @testset "time-domain response composed signal inventory and injection graph" begin
     for id in V.TIME_DOMAIN_IDS
-        net=V.coupled_network(id);point=power_flow(net);list=V.fixture_netlist(net,point)
+        net=V.coupled_network(id);point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+            list=V.fixture_netlist(net,point)
         c=V.coupled_circuit(id,net);spec=V.time_domain_spec(id,list)
         inventory=V.time_domain_channels(c,spec)
         plan,settings=V.scan_plan(list,spec,spec.driven_axis)
@@ -235,7 +236,8 @@ end
 end
 
 @testset "time-domain response synthetic comparison and measurement qualification" begin
-    net=V.coupled_network("mmc_rc_shunt");point=power_flow(net);list=V.fixture_netlist(net,point)
+    net=V.coupled_network("mmc_rc_shunt");point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());list=V.fixture_netlist(net,point)
     c=V.coupled_circuit("mmc_rc_shunt",net);spec=merge(V.time_domain_spec("mmc_rc_shunt",list),
         (;injection_time=.05,simulation_time=.4,ringdown=(.12,.27)))
     time=collect(0.:spec.sample_step:spec.simulation_time)
