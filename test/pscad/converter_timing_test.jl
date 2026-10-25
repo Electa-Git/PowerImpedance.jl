@@ -16,7 +16,7 @@ end
     for factory in (PSCADFixtures.tlc_case2_network, PSCADFixtures.mmc_pq_network,
         PSCADFixtures.mmc_gfm_network, PSCADFixtures.mmc_compensated_network)
         network = factory()
-        list = P.netlist(network, PSCADFixtures.solved_powerflow(network))
+        list = P.netlist(network, compute(PowerFlowProblem(network), ACDCPowerFlow()))
         e = only(filter(e -> e.name == :DUT, list.elements))
         eq = P.converter_equilibrium(e)
         gfm = e.model.sync isa PowerImpedance.VSEWithDamping

@@ -12,8 +12,8 @@ const P = PowerImpedance
         omega in (1e-6, 2π * 50)
 
         s = ComplexF64(im * omega)
-        differential = P.eval_abcd(impedance(; z, pins = 1).element_model, s)
-        poles = P.eval_abcd(impedance(; z = t -> z(t) / 2, pins = 2).element_model, s)
+        differential = P.eval_abcd(impedance(; z, conductors = 1), s)
+        poles = P.eval_abcd(impedance(; z = t -> z(t) / 2, conductors = 2), s)
         @test P.transformation_dc(poles)≈differential rtol=1e-12 atol=1e-12
         identity = Matrix{ComplexF64}(I, 2, 2)
         shunt_poles = [identity zeros(ComplexF64, 2, 2);
@@ -24,7 +24,7 @@ end
 
 @testset "DC fixture solved power and pole circuit" begin
     classic = dc_network()
-    pf = PSCADFixtures.solved_powerflow(classic)
+    pf = compute(PowerFlowProblem(classic), ACDCPowerFlow())
     result, data, elem2comp = pf.result, pf.data, pf.elem2comp
     @test string(result["termination_status"]) == "LOCALLY_SOLVED"
     _, index = elem2comp[:line]

@@ -9,7 +9,7 @@ const PI = PowerImpedance
 
 @testset "MMC optional Sigma controls follow the owned equations" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
+    list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
     original = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(original)
     m = original.model

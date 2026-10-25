@@ -31,8 +31,8 @@ end
         Vterminal = v * cis(θ)
         Igen = conj(complex(p, q) / Vterminal)
         Vbus = Vterminal - complex(rt, lt) * Igen
-        sp = Setpoint(Pac=p*sbase, Qac=q*sbase,
-            Vac=abs(Vbus)*vbase*sqrt(2/3), θac=angle(Vbus))
+        sp = (ac = ACPortValues(abs(Vbus)*vbase*sqrt(2/3), angle(Vbus),
+            -p*sbase, -q*sbase),)
         inputs, pu = PI.pftoinputs(m, sp)
         @test inputs.Tm0 ≈ p + Ra*abs2(Igen)
         @test pu.p_ac == p
@@ -54,16 +54,16 @@ end
         F = zeros(PI.n_states(m))
         PI._state_space!(F, collect(values(seed)), collect(values(inputs)), pu, m, PI.Equil())
         @test norm(F, Inf) <= DYNAMIC_ATOL
-        element = synchronousmachine(elec=electrical, avr=m.avr, setpoint=sp)
-        PI.update!(element, sp)
-        state = PI._steady_state(element)
+        element = synchronousmachine(elec = electrical, avr = m.avr)
+        _, B, _, D = linearize(element, sp)
+        state = steady_state(element, sp)
         actual = terminal_quantities(m, inputs, state)
         @test actual.Sterminal ≈ complex(p, q) atol=DYNAMIC_ATOL rtol=0
         @test actual.Vterminal ≈ Vterminal atol=DYNAMIC_ATOL rtol=0
         @test inputs.Tm0 ≈ real(actual.Sterminal) + Ra*abs2(actual.Igen) atol=DYNAMIC_ATOL
         @test actual.Ef ≈ gain*(inputs.vref_SG-abs(actual.Vterminal)) atol=DYNAMIC_ATOL
-        @test size(element.B) == (16, 2)
-        @test size(element.D) == (2, 2)
+        @test size(B) == (16, 2)
+        @test size(D) == (2, 2)
         # Perturb the electrical inputs with commands held fixed, as in the
         # linearization; reference conversion must not become feedback.
         perturbed = collect(values(inputs))
@@ -80,7 +80,7 @@ end
     m = SynchronousMachine(ElectricalSM(), MechanicalSM(), AVRSM(v_ref=1.03),
         GovernorSM(), PI.Limits(), (p = 0.0, q = 0.0, v = 1.0),
         PI.LinearizationCache())
-    sp = Setpoint(Pac=50.0, Vac=220sqrt(2/3), θac=0.12)
+    sp = (ac = ACPortValues(220sqrt(2/3), 0.12, -50.0, NaN),)
     inputs, pu = PI.pftoinputs(m, sp)
     @test pu === nothing
     @test inputs.Tm0 == 0.05
@@ -96,33 +96,20 @@ end
     PI.state_space!(Fraw, seed, (; inputs.vd, inputs.vq, inputs.Tm0), m)
     @test F == Fraw
     raw = synchronousmachine(avr=m.avr)
-    @test raw.element_model.avr.v_ref == 1.03
-    @test isempty(raw.A)
+    @test raw.avr.v_ref == 1.03
+    @test raw.cache.A === nothing
 end
 
 include("pscad/fixtures.jl")
-include("manual/pscad/validation/classic_fixtures.jl")
 @testset "Synchronous machine power-flow and dynamic equilibrium agree" begin
-    fixture = (; classic = ClassicFixtures.sm_network(),
-        state = PSCADFixtures.sm_network())
-    pf_classic = power_flow(fixture.classic)
-    solved_builder = NB.solve(fixture.state)
-    for representation in (:classic, :builder)
-        if representation === :classic
-            element = fixture.classic.elements[:sg1]
-            m = element.element_model
-            point = PI._terminal_values(m, element.setpoint) # transitional
-            state = PI._steady_state(element)
-            result, data, _, mapping = pf_classic
-            record = data["gen"][string(last(mapping[:sg1]))]
-        else
-            m = fixture.state.elements.sg1
-            point = solved_builder.operating_point[:sg1]
-            state = steady_state(m, point)
-            index = string(solved_builder.elem2comp[:sg1].compkey)
-            record = solved_builder.data["gen"][index]
-            result, data = solved_builder.result, solved_builder.data
-        end
+    fixture = PSCADFixtures.sm_network()
+    solved_builder = compute(PowerFlowProblem(fixture), ACDCPowerFlow())
+    let m = fixture.elements.sg1
+        point = solved_builder.operating_point[:sg1]
+        state = steady_state(m, point)
+        index = string(solved_builder.elem2comp[:sg1].compkey)
+        record = solved_builder.data["gen"][index]
+        result, data = solved_builder.result, solved_builder.data
         solution = result["solution"]
         gen = solution["gen"][string(record["index"])]
         bus = solution["bus"][string(record["gen_bus"])]

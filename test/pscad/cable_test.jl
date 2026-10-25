@@ -75,7 +75,7 @@ end
     interfaces = filter(c -> c.defn == "master:cable_interface", plan.main.components)
     @test length(interfaces) == 2
     @test [c.orient for c in interfaces] == [0, 4]
-    for (side, interface) in enumerate(interfaces)
+    for (port_index, interface) in enumerate(interfaces)
         expected = Dict(
             "Name" => "line", "NCAB" => "2", "pipe" => "0", "dim_s" => "0", "dim_r" => "0",
             "GroundS" => "0", "GroundA" => "0", "GroundOC" => "0", "ResS" => "0.001 [ohm]",
@@ -83,7 +83,7 @@ end
             "recv_default_type" => "0", "recv_default" => "0")
         merge!(expected, Dict("C$(i)T" => "1" for i in 1:12))
         @test Dict(interface.params) == expected
-        direction = side == 1 ? -1 : 1
+        direction = port_index == 1 ? -1 : 1
         for (i, pole) in enumerate(("P", "N"))
             port = (interface.x + 18direction, interface.y + 54 * (i - 1))
             endpoint = (
@@ -91,11 +91,11 @@ end
             label = only(filter(
                 c -> c.defn == "master:nodelabel" && (c.x, c.y) == endpoint,
                 plan.main.components))
-            @test Dict(label.params)["Name"] == "D$(side)_$pole"
+            @test Dict(label.params)["Name"] == "D$(port_index)_$pole"
             if i == 1
                 meter = only(filter(
                     c -> c.defn == "master:ammeter" &&
-                         Dict(c.params)["Name"] == "I_line_side$side",
+                         Dict(c.params)["Name"] == "I_line_side$port_index",
                     plan.main.components))
                 @test (meter.x, meter.y) ==
                       (port[1] + 36direction, port[2] - 36)
@@ -140,11 +140,11 @@ end
     @test Dict(only(plan.wrappers).params)["Freq"] == "50.0 [Hz]"
     @test counts(plan)["master:breakout"] == 2
     @test all(c -> c.dim == 3, filter(c -> c.element == "line", plan.probes.channels))
-    for side in 1:2, phase in ("A", "B", "C")
+    for port_index in 1:2, phase in ("A", "B", "C")
 
         @test count(
             c -> c.defn == "master:nodelabel" &&
-                 Dict(c.params)["Name"] == "line_$(side)_$phase",
+                 Dict(c.params)["Name"] == "line_$(port_index)_$phase",
             plan.main.components) == 2
     end
     check_layout(plan, 9)

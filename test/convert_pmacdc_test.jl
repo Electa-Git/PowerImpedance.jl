@@ -7,16 +7,19 @@ using PowerImpedance.NetworkBuilder: solve_acdcpf, define, powerflow_optimizer,
 Vac = 220 #LL-RMS
 Z = 1
  elements = (; 
-        sm1 = synchronousmachine(;elec=ElectricalSM(rt=1e-10,lt=1e-10), setpoint=Setpoint(;Pac = 50, Qac = 10, Vac = 1.0 * Vac *sqrt(2)/ sqrt(3))),
-        z1 = impedance(z = Z, pins = 3, transformation = true),
+        sm1 = let machine = synchronousmachine(
+            elec = ElectricalSM(rt = 1e-10, lt = 1e-10))
+            b = bases(machine)
+            component(machine; powerflow = (p = 50.0 / b.S, q = 10.0 / b.S,
+                v = (1.0 * Vac * sqrt(2) / sqrt(3)) / b.v_ac))
+        end,
+        z1 = impedance(z = Z, conductors = 3),
     )
     connections = (
-        (node = :machine_d, element = :z1, side = 1, terminal = 1),
-        (node = :machine_d, element = :sm1, side = 1, terminal = 1),
-        (node = :machine_q, element = :z1, side = 1, terminal = 2),
-        (node = :machine_q, element = :sm1, side = 1, terminal = 2),
-        (node = :gndD, element = :z1, side = 2, terminal = 1),
-        (node = :gndQ, element = :z1, side = 2, terminal = 2),
+        PowerImpedance.NetworkBuilder.Bus(:machine_;
+            ports = ((:z1, :side1), (:sm1, :ac)), domain = ACDQ),
+        PowerImpedance.NetworkBuilder.Bus(:gnd_;
+            ports = ((:z1, :side2),), domain = ACDQ),
     )
 
     builder = define(elements, connections)
@@ -59,11 +62,11 @@ end
 
 @testset "PowerModels buses keyed by port name" begin
     nb = PowerImpedance.NetworkBuilder
-    grid = component(ac_source().element_model; v = 220sqrt(2/3))
-    dc_grid = component(dc_source().element_model; v = 640.0)
-    line = impedance(z = 1.0, pins = 3).element_model
+    grid = component(ac_source(); v = 220sqrt(2/3))
+    dc_grid = component(dc_source(); v = 640.0)
+    line = impedance(z = 1.0, conductors = 3)
     converter = tlc(outerActive = OuterActivePowerControl(),
-        outerReactive = OuterReactiveQControl()).element_model
+        outerReactive = OuterReactiveQControl())
     state = nb.define((; grid, dc_grid, line, converter), (
         nb.Bus(:DC; ports = ((:dc_grid, :dc), (:converter, :dc))),
         nb.Bus(:Grid; ports = ((:grid, :ac), (:line, :side1)), domain = ACDQ),
@@ -122,11 +125,7 @@ end
             fallback = model isa MMC ? p_ac : -p_ac
             expected = (iszero(p_dc) ? fallback : p_dc * b.S) / data["baseMVA"]
             @test entry["Pdcset"] === expected
-            configured = NB._configured_model(model, Setpoint(Pdc = p_dc * b.S),
-                limits(model))
-            @test configured.powerflow.p_dc === p_dc
-            retained = NB._configured_model(model, Setpoint(), limits(model))
-            @test retained.powerflow.p_dc === p_dc
+
         end
     end
 end

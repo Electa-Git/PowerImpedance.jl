@@ -8,24 +8,26 @@ function voltage_fixture(reactive)
     state=fixture
     circuit = PSCADFixtures._mmc_circuit(:pq)
     original, rows = circuit.elements, circuit.rows
-    e=deepcopy(original.DUT)
-    m=e.element_model
-    e=PI.mmc(; m.elec, m.meas, m.sync, m.sigma_control, m.modulation,
+    m = original.DUT
+    v_ac = 1.01*380sqrt(2/3) / bases(m).v_ac
+    reactive_inputs = reactive isa OuterReactiveVacControl ? (; v_ac_ref = v_ac) :
+        (; q_ref = 200.0 / bases(m).S, support = (; v_ac_ref = v_ac))
+    reactive_seeds = reactive isa OuterReactiveVacControl ?
+        (; q_ac = 200.0 / bases(m).S) : (;)
+    e = component(PI.mmc(; m.elec, m.meas, m.sync, m.sigma_control, m.modulation,
         delta_control = PI.ΔdqControlGFL(outer_active = m.delta_control.outer_active,
-            outer_reactive = reactive, occ = m.delta_control.occ), setpoint = e.setpoint, limits = e.limits)
-    e.setpoint=Setpoint(
-        Pac = 600.0, Qac = 200.0, Vac = 1.01*380sqrt(2/3), θac = 0.0,
-        Vdc = 800.0, Pdc = 600.0)
-    branch=impedance(z = s->0.19+s*0.0122, pins = 3, transformation = true)
-    elements=merge(original, (; DUT = e, branch))
-    rows=[(; node = r.element==:G_AC ? Symbol("source_", r.terminal) : r.node,
-              r.element, r.side, r.terminal) for r in rows]
-    append!(rows, [(node = Symbol("source_", t), element = :branch, side = 1, terminal = t)
-                   for t in 1:2])
-    append!(rows,
-        [(node = Symbol("AC", t==1 ? "d" : "q"), element = :branch, side = 2, terminal = t)
-         for t in 1:2])
-    return PI.NetworkBuilder.define(elements, rows; options = state.options)
+            outer_reactive = reactive, occ = m.delta_control.occ), limits = limits(m));
+        delta_control = (outer_reactive = reactive_inputs,),
+        powerflow = (; reactive_seeds..., v_dc = 800.0 / bases(m).v_dc,
+            p_dc = 600.0 / bases(m).S))
+    branch = impedance(z = s -> 0.19 + s*0.0122, conductors = 3)
+    elements = merge(original, (; DUT = e, branch))
+    rows = (
+        NB.Bus(:AC; ports = ((:DUT, :ac), (:branch, :side2))),
+        NB.Bus(:source_; ports = ((:G_AC, :ac), (:branch, :side1)), domain = ACDQ),
+        NB.Bus(:DC; ports = ((:DUT, :dc), (:G_DC, :dc))),
+    )
+    return NB.define(elements, rows; options = state.options)
 end
 
 function equilibrium(m, terminal_values)
@@ -45,15 +47,13 @@ function vac_grid(fixture, converter)
     (; elements, rows) = PSCADFixtures._tlc_circuit(false)
     # Keep the original plant and give VAC a separate converter bus. This is
     # the 0.1 H grid reactor used by PSCADFixtures.tlc_vac_network.
-    grid = impedance(z = s -> 0.1s, pins = 3, transformation = true)
-    rows = [(; node = r.element == :G3 ? Symbol("Grid" * string(r.terminal)) : r.node,
-                r.element, r.side, r.terminal) for r in rows]
-    append!(rows, [(node = Symbol("Grid" * string(t)),
-                       element = :Grid, side = 1, terminal = t)
-                   for t in 1:2])
-    append!(rows,
-        [(node = Symbol("AC" * axis), element = :Grid, side = 2, terminal = t)
-         for (t, axis) in enumerate(("d", "q"))])
+    grid = impedance(z = s -> 0.1s, conductors = 3)
+    rows = (
+        NB.Bus(:AC; ports = ((:DUT, :ac), (:Grid, :side2))),
+        NB.Bus(:Grid; ports = ((:G3, :ac), (:Grid, :side1)), domain = ACDQ),
+        NB.Bus(:DC1; ports = ((:DUT, :dc), (:CableDC12, :side1))),
+        NB.Bus(:DC2; ports = ((:CableDC12, :side2), (:G_DC, :dc))),
+    )
     return NB.define(merge(elements, (; DUT = converter, Grid = grid)), rows;
         options = state.options)
 end
@@ -135,11 +135,25 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             state=fixture
             (; elements, rows) = PSCADFixtures._tlc_circuit(false)
             e=deepcopy(elements.DUT)
-            m=e.element_model
+            m=e
             e=PI.tlc(elec = m.elec, meas = m.meas, sync = m.sync,
                 outerActive = m.outerActive, outerReactive = reactive,
                 innerVoltage = m.innerVoltage, innerCurrent = m.innerCurrent,
-                mod = m.mod, setpoint = e.setpoint, limits = e.limits)
+                mod = m.mod, limits = limits(m))
+            b = PI.bases(m)
+            reactive_inputs = reactive isa OuterReactiveVacControl ?
+                (; v_ac_ref = 220sqrt(2/3) / b.v_ac) :
+                reactive isa OuterReactiveQControl ?
+                reactive.support isa VoltageSupportLag ?
+                (; q_ref = 20.0 / b.S, support = (; v_ac_ref = 220sqrt(2/3) / b.v_ac)) :
+                (; q_ref = 20.0 / b.S) : (;)
+            seeds = reactive isa OuterReactiveVacControl ? (; q_ac = 20.0 / b.S) :
+                reactive isa NoOuterReactiveControl ? (; q_ac = 20.0 / b.S,
+                    v_ac = 220sqrt(2/3) / b.v_ac) :
+                reactive.support isa VoltageSupportLag ? (;) :
+                (; v_ac = 220sqrt(2/3) / b.v_ac)
+            e = component(e; outerReactive = reactive_inputs,
+                powerflow = (; seeds..., v_dc = 640.0 / b.v_dc, p_dc = 70.0 / b.S))
             state=reactive isa OuterReactiveVacControl ? vac_grid(fixture, e) :
                   NB.define(merge(elements, (; DUT = e)), rows; options = state.options)
             data, bases, mapping=convert(state, PI.PMACDC)
@@ -151,7 +165,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             @test data["bus"][string(c["busac_i"])]["bus_type"]==(reactive isa
                                                                   OuterReactiveVacControl ?
                                                                   2 : 3)
-            @test c["Vtar"]==(e.setpoint.Vac/sqrt(2))/(bases["V"]/1e3)
+            @test c["Vtar"]==(220sqrt(2/3)/sqrt(2))/(bases["V"]/1e3)
             @test c["acq_droop"]==(reactive isa OuterReactiveQControl &&
                                    reactive.support isa VoltageSupportLag ? 1 : 0)
             @test c["kq_droop"]==(reactive isa OuterReactiveQControl &&
@@ -163,8 +177,8 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             F=zeros(PI.n_states(reactive))
             expected=similar(F)
             result=reactive isa NoOuterReactiveControl ?
-                   PI.state_space!(F, x, (; meas), reactive, e.element_model) :
-                   PI.state_space!(F, x, (; meas), sp, reactive, e.element_model)
+                   PI.state_space!(F, x, (; meas), reactive, e) :
+                   PI.state_space!(F, x, (; meas), sp, reactive, e)
             voltage=sqrt(meas.vG_d_f^2+meas.vG_q_f^2)
             if reactive isa OuterReactiveVacControl
                 expected[1]=reactive.pi_ctrl.Ki*(sp.v_ac-voltage)
@@ -190,12 +204,18 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             fixture = PSCADFixtures.tlc_network(vdc_control)
             state = fixture
             original = PSCADFixtures._tlc_circuit(vdc_control).elements.DUT
-            m = original.element_model
+            m = original
             element = PI.tlc(elec = m.elec, meas = m.meas, sync = m.sync,
                 outerActive = m.outerActive,
                 outerReactive = OuterReactiveVacControl(pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0)),
                 innerVoltage = m.innerVoltage, innerCurrent = m.innerCurrent,
-                mod = m.mod, setpoint = original.setpoint, limits = original.limits)
+                mod = m.mod, limits = limits(original))
+            b = PI.bases(m)
+            active_seeds = vdc_control ? (; p_ac = 70.0 / b.S) :
+                (; v_dc = 640.0 / b.v_dc)
+            element = component(element;
+                outerReactive = (v_ac_ref = 220sqrt(2/3) / b.v_ac,),
+                powerflow = (; active_seeds..., q_ac = 20.0 / b.S, p_dc = 70.0 / b.S))
             state = vac_grid(fixture, element)
             solved = NB.solve(state)
             element = state.elements.DUT

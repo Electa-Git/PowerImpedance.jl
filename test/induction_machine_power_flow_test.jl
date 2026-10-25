@@ -6,53 +6,40 @@ const POWER_FLOW_ATOL = 1e-5
 const DYNAMIC_ATOL = 1e-6
 
 include("pscad/fixtures.jl")
-include("manual/pscad/validation/classic_fixtures.jl")
 
 @testset "Induction machine power flow and dynamic steady state" begin
     for (sbase, rt, lt) in ((1000.0, 0.0, 0.0), (2000.0, 0.0, 0.0),
             (1000.0, 0.017, 0.0), (1000.0, 0.0, 0.04), (2000.0, 0.017, 0.04))
         elec = ElectricalIM(S_base = sbase, r_s = 0.01, rt = rt, lt = lt)
-        pair = (; classic = ClassicFixtures.im_network(; elec),
-            state = PSCADFixtures.im_network(; elec))
-        for representation in (:classic, :builder)
-            @testset "$representation S_base=$sbase rt=$rt lt=$lt" begin
-                if representation === :classic
-                    network = pair.classic
-                    result, data = power_flow(network)
-                    element = network.elements[:im1]
-                    m = element.element_model
-                    state = PI._steady_state(element)
-                    inputs, pu = PI.pftoinputs(m, element.setpoint)
-                else
-                    solved = NB.solve(pair.state)
-                    result, data = solved.result, solved.data
-                    m = pair.state.elements.im1
-                    point = solved.operating_point[:im1]
-                    state = PI.steady_state(m, point)
-                    inputs, pu = PI.pftoinputs(m, point)
-                end
-                @test result["termination_status"] == PI.MOI.LOCALLY_SOLVED
-                x = NamedTuple{PI.statenames(m)}(Tuple(state))
-                current = zeros(2)
-                PI.outputequations!(current, x, inputs, nothing, m)
-                power = complex(inputs.vd, -inputs.vq) *
-                        conj(complex(current[1], -current[2])) *
-                        m.elec.S_base / data["baseMVA"]
-                flow = only(values(result["solution"]["im"]))
-                @test real(power) ≈ flow["pg"] atol = POWER_FLOW_ATOL rtol = 0
-                @test imag(power) ≈ flow["qg"] atol = POWER_FLOW_ATOL rtol = 0
-                @test 1 - x.ω_r ≈ flow["slip"] atol = POWER_FLOW_ATOL rtol = 0
-                residual = zeros(PI.n_states(m))
-                PI._state_space!(residual, state, collect(values(inputs)), pu, m, PI.Equil())
-                @test norm(residual, Inf) <= DYNAMIC_ATOL
-                converted = only(values(data["im"]))
-                torque = sbase == 2000.0 ? 1.8 : 0.9
-                @test converted["torque"]["T_0"] == torque
-                @test converted["P_ag"] == torque
-                @test converted["Pacmin"] == 0.9torque
-                @test converted["Pacmax"] == 1.1torque
-                @test converted["Pacrated"] == torque
-            end
+        network = PSCADFixtures.im_network(; elec)
+        @testset "S_base=$sbase rt=$rt lt=$lt" begin
+            solved = compute(PowerFlowProblem(network), ACDCPowerFlow())
+            result, data = solved.result, solved.data
+            m = network.elements.im1
+            point = solved.operating_point[:im1]
+            state = steady_state(m, point)
+            inputs, pu = PI.pftoinputs(m, point)
+            @test result["termination_status"] == PI.MOI.LOCALLY_SOLVED
+            x = NamedTuple{PI.statenames(m)}(Tuple(state))
+            current = zeros(2)
+            PI.outputequations!(current, x, inputs, nothing, m)
+            power = complex(inputs.vd, -inputs.vq) *
+                    conj(complex(current[1], -current[2])) *
+                    m.elec.S_base / data["baseMVA"]
+            flow = only(values(result["solution"]["im"]))
+            @test real(power) ≈ flow["pg"] atol = POWER_FLOW_ATOL rtol = 0
+            @test imag(power) ≈ flow["qg"] atol = POWER_FLOW_ATOL rtol = 0
+            @test 1 - x.ω_r ≈ flow["slip"] atol = POWER_FLOW_ATOL rtol = 0
+            residual = zeros(PI.n_states(m))
+            PI._state_space!(residual, state, collect(values(inputs)), pu, m, PI.Equil())
+            @test norm(residual, Inf) <= DYNAMIC_ATOL
+            converted = only(values(data["im"]))
+            torque = sbase == 2000.0 ? 1.8 : 0.9
+            @test converted["torque"]["T_0"] == torque
+            @test converted["P_ag"] == torque
+            @test converted["Pacmin"] == 0.9torque
+            @test converted["Pacmax"] == 1.1torque
+            @test converted["Pacrated"] == torque
         end
     end
 end

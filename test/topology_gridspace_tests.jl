@@ -3,7 +3,9 @@ using Measurements
 using PowerImpedance
 
 const TOPOLOGY_NB = PowerImpedance.NetworkBuilder
-const PI = PowerImpedance
+if !isdefined(@__MODULE__, :PI)
+    const PI = PowerImpedance
+end
 if !isdefined(@__MODULE__, :NB)
     const NB = TOPOLOGY_NB
 end
@@ -21,35 +23,8 @@ end
 function copied_element_spaces(elements)
     spaces = map(copied_space, elements)
     probe_name = first(keys(elements))
-    return merge(spaces, NamedTuple{(probe_name,)}((copied_space(elements[probe_name]; uncertain = true),)))
-end
-
-function include_fixture_definitions(path)
-    skip_testsets(expression) = if expression isa Expr &&
-                                   expression.head === :macrocall &&
-                                   expression.args[1] === Symbol("@testset")
-        :(nothing)
-    else
-        expression
-    end
-    return Base.include(skip_testsets, @__MODULE__, path)
-end
-
-function include_example_definitions(path)
-    function is_plot_backend(argument)
-        return argument === :CairoMakie ||
-               argument isa Expr &&
-               argument.head === :. &&
-               first(argument.args) === :CairoMakie
-    end
-    skip_plot_backend(expression) = if expression isa Expr &&
-                                       expression.head in (:using, :import) &&
-                                       any(is_plot_backend, expression.args)
-        :(nothing)
-    else
-        expression
-    end
-    return Base.include(skip_plot_backend, @__MODULE__, path)
+    probe = copied_space(elements[probe_name]; uncertain = true)
+    return merge(spaces, NamedTuple{(probe_name,)}((probe,)))
 end
 
 function assert_zero_uncertainty_impedance(result, reference, frequencies)
@@ -82,8 +57,8 @@ function zero_uncertainty_response(
 end
 
 @testset "IEEE39 zero-uncertainty Gridspace" begin
-    if !isdefined(Main, :ieee39bus_elements)
-        include_fixture_definitions(joinpath(@__DIR__, "NetworkBuilder_test.jl"))
+    if !isdefined(@__MODULE__, :ieee39bus_elements)
+        include("fixtures/ieee39bus.jl")
     end
 
     options = (;
@@ -94,6 +69,7 @@ end
         copied_element_spaces(ieee39bus_elements()),
         ieee39bus_connections();
         options,
+        exclude = (:T8_9,),
     )
     scalar = only(builders)
     model = compute(
@@ -116,10 +92,11 @@ end
 end
 
 @testset "P2P HVDC zero-uncertainty Gridspace" begin
-    example_path = joinpath(@__DIR__, "..", "examples", "P2P_HVDC_ALT.jl")
-    include_example_definitions(example_path)
-    elements = ohl_to_ugc(0.5)
-    builders = TOPOLOGY_NB.define(copied_element_spaces(elements), connections; options = builder_options)
+    include("parity/fixtures.jl")
+    fixture = ParityFixtures.P2PAlt
+    elements = fixture.ohl_to_ugc(0.5)
+    builders = TOPOLOGY_NB.define(copied_element_spaces(elements), fixture.connections;
+        options = fixture.builder_options)
     scalar = only(builders)
     model = compute(
         LinearizationProblem(scalar),

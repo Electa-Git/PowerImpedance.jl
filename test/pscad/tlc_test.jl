@@ -188,7 +188,7 @@ end
 @testset "TLC solved-state modules and controller equations" begin
     for factory in (PSCADFixtures.tlc_case1_network, PSCADFixtures.tlc_case2_network)
         fixture = factory()
-        pf = PSCADFixtures.solved_powerflow(fixture)
+        pf = compute(PowerFlowProblem(fixture), ACDCPowerFlow())
         netlist = P.netlist(fixture, pf)
         e = only(filter(e -> e.model isa PI.TLC, netlist.elements))
         equilibrium = P.converter_equilibrium(e)

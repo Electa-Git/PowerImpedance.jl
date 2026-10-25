@@ -2,40 +2,6 @@ module PSCADFixtures
 using PowerImpedance
 include("ieee9_network.jl")
 
-# transitional
-function state_from_classic(network)
-    elements = (; (name => element for (name, element) in network.elements)...)
-    rows = NamedTuple{(:node, :element, :side, :terminal),
-        Tuple{Symbol, Symbol, Int, Int}}[]
-    for (name, element) in pairs(elements)
-        ports = electricalconnections(element.element_model)
-        for (side, count) in ((1, PowerImpedance.nip(element)),
-            (2, PowerImpedance.nop(element))), terminal in 1:count
-            node = get(element.pins, Symbol("$side.$terminal"), Symbol())
-            node == Symbol() && continue
-            if length(ports) == 1 && side == 2
-                PowerImpedance.isgroundnet(node) ||
-                    throw(ArgumentError("one-port device :$name requires ground"))
-                continue
-            end
-            push!(rows, (; node, element = name, side, terminal))
-        end
-    end
-    return NetworkBuilder.define(elements, rows;
-        options = (; voltageBase = network.voltageBase[1]))
-end
-
-function solved_powerflow(state)
-    NB = NetworkBuilder
-    data, bases, mapping = convert(state, PowerImpedance.PMACDC)
-    result = NB.solve_acdcpf(data, PowerImpedance._PM.ACPPowerModel,
-        NB.powerflow_optimizer(state.options), NB.is_bounded_options(state.options);
-        setting = NB.powerflow_setting(state.options))
-    point = NB._operating_point(result, bases, state, mapping)
-    return PowerFlowResult(NB.ACDCPowerFlow(), result, data,
-        NB._node_bus_mapping(state.topology), mapping, point, (;))
-end
-
 # The 220 kV case from adm_IM_test.jl, with independent elements in each representation.
 function _im_circuit(; elec = ElectricalIM(r_s = 0.01),
         mech = MechanicalIM(T_0 = 0.9, A = 0.0, B = 0.0, C = 1.0, m = 0))

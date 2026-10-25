@@ -59,7 +59,7 @@ end
 end
 
 @testset "Frames select passive admittances" begin
-    branch = impedance(z = s -> 1.0 + 0.01s, pins = 3).element_model
+    branch = impedance(z = s -> 1.0 + 0.01s, conductors = 3)
     dq = NB.define((; branch), (
         NB.Bus(:from; ports = ((:branch, :side1),), domain = ACDQ),
         NB.Bus(:to; ports = ((:branch, :side2),), domain = ACDQ),
@@ -96,7 +96,7 @@ end
 end
 
 @testset "Admittance errors name the element" begin
-    branch = impedance(z = s -> error("invalid impedance"), pins = 1).element_model
+    branch = impedance(z = s -> error("invalid impedance"), conductors = 1)
     state = NB.define((; branch), (
         NB.Net(:from; terminals = ((:branch, :side1, :dc),)),
         NB.Net(:to; terminals = ((:branch, :side2, :dc),)),
@@ -108,16 +108,16 @@ end
 @testset "Component roles" begin
     ac = [(bus = (domain = 1,),)]
     dc = [(bus = (domain = 2,),)]
-    z = impedance(z = 1.0).element_model
+    z = impedance(z = 1.0)
     @test NB.topology_role(z, ac, ()) == :ac_branch
     @test NB.topology_role(z, dc, ()) == :dc_branch
     @test NB.topology_role(z, ac, (:side2,)) == :shunt
-    @test NB.topology_role(ac_source().element_model, ac, ()) == :source
+    @test NB.topology_role(ac_source(), ac, ()) == :source
     @test NB.topology_role(
         PSCADFixtures.mmc_pq_network().elements.DUT, ac, ()) == :converter
-    @test NB.topology_role(synchronousmachine().element_model, ac, ()) == :machine
-    @test NB.topology_role(inductionmachine().element_model, ac, ()) == :machine
-    @test NB.topology_role(transformer().element_model, ac, ()) == :transformer
+    @test NB.topology_role(synchronousmachine(), ac, ()) == :machine
+    @test NB.topology_role(inductionmachine(), ac, ()) == :machine
+    @test NB.topology_role(transformer(), ac, ()) == :transformer
     @test NB.refined_role(:generic, z, "branch", Dict("transformer" => 2)) == :transformer
     @test NB.refined_role(:generic, z, "branchdc", Dict()) == :dc_branch
     @test NB.refined_role(:generic, z, "branch", nothing) == :ac_branch

@@ -107,7 +107,7 @@ end
 
 @testset "PSCAD passive AC plan" begin
     state = small_ac_network()
-    pf = PSCADFixtures.solved_powerflow(state)
+    pf = compute(PowerFlowProblem(state), ACDCPowerFlow())
     list = P.netlist(state, pf)
     builder_list = list
     plan = P.build_plan(list; name = "small_ac")
@@ -484,7 +484,7 @@ end
         t.Lₛ = 0.097 / 2
         t.V₁ᵒ = 16.5e3 / sqrt(3)
         t.V₂ᵒ = 230e3 / sqrt(3)
-        pf = PSCADFixtures.solved_powerflow(state)
+        pf = compute(PowerFlowProblem(state), ACDCPowerFlow())
         @test string(pf.result["termination_status"]) == "LOCALLY_SOLVED"
         # Open-circuit metadata must not supply the exported winding ratings.
         t.V₁ᵒ = t.V₂ᵒ = 0.0
@@ -512,9 +512,9 @@ end
     @test counts(plan)["master:ground"] == 5
     @test counts(plan)["master:ammeter"] == 6
     @test [c.name for c in plan.probes.channels] ==
-          ["I_ac_ac", "I_from_dc", "I_to_dc", "I_line_side1", "I_line_side2",
-        "I_ac_load_side1", "V_BUS1", "V_D1_P", "V_D1_N", "V_D2_P", "V_D2_N"]
-    @test all(c -> c.dim == 1, filter(c -> c.bus != "BUS1", plan.probes.channels))
+          ["I_ac_2_ac", "I_from_dc", "I_to_dc", "I_line_side1", "I_line_side2",
+        "I_ac_load_side1", "V_AC", "V_D1_P", "V_D1_N", "V_D2_P", "V_D2_N"]
+    @test all(c -> c.dim == 1, filter(c -> c.bus != "AC", plan.probes.channels))
     @test plan_shape(plan) ==
           plan_shape(P.build_plan(P.netlist(state, nothing); name = "dc",
               dc_reference = :none))
@@ -552,7 +552,7 @@ end
     @test all(c -> Dict(c.params)["L"] == "0.025 [H]",
         filter(c -> c.defn == "master:inductor", plan.main.components))
     # Solved voltages override source setpoints without changing the input.
-    solved = PSCADFixtures.solved_powerflow(deepcopy(state))
+    solved = compute(PowerFlowProblem(deepcopy(state)), ACDCPowerFlow())
     shifted = deepcopy(solved)
     shifted.result["solution"]["busdc"]["1"]["vm"] = 1.02
     shifted_plan = P.build_plan(P.netlist(state, shifted))
@@ -582,7 +582,7 @@ end
     @test_throws ArgumentError P.build_plan(P.netlist(floating, nothing); dc_reference = :invalid)
     # Add a grounded parallel RC shunt. It suppresses local references and
     # doubles C / halves R in both poles without invoking unsupported PF.
-    load = impedance(; z = s -> inv(inv(400.0) + s * 1e-6), pins = 1)
+    load = impedance(; z = s -> inv(inv(400.0) + s * 1e-6), conductors = 1)
     shunt_elements = merge(elements, (; load))
     shunt_rows = (rows..., NB.Net(:D2; terminals = ((:load, :side1, :dc),)),
         NB.Net(:gnd_dc; terminals = ((:load, :side2, :dc),)))

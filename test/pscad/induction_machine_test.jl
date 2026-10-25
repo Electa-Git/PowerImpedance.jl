@@ -140,7 +140,7 @@ end
 
 @testset "PSCAD induction-machine terminal comparison" begin
     classic = im_network()
-    nl = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    nl = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     plan = P.build_plan(nl)
     model = PSCADModel("im.pscx", "im", nl, plan.probes,
         P.SimulationSettings(), nl.operating_point, (;))

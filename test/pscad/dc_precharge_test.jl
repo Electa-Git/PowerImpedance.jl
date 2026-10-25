@@ -6,7 +6,7 @@ const P = PowerImpedance.PSCAD
 
 @testset "DC island pre-charge detection and components" begin
     fixture = PSCADFixtures.mmc_vdc_network()
-    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
+    list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
     buses = P._dc_precharge_buses(list)
     @test length(buses) == 2 # Vdc MMC and its remote PQ MMC, joined by the cable
     plan = P.build_plan(list; settings = P.SimulationSettings(source_ramp = 0.0))

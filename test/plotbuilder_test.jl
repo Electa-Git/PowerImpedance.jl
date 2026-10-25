@@ -219,18 +219,19 @@ end
 end
 
 @testset "Computed harmonic impedance plot recipe" begin
+    NB = PowerImpedance.NetworkBuilder
     elements = (
-        branch = impedance(z = s -> 0.35 + s * 3.0e-3, pins = 1),
-        source_shunt = impedance(z = s -> 1 / (s * 30.0e-6), pins = 1),
-        remote_shunt = impedance(z = s -> 1 / (s * 45.0e-6), pins = 1)
+        branch = impedance(z = s -> 0.35 + s * 3.0e-3, conductors = 1),
+        source_shunt = impedance(z = s -> 1 / (s * 30.0e-6), conductors = 1),
+        remote_shunt = impedance(z = s -> 1 / (s * 45.0e-6), conductors = 1)
     )
     connections = (
-        (node = :source, element = :branch, side = 1, terminal = 1),
-        (node = :remote, element = :branch, side = 2, terminal = 1),
-        (node = :source, element = :source_shunt, side = 1, terminal = 1),
-        (node = :gnd, element = :source_shunt, side = 2, terminal = 1),
-        (node = :remote, element = :remote_shunt, side = 1, terminal = 1),
-        (node = :gnd, element = :remote_shunt, side = 2, terminal = 1)
+        NB.Net(:source; terminals = ((:branch, :side1, :dc),)),
+        NB.Net(:remote; terminals = ((:branch, :side2, :dc),)),
+        NB.Net(:source; terminals = ((:source_shunt, :side1, :dc),)),
+        NB.Net(:gnd; terminals = ((:source_shunt, :side2, :dc),)),
+        NB.Net(:remote; terminals = ((:remote_shunt, :side1, :dc),)),
+        NB.Net(:gnd; terminals = ((:remote_shunt, :side2, :dc),))
     )
     network = PowerImpedance.NetworkBuilder.define(elements, connections)
     result = compute(

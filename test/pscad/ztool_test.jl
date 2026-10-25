@@ -41,7 +41,6 @@ channel_values(plan) = [Tuple(getfield(c, f) for f in fieldnames(P.ProbeChannel)
 
 @testset "Z-tool probe arguments" begin
     @test ZToolProbe(:ac, "scan"; bus = :B1).perturbation == 0.01
-    @test_throws r"pass port" ZToolProbe(:dc, "old"; element = :line, side = 1)
     @test ZToolProbe(:dc, "scan"; element = :line, port = :side1).kind == :dc
     for name in ("", "1scan", "scan-point", "scan point", "é", "a"^31)
         @test_throws ArgumentError ZToolProbe(:ac, name; bus = :B1)
@@ -106,7 +105,7 @@ end
         (mmc_pq_network, ((:ac, :DUT, :ac), (:dc, :DUT, :dc), (:dc, :G_DC, :dc))),
         (tlc_case1_network, ((:ac, :DUT, :ac), (:dc, :DUT, :dc))))
         network = factory()
-        list = P.netlist(network, PSCADFixtures.solved_powerflow(network))
+        list = P.netlist(network, compute(PowerFlowProblem(network), ACDCPowerFlow()))
         baseline = P.build_plan(list)
         probes = [ZToolProbe(kind, "scan_$i"; element, port)
                   for (i, (kind, element, port)) in enumerate(terminals)]
@@ -155,7 +154,7 @@ end
     @test_throws r"ac probe on dc bus D1" P.build_plan(P.netlist(dc, nothing);
         ztool_probes = [ZToolProbe(:ac, "s"; bus = :D1)])
     for (network, kind, name, scale) in ((classic, :ac, "B1", sqrt(2)), (dc, :dc, "D1", 2))
-        solved = P.netlist(network, PSCADFixtures.solved_powerflow(network))
+        solved = P.netlist(network, compute(PowerFlowProblem(network), ACDCPowerFlow()))
         bus = only(filter(b -> b.name == name, solved.buses))
         plan = P.build_plan(solved; ztool_probes = [ZToolProbe(kind, "s"; bus = bus.key)])
         scan = only(filter(c -> startswith(c.defn, "Z_tool:"), plan.main.components))

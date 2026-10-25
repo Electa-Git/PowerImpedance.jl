@@ -8,41 +8,46 @@ active(m::MMC) = m.delta_control.outer_active
 active(m::TLC) = m.outerActive
 
 function converter(kind; K = 5.0, voltage = 672.0, dcbase = 640.0)
-    point = Setpoint(Pac = 50.0, Qac = 25.0, Vac = 380sqrt(2/3), Vdc = voltage, Pdc = 50.0)
+
     limits = PI.Limits(P_min = -100.0, P_max = 100.0, Q_min = -50.0, Q_max = 50.0)
     outer = OuterActivePowerControl(pi_ctrl = PIControl(Kp = 0.2, Ki = 10.0),
         support = DCVoltageSupportLag(; K, ωc = 2.0))
     reactive = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.2, Ki = 10.0))
     sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.085, Ki = 32.0))
     occ = InnerCurrentPIControl(pi_ctrl = PIControl(Kp = 0.1, Ki = 43.0))
-    return kind === :mmc ? mmc(
+    model = kind === :mmc ? mmc(
         elec = ElectricalMMC(Sbase = 500.0, vDC_base = dcbase),
-        delta_control = ΔdqControlGFL(outer_active = outer, outer_reactive = reactive, occ = occ),
+        delta_control = ΔdqControlGFL(outer_active = outer,
+            outer_reactive = reactive, occ = occ),
         sigma_control = ΣdqzControlTEC(
             tec = TotalEnergyControl(pi_control = PIControl(Kp = 1.4, Ki = 30.0)),
             zscc = ZeroSequenceCurrentControl(PIControl(Kp = 0.1, Ki = 43.0)),
             ccsc = CirculatingCurrentSuppressionControl(PIControl(Kp = 0.1, Ki = 43.0))),
-        sync = sync, setpoint = point, limits = limits) : tlc(
+        sync = sync, limits = limits) : tlc(
         elec = ElectricalTLC(Sbase = 500.0, vACbase_LL_RMS = 380.0, vDCbase = dcbase),
         outerActive = outer, outerReactive = reactive, innerCurrent = occ,
-        sync = sync, setpoint = point, limits = limits)
+        sync = sync, limits = limits)
+    b = bases(model)
+    powerflow = (v_ac = 380sqrt(2/3) / b.v_ac, p_dc = 50.0 / b.S)
+    active_inputs = (p_ref = 50.0 / b.S, support = (v_dc_ref = voltage / b.v_dc,))
+    reactive_inputs = (q_ref = 25.0 / b.S,)
+    return kind === :mmc ? component(model;
+        delta_control = (outer_active = active_inputs, outer_reactive = reactive_inputs),
+        powerflow) : component(model;
+        outerActive = active_inputs, outerReactive = reactive_inputs, powerflow)
 end
 
 function droop_network(kind; K = 5.0)
     elements = (;
         DUT = converter(kind; K),
-        G_AC = ac_source(pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = 380sqrt(2/3))),
-        G_DC = dc_source(setpoint = Setpoint(Vdc = 680.0)),
-        line = impedance(z = s -> 0.5, pins = 1))
-    rows = [(node = Symbol("AC" * axis), element, side, terminal)
-        for (element, side) in ((:DUT, 2), (:G_AC, 1))
-        for (terminal, axis) in enumerate(("d", "q"))]
-    append!(rows, [
-        (node = :DC1, element = :DUT, side = 1, terminal = 1),
-        (node = :DC1, element = :line, side = 1, terminal = 1),
-        (node = :DC2, element = :line, side = 2, terminal = 1),
-        (node = :DC2, element = :G_DC, side = 1, terminal = 1)])
+        G_AC = ac_source(v = 380sqrt(2/3)),
+        G_DC = dc_source(v = 680.0),
+        line = impedance(; z = s -> 0.5, conductors = 1))
+    rows = (
+        NB.Bus(:AC; ports = ((:DUT, :ac),), domain = ACDQ),
+        NB.Bus(:AC; ports = ((:G_AC, :ac),), domain = ACDQ),
+        NB.Bus(:DC1; ports = ((:DUT, :dc), (:line, :side1))),
+        NB.Bus(:DC2; ports = ((:line, :side2), (:G_DC, :dc))))
     return NB.define(elements, rows; options = (; voltageBase = 380/sqrt(3)))
 end
 
@@ -58,7 +63,7 @@ end
     sp = PI.TerminalValuesPU(p_ac = 0.3, v_dc = 1.05)
     x = (; ξ_vdc_supp = 0.017, ξ_P_ac = 0.071)
     for kind in (:mmc, :tlc), measured_voltage in (0.97, 1.05, 1.1)
-        m = converter(kind).element_model
+        m = converter(kind)
         inputs = (; meas = (; P_ac_f = 0.21, v_dc_f = measured_voltage), sync = (; ω_c = 0.98))
         F = zeros(2)
         y = PI.state_space!(F, x, inputs, sp, block, m)
@@ -85,7 +90,8 @@ end
         data = Dict{String,Any}("dcpol" => 2, "convdc" => Dict{String,Any}(),
             "bus" => Dict("1" => Dict{String,Any}("bus_type" => 3)),
             "busdc" => Dict("1" => Dict{String,Any}("bus_type" => 1)))
-        PI.convert!(data, e, PI.PMACDC, 1, (1, 1), bases)
+        PI.convert!(data, e, PI.PMACDC,
+            (; name = :DUT, index = 1, pmtype = "convdc"), (ac = 1, dc = 1), bases)
         c = data["convdc"]["1"]
         @test c["type_dc"] == 4
         @test c["Vdcset"] * 640.0 == voltage
@@ -161,17 +167,19 @@ end
                 ccsc = CirculatingCurrentSuppressionControl(
                     PIControl(Kp = 0.1, Ki = 43.0); ref = (0.02, -0.01))),
             modulation = UncompensatedModulation(),
-            setpoint = Setpoint(Pac = 50.0, Qac = 25.0, θac = 0.0,
-                Vac = (380 / sqrt(3)) * sqrt(2), Vdc = 672.0, Pdc = 50.0),
             limits = PI.Limits(P_min = 0.9, P_max = 1.1, Q_min = -0.5, Q_max = 0.5))
-        PI.update!(e, e.setpoint)
+        point = (ac = ACPortValues((380 / sqrt(3)) * sqrt(2), 0.0, -50.0, -25.0),
+            dc = DCPortValues(672.0, 50.0))
+        admittance! = NB.build(e, point, :dq)
         prefix = "oracle.droop_mmc.order$order"
         x = [real(get(reference, ("$prefix.x", i, 1, 1), 0.0)) for i in 1:12]
-        @test PI._steady_state(e)[end-11:end] ≈ x
+        @test steady_state(e, point)[end-11:end] ≈ x
         for (index, ω) in enumerate((2π, 100π, 1000π))
             y = [get(reference, ("$prefix.y.$index", i, j, 1), 0.0 + 0.0im)
                 for i in 1:3, j in 1:3]
-            @test PI.eval_y(e, ComplexF64(im*ω)) ≈ y
+            actual = zeros(ComplexF64, 3, 3, 1)
+            admittance!(actual, [ComplexF64(im*ω)])
+            @test actual[:, :, 1] ≈ y
         end
     end
 end
@@ -179,7 +187,7 @@ end
 @testset "PSCAD DC droop fail-fast" begin
     for kind in (:mmc, :tlc)
         e = converter(kind)
-        m = e.element_model
+        m = e
         @test_throws r"converter :station:.*DCVoltageSupportLag.*not yet exportable" PI.PSCAD.converter_equilibrium((; name = :station, model = m))
         @test_throws r"converter :station:.*DCVoltageSupportLag.*not yet exportable" PI.PSCAD.converter_active("P", (; name = :station), nothing, active(m))
     end

@@ -5,14 +5,14 @@ const CALCULATION_NB = PowerImpedance.NetworkBuilder
 
 function passive_calculation_state(; impedance_value=2.0)
     elements = (
-        branch=impedance(z=impedance_value, pins=1),
-        shunt=impedance(z=4.0, pins=1),
+        branch=impedance(z=impedance_value, conductors=1),
+        shunt=impedance(z=4.0, conductors=1),
     )
     connections = (
-        (node=:bus, element=:branch, side=1, terminal=1),
-        (node=:bus, element=:shunt, side=1, terminal=1),
-        (node=:gnd, element=:branch, side=2, terminal=1),
-        (node=:gnd, element=:shunt, side=2, terminal=1),
+        CALCULATION_NB.Net(:bus; terminals = ((:branch, :side1, :dc),)),
+        CALCULATION_NB.Net(:bus; terminals = ((:shunt, :side1, :dc),)),
+        CALCULATION_NB.Net(:gnd; terminals = ((:branch, :side2, :dc),)),
+        CALCULATION_NB.Net(:gnd; terminals = ((:shunt, :side2, :dc),)),
     )
     return CALCULATION_NB.define(elements, connections)
 end
@@ -97,11 +97,11 @@ end
 
 function calculation_space(axis)
     connections = (
-        (node=:bus, element=:branch, side=1, terminal=1),
-        (node=:gnd, element=:branch, side=2, terminal=1),
+        CALCULATION_NB.Net(:bus; terminals = ((:branch, :side1, :dc),)),
+        CALCULATION_NB.Net(:gnd; terminals = ((:branch, :side2, :dc),)),
     )
     return CALCULATION_NB.define(
-        (branch=impedance(Grid; z=axis, pins=1),),
+        (branch=impedance(Grid; z=axis, conductors=1),),
         connections,
     )
 end
@@ -123,8 +123,8 @@ end
 
     powerflow_space = CALCULATION_NB.define((
         source=component(PowerImpedance.Source(; domain=DC_CM); v=10.0),
-        branch=impedance(Grid; z=Grid([1.0, 2.0]), pins=1),
-        shunt=impedance(z=4.0, pins=1),
+        branch=impedance(Grid; z=Grid([1.0, 2.0]), conductors=1),
+        shunt=impedance(z=4.0, conductors=1),
     ), (
         CALCULATION_NB.Bus(:bus; ports=((:branch, :side1), (:shunt, :side1))),
         CALCULATION_NB.Bus(:supply; ports=((:source, :dc), (:branch, :side2))),

@@ -21,10 +21,10 @@ function name_map(list, probes; voltage_names = Dict{String, String}(),
         polarities[channel.name] = channel.orientation == previous ? 1 : -1
         ports = keys(element.ports)
         ports == (:ac, :dc) && (ports = (:dc, :ac))
-        side = findfirst(==(channel.port), ports)
-        side === nothing && error("missing old port number for $(channel.name)")
+        port_index = findfirst(==(channel.port), ports)
+        port_index === nothing && error("missing old port number for $(channel.name)")
         designator = get(element_names, element.name, element.pscad)
-        old = P.pscad_name("I_$(designator)_$side")
+        old = P.pscad_name("I_$(designator)_$port_index")
         haskey(names, old) && error("duplicate old current probe $old")
         names[old] = channel.name
         proposed = P.current_probe_name(element.pscad, channel.port)

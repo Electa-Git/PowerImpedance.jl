@@ -12,8 +12,8 @@ function network()
             Rᵈᶜ = 0.0266, rᶜ = 0.0224, yᵇᶜ = 18.0, Δxᵇᶜ = 7.3, dˢᵃᵍ = 6.0),
         groundwires = Groundwires(nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
             Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0),
-        earth_parameters = (1, 1, 100), transformation = true)
-    elements = merge(state.elements, (; line = line.element_model))
+        earth_parameters = (1, 1, 100))
+    elements = merge(state.elements, (; line = line))
     return PowerImpedance.NetworkBuilder.NetworkState(elements, state.topology,
         state.options)
 end
@@ -36,11 +36,11 @@ end
     interfaces = filter(c -> c.defn == "master:tline_interface", plan.main.components)
     @test length(interfaces) == 2
     @test P.check_connectivity(plan) === nothing
-    for (side, interface) in enumerate(interfaces)
+    for (port_index, interface) in enumerate(interfaces)
         @test Dict(interface.params) == Dict("Name" => "line", "NC" => "2", "View" => "0",
             "send_recv" => "0", "dim_s" => "0", "dim_r" => "0")
         ports = first.(P.component_ports(interface, Dict()))
-        direction = side == 1 ? -1 : 1
+        direction = port_index == 1 ? -1 : 1
         @test ports == [(interface.x + 18direction, interface.y - 18),
             (interface.x + 18direction, interface.y + 18)]
         # Follow each saved scalar port's wire to its actual node label.
@@ -51,12 +51,12 @@ end
                 (c.x, c.y) == endpoint, plan.main.components))
             Dict(label.params)["Name"]
         end
-        @test node(ports[2]) == "D$(side)_N"
+        @test node(ports[2]) == "D$(port_index)_N"
         meter = only(filter(c -> c.defn == "master:ammeter" &&
-            Dict(c.params)["Name"] == "I_line_side$side", plan.main.components))
+            Dict(c.params)["Name"] == "I_line_side$port_index", plan.main.components))
         meter_ports = first.(P.component_ports(meter, Dict()))
         @test node(ports[1]) == node(meter_ports[2])
-        @test node(meter_ports[1]) == "D$(side)_P"
+        @test node(meter_ports[1]) == "D$(port_index)_P"
     end
     override = P.build_plan(list; line_options = (; FS = 0.01))
     @test Dict(only(override.lines).frephase)["FS"] == "0.01 [Hz]"

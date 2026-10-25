@@ -20,7 +20,7 @@ end
 
 @testset "MMC live feedback and DC-divisor handover" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
+    list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(e)
     plan = P.build_plan(list; settings = SETTINGS)
@@ -282,7 +282,7 @@ end
 
 @testset "Module electrical parameters require finite literals" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
+    list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
     plan = P.build_plan(list; settings = SETTINGS)
     for (module_name, defn, field, invalid) in (
         ("MMC_DUT", "inductor", "L", "armL"),
@@ -311,7 +311,7 @@ end
 
 @testset "MMC Σ control against owned equations" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
+    list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(e)
     transforms = (; abc = "network:ABC_DQ", dq = "network:DQ_ABC")
@@ -358,7 +358,7 @@ end
 
 @testset "MMC modulation and R12 arm assembly" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
+    list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     transforms = (; abc = "network:ABC_DQ", dq = "network:DQ_ABC")
     for delay in (0.0, 200e-6)
@@ -426,7 +426,7 @@ end
 
 @testset "MMC arm equations projected onto the current harmonic model" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture, PSCADFixtures.solved_powerflow(fixture))
+    list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(e)
     b = e.model.elec

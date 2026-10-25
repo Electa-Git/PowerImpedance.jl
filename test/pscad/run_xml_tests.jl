@@ -1118,7 +1118,8 @@ else
         # references at the source bus.
         elements = (; ac = dc_state.elements.ac, from = dc_state.elements.from,
             line = dc_state.elements.line, ac_load = dc_state.elements.ac_load)
-        elements = merge(elements, (; parallel = impedance(; z = s -> 400.0, pins = 1)))
+        elements = merge(elements,
+            (; parallel = impedance(; z = s -> 400.0, conductors = 1)))
         NB = NetworkBuilder
         rows = (NB.Bus(:AC; ports = ((:ac, :ac), (:ac_load, :side1)), domain = ACDQ),
             NB.Bus(:gnd; ports = ((:ac_load, :side2),), domain = ACDQ),
@@ -1137,7 +1138,7 @@ else
             end
         end
         # A supplied solution leaves declared source inputs unchanged.
-        supplied = PSCADFixtures.solved_powerflow(state)
+        supplied = compute(PowerFlowProblem(state), ACDCPowerFlow())
         original = inputvalues(state.elements.source)
         mktempdir() do temporary
             model = export_pscad(state; path = joinpath(temporary, "supplied.pscx"),

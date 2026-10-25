@@ -4,7 +4,6 @@ const PI = PowerImpedance
 const NB = PI.NetworkBuilder
 const PSC = PI.PSCAD
 include("pscad/fixtures.jl")
-include("manual/pscad/validation/classic_fixtures.jl")
 
 function constraint_tolerance(options)
     attribute = PI.JuMP.MOI.RawOptimizerAttribute("constr_viol_tol")
@@ -12,56 +11,22 @@ function constraint_tolerance(options)
         NB.powerflow_optimizer(options).params)))
 end
 
-module P2PExample
-using PowerImpedance
-# Only the example's numerical constructors are used; no plotting dependency
-# is needed in the separately run XML environment.
-Base.include(e -> e == :(using CairoMakie) ? nothing : e, @__MODULE__,
-    joinpath(pkgdir(PowerImpedance), "examples/P2P_HVDC_ALT.jl"))
-end
-
+include("parity/fixtures.jl")
 
 function tlc_qv_fixture()
-    fixture = (; classic = ClassicFixtures.tlc_network(false),
-        state = PSCADFixtures.tlc_network(false))
-    e = fixture.classic.elements[:DUT]
-    m = e.element_model
-    converter = tlc(; m.elec, m.meas, m.sync, m.outerActive,
-        outerReactive = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0),
-            support = VoltageSupportLag(K = 5.0, ωc = 2.0)),
-        m.innerVoltage, m.innerCurrent, m.mod, e.setpoint, e.limits)
-    converter.symbol, converter.pins = e.symbol, copy(e.pins)
-    fixture.classic.elements[:DUT] = converter
-    state = PSCADFixtures.state_from_classic(fixture.classic)
-    return (; fixture.classic, state)
-end
-
-function consumer_values(net)
-    converters = Dict()
-    for (name, element) in pairs(net.elements)
-        element.element_model isa Union{PI.MMC, PI.TLC} || continue
-        m = element.element_model
-        inputs, sp = PI.pftoinputs(m, element.setpoint)
-        seed = PI.orderedinitialvalues(m; inputs, terminal_pu = sp)
-        parameters = (; inputs = collect(values(inputs)), sp, m)
-        f!(F, x, p) = PI._state_space!(F, x, p.inputs, p.sp, p.m, PI.Equil())
-        solution = PI.solve(
-            PI.NonlinearProblem(f!, collect(promote(values(seed)...)), parameters);
-            maxiters = 20, abstol = 1e-6, reltol = 1e-6)
-        @test PI.SciMLBase.successful_retcode(solution)
-        residual = zeros(length(solution.u))
-        f!(residual, solution.u, parameters)
-        @test norm(residual, Inf) <= 1e-6
-        @test sp.q_ac == element.setpoint.Qac / m.elec.Sbase
-        converters[name] = (; state = copy(solution.u), A = copy(element.A),
-            B = copy(element.B), C = copy(element.C), D = copy(element.D),
-            y = cat(
-                (PI.get_y(element, ComplexF64(2π * im * f))
-                for f in (1.0, 100.0, 5000.0))...; dims = 3))
-    end
-    y, nodes, omega = make_y_node(net; freq_range = (1.0, 5000.0, 3))
-    return (; converters, y, nodes, omega,
-        setpoints = Dict(n => e.setpoint for (n, e) in pairs(net.elements)))
+    state = PSCADFixtures.tlc_network(false)
+    m = state.elements.DUT
+    b = bases(m)
+    reactive = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0),
+        support = VoltageSupportLag(K = 5.0, ωc = 2.0))
+    converter = component(tlc(; m.elec, m.meas, m.sync, m.outerActive,
+        outerReactive = reactive, m.innerVoltage, m.innerCurrent, m.mod,
+        limits = limits(m));
+        outerReactive = (q_ref = 20.0 / b.S,
+            support = (v_ac_ref = (220sqrt(2 / 3)) / b.v_ac,)),
+        powerflow = (v_dc = 640.0 / b.v_dc, p_dc = 70.0 / b.S))
+    return NB.NetworkState(merge(state.elements, (; DUT = converter)),
+        state.topology, state.options)
 end
 
 function consumer_values(net::NB.NetworkState, flow)
@@ -90,15 +55,12 @@ function consumer_values(net::NB.NetworkState, flow)
     y = NB.initY(model, s)
     fill!(y, model.element_admittances[model.active_elements], s)
     nodes = sort!(collect(keys(model.indices.nodes)); by = n -> model.indices.nodes[n])
-    # transitional
-    setpoints = Dict(name => Setpoint(Pac = -point.ac.p, Qac = -point.ac.q,
-        Vac = point.ac.v, θac = point.ac.theta, Pdc = point.dc.p, Vdc = point.dc.v)
-        for (name, point) in flow.operating_point.values
+    points = Dict(name => point for (name, point) in flow.operating_point.values
         if PI.is_converter(net.elements[name]))
-    return (; converters, y, nodes, omega, setpoints)
+    return (; converters, y, nodes, omega, points)
 end
 
-function check_powerflow(one, two, tolerance, reactive_bounds = Dict())
+function check_powerflow(one, two, tolerance)
     @test keys(one) == keys(two)
     for group in keys(one)
         @test keys(one[group]) == keys(two[group])
@@ -114,32 +76,10 @@ function check_powerflow(one, two, tolerance, reactive_bounds = Dict())
                 b *= cis(two[group][id]["vaconv"])
             end
             @testset "$group/$id/$field" begin
-                @test abs(a - b) <= get(reactive_bounds, (group, id, field), tolerance)
+                @test abs(a - b) <= tolerance
             end
         end
     end
-end
-
-function qv_reactive_bounds(one, two, data, tolerance)
-    # This fixture has one resistive grid branch without reactive shunts. PowerModels
-    # form/acp.jl's two Ohm equations give qf + qt = 0 exactly. Converter-bus KCL adds one
-    # residual; source-bus KCL adds another. Each equality has residual <= constr_viol_tol
-    # in EACH solve. |Δqf| <= |Δqgrid| + 2*3*tol; |Δqg| <= |Δqgrid| + 2*4*tol. On the 1000
-    # MVA fixture base, tol=0.001 means 1 MVAr per residual; the bounds are ΔQconverter +
-    # 6 MVAr and ΔQconverter + 8 MVAr.
-    branch = only(keys(data["branch"]))
-    generator = only(keys(data["gen"]))
-    converter = only(keys(data["convdc"]))
-    b = data["branch"][branch]
-    @test b["br_x"] == b["b_fr"] == b["b_to"] == b["shift"] == 0.0
-    @test b["tap"] == 1.0
-    @test b["f_bus"] == data["gen"][generator]["gen_bus"]
-    @test b["t_bus"] == data["convdc"][converter]["busac_i"]
-    delta_q = abs(one["convdc"][converter]["qgrid"] -
-                  two["convdc"][converter]["qgrid"])
-    @test delta_q <= tolerance
-    return Dict(("branch", branch, "qf") => delta_q + 6tolerance,
-        ("gen", generator, "qg") => delta_q + 8tolerance)
 end
 
 function check_setpoints(one, two, data, voltage_base, tolerance)
@@ -157,7 +97,9 @@ function check_setpoints(one, two, data, voltage_base, tolerance)
 end
 
 @testset "P2P builder repeated calls and exported setpoints" begin
-    state = first(P2PExample.transition_network_space([0.0]))
+    fixture = ParityFixtures.P2PAlt
+    state = NB.define(fixture.ohl_to_ugc(0.0), fixture.connections;
+        options = fixture.builder_options)
     declared = map(inputvalues, state.elements)
     one = compute(PowerFlowProblem(state), ACDCPowerFlow())
     two = compute(PowerFlowProblem(state), ACDCPowerFlow())
@@ -211,18 +153,7 @@ end
 end
 
 
-@testset "Excluded pre-existing builder-to-classic VAC failures" begin
-    # Cross-formulation re-solves are excluded from repeated non-mutating builder calls:
-    # test/converter_voltage_test.jl:183:solved.network:1 reaches the undefined
-    # ACPPowerModel fallback; :2 reports violated constraints.
-    for failure in ("ACPPowerModel fallback", "violated constraints")
-        @testset "$failure" begin
-            @test_skip false
-        end
-    end
-end
-
-function pscad_export_after_explicit_power_flow(factories)
+function pscad_export_after_explicit_solve(factories)
     @testset "PSCAD export after explicit power flow" begin
         if Base.get_extension(PI, :PowerImpedancePSCADExt) === nothing
             @test_skip false # Run with PythonCall for actual XML exports.
@@ -276,125 +207,77 @@ function pscad_export_after_explicit_power_flow(factories)
     end
 end
 
-function repeated_converter_power_flow(cases)
+function repeated_converter_solves(cases)
     @testset "Repeated converter power flow" begin
-        # Both formulations use the optimizer's default setting. A 1000 MVA system base
+        # Both solves use the optimizer's default setting. A 1000 MVA system base
         # makes constr_viol_tol=1e-5 equivalent to 0.01 MVA (0.01 MW active or 0.01 MVAr
         # reactive), per equality. Q sign is ignored below the absolute noise threshold of
         # 1e-6 MVAr.
         q_sign_threshold = 1e-6
-        for (label, factory) in cases, representation in (:classic, :builder)
-
-            @testset "$label $representation" begin
-                fixture = factory()
-                state = fixture.state
+        for (label, factory) in cases
+            @testset "$label" begin
+                state = factory()
                 tolerance = constraint_tolerance(state.options)
                 declared = map(inputvalues, state.elements)
-                net = representation === :classic ? fixture.classic : state
-                if representation === :classic
-                    result, data, _, mapping = power_flow(net)
-                else
-                    flow = compute(PowerFlowProblem(state), ACDCPowerFlow())
-                    result, data = flow.result, flow.data
-                    mapping = Dict(n => (m.pmtype, m.compkey)
-                    for (n, m) in pairs(flow.elem2comp))
-                end
-                one = representation === :classic ? consumer_values(net) :
-                    consumer_values(net, flow)
+                flow = compute(PowerFlowProblem(state), ACDCPowerFlow())
+                result, data = flow.result, flow.data
+                mapping = flow.elem2comp
+                one = consumer_values(state, flow)
                 system_base = data["baseMVA"]
                 for (name, c) in one.converters
-                    @test one.setpoints[name].Qac ==
-                          -result["solution"]["convdc"][string(last(mapping[name]))]["qgrid"] *
-                          1e9 / 1e6
+                    record = result["solution"]["convdc"][string(mapping[name].compkey)]
+                    @test one.points[name].ac.q == record["qgrid"] * 1e9 / 1e6
                 end
-                if representation === :classic
-                    second = first(power_flow(net))
-                else
-                    # Builder compute leaves its input definition unchanged. Reusing
-                    # solved output setpoints would construct a different problem.
-                    flow = compute(PowerFlowProblem(state), ACDCPowerFlow())
-                    second = flow.result
-                end
-                two = representation === :classic ? consumer_values(net) :
-                    consumer_values(net, flow)
-                bounds = label == "MMC Q-V" && representation === :classic ?
-                         qv_reactive_bounds(result["solution"], second["solution"],
-                    data, tolerance) : Dict()
-                check_powerflow(result["solution"], second["solution"], tolerance, bounds)
-                if representation === :builder
-                    @test declared == map(inputvalues, state.elements)
-                    for name in keys(two.setpoints)
-                        point = flow.operating_point[name]
-                        @test two.setpoints[name] == Setpoint(Pac = -point.ac.p,
-                            Qac = -point.ac.q, θac = point.ac.theta, Vac = point.ac.v,
-                            Pdc = point.dc.p, Vdc = point.dc.v)
-                    end
+                # Builder compute leaves its input definition unchanged. Reusing
+                # solved output setpoints would construct a different problem.
+                flow = compute(PowerFlowProblem(state), ACDCPowerFlow())
+                second = flow.result
+                two = consumer_values(state, flow)
+                check_powerflow(result["solution"], second["solution"], tolerance)
+                @test declared == map(inputvalues, state.elements)
+                for name in keys(two.points)
+                    @test two.points[name] == flow.operating_point[name]
                 end
                 @test one.nodes == two.nodes
                 @test one.omega == two.omega
                 @test norm(one.y - two.y) / norm(one.y) <= tolerance
                 for (name, a) in one.converters
                     b = two.converters[name]
-                    fields = (:state, :A, :B, :C, :D, :y)
-                    if label == "TLC Vdc" && representation === :classic
-                        # On Julia 1.12, near Pdc≈0 MW, ΔPac=0.00890970 MW and
-                        # ΔPdc=0.00890978 MW correspond to i_d=-3.2e-5 versus -1.21e-4 pu.
-                        # B/C/D are sensitive to these small current differences, while
-                        # constr_viol_tol=1e-5 on 1000 MVA permits 0.01 MW. The comparison
-                        # uses operating points.
-                        first_point, second_point = one.setpoints[name], two.setpoints[name]
-                        @test abs(first_point.Pac - second_point.Pac) <= tolerance * system_base
-                        @test abs(first_point.Pdc - second_point.Pdc) <= tolerance * system_base
-                        @test abs(first_point.Vdc - second_point.Vdc) /
-                              (data["dcpol"] * state.options.voltageBase) <= tolerance
-                        @test abs(first_point.Vac * cis(first_point.θac) -
-                                  second_point.Vac * cis(second_point.θac)) /
-                              (sqrt(2) * state.options.voltageBase) <= tolerance
-                        fields = (:state, :A, :y)
-                    end
-                    for field in fields
+                    for field in (:state, :A, :B, :C, :D, :y)
                         x, y = getproperty(a, field), getproperty(b, field)
                         @test norm(x - y, Inf) <= tolerance * max(norm(x, Inf), 1.0)
                     end
-                    for field in fieldnames(Setpoint)
-                        x, y = getfield(one.setpoints[name], field),
-                        getfield(two.setpoints[name], field)
-                        base = field in (:Pac, :Qac, :Pdc) ? system_base :
-                               field === :Vac ? sqrt(2) * state.options.voltageBase :
-                               field === :Vdc ? 2 * state.options.voltageBase : 1.0
+                    for port in keys(one.points[name]),
+                            field in fieldnames(typeof(one.points[name][port]))
+                        x, y = getfield(one.points[name][port], field),
+                            getfield(two.points[name][port], field)
+                        base = field in (:p, :q) ? system_base :
+                            field === :v ? (port === :ac ? sqrt(2) : 2) *
+                                state.options.voltageBase : 1.0
                         @test abs(x - y) / base <= tolerance
                     end
-                    if min(abs(one.setpoints[name].Qac), abs(two.setpoints[name].Qac)) >=
-                       q_sign_threshold
-                        @test signbit(one.setpoints[name].Qac) ==
-                              signbit(two.setpoints[name].Qac)
+                    if min(abs(one.points[name].ac.q), abs(two.points[name].ac.q)) >=
+                            q_sign_threshold
+                        @test signbit(one.points[name].ac.q) ==
+                            signbit(two.points[name].ac.q)
                     end
                 end
-                for (name, point) in one.setpoints
-                    PI.is_source(net.elements[name]) || continue
-                    @test point === two.setpoints[name]
-                end
-                if representation === :builder
-                    for (name, model) in pairs(net.elements)
-                        PI.is_source(model) || continue
-                        @test inputvalues(model) == declared[name]
-                    end
+                for (name, model) in pairs(state.elements)
+                    PI.is_source(model) || continue
+                    @test inputvalues(model) == declared[name]
                 end
             end
         end
     end
 end
 
-pscad_export_after_explicit_power_flow((
+pscad_export_after_explicit_solve((
     () -> PSCADFixtures.mmc_pq_network(),
     () -> PSCADFixtures.tlc_network(false)))
 
-repeated_converter_power_flow((
-    ("MMC PQ", () -> (; classic = ClassicFixtures.mmc_pq_network(),
-        state = PSCADFixtures.mmc_pq_network())),
-    ("TLC PQ", () -> (; classic = ClassicFixtures.tlc_network(false),
-        state = PSCADFixtures.tlc_network(false))),
+repeated_converter_solves((
+    ("MMC PQ", PSCADFixtures.mmc_pq_network),
+    ("TLC PQ", () -> PSCADFixtures.tlc_network(false)),
     ("TLC Q-V", tlc_qv_fixture),
-    ("TLC Vdc", () -> (; classic = ClassicFixtures.tlc_network(true),
-        state = PSCADFixtures.tlc_network(true)))))
+    ("TLC Vdc", () -> PSCADFixtures.tlc_network(true))))
 end

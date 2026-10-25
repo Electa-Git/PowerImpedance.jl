@@ -1,19 +1,14 @@
 module PowerFlowFallbackTests
 using PowerImpedance, Test
 
-@testset "Classic power-flow fallback" begin
-    # Isolate solver-stage dispatch used to force this otherwise solver-dependent
-    # branch. The child calls the production power_flow body and native relaxation.
+@testset "NetworkBuilder power-flow fallback" begin
     script = raw"""
     using PowerImpedance, Test, Logging
     const PI = PowerImpedance
+    const NB = PI.NetworkBuilder
     Logging.global_logger(ConsoleLogger(stderr, Logging.Error))
     PI._PMACDC.silence()
     include(joinpath(pkgdir(PI), "test/pscad/fixtures.jl"))
-    include(joinpath(pkgdir(PI), "test/manual/pscad/validation/classic_fixtures.jl"))
-    witness = ClassicFixtures.small_ac_network()
-    witness_result = first(power_flow(witness))
-    witness_setpoints = Dict(n => e.setpoint for (n, e) in witness.elements)
     const force_status = Ref(true)
     const solve_calls = Ref(0)
     # Change only the reported label of real solved models, so acceptance and
@@ -29,13 +24,6 @@ using PowerImpedance, Test
         return result
     end
     @testset "Feasible points retain their status and skip fallback" begin
-        net = ClassicFixtures.small_ac_network()
-        result = first(@test_logs (:warn, r"termination status ITERATION_LIMIT.*maximum primal constraint violation") min_level=Logging.Warn power_flow(net))
-        @test result["termination_status"] == PI.MOI.ITERATION_LIMIT
-        @test result["primal_feasible"]
-        @test result["solution"] == witness_result["solution"]
-        @test solve_calls[] == 1
-
         state = PSCADFixtures.small_ac_network()
         data = first(convert(state, PI.PMACDC))
         original = deepcopy(data)
@@ -47,7 +35,7 @@ using PowerImpedance, Test
         @test result["termination_status"] == PI.MOI.ITERATION_LIMIT
         @test result["primal_feasible"]
         @test isequal(data, original)
-        @test solve_calls[] == 2
+        @test solve_calls[] == 1
     end
     @testset "Primal feasibility uses the configured inclusive threshold" begin
         model = PI.JuMP.Model(PI.JuMP.optimizer_with_attributes(PI.Ipopt.Optimizer,
@@ -67,76 +55,38 @@ using PowerImpedance, Test
         @test result["primal_feasible"]
     end
     force_status[] = false
-    const initial_calls = Ref(0)
     const fallback_calls = Ref(0)
-    const fallback_mode = Ref(:native)
-
-    @eval PI function solve_acdcpf(data::Dict{String, Any},
-            ::Type{_PM.ACPPowerModel}, optimizer::JuMP.MOI.OptimizerWithAttributes,
-            start::_PowerFlowStart; kwargs...)
-        Main.initial_calls[] += 1
-        return Dict("termination_status" => MOI.ITERATION_LIMIT)
-    end
-    @eval PI function solve_acdcpf_relax(data::Dict{String, Any},
-            model_type::Type{_PM.ACPPowerModel},
-            optimizer::JuMP.MOI.OptimizerWithAttributes; kwargs...)
+    @eval NB function solve_acdcpf_relax(data::Dict{String, Any},
+            model_type::Type{Main.PI._PM.ACPPowerModel},
+            optimizer::Main.PI.JuMP.MOI.OptimizerWithAttributes,
+            variables::NamedTuple; kwargs...)
         Main.fallback_calls[] += 1
-        if Main.fallback_mode[] === :native
-            return invoke(solve_acdcpf_relax, Tuple{Dict{String, Any}, Type, Any},
-                data, model_type, optimizer; kwargs...)
-        elseif Main.fallback_mode[] === :accepted
-            return Main.witness_result
-        end
-        return Dict("termination_status" => MOI.ITERATION_LIMIT)
+        return invoke(solve_acdcpf_relax,
+            Tuple{Dict{String, Any}, Type, Any, NamedTuple},
+            data, model_type, optimizer, variables; kwargs...)
     end
 
-    @testset "Native relaxation rejects violated constraints" begin
-        net = ClassicFixtures.small_ac_network()
+    @testset "Native relaxation reports violated constraints" begin
+        state = PSCADFixtures.small_ac_network()
         # An isolated PV generator prescribes nonzero active power, while its
         # bus balance requires zero: relaxation cannot make this case feasible.
-        add!(net, :isolated, synchronousmachine(;
-            setpoint = Setpoint(Vac = 380sqrt(2 / 3), Pac = 100.0),
-            elec = ElectricalSM(Vᵃᶜ_base = 380.0)))
-        for terminal in 1:2
-            connect!(net, (:isolated, Symbol("1.$terminal")), Symbol("isolated$terminal"))
-            connect!(net, (:isolated, Symbol("2.$terminal")), :gnd)
+        machine = synchronousmachine(elec = ElectricalSM(Vᵃᶜ_base = 380.0))
+        b = bases(machine)
+        machine = component(machine;
+            powerflow = (p = 100.0 / b.S, v = (380sqrt(2 / 3)) / b.v_ac))
+        declarations = (PSCADFixtures._small_ac_circuit().rows...,
+            NB.Bus(:isolated; ports = ((:isolated, :ac),)))
+        state = NB.define(merge(state.elements, (; isolated = machine)), declarations;
+            options = state.options)
+        declared = map(inputvalues, state.elements)
+        logger = Test.TestLogger(; min_level = Logging.Warn)
+        solved = with_logger(logger) do
+            compute(PowerFlowProblem(state), ACDCPowerFlow())
         end
-        connect!(net)
-        declared = Dict(n => e.setpoint for (n, e) in net.elements)
-        error = try
-            power_flow(net)
-            nothing
-        catch exception
-            exception
-        end
-        @test error isa ErrorException
-        @test sprint(showerror, error) == "Power flow constraints are violated."
-        @test (initial_calls[], fallback_calls[]) == (1, 1)
-        @test isequal(declared, Dict(n => e.setpoint for (n, e) in net.elements))
-    end
-    @testset "Accepted fallback updates setpoints" begin
-        fallback_mode[] = :accepted
-        net = ClassicFixtures.small_ac_network()
-        result = first(power_flow(net))
-        @test result === witness_result
-        @test result["termination_status"] == PI.MOI.LOCALLY_SOLVED
-        @test (initial_calls[], fallback_calls[]) == (2, 2)
-        @test isequal(witness_setpoints, Dict(n => e.setpoint for (n, e) in net.elements))
-    end
-    @testset "Unsuccessful fallback preserves setpoints" begin
-        fallback_mode[] = :failed
-        net = ClassicFixtures.small_ac_network()
-        declared = Dict(n => e.setpoint for (n, e) in net.elements)
-        error = try
-            power_flow(net)
-            nothing
-        catch exception
-            exception
-        end
-        @test error isa ErrorException
-        @test sprint(showerror, error) == "Second iteration not succesful. Check your formulation"
-        @test (initial_calls[], fallback_calls[]) == (3, 3)
-        @test isequal(declared, Dict(n => e.setpoint for (n, e) in net.elements))
+        @test fallback_calls[] == 1
+        @test any(log -> occursin("Relaxing constraints", string(log.message)), logger.logs)
+        @test any(log -> occursin("is violated by", string(log.message)), logger.logs)
+        @test declared == map(inputvalues, state.elements)
     end
     """
     command = `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(Base.active_project())) -e $script`

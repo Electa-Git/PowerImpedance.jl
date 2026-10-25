@@ -7,7 +7,7 @@ const P = PowerImpedance.PSCAD
 
 @testset "PSCAD comparison settling" begin
     classic = small_ac_network()
-    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    list = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     probes = P.build_plan(list).probes
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
         P.SimulationSettings(), list.operating_point, (;))
@@ -94,7 +94,7 @@ end
 
 @testset "PSCAD differential DC voltage settling" begin
     classic = dc_network()
-    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    list = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     probes = P.ProbeManifest(filter(c -> c.kind == :voltage && c.bus == "D1",
         P.build_plan(list).probes.channels), nothing)
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
@@ -119,7 +119,7 @@ end
 
 @testset "PSCAD rating-based settling near zero" begin
     classic = tlc_case1_network()
-    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    list = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     probes = P.ProbeManifest(filter(c -> c.kind in (:converter_p, :converter_q),
         P.build_plan(list).probes.channels), nothing)
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
@@ -152,7 +152,7 @@ end
 
 @testset "PSCAD machine phasor settling" begin
     classic = sm_network()
-    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    list = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     plan = P.build_plan(list)
     probes = P.ProbeManifest(filter(c -> c.kind == :voltage || c.name == "I_sg1_ac",
         plan.probes.channels), plan.probes.reference_bus)
@@ -192,7 +192,7 @@ end
 
 @testset "PSCAD machine speed settling" begin
     classic = sm_network()
-    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    list = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     probes = P.ProbeManifest(filter(c -> c.kind == :machine_speed,
         P.build_plan(list).probes.channels), nothing)
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,

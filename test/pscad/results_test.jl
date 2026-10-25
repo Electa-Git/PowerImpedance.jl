@@ -99,7 +99,7 @@ end
 @testset "PSCAD operating-point comparison" begin
     classic = small_ac_network()
     state = classic
-    netlist = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    netlist = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     plan = P.build_plan(netlist)
     model = PSCADModel("synthetic.pscx", "synthetic", netlist, plan.probes,
         P.SimulationSettings(), netlist.operating_point, (source = :fixture,))
@@ -171,14 +171,14 @@ end
 
 @testset "PSCAD DC operating-point comparison" begin
     classic = dc_network()
-    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    list = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     plan = P.build_plan(list)
     model = PSCADModel("dc.pscx", "dc", list, plan.probes,
         P.SimulationSettings(), list.operating_point, (; source = :fixture))
     times = collect(0.0:250e-6:0.3)
     channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
-    add_three_phase!(channels, "V_BUS1", times, 320sqrt(2) * cis(0.23))
-    add_three_phase!(channels, "I_ac_ac", times, 0.8sqrt(2) * cis(0.23))
+    add_three_phase!(channels, "V_AC", times, 320sqrt(2) * cis(0.23))
+    add_three_phase!(channels, "I_ac_2_ac", times, 0.8sqrt(2) * cis(0.23))
     add_three_phase!(channels, "I_ac_load_side1", times, 0.8sqrt(2) * cis(0.23))
     for (bus, voltage) in (("D1", 320.0), ("D2", 318.0))
         # Common-mode offset cancels in the differential voltage. Integer-cycle
@@ -230,8 +230,7 @@ end
         "I_CableDC12_side1" => (9.956e-5, 1.83e-14),
         "I_CableDC12_side2" => (7.837e-5, 2.66e-13))
     for network in (tlc_case1_network(),)
-        solved = network isa Network ? PSCADFixtures.solved_powerflow(network) :
-                 NetworkBuilder.solve(network)
+        solved = compute(PowerFlowProblem(network), ACDCPowerFlow())
         list = P.netlist(network, solved)
         plan = P.build_plan(list)
         dc_buses = Set(b.name for b in list.buses if b.kind == :dc)
@@ -309,8 +308,8 @@ end
               Dict(b.key => base for b in list.buses if b.kind == :dc)
         different_element = tlc(elec = PowerImpedance.ElectricalTLC(Sbase = 200.0,
             vDCbase = 640.0))
-        different_base = P.NetlistElement(:DUT2, "DUT2", different_element.element_model,
-            electricalconnections(different_element.element_model), second_terminals,
+        different_base = P.NetlistElement(:DUT2, "DUT2", different_element,
+            electricalconnections(different_element), second_terminals,
             converter.role, converter.values)
         mixed = P.Netlist(
             list.buses, [list.elements; different_base], list.operating_point,
@@ -327,7 +326,7 @@ end
     # Converter-free DC components use relative normalization for nonzero means and the
     # absolute rule at zero.
     classic = dc_network()
-    list = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    list = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     @test isempty(P._dc_converter_current_bases(list))
     plan = P.build_plan(list)
     probes = P.ProbeManifest(filter(c -> c.name == "I_line_side1",
@@ -398,7 +397,7 @@ end
 
 @testset "PSCAD machine network-side comparison policy" begin
     classic = sm_network()
-    netlist = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    netlist = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     plan = P.build_plan(netlist)
     model = PSCADModel("synthetic.pscx", "synthetic", netlist, plan.probes,
         P.SimulationSettings(), netlist.operating_point, (source = :fixture,))
@@ -602,7 +601,7 @@ end
 
 @testset "PSCAD TLC power signs, units and rating normalization" begin
     classic = tlc_case2_network()
-    netlist = P.netlist(classic, PSCADFixtures.solved_powerflow(classic))
+    netlist = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     settings = P.SimulationSettings(source_ramp = 0.05)
     plan = P.build_plan(netlist; settings)
     model = PSCADModel("synthetic.pscx", "synthetic", netlist, plan.probes,
@@ -705,7 +704,7 @@ end
     # Both 640 kV DC ends put case 1 near zero P. A 117 W discrepancy must
     # use the 100 MVA rating rather than the approximately 3.2 kW reference.
     case1 = tlc_case1_network()
-    list1 = P.netlist(case1, PSCADFixtures.solved_powerflow(case1))
+    list1 = P.netlist(case1, compute(PowerFlowProblem(case1), ACDCPowerFlow()))
     flow1 = list1.operating_point.branch_flows[:DUT]
     rating = only(filter(e -> e.name == :DUT, list1.elements)).model.elec.Sbase
     internal_probes = P.ProbeManifest(

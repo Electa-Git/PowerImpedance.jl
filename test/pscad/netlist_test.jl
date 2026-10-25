@@ -12,7 +12,7 @@ function pscad_ac_fixture(; abc = false, machine_first = false)
     source = component(P.Source(; conductors = 3); v = voltage * sqrt(2))
     line = P.Impedance(; conductors = 3,
         value = s -> Matrix(Diagonal(fill(0.19 + s * 0.0122, 3))))
-    # IEEE39 bus-3 calc_RLC load from test/NetworkBuilder_test.jl.
+    # IEEE39 bus-3 calc_RLC load from test/fixtures/ieee39bus.jl.
     load_current = 3 * hypot(107.3333, 0.8) * 1e6 / (sqrt(3) * 345e3)
     load_R = 107.3333e6 / load_current^2
     load_L = 0.8e6 / (load_current^2 * 2π * 50)
@@ -210,7 +210,7 @@ end
     end
 
     # An abc transformer has an explicit AC port domain.
-    abc_elements = (; transformer = P.Transformer(; pins = 3, n = 2.0))
+    abc_elements = (; transformer = P.Transformer(; conductors = 3, n = 2.0))
     abc_state = NB.define(abc_elements, (
         NB.Bus(:B1; ports = ((:transformer, :side1),)),
         NB.Bus(:B2; ports = ((:transformer, :side2),))))
@@ -370,7 +370,6 @@ end
     scan = ZToolProbe(:ac, "scan"; element = :line, port = :side1, voltage = 380.0)
     @test scan.port == :side1
     @test only(pscad._resolve_ztool_probes(plain, [scan])).terminal.port == :side1
-    @test_throws r"pass port" ZToolProbe(:ac, "scan"; element = :line, side = 1)
     @test_throws r"port as a Symbol" ZToolProbe(:ac, "scan"; element = :line, port = 1)
     @test_throws r"unknown port" pscad._resolve_ztool_probes(plain,
         [ZToolProbe(:ac, "scan"; element = :line, port = :missing, voltage = 380.0)])

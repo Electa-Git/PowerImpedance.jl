@@ -1,7 +1,6 @@
 # using JLD2
 ENV["GKSwstype"] = "100"
 using PowerImpedance
-import PowerImpedance: @network
 using Test
 using LinearAlgebra
 import PowerImpedance.NetworkBuilder
@@ -29,6 +28,9 @@ end
 @test nameof(PowerImpedance) === :PowerImpedance
 
 @time @testset "PowerImpedance" begin
+    @testset "api_guard_test.jl" begin
+        include("api_guard_test.jl")
+    end
     @testset "aqua.jl" begin
         include("aqua.jl")
     end
@@ -130,9 +132,6 @@ end
     end
     @testset "network_model_test.jl" begin
         include("network_model_test.jl")
-    end
-    @testset "numeric_parity_test.jl" begin
-        include("numeric_parity_test.jl")
     end
     @testset "parity_test.jl" begin
         include("parity_test.jl")

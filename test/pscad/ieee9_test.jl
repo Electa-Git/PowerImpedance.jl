@@ -5,15 +5,15 @@ using ..PSCADFixtures: ieee9_network
 const P = PowerImpedance.PSCAD
 
 @testset "IEEE9 physical fixture and power-flow dispatch" begin
-    classic = ieee9_network()
-    net = classic
+    state = ieee9_network()
+    net = state
     @test length(net.elements) == 15
     @test net.options.voltageBase == 220 / sqrt(3)
     for (name, voltage) in ((:g1, 16.5), (:g2, 18.0), (:g3, 13.8))
-        @test classic.elements[name].setpoint.Vac ≈ voltage * sqrt(2 / 3)
-        @test ismissing(classic.elements[name].setpoint.θac)
-        @test ismissing(classic.elements[name].setpoint.Pac)
-        @test ismissing(classic.elements[name].setpoint.Qac)
+        @test state.elements[name].v ≈ voltage * sqrt(2 / 3)
+        @test state.elements[name].theta == 0.0
+        @test state.elements[name].p == 0.0
+        @test state.elements[name].q == 0.0
     end
     for (name, distance) in ((:tl78, 76e3), (:tl89, 106e3), (:tl75, 170e3),
         (:tl96, 179e3), (:tl54, 89e3), (:tl64, 97e3))
@@ -32,7 +32,7 @@ const P = PowerImpedance.PSCAD
         @test form.R ≈ resistance
         @test form.L ≈ inductance
     end
-    pf = PSCADFixtures.solved_powerflow(net)
+    pf = compute(PowerFlowProblem(net), ACDCPowerFlow())
     @test count(bus -> bus["bus_type"] == 3, values(pf.data["bus"])) == 3
     list = P.netlist(net, pf)
     @test length(list.buses) == 9
@@ -42,7 +42,7 @@ const P = PowerImpedance.PSCAD
         terminal = only(t for t in element.terminals if !t.grounded)
         @test list.operating_point.bus_states[terminal.bus].va_rad ≈ 0 atol = 1e-12
     end
-    plan = P.build_plan(list; name = "ieee9_classic",
+    plan = P.build_plan(list; name = "ieee9_state",
         settings = P.SimulationSettings(simulation_time = 3.0))
     @test P.check_connectivity(plan) === nothing
     @test length(plan.lines) == 6

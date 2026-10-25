@@ -1,6 +1,7 @@
 module SteadyStateTests
 using Test, PowerImpedance
-using ..PSCADFixtures
+include("pscad/fixtures.jl")
+using .PSCADFixtures
 const PI = PowerImpedance
 const NB = PI.NetworkBuilder
 const P = PI.PSCAD
@@ -13,8 +14,6 @@ end
 PI.statenames(::RecordedState) = (:x,)
 PI.inputnames(::RecordedState) = (:u,)
 PI.outputnames(::RecordedState) = (:y,)
-PI._terminal_values(::RecordedState, sp::Setpoint) =
-    (ac = ACPortValues(1.0, 0.0, sp.Pac, 0.0),)
 PI.pftoinputs(::RecordedState, values::NamedTuple) = ((; u=values.ac.p), nothing)
 function PI.initialvalues(model::RecordedState; kwargs...)
     model.seeds[] += 1
@@ -29,53 +28,48 @@ PI.outputequations!(F, x, inputs, y, ::RecordedState) = (F[1] = y.y)
 
 @testset "Core retained steady state lifecycle" begin
     model = RecordedState(Ref(0), Ref(false), PI.LinearizationCache())
-    first_point = Setpoint(Pac=1.25)
-    second_point = Setpoint(Pac=1.5)
-    element = PI.Element(; element_model=model, input_pins=1, output_pins=1,
-        setpoint=first_point)
-    @test :_steady_state ∉ names(PI)
-    @test_throws ArgumentError PI._steady_state(element)
-    A, B, C, D = PI.update(element, first_point)
+    first_point = (ac = ACPortValues(1.0, 0.0, 1.25, 0.0),)
+    second_point = (ac = ACPortValues(1.0, 0.0, 1.5, 0.0),)
+    @test model.cache.state === nothing
+    A, B, C, D = linearize(model, first_point)
     @test (A, B, C, D) == (reshape([-1.0], 1, 1), reshape([1.0], 1, 1),
         reshape([1.0], 1, 1), reshape([0.0], 1, 1))
     @test model.seeds[] == 1
-    state = PI._steady_state(element)
+    state = steady_state(model, first_point)
     @test state == [1.25]
-    @test PI._steady_state(element, first_point) == state
+    @test steady_state(model, first_point) === state
     @test model.seeds[] == 1
     state[1] = -10.0
-    @test PI._steady_state(element) == [1.25]
+    @test steady_state(model, first_point) == [-10.0]
 
-    # The matrix-returning update retains its solved state without changing
-    # the element's declared setpoint.
-    PI.update(element, second_point)
-    @test isequal(element.setpoint, first_point)
-    @test PI._steady_state(element) == [1.5]
+    linearize(model, second_point)
+    @test isequal(model.cache.values, second_point)
+    @test steady_state(model, second_point) == [1.5]
     @test model.seeds[] == 2
-    @test PI._steady_state(element, first_point) == [1.25]
+    @test steady_state(model, first_point) == [1.25]
     @test model.seeds[] == 3
-    PI.update!(element, second_point)
-    @test isequal(element.setpoint, second_point)
-    @test PI._steady_state(element) == [1.5]
-    @test (element.A, element.B, element.C, element.D) == (A, B, C, D)
+    linearize(model, second_point)
+    @test isequal(model.cache.values, second_point)
+    @test steady_state(model, second_point) == [1.5]
+    @test (model.cache.A, model.cache.B, model.cache.C, model.cache.D) == (A, B, C, D)
     @test model.seeds[] == 4
-    PI.update!(element, second_point)
+    linearize(model, second_point)
     @test model.seeds[] == 5
 
     model.fail[] = true
-    @test_throws ErrorException PI.update(element, first_point)
-    @test_throws ArgumentError PI._steady_state(element)
+    @test_throws ErrorException linearize(model, first_point)
+    @test isequal(model.cache.values, second_point)
     model.fail[] = false
-    @test PI._steady_state(element, second_point) == [1.5]
+    @test steady_state(model, second_point) == [1.5]
     replacement = RecordedState(Ref(0), Ref(false), PI.LinearizationCache())
-    element.element_model = replacement
-    @test_throws ArgumentError PI._steady_state(element)
-    @test PI._steady_state(element, second_point) == [1.5]
+    @test replacement.cache.state === nothing
+    @test steady_state(replacement, second_point) == [1.5]
     @test replacement.seeds[] == 1
 
     # Preserve the exact vector used for the core's small-value zeroing.
-    PI.update!(element, Setpoint(Pac=1e-16))
-    @test isequal(PI._steady_state(element), [0.0])
+    tiny = (ac = ACPortValues(1.0, 0.0, 1e-16, 0.0),)
+    linearize(model, tiny)
+    @test isequal(steady_state(model, tiny), [0.0])
 end
 
 @testset "PSCAD consumes retained converter states" begin

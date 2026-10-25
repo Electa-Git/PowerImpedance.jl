@@ -24,7 +24,7 @@ const P = PowerImpedance.PSCAD
         (:uncompensated, PSCADFixtures.mmc_pq_network),
         (:compensated, PSCADFixtures.mmc_compensated_network))
         network = factory()
-        list = P.netlist(network, PSCADFixtures.solved_powerflow(network))
+        list = P.netlist(network, compute(PowerFlowProblem(network), ACDCPowerFlow()))
         e = only(filter(e -> e.name == :DUT, list.elements))
         eq = P.converter_equilibrium(e)
         for tau in (0.0, dt, 4dt, 2.5dt, dt/2)

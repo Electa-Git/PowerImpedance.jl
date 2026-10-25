@@ -15,9 +15,9 @@ function topology_error(f)
 end
 
 @testset "Bus expansion and inferred domains" begin
-    elements = (grid = ac_source().element_model,
-        line = impedance(z = 1.0, pins = 3).element_model,
-        dc = dc_source().element_model)
+    elements = (grid = ac_source(),
+        line = impedance(z = 1.0, conductors = 3),
+        dc = dc_source())
     topology = NB.NetworkTopology(elements, (
         NB.Bus(:Bus7; ports = ((:grid, :ac), (:line, :side1))),
         NB.Bus(:DC1; ports = ((:dc, :dc),)),
@@ -48,8 +48,8 @@ end
 end
 
 @testset "Bus frames" begin
-    line = impedance(z = 1.0, pins = 3).element_model
-    machine = synchronousmachine().element_model
+    line = impedance(z = 1.0, conductors = 3)
+    machine = synchronousmachine()
     topology = NB.NetworkTopology((; line, machine), (
         NB.Bus(:Bus7; ports = ((:line, :side1), (:machine, :ac))),
         NB.Bus(:Bus8; ports = ((:line, :side2),), domain = ACDQ),
@@ -73,7 +73,7 @@ end
     end
     @test occursin("line", message)
 
-    dc = dc_source().element_model
+    dc = dc_source()
     for declaration in (
             NB.Bus(:MixedBus; ports = ((:machine, :ac), (:dc, :dc))),
             NB.Net(:MixedNet; terminals = ((:machine, :ac, :d), (:dc, :dc, :dc))))
@@ -87,9 +87,9 @@ end
 end
 
 @testset "Net terminals and ground" begin
-    machine = synchronousmachine().element_model
-    line = impedance(z = 1.0, pins = 3).element_model
-    dc = impedance(z = 2.0, pins = 1).element_model
+    machine = synchronousmachine()
+    line = impedance(z = 1.0, conductors = 3)
+    dc = impedance(z = 2.0, conductors = 1)
     topology = NB.NetworkTopology((; machine, line, dc), (
         NB.Net(:d; terminals = ((:machine, :ac, :d),)),
         NB.Net(:gnd_q; terminals = ((:machine, :ac, :q),)),
@@ -123,9 +123,9 @@ end
 end
 
 @testset "Deterministic numbering and admittance order" begin
-    z1 = impedance(z = 1.0, pins = 1).element_model
-    z2 = impedance(z = 2.0, pins = 1).element_model
-    grid = ac_source().element_model
+    z1 = impedance(z = 1.0, conductors = 1)
+    z2 = impedance(z = 2.0, conductors = 1)
+    grid = ac_source()
     elements = (; z1, z2, grid)
     declarations = (
         NB.Net(:last_alphabetically; terminals = ((:z2, :side2, :dc),)),
@@ -143,7 +143,7 @@ end
     @test topology.connections == reordered.connections
     @test NB.sortedcomponentconnections(topology, :z2).port == [:side1, :side2]
 
-    converter = tlc().element_model
+    converter = tlc()
     topology = NB.NetworkTopology((; converter), (
         NB.Bus(:AC; ports = ((:converter, :ac),)),
         NB.Bus(:DC; ports = ((:converter, :dc),)),))
@@ -156,8 +156,8 @@ end
 end
 
 @testset "Exclusion and validation" begin
-    z = impedance(z = 1.0, pins = 1).element_model
-    off = impedance(z = 2.0, pins = 1).element_model
+    z = impedance(z = 1.0, conductors = 1)
+    off = impedance(z = 2.0, conductors = 1)
     elements = (; z, off)
     declarations = (NB.Bus(:DC; ports = ((:z, :side1), (:off, :side1))),)
     state = @test_logs (:info, r"Excluded elements.*off") NB.define(
@@ -175,7 +175,7 @@ end
     @test_throws ArgumentError NB.define((; z), (
         NB.Bus(:DC1; ports = ((:z, :side1),)),
         NB.Bus(:DC2; ports = ((:z, :side1),)),))
-    bad = impedance(z = 1.0, pins = 4).element_model
+    bad = impedance(z = 1.0, conductors = 4)
     message = topology_error() do
         NB.define((; bad), (NB.Bus(:DC; ports = ((:bad, :side1),)),))
     end
@@ -189,85 +189,83 @@ end
     @test NB.define((; blackbox), topology).elements.blackbox === blackbox
 end
 
-@testset "Old rows and configured models" begin
-    row(node, element, side, terminal) = (; node, element, side, terminal)
-    grid = ac_source(setpoint = Setpoint(Vac = 132.0, θac = 0.1, Pac = 12.0, Qac = 3.0),
-        pins = 3, transformation = true)
-    grid.limits = PowerImpedance.Limits(P_max = 20.0)
-    dc = dc_source(setpoint = Setpoint(Vdc = 640.0, Pdc = 4.0))
-    line = impedance(z = 1.0, pins = 3, transformation = true)
-    off = impedance(z = 2.0, pins = 1)
-    off.connection = false
-    rows = (row(:d, :grid, 1, 1), row(:d, :line, 1, 1),
-        row(:q, :grid, 1, 2), row(:q, :line, 1, 2),
-        row(:DC, :dc, 1, 1), row(:ignored, :off, 1, 1),
-        row(:gnd_d, :line, 2, 1), row(:gnd_q, :line, 2, 2))
+@testset "Configured models" begin
+    grid = component(ac_source(v = 132.0, theta = 0.1, p = 12.0, q = 3.0);
+        limits = PowerImpedance.Limits(P_max = 20.0))
+    dc = dc_source(v = 640.0, p = 4.0)
+    line = impedance(z = 1.0, conductors = 3)
+    off = impedance(z = 2.0, conductors = 1)
+    declarations = (
+        NB.Bus(:AC; ports = ((:grid, :ac), (:line, :side1)), domain = ACDQ),
+        NB.Bus(:DC; ports = ((:dc, :dc),)),
+        NB.Bus(:ignored; ports = ((:off, :side1),)),
+        NB.Bus(:gnd_; ports = ((:line, :side2),), domain = ACDQ),
+    )
     state = @test_logs (:info, r"Excluded elements.*off") NB.define(
-        (; grid, dc, line, off), rows)
-    @test state.topology.connections.net == [:d, :d, :q, :q, :DC, :gnd_d, :gnd_q]
+        (; grid, dc, line, off), declarations; exclude = (:off,))
+    @test state.topology.connections.net ==
+        [:ACd, :ACd, :ACq, :ACq, :DC, :gnd_d, :gnd_q]
     @test state.topology.connections.bus == [1, 1, 1, 1, 1, 0, 0]
     @test state.topology.connections.terminal == [:d, :d, :q, :q, :dc, :d, :q]
-    @test PowerImpedance.inputvalues(state.elements.grid) ==
-        (v = 132.0, theta = 0.1, p = 12.0, q = 3.0)
-    @test PowerImpedance.inputvalues(state.elements.dc) == (v = 640.0, p = 4.0)
-    @test PowerImpedance.limits(state.elements.grid) == grid.limits
-    @test grid.element_model !== state.elements.grid
-    @test state.elements.line === line.element_model
-    @test PowerImpedance.inputvalues(grid.element_model) ==
-        (v = 132.0, theta = 0.1, p = 12.0, q = 3.0)
+    @test inputvalues(state.elements.grid) == (v = 132.0, theta = 0.1, p = 12.0, q = 3.0)
+    @test inputvalues(state.elements.dc) == (v = 640.0, p = 4.0)
+    @test limits(state.elements.grid) == limits(grid)
+    @test state.elements.line === line
+    @test inputvalues(grid) == (v = 132.0, theta = 0.1, p = 12.0, q = 3.0)
     @test all(model -> model isa PowerImpedance.AbstractElementModel,
         values(state.elements))
-    @test_throws ArgumentError NB.define((; dc), ((node = :DC, element = :dc, side = 1),))
-    @test_throws ArgumentError NB.define((; dc), (row(:DC, :dc, 2, 1),))
-    @test_throws ArgumentError NB.define((; dc), (row(:DC, :dc, 1, 2),))
 
     constructors = (
-        point -> mmc(sync = PLLSynchronization(),
+        () -> mmc(sync = PLLSynchronization(),
             delta_control = ΔdqControlGFL(outer_active = OuterActivePowerControl(),
                 outer_reactive = OuterReactiveQControl(), occ = InnerCurrentPIControl()),
-            sigma_control = ΣdqzControlTEC(), setpoint = point),
-        point -> tlc(outerActive = OuterActiveVdcControl(),
-            outerReactive = OuterReactiveVacControl(), setpoint = point),
+            sigma_control = ΣdqzControlTEC()),
+        () -> tlc(outerActive = OuterActiveVdcControl(),
+            outerReactive = OuterReactiveVacControl()),
     )
     for constructor in constructors
-        point = Setpoint(Pac = 120.0, Qac = 30.0, Vac = 210.0,
-            Pdc = -121.0, Vdc = 630.0, θac = 0.0)
-        converter = constructor(point)
-        converter.limits = PowerImpedance.Limits(P_max = 9.0)
+        original = constructor()
+        b = bases(original)
+        converter = if original isa MMC
+            component(original; limits = PowerImpedance.Limits(P_max = 9.0),
+                delta_control = (outer_active = (p_ref = 120.0 / b.S,),
+                    outer_reactive = (q_ref = 30.0 / b.S,)),
+                powerflow = (v_ac = 210.0 / b.v_ac, p_dc = -121.0 / b.S,
+                    v_dc = 630.0 / b.v_dc))
+        else
+            component(original; limits = PowerImpedance.Limits(P_max = 9.0),
+                outerActive = (v_dc_ref = 630.0 / b.v_dc,),
+                outerReactive = (v_ac_ref = 210.0 / b.v_ac,),
+                powerflow = (p_ac = 120.0 / b.S, q_ac = 30.0 / b.S, p_dc = -121.0 / b.S))
+        end
         state = NB.define((; converter), (
-            row(:DC, :converter, 1, 1), row(:d, :converter, 2, 1),
-            row(:q, :converter, 2, 2)))
+            NB.Bus(:DC; ports = ((:converter, :dc),)),
+            NB.Bus(:AC; ports = ((:converter, :ac),)),
+        ))
         model = state.elements.converter
-        b = bases(model)
         @test PowerImpedance.powerflow_targets(model) == (
             p_ac = 120.0 / b.S, q_ac = 30.0 / b.S, v_ac = 210.0 / b.v_ac,
-            p_dc = point.Pdc / b.S, v_dc = 630.0 / b.v_dc)
-        @test limits(model) == converter.limits
-        @test model.cache !== converter.element_model.cache
+            p_dc = -121.0 / b.S, v_dc = 630.0 / b.v_dc)
+        @test limits(model) == limits(converter)
+        @test model.cache !== original.cache
         @test state.topology.connections.port == [:dc, :ac, :ac]
     end
 
-    scalar = impedance(z = 2.0, pins = 1)
-    inferred = NB.NetworkTopology((; grid, scalar), (
-        row(:d, :grid, 1, 1), row(:q, :grid, 1, 2),
-        row(:d, :scalar, 1, 1), row(:gnd_d, :scalar, 2, 1)))
-    @test all(==(1), inferred.connections.domain)
-    @test all(==(:dq), inferred.connections.frame)
-
-    machine = synchronousmachine(setpoint =
-        Setpoint(Pac = 15.0, Qac = 3.0, Vac = 220.0, θac = 0.0))
-    state = NB.define((; machine),
-        (row(:d, :machine, 1, 1), row(:q, :machine, 1, 2)))
+    machine = synchronousmachine()
+    b = bases(machine)
+    machine = component(machine;
+        powerflow = (p = 15.0 / b.S, q = 3.0 / b.S, v = 220.0 / b.v_ac))
+    state = NB.define((; machine), (NB.Bus(:AC; ports = ((:machine, :ac),)),))
     b = bases(state.elements.machine)
     @test inputvalues(state.elements.machine).powerflow ==
         (p = 15.0 / b.S, q = 3.0 / b.S, v = 220.0 / b.v_ac)
 end
 
-@testset "Gridspace materializes old Elements through define" begin
-    line = impedance(NB.Grid; z = NB.Grid((1.0, 2.0)), pins = 1)
-    off = impedance(z = 3.0, pins = 1)
-    rows = ((node = :DC, element = :line, side = 1, terminal = 1),)
-    space = NB.define((; line, off), rows; exclude = (:off,))
+@testset "Gridspace materializes direct models through define" begin
+    line = impedance(NB.Grid; z = NB.Grid((1.0, 2.0)), conductors = 1)
+    off = impedance(z = 3.0, conductors = 1)
+    declarations = (NB.Bus(:DC; ports = ((:line, :side1),)),)
+    space = NB.define((; line, off), declarations; exclude = (:off,))
     states = [@test_logs (:info, r"Excluded elements.*off") NB.materialize(config)
         for config in NB.configurations(space)]
     @test length(states) == 2

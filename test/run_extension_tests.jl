@@ -8,14 +8,14 @@ const NB = PowerImpedance.NetworkBuilder
 
 function uncertain_parallel_impedance_space()
     elements = (
-        z1=impedance(Grid; z=Grid(10.0, AbsoluteError(1.0)), pins=1),
-        z2=impedance(z=20.0, pins=1),
+        z1=impedance(Grid; z=Grid(10.0, AbsoluteError(1.0)), conductors=1),
+        z2=impedance(z=20.0, conductors=1),
     )
     connections = (
-        (node=:n1, element=:z1, side=1, terminal=1),
-        (node=:n1, element=:z2, side=1, terminal=1),
-        (node=:gnd, element=:z1, side=2, terminal=1),
-        (node=:gnd, element=:z2, side=2, terminal=1),
+        NB.Net(:n1; terminals = ((:z1, :side1, :dc),)),
+        NB.Net(:n1; terminals = ((:z2, :side1, :dc),)),
+        NB.Net(:gnd; terminals = ((:z1, :side2, :dc),)),
+        NB.Net(:gnd; terminals = ((:z2, :side2, :dc),)),
     )
     return NB.define(elements, connections)
 end
@@ -23,19 +23,19 @@ end
 function extension_powerflow_state(shunt_impedance)
     voltage = 220.0
     elements = (
-        sm1=synchronousmachine(
-            elec=ElectricalSM(rt=1e-10, lt=1e-10),
-            setpoint=Setpoint(Pac=50.0, Qac=10.0, Vac=voltage / sqrt(3)),
-        ),
-        z1=impedance(z=shunt_impedance, pins=3, transformation=true),
+        sm1 = let machine = synchronousmachine(
+            elec = ElectricalSM(rt = 1e-10, lt = 1e-10))
+            b = bases(machine)
+            component(machine; powerflow = (p = 50.0 / b.S, q = 10.0 / b.S,
+                v = (voltage / sqrt(3)) / b.v_ac))
+        end,
+        z1=impedance(z=shunt_impedance, conductors=3),
     )
     connections = (
-        (node=:machine_d, element=:z1, side=1, terminal=1),
-        (node=:machine_d, element=:sm1, side=1, terminal=1),
-        (node=:machine_q, element=:z1, side=1, terminal=2),
-        (node=:machine_q, element=:sm1, side=1, terminal=2),
-        (node=:gnd_d, element=:z1, side=2, terminal=1),
-        (node=:gnd_q, element=:z1, side=2, terminal=2),
+        PowerImpedance.NetworkBuilder.Bus(:machine_;
+            ports = ((:z1, :side1), (:sm1, :ac)), domain = ACDQ),
+        PowerImpedance.NetworkBuilder.Bus(:gnd_;
+            ports = ((:z1, :side2),), domain = ACDQ),
     )
     return NB.define(elements, connections)
 end
@@ -51,11 +51,11 @@ end
 function uncertain_impedance_space(; shared=false)
     key = shared ? :shared : nothing
     elements = (
-        z=impedance(Grid; z=Grid(2.0, 5.0; key), pins=1),
+        z=impedance(Grid; z=Grid(2.0, 5.0; key), conductors=1),
     )
     connections = (
-        (node=:bus, element=:z, side=1, terminal=1),
-        (node=:gnd, element=:z, side=2, terminal=1),
+        NB.Net(:bus; terminals = ((:z, :side1, :dc),)),
+        NB.Net(:gnd; terminals = ((:z, :side2, :dc),)),
     )
     return NB.define(elements, connections)
 end
@@ -117,8 +117,8 @@ end
     key = nothing
     space = NB.define((
         source=component(PowerImpedance.Source(; domain=DC_CM); v=10.0),
-        z=impedance(Grid; z=Grid(2.0, 5.0; key), pins=1),
-        shunt=impedance(z=4.0, pins=1),
+        z=impedance(Grid; z=Grid(2.0, 5.0; key), conductors=1),
+        shunt=impedance(z=4.0, conductors=1),
     ), (
         NB.Bus(:bus; ports=((:z, :side1), (:shunt, :side1))),
         NB.Bus(:supply; ports=((:source, :dc), (:z, :side2))),
@@ -199,4 +199,8 @@ end
     @test retained.details.samples !== nothing
     @test length(only(discarded.details.plot_data.values)) == 3
     @test primitives(retained, EmpiricalSamples()) === retained.details.samples
+end
+
+@testset "topology_gridspace_tests.jl" begin
+    include("topology_gridspace_tests.jl")
 end

@@ -16,7 +16,7 @@ function rejects(canvas, coordinates)
     @test occursin(string(coordinates), sprint(showerror, err))
 end
 
-function disconnect!(canvas, pin)
+function remove_pin!(canvas, pin)
     wire = only(filter(w -> pin in w.vertices, canvas.wires))
     label = only(filter(!=(pin), wire.vertices))
     filter!(w -> w !== wire, canvas.wires)
@@ -63,11 +63,11 @@ end
             @test label_names[only(filter(!=(pin), wire.vertices))] == signal
         end
         missing_input = deepcopy(canvas)
-        disconnect!(missing_input, reader)
+        remove_pin!(missing_input, reader)
         rejects(missing_input, reader)
 
         undriven = deepcopy(canvas)
-        disconnect!(undriven, writer)
+        remove_pin!(undriven, writer)
         rejects(undriven, reader)
 
         multiple = deepcopy(canvas)
@@ -180,9 +180,7 @@ end
                 e -> e isa
                      Union{PowerImpedance.SynchronousMachine, PowerImpedance.TLC},
                 values(builder.elements))
-            pf = nonlinear ?
-                 network isa Network ? PSCADFixtures.solved_powerflow(network) :
-                 NetworkBuilder.solve(network) : nothing
+            pf = nonlinear ? compute(PowerFlowProblem(network), ACDCPowerFlow()) : nothing
             plan = P.build_plan(P.netlist(network, pf))
             @test P.check_connectivity(plan) === nothing
         end
