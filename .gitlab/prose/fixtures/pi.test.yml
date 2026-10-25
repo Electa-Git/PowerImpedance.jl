@@ -1,0 +1,449 @@
+- name: FixtureKeys fixture L1-01
+  rule: ../styles/PI/FixtureKeys.yml
+  input: Compare L1-01 with the reference.
+  contains: PI.FixtureKeys
+- name: FixtureKeys fixture L2-12A
+  rule: ../styles/PI/FixtureKeys.yml
+  input: Compare L2-12A with the reference.
+  contains: PI.FixtureKeys
+- name: FixtureKeys fixture L3-42
+  rule: ../styles/PI/FixtureKeys.yml
+  input: Compare L3-42 with the reference.
+  contains: PI.FixtureKeys
+- name: FixtureKeys fixture L4-03Z
+  rule: ../styles/PI/FixtureKeys.yml
+  input: Compare L4-03Z with the reference.
+  contains: PI.FixtureKeys
+- name: FixtureKeys descriptive name
+  rule: ../styles/PI/FixtureKeys.yml
+  input: Compare the radial cable example with the reference.
+  want: ''
+- name: FixtureKeys code key
+  rule: ../styles/PI/FixtureKeys.yml
+  input: Compare `L1-01` with the reference.
+  want: ''
+- name: FixtureKeys different identifier
+  rule: ../styles/PI/FixtureKeys.yml
+  input: Compare L5-01 with the reference.
+  want: ''
+- name: InternalCodes planning label M1
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read M1 for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label M2a
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read M2a for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label M3-12
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read M3-12 for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label M4e-12b
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read M4e-12b for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label Tier A
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read Tier A for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label Tiers A/B
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read Tiers A/B for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label tier C/D
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read tier C/D for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label stage A
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read stage A for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label stage B
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read stage B for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label stage C
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read stage C for details.
+  contains: PI.InternalCodes
+- name: InternalCodes planning label L3b
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read L3b for details.
+  contains: PI.InternalCodes
+- name: InternalCodes physical stages
+  rule: ../styles/PI/InternalCodes.yml
+  input: Use the three-stage converter.
+  want: ''
+- name: InternalCodes technical quantities
+  rule: ../styles/PI/InternalCodes.yml
+  input: "The resistance is 2 M\u03A9."
+  want: ''
+- name: InternalCodes code label
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read `M1` for details.
+  want: ''
+- name: InternalCodes ordinary description
+  rule: ../styles/PI/InternalCodes.yml
+  input: Read the measured impedances.
+  want: ''
+- name: Jargon wording witness
+  rule: ../styles/PI/Jargon.yml
+  input: witness.
+  contains: PI.Jargon
+- name: Jargon wording ledger
+  rule: ../styles/PI/Jargon.yml
+  input: ledger.
+  contains: PI.Jargon
+- name: Jargon wording admission
+  rule: ../styles/PI/Jargon.yml
+  input: admission.
+  contains: PI.Jargon
+- name: Jargon wording admitted
+  rule: ../styles/PI/Jargon.yml
+  input: admitted.
+  contains: PI.Jargon
+- name: Jargon wording authority
+  rule: ../styles/PI/Jargon.yml
+  input: authority.
+  contains: PI.Jargon
+- name: Jargon wording qualification
+  rule: ../styles/PI/Jargon.yml
+  input: qualification.
+  contains: PI.Jargon
+- name: Jargon wording fairness
+  rule: ../styles/PI/Jargon.yml
+  input: fairness.
+  contains: PI.Jargon
+- name: Jargon wording honest
+  rule: ../styles/PI/Jargon.yml
+  input: honest.
+  contains: PI.Jargon
+- name: Jargon wording robust
+  rule: ../styles/PI/Jargon.yml
+  input: robust.
+  contains: PI.Jargon
+- name: Jargon wording seamless
+  rule: ../styles/PI/Jargon.yml
+  input: seamless.
+  contains: PI.Jargon
+- name: Jargon wording leverage
+  rule: ../styles/PI/Jargon.yml
+  input: leverage.
+  contains: PI.Jargon
+- name: Jargon wording ensure
+  rule: ../styles/PI/Jargon.yml
+  input: ensure.
+  contains: PI.Jargon
+- name: Jargon wording guardrail
+  rule: ../styles/PI/Jargon.yml
+  input: guardrail.
+  contains: PI.Jargon
+- name: Jargon wording hygiene
+  rule: ../styles/PI/Jargon.yml
+  input: hygiene.
+  contains: PI.Jargon
+- name: Jargon wording first-class
+  rule: ../styles/PI/Jargon.yml
+  input: first-class.
+  contains: PI.Jargon
+- name: Jargon wording end-to-end
+  rule: ../styles/PI/Jargon.yml
+  input: end-to-end.
+  contains: PI.Jargon
+- name: Jargon wording load-bearing
+  rule: ../styles/PI/Jargon.yml
+  input: load-bearing.
+  contains: PI.Jargon
+- name: Jargon wording posture
+  rule: ../styles/PI/Jargon.yml
+  input: posture.
+  contains: PI.Jargon
+- name: Jargon wording semantics
+  rule: ../styles/PI/Jargon.yml
+  input: semantics.
+  contains: PI.Jargon
+- name: Jargon wording invariant
+  rule: ../styles/PI/Jargon.yml
+  input: invariant.
+  contains: PI.Jargon
+- name: Jargon wording surface the
+  rule: ../styles/PI/Jargon.yml
+  input: surface the.
+  contains: PI.Jargon
+- name: Jargon wording gate
+  rule: ../styles/PI/Jargon.yml
+  input: gate.
+  contains: PI.Jargon
+- name: Jargon wording envelope
+  rule: ../styles/PI/Jargon.yml
+  input: envelope.
+  contains: PI.Jargon
+- name: Jargon technical wording 45
+  rule: ../styles/PI/Jargon.yml
+  input: Apply the gate signals.
+  want: ''
+- name: Jargon technical wording 46
+  rule: ../styles/PI/Jargon.yml
+  input: Compute the IGBT gate voltages.
+  want: ''
+- name: Jargon technical wording 47
+  rule: ../styles/PI/Jargon.yml
+  input: Compare the signal envelope with the modal envelopes.
+  want: ''
+- name: Jargon technical wording 48
+  rule: ../styles/PI/Jargon.yml
+  input: Use the Hann envelope.
+  want: ''
+- name: Jargon technical wording 49
+  rule: ../styles/PI/Jargon.yml
+  input: Read `ledger` from the file.
+  want: ''
+- name: Disclaimer must read
+  rule: ../styles/PI/Disclaimer.yml
+  input: These counts must not be read as regional telemetry.
+  contains: PI.Disclaimer
+- name: Disclaimer must interpreted
+  rule: ../styles/PI/Disclaimer.yml
+  input: These counts must not be interpreted as regional telemetry.
+  contains: PI.Disclaimer
+- name: Disclaimer must taken
+  rule: ../styles/PI/Disclaimer.yml
+  input: These counts must not be taken as regional telemetry.
+  contains: PI.Disclaimer
+- name: Disclaimer must used
+  rule: ../styles/PI/Disclaimer.yml
+  input: These counts must not be used as regional telemetry.
+  contains: PI.Disclaimer
+- name: Disclaimer should read
+  rule: ../styles/PI/Disclaimer.yml
+  input: These counts should not be read as regional telemetry.
+  contains: PI.Disclaimer
+- name: Disclaimer should interpreted
+  rule: ../styles/PI/Disclaimer.yml
+  input: These counts should not be interpreted as regional telemetry.
+  contains: PI.Disclaimer
+- name: Disclaimer should taken
+  rule: ../styles/PI/Disclaimer.yml
+  input: These counts should not be taken as regional telemetry.
+  contains: PI.Disclaimer
+- name: Disclaimer is intended to
+  rule: ../styles/PI/Disclaimer.yml
+  input: This is not intended to a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer is intended as
+  rule: ../styles/PI/Disclaimer.yml
+  input: This is not intended as a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer is intended for
+  rule: ../styles/PI/Disclaimer.yml
+  input: This is not intended for a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer is meant to
+  rule: ../styles/PI/Disclaimer.yml
+  input: This is not meant to a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer is meant as
+  rule: ../styles/PI/Disclaimer.yml
+  input: This is not meant as a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer is meant for
+  rule: ../styles/PI/Disclaimer.yml
+  input: This is not meant for a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer are intended to
+  rule: ../styles/PI/Disclaimer.yml
+  input: This are not intended to a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer are intended as
+  rule: ../styles/PI/Disclaimer.yml
+  input: This are not intended as a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer are intended for
+  rule: ../styles/PI/Disclaimer.yml
+  input: This are not intended for a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer are meant to
+  rule: ../styles/PI/Disclaimer.yml
+  input: This are not meant to a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer are meant as
+  rule: ../styles/PI/Disclaimer.yml
+  input: This are not meant as a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer are meant for
+  rule: ../styles/PI/Disclaimer.yml
+  input: This are not meant for a measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer substitute
+  rule: ../styles/PI/Disclaimer.yml
+  input: This is not a substitute for measurement.
+  contains: PI.Disclaimer
+- name: Disclaimer implication
+  rule: ../styles/PI/Disclaimer.yml
+  input: This result does not imply convergence.
+  contains: PI.Disclaimer
+- name: Disclaimer guarantee
+  rule: ../styles/PI/Disclaimer.yml
+  input: This result does not guarantee convergence.
+  contains: PI.Disclaimer
+- name: Disclaimer illustration
+  rule: ../styles/PI/Disclaimer.yml
+  input: These data are for illustration only.
+  contains: PI.Disclaimer
+- name: Disclaimer design
+  rule: ../styles/PI/Disclaimer.yml
+  input: The row is empty by design.
+  contains: PI.Disclaimer
+- name: Disclaimer intentionally not included
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example intentionally not included.
+  contains: PI.Disclaimer
+- name: Disclaimer intentionally no value
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example intentionally no value.
+  contains: PI.Disclaimer
+- name: Disclaimer intentionally left empty
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example intentionally left empty.
+  contains: PI.Disclaimer
+- name: Disclaimer intentionally omit details
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example intentionally omit details.
+  contains: PI.Disclaimer
+- name: Disclaimer intentionally omitted
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example intentionally omitted.
+  contains: PI.Disclaimer
+- name: Disclaimer intentionally omitting details
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example intentionally omitting details.
+  contains: PI.Disclaimer
+- name: Disclaimer intentionally omits details
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example intentionally omits details.
+  contains: PI.Disclaimer
+- name: Disclaimer deliberately not included
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example deliberately not included.
+  contains: PI.Disclaimer
+- name: Disclaimer deliberately no value
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example deliberately no value.
+  contains: PI.Disclaimer
+- name: Disclaimer deliberately left empty
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example deliberately left empty.
+  contains: PI.Disclaimer
+- name: Disclaimer deliberately omit details
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example deliberately omit details.
+  contains: PI.Disclaimer
+- name: Disclaimer deliberately omitted
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example deliberately omitted.
+  contains: PI.Disclaimer
+- name: Disclaimer deliberately omitting details
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example deliberately omitting details.
+  contains: PI.Disclaimer
+- name: Disclaimer deliberately omits details
+  rule: ../styles/PI/Disclaimer.yml
+  input: The example deliberately omits details.
+  contains: PI.Disclaimer
+- name: Disclaimer regional aggregates
+  rule: ../styles/PI/Disclaimer.yml
+  input: These regional aggregates are useful adoption indicators, but they are not a count of distinct
+    people and must not be read as country-level telemetry.
+  contains: PI.Disclaimer
+- name: Disclaimer uppercase
+  rule: ../styles/PI/Disclaimer.yml
+  input: THIS DOES NOT GUARANTEE CONVERGENCE.
+  contains: PI.Disclaimer
+- name: Disclaimer wrapped phrase
+  rule: ../styles/PI/Disclaimer.yml
+  input: 'These counts must not be
+
+    interpreted as regional telemetry.'
+  contains: PI.Disclaimer
+- name: Disclaimer solver negation
+  rule: ../styles/PI/Disclaimer.yml
+  input: The solver does not converge.
+  want: ''
+- name: Disclaimer physical absence
+  rule: ../styles/PI/Disclaimer.yml
+  input: The circuit is not connected to earth.
+  want: ''
+- name: Disclaimer negative definiteness
+  rule: ../styles/PI/Disclaimer.yml
+  input: The matrix is not positive definite.
+  want: ''
+- name: Disclaimer direct quantity
+  rule: ../styles/PI/Disclaimer.yml
+  input: The map shows requests grouped by server region.
+  want: ''
+- name: Disclaimer plot purpose
+  rule: ../styles/PI/Disclaimer.yml
+  input: The plot illustrates the frequency response.
+  want: ''
+- name: Disclaimer code phrase
+  rule: ../styles/PI/Disclaimer.yml
+  input: Use `for illustration only` as the input text.
+  want: ''
+- name: ContrastNot article a
+  rule: ../styles/PI/ContrastNot.yml
+  input: The value is a sum, not a count.
+  contains: PI.ContrastNot
+- name: ContrastNot article an
+  rule: ../styles/PI/ContrastNot.yml
+  input: The value is a count, not an estimate.
+  contains: PI.ContrastNot
+- name: ContrastNot article the
+  rule: ../styles/PI/ContrastNot.yml
+  input: The file stores the current, not the voltage.
+  contains: PI.ContrastNot
+- name: ContrastNot this frame
+  rule: ../styles/PI/ContrastNot.yml
+  input: This is not a measurement.
+  contains: PI.ContrastNot
+- name: ContrastNot it frame
+  rule: ../styles/PI/ContrastNot.yml
+  input: It is not a measurement.
+  contains: PI.ContrastNot
+- name: ContrastNot rather frame
+  rule: ../styles/PI/ContrastNot.yml
+  input: Use the current rather than the voltage.
+  contains: PI.ContrastNot
+- name: ContrastNot uppercase
+  rule: ../styles/PI/ContrastNot.yml
+  input: THIS IS NOT A MEASUREMENT.
+  contains: PI.ContrastNot
+- name: ContrastNot wrapped phrase
+  rule: ../styles/PI/ContrastNot.yml
+  input: 'Use the current rather
+
+    than the voltage.'
+  contains: PI.ContrastNot
+- name: ContrastNot solver negation
+  rule: ../styles/PI/ContrastNot.yml
+  input: The solver does not converge.
+  want: ''
+- name: ContrastNot physical negation
+  rule: ../styles/PI/ContrastNot.yml
+  input: The circuit is not connected to earth.
+  want: ''
+- name: ContrastNot ordinary conjunction
+  rule: ../styles/PI/ContrastNot.yml
+  input: Read the current and the voltage.
+  want: ''
+- name: ContrastNot comma without article
+  rule: ../styles/PI/ContrastNot.yml
+  input: The value is finite, not zero.
+  want: ''
+- name: ContrastNot word ending
+  rule: ../styles/PI/ContrastNot.yml
+  input: The estimate is rather thankful.
+  want: ''
+- name: ContrastNot code phrase
+  rule: ../styles/PI/ContrastNot.yml
+  input: Read `this is not` as the input text.
+  want: ''

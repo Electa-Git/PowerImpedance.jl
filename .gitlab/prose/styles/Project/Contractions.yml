@@ -1,0 +1,5 @@
+extends: STE.Contractions
+tokens-:
+  - '\b\w+[''’](?:re|ve|ll|d|s)\b(?!\s)'
+tokens+:
+  - '\b\w+[''’](?:re|ve|ll|d)\b'

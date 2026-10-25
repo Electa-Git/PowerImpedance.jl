@@ -1,0 +1,9 @@
+extends: existence
+message: "Use '%s' only for a specified linear-algebra construction."
+level: error
+ignorecase: true
+tokens:
+  - canonical(?:s|ly)?
+exceptions:
+  # Standard coordinate vectors in linear algebra.
+  - '(?i)canonical\s+bas(?:is|es)'

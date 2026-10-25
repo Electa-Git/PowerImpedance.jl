@@ -1,0 +1,9 @@
+extends: existence
+message: "Describe the content instead of using '%s'."
+level: error
+ignorecase: false
+tokens:
+  - '\bM[0-9][a-e]?(?:-[0-9]+[a-z]?)?\b'
+  - '\b[Tt]ier[s]? [A-D](?:/[A-D])*\b'
+  - '\bstage [A-C]\b'
+  - '\bL3b\b'

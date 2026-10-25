@@ -34,3 +34,9 @@ Manifest*.toml
 LocalPreferences.toml
 JuliaLocalPreferences.toml
 local/
+
+# Downloaded prose styles and local check output.
+.gitlab/prose/styles/ai-tells/
+.gitlab/prose/styles/STE/
+.gitlab/prose/styles/config/templates/
+prose-reports/

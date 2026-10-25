@@ -1,0 +1,13 @@
+extends: existence
+message: "State the measured quantity, supported use or technical limitation directly."
+level: error
+ignorecase: true
+tokens:
+  - 'must\s+not\s+be\s+(?:read|interpreted|taken|used)\s+as'
+  - 'should\s+not\s+be\s+(?:read|interpreted|taken)\s+as'
+  - '(?:is|are)\s+not\s+(?:intended|meant)\s+(?:to|as|for)'
+  - 'not\s+a\s+substitute\s+for'
+  - 'does\s+not\s+(?:imply|guarantee)'
+  - 'for\s+illustration\s+only'
+  - '(?:intentionally|deliberately)\s+(?:not|no|left|omit(?:s|ted|ting)?)'
+  - 'by\s+design'

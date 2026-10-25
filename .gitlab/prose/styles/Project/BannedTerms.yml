@@ -1,0 +1,7 @@
+extends: existence
+message: "Replace '%s' with a specific description."
+level: error
+ignorecase: true
+tokens:
+  - provenances?
+  - contracts?

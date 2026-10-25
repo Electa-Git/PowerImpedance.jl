@@ -1,0 +1,10 @@
+extends: existence
+message: "State what the subject does or contains directly."
+level: warning
+ignorecase: true
+nonword: true
+tokens:
+  - ',\s+not\s+(?:a|an|the)\b'
+  - '\bthis\s+is\s+not\b'
+  - '\bit\s+is\s+not\b'
+  - '\brather\s+than\b'

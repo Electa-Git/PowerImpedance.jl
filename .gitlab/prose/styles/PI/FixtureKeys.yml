@@ -1,0 +1,6 @@
+extends: existence
+message: "Use the fixture's descriptive name and format '%s' as code at its first use."
+level: error
+ignorecase: false
+tokens:
+  - '\bL[1-4]-[0-9]{2}[A-Z]?\b'

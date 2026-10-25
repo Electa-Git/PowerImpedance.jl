@@ -1,0 +1,6 @@
+extends: ai-tells.FormalRegister
+exceptions:
+  # These are literal programming and numerical operations in this package.
+  - '(?i)implement(?:s|ing|ation)?'
+  - '(?i)(?:optimi[sz]|maximi[sz]|minimi[sz])(?:e|es|ing)'
+  - '(?i)terminat(?:e|es|ed|ing)'

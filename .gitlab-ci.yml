@@ -365,10 +365,55 @@ docs_check:
     expire_in: 1 day
     paths:
       - docs/build/
+      - docs/src/examples/
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
     # Validate the public documentation before publishing the candidate.
+    - if: '$POWERIMPEDANCE_PUBLISH == "true"'
+      variables:
+        POWERIMPEDANCE_DOCS_TARGET: "github"
+
+
+prose_check:
+  image: debian:bookworm-slim
+  stage: docs
+  needs:
+    - job: docs_check
+      artifacts: true
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends curl ca-certificates git
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - |
+      set -euo pipefail
+      tools=$(mktemp -d)
+      mkdir -p prose-reports
+      release=https://github.com/vale-cli/vale/releases/download/v3.23.0
+      curl --fail --location --retry 3 "$release/vale_3.23.0_Linux_64-bit.tar.gz" -o "$tools/vale.tar.gz"
+      curl --fail --location --retry 3 "$release/vale_3.23.0_checksums.txt" -o "$tools/checksums.txt"
+      expected=$(awk '$2 == "vale_3.23.0_Linux_64-bit.tar.gz" {print $1}' "$tools/checksums.txt")
+      test -n "$expected"
+      echo "$expected  $tools/vale.tar.gz" | sha256sum --check
+      tar -xzf "$tools/vale.tar.gz" -C "$tools"
+      export PATH="$tools:$PATH"
+      vale --version
+      vale sync --no-global --config=.gitlab/prose/vale.ini
+      bash .gitlab/prose/files.sh
+      vale test --no-global --config=.gitlab/prose/vale.ini --coverage \
+        .gitlab/prose/styles/PI .gitlab/prose/styles/Project .gitlab/prose/fixtures \
+        | tee prose-reports/rules.log
+      mapfile -t files < prose-reports/vale-files.txt
+      vale --no-global --config=.gitlab/prose/vale.ini --no-color --output=JSON \
+        "${files[@]}" > prose-reports/vale.json
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - prose-reports/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$POWERIMPEDANCE_PUBLISH == "true"'
       variables:
         POWERIMPEDANCE_DOCS_TARGET: "github"
