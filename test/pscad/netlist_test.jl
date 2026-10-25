@@ -362,8 +362,7 @@ end
     empty = pscad.netlist(NB.define((;), ()), nothing)
     @test isempty(empty.buses) && isempty(empty.elements)
     @test_throws ArgumentError NB.define((; unconnected = dc_elements.branch), ())
-    @test !hasmethod(pscad.netlist, Tuple{Network, Nothing})
-    @test !hasmethod(export_pscad, Tuple{Network})
+    @test !isdefined(PowerImpedance, :Network)
     @test pscad.current_probe_name(:c1, :ac) == "I_c1_ac"
     @test pscad.current_probe_name(:c1, :dc) == "I_c1_dc"
     @test pscad.current_probe_name(:tl1, :side1) == "I_tl1_side1"

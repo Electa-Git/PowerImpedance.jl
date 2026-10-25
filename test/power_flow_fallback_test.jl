@@ -29,9 +29,11 @@ using PowerImpedance, Test
         original = deepcopy(data)
         options = (; power_flow = (; optimizer = (; constr_viol_tol = 1e-7)))
         NB = PI.NetworkBuilder
-        result = @test_logs (:warn, r"termination status ITERATION_LIMIT.*constr_viol_tol = 1.0e-7") min_level=Logging.Warn NB.solve_acdcpf(
-            data, PI._PM.ACPPowerModel, NB.powerflow_optimizer(options),
-            NB.is_bounded_options(options); setting = NB.powerflow_setting(options))
+        result = @test_logs(
+            (:warn, r"termination status ITERATION_LIMIT.*constr_viol_tol = 1.0e-7"),
+            min_level=Logging.Warn,
+            NB.solve_acdcpf(data, PI._PM.ACPPowerModel, NB.powerflow_optimizer(options),
+                NB.is_bounded_options(options); setting = NB.powerflow_setting(options)))
         @test result["termination_status"] == PI.MOI.ITERATION_LIMIT
         @test result["primal_feasible"]
         @test isequal(data, original)
@@ -43,14 +45,18 @@ using PowerImpedance, Test
         PI.JuMP.@variable(model, x, start = 0.0)
         PI.JuMP.@constraint(model, x == 1.0)
         result = Dict{String, Any}("termination_status" => PI.MOI.ITERATION_LIMIT)
-        @test !PI.accept_feasible_power_flow!(result, model) # No returned point.
+        @test !NB.accept_feasible_power_flow!(result, model) # No returned point.
         PI.JuMP.optimize!(model)
         @test maximum(values(PI.JuMP.primal_feasibility_report(model))) == 1.0
-        @test_logs min_level=Logging.Warn @test !PI.accept_feasible_power_flow!(result, model)
+        @test_logs min_level=Logging.Warn @test !NB.accept_feasible_power_flow!(
+            result, model)
         @test !haskey(result, "primal_feasible")
         PI.JuMP.set_optimizer_attribute(model, "constr_viol_tol", 1.0)
         PI.JuMP.optimize!(model)
-        @test_logs (:warn, r"termination status ITERATION_LIMIT.*violation 1.0") min_level=Logging.Warn @test PI.accept_feasible_power_flow!(result, model)
+        @test_logs(
+            (:warn, r"termination status ITERATION_LIMIT.*violation 1.0"),
+            min_level=Logging.Warn,
+            @test NB.accept_feasible_power_flow!(result, model))
         @test result["termination_status"] == PI.MOI.ITERATION_LIMIT
         @test result["primal_feasible"]
     end
@@ -89,7 +95,8 @@ using PowerImpedance, Test
         @test declared == map(inputvalues, state.elements)
     end
     """
-    command = `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(Base.active_project())) -e $script`
+    command = `$(Base.julia_cmd()) --startup-file=no
+        --project=$(dirname(Base.active_project())) -e $script`
     @test success(pipeline(command; stdout = stdout, stderr = stderr))
 end
 end

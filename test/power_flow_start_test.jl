@@ -40,7 +40,7 @@ end
         # unreported DC current and converter firing angle.
         data, _, mapping = convert(network, PI.PMACDC)
         pm = model(data, pm -> NB.build_acdcpf(pm, (;)))
-        PI._initialize_power_flow!(pm.model, start)
+        NB._initialize_power_flow!(pm.model, start)
         @test all(v -> PI.JuMP.start_value(v) == primal[PI.JuMP.name(v)],
             PI.JuMP.all_variables(pm.model))
         # Changing the power target must still change the solved power.
@@ -61,11 +61,11 @@ end
         changed_mapping = (changed_mapping, collect(network.topology.connections))
         branch = only(values(changed["branchdc"]))
         branch["fbusdc"], branch["tbusdc"] = branch["tbusdc"], branch["fbusdc"]
-        PI._prepare_power_flow_start!(start, changed, changed_mapping)
+        NB._prepare_power_flow_start!(start, changed, changed_mapping)
         @test isempty(start.primal)
         cold = model(changed, pm -> NB.build_acdcpf(pm, (;)))
         defaults = PI.JuMP.start_value.(PI.JuMP.all_variables(cold.model))
-        PI._initialize_power_flow!(cold.model, start)
+        NB._initialize_power_flow!(cold.model, start)
         @test isequal(defaults, PI.JuMP.start_value.(PI.JuMP.all_variables(cold.model)))
     end
 end
@@ -101,7 +101,7 @@ end
     @test only(values(changed["im"]))["im_bus"] !=
           only(values(flow.data["im"]))["im_bus"]
     @test isequal(start.topology, snapshot)
-    PI._prepare_power_flow_start!(start, changed,
+    NB._prepare_power_flow_start!(start, changed,
         (mapping, collect(state.topology.connections)))
     @test isempty(start.primal)
 end
