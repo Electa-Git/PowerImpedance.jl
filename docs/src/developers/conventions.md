@@ -55,7 +55,7 @@ Until formatter checks are automated, contributors should format changed Julia f
 - Type, struct, and module names use `CamelCase`.
 - Function and variable names use lowercase `snake_case`.
 - Constant names use uppercase `SNAKE_CASE`.
-- Abstract type names begin with `Abstract`, as in `AbstractElement`.
+- Abstract type names begin with `Abstract`, as in `AbstractElementModel`.
 - Type variables are a single capital letter, preferably related to the value being typed, such as `T`.
 - Prefer whole words over abbreviations or single letters when they make the code clearer.
 - Prefix package-internal or private names with two underscores, as in `__internal_cache`.
@@ -66,3 +66,20 @@ Single-letter names are appropriate for mathematical entities whose domain meani
 An additional exception applies when an implementation directly follows a mathematical expression with physical meaning and the technical literature consistently uses a short symbol. Names such as `v` for voltage, `i` for current, and `f` for frequency are acceptable when they preserve a clear correspondence between the code and the documented equation. Use this exception locally and only where the formula makes the meaning unambiguous.
 
 Public API names must remain typeable in ASCII, including keyword arguments. If notation uses a symbol such as ``\eta``, expose an ASCII name such as `eta`. Unicode notation may still be used in the mathematical documentation.
+
+## Component models and topology
+
+Constructors return component models directly. Declare electrical ports with
+`electricalconnections` and configurable inputs with `inputs`. Input metadata
+uses `Input`. Configured values are read with `inputvalues`. Use `withinputs`
+or `component` for configured copies, `bases` for model bases, and `limits`
+for stored operating limits.
+
+Control references use per-unit values on the model bases. Source inputs use
+physical units. Physical terminal powers and signed currents are positive into
+each component port. Linearized admittances use `Y = I_in / V`.
+
+Topology declarations use `NetworkBuilder.Bus` and `NetworkBuilder.Net` with
+named ports and symbol terminal labels. The bus selects the AC frame. Keep
+component-specific equations in the component implementation. Network assembly
+uses the declared ports, input data and solved terminal values.

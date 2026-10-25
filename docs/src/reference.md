@@ -16,11 +16,11 @@ Component ports are declared by `Port`, `ACDQ`, `ACABC`, `DC_CM` and
 `electricalconnections`. Configurable inputs use `Input`, `inputs`, `inputvalues`,
 `withinputs` and `component`. Bases and limits are available through `BaseValues`,
 `bases` and `limits`. Control references and converter or machine power-flow seeds use
-the model bases. Source inputs use physical units.
+the model bases. Source and scan-based MMC inputs use physical units.
 
 Terminal operating points use `ACPortValues` and `DCPortValues`, keyed by port name
 in a NamedTuple. `OperatingPoint` stores these NamedTuples by element name:
-`op[:c1].ac.p` accesses AC active power, and `op[:c1].dc.v` accesses DC voltage.
+`op[:c1].ac.p` accesses AC active power into the component, and `op[:c1].dc.v` accesses DC voltage.
 `get(op, :missing, nothing)` returns `nothing` for an absent element.
 `linearize(model, values)` computes the state-space matrices and
 stores the converged state. `steady_state(model, values)` reuses that state when
@@ -59,7 +59,15 @@ Public = true
 Private = false
 ```
 
-Component and configuration Gridspaces use positional dispatch as `constructor(Grid; kwargs...)`. The keyword-only `constructor(; kwargs...)` method remains the scalar API. `NetworkBuilder` does not define a second constructor family.
+`solve(state)` and `compute(PowerFlowProblem(state), ACDCPowerFlow())` return
+`PowerFlowResult` and always solve the requested network. A
+`LinearizationProblem(state, powerflow)` uses the supplied operating point.
+Without a supplied result, linearization of linear models uses an empty point.
+Nonlinear models require power flow.
+
+Component and configuration Gridspaces use positional dispatch as
+`constructor(Grid; kwargs...)`. The keyword-only `constructor(; kwargs...)`
+method is the scalar API.
 
 ## `PowerImpedance.PSCAD`
 

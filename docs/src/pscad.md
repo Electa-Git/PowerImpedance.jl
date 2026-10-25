@@ -1,7 +1,6 @@
 # PSCAD export and simulation
 
-`export_pscad(::Network)` and `export_pscad(::NetworkBuilder.NetworkState)`
-write runnable PSCAD 5 projects from PowerImpedance networks. Load `PythonCall`
+`export_pscad(::NetworkBuilder.NetworkState)` writes runnable PSCAD 5 projects from PowerImpedance networks. Load `PythonCall`
 to activate the writer; CondaPkg installs `mhi-xml` and its XML dependencies.
 Export runs locally and does not contact PSCAD. `compute(model, PSCADRun();
 options)` runs the project on a Windows station with PSCAD 5.1.0, and
@@ -12,7 +11,7 @@ Induction machines export with a speed-dependent load torque and their solved eq
 ## Export a network
 
 Install `PythonCall` in the Julia environment containing PowerImpedance, then
-use an existing classic network or materialized NetworkBuilder state as `net`:
+use a materialized `NetworkBuilder.NetworkState` as `net`:
 
 ```julia
 using PowerImpedance
@@ -29,10 +28,16 @@ name equals the filename stem. The returned `PSCADModel` retains the project,
 probes, settings and operating-point references. The file can also be opened
 and run in PSCAD directly.
 
-Classic export calls `power_flow(net)` and retains its setpoint mutations.
-To reuse a classic solution, pass `powerflow = power_flow(net)` to the exporter.
-Builder export calls `NetworkBuilder.solve`; linear builder networks use source
-setpoints without solving power flow and have no solved data for comparison.
+With `powerflow = nothing` (the default), export calls
+`compute(PowerFlowProblem(net), ACDCPowerFlow())` for every network, including
+networks containing only sources and passive components. Bus voltages and
+transformer ratings use that solution. To reuse a completed result:
+
+```julia
+powerflow = compute(PowerFlowProblem(net), ACDCPowerFlow())
+model = export_pscad(net; path = "pscad_exports/solved.pscx", settings, powerflow)
+```
+
 `line_options` overrides supported ground and frequency-dependent fitting
 fields. AC/DC line and cable fit targets default to `YMaxE=AMaxE=0.02%`. `dc_reference = :midpoint_resistors` adds two 10 MΩ ground references
 at DC buses without a local source midpoint or grounded shunt; use `:none`
@@ -49,15 +54,15 @@ decoupling times are `1e8` seconds, so they remain idle during an ordinary run.
 
 ```julia
 probes = [
-    ZToolProbe(:ac, "converter_scan"; element = :DUT, side = 2),
+    ZToolProbe(:ac, "converter_scan"; element = :DUT, port = :ac),
     ZToolProbe(:ac, "bus_scan"; bus = :B2),
-    ZToolProbe(:dc, "dc_scan"; element = :DUT, side = 1),
+    ZToolProbe(:dc, "dc_scan"; element = :DUT, port = :dc),
 ]
 model = export_pscad(net; path = "pscad_exports/scanned.pscx", settings,
     ztool_probes = probes)
 ```
 
-`element` and `side` place a series probe between that element terminal and
+`element` and `port` place a series probe between that component port and
 its bus. `A1` faces the bus and `A2` faces the element. `bus` alone places an
 open shunt probe with `A1` connected to the bus. An open shunt leaves `A2`
 unconnected, so PSCAD reports a floating-terminal build warning.
@@ -109,7 +114,7 @@ and scan blocks on Main. This example exports one block and scans both sides:
 
 ```julia
 scan_model = export_pscad(net; path = "pscad_exports/scan_run.pscx", settings,
-    ztool_probes = [ZToolProbe(:ac, "converter_scan"; element = :DUT, side = 2)])
+    ztool_probes = [ZToolProbe(:ac, "converter_scan"; element = :DUT, port = :ac)])
 scan = ZToolScan(frequencies = [1, 2, 5, 10, 20, 40, 100, 500],
     snapshot_time = 5.0, start_fft = 2.0, time_step = 1e-6, sample_step = 25e-6)
 result = compute(scan_model, scan;
@@ -265,9 +270,9 @@ during a fresh run and does not restart from one.
 
 ## Supported elements and controls
 
-| Element | Variants | Notes |
+| Component | Variants | Notes |
 |:--|:--|:--|
-| Sources and lumped impedances | Three-phase AC; two-pole DC; supported scalar R/L/C realizations | Sources follow solved voltages or source setpoints; terminal probes preserve physical order. |
+| Sources and lumped impedances | Three-phase AC, two-pole DC, supported scalar R/L/C realizations | Sources follow solved voltages. Terminal probes preserve physical order. |
 | Overhead lines | Three-conductor AC; two-conductor DC | Frequency-dependent phase model, with geometry, earth and fitting parameters. |
 | Cables | Coaxial underground or aerial, AC/DC | Ordered layers and positions; eliminated sheath/armour interfaces. |
 | Transformers | YY and ΔY (Dyn11) | Three-phase winding ratings use the solved primary voltage. |
@@ -318,25 +323,31 @@ inspect traces and build warnings before interpreting comparison rows.
 | Machine or MMC VSM speed | Mean speed within `1e-3` pu of 1. |
 
 
-Terminal-current probe metadata records `orientation = :into` or `:out`, relative
-to the element at the specified terminal. Other channels have `orientation = nothing`.
-These signs describe measured currents, independently of power direction.
+Terminal-current probes use `I_<element>_<port>`, such as `I_c1_ac`,
+`I_c1_dc`, or `I_tl1_side1`. Every exported current probe measures current
+**into the component** at that port and records `orientation = :into`.
+Other channels have `orientation = nothing`. The direction is fixed regardless
+of operating power flow. Bus-voltage names remain `V_<bus>` (with `_P` and `_N`
+for the DC pole channels).
 
-| Element | Positive probe current |
-|:--|:--|
-| Passive AC/DC two-port: impedance, OHL, cable, YY or Dyn11 transformer | Side 1 into the element; side 2 out of the element (branch direction 1 → 2). |
-| Grounded impedance | Into the sole nongrounded terminal. |
-| AC source, synchronous machine | Out of the element, toward the AC bus (injection). |
-| DC source | Into its positive-pole terminal. |
-| TLC/MMC | DC side 1 into the element; AC side 2 out toward the AC bus. |
+| Component | Port | Positive probe current |
+|:--|:--|:--|
+| AC/DC impedance, overhead line, cable, YY or Dyn11 transformer | `side1`, `side2` | Into the component at each end. |
+| Grounded impedance | Nongrounded port | Into the component. |
+| AC source, synchronous machine, induction machine | `ac` | From the AC bus into the component. |
+| DC source | `dc` | Into the positive-pole terminal. |
+| TLC/MMC | `ac`, `dc` | Into the converter at each port. |
 
-To compare with Julia's inward port admittance, negate every `:out` terminal
-current. For a shunt-source network impedance measurement, the input is current
-injected into the network, so retain `:out` source current instead. Use the
-metadata of the project that produced the run: AC cable projects exported before
-the orientation correction measured inward current at both ends. AC RMS and DC
-magnitude acceptance rows do not detect sign reversal; signed machine/converter
-power and MMC DC-current identity rows retain their existing conventions.
+These directions agree with Julia's port admittance `Y = I_in / V` and its
+`OperatingPoint` powers. A source delivering 900 MW has `ac.p = -900`.
+A converter receiving 603 MW from DC and delivering 600 MW to AC has
+`dc.p = 603` and `ac.p = -600`. Reactive power follows the same inward rule.
+For a source used to measure network impedance, network injection is the
+negative of its inward source current.
+
+Use the metadata saved with an older project when reading its recordings.
+Previous exports used outward current at some ports. AC RMS and DC magnitude
+comparison rows alone cannot detect reversed polarity.
 
 All durations and steps in Julia are in seconds. A 10 μs integration step is
 typical; **use the measured 1 μs step for compensated MMC modulation**

@@ -23,8 +23,10 @@ const GITLAB_REPOSITORY_PATH = get(
     "CI_PROJECT_PATH",
     "electa/controlgroup/PowerImpedance.jl"
 )
-const GITLAB_REPOSITORY_GROUP, GITLAB_REPOSITORY_NAME = rsplit(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
-const GITLAB_REPOSITORY_NAMESPACE, GITLAB_REPOSITORY_PAGES_PATH = split(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
+const GITLAB_REPOSITORY_GROUP, GITLAB_REPOSITORY_NAME =
+    rsplit(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
+const GITLAB_REPOSITORY_NAMESPACE, GITLAB_REPOSITORY_PAGES_PATH =
+    split(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
 const GITLAB_REPOSITORY_URL = get(
     ENV,
     "CI_PROJECT_URL",
@@ -33,7 +35,8 @@ const GITLAB_REPOSITORY_URL = get(
 const GITLAB_PAGES_URL = get(
     ENV,
     "CI_PAGES_URL",
-    "https://$(GITLAB_REPOSITORY_NAMESPACE).pages.$(GITLAB_HOST)/$(GITLAB_REPOSITORY_PAGES_PATH)"
+    "https://$(GITLAB_REPOSITORY_NAMESPACE).pages.$(GITLAB_HOST)/" *
+    GITLAB_REPOSITORY_PAGES_PATH
 )
 
 const GITHUB_REPOSITORY_PATH = "Electa-Git/PowerImpedance.jl"
@@ -81,7 +84,7 @@ const LITERATE_EXAMPLE_FILES = (
 
 const PLAIN_LITERATE_EXAMPLE_FILES = ("PSCAD_tutorial.jl",)
 
-# Gridspace_uncertainty.jl and P2P_HVDC_Gridspace.jl are not part of the documentation build.
+# Gridspace_uncertainty.jl and P2P_HVDC_Gridspace.jl are omitted from this build.
 
 const LITERATE_EXAMPLE_PATHS = [joinpath(EXAMPLES_SRC, file)
                                 for file in LITERATE_EXAMPLE_FILES
@@ -242,7 +245,8 @@ function html_assets()
 end
 
 function sanitize_rendered_log_paths(content::AbstractString)
-    location = r"(?m)(└ @ [^\s<]+) (?:~|/)[^\r\n<]*/(src|ext|docs|examples|test)/([^\r\n<]+:\d+)"
+    location = Regex(raw"(?m)(└ @ [^\s<]+) (?:~|/)[^\r\n<]*/" *
+        raw"(src|ext|docs|examples|test)/([^\r\n<]+:\d+)")
     return replace(content, location => s"\1 \2/\3")
 end
 
@@ -295,15 +299,12 @@ function build_pages()
         push!(pages, "API Reference" => "reference.md")
     end
 
-    push!(pages, "Classic scalar interface" => "legacy.md")
-
     development_pages = Any[
         "Release and registration" => "developers/releasing.md",
         "PlotBuilder guide" => "developers/plotbuilder.md",
         "Docstrings" => "developers/docstrings.md",
         "Conventions" => "developers/conventions.md",
         "Calculation parity" => "developers/calculation_parity.md",
-        "Network-model performance" => "developers/network_model_performance.md",
         "PSCAD mapping and station notes" => "developers/pscad_mapping.md"
     ]
 
@@ -359,7 +360,9 @@ makedocs(;
         assets = html_assets(),
         mathengine = math_engine(),
         prettyurls = running_in_ci(),
-        footer = "[$(metadata.name).jl]($(REPOSITORY_URL)) v$(metadata.version) supported by the Etch Competence Hub of EnergyVille, financed by the Flemish Government.",
+        footer = "[$(metadata.name).jl]($(REPOSITORY_URL)) v$(metadata.version) " *
+            "supported by the Etch Competence Hub of EnergyVille, " *
+            "financed by the Flemish Government.",
         size_threshold = nothing
     ),
     pages = build_pages(),

@@ -55,8 +55,8 @@ supported combinations and data structures.
 
 - [Introduction](introduction.md) explains the multiport ABCD representation
   and impedance-based stability workflow.
-- [Network construction](network.md) covers the scalar and declarative
-  NetworkBuilder interfaces.
+- [Network construction](network.md) covers direct models, inputs, and topology
+  declarations with ports.
 - [Power-flow initialization](initialization.md) explains when operating
   points are computed or reused.
 - [Impedance and stability analysis](results.md) introduces the downstream

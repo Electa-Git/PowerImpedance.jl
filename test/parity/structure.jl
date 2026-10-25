@@ -356,7 +356,7 @@ function collect_oracles()
         pscad_polarities)
 end
 
-# Frozen Setpoint powers enter induction machines and converter DC ports.
+# Powers frozen from the former setpoints enter induction machines and converter DC ports.
 const SETPOINT_POWER_SIGNS = (
     Source = (ac = -1, dc = -1),
     SynchronousMachine = (ac = -1, dc = 1),

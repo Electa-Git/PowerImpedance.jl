@@ -5,8 +5,10 @@ CurrentModule = PowerImpedance
 # Transformer
 
 `transformer` represents a single-phase or balanced three-phase transformer
-with a T-model containing primary winding impedance, excitation branch, ideal
+with named `side1` and `side2` ports. The constructor returns the transformer
+model. Its T-model contains primary winding impedance, excitation branch, ideal
 voltage ratio, secondary winding impedance, and optional capacitive paths.
+`conductors = 3` declares `ACABC` ports. `conductors = 1` declares `DC_CM` ports.
 
 The model can be specified directly from its equivalent-circuit parameters or
 derived from open-circuit and short-circuit test data. For three phases, `n` is
@@ -45,9 +47,9 @@ T = \begin{bmatrix}1&1&1\\1&a^2&a\\1&a&a^2\end{bmatrix},
 Delta-to-Y zero-sequence isolation has no phase-domain ABCD representation.
 The internal zero-sequence block is an identity placeholder exactly decoupled
 from positive and negative sequence; it does not model physical zero-sequence
-transfer. The supported three-phase use requires `transformation=true`, which
-discards zero sequence and produces the dq model. An untransformed three-phase
-`:ΔY` element throws `ArgumentError` at construction. In dq, Dyn11 rotates the
+transfer. Connect a three-phase `:ΔY` transformer to an `ACDQ` bus. The builder discards
+zero sequence and produces the dq model. An abc topology raises `ArgumentError`
+when the network is defined. In dq, Dyn11 rotates the
 secondary frame by +30° relative to the primary. The repository uses a lagging
 q axis, `[d,q] = [V cos θ, -V sin θ]`; with
 `R(θ) = [cos θ -sin θ; sin θ cos θ]`, the ideal voltage ABCD block is
@@ -60,4 +62,13 @@ and `:ΔY` with the same parameters. PowerModels defines the complex tap as
 `tap·exp(j·shift)` and the unloaded voltage as `V_to = V_from/t`; Dyn11 uses `shift = -π/6` [rad]. Frequency-domain analysis retains the detailed
 transformer model.
 
+```@example transformers
+using PowerImpedance
+
+model = transformer(; conductors = 3, organization = :ΔY,
+    n = 380/150, Rₚ = 0.1, Lₚ = 1e-3, Rₛ = 0.1, Lₛ = 1e-3)
+electricalconnections(model)
+```
+
+`V₁ᵒ` and `V₂ᵒ` test ratings use volts per phase (phase RMS).
 See [`transformer`](@ref) for fields, units, and constructor modes.

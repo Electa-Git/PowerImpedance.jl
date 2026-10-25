@@ -34,8 +34,11 @@ aggregate reconstructs Measurements for solved AC and DC bus fields only.
 
 ## PSCAD
 
-Load `PythonCall` to enable `export_pscad`; CondaPkg installs `mhi-xml` for
-the project writer. Remote execution and operating-point comparison use the
+Load `PythonCall` to enable `export_pscad(state; path, powerflow = nothing)`
+for a materialized `NetworkBuilder.NetworkState`. CondaPkg installs `mhi-xml` for
+the project writer. Export calculates power flow unless a completed
+`PowerFlowResult` is supplied, including for networks of sources and passives.
+Current probes use named ports and measure into the component. Remote execution and operating-point comparison use the
 core PSCAD interface. See [PSCAD export and simulation](pscad.md) for station
 setup, supported models and comparison rules.
 
@@ -44,6 +47,8 @@ setup, supported models and comparison rules.
 LineCableModels interoperability is temporarily dormant while
 LineCableModels.jl awaits registration. The extension source and dedicated tests
 are retained for restoration once it can again be declared as a weak dependency.
+Native overhead-line, cable and imported Z/Y line constructors return models
+with named `side1` and `side2` ports.
 
 ## Makie backends
 

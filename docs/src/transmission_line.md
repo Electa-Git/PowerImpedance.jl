@@ -17,15 +17,15 @@ then forms the distributed-parameter transmission-line ABCD model
 =
 \begin{bmatrix}
 \cosh(\mathbf{\Gamma}l) &
-\mathbf{Y}_c^{-1}\sinh(\mathbf{\Gamma}l) \\
+\mathbf{\Gamma}^{-1}\sinh(\mathbf{\Gamma}l)\mathbf{Z} \\
 \mathbf{Y}_c\sinh(\mathbf{\Gamma}l) &
-\cosh(\mathbf{\Gamma}l)
+\mathbf{Z}^{-1}\cosh(\mathbf{\Gamma}l)\mathbf{Z}
 \end{bmatrix},
 ```
 
 where ``\mathbf{\Gamma}=\sqrt{\mathbf{Z}\mathbf{Y}}``,
 ``\mathbf{Y}_c=\mathbf{Z}^{-1}\mathbf{\Gamma}``, and ``l`` is the line
-length.
+length. Matrix products retain the displayed order for untransposed geometries.
 
 ## Overhead lines
 
@@ -40,9 +40,11 @@ matrices [MartinezVelasco2017](@cite).
 
 ![Tower coordinates, sag-adjusted conductor positions, and subconductor bundle geometry.](pictures/transmission_line/transmission_line.png)
 
-The complete matrices are retained through the line evaluation; valid mutual
-coupling is not discarded. Three-phase transformed models apply the requested
-coordinate transformation only at the component terminals.
+The complete matrices, including mutual terms, are retained through line
+evaluation. Line constructors return models with `side1` and `side2` ports.
+Three-conductor lines declare `ACABC`. Connecting them to an `ACDQ` bus selects
+the dq transform. Two-conductor lines declare one `DC_CM` differential port
+per end.
 
 ## Underground cables
 
@@ -51,6 +53,10 @@ burial positions. The implemented native geometry supports core, sheath, and
 armor/screen arrangements, layer material properties, and earth-return mutual
 coupling. Internal grounded layers can be eliminated by Kron reduction to
 obtain a compact terminal model [Ametani1980, RivasMarti2002](@cite).
+
+Cable models also use `side1` and `side2`. A cable with three retained conductors uses
+`ACABC`. A cable with two uses one differential `DC_CM` port per end. The same port
+names apply to `blackbox_line` models imported from Z/Y data.
 
 ![Coaxial cable layers and geometric parameters.](pictures/transmission_line/cable_example.png)
 

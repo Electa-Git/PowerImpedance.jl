@@ -8,7 +8,7 @@ manual suite in `test/manual/pscad/validation/README.md` describes frequency-res
 and time-domain measurements. XML checks verify the written project; a native
 build and measured response test its execution in PSCAD.
 
-## Element mapping
+## Component mapping
 
 | Julia element | PSCAD components | Supported form |
 |---|---|---|
@@ -107,7 +107,9 @@ and ports used by this mapping.
 | Library scan settings | `selector`, `single_frequency`, `block_id` | 0, 1, 0 |
 
 The [scan guide](../pscad.md#Z-tool-scan-probes) describes placement and the
-library workspace. Series placement changes only the selected terminal label.
+library workspace. `ZToolProbe(...; element, port)` selects series placement
+by component and port name, such as `port = :ac` or `port = :side1`. It changes
+only the selected terminal label.
 The existing ammeter and its channel orientation remain in the through-path.
 
 ### Z-tool sweep inputs
@@ -166,7 +168,7 @@ zero because the Julia model has no dielectric-loss input.
 | Julia quantity / choice | PSCAD field | Convention |
 |---|---|---|
 | Position index | `CABNUM` | 1-based physical position order |
-| Element identifier | `Name` | same sanitized name as wrapper and both interfaces |
+| Component identifier | `Name` | same sanitized name as wrapper and both interfaces |
 | `positions[k][1]` | `X` | m |
 | `type=:underground`, positive depth | `OHC=0`, `Y=positions[k][2]`, `Y2=0` | m; Julia uses positive underground depth, unlike the donor's signed vertical coordinates |
 | `type=:aerial`, positive height | `OHC=1`, `Y=0`, `Y2=positions[k][2]` | m |
@@ -239,15 +241,15 @@ represent the emitted floating winding neutrals.
 
 ### DC circuits
 
-A one-pin DC bus represents differential voltage `V_P - V_N` and pole current.
-Export expands it into `<bus>_P` and `<bus>_N`. Sources and converters use
-pole-to-pole `Setpoint.Vdc` in kV. Solved `vm_pu * base_kV` is already a
-pole-to-ground magnitude; it takes precedence over an unsolved setpoint.
+A `DC_CM` bus represents differential voltage `V_P - V_N` and pole current.
+Export expands it into `<bus>_P` and `<bus>_N`. Source input `v` and converter
+`values.dc.v` use pole-to-pole kV. Solved `vm_pu * base_kV` is already a
+pole-to-ground magnitude. It takes precedence over a declared source input.
 
 | Julia quantity / choice | PSCAD realization | Unit / convention |
 |---|---|---|
 | Solved `busdc.vm * base_kV` | each `source_1.Vm` | kV pole-to-ground magnitude |
-| Unsolved `dc_source` `Setpoint.Vdc / 2` | each `source_1.Vm` | kV pole-to-ground magnitude from the pole-to-pole setpoint |
+| Unsolved `dc_source` input `v / 2` | each `source_1.Vm` | kV pole-to-ground magnitude from the pole-to-pole input |
 | P source | positive `NA` to P bus through ammeter, negative `NB` to ground | station-measured polarity |
 | N source | positive `NA` to midpoint ground, negative `NB` to N bus | gives negative N voltage |
 | Source options | `AC=0`, `Type=6`, `Cntrl=0`, `Grnd=0`, `Tc=source_ramp` | ideal internally controlled DC, ramp in seconds |
@@ -256,35 +258,42 @@ pole-to-ground magnitude; it takes precedence over an unsolved setpoint.
 | `dc_reference=:midpoint_resistors` | two `DC_REFERENCE_RESISTANCE=1e7 ohm` resistors per bus without a local source midpoint or grounded DC shunt | small grounding conductance; local rule applies even when another bus has a source |
 | `dc_reference=:none` | no additional resistors | preserves a floating midpoint where present |
 | Bus probes | two scalar `voltmetergnd` + PGB channels `V_<bus>_P`, `V_<bus>_N` | kV |
-| Terminal probes | one series ammeter on the P path per nongrounded terminal | scalar kA, `I_<element>_<side>` |
+| Terminal probes | one series ammeter on the P path per nongrounded terminal | scalar kA, `I_<element>_<port>` |
 
 
-For `Setpoint(Vdc = 640)`, unsolved pole sources produce +320/-320 kV.
+For `dc_source(v = 640)`, pole sources use +320/-320 kV before a solved
+voltage is supplied. Public export always obtains or receives a solved result.
 A differential impedance `Z` becomes `Z/2` in each pole: halve R and L,
 double C. This applies to series and grounded shunt RLC forms. A 2 ohm
 branch between 320 and 318 kV poles carries 2 kA and loses 8 MW in total.
 
-Grounded one-pin DC shunts require care in power flow: conversion can create
+Grounded differential DC shunts require care in power flow: conversion can create
 an ordinary `busdc` for `:gnd` and solve it at nonzero voltage. Validation
-fixtures explicitly eliminate a zero-voltage reference into ground. Export
-of an unsolved builder shunt does not establish power-flow equivalence.
+fixtures explicitly eliminate a zero-voltage reference into ground. Check the solved shunt voltage when comparing power flow with the emitted
+circuit.
 
 ## Signs, bases and reference frames
 
-`ProbeChannel.orientation` records `:into` or `:out` at the element terminal,
-independently of operating power direction. Non-current channels use `nothing`.
+`ProbeChannel.orientation` is `:into` for every exported port-current channel.
+Non-current channels use `nothing`. Channel names are `I_<element>_<port>`. Bus
+voltage channel names remain `V_<bus>`.
 
-| Emitter | Positive current direction |
-|:--|:--|
-| AC/DC impedance, OHL and cable; YY/Dyn11 | Side 1 inward, side 2 outward. Grounded impedance: sole nongrounded terminal inward. |
-| AC source and synchronous machine | Outward, injection into the AC bus. |
-| DC source | Inward at the positive pole. |
-| TLC/MMC | DC side 1 inward; AC side 2 outward. |
+| Component | Port | Positive current direction |
+|:--|:--|:--|
+| AC/DC impedance, overhead line, cable, YY/Dyn11 | `side1`, `side2` | Inward at each end. |
+| Grounded impedance | Nongrounded port | Inward. |
+| AC source, synchronous machine, induction machine | `ac` | From the bus into the component. |
+| DC source | `dc` | Inward at the positive pole. |
+| TLC/MMC | `ac`, `dc` | Inward at both ports. |
 
-Y comparisons negate outward terminal currents. Direct network Z retains
-outward shunt-source current as network injection. Read the metadata saved with
-the producing project: older AC-cable exports measured both terminal currents
-inward. Current magnitudes alone cannot detect reversed polarity.
+Port powers in `ACPortValues` and `DCPortValues` use the same inward sign.
+A source delivering 900 MW has `ac.p = -900`. A converter receiving 603 MW
+from DC and delivering 600 MW to AC has `dc.p = 603` and `ac.p = -600`.
+Y comparisons use the recorded inward current directly. A shunt source's
+injection into a network is the negative of its inward current. Read older
+recordings with their saved orientation metadata. Current magnitudes alone
+cannot detect reversed polarity. The parity tests map frozen probe names and
+reverse meter terminals where the former orientation differs.
 
 AC source `Ph = rad2deg(va) + 90` converts Julia's cosine angle to PSCAD's
 sine reference. The dq convention is `d=cos(theta)`, `q=-sin(theta)`.
@@ -430,8 +439,9 @@ E_{f,pf} = L_{ad} i_{df} = L_{ad} v_{df}/R_{fd}.
 
 Only the armature loss is added to terminal power; the external `rt` loss is
 already between the generator terminal and the public bus. The turbine
-fractions are assumed to sum to one. `Setpoint.Pac`/`Qac` contain terminal
-power, whereas solved `Vac`/`θac` contain the receiving-bus voltage. The core
+fractions are assumed to sum to one. Solved `values.ac.p` and `values.ac.q`
+contain inward terminal powers. Generation in the equations above uses their
+negatives. `values.ac.v` and `values.ac.theta` describe the receiving-bus voltage. The core
 reconstructs terminal phasors using the high-voltage solution of that branch,
 then seeds rotor angle, stator/field currents, speed, governor/turbine states
 and AVR states from the same point. Damper currents and speed error start at
@@ -439,7 +449,7 @@ zero. The nonlinear solver's existing iteration limit and tolerances are unchang
 
 
 These references remain fixed during linearization. With incomplete operating
-setpoints, `Tm0=Pac/S_base` and configured `AVRSM.v_ref` remain in use.
+values with unknown reactive power, `Tm0=-values.ac.p/S_base` and configured `AVRSM.v_ref` remain in use.
 The configured field itself is unchanged by the effective reference conversion.
 
 `SM_AVR_FIELD_VOLTAGE_SCALE=1.0`: Julia's `v_df=K_A*y*Rf_d/La_d` and
@@ -464,7 +474,7 @@ component definition and the validated `IM.pscx` instance.
 
 | Machine field | Julia value or selected setting | Effect |
 |---|---|---|
-| `Name` | Element name | Identification |
+| `Name` | Component name | Identification |
 | `Pbase` | `elec.S_base` MVA | Rated power |
 | `Vbase` | `elec.Vac_base` kV | Line-to-line RMS base in single-line view |
 | `OMEG` | `elec.ωn` rad/s | Base angular frequency |
@@ -614,9 +624,9 @@ MMC inductance is `Lₑ=(L_arm/2+Lr)/L_AC_base`, obtained from `elec_inductance`
 | Q-V | `ξ_v'=ωc*(K*(v_ac_ref-hypot(vG_d_f,vG_q_f))-ξ_v)`, `Q_eff=q_ac_ref+ξ_v`; lag starts at `ξ_vac_supp`, Q PI at `ξ_Q_ac` | `local/GFL-MMC/Q-V_Droop/GFL_MMC_Validation.pscx:11992–11998`: `Kd=20`, `wf=100`; shared `realpole` fields and pins |
 | VAC | `e=v_ac_ref-hypot(vG_d_f,vG_q_f)`, `i_q_ref=Kp*e+ξ_v_ac`, `ξ'=Ki*e`; PI starts at converged `ξ_v_ac` | `local/GFL-MMC/VAC_Control/GFL_MMC_Validation.pscx:8025–8215` (split PI), `11936–11941` (0/100 gains); shared square/sqrt primitives |
 
-Q-V and VAC references use `SetpointPU.v_ac*voltage_filter_ratio(model)`:
+Q-V and VAC references use `terminal_pu.v_ac*voltage_filter_ratio(model)`:
 `turnsRatio` for MMC, 1 for TLC. Measured quantities and references use the same transformer side. VAC equilibrium replaces the `ξ_v_ac` residual
-with `setpoint_pu.q_ac-y.meas.Q_ac_f`; normal dynamics retain the voltage PI.
+with `terminal_pu.q_ac-y.meas.Q_ac_f`. Normal dynamics retain the voltage PI.
 Q-V already determines Q through its support equation.
 Grid-following MMC VAC and Q-V select `type_ac=2`; VAC has `acq_droop=0`,
 Q-V has `acq_droop=1` with `kq_droop=K*Sbase/(global_dict["S"]*1e-6)`.
@@ -765,13 +775,12 @@ Use 1 us and verify refinement when extending this case.
 
 ### Equilibrium initialization
 
-The exporter reads the retained converged vector through `_steady_state` and
-evaluates the existing state-space blocks. It does not solve a second nonlinear
-problem. Builder export follows solved element order. An unsolved direct netlist
-is updated once at its effective setpoint. The accessor returns a copy with the
-same below-`1e-15` zeroing used by linearization. The table gives TLC state
-mappings; MMC control blocks use the same solved-output projection, together
-with the arm-capacitor reconstruction above.
+The exporter obtains the converged vector through `steady_state(model, values)`
+and evaluates the existing state-space blocks. Equal cached per-port values
+reuse the converged vector. A missing or different operating point calls
+`linearize` to solve and store it. The returned vector is the cached object.
+The table gives TLC state mappings. MMC control blocks use the same projection
+of solved outputs, together with the arm-capacitor reconstruction above.
 
 | Julia solved state(s) | PSCAD initial value |
 |---|---|
@@ -1006,7 +1015,8 @@ A 100 m OHL/cable measured 0.329/0.648 us; it cannot run at 10 us.
 Reduce the integration step or explicitly change physical section length.
 
 The recorded educational licence permits 200 electrical nodes and one
-subsystem. IEEE9 uses 78 live nodes. IEEE39 classic/builder use 528 and build
+subsystem. IEEE9 uses 78 live nodes. Both recorded IEEE39 representations
+use 528 and build
 with only the node-cap error, zero warnings. Their exports pass offline checks;
 they were not run in PSCAD under that licence. Bus conductor counts exclude
 internal component nodes and do not predict licence usage.
