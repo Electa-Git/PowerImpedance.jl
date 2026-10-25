@@ -293,7 +293,7 @@ function solve_acdcpf(
     result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
     @info result["termination_status"]
     if accept_feasible_power_flow!(result, pm.model)
-        @info "Power flow converged succesfully."
+        @info "Power flow converged successfully."
     else
         converged_feasible = false
         has_violations = !isempty(P.JuMP.primal_feasibility_report(pm.model; atol = 1e-4))
@@ -314,11 +314,11 @@ function solve_acdcpf(
                 _store_power_flow_start!(start, pm.model)
                 result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
                 if accept_feasible_power_flow!(result, pm.model)
-                    @info "Power flow converged succesfully after $r increment change."
+                    @info "Power flow converged successfully after $r increment change."
                     converged_feasible = true
                     break
                 elseif isempty(P.JuMP.primal_feasibility_report(pm.model; atol = 1e-4))
-                    @info ("Power flow converged succesfully after $r increment " *
+                    @info ("Power flow converged successfully after $r increment " *
                         "change. Point is feasible.")
                     converged_feasible = true
                     break
@@ -331,7 +331,7 @@ function solve_acdcpf(
                     data, model_type, optimizer, variables; kwargs...)
             end
         else
-            @info "Power flow converged succesfully. Point is feasible"
+            @info "Power flow converged successfully. Point is feasible"
         end
     end
 
