@@ -14,6 +14,17 @@ end
     frequencies = (ComplexF64(100π * im), ComplexF64(7 + 2000π * im))
     capacitive = (; Cₜ = 2e-8, Cₛ = 1e-9, hasRω = true, k = 0.7)
 
+    @testset "Dyn11 bus frame" begin
+        elements = (; transformer = transformer(; parameters..., conductors = 3,
+            organization = :ΔY))
+        topology(domain) = (
+            NetworkBuilder.Bus(:primary; ports = ((:transformer, :side1),), domain),
+            NetworkBuilder.Bus(:secondary; ports = ((:transformer, :side2),), domain))
+        @test_throws ArgumentError NetworkBuilder.define(elements, topology(ACABC))
+        @test NetworkBuilder.define(elements, topology(ACDQ)) isa
+              NetworkBuilder.NetworkState
+    end
+
     @testset "YY and one-phase bit regression" begin
         # Independent stored matrices from Julia 1.12.7 fix the reference arithmetic,
         # including capacitive paths.

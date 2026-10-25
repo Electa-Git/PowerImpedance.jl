@@ -297,10 +297,24 @@ function NetworkTopology(elements::NamedTuple, connections::Union{Tuple, Abstrac
     for name in unique(stored.component)
         model = elements[name]
         orders[name] = _element_call(name) do
-            _frame_order(model, get(frames, name, :dc))
+            frame = get(frames, name, :dc)
+            _check_frame(model, frame)
+            _frame_order(model, frame)
         end
     end
     return NetworkTopology(stored, orders)
+end
+
+_check_frame(model, frame) = nothing
+
+function _check_frame(model::P.Transformer, frame)
+    if model.conductors == 3 && model.organization == :ΔY && frame != :dq
+        throw(ArgumentError(
+            "three-phase :ΔY transformer requires dq coordinates; " *
+            "connect it to an ACDQ bus (domain = ACDQ on the Bus, " *
+            "or an ACDQ port on that bus)"))
+    end
+    return nothing
 end
 
 function _frame_order(model, frame)

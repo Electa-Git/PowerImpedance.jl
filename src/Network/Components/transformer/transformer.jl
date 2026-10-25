@@ -17,7 +17,9 @@ opposite shift. It applies this rotation to the complete `:YY` T-model,
 including its capacitive paths. Its internal zero-sequence block is an identity
 placeholder decoupled from both other sequences, discarded by the supported
 dq transformation. It does not represent physical zero-sequence transfer.
-Connect three-phase `:ΔY` models to an `ACDQ` bus.
+Connect three-phase `:ΔY` models to an `ACDQ` bus with `domain = ACDQ` on
+the `Bus`, or an `ACDQ` port on an inferred bus. `NetworkBuilder.define` rejects
+these models when the resolved frame is not `:dq`.
 
 $(TYPEDFIELDS)
 """
@@ -137,6 +139,8 @@ formulas; no three-phase test-data conversion is applied.
 # Errors
 
 - Invalid or zero test data can make the `:tests` calculation undefined.
+- `NetworkBuilder.define` throws `ArgumentError` when a three-phase `:ΔY`
+  model has a resolved frame other than `:dq`.
 
 # Examples
 
