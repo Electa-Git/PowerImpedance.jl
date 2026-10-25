@@ -204,7 +204,7 @@ end
 $(TYPEDEF)
 
 Store one cable row with a coaxial component per physical position and
-shared earth-return and frequency/phase parameters.
+shared earth-return, frequency and phase parameters.
 
 $(TYPEDFIELDS)
 """
@@ -264,7 +264,7 @@ end
 """
 $(TYPEDEF)
 
-Describe a passive, single-subsystem PSCAD project without Python resources.
+Describe a passive, single-subsystem PSCAD project using Julia data fields.
 
 $(TYPEDFIELDS)
 """

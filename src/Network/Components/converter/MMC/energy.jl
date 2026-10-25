@@ -52,7 +52,8 @@ struct TotalEnergyControl{F<:AbstractMeasurementFilter} <: AbstractEnergyControl
     "Independent filter for active-power feedforward. Cutoff in \\[rad/s\\]."
     power_filter::F
     # Legacy feedforward is independent even when its filter has no states.
-    "Whether power feedforward uses its own voltage-current product instead of the shared active-power measurement."
+    "Whether power feedforward uses an independent voltage-current product or the shared
+    active-power measurement."
     _independent_power::Bool
 end
 
@@ -63,7 +64,7 @@ Construct a `TotalEnergyControl` component from the supplied parameters.
 
 # Arguments
 
-- `pi_control`: PI gains for normalized signals; `Kp` is \\[dimensionless\\] and `Ki` is
+- `pi_control`: PI gains for normalized signals. `Kp` is \\[dimensionless\\] and `Ki` is
   \\[s⁻¹\\].
 - `ref`: Controller reference on the converter base \\[dimensionless\\]. Default: `1`.
 - `power_filter`: Independent active-power feedforward filter. Default: `NoFilter()`.
@@ -74,7 +75,7 @@ Construct a `TotalEnergyControl` component from the supplied parameters.
 
 # Notes
 
-The positional form `TotalEnergyControl(pi_control, ref)` is also accepted; both
+The positional form `TotalEnergyControl(pi_control, ref)` is also accepted. Both
 arguments are required in that form.
 
 # Examples
@@ -104,11 +105,11 @@ Evaluate MMC total-energy PI control, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]; angle
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]. Angle
   signals use \\[rad\\].
 - `b`: The `TotalEnergyControl` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -174,9 +175,11 @@ controller.
 $(TYPEDFIELDS)
 """
 @with_kw struct ΣEnergyControl <: AbstractEnergyControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_control::PIControl
-    "Per-leg sum-energy reference; the zero-sequence target is twice this value \\[dimensionless\\]."
+    "Per-leg sum-energy reference. The zero-sequence target is twice this value
+    \\[dimensionless\\]."
     ref::Float64 = 1 # reference for the energy in each leg (in pu)
 end
 statenames(::ΣEnergyControl) = (:FΣ1_d, :FΣ1_q, :FΣ1_z, :FΣ2_d, :FΣ2_q, :FΣ2_z, # Notch filter states
@@ -190,11 +193,11 @@ Evaluate MMC summed-energy PI control, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `b`: The `ΣEnergyControl` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -221,7 +224,7 @@ J=-2\\omega_b\\begin{bmatrix}0&1&0\\\\-1&0&0\\\\0&0&0\\end{bmatrix},\\qquad
 \\mathbf i_\\Sigma^{dc,ref}=\\frac{\\boldsymbol\\xi+K_p(\\mathbf w^{ref}-\\mathbf w_f)+(0,0,p_f/3)^T}{v_{dc,f}}.
 ```
 
-Energy and current references are normalized \\[dimensionless\\]; ``ω_b`` uses
+Energy and current references are normalized \\[dimensionless\\]. ``ω_b`` uses
 \\[rad/s\\]. The returned d/q/z entries are the components of this current vector.
 
 # Examples
@@ -286,13 +289,14 @@ end
 $(TYPEDEF)
 
 Regulate difference arm energies with fundamental- and triplen-frame notch and PI
-states. The stored `ref` parameter is currently unused; the implemented
-difference-energy references are zero.
+states. The difference-energy references are fixed at zero, independently of the stored
+`ref` parameter.
 
 $(TYPEDFIELDS)
 """
 @with_kw struct ΔEnergyControl <: AbstractEnergyControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_control::PIControl
     "Legacy energy-reference parameter, currently unused by the equations \\[dimensionless\\]."
     ref::Float64 = 1
@@ -308,11 +312,11 @@ Evaluate MMC differential-energy PI control, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `b`: The `ΔEnergyControl` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -341,8 +345,8 @@ J=\\operatorname{diag}(\\omega_bJ_2,3\\omega_bJ_2),\\qquad
 \\mathbf i_\\Sigma^{ac,ref}=\\frac34(u_1+u_3,-u_2-u_4,0)^T.
 ```
 
-The stored `ref` is unused. No voltage division is applied to the PI output.
-Energy and current references are normalized \\[dimensionless\\]; ``ω_b`` uses
+The stored `ref` is unused. The PI output is used directly.
+Energy and current references are normalized \\[dimensionless\\]. ``ω_b`` uses
 \\[rad/s\\]. The returned zero-sequence current reference is always zero.
 
 # Examples
@@ -384,7 +388,7 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΔEne
     FΔ1 = [x.FΔ1_d, x.FΔ1_q, x.FΔ1_Zd, x.FΔ1_Zq]; FΔ2 = [x.FΔ2_d, x.FΔ2_q, x.FΔ2_Zd, x.FΔ2_Zq]; wΔ = -2 .* [wΔd, wΔq, wΔZd, wΔZq] # PSCAD implementation has a minus sign for wΔ, and *2 TODO check if it is a problem?
     J_dq = [ 0 1
             -1 0]
-    # Triplen reconstruction T = [cos(3θ) sin(3θ); sin(3θ) -cos(3θ)]
+    # Triplen reconstruction `T = [cos(3θ) sin(3θ); sin(3θ) -cos(3θ)]`
     # gives (dT/dt)*T = -3ωbase*J_dq. Since the equations use -J_G*x,
     # its triplen block is +3ωbase*J_dq for both notch and PI states.
     J_G = [ J_dq * conv.elec.ωbase zeros(2,2)
@@ -399,8 +403,10 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΔEne
     Ki_wΔ = b.pi_control.Ki
     F[9:12] = Ki_wΔ * (wΔ_f_ref - wΔ_f) - J_G * ξ_wΔ 
     
-    d, q, Zd, Zq = (ξ_wΔ + b.pi_control.Kp * (wΔ_f_ref - wΔ_f)) # Different from Freytes thesis: the division by -Vac (see Freytes thesis) is not done in PSCAD implementation.
-    iΣ_dqZ_ac_ref = 3/4 * [d + Zd, - (q + Zq), 0] # Different from Freytes thesis: the multiplication by sqrt(2) in matrix R (see Freytes thesis) is not done in PSCAD implementation.
+    # PSCAD uses the PI output directly. Freytes divides it by -Vac.
+    d, q, Zd, Zq = (ξ_wΔ + b.pi_control.Kp * (wΔ_f_ref - wΔ_f))
+    # PSCAD uses R directly. Freytes multiplies R by sqrt(2).
+    iΣ_dqZ_ac_ref = 3/4 * [d + Zd, - (q + Zq), 0]
 
     return (iΣ_d_ac_ref = iΣ_dqZ_ac_ref[1], iΣ_q_ac_ref = iΣ_dqZ_ac_ref[2], iΣ_z_ac_ref = iΣ_dqZ_ac_ref[3])
 end

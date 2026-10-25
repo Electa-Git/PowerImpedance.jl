@@ -106,7 +106,7 @@ Base.@kwdef struct Blackbox_MMC <: AbstractLinFreqDomain
     Rₘₑ::Float64 = 1.230972594
     "Admittance interpolant over AC voltage, active power, reactive power and frequency."
     itp::Any = nothing
-    "Frequency-table filename; the importer reads the second column."
+    "Frequency-table filename. The importer reads the second column."
     path_f::String = ""
     "Operating-point scan filename with a header row."
     path_MMC::String = ""
@@ -194,8 +194,8 @@ frequency \\[Hz\\]. The admittance table has one header row. Each scan row conta
 six operating-point entries followed by nine row-major complex entries per frequency.
 Use complex-literal tokens such as `1.0+0.0im` for the operating-point entries so
 that the reader preserves strings for the parser. Interpolation uses AC voltage,
-active power, reactive power, and frequency; DC voltage is not an interpolation axis.
-The importer requires a complete scan grid at a single DC voltage.
+active power, reactive power, and frequency. The importer requires a complete
+scan grid at one fixed DC voltage.
 
 ```math
 P_{loss}=3R_{eq}I_{ac}^{2}.
@@ -208,12 +208,12 @@ from \\[kA\\] to \\[A\\] and power samples from \\[MW\\] to \\[W\\].
 # Errors
 
 - Propagates file-reading and parsing errors. Unsupported control symbols raise
-  `ArgumentError`; incompatible scan dimensions raise an error.
+  `ArgumentError`. Incompatible scan dimensions raise an error.
 
 # Examples
 
 The following call assumes matching frequency and admittance scan files
-in the formats described above, with a complete AC-voltage/power scan grid.
+in the formats described above, with a complete grid of AC voltage and power scans.
 
 ```julia
 using PowerImpedance
@@ -232,7 +232,7 @@ function blackbox_MMC(; ac_control = :pq, dc_control = :p,
 
     # Sniff the data from file here and store it 
 
-    # First: Frequency points 
+    # Frequency points
 
     data = readdlm(converter.path_f , '\t', Float64)
     freq = data[:, 2]                                 
@@ -241,7 +241,7 @@ function blackbox_MMC(; ac_control = :pq, dc_control = :p,
 
     # Second: MMC data - Each row: Vdc_pu Vac_p Pref Qref Pdc Iac
     # then Nf * 9 complex entries (flattened 3x3 per frequency, C-order)
-    # whitespace-delimited; header returned separately
+    # Whitespace-delimited data. The header is returned separately.
     raw, header = readdlm(converter.path_MMC, Any; header=true)
     nrows, ncols = size(raw)
     @info "MMC: $nrows operating points loaded from MMC data file"
@@ -280,13 +280,13 @@ function blackbox_MMC(; ac_control = :pq, dc_control = :p,
         scan_data[i] = op
     end
 
-    # TODO: Based on prior discremination if statement whether matching is actually needed 
+    # TODO use the preceding condition to determine whether matching is needed.
     # Match an equivalent resistance based on the operating point 
 
     y=[]  # Power losses [W]
     x=[]  # AC current [A]
 
-    # If DC-controlling then: Losses Pdc-(sqrt(3)*Vac*Iac-Qref)
+    # DC-voltage control losses are Pdc-(sqrt(3)*Vac*Iac-Qref).
     if converter.dc_control == :vdc
 
         for i in 1:nrows
@@ -302,7 +302,7 @@ function blackbox_MMC(; ac_control = :pq, dc_control = :p,
             push!(x, scan_data[i].Iac*1e3)                  # in A
         end
 
-    else # Pac-controlling: Losses Pdc-Pac
+    else # Active-power control losses are Pdc-Pac.
 
         for i in 1:nrows
             push!(y, (scan_data[i].Pdc - scan_data[i].Pac)*1e6)  # in W
@@ -402,7 +402,7 @@ Evaluate the imported admittance at the cached solved terminal values.
 # Returns
 
 - Rotated terminal admittance matrix \\[S\\], with row order DC, AC d, AC q.
-  No unit conversion is applied to the scan admittance.
+  The scan admittance retains its units.
 
 # Notes
 
@@ -423,7 +423,7 @@ Here `v` is the solved AC phase-peak voltage \\[kV\\], `V_LL,b` is `vACbase`
 \\[kV\\], and `p` \\[MW\\] and `q` \\[MVAr\\] are solved powers into the converter.
 The scan receives the solved active- and reactive-power injections into the AC bus.
 The imported interpolant uses linear extrapolation outside the sampled intervals.
-DC voltage is not an interpolation axis.
+DC voltage is fixed across the interpolation grid.
 
 # Errors
 

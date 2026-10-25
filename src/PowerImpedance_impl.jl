@@ -14,7 +14,7 @@ using Parameters
 using DataStructures
 using DocStringExtensions
 
-## Overloading of Base functions (TODO: In future from PowerBlocks overloading)
+## Base method extensions. TODO move to PowerBlocks.
 import Base: convert
 
 using ControlSystemsBase: ControlSystemsBase, tf, ss
@@ -112,7 +112,7 @@ include("Network/Components/machine/InductionMachine.jl")
 
 include("Network/powermodels_data.jl")
 
-# Common semantic layer (proto-PowerBlocks grammar)
+# Shared calculation grammar
 include("Grammar.jl")
 
 # Backend-independent unit and plotting descriptions
@@ -122,7 +122,7 @@ using .PlotBuilder: UIPlot, export_svg
 using .PlotBuilder.BackendHandler: set_backend!
 export PlotBuilder, UIPlot, export_svg, set_backend!
 
-# Optional Makie plotting entry point. The Makie extension owns its methods.
+# Optional plotting entry point with methods defined by the Makie extension.
 function plot end
 
 """
@@ -144,8 +144,8 @@ Render a single-line network diagram through the optional GraphMakie extension.
 
 # Notes
 
-This function never calculates power flow. Load `GraphMakie` and one Makie
-backend before calling it.
+Rendering uses the supplied topology and any completed power-flow result. Load `GraphMakie`
+and one Makie backend before calling this function.
 """
 function diagram end
 export diagram

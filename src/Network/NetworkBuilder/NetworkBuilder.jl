@@ -150,7 +150,7 @@ Replace fields of an existing [`NetworkState`](@ref).
 
 # Notes
 
-Calculated operating points are returned by `compute` and are not cached here.
+`compute` returns calculated operating points separately from the network definition.
 """
 function update!(
         builder::NetworkState;

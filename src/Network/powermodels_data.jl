@@ -2,7 +2,7 @@ const ang_max = deg2rad(360)
 const ang_min = deg2rad(-360)
 
 function set_bus_type(bus_data, type)
-	## This function makes sure we dont overwrite higher bus type (only for AC bus now)
+	# Preserve higher-priority AC bus types.
 	## PQ (1) < PV (2) < slack (3)
 	current_type = bus_data["bus_type"] #Just to make sure it is int
 	if type > current_type
@@ -71,7 +71,7 @@ generator and RL-branch (transformer)
 """
 function add_interm_bus_ac!(data, global_dict)
 
-	bus = length(data["bus"]) + 1# We make new DC bus, key should be string apparently
+	bus = length(data["bus"]) + 1# Create the bus with a string key.
 	bus = string(bus)
 
 	(data["bus"])[bus] = Dict{String, Any}()

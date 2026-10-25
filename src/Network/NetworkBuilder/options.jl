@@ -16,7 +16,7 @@ end
 
 
 
-####### Power flow options ###########
+# Power flow options
 
 function powerflow_options(options::NamedTuple)
 	return option_value(options, :power_flow, (;))

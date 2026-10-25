@@ -2,7 +2,7 @@ export stabilitymargin
 
 function stabilitymargin(L, omega; SM :: String = "")
 
-##### ----- STABILITY MARGINS ----- #####
+# Stability margins
 L_mag = abs.(L)
 # L_mag_dB = 20*log10.(L_mag)
 L_ph = angle.(L).*(180/π)

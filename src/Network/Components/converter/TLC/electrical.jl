@@ -1,11 +1,11 @@
-############################  electrical.jl  ############################
+# electrical.jl
 
 #=
 Electrical plant model for the two-level converter (TLC).
 
-This file contains the converter-side electrical state equations and terminal
-output calculations. It is intentionally TLC-specific; reusable control and
-measurement primitives live under `converter/common`.
+This file contains the TLC converter-side electrical state equations and terminal
+output calculations. Reusable control and measurement primitives live under
+`converter/common`.
 =#
 
 export ElectricalTLC
@@ -146,9 +146,9 @@ Compute initial current states from power-flow inputs and terminal values.
 # Arguments
 
 - `block`: Normalized TLC reactor parameters.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\]. Default: `TerminalValuesPU()`.
 
 # Returns
@@ -201,10 +201,10 @@ Evaluate the TLC reactor current dynamics and electrical outputs.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `data`: Named tuple of electrical input signals and modulation outputs, as shown in
   the example.
 - `block`: Normalized TLC reactor parameters.

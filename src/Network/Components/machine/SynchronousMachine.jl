@@ -1,6 +1,6 @@
 export synchronousmachine, ElectricalSM, MechanicalSM, AVRSM, GovernorSM, SynchronousMachine
 #  using SciMLLogging #Debug
-### Abstract synchronous machine type (allow for other structures in future, subtype of Machine is this necessary)
+# Abstract synchronous-machine type derived from Machine.
 """
 $(TYPEDEF)
 
@@ -11,7 +11,7 @@ abstract type AbstractSynchronousMachine <: Machine end
 
 
 
-################# ELECTRICAL #################################
+# Electrical
 
 """
 $(TYPEDEF)
@@ -84,7 +84,7 @@ initialvalues(::ElectricalSM) =  (;) # No non-zero states
 
 
 
-############################# MECHANICAL #######################################
+# Mechanical
 
 """
 $(TYPEDEF)
@@ -120,7 +120,7 @@ initialvalues(::MechanicalSM) =  (ω_pu=1.0,)
 
 
 
-################# GOVERNOR ######################
+# Governor
 
 
 """
@@ -144,7 +144,7 @@ initialvalues(::GovernorSM;inputs) =  NamedTuple{(:flow, :TchHP, :TreIP, :TcrLP)
 
 
 
-########################### AVR #############################
+# AVR
 
 const _AVR_VOLTAGE_INPUT =
     Input(1.01; unit = "pu", description = "AVR voltage reference")
@@ -193,7 +193,7 @@ initialvalues(::AVRSM) =  (;)
 
 
 
-################### SYNCHRONOUS MACHINE ######################
+# Synchronous machine
 """
 $(TYPEDEF)
 
@@ -312,7 +312,7 @@ Port powers are positive into the machine. Delivering 900 MW gives `ac.p = -900`
 
 - `inputs`: Named tuple of bus voltages `vd`, `vq`, fixed turbine torque `Tm0`, and
   effective AVR reference `vref_SG`, on machine bases \\[dimensionless\\].
-- `terminal_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point. Powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\]. Returns `nothing` when `values.ac.q` is `NaN`.
 
 # Notes
@@ -324,7 +324,7 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
 power base after negation. A complete operating point determines fixed turbine and AVR
-references from the terminal power-flow solution; otherwise `Tm0=-values.ac.p/S_base`
+references from the terminal power-flow solution. Otherwise `Tm0=-values.ac.p/S_base`
 and the configured AVR reference is retained.
 
 # Examples
@@ -354,7 +354,7 @@ end
 
 function outputequations!(F, x, inputs, y, gen::SynchronousMachine)
     
-    theta_grid = 0; # The angle of the global dq reference frame TODO: Check if this is correct
+    theta_grid = 0; # Global dq reference-frame angle. TODO verify this value.
     d = get_state(:θ_sg, x) - theta_grid; # New reference frame angle - old RF angle
     T_inv = [cos(d) sin(d);
         -sin(d)  cos(d)]; # Rotation to stator's RF
@@ -362,7 +362,7 @@ function outputequations!(F, x, inputs, y, gen::SynchronousMachine)
 end
 
 
-#################### STATE SPACE EQUATIONS ###############################
+# State-space equations
 
 """
 $(TYPEDSIGNATURES)
@@ -373,10 +373,10 @@ derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `v_dq`: d/q bus-voltage pair in internal machine coordinates \\[dimensionless\\].
 - `block`: Synchronous-machine winding parameters.
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
@@ -394,7 +394,7 @@ L_D\\dot{\\mathbf i}_D=\\mathbf r_D,\\quad L_Q\\dot{\\mathbf i}_Q=\\mathbf r_Q,\
 
 The assembled d/q inductance matrices contain stator, field, and damper couplings.
 Right-hand sides include winding resistive drops and speed-induced flux voltages, scaled
-by the electrical base angular frequency \\[rad/s\\]. Currents, fluxes, and torque use
+by the electrical base angular frequency \\[rad/s\\]. Currents, fluxes, and torque are on
 machine bases \\[dimensionless\\].
 
 # Examples
@@ -446,7 +446,7 @@ function state_space!(F, x, v_dq, block::ElectricalSM; gen::SynchronousMachine)
     Ψ_q = - Lq*i_q + block.La_q*(i_q1 + i_q2); # q-axis flux
 
     Te = -(Ψ_d*i_q - Ψ_q*i_d); # Generator operation electrical torque n_ppoles*w_m = w_e
-    # z = merge(z, (;Te))
+    # `z = merge(z, (;Te))`
     
     w_pu = get_state(:ω_pu, x)
 
@@ -458,7 +458,7 @@ function state_space!(F, x, v_dq, block::ElectricalSM; gen::SynchronousMachine)
                 (0    -  block.R1_q*i_q1)
                 (0    -  block.R2_q*i_q2)]
 
-    F[1:3] = L_D \ RHS_D # Tests show that this is faster than precomputing inverse lol
+    F[1:3] = L_D \ RHS_D # Tests showed faster execution than precomputing the inverse.
     F[4:6] = L_Q \ RHS_Q
 
     didq_dt = (F[1], F[4])
@@ -477,10 +477,10 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `Te`: Electromagnetic torque on the machine torque base \\[dimensionless\\].
 - `block`: Rotor inertia and turbine torque fractions.
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
@@ -495,7 +495,7 @@ into `F`.
 T_t=F_{HP}T_{HP}+F_{IP}T_{IP}+F_{LP}T_{LP},\\quad \\dot\\omega=(T_t-T_e)/(2H),\\quad \\dot\\theta=\\omega_n(\\omega-1).
 ```
 
-Torques and speed use machine bases \\[dimensionless\\]; inertia uses \\[s\\] and rotor
+Torques and speed are on machine bases \\[dimensionless\\]. Inertia uses \\[s\\] and rotor
 angle \\[rad\\].
 
 # Examples
@@ -539,10 +539,10 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `Tm`: Fixed turbine torque reference on the machine torque base \\[dimensionless\\].
 - `block`: Governor lag and droop parameters.
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
@@ -604,10 +604,10 @@ derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `v_dq`: d/q bus-voltage pair in internal machine coordinates \\[dimensionless\\].
 - `didq_dt`: Tuple of d/q current time derivatives on the machine current base \\[s⁻¹\\].
 - `block`: Voltage-regulator and exciter parameters.
@@ -626,7 +626,7 @@ derivatives into `F`.
 ```
 
 Terminal voltage is reconstructed from bus voltage, external branch drop, and current
-derivatives. Voltages use machine bases \\[dimensionless\\]; time constants use \\[s\\].
+derivatives. Voltages use machine bases \\[dimensionless\\]. Time constants use \\[s\\].
 
 # Examples
 
@@ -682,11 +682,11 @@ dynamics, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
 
@@ -718,14 +718,14 @@ function state_space!(F, x, inputs, gen::SynchronousMachine)
     v_bus_q = inputs.vq
     Tm = inputs.Tm0
 
-    theta_grid = 0; # The angle of the global dq reference frame TODO: Check if this is correct
+    theta_grid = 0; # Global dq reference-frame angle. TODO verify this value.
     d = get_state(:θ_sg, x) - theta_grid; # New reference frame angle - old RF angle
     T = [cos(d) -sin(d);
         sin(d)  cos(d)]; # Rotation to rotor's RF
     v_dq = T*[v_bus_d; v_bus_q];
-    # vd = v_dq[1];
-    # vq = v_dq[2];
-    # z = merge(z,(;vd,vq, Tm0))
+    # `vd = v_dq[1];`
+    # `vq = v_dq[2];`
+    # `z = merge(z,(;vd,vq, Tm0))`
 
     ### ElectricalSM
     index_end = index + n_states(gen.elec) -1  #Nb of equatinos
@@ -752,7 +752,7 @@ function state_space!(F, x, inputs, gen::SynchronousMachine)
 end
 
 
-###### HElper functions ########################
+# Helper functions
 
 """
 $(TYPEDSIGNATURES)
@@ -797,8 +797,8 @@ end
 
 
 
-# This did not work!
-# function eval_abcd(gen :: SynchronousMachine, s :: Complex)
+# Previous ABCD conversion attempt. It did not give a valid result.
+# `function eval_abcd(gen :: SynchronousMachine, s :: Complex)`
 #     Y = eval_parameters(gen,s)
 #     abcd = y_to_abcd(Y)
 # end

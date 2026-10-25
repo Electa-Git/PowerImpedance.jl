@@ -1,4 +1,4 @@
-############################  common/loops/outer_reactive.jl  ############################
+# Reactive-power outer loops
 
 #=
 Shared reactive-power and AC-voltage outer-loop blocks.
@@ -88,13 +88,13 @@ Evaluate the voltage-support lag equation.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]; angle
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]. Angle
   signals use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `block`: The `VoltageSupportLag` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization. Default:
@@ -110,8 +110,8 @@ Evaluate the voltage-support lag equation.
 v=\\sqrt{v_d^2+v_q^2},\\quad \\dot{\\xi}=\\omega_c[K(v_{ref}-v)-\\xi],\\quad Q_{supp}=\\xi.
 ```
 
-The reference includes the parent converter voltage-filter ratio. Voltage and power use
-converter bases \\[dimensionless\\].
+The reference includes the voltage-filter ratio of the parent converter. Voltage and
+power are on converter bases \\[dimensionless\\].
 
 # Examples
 
@@ -153,7 +153,8 @@ Reactive-power PI controller with optional voltage support.
 $(TYPEDFIELDS)
 """
 struct OuterReactiveQControl{S<:AbstractVoltageSupportTLC} <: AbstractOuterReactiveControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_ctrl::PIControl
     "Reactive-power support block driven by AC voltage."
     support::S
@@ -168,7 +169,7 @@ Construct a reactive-power PI controller.
 
 # Arguments
 
-- `pi_ctrl`: PI gains for normalized signals; proportional gain is \\[dimensionless\\] and
+- `pi_ctrl`: PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and
   integral gain is \\[s⁻¹\\]. Default: `PIControl()`.
 - `support`: Reactive-power support block driven by AC voltage. Default:
   `NoVoltageSupport()`.
@@ -210,13 +211,13 @@ Evaluate reactive-power control and support dynamics.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `block`: The `OuterReactiveQControl` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -274,7 +275,7 @@ $(TYPEDEF)
 
 AC-voltage outer-loop PI controller returning the scalar `q_ctrl_ref`.
 The TLC pass-through and MMC grid-following assemblies use it as a q-axis current
-reference; the MMC grid-forming virtual-impedance block uses it as a d-axis voltage
+reference. The MMC grid-forming virtual-impedance block uses it as a d-axis voltage
 correction. These signals use their converter bases \\[dimensionless\\].
 The filter acts on measured voltage magnitude before calculation of the PI
 error. `NoFilter()` preserves the zero-state magnitude measurement.
@@ -296,7 +297,7 @@ Construct a `OuterReactiveVacControl` component from the supplied parameters.
 
 # Arguments
 
-- `pi_ctrl`: PI gains for normalized signals; `Kp` is \\[dimensionless\\] and `Ki` is
+- `pi_ctrl`: PI gains for normalized signals. `Kp` is \\[dimensionless\\] and `Ki` is
   \\[s⁻¹\\]. Default: `PIControl()`.
 - `filter`: Scalar measurement filter specification or realized filter. Default:
   `NoFilter()`.
@@ -343,13 +344,13 @@ Evaluate AC-voltage PI control.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `block`: The `OuterReactiveVacControl` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -364,9 +365,10 @@ Evaluate AC-voltage PI control.
 e=v_{ref}-\\operatorname{LPF}(\\sqrt{v_d^2+v_q^2}),\\quad \\dot{\\xi}=K_i e,\\quad u_q=K_p e+\\xi.
 ```
 
-The returned `q_ctrl_ref` is ``u_q``; its interpretation as a current reference or
+The returned `q_ctrl_ref` is ``u_q``. Its interpretation as a current reference or
 voltage correction depends on the downstream assembly. Signals use converter bases
-\\[dimensionless\\]. The voltage reference includes the parent converter voltage ratio.
+\\[dimensionless\\]. The voltage reference includes the voltage ratio of the parent
+converter.
 
 # Examples
 

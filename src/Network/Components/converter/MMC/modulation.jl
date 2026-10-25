@@ -19,11 +19,11 @@ zero-sequence commands.
 $(TYPEDFIELDS)
 """
 struct UncompensatedModulation{D<:PadeDelay} <: AbstractModulationMMC 
-    "Two-channel differential d/q modulation delay."
+    "Delay of differential d/q modulation commands in two channels."
     delay1::D
-    "Two-channel sum d/q modulation delay."
+    "Delay of sum d/q modulation commands in two channels."
     delay2::D
-    "Scalar sum zero-sequence modulation delay."
+    "Modulation delay for the scalar sum zero-sequence command."
     delay3::D
 end
 statenames(m::UncompensatedModulation) = (statenames(m.delay1)..., statenames(m.delay2)..., statenames(m.delay3)...)
@@ -89,11 +89,11 @@ compensation, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `b`: The `UncompensatedModulation` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -115,7 +115,7 @@ compensation, writing state derivatives into `F`.
 ```
 
 References are rotated to the electrical-model frames before insertion-index
-calculation. Triplen differential indices are zero; delayed commands receive
+calculation. Triplen differential indices are zero. Delayed commands receive
 frame-dependent phase compensation. Voltages and insertion indices are normalized
 \\[dimensionless\\].
 
@@ -152,7 +152,8 @@ function state_space!(F, x, inputs, b::UncompensatedModulation, conv::AbstractMM
     # First, the references are converter to grid reference framoe
     Δθ_c = syncangle(conv.sync, x)
     vMΔ_d_ref, vMΔ_q_ref = inverse_frame_transform(vMΔ_d_ref_c, vMΔ_q_ref_c, Δθ_c)
-    vMΣ_d_ref, vMΣ_q_ref = inverse_frame_transform(vMΣ_d_ref_c, vMΣ_q_ref_c, -2*Δθ_c) # Zero sequence is reference frame independent, so not transformed
+    # Zero sequence is independent of the reference frame.
+    vMΣ_d_ref, vMΣ_q_ref = inverse_frame_transform(vMΣ_d_ref_c, vMΣ_q_ref_c, -2*Δθ_c)
 
     # Δ variables multiplied by -1 * baseConv1 * 2/v_dc_f
     mΔd = -conv.elec.baseConv1 * 2/v_dc_f * vMΔ_d_ref 
@@ -180,21 +181,21 @@ end
 $(TYPEDEF)
 
 Calculate insertion indices by solving the instantaneous capacitor-voltage coupling
-system. A singular coupling matrix produces NaN insertion indices so an equilibrium
-solver can reject the iterate.
+system. Singular coupling matrices produce NaN insertion indices, which an equilibrium
+solver rejects.
 
 $(TYPEDFIELDS)
 """
 struct CompensatedModulation{D<:PadeDelay} <: AbstractModulationMMC 
-    "Two-channel differential d/q modulation delay."
+    "Delay of differential d/q modulation commands in two channels."
     delay1::D
     "Differential triplen d-component modulation delay."
     delay2a::D
     "Differential triplen q-component modulation delay."
     delay2b::D
-    "Two-channel sum d/q modulation delay."
+    "Delay of sum d/q modulation commands in two channels."
     delay3::D
-    "Scalar sum zero-sequence modulation delay."
+    "Modulation delay for the scalar sum zero-sequence command."
     delay4::D
 end
 statenames(m::CompensatedModulation) = (statenames(m.delay1)..., statenames(m.delay2a)..., statenames(m.delay2b)..., statenames(m.delay3)..., statenames(m.delay4)...)
@@ -274,11 +275,11 @@ compensation, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `b`: The `CompensatedModulation` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -302,7 +303,7 @@ M(\\mathbf v_C)\\mathbf m=\\mathbf v^{ref}.
 ``M`` is the seven-by-seven capacitor-voltage coupling matrix used by the electrical
 model. The reference vector contains sum d/q/z and differential d/q voltages, followed
 by two zero triplen-voltage targets. Differential references rotate into the grid
-frame and are multiplied by `baseConv1`; sum references are used without rotation
+frame and are multiplied by `baseConv1`. Sum references are used without rotation
 in this method. Singular matrices produce NaN insertion indices.
 Independent Padé delays and fundamental, negative-double-frequency, and triplen phase
 compensation follow the solve.
@@ -352,11 +353,10 @@ function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
                         -vCΔ_d          -vCΔ_q          -2 * vCΔ_Zd             -vCΣ_d              -vCΣ_q              -2 * vCΣ_z  0
                         -vCΔ_q          vCΔ_d           -2 * vCΔ_Zq             vCΣ_q               -vCΣ_d              0          -2 * vCΣ_z]
     
-    # For optimization, the matrix VΣΔ_CmdqZ could be inversed or factorized (symbolically) beforehand. But is it needed/better?
+    # TODO assess symbolic inversion or factorization of VΣΔ_CmdqZ before evaluation.
     references = [vMΣ_d_ref; vMΣ_q_ref; vMΣ_z_ref; vMΔ_d_ref; vMΔ_q_ref; 0; 0] # vΔZdq are set to zero by controller, but mΔZdq can be different from zero
-    # A singular capacitor-voltage matrix has no insertion indices. NaN marks the
-    # point as invalid, so a steady-state solver rejects the iterate instead of
-    # aborting; regular points use the same LU solve as `\`.
+    # Singular capacitor-voltage matrices produce NaN insertion indices, which a
+    # steady-state solver rejects. Regular points use the same LU solve as `\`.
     factorization = LinearAlgebra.lu(VΣΔ_CmdqZ; check = false)
     insertion = LinearAlgebra.issuccess(factorization) ? factorization \ references :
                 fill(oftype(first(references), NaN), length(references))

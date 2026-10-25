@@ -95,7 +95,7 @@ function (fr::HessenbergFreqResp)(Yout::AbstractArray{T, 3}, s_vec::AbstractVect
         ldiv2!(fr.u, fr.cs, fr.H, fr.workB, shift = -s) #Shift is A+μI so need to negate s
         copyto!(Youti, fr.D)
         mul!(Youti, fr.C, fr.workB, -1, 1)
-        Youti .*= fr.scale # Scale output if necessary
+        Youti .*= fr.scale # Scale output
     end
 
     # return Yout

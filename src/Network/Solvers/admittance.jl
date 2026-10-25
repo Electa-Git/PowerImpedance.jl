@@ -39,21 +39,22 @@ function Base.fill!(Y::Array{ComplexF64, 3}, admcoll::AdmittanceLookup{ComplexF6
     #Y array of size (N, N, length(s)) where N is the number of nodes in the network
     # Allocate matrix to store temporary results (inplace operation)
     maxsize = maximum(size.(admcoll.indices))
-    Ytemp = zeros(ComplexF64, maxsize..., length(s)) # Size should be sufficient to hold the largest admittance matrix in admvec
+    # Holds the largest admittance matrix in admvec.
+    Ytemp = zeros(ComplexF64, maxsize..., length(s))
 
     any(iszero,Y) || (Y .= complex(0)) # Initialize Y to zero. (Checking = 100ns, assignment=30ms) -> only when necessary
     Y!vec = admcoll.Y!
     indicvec = admcoll.indices
 
     for i in eachindex(Y!vec)
-        # Ytemp .= complex(0) # Reset Ytemp for the next admittance -> Not necessary, Ytemp gets overwritten by D inside Y!
+        # Y! overwrites Ytemp with D for the next admittance.
         Y! = Y!vec[i]
         indici = indicvec[i]
         # admsize = size(indici)
         Ytempi = @view(Ytemp[axes(indici,1), axes(indici,2), :])
         Y!(Ytempi, s) # Fill Ytemp with the admittance values for this element
         # Now add Ytempi to the correct location in Y based on adm.indices
-        #TODO: Try out with @simd if increased speed (probably not, bcs clear to compiler)
+        # TODO measure the effect of @simd on execution time.
         for (I, place) in pairs(indicvec[i])
             for j in eachindex(s) 
                 Y[place[1], place[2], j] += Ytempi[I,j]

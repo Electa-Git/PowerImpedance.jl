@@ -1,4 +1,4 @@
-############################  common/kernels/reference_frames.jl  ############################
+# Reference-frame transformations
 
 #=
 Reference-frame helper routines for converter dq/αβ transformations.
@@ -128,7 +128,7 @@ electrical angle accumulated over the delay duration, typically `ω₀ * τ`.
 z=e^{-j\\alpha}T_{dq,\\alpha\\beta}y,\\qquad u=\\operatorname{Re}(T_{\\alpha\\beta,dq}\\overline{z}+\\overline{T_{\\alpha\\beta,dq}}z).
 ```
 
-The helper matrices are `T_DQ_AB` and `T_AB_DQ`; ``α`` is the delay-compensation angle
+The helper matrices are `T_DQ_AB` and `T_AB_DQ`. ``α`` is the delay-compensation angle
 \\[rad\\].
 
 # Examples

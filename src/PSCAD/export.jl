@@ -28,7 +28,7 @@ or a power-flow solve.
   Frequency \\[Hz\\] must equal the network frequency.
 - `name`: ASCII project identifier. Default: `"network"`.
 - `description`: Project description. Default: `name`.
-- `line_options`: PSCAD ground and frequency/phase parameter overrides.
+- `line_options`: PSCAD ground, frequency and phase parameter overrides.
   Default: an empty named tuple.
 - `dc_reference`: `:midpoint_resistors` (default) adds two grounding resistors
   per DC bus without a local source midpoint or grounded shunt.
@@ -213,7 +213,7 @@ availability before the power-flow solve or project write.
 - `name`: Project identifier, equal to the path stem. Default: the path stem.
 - `powerflow`: `PowerFlowResult`, or `nothing` (default) to calculate it.
 - `settings`: Simulation settings. Default: `SimulationSettings()`.
-- `line_options`: Named tuple of PSCAD ground and frequency/phase overrides.
+- `line_options`: Named tuple of PSCAD ground, frequency and phase overrides.
   Default: empty. An example is `(; FS = 0.5, FE = 1e6, Numf = 200, CPASS = 0)`.
   Numbers use PSCAD field units. Strings retain explicit units.
 - `dc_reference`: `:midpoint_resistors` (default) adds two resistors of

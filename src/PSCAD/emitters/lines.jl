@@ -49,7 +49,7 @@ end
 # Extending the DC fit down to 0.001 Hz reduces the measured cable current
 # deviation from power flow: -25% at 3 s with FS=0.5 Hz versus +0.67% at 5 s
 # with FS=0.001 Hz. AC lines use FS=0.5 Hz.
-"DC line frequency/phase fit start frequency \\[Hz\\]."
+"DC line frequency and phase fit start frequency \\[Hz\\]."
 const DC_LINE_FIT_START_FREQUENCY = 0.001
 
 function _line_frephase_parameters(overrides, buses)

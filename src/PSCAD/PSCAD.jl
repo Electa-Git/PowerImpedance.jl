@@ -2,7 +2,7 @@
     PSCAD
 
 Export PSCAD projects and execute simulations on a configured station.
-Module loading does not contact the station or access files.
+Module loading defines the export and execution methods in memory.
 """
 module PSCAD
 

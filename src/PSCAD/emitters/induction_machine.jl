@@ -62,7 +62,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.InductionMac
         "Pbase" => pscad_value(elec.S_base; unit = "MVA"),
         "Vbase" => pscad_value(elec.Vac_base; unit = "kV"),
         "OMEG" => pscad_value(elec.ωn; unit = "rad/s"),
-        # TRN is passed to INDUCMC2_CFG even with ERC=0; retain the tested ratio.
+        # TRN is passed to INDUCMC2_CFG even with ERC=0. Retain the tested ratio.
         "TRN" => "1", "J" => pscad_value(2machine.mech.H; unit = "s"),
         "D" => "0.0 [pu]", "View" => "1", "ERC" => "0", "MM" => "0",
         "SNP" => "1", "Cage" => "0", "NCW" => "1", "Msat" => "0", "Lsat" => "0",
@@ -94,7 +94,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.InductionMac
     component!(state.main, "wound_rotor", point, params)
     inner = pscad_name(e.pscad * "_terminal"; used = state.used)
     stub!(state.main, (point[1] + 54, point[2]), inner)
-    # The three inputs are only 36 pixels apart; horizontal stubs keep them separate.
+    # Inputs are 36 pixels apart. Horizontal stubs keep them separate.
     for (dy, signal) in ((-36, initial), (0, transfer), (36, demand))
         port, label = (point[1] - 54, point[2] + dy), (point[1] - 90, point[2] + dy)
         wire!(state.main, port, label)

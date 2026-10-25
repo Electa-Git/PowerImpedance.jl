@@ -34,7 +34,7 @@ $(TYPEDFIELDS)
     q::Float64 = _AC_SOURCE_INPUTS.q.default
     "Operating limits in \\[MW\\] and \\[MVAr\\]."
     limits::Limits = Limits()
-    "Ideal ABCD matrix; A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
+    "Ideal ABCD matrix. A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
     ABCD::Matrix{ComplexF64} = _source_abcd(conductors)
 end
 
@@ -88,7 +88,7 @@ Evaluate the component terminal admittance at complex frequency `s`.
 # Arguments
 
 - `source`: Ideal-source parameters and cached ABCD matrix.
-- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+- `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses `s = 2π * im * f`
   for frequency `f` \\[Hz\\].
 
 # Returns
@@ -98,7 +98,7 @@ Evaluate the component terminal admittance at complex frequency `s`.
 # Notes
 
 The source is regularized for admittance conversion by replacing its series B block with
-a diagonal \\[Ω\\] value of `1e-6`; the cached ideal ABCD matrix remains unchanged.
+a diagonal \\[Ω\\] value of `1e-6`. The cached ideal ABCD matrix remains unchanged.
 The frequency argument is unused by this ideal-source model.
 
 # Examples

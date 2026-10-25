@@ -8,12 +8,12 @@ abstract type AbstractPlotDefinition end
 """
     PlotRecipe(object, input, renderer)
 
-Store a domain object together with typed semantic and renderer options.
+Store a domain object together with typed domain and renderer options.
 """
 struct PlotRecipe{O, I <: NamedTuple, R <: NamedTuple}
     "Domain object being plotted."
     object::O
-    "Validated semantic recipe options."
+    "Validated domain recipe options."
     input::I
     "Validated renderer options."
     renderer::R
@@ -307,7 +307,7 @@ $(TYPEDFIELDS)
 struct LegendDefinition
     "Whether to render a legend."
     enabled::Bool
-    "Whether legend entries control series visibility."
+    "Whether clicking a legend entry changes the visibility of its series."
     interactive::Bool
     "Destination legend slot."
     slot::Symbol
@@ -487,7 +487,7 @@ Describe one backend-neutral plot axis.
 struct AxisDefinition{A <: NamedTuple}
     "Axis dimension, one of `:x`, `:y`, or `:z`."
     dim::Symbol
-    "Semantic quantity tag."
+    "Domain quantity tag."
     quantity::QuantityTag
     "Display units."
     units::Units
@@ -616,7 +616,7 @@ struct ViewDefinition{A <: NamedTuple}
     title::String
     "Backend-neutral series declarations."
     series::Vector{SeriesDefinition}
-    "Semantic panel identity."
+    "Domain panel identity."
     key::NamedTuple
     "Named-slot placement."
     placement::PlacementDefinition
@@ -665,7 +665,7 @@ struct PageDefinition
     title::String
     "Figure width and height in pixels."
     size::Tuple{Int, Int}
-    "Semantic page identity."
+    "Domain page identity."
     key::NamedTuple
     "Named layout tree."
     layout::LayoutDefinition
@@ -776,7 +776,7 @@ Validate a layout, page, or complete render definition and return it.
 
 # Errors
 
-- `ArgumentError`, `DimensionMismatch`, or `DomainError` when semantic fields,
+- `ArgumentError`, `DimensionMismatch`, or `DomainError` when domain fields,
   data shapes, layout relationships, placements, or logarithmic data are invalid.
 """
 function validate(layout::LayoutDefinition)

@@ -216,8 +216,8 @@ Create an explicit deterministic or uncertain parameter axis. Collections passed
 Passing the `Grid` function itself as the first positional argument to any
 component or configuration constructor selects its lazy NetworkBuilder method.
 The call `impedance(Grid, z=Grid([1.0, 2.0]), pins=1)` returns a Gridspace.
-Calling `impedance(z=1.0, pins=1)` uses the scalar constructor. Julia does not
-dispatch on keyword argument types, so the positional marker selects the lazy
+Calling `impedance(z=1.0, pins=1)` uses the scalar constructor. Julia dispatches on the
+positional marker to select the lazy
 method.
 
 # Notes

@@ -215,8 +215,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Compare settled bus voltages, terminal currents and machine/converter operating
-points with a retained power flow. Check the requested channels in `model.probes`
+Compare settled bus voltages, terminal currents, and operating points of machines
+and converters with a retained power flow. Check the requested channels in `model.probes`
 using complete three-phase AC or scalar DC measurements.
 
 Each row passes when `error <= tolerance` and
@@ -271,7 +271,8 @@ is absent, including a source without a `gendc` solution record.
 Within a connected DC circuit containing a TLC or MMC, normalize current error
 by `max(abs(reference), Sbase/vDCbase)` \\[kA\\]. The MMC field is `vDC_base`.
 The base applies to converter terminals, branches and sources in that circuit.
-DC terminals connect the circuit. AC terminals and shared ground do not.
+DC terminals determine circuit connectivity independently of AC terminals and
+shared ground.
 Multiple converters must have equal current bases. Circuits without converters
 use relative error. For a zero reference and no converter base, error is zero
 when the measurement is zero, and infinite otherwise.

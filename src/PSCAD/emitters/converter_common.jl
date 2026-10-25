@@ -1,5 +1,5 @@
-# The block diagrams use coefficients from converter/common, TLC and MMC
-# to preserve their control equations.
+# Block-diagram coefficients come from the shared converter code and the TLC
+# and MMC models. The diagrams reproduce their control equations.
 const _CONVERTER_STARTUP_RELEASE = 0.2
 
 # The dynamics and source calculation follows the electrical solve by one
@@ -458,7 +458,7 @@ function converter_reactive(name, e, equilibrium, block::PowerImpedance.OuterRea
     parameters = ModuleParameterPlan[]
     converter_parameter!(parameters, "vac_reference",
         equilibrium.terminal_pu.v_ac * PowerImpedance.voltage_filter_ratio(e.model))
-    # VacControl measures voltage magnitude with square/sqrt blocks and
+    # VacControl measures voltage magnitude with square and square-root blocks and
     # uses separate proportional and integral paths.
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for n in ("vG_d_f", "vG_q_f")])
     append!(graph.nodes,

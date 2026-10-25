@@ -15,7 +15,7 @@ end
 """
 $(TYPEDEF)
 
-Store a bus and its optional solved voltage. AC bases are phase RMS \\[kV\\];
+Store a bus and its optional solved voltage. AC bases are phase RMS \\[kV\\].
 DC bases are pole-to-ground \\[kV\\]. With a solved power flow and input data,
 `pf_index` selects the base from the PowerModels bus record. All bus bases
 must agree. Without a solution, use the declared network base.
@@ -108,7 +108,8 @@ $(TYPEDFIELDS)
 struct OperatingPointRecord
     "Bus states `(vm_pu, va_rad)` in \\[dimensionless\\] and \\[rad\\], indexed by `BusKey`."
     bus_states::Dict{BusKey, NamedTuple}
-    "Solved component powers \\[MW, MVAr\\], synchronous-machine terminal voltage/angle \\[kV, rad\\] and induction-machine speed \\[pu\\], keyed by designator."
+    "Solved component powers \\[MW, MVAr\\], synchronous-machine terminal voltage and angle
+    \\[kV, rad\\] and induction-machine speed \\[pu\\], keyed by designator."
     branch_flows::Dict{Symbol, NamedTuple}
     "Solved per-port values \\[MW, MVAr, rad, kV\\], keyed by designator."
     values::Dict{Symbol, NamedTuple}

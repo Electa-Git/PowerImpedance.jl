@@ -36,7 +36,8 @@ feedforward.
 $(TYPEDFIELDS)
 """
 struct ZeroSequenceCurrentControl <: AbstractInnerCurrentControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_control::PIControl
 end
 statenames(::ZeroSequenceCurrentControl) = (:ξ_iΣ_z,)
@@ -68,7 +69,7 @@ parameters.
 
 # Arguments
 
-- `pi_control`: PI gains for normalized signals; `Kp` is \\[dimensionless\\] and `Ki` is
+- `pi_control`: PI gains for normalized signals. `Kp` is \\[dimensionless\\] and `Ki` is
   \\[s⁻¹\\].
 - `ref`: Tuple of constant d/q circulating-current references in the converter frame
   \\[dimensionless\\]. Default: `(0.0, 0.0)`.
@@ -92,8 +93,8 @@ CirculatingCurrentSuppressionControl(; pi_control::PIControl, ref = (0.0, 0.0)) 
     CirculatingCurrentSuppressionControl(pi_control; ref)
 statenames(::CirculatingCurrentSuppressionControl) = (:ξ_iΣ_d, :ξ_iΣ_q)
 
-### Lower level structures ###
-#TODO: update the equations in comments to match the new version (including taking into account that modulation is now done in a specific function)
+# Lower level structures
+# TODO update the commented equations for the separate modulation function.
 """
 $(TYPEDSIGNATURES)
 
@@ -102,11 +103,11 @@ Evaluate MMC circulating-current suppression, writing state derivatives into `F`
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]; angle
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]. Angle
   signals use \\[rad\\].
 - `b`: The `CirculatingCurrentSuppressionControl` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -176,11 +177,11 @@ Evaluate MMC zero-sequence current control, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `b`: The `ZeroSequenceCurrentControl` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -195,7 +196,7 @@ Evaluate MMC zero-sequence current control, writing state derivatives into `F`.
 e=i_{\\Sigma z}^{ref}-i_{\\Sigma z},\\quad \\dot{\\xi}=K_i e,\\quad v_{\\Sigma z}^{ref}=v_{dc,f}/2-K_p e-\\xi.
 ```
 
-Current and voltage use converter bases \\[dimensionless\\].
+Current and voltage are on converter bases \\[dimensionless\\].
 
 # Examples
 
@@ -240,7 +241,8 @@ circulating-current PI controller.
 $(TYPEDFIELDS)
 """
 struct CirculatingCurrentControl <: AbstractInnerCurrentControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_control::PIControl
 end
 statenames(::CirculatingCurrentControl) = (:ξ_iΣ_d, :ξ_iΣ_q, :ξ_iΣ_z)
@@ -253,11 +255,11 @@ Evaluate MMC circulating-current PI control, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `b`: The `CirculatingCurrentControl` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -275,7 +277,7 @@ Evaluate MMC circulating-current PI control, writing state derivatives into `F`.
 ```
 
 Sum- and difference-energy outputs are added to form the three-component current
-reference. ``J_{-2ω}`` is the implemented double-frequency rotation matrix; all
+reference. ``J_{-2ω}`` is the implemented double-frequency rotation matrix. All
 electrical quantities use converter bases \\[dimensionless\\].
 
 # Examples

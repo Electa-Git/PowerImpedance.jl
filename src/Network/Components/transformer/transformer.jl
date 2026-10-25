@@ -16,7 +16,8 @@ secondary voltage leads the primary by 30°, and negative sequence has the
 opposite shift. It applies this rotation to the complete `:YY` T-model,
 including its capacitive paths. Its internal zero-sequence block is an identity
 placeholder decoupled from both other sequences, discarded by the supported
-dq transformation. It does not represent physical zero-sequence transfer.
+dq transformation. The supported dq representation contains the positive and
+negative sequences.
 Connect three-phase `:ΔY` models to an `ACDQ` bus with `domain = ACDQ` on
 the `Bus`, or an `ACDQ` port on an inferred bus. `NetworkBuilder.define` rejects
 these models when the resolved frame is not `:dq`.
@@ -48,7 +49,7 @@ $(TYPEDFIELDS)
 	"Stored short-circuit secondary voltage \\[V\\]."
 	V₂ˢ::Union{Int, Float64}  = 0      # short circuit secondary voltage [V]
 
-	"Primary-to-secondary voltage ratio; line-to-line for three phases \\[dimensionless\\]."
+	"Primary-to-secondary voltage ratio. Line-to-line for three phases \\[dimensionless\\]."
 	n::Union{Int, Float64}    = 0        # voltage ratio (line-to-line for three phases)
 	"Primary winding inductance \\[H\\]."
 	Lₚ::Union{Int, Float64} = 0       # primary side inductance [H]
@@ -58,9 +59,9 @@ $(TYPEDFIELDS)
 	Rₛ::Union{Int, Float64} = 0       # secondary side resistance [Ω]
 	"Secondary winding inductance \\[H\\]."
 	Lₛ::Union{Int, Float64} = 0       # secondary side inductance [H]
-	"Primary excitation inductance; zero omits this term \\[H\\]."
+	"Primary excitation inductance. Zero omits this term \\[H\\]."
 	Lₘ::Union{Int, Float64} = 0      # magnetising inductance [H]
-	"Primary excitation resistance; zero omits this term \\[Ω\\]."
+	"Primary excitation resistance. Zero omits this term \\[Ω\\]."
 	Rₘ::Union{Int, Float64} = 0      # magnetising resistance [Ω]
 	"Per-phase turn-to-turn capacitance \\[F\\]."
 	Cₜ::Union{Int, Float64} = 0       # turn-to-turn capacitance [F]
@@ -87,7 +88,7 @@ Construct a one-phase or balanced three-phase transformer model.
   delta primary, grounded-Y secondary, secondary positive sequence leading by 30°).
 - `ω`: Rated angular frequency `\\[rad/s\\]`.
 - `V₁ᵒ`, `V₁ˢ`, `V₂ᵒ`: Open- and short-circuit voltages
-  `\\[V\\]` used by `def=:tests`; `V₁ᵒ` and `V₂ᵒ` also specify power-flow voltage ratings.
+  `\\[V\\]` used by `def=:tests`. `V₁ᵒ` and `V₂ᵒ` also specify power-flow voltage ratings.
 - `V₂ˢ`: Stored secondary short-circuit voltage `\\[V\\]`, unused by the implemented
   parameter conversion.
 - `I₁ᵒ`, `I₁ˢ`: Open- and short-circuit primary currents `\\[A\\]`.
@@ -95,7 +96,7 @@ Construct a one-phase or balanced three-phase transformer model.
 - `n`: Primary-to-secondary voltage ratio (line-to-line for three phases)
   `\\[dimensionless\\]`.
 - `Lₚ`, `Lₛ`, `Lₘ`: Primary, secondary, and magnetizing inductances
-  `\\[H\\]`; winding leakage is referred to its own side, excitation to the primary.
+  `\\[H\\]`. Winding leakage is referred to its own side, excitation to the primary.
 - `Rₚ`, `Rₛ`, `Rₘ`: Primary, secondary, and magnetizing resistances
   `\\[Ω\\]`, with the same side references as the inductances.
 - `Cₜ`, `Cₛ`: Turn-to-turn and stray capacitances `\\[F\\]`.
@@ -108,17 +109,18 @@ convention and impose ±10 % bounds. With `V₁ᵒ == V₂ᵒ == 0`, nominal bus
 levels are inferred from finite, positive AC source voltage setpoints outside
 ±10 % of the network base. They propagate in both directions through transformer
 voltage ratios and unchanged through AC branches joining two non-ground buses.
-Shunts and converters do not propagate levels. In element order, each unreached
+Shunts and converters terminate this propagation. In element order, each unreached
 transformer primary is assigned the base and its level propagated in the same way.
-Sources within the base band do not redefine the nominal level. Conflicting
+Sources within the base band retain the nominal level. Conflicting
 levels differing by more than 1 % warn and retain the first level.
 
 All T-model parameters are per-phase Y-equivalent values for both organizations.
 `:ΔY` applies the Dyn11 rotation to the complete `:YY` model, including `Cₜ` and
 `Cₛ`, without rescaling impedances or `n`. `hasRω` and `k` use the same 50 Hz
 winding-resistance reference as `:YY`. Zero `Rₘ` or `Lₘ` omits that excitation
-term. The internal identity zero-sequence block is only a decoupled placeholder
-for dq conversion; delta-to-Y zero-sequence isolation has no phase-domain ABCD.
+term. The internal identity zero-sequence block is a decoupled placeholder
+for dq conversion. Delta-to-Y zero-sequence isolation makes the physical phase-domain ABCD
+undefined.
 - `args...`: Remaining component-field keywords described above.
 
 # Returns
@@ -133,8 +135,8 @@ n=V_1^o/V_2^o,\\quad R=P_1^s/(I_1^s)^2,\\quad L=\\frac{\\sqrt{(V_1^sI_1^s)^2-(P_
 
 In `:tests` mode the primary winding receives half of ``R,L`` and the secondary receives
 the other half divided by ``n²``. The excitation inductance is derived from the
-open-circuit reactive power. The stored test values are interpreted per the implemented
-formulas; no three-phase test-data conversion is applied.
+open-circuit reactive power. The formulas use the stored per-phase
+test values directly.
 
 # Errors
 
@@ -186,7 +188,7 @@ function transformer(def=:explicit; args...)
 		t.Lₘ = (t.V₁ᵒ)^2 / sqrt((t.V₁ᵒ*t.I₁ᵒ)^2 - t.P₁ᵒ^2) / t.ω
 	end
 
-	# DO NOT build t.ABCD here anymore (no symbolics)
+	# ABCD is evaluated numerically by eval_abcd.
 	return t
 end
 
@@ -198,7 +200,7 @@ Evaluate the component ABCD representation at complex frequency `s`.
 # Arguments
 
 - `t`: Transformer T-model and winding organization.
-- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+- `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses `s = 2π * im * f`
   for frequency `f` \\[Hz\\].
 
 # Returns
@@ -214,7 +216,7 @@ Z_p=R_p w_k+sL_p,\\quad Z_s=R_s w_k+sL_s,\\quad Y_m=R_m^{-1}+(sL_m)^{-1},\\quad 
 The resistance multiplier is unity unless `hasRω` is enabled. Zero magnetizing
 resistance or inductance omits its term. Series-winding, excitation, ideal-ratio, and
 capacitive two-ports are cascaded in implementation order. For Dyn11, the complete
-positive/negative-sequence models are multiplied by ``e^{∓jπ/6}``; the internal
+positive- and negative-sequence models are multiplied by ``e^{∓jπ/6}``. The internal
 zero-sequence identity is a placeholder removed by the supported dq transformation.
 
 # Examples
@@ -227,10 +229,10 @@ PowerImpedance.eval_abcd(model, 2π*im*50)
 """
 function eval_abcd(t::Transformer, s::ComplexF64)
 	# Frequency-dependent winding resistance scaling
-	# Keep the original behavior: base = 2π*50 (NOT t.ω), because the legacy code used that constant.
+	# Winding-resistance scaling uses the original fixed reference base = 2π*50.
 	wk = t.hasRω ? (abs(s) / (2*π*50))^t.k : 1.0
 
-	# ---- 1-phase building blocks (2×2 ABCD) ----
+	# 1-phase building blocks (2×2 ABCD)
 	Zp = (t.Rₚ * wk) + s * t.Lₚ
 	Zs = (t.Rₛ * wk) + s * t.Lₛ
 
@@ -272,7 +274,7 @@ function eval_abcd(t::Transformer, s::ComplexF64)
 		Z = connect_parallel!(Z, Z_stray)
 	end
 
-	# ---- Lift to requested pin count / topology ----
+	# Lift to requested pin count / topology
 	if (t.conductors == 1)
 		return Z
 	end
@@ -297,15 +299,15 @@ function eval_abcd(t::Transformer, s::ComplexF64)
         Z_positive = cis(-π / 6) * Z
         Z_negative = cis(π / 6) * Z
 
-        # Sequence order: [V0, V+, V-, I0, I+, I-]. Zero sequence has
-        # no physical ABCD for delta-to-Y isolation. Identity is only an
-        # exactly decoupled placeholder removed by transformation_dq.
+        # Sequence order: [V0, V+, V-, I0, I+, I-]. Delta-to-Y zero-sequence
+        # isolation makes the physical phase-domain ABCD undefined. The decoupled identity
+        # placeholder is removed by transformation_dq.
         Z_sequence = zeros(ComplexF64, 6, 6)
         Z_sequence[1, 1] = Z_sequence[4, 4] = 1
         Z_sequence[[2, 5], [2, 5]] = Z_positive
         Z_sequence[[3, 6], [3, 6]] = Z_negative
 
-        # Fortescue columns [zero, positive, negative]; apply the same
+        # Fortescue columns [zero, positive, negative]. Apply the same
         # basis to voltages and currents, with phase order [a, b, c].
         a = cis(2π / 3)
         T = ComplexF64[1 1 1; 1 a^2 a; 1 a a^2]
@@ -340,7 +342,7 @@ function convert!(data, t::Transformer, ::Type{PMACDC}, component_key,
     branch = data["branch"][string(key_branch)]
     branch["transformer"] = true
     # PowerModels uses t = tap*exp(j*shift), with V_to = V_from/t
-    # (core/data.jl:15-22, core/admittance_matrix.jl:55-59).
+    # (`core/data.jl:15-22`, `core/admittance_matrix.jl:55-59`).
     branch["shift"] = t.conductors == 3 && t.organization == :ΔY ? -π / 6 : 0
     branch["c_rating_a"] = 1
 

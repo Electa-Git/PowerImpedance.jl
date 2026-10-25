@@ -3,7 +3,7 @@ export mmc, MMC, AbstractMMC,       # MMC
     ΣdqzControlTEC, ΣdqzControlLEC
 
 
-### Abstract types ###
+# Abstract types
 """
 $(TYPEDEF)
 
@@ -24,16 +24,16 @@ Define the sum-current and internal-energy control assembly of an MMC.
 abstract type AbstractΣdqzControl               <: AbstractStateSpace end
 voltage_filter_ratio(conv::AbstractMMC) = conv.elec.turnsRatio
 
-### Include files ###
+# Include files
 include("electrical.jl")
 include("energy.jl")
 include("inner_current.jl")
 include("modulation.jl")
 
 
-################## Structs #####################
+# Structs
 
-### MMC ###
+# MMC
 """
 $(TYPEDEF)
 
@@ -75,7 +75,7 @@ initialvalues(c::MMC; inputs, terminal_pu)  = (;
 inputnames(::MMC)                           = (:v_dc, :vG_d, :vG_q)
 outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q) 
 
-### High level structures ###
+# High level structures
 """
 $(TYPEDEF)
 
@@ -162,9 +162,9 @@ initialvalues(c::ΣdqzControlLEC; terminal_pu=TerminalValuesPU()) = (;
     initialvalues(c.ccc)...)
 
 
-################## State-space equations #####################
+# State-space equations
 
-### MMC ###
+# MMC
 """
 $(TYPEDSIGNATURES)
 
@@ -174,13 +174,13 @@ writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `c`: MMC assembly and electrical bases.
 
@@ -207,31 +207,31 @@ outputs = P.state_space!(F, x, inputs, point, model)
 ```
 """
 function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, c::MMC)
-    # -- Signal Processing ------------------------------------------------------------------------    
+    # Signal processing
     sig_in = input_signals(c, x, inputs)
 
     meas, i = state_space_block!(F, x, sig_in, terminal_pu, c.meas, c, 1)
     sync_out, i = state_space_block!(F, x, meas, terminal_pu, c.sync, c, i)
 
-    # -- Delta and Sigma control ------------------------------------------------------------------
+    # Delta and Sigma control
     out_delta, i = state_space_block!(F, x, (; meas, sync = sync_out), terminal_pu,
         c.delta_control, c, i)
     out_sigma, i = state_space_block!(F, x,
         (meas = meas, power = (P_ac_f = meas.P_ac_f,), sync = sync_out), terminal_pu,
         c.sigma_control, c, i)
 
-    # -- Modulation -------------------------------------------------------------------------------
+    # Modulation
     out_modulation, i = state_space_block!(F, x, (; meas, out_delta, out_sigma),
         terminal_pu, c.modulation, c, i)
 
-    # -- Electrical model -------------------------------------------------------------------------
+    # Electrical model
     state_space_block!(F, x, (; out_modulation, sig_in, inputs), terminal_pu, c.elec, c, i)
 
     return (; meas)
 end
 
 
-### Higher level structures ###
+# Higher level structures
 
 """
 $(TYPEDSIGNATURES)
@@ -242,13 +242,13 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `b`: The `ΣdqzControlTEC` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -285,10 +285,10 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)},
         terminal_pu::TerminalValuesPU, b::ΣdqzControlTEC, c::MMC)
     (; meas) = inputs
-    # -- Outer Loop -------------------------------------------------------------------------------
+    # Outer loop
     out_Wtot, i = state_space_block!(F, x, meas, terminal_pu, b.tec, c, 1)
 
-    # -- Inner Loop -------------------------------------------------------------------------------
+    # Inner loop
     out_zscc, i = state_space_block!(F, x, (; meas, out_Wtot), terminal_pu, b.zscc, c, i)
     out_ccsc, i = state_space_block!(F, x, meas, terminal_pu, b.ccsc, c, i)
 
@@ -304,13 +304,13 @@ Evaluate MMC summed- and differential-energy control, writing state derivatives 
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `b`: The `ΣdqzControlLEC` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -347,13 +347,13 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)},
         terminal_pu::TerminalValuesPU, b::ΣdqzControlLEC, c::MMC)
     (; meas, power, sync) = inputs
-    # -- Outer Loop -------------------------------------------------------------------------------
+    # Outer loop
     out_wsigma, i = state_space_block!(F, x, (; meas, power, sync), terminal_pu, b.wsigma,
         c, 1)
     out_wdelta, i = state_space_block!(F, x, (; meas, power, sync), terminal_pu, b.wdelta,
         c, i)
 
-    # -- Inner Loop -------------------------------------------------------------------------------
+    # Inner loop
     out_ccc, _ = state_space_block!(F, x,
         (; meas, sync, out_wΣ = out_wsigma, out_wΔ = out_wdelta), terminal_pu, b.ccc, c, i)
 
@@ -369,13 +369,13 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `b`: The `ΔdqControlGFL` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -413,13 +413,13 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 """
 function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, b::ΔdqControlGFL, c::MMC)
     (; meas, sync) = inputs
-    # -- Outer Loop -------------------------------------------------------------------------------
+    # Outer loop
     out_active, i = state_space_block!(F, x, (; meas, sync), terminal_pu, b.outer_active, c,
         1)
     out_reactive, i = state_space_block!(F, x, (; meas, sync), terminal_pu,
         b.outer_reactive, c, i)
 
-    # -- Inner Loop -------------------------------------------------------------------------------
+    # Inner loop
     
     out_occ, _= state_space_block!(F, x,
         (; meas, sync, vloop = (; out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref)),
@@ -437,13 +437,13 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `b`: The `ΔdqControlGFM` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -480,11 +480,11 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 """
 function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, b::ΔdqControlGFM, c::MMC)
     (; meas, sync) = inputs
-    # -- Outer Loop -------------------------------------------------------------------------------
+    # Outer loop
     out_reactive, i = state_space_block!(F, x, (; meas, sync), terminal_pu,
         b.outer_reactive, c, 1)
 
-    # -- Inner Loop -------------------------------------------------------------------------------
+    # Inner loop
     out_vi, i = state_space_block!(F, x, (; meas, sync, out_reactive), terminal_pu, b.vi, c,
         i)
 
@@ -495,7 +495,7 @@ function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, b::ΔdqContro
 end
 
 
-################## Handling of inputs and outputs ############
+# Handling of inputs and outputs
 
 """
 $(TYPEDSIGNATURES)
@@ -515,7 +515,7 @@ Port powers are positive into the converter. Taking 603 MW from DC and deliverin
 
 - `inputs`: Named tuple of DC voltage `v_dc` and grid-frame AC voltages `vG_d`, `vG_q`,
   on converter bases \\[dimensionless\\].
-- `terminal_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point. Powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\].
 
 # Notes
@@ -567,8 +567,8 @@ Build the electrical signals passed to converter measurement and plant blocks.
 
 - `c`: MMC assembly and electrical bases.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 
 # Returns
@@ -609,7 +609,7 @@ function input_signals(c::MMC, x, inputs)
     v = frame_transform(inputs.vG_d, inputs.vG_q, θ)
     i = frame_transform(x.iΔ_d, x.iΔ_q, θ)
 
-    return ( # If not speficied otherwise, all fields are in converter reference frame 
+    return ( # Fields use the converter reference frame unless specified otherwise.
         vG_d = v.d * c.elec.turnsRatio,
         vG_q = v.q * c.elec.turnsRatio,
         vG_d_g = inputs.vG_d * c.elec.turnsRatio, # grid reference frame
@@ -623,14 +623,15 @@ function input_signals(c::MMC, x, inputs)
 end
 
 
-## Conventions: should all be ingoing as to have proper admittance formulation wrt to nodal voltages
+# Convention: every current enters its terminal, as the nodal admittance
+# formulation requires.
 function outputequations!(F, x, y, inputs, c::MMC)
-    # NB: All electrical state variables are in grid dq frame (and not converter frame)
+    # Electrical state variables are in the grid dq frame.
     F[1:3] = [3*x.iΣ_z, -x.iΔ_d, -x.iΔ_q]
 end
 
 
-################## Contructor ################################
+# Constructor
 
 """
 $(TYPEDSIGNATURES)
@@ -663,11 +664,11 @@ Set control references and power-flow seeds with `component` or `withinputs`.
 References and seeds use the converter bases.
 
 The selected synchronization and outer-control blocks determine the AC and DC
-power-flow control modes. The power bounds multiply `limits` by `Sbase`; the
-current-limit estimate instead compares their unscaled values with physical `Pac`.
-Construction does not solve an equilibrium or populate linearization matrices.
-`linearize` solves and linearizes the converter at a supplied operating point;
-frequency-domain evaluation then uses those stored matrices.
+power-flow control modes. The power bounds multiply `limits` by `Sbase`. The
+current-limit estimate compares their unscaled values with physical `Pac`.
+`linearize` solves the equilibrium and populates the linearization matrices at
+a supplied operating point.
+Frequency-domain evaluation then uses those stored matrices.
 
 # Examples
 
@@ -706,7 +707,7 @@ function mmc(;
         limits, seeds, LinearizationCache())
 end
 
-##################### SI Scaling ######################################
+# SI scaling
 function _mmc_si_scale!(Y, elec::ElectricalMMC)
     iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
     iDCbase = elec.Sbase / elec.vDC_base
@@ -745,10 +746,10 @@ admittance.
 Y_{ij}^{SI}=Y_{ij}^{pu}\\frac{I_{b,i}}{V_{b,j}}.
 ```
 
-Rows use current bases `(I_dc, n*I_ac, n*I_ac)` and columns use voltage bases
+The row current bases are `(I_dc, n*I_ac, n*I_ac)` and the column voltage bases are
 `(V_dc, V_ac, V_ac)`, where `n=turnsRatio`, `I_ac=2Sbase/(3vAC_base)`,
 `I_dc=Sbase/vDC_base`, `V_ac=vAC_base`, and `V_dc=vDC_base`. Currents use
-\\[kA\\] and voltages \\[kV\\], so their ratios use \\[S\\].
+\\[kA\\] and voltages \\[kV\\]. Their ratios use \\[S\\].
 
 # Examples
 
@@ -768,7 +769,7 @@ end
 
 
 
-############################  Power-flow integration MMC ############################
+# Power-flow integration MMC
 
 
 
@@ -888,7 +889,7 @@ function convert!(data, conv::MMC, ::Type{PMACDC}, component_key,
     convdc["basekVac"] = global_dict["V"] / 1e3
 
     convdc["type_ac"] = pf_type_ac(conv.delta_control)
-    # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages,
+    # Divide by sqrt(2). PowerModelsACDC uses RMS base voltages,
     # PowerImpedance uses amplitude
     convdc["Vtar"] = (v_ac/sqrt(2)) / (global_dict["V"] / 1e3)
     if convdc["type_ac"] == 2

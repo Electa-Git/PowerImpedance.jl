@@ -16,7 +16,7 @@ struct ElectricalMMC <: AbstractStateSpace
     "Arm resistance normalized by the DC impedance base \\[dimensionless\\]."
     Rₐᵣₘ :: Float64        # equivalent arm resistance [pu]
     "Submodule capacitance normalized by the DC capacitance base \\[dimensionless\\]."
-    Cₐᵣₘ :: Float64        # capacitance per submodule [pu]
+    Cₐᵣₘ :: Float64        # Capacitance of each submodule [pu]
     "Number of submodules per arm."
     N :: Int               # number of submodules per arm [-]
     "Transformer converter-side to grid-side voltage ratio \\[dimensionless\\]."
@@ -95,8 +95,8 @@ normalized by these bases.
 L_e=(L_{arm}/2+L_r)/L_{ac,b},\\quad R_e=(R_{arm}/2+R_r)/Z_{ac,b},\\quad C_{dc,b}=1/(\\omega_b Z_{dc,b}).
 ```
 
-Arm resistance, arm inductance, and submodule capacitance are normalized using DC bases;
-the equivalent AC reactor uses AC bases.
+Arm resistance, arm inductance, and submodule capacitance are normalized using DC bases.
+The equivalent AC reactor uses AC bases.
 
 # Examples
 
@@ -152,9 +152,9 @@ Return the explicitly specified initial states of the component.
 # Arguments
 
 - `e`: Normalized MMC plant parameters.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 
 # Returns
@@ -172,8 +172,8 @@ i_{\\Delta d}=(v_d p-v_q q)/(v_d^2+v_q^2),\\quad i_{\\Delta q}=(v_q p+v_d q)/(v_
 ```
 
 The AC voltage components include the transformer turns ratio. The returned keys,
-including `iΣ_d`, follow the implemented initialization. Other states are not explicitly
-initialized. Electrical quantities use converter bases \\[dimensionless\\].
+including `iΣ_d`, follow the implemented initialization. Other states use the default
+initializer. Electrical quantities use converter bases \\[dimensionless\\].
 
 # Examples
 
@@ -206,10 +206,10 @@ Evaluate MMC electrical plant derivatives, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `data`: Named tuple of electrical input signals and modulation outputs, as shown in
   the example.
 - `b`: Normalized MMC plant parameters.
@@ -229,7 +229,7 @@ Evaluate MMC electrical plant derivatives, writing state derivatives into `F`.
 The plant writes twelve differential equations: five current and seven capacitor-voltage
 states. The inserted voltages are the implemented seven-by-seven capacitor-voltage
 coupling matrix times the insertion-index vector, with explicit AC/DC base conversion.
-All electrical states are normalized \\[dimensionless\\] and derivatives are per second.
+Electrical states are normalized \\[dimensionless\\] and derivatives are per second.
 
 # Examples
 
@@ -275,18 +275,22 @@ function state_space!(F, x, data, b::ElectricalMMC, conv::AbstractMMC)
     vMΔd *= conv.elec.baseConv2
     vMΔq *= conv.elec.baseConv2
 
-    # Hard coded equations (old code). Kept for reference --- will be deleted soon
+    # Reference equations
+    # ```julia
     # vMΔd = conv.elec.baseConv2 * ((mΔq*vCΣ_q)/4 - (mΔd*vCΣ_z)/2 - (mΔd*vCΣ_d)/4 - (mΔZd*vCΣ_d)/4 + (mΔZq*vCΣ_q)/4 - (mΣd*vCΔ_d)/4 - (mΣz*vCΔ_d)/2 +
     #         (mΣq*vCΔ_q)/4 - (mΣd*vCΔ_Zd)/4 + (mΣq*vCΔ_Zq)/4);
     # vMΔq = conv.elec.baseConv2 * ((mΔd*vCΣ_q)/4 + (mΔq*vCΣ_d)/4 - (mΔq*vCΣ_z)/2 - (mΔZd*vCΣ_q)/4 - (mΔZq*vCΣ_d)/4 + (mΣd*vCΔ_q)/4 + (mΣq*vCΔ_d)/4 -
     #         (mΣz*vCΔ_q)/2 - (mΣd*vCΔ_Zq)/4 - (mΣq*vCΔ_Zd)/4);
+    # ```
 
+    # ```julia
     # # vMΣd = (mΔd*vCΔ_d)/4 - (mΔq*vCΔ_q)/4 + (mΔd*vCΔ_Zd)/4 + (mΔZd*vCΔ_d)/4 + (mΔq*vCΔ_Zq)/4 + (mΔZq*vCΔ_q)/4 + (mΣd*vCΣ_z)/2 + (mΣz*vCΣ_d)/2;
     # vMΣd =mΔd*vCΔ_d/4 - mΔq*vCΔ_q/4 + mΔd*vCΔ_Zd/4 + mΔZd*vCΔ_d/4 + mΔq*vCΔ_Zq/4 + mΔZq*vCΔ_q/4 + mΣd*vCΣ_z/2 + mΣz*vCΣ_d/2;
     # # vMΣq = (mΔq*vCΔ_Zd)/4 - (mΔq*vCΔ_d)/4 - (mΔd*vCΔ_Zq)/4 - (mΔd*vCΔ_q)/4 + (mΔZd*vCΔ_q)/4 - (mΔZq*vCΔ_d)/4 + (mΣq*vCΣ_z)/2 + (mΣz*vCΣ_q)/2;
     # vMΣq = mΔq*vCΔ_Zd/4 - mΔq*vCΔ_d/4 - mΔd*vCΔ_Zq/4 - mΔd*vCΔ_q/4 + mΔZd*vCΔ_q/4 - mΔZq*vCΔ_d/4 + mΣq*vCΣ_z/2 + mΣz*vCΣ_q/2;
     # # vMΣz = (mΔd*vCΔ_d)/4 + (mΔq*vCΔ_q)/4 + (mΔZd*vCΔ_Zd)/4 + (mΔZq*vCΔ_Zq)/4 + (mΣd*vCΣ_d)/4 + (mΣq*vCΣ_q)/4 + (mΣz*vCΣ_z)/2;
     # vMΣz = mΔd*vCΔ_d/4 + mΔq*vCΔ_q/4 + mΔZd*vCΔ_Zd/4 + mΔZq*vCΔ_Zq/4 + mΣd*vCΣ_d/4 + mΣq*vCΣ_q/4 + mΣz*vCΣ_z/2;
+    # ```
 
 
     # diΔ_d_dt =-(vG_d - vMΔd + Rₑ*iΔ_d + Lₑ*iΔ_q*w)/Lₑ, grid frame

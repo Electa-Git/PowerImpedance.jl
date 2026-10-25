@@ -100,7 +100,7 @@ function impedance_path!(state, parts, topology, left_name, right_name, stem;
         second_probe === nothing ||
             output_probe!(state.main, second_probe, "branch", "kA", (x + 144, y + 162))
     else
-        # A single meter per terminal measures total current through the parallel
+        # One meter per terminal measures total current through the parallel
         # branches. Internal labels connect those branches to the meter.
         inner_left = pscad_name(stem * "_parallel_1"; used = state.used)
         inner_right = pscad_name(stem * "_parallel_2"; used = state.used)

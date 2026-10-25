@@ -2,8 +2,8 @@ function kron(matrix, no_eliminate)
 	# Old approach
 	# n = size(matrix, 1)
 	# eliminate = setdiff(1:n, no_eliminate)
-	# matrix = matrix[[no_eliminate; eliminate],:]
-	# matrix = matrix[:,[no_eliminate; eliminate]]
+	# `matrix = matrix[[no_eliminate; eliminate],:]`
+	# `matrix = matrix[:,[no_eliminate; eliminate]]`
 
 	# n_noElim = length(no_eliminate)
 	# return matrix[1:n_noElim,1:n_noElim] - matrix[1:n_noElim,1+n_noElim:end]*

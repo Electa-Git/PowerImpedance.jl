@@ -1,4 +1,4 @@
-############################  common/loops/outer_active.jl  ############################
+# Active-power outer loops
 
 #=
 Shared active-power outer-loop blocks.
@@ -82,10 +82,10 @@ Evaluate the frequency-support lag equation.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `sync`: Synchronization output with normalized angular frequency `ω_c`
   \\[dimensionless\\].
 - `block`: The `FrequencySupportLag` parameters.
@@ -100,7 +100,7 @@ Evaluate the frequency-support lag equation.
 \\dot{\\xi}=\\omega_c[-K_\\omega(\\omega-1)-\\xi],\\qquad P_{supp}=\\xi.
 ```
 
-The frequency and support power are normalized \\[dimensionless\\]; ``ω_c`` is the lag
+The frequency and support power are normalized \\[dimensionless\\]. ``ω_c`` is the lag
 cutoff \\[rad/s\\].
 
 # Examples
@@ -171,13 +171,13 @@ Evaluate DC-voltage support lag, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `block`: The `DCVoltageSupportLag` parameters.
 
@@ -191,7 +191,7 @@ Evaluate DC-voltage support lag, writing state derivatives into `F`.
 \\dot{\\xi}=\\omega_c[K(v_{dc,ref}-v_{dc,f})-\\xi],\\qquad P_{supp}=-\\xi.
 ```
 
-Voltages and support power are normalized \\[dimensionless\\]; ``ω_c`` uses \\[rad/s\\].
+Voltages and support power are normalized \\[dimensionless\\]. ``ω_c`` uses \\[rad/s\\].
 
 # Examples
 
@@ -227,13 +227,13 @@ Evaluate frequency-support response, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `block`: Component block whose equations or metadata are evaluated.
 
@@ -278,7 +278,8 @@ Regulate active power with PI control and optional frequency or DC-voltage suppo
 $(TYPEDFIELDS)
 """
 struct OuterActivePowerControl{S<:AbstractFrequencySupport} <: AbstractOuterActiveControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_ctrl::PIControl
     "Active-power support block driven by frequency or DC voltage."
     support::S
@@ -293,7 +294,7 @@ Construct an active-power PI controller.
 
 # Arguments
 
-- `pi_ctrl`: PI gains for normalized signals; proportional gain is \\[dimensionless\\] and
+- `pi_ctrl`: PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and
   integral gain is \\[s⁻¹\\]. Default: `PIControl()`.
 - `support`: Active-power support block driven by frequency or DC voltage. Default:
   `NoFrequencySupport()`.
@@ -341,13 +342,13 @@ Evaluate active-power control and its support dynamics.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `block`: The `OuterActivePowerControl` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -429,7 +430,7 @@ Construct a DC-voltage PI controller with a local measurement filter.
 
 # Arguments
 
-- `pi_ctrl`: PI gains for normalized signals; `Kp` is \\[dimensionless\\] and `Ki` is
+- `pi_ctrl`: PI gains for normalized signals. `Kp` is \\[dimensionless\\] and `Ki` is
   \\[s⁻¹\\]. Default: `PIControl()`.
 - `filter`: Scalar measurement filter specification or realized filter. Default:
   `NoFilter()`.
@@ -474,13 +475,13 @@ Evaluate DC-voltage PI control.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `block`: The `OuterActiveVdcControl` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.

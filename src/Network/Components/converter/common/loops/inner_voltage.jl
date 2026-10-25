@@ -1,9 +1,8 @@
 #=
 Shared inner-voltage-loop slot for modular converters.
 
-The current modular TLC implementation only provides a pass-through voltage
-loop. The abstraction is kept so voltage-loop implementations can be added
-without changing the surrounding converter calculation.
+The modular TLC implementation provides a pass-through voltage loop. Concrete
+voltage-loop implementations extend the shared interface.
 =#
 
 export AbstractInnerVoltage,
@@ -123,11 +122,11 @@ Evaluate virtual-impedance voltage control, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `b`: The `CCVI` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -144,7 +143,8 @@ Evaluate virtual-impedance voltage control, writing state derivatives into `F`.
 ```
 
 The measured voltages are locally filtered. Voltage, current, impedance, and angular
-frequency use converter bases \\[dimensionless\\]. A zero denominator is not regularized.
+frequency are on converter bases \\[dimensionless\\]. The denominator is used directly,
+including when it is zero.
 
 # Examples
 

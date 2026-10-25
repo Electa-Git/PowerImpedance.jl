@@ -3,16 +3,18 @@ export impedance
 """
 $(TYPEDEF)
 
-Store impedances between input/output terminal pairs, or a complex-frequency callback,
-and an optional cached ABCD matrix. Array entries specify individual branches rather
-than mutual terms of a coupled series-impedance matrix.
+Store impedances between input and output terminal pairs, or a complex-frequency
+callback, and an optional cached ABCD matrix. Each array entry specifies an
+individual branch.
 
 $(TYPEDFIELDS)
 """
 @with_kw mutable struct Impedance <: AbstractLinFreqDomain
-	"Terminal-pair branch impedances \\[Ω\\] or a callback returning them at complex frequency; zero entries omit branches."
+	"Terminal-pair branch impedances \\[Ω\\] or a callback returning them at complex frequency.
+	Zero entries omit branches."
 	value::Any = nothing      # either Matrix{ComplexF64} or a function s::Complex -> Matrix{ComplexF64}
-	"Cached ABCD matrix for constant impedances, or `nothing` for a callback; A/D blocks are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
+	"Cached ABCD matrix for constant impedances, or `nothing` for a callback. A/D blocks are
+	\\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
 	ABCD::Any  = nothing      # cached Matrix{ComplexF64} for constant impedances, otherwise nothing
     "Number of physical conductors per side."
     conductors::Int = 1
@@ -93,7 +95,7 @@ Construct a constant or frequency-dependent network of terminal-pair impedances.
 
 # Arguments
 
-- `z`: Branch impedance specification \\[Ω\\]. A scalar repeats on the diagonal; a
+- `z`: Branch impedance specification \\[Ω\\]. A scalar repeats on the diagonal. A
   vector with `conductors` entries defines unequal diagonal branches. An array with
   `conductors²` entries defines all input-to-output branches in column-major order.
   A `Function` `z(s)` returns a scalar or compatible array at complex Laplace frequency
@@ -109,15 +111,16 @@ Construct a constant or frequency-dependent network of terminal-pair impedances.
 # Notes
 
 For each nonzero ``z_{ij}``, a branch of admittance ``1/z_{ij}`` connects input
-terminal ``i`` to output terminal ``j``. Zero entries omit branches; they do not
-represent ideal shorts. Diagonal specifications give independent series impedances.
-An off-diagonal entry adds a cross-terminal branch, rather than a mutual impedance.
+terminal ``i`` to output terminal ``j``. Zero entries omit branches. Diagonal specifications
+give independent series impedances.
+An off-diagonal entry adds a cross-terminal branch.
 
 # Errors
 
-- Throws `ArgumentError` when the impedance shape is incompatible with `conductors`
+- Throws `ArgumentError` when the impedance array dimensions are incompatible with
+  `conductors`
   or when `conductors=0` cannot be inferred from the supplied array.
-- A singular branch-to-ABCD conversion propagates a linear-solve error; the default
+- Singular branch-to-ABCD conversions propagate a linear-solve error. The default
   all-zero specification is one such case.
 
 # Examples
@@ -132,7 +135,7 @@ dynamic = impedance(z = s -> 0.1 + s * 2e-3, conductors = 1)
 function impedance(; z = 0, conductors::Int = 0)
 	imp = Impedance()
 	if z isa Function
-		# z(s) must return Number or array-like; we normalize it to a matrix every call.
+		# z(s) returns a Number or array-like value, normalized to a matrix on each call.
 		imp.value = (s::Complex) -> begin
 			Zs = z(s)
 			_z_matrix(Zs, conductors)

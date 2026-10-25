@@ -12,7 +12,7 @@ $(TYPEDEF)
 Store one materialized NetworkBuilder system with numeric component models,
 topology, and numerical options.
 
-Construct systems with [`define`](@ref) rather than calling this type directly.
+Construct systems with [`define`](@ref).
 
 $(TYPEDFIELDS)
 """
@@ -85,7 +85,7 @@ end
 
 function _prepare_power_flow_start!(start::_PowerFlowStart, data, mapping)
     # Component identities and endpoints identify the topology used for a warm start.
-    # Numerical targets may change; the converged point supplies initial values for the
+    # Numerical targets may change. The converged point supplies initial values for the
     # rebuilt constraints.
     fields = ("index", "status", "gen_bus", "load_bus", "shunt_bus",
         "storage_bus", "f_bus", "t_bus", "busac_i", "busdc_i", "fbusdc", "tbusdc")
@@ -114,7 +114,8 @@ function _initialize_power_flow!(model, start::_PowerFlowStart)
 end
 
 function _store_power_flow_start!(start::_PowerFlowStart, model)
-    # Residual acceptance and penalty relaxation are not converged primal points.
+    # Store converged primal points. Residual-acceptance and penalty-relaxation results
+    # leave the saved point unchanged.
     if P.JuMP.termination_status(model) == P.MOI.LOCALLY_SOLVED
         empty!(start.primal)
         for variable in P.JuMP.all_variables(model)
@@ -130,7 +131,7 @@ function update_actives_setpoints!(data, delta)
 
 	# Slightly shift the reactive power setpoints for the converters, if any
 	if haskey(data, "convdc")
-		#TODO: Handle Vac control, if properly implemented
+		# TODO handle Vac control after its implementation.
 		for conv_index in keys(data["convdc"])
 
 			data["convdc"][conv_index]["Q_g"] != 0.0 ?

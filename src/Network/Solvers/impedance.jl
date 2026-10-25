@@ -1,8 +1,10 @@
 export determine_impedance
 
 """
-    determine_impedance(model::NetworkModel; nets, elim_elements=Symbol[],
-                        freq_range=(0.001, 10000, 2000))
+```text
+determine_impedance(model::NetworkModel; nets, elim_elements=Symbol[],
+                    freq_range=(0.001, 10000, 2000))
+```
 
 Calculate the nodal impedance seen at `nets` from an already linearized
 [`NetworkModel`](@ref). Elements named by `elim_elements` are omitted before

@@ -3,7 +3,7 @@ Top-level modular two-level converter (TLC) assembly.
 
 This file wires the TLC electrical plant, measurement, synchronization, outer
 loops, inner loops, modulation, equilibrium handling, and power-flow adapter.
-Reusable control loops and primitives live in `converter/common`; TLC-specific
+Reusable control loops and primitives live in `converter/common`. TLC-specific
 plant and modulation behavior remains in this folder.
 =#
 
@@ -180,7 +180,7 @@ Port powers are positive into the converter. Taking 603 MW from DC and deliverin
 
 - `inputs`: Named tuple of DC voltage `v_dc` and grid-frame AC voltages `vG_d`, `vG_q`,
   on converter bases \\[dimensionless\\].
-- `terminal_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point. Powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\].
 
 # Notes
@@ -230,8 +230,8 @@ Build the raw internal signals seen by the measurement block.
 
 - `c`: TLC assembly and electrical bases.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 
 # Returns
@@ -243,7 +243,7 @@ Build the raw internal signals seen by the measurement block.
 - `v_dc`: DC input voltage \\[dimensionless\\].
 - `i_d`: AC current d component in the synchronization frame \\[dimensionless\\].
 - `i_q`: AC current q component in the synchronization frame \\[dimensionless\\].
-- `i_dc`: DC measurement signal; zero in this TLC input adapter \\[dimensionless\\].
+- `i_dc`: DC measurement signal. Zero in this TLC input adapter \\[dimensionless\\].
 - `θ`: Synchronization angle \\[rad\\].
 
 # Notes
@@ -310,13 +310,13 @@ Evaluate the full TLC state-space model.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `c`: TLC assembly and electrical bases.
 
@@ -331,7 +331,7 @@ Evaluate the full TLC state-space model.
 - `iloop`: Inner-current-loop outputs.
 - `mod`: Modulation commands.
 - `elec`: Electrical terminal currents. Electrical quantities use converter bases
-  \\[dimensionless\\]; angles use \\[rad\\].
+  \\[dimensionless\\]. Angles use \\[rad\\].
 
 # Notes
 
@@ -423,9 +423,9 @@ Set control references and power-flow seeds with `component` or `withinputs`.
 References and seeds use the converter bases.
 
 The selected synchronization and outer-control blocks determine the converter's
-AC and DC power-flow modes. Construction does not solve an equilibrium or populate linearization matrices.
-`linearize` solves and linearizes the numeric model at a supplied operating point;
-frequency-domain evaluation then uses those stored matrices.
+AC and DC power-flow modes. `linearize` solves the equilibrium and populates
+the linearization matrices at a supplied operating point.
+Frequency-domain evaluation then uses those stored matrices.
 
 # Examples
 
@@ -463,7 +463,7 @@ function tlc(;
         mod, limits, seeds, LinearizationCache())
 end
 
-##################### SI Scaling ######################################
+# SI scaling
 """
 $(TYPEDSIGNATURES)
 
@@ -516,7 +516,7 @@ function SI_scale(model::TLC)
     return scale
 end
 
-############################  Power-flow integration TLC ############################
+# Power-flow integration TLC
 
 
 pf_type_ac(::NoOuterReactiveControl) = 1
@@ -594,7 +594,7 @@ function convert!(data, conv::TLC, ::Type{PMACDC}, component_key,
     convdc["basekVac"] = global_dict["V"] / 1e3
 
     convdc["type_ac"] = pf_type_ac(conv.outerReactive)
-    # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages,
+    # Divide by sqrt(2). PowerModelsACDC uses RMS base voltages,
     # PowerImpedance uses amplitude
     convdc["Vtar"] = (v_ac/sqrt(2)) / ( global_dict["V"] / 1e3)
     if convdc["type_ac"] == 2

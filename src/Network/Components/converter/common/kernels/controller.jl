@@ -1,11 +1,10 @@
-############################  common/kernels/controller.jl  ############################
+# Controller parameters
 
 #=
 Shared controller primitives used by converter models.
 
-This file contains controller data containers that are independent of a
-particular converter topology. TLC and MMC control blocks can use these types
-without depending on each other's implementation files.
+This file contains controller data containers shared by TLC and MMC control blocks
+and defined independently of either converter topology.
 =#
 
 export PIControl
@@ -19,7 +18,7 @@ $(TYPEDFIELDS)
 
 # Notes
 
-`PIControl` is intentionally a lightweight immutable parameter container.
+`PIControl` is an immutable parameter container.
 State variables for the integrator live in the state-space blocks that use the
 controller.
 """

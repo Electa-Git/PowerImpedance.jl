@@ -122,7 +122,7 @@ ProbeManifest() = ProbeManifest(ProbeChannel[], nothing)
 $(TYPEDEF)
 
 Store a PSCAD project, measurement manifest, simulation settings, and optional
-network and operating-point records. Construction does not contact the station.
+network and operating-point records. Construction stores these records locally.
 
 $(TYPEDFIELDS)
 """

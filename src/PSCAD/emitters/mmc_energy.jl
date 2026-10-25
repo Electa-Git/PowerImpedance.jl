@@ -102,7 +102,7 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
                     Square(Signal("lec_cap_" * stem), Signal("lec_energy_" * stem))])
         end
         sigma, delta = Signal.(["lec_sum_" * phase, "lec_delta_" * phase])
-        # 2*wΣ = (vu²+vl²)/Vbase²; -2*wΔ = (vl²-vu²)/Vbase².
+        # `2*wΣ = (vu²+vl²)/Vbase²` and `-2*wΔ = (vl²-vu²)/Vbase²`.
         push!(graph.nodes, Sum(
             Signal.(["lec_energy_u_" * phase, "lec_energy_l_" * phase]), [
                 1, 1], sigma))

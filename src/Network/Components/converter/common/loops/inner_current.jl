@@ -41,11 +41,12 @@ modulation blocks.
 $(TYPEDFIELDS)
 """
 struct InnerCurrentPIControl{F<:AbstractMeasurementFilter} <: AbstractInnerCurrentControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_ctrl::PIControl
     "Measurement filter with a scalar state-space realization."
     filter::F
-    "Whether inductive decoupling uses the synchronization frequency instead of nominal frequency."
+    "Whether inductive decoupling uses the synchronization or nominal frequency."
     activate_ω_c_multiplication::Bool
 end
 
@@ -56,12 +57,12 @@ Construct a `InnerCurrentPIControl` component from the supplied parameters.
 
 # Arguments
 
-- `pi_ctrl`: PI gains for normalized signals; proportional gain is \\[dimensionless\\] and
+- `pi_ctrl`: PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and
   integral gain is \\[s⁻¹\\]. Default: `PIControl()`.
 - `filter`: Measurement filter with a scalar state-space realization. Default:
   `NoFilter()`.
 - `activate_ω_c_multiplication`: Whether inductive decoupling uses the synchronization
-  frequency instead of nominal frequency. Default: `true`.
+  frequency (`true`) or nominal frequency (`false`). Default: `true`.
 
 # Returns
 
@@ -116,11 +117,11 @@ Evaluate modular-converter inner-current PI control in the synchronization frame
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `block`: The `InnerCurrentPIControl` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -136,7 +137,7 @@ Evaluate modular-converter inner-current PI control in the synchronization frame
 \\dot{\\xi}_{d,q}=K_i(i_{d,q}^{ref}-i_{d,q}),\\quad v_d^{ref}=\\xi_d+K_p e_d+L\\omega i_q+v_d,\\quad v_q^{ref}=\\xi_q+K_p e_q-L\\omega i_d+v_q.
 ```
 
-All electrical quantities are normalized \\[dimensionless\\]. The optional frequency
+Electrical quantities are normalized \\[dimensionless\\]. The optional frequency
 factor uses synchronization frequency or unity. Local voltage filters supply the
 feedforward terms.
 

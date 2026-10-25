@@ -3,8 +3,9 @@ export linearize, steady_state
 
 
 
-# Function for ordering states & initialvalues. Puts all that are not defined to zero & discards initial values that do not appear in statenames 
-# Default: no explicit nonzero initial values; Fallback function, so that it is not necessary in all the modular parts to initialize.
+# Order states and initial values. Fill unspecified states with zero and discard
+# initial values whose names are absent from statenames.
+# Default initial values are zero. Modular parts can supply specialized initializers.
 """
 $(TYPEDSIGNATURES)
 
@@ -30,8 +31,8 @@ initial = P.initialvalues(NoModulation())
 ```
 """
 initialvalues(::AbstractStateSpace; kwargs...) = (;)
-# equilibriuminitialvalues(::AbstractStateSpace; kwargs...) = (;)
-# TODO: Find proper name, add check for discrepancy statenames and initialvalues
+# `equilibriuminitialvalues(::AbstractStateSpace; kwargs...) = (;)`
+# TODO find a name and check discrepancies between statenames and initialvalues.
 """
 $(TYPEDSIGNATURES)
 
@@ -69,7 +70,7 @@ n_inputs(m::AbstractStateSpace) = length(inputnames(m))
 n_outputs(m::AbstractStateSpace) = length(outputnames(m))
 n_elec_inputs(m::AbstractStateSpace) = length(elecinputnames(m))
 
-# Default for elecinputnames (only different for SM atm)
+# Default for elecinputnames. Synchronous machines currently specialize this method.
 """
 $(TYPEDSIGNATURES)
 
@@ -100,7 +101,7 @@ names = P.elecinputnames(model)
 elecinputnames(m::AbstractStateSpace) = inputnames(m)
 
 
-### Helper functions ###
+# Helper functions
 
 """
 $(TYPEDSIGNATURES)
@@ -110,15 +111,15 @@ index.
 
 # Arguments
 
-- `F`: Writable parent derivative buffer. The block slice starts at `idx`; normalized
+- `F`: Writable parent derivative buffer. The block slice starts at `idx`. Normalized
   electrical-state rates use \\[s⁻¹\\], angle rates use \\[rad/s\\], and filter-state rates
   follow the realization.
 - `x`: Named state values of the parent model, containing all states required by the
-  block. Normalized electrical states use \\[dimensionless\\] and angles use \\[rad\\];
-  filter states follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  block. Normalized electrical states use \\[dimensionless\\] and angles use \\[rad\\].
+  Filter states follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `block`: Submodel whose derivative slice is evaluated.
 - `m`: Parent model providing shared parameters to the submodel.
@@ -151,7 +152,7 @@ function state_space_block!(F, x, inputs, terminal_pu, block, m::AbstractStateSp
     return out, idx_end + 1
 end
 
-# Default functions for state_space! that do not use the terminal_pu or the full model
+# Forward state_space! calls to methods with fewer arguments.
 state_space!(F, x, inputs, terminal_pu, block::AbstractStateSpace, m::AbstractStateSpace) =
     state_space!(F, x, inputs, block, m)
 state_space!(F, x, inputs, terminal_pu,  m::AbstractStateSpace) =
@@ -216,17 +217,18 @@ function _state_space!(F, x, inputs, terminal_pu::Union{TerminalValuesPU, Nothin
     
     # Convert vector states to NamedTuple with keys the statenames (we enforce the same order)
     x_names = statenames(m)
-    # F_names = (x_names..., solvekindnames(m, solvekind)...) TODO: Think about this
+    # TODO consider `F_names = (x_names..., solvekindnames(m, solvekind)...)`.
     x_nt = NamedTuple{x_names}(x)
     inputs_nt = NamedTuple{inputnames(m)}(inputs)
     
     # To where state space equations fill up F
     index_stsp = n_states(m)
 
-    # Call the modeler's state space functions, certain algebr variables can be returned to be used by outputequations or equilibriumequations
+    # Call the modeler's state-space functions. Returned algebraic variables can be used
+    # by outputequations or equilibriumequations.
     y = state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, terminal_pu, m)
     
-    # Modify output/equilibrium equations
+    # Modify output or equilibrium equations
     solvekindequations!(F, x_nt, inputs_nt, terminal_pu, y, m, solvekind)
 
     return
@@ -265,7 +267,7 @@ after a failed default solve.
 
 # Errors
 
-- Raises an error when equilibrium cannot be found; propagates unsupported-model and
+- Raises an error when equilibrium cannot be found. Propagates unsupported-model and
   differentiation errors.
 
 # Examples

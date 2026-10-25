@@ -1,4 +1,4 @@
-############################  filter.jl  ############################
+# filter.jl
 
 #=
 Measurement filter specifications and state-space realization helpers.
@@ -8,7 +8,7 @@ models. Filter specification objects are converted to state-space matrices by
 [`measurement_filter_ss`](@ref).
 =#
 
-############################  Filter types  ############################
+# Filter types
 
 """
 $(TYPEDEF)
@@ -25,17 +25,17 @@ Static pass-through measurement filter.
 $(TYPEDFIELDS)
 """
 @with_kw mutable struct NoFilter <: AbstractMeasurementFilter
-    "State matrix; its coefficients depend on the realization coordinates."
+    "State matrix. Its coefficients depend on the realization coordinates."
     A::Matrix{Float64} = zeros(0, 0)
-    "Input matrix; its coefficients depend on the realization coordinates."
+    "Input matrix. Its coefficients depend on the realization coordinates."
     B::Matrix{Float64} = zeros(0, 1)
-    "Output matrix; its coefficients depend on the realization coordinates."
+    "Output matrix. Its coefficients depend on the realization coordinates."
     C::Matrix{Float64} = zeros(1, 0)
     "Direct input-to-output gain matrix \\[dimensionless\\]."
     D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
 end
 
-############################  Coefficient tables  ############################
+# Coefficient tables
 # The floating point values were taken from SciPy.
 # Each entry corresponds to one overall filter order.
 # The stored tuples are the cascade sections:
@@ -85,7 +85,7 @@ const CRITICAL_DAMPING_TABLE = (
     ((0.6998915581984769, 0.1224620483093730), (0.6998915581984769, 0.1224620483093730), (0.6998915581984769, 0.1224620483093730))
 )
 
-############################  Table-based filter specs  ############################
+# Table-based filter specs
 
 """
 $(TYPEDEF)
@@ -95,17 +95,17 @@ Butterworth low-pass measurement filter specification.
 $(TYPEDFIELDS)
 """
 @with_kw mutable struct Butterworth <: AbstractMeasurementFilter
-    "Filter order; the supplied coefficient tables cover orders one through six."
+    "Filter order. The supplied coefficient tables cover orders one through six."
     order::Int = 1
     "Angular cutoff frequency \\[rad/s\\]."
     ωc::Float64 = 100 * π
     "Normalized cascade-section coefficients indexed by filter order \\[dimensionless\\]."
     table::Tuple = BUTTERWORTH_TABLE
-    "State matrix; its coefficients depend on the realization coordinates."
+    "State matrix. Its coefficients depend on the realization coordinates."
     A::Matrix{Float64} = zeros(0, 0)
-    "Input matrix; its coefficients depend on the realization coordinates."
+    "Input matrix. Its coefficients depend on the realization coordinates."
     B::Matrix{Float64} = zeros(0, 1)
-    "Output matrix; its coefficients depend on the realization coordinates."
+    "Output matrix. Its coefficients depend on the realization coordinates."
     C::Matrix{Float64} = zeros(1, 0)
     "Direct input-to-output gain matrix \\[dimensionless\\]."
     D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
@@ -119,17 +119,17 @@ Chebyshev low-pass measurement filter specification.
 $(TYPEDFIELDS)
 """
 @with_kw mutable struct Chebyshev <: AbstractMeasurementFilter
-    "Filter order; the supplied coefficient tables cover orders one through six."
+    "Filter order. The supplied coefficient tables cover orders one through six."
     order::Int = 1
     "Angular cutoff frequency \\[rad/s\\]."
     ωc::Float64 = 100 * π
     "Normalized cascade-section coefficients indexed by filter order \\[dimensionless\\]."
     table::Tuple = CHEBYSHEV_TABLE
-    "State matrix; its coefficients depend on the realization coordinates."
+    "State matrix. Its coefficients depend on the realization coordinates."
     A::Matrix{Float64} = zeros(0, 0)
-    "Input matrix; its coefficients depend on the realization coordinates."
+    "Input matrix. Its coefficients depend on the realization coordinates."
     B::Matrix{Float64} = zeros(0, 1)
-    "Output matrix; its coefficients depend on the realization coordinates."
+    "Output matrix. Its coefficients depend on the realization coordinates."
     C::Matrix{Float64} = zeros(1, 0)
     "Direct input-to-output gain matrix \\[dimensionless\\]."
     D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
@@ -143,17 +143,17 @@ Bessel low-pass measurement filter specification.
 $(TYPEDFIELDS)
 """
 @with_kw mutable struct Bessel <: AbstractMeasurementFilter
-    "Filter order; the supplied coefficient tables cover orders one through six."
+    "Filter order. The supplied coefficient tables cover orders one through six."
     order::Int = 1
     "Angular cutoff frequency \\[rad/s\\]."
     ωc::Float64 = 100 * π
     "Normalized cascade-section coefficients indexed by filter order \\[dimensionless\\]."
     table::Tuple = BESSEL_TABLE
-    "State matrix; its coefficients depend on the realization coordinates."
+    "State matrix. Its coefficients depend on the realization coordinates."
     A::Matrix{Float64} = zeros(0, 0)
-    "Input matrix; its coefficients depend on the realization coordinates."
+    "Input matrix. Its coefficients depend on the realization coordinates."
     B::Matrix{Float64} = zeros(0, 1)
-    "Output matrix; its coefficients depend on the realization coordinates."
+    "Output matrix. Its coefficients depend on the realization coordinates."
     C::Matrix{Float64} = zeros(1, 0)
     "Direct input-to-output gain matrix \\[dimensionless\\]."
     D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
@@ -162,29 +162,29 @@ end
 """
 $(TYPEDEF)
 
-Critically damped low-pass measurement filter specification.
+Specification of a critically damped low-pass measurement filter.
 
 $(TYPEDFIELDS)
 """
 @with_kw mutable struct CriticalDamping <: AbstractMeasurementFilter
-    "Filter order; the supplied coefficient tables cover orders one through six."
+    "Filter order. The supplied coefficient tables cover orders one through six."
     order::Int = 1
     "Angular cutoff frequency \\[rad/s\\]."
     ωc::Float64 = 100 * π
     "Normalized cascade-section coefficients indexed by filter order \\[dimensionless\\]."
     table::Tuple = CRITICAL_DAMPING_TABLE
-    "State matrix; its coefficients depend on the realization coordinates."
+    "State matrix. Its coefficients depend on the realization coordinates."
     A::Matrix{Float64} = zeros(0, 0)
-    "Input matrix; its coefficients depend on the realization coordinates."
+    "Input matrix. Its coefficients depend on the realization coordinates."
     B::Matrix{Float64} = zeros(0, 1)
-    "Output matrix; its coefficients depend on the realization coordinates."
+    "Output matrix. Its coefficients depend on the realization coordinates."
     C::Matrix{Float64} = zeros(1, 0)
     "Direct input-to-output gain matrix \\[dimensionless\\]."
     D::Matrix{Float64} = Matrix{Float64}(I, 1, 1)
 end
 
 
-##############################################  Implemenation of the Filter State Space  ###############################################
+# Filter state-space implementation
 function measurement_filter_ss(filter::NoFilter)
     filter.A = zeros(Float64, 0, 0)
     filter.B = zeros(Float64, 0, 1)
@@ -213,7 +213,7 @@ Build the state-space realization of a table-based measurement filter.
 G(s)=\\prod_k\\frac{1}{b_k(s/\\omega_c)^2+a_k(s/\\omega_c)+1}.
 ```
 
-The order-indexed coefficient table supplies ``a_k,b_k`` \\[dimensionless\\]; a zero
+The order-indexed coefficient table supplies ``a_k,b_k`` \\[dimensionless\\]. A zero
 ``b_k`` gives a first-order section. The cutoff ``ω_c`` uses \\[rad/s\\]. `NoFilter` is a
 zero-state unity-gain realization.
 
@@ -312,11 +312,11 @@ Evaluate a scalar filter and write its state derivatives at the requested offset
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `offset`: First destination index for the filter derivatives.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `filter`: Scalar measurement filter specification or realized filter.
 - `names`: State names in the filter realization order.
 - `u`: Filter input in the units of the measured signal.
@@ -332,7 +332,7 @@ Evaluate a scalar filter and write its state derivatives at the requested offset
 \\dot{x}=Ax+Bu,\\qquad y=Cx+Du.
 ```
 
-Time uses \\[s\\]. Realization-state units depend on the matrices; input and output have
+Time uses \\[s\\]. Realization-state units depend on the matrices. Input and output have
 the same physical signal units. A realization without states returns its direct output.
 
 # Examples

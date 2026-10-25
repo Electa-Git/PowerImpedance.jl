@@ -1,14 +1,14 @@
 export inductionmachine, InductionMachine, ElectricalIM, MechanicalIM
 
 
-##### Electrical model ###############333
+# Electrical model
 
 """
 $(TYPEDEF)
 
 Represent induction-machine stator-current and rotor-flux dynamics using an inverse-Γ
 model in synchronous dq coordinates. Electrical states and circuit parameters use
-machine per-unit bases; the internal q axis leads, while the external interface uses a
+machine per-unit bases. The internal q axis leads, while the external interface uses a
 lagging q axis.
 
 $(TYPEDFIELDS)
@@ -17,7 +17,7 @@ $(TYPEDFIELDS)
 
     "Base electrical angular frequency \\[rad/s\\]."
     ωn :: Float64 = 100π
-    "Stored legacy parameter; not used by the current state equations."
+    "Legacy parameter unused by the current state equations."
     p_f :: Float64 = 2
 
     # Base values
@@ -52,7 +52,7 @@ initialvalues(::ElectricalIM;terminal_pu::TerminalValuesPU) = (;
 
 
 
-######## Mechanical model #######################3
+# Mechanical model
 """
 $(TYPEDEF)
 
@@ -84,14 +84,14 @@ end
 statenames(::MechanicalIM) = (:ω_r,)
 initialvalues(::MechanicalIM) = (ω_r = 1.0,)
 
-########## Induction Machine #############33
+# Induction machine
 
 
 """
 $(TYPEDEF)
 
 Combine induction-machine electrical and mechanical subsystems. External voltages and
-currents use a lagging q axis; state equations use a leading q axis, with sign
+currents use a lagging q axis. State equations use a leading q axis, with sign
 conversion at the interface.
 
 $(TYPEDFIELDS)
@@ -158,7 +158,7 @@ Port powers are positive into the machine. A motor drawing 916 MW has `ac.p = 91
 # Returns
 
 - `inputs`: Named tuple of bus voltages `vd`, `vq`, on machine bases \\[dimensionless\\].
-- `terminal_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point. Powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\].
 
 # Notes
@@ -203,7 +203,7 @@ function outputequations!(F,x,inputs,y,m::InductionMachine)
 end
 
 
-############ State space equations ###########
+# State space equations
 
 
 """
@@ -215,10 +215,10 @@ derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `v_dq`: d/q bus-voltage pair in internal machine coordinates \\[dimensionless\\].
 - `block`: Induction-machine winding parameters.
 - `indm`: Induction-machine electrical and mechanical blocks.
@@ -234,8 +234,8 @@ L_M=L_m^2/(L_m+L_{rl}),\\quad L_\\sigma=L_m+L_{sl}+L_t-L_M,\\quad R_R=(L_m/(L_m+
 ```
 
 The electrical equations use synchronous dq-leading coordinates. Current and rotor-flux
-derivatives include stator/rotor loss, synchronous-frame coupling, and slip terms
-``1-ω_r``; all electrical quantities use machine bases \\[dimensionless\\].
+derivatives include stator and rotor losses, synchronous-frame coupling, and slip terms
+``1-ω_r``. All electrical quantities use machine bases \\[dimensionless\\].
 
 # Examples
 
@@ -296,10 +296,10 @@ Evaluate induction-machine rotor-speed dynamics, writing state derivatives into 
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `τ_e`: Electromagnetic torque on the machine torque base \\[dimensionless\\].
 - `block`: Rotor inertia and load-torque parameters.
 - `indm`: Induction-machine electrical and mechanical blocks.
@@ -314,7 +314,7 @@ Evaluate induction-machine rotor-speed dynamics, writing state derivatives into 
 \\tau_m=T_0(A\\omega_r^m+B\\omega_r+C),\\qquad \\dot\\omega_r=(\\tau_e-\\tau_m)/(2H).
 ```
 
-Torques and rotor speed use machine bases \\[dimensionless\\]; ``H`` uses \\[s\\].
+Torques and rotor speed are on machine bases \\[dimensionless\\]. ``H`` uses \\[s\\].
 
 # Examples
 
@@ -354,11 +354,11 @@ derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `indm`: Induction-machine electrical and mechanical blocks.
 
@@ -398,7 +398,7 @@ function state_space!(F, x, inputs,indm::InductionMachine)
 
 end
 
-##################### SI Scaling ######################################
+# SI scaling
 """
 $(TYPEDSIGNATURES)
 
@@ -421,7 +421,7 @@ Y_{ij}^{SI}=Y_{ij}^{pu}\\frac{I_{b,i}}{V_{b,j}}.
 
 The common entry is `S_base/Vac_base²` \\[S\\], using the three-phase power base
 in \\[MVA\\] and line-to-line RMS voltage base in \\[kV\\]. These factors are returned
-for explicit use; core `eval_y` does not automatically apply them to induction machines.
+for explicit application to the unscaled induction-machine admittance from core `eval_y`.
 
 # Examples
 
@@ -483,9 +483,9 @@ function convert!(data, indm::InductionMachine, ::Type{PMACDC}, component_key,
     data["im"][key_str]["status"] = 1
     data["im"][key_str]["im_bus"] = ac_bus
 
-    # Power flow limits (not used in power flow)
+    # Stored power-flow limit fields, currently unused by the solver.
     data["im"][key_str]["Pacmin"] = 0.9 * T_0 #/ Sbase
-    # Should be extended with local_base/global_base but we do not care (not used in PF)
+    # TODO scale the currently unused limit fields by local_base/global_base.
     data["im"][key_str]["Vmmin"] = 0.9
     data["im"][key_str]["Vmmax"] = 1.1
     data["im"][key_str]["Pacmax"] = 1.1 * T_0 #/ Sbase

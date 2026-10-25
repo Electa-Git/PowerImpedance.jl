@@ -12,8 +12,8 @@ Names are case-insensitively unique ASCII PSCAD identifiers, at most 30 characte
 The `voltage` keyword overrides the solved voltage in \\[kV\\]: AC peak
 line-to-ground, or DC pole-to-pole. An unsolved bus requires this keyword.
 `perturbation` is the per-unit injection amplitude (default `0.01`).
-`vac_control`, `f_control` and `vdc_control` are Boolean flags (default `false`);
-only the flags for the selected electrical domain are accepted.
+`vac_control`, `f_control` and `vdc_control` are Boolean flags (default `false`).
+Only the flags for the selected electrical domain are accepted.
 Injection and decoupling times retain the library default of `1e8` \\[s\\].
 The request leaves the network unchanged.
 
@@ -212,7 +212,7 @@ function _write_ztool_frequency_tables(directory, tables)
 end
 
 function _ztool_workspace(project_name, project_file)
-    # All three names are generated ASCII identifiers or fixed bundle filenames.
+    # The names are generated ASCII identifiers or fixed bundle filenames.
     return """<workspace name="$project_name" version="$PROJECT_FILE_VERSION" crc="0">
   <projects>
     <project type="library" name="Z_tool" filepath=".\\Z_tool.pslx" />

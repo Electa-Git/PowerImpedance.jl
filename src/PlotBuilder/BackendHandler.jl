@@ -63,7 +63,7 @@ function _backend_package(backend::Symbol)
     throw(ArgumentError("Unknown backend :$(backend). Use :cairo, :gl, or :wgl."))
 end
 
-"Ensure that an explicitly loaded backend is active."
+"Activate an explicitly loaded backend."
 function ensure_backend!(backend::Union{Nothing, Symbol} = nothing)
     backend !== nothing && return set_backend!(backend)
     current = current_backend_symbol()

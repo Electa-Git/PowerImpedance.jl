@@ -1,4 +1,4 @@
-############################  common/loops/synchronization.jl  ############################
+# Synchronization blocks
 
 #=
 Shared synchronization blocks for converter control models.
@@ -45,7 +45,8 @@ Phase-locked-loop synchronization block.
 $(TYPEDFIELDS)
 """
 struct PLLSynchronization{Filter<:AbstractMeasurementFilter} <: AbstractSynchronization
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_ctrl::PIControl
     "Measurement filter with a scalar state-space realization."
     filter::Filter
@@ -58,7 +59,7 @@ Construct a PLL synchronization block.
 
 # Arguments
 
-- `pi_ctrl`: PI gains for normalized signals; proportional gain is \\[dimensionless\\] and
+- `pi_ctrl`: PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and
   integral gain is \\[s⁻¹\\]. Default: `PIControl()`.
 - `filter`: Measurement filter with a scalar state-space realization. Default:
   `NoFilter()`.
@@ -106,11 +107,11 @@ Evaluate PLL filter, PI integrator, and angle state equations.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]; angle
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]. Angle
   signals use \\[rad\\].
 - `::TerminalValuesPU`: Operating-point argument accepted for the common interface and
   unused by this PLL method.
@@ -153,7 +154,8 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 """
 function state_space!(F, x, meas, ::TerminalValuesPU, block::PLLSynchronization,
         conv::AbstractConverter)
-    _, vG_q_pll_f = frame_transform(meas.vG_d_f, meas.vG_q_f, (x.Δθ_pll - syncangle(conv.sync, x))) # Ensuring that voltage is in PLL reference frame (it is not the converter reference frame in GFM)
+    # Rotate voltage into the PLL frame, which differs from the GFM converter frame.
+    _, vG_q_pll_f = frame_transform(meas.vG_d_f, meas.vG_q_f, (x.Δθ_pll - syncangle(conv.sync, x)))
     v_pll, i = filter_step!(F, 1, x, block.filter, filter_statenames(:v_q_pll_f, block.filter), vG_q_pll_f)
     Δω = -block.pi_ctrl.Kp * v_pll + x.ξ_pll
 
@@ -252,13 +254,13 @@ Evaluate virtual-swing synchronization with damping, writing state derivatives i
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]; angle
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]. Angle
   signals use \\[rad\\].
-- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `b`: The `VSEWithDamping` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -274,7 +276,7 @@ Evaluate virtual-swing synchronization with damping, writing state derivatives i
 2H\\dot{\\omega}=p_{ref}-p_f-K_d(\\omega-\\omega_{PLL})-K_\\omega(\\omega-\\omega_{ref}),\\quad \\dot{\\theta}=\\omega_b(\\omega-1).
 ```
 
-Power and angular frequencies are normalized \\[dimensionless\\]; inertia ``H`` uses \\[s\\]
+Power and angular frequencies are normalized \\[dimensionless\\]. Inertia ``H`` uses \\[s\\]
 and ``θ`` \\[rad\\].
 
 # Examples

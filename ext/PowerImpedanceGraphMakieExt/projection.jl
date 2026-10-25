@@ -1,4 +1,4 @@
-"Identify one physical AC or DC bus without allowing domain collisions."
+"Identify one physical bus by its AC or DC domain and bus number."
 struct BusKey
     domain::Int
     bus::Int
@@ -68,8 +68,8 @@ struct DiagramModel{O, D}
     powerflow_diagnostics::D
 end
 
-# PowerModels/PowerModelsACDC adapter. All schema-specific dictionary access is
-# intentionally confined to this section.
+# PowerModels/PowerModelsACDC adapter. Schema-specific dictionary access is
+# confined to this section.
 
 function _record_get(record::AbstractDict, field::String, default = nothing)
     haskey(record, field) && return record[field]

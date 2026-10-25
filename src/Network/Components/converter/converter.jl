@@ -19,7 +19,7 @@ end
 
 function timeDelayPadeMatrices(padeOrderNum,padeOrderDen,t_delay,numberVars)
 
-    # Calculation of the state-space representation of a pade approximation with nth-order numerator and nth-order denominator
+    # State-space Padé approximation with the specified numerator and denominator orders.
     # padeOrderNum = Order of the numerator, padeOrderDen= Order of the denominator, t_delay = Time delay duration, numberVars= Variables to be delayed max.2 !
     #
     size_A=padeOrderDen;
@@ -37,9 +37,10 @@ function timeDelayPadeMatrices(padeOrderNum,padeOrderDen,t_delay,numberVars)
         Ad[end,i+1] =-a_i;
         Cd[i+1] = (b_i-(a_i*b_l));
     end
-    # Result above gives state space in canonical realization, which is ill-conditioned, especially for higher order pades.
-    # In order to improve numerical handling, transform state space into modal realization
-    # Alternative # TODO: What about Dd?
+    # The controllable companion realization is ill-conditioned, especially at high
+    # Padé orders.
+    # Transform the state space into modal form to improve numerical conditioning.
+    # TODO review Dd in the modal realization.
     sys = ss(Ad,Bd,Cd,Dd)
     sys_modal = modal_form(sys; C1=true)
     Ad = sys_modal[1].A
@@ -80,10 +81,10 @@ function transform(elemresult, busresult::NamedTuple, global_dict,
     θ = acbusresult["va"]
     Vdc =
         dcbusresult["vm"] *
-        # data["dcpol"] should be here. const dcpol in powermodels_data.jl
+        # TODO use data["dcpol"]. The current dcpol is constant in powermodels_data.jl.
         (dcpol * global_dict["V"] / 1e3)
     Pac = -elemresult["pgrid"] * global_dict["S"] / 1e6
-    # PowerModels pgrid/qgrid are absorbed; port values use their signs and
+    # PowerModels pgrid and qgrid are absorbed powers. Port values use their signs and
     # pftoinputs negates AC powers to obtain the model's internal pu references.
     Qac = -elemresult["qgrid"] * global_dict["S"] / 1e6
 
