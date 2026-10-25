@@ -77,6 +77,7 @@ end
     for name in tracked_files(root)
         excluded(name) && continue
         path = joinpath(root, name)
+        isfile(path) || continue
         content = read(path, String)
         # As in a text search, omit binary images and serialized numeric data.
         (isvalid(content) && !occursin('\0', content)) || continue

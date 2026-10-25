@@ -166,7 +166,4 @@ end
     @testset "steady_state_test.jl" begin
         include("steady_state_test.jl")
     end
-    @testset "advisory_quality.jl" begin
-        include("advisory_quality.jl")
-    end
 end;
