@@ -1,3 +1,11 @@
+"""
+    NetworkBuilder
+
+Build AC and DC networks from named component models and bus or terminal connections.
+Solve power flow, construct linearized admittance models, and calculate frequency
+responses of the network. Parameter spaces describe families of component models and
+networks.
+"""
 module NetworkBuilder
 
 ### Set up module and imports

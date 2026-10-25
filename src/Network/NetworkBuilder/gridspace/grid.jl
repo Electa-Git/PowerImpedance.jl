@@ -1,6 +1,19 @@
 import Base: eltype, extrema, getindex, iterate, length, rand, size
 import Random
+"""
+$(TYPEDEF)
+
+Represent a finite parameter axis with indexed, iterable cases and a coupling key.
+Subtypes store deterministic alternatives or nominal values with standard uncertainties.
+"""
 abstract type AbstractGrid end
+
+"""
+$(TYPEDEF)
+
+Represent a parameter axis whose cases pair nominal values with standard uncertainties.
+Indexing returns an [`UncertainValue`](@ref). Sampling draws a numeric realization.
+"""
 abstract type AbstractUncertainGrid <: AbstractGrid end
 
 abstract type AbstractUncertainty end
@@ -47,7 +60,34 @@ struct UncertainValue{T, S <: AbstractUncertainty, E}
     end
 end
 
+"""
+    nominal(value::UncertainValue)
+
+Return the stored nominal parameter value.
+
+# Arguments
+
+- `value`: Uncertainty descriptor for a parameter.
+
+# Returns
+
+- Nominal value in the physical unit of the parameter.
+"""
 nominal(value::UncertainValue) = value.nominal
+
+"""
+    standard_uncertainty(value::UncertainValue)
+
+Return the stored absolute standard uncertainty.
+
+# Arguments
+
+- `value`: Uncertainty descriptor for a parameter.
+
+# Returns
+
+- Standard uncertainty in the same physical unit as the nominal parameter value.
+"""
 standard_uncertainty(value::UncertainValue) = value.sigma
 uncertainty_style(value::UncertainValue) = value.style
 

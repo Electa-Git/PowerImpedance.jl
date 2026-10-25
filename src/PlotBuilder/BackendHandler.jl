@@ -114,6 +114,15 @@ function renderfig(fig)
     return Base.invokelatest(ext.renderfig, fig)
 end
 
+"""
+    next_fignum()
+
+Reserve a figure number by atomically incrementing the module's figure counter.
+
+# Returns
+
+- Integer counter value before the increment. The initial counter value is `1`.
+"""
 next_fignum() = Base.Threads.atomic_add!(FIG_NO, 1)
 reset_fignum!(n::Int = 1) = (FIG_NO[] = n)
 

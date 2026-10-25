@@ -1,6 +1,47 @@
 ### Admittance-matrix calculations for NetworkModel.
 
+"""
+$(TYPEDSIGNATURES)
+
+Assemble active-element admittances, eliminate grounded nodes, and apply Kron reduction
+to the model's retained nodes.
+
+# Arguments
+
+- `lanw`: Linearized network model.
+- `s`: Complex frequencies \\[s⁻¹\\] at which to evaluate the admittances.
+
+# Returns
+
+- Complex admittance tensor \\[S\\] with dimensions `(n, n, length(s))`, where `n`
+  counts retained nongrounded nodes in model order.
+
+# Errors
+
+- Propagates singular-matrix errors from Kron reduction.
+"""
 make_y_node(lanw::NetworkModel, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.active_elements, s)
+
+"""
+$(TYPEDSIGNATURES)
+
+Assemble passive-element admittances, eliminate grounded nodes, and apply Kron reduction
+to the model's retained nodes.
+
+# Arguments
+
+- `lanw`: Linearized network model.
+- `s`: Complex frequencies \\[s⁻¹\\] at which to evaluate the admittances.
+
+# Returns
+
+- Complex admittance tensor \\[S\\] with dimensions `(n, n, length(s))`, where `n`
+  counts retained nongrounded nodes in model order.
+
+# Errors
+
+- Propagates singular-matrix errors from Kron reduction.
+"""
 make_y_edge(lanw::NetworkModel, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.passive_elements, s)
 
 

@@ -145,7 +145,25 @@ abstract type AbstractPowerImpedanceFormulation{B} <: AbstractFormulation end
 
 for Formulation in (:NodalImpedance, :NodeAdmittance, :EdgeAdmittance, :LoopGain)
     @eval begin
+        """
+        $($TYPEDEF)
+
+        $($(Formulation === :NodalImpedance ?
+          "Specify the nodal impedance response of a network at selected nodes." :
+          Formulation === :NodeAdmittance ?
+          "Specify the reduced nodal admittance response of the active network elements." :
+          Formulation === :EdgeAdmittance ?
+          "Specify the reduced nodal admittance response of the passive network elements." :
+          "Specify loop gain as inverse passive admittance times active admittance."))
+
+        Construct with `$($Formulation)(backend=PIACDC)` and pass the value with a
+        [`PowerImpedanceProblem`](@ref) to [`compute`](@ref). The result is a
+        [`FrequencyResponseResult`](@ref).
+
+        $($TYPEDFIELDS)
+        """
         struct $Formulation{B} <: AbstractPowerImpedanceFormulation{B}
+            "Calculation backend type."
             backend::Type{B}
         end
 
@@ -180,7 +198,26 @@ _register_backend!(GeneralizedNyquist, PIACDC)
 
 for Formulation in (:BodeAnalysis, :PassivityAnalysis, :SmallGainAnalysis)
     @eval begin
+        """
+        $($TYPEDEF)
+
+        $($(Formulation === :BodeAnalysis ?
+          "Specify entrywise magnitude in decibels and unwrapped phase in degrees." :
+          Formulation === :PassivityAnalysis ?
+          "Specify the minimum eigenvalue of a response matrix plus its adjoint." :
+          "Specify maximum singular values of two response matrices and their product."))
+
+        Construct with `$($Formulation)(backend=PIACDC)` and pass the value with a
+        [`StabilityProblem`](@ref) to [`compute`](@ref). The result is a
+        [`StabilityResult`](@ref).
+        $($(Formulation === :SmallGainAnalysis ?
+          "Supply a pair of completed frequency responses on identical frequency axes." :
+          "Supply one completed frequency response."))
+
+        $($TYPEDFIELDS)
+        """
         struct $Formulation{B} <: AbstractPowerImpedanceFormulation{B}
+            "Calculation backend type."
             backend::Type{B}
         end
 

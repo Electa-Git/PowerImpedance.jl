@@ -157,6 +157,32 @@ function _check_stability_response(
     return response, nodes, frequencies, network
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Calculate the reduced nodal admittance of the active network elements.
+Linearize the network, eliminate grounded nodes, and apply Kron reduction.
+
+# Arguments
+
+- `builder`: Materialized network state.
+- `nodelist`: Ordered nodes to retain. Default: `Symbol[]`, selecting the model's
+  retained nongrounded nodes.
+- `freq_range`: Frequency bounds \\[Hz\\] and sample count as `(minimum, maximum, count)`.
+  Default: `(1.0, 1.0e3, 1000)`. Samples are logarithmically spaced.
+
+# Returns
+
+- Complex admittance tensor \\[S\\] with dimensions `(n, n, nf)`.
+- Ordered vector of retained node names.
+- Angular-frequency vector \\[rad/s\\].
+
+# Errors
+
+- Throws `ArgumentError` for invalid frequencies, repeated, absent, or grounded nodes,
+  or an empty default node selection.
+- Propagates linearization, power-flow, and singular-matrix errors.
+"""
 function make_y_node(builder::NetworkState; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000))
     result = P.compute(P.PowerImpedanceProblem(
         builder;
@@ -166,6 +192,32 @@ function make_y_node(builder::NetworkState; nodelist=Symbol[], freq_range=(1.0, 
     return result.response, result.nodes, result.frequencies
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Calculate the reduced nodal admittance of the passive network elements.
+Linearize the network, eliminate grounded nodes, and apply Kron reduction.
+
+# Arguments
+
+- `builder`: Materialized network state.
+- `nodelist`: Ordered nodes to retain. Default: `Symbol[]`, selecting the model's
+  retained nongrounded nodes.
+- `freq_range`: Frequency bounds \\[Hz\\] and sample count as `(minimum, maximum, count)`.
+  Default: `(1.0, 1.0e3, 1000)`. Samples are logarithmically spaced.
+
+# Returns
+
+- Complex admittance tensor \\[S\\] with dimensions `(n, n, nf)`.
+- Ordered vector of retained node names.
+- Angular-frequency vector \\[rad/s\\].
+
+# Errors
+
+- Throws `ArgumentError` for invalid frequencies, repeated, absent, or grounded nodes,
+  or an empty default node selection.
+- Propagates linearization, power-flow, and singular-matrix errors.
+"""
 function make_y_edge(builder::NetworkState; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000))
     result = P.compute(P.PowerImpedanceProblem(
         builder;
@@ -175,6 +227,32 @@ function make_y_edge(builder::NetworkState; nodelist=Symbol[], freq_range=(1.0, 
     return result.response, result.nodes, result.frequencies
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Calculate network loop gain by multiplying the inverse passive admittance by the
+active admittance at each frequency. Both admittances are reduced to `nodelist`.
+
+# Arguments
+
+- `builder`: Materialized network state.
+- `nodelist`: Ordered nodes to retain. Default: `Symbol[]`, selecting the model's
+  retained nongrounded nodes.
+- `freq_range`: Frequency bounds \\[Hz\\] and sample count as `(minimum, maximum, count)`.
+  Default: `(1.0, 1.0e3, 1000)`. Samples are logarithmically spaced.
+
+# Returns
+
+- Complex loop-gain tensor \\[dimensionless\\] with dimensions `(n, n, nf)`.
+- Ordered vector of retained node names.
+- Angular-frequency vector \\[rad/s\\].
+
+# Errors
+
+- Throws `ArgumentError` for invalid frequencies, repeated, absent, or grounded nodes,
+  or an empty default node selection.
+- Propagates linearization, power-flow, and singular-matrix errors.
+"""
 function make_loopgain(builder::NetworkState; nodelist=Symbol[], freq_range=(1.0, 1.0e3, 1000))
     result = P.compute(P.PowerImpedanceProblem(
         builder;

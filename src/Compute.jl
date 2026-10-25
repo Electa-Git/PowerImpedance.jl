@@ -1053,6 +1053,42 @@ function _completed_response(response, frequencies, formulation, kind)
     )
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+    nyquistplot(response, frequencies; kwargs...)
+
+Calculate generalized Nyquist quantities and plot the tracked loop-gain eigenloci.
+Load a Makie backend before plotting.
+
+# Arguments
+
+- `response`: Completed `FrequencyResponseResult` or raw loop gain \\[dimensionless\\].
+  Raw data are a vector of scalar samples, a vector of square matrices, or an
+  `n × n × nf` tensor.
+- `frequencies`: Angular frequencies \\[rad/s\\] for raw data, in sample order.
+- `zoom`: Whether to focus the axes around `-1`. Default: `false`.
+- `SM`: Accepted margin selector, `"no"`, `"PM"`, `"GM"`, or `"VM"`.
+  Default: `"no"`. The analysis calculates all margin records.
+- `title`: Figure title. Default: `"Nyquist plot"`.
+- `indentations`: Angular frequencies \\[rad/s\\] for gaps in each locus.
+  For each value strictly inside the scan, replace both bracketing samples with gaps.
+  Default: `Float64[]`.
+- `order_maxima`: Positive neighborhood order for oscillatory peak detection. Default: `5`.
+- `display_plot`: Whether to display the created figure. Default: `true`.
+- `kwargs`: Additional plot recipe and rendering keywords.
+
+# Returns
+
+- Vector of `PlotBuilder.UIPlot` handles for the generated figures.
+
+# Errors
+
+- Throws `ArgumentError` for an invalid margin selector, peak order, raw response format,
+  or plot option, or when a requested backend is unavailable.
+- Throws `DimensionMismatch` for inconsistent raw response dimensions or frequency counts.
+- Propagates `MethodError` when the Makie plotting extension is unloaded.
+"""
 function nyquistplot(
     response::FrequencyResponseResult;
     zoom=false,
@@ -1085,6 +1121,40 @@ function nyquistplot(response, frequencies; kwargs...)
     return nyquistplot(completed; kwargs...)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+    bodeplot(response, frequencies; kwargs...)
+
+Calculate entrywise magnitude in decibels and unwrapped phase in degrees, then plot
+the selected response channels. Load a Makie backend before plotting.
+
+# Arguments
+
+- `response`: Completed `FrequencyResponseResult` or raw data in the response's physical
+  unit. Raw data are a vector of scalars or square matrices, or an `n × n × nf` tensor.
+- `frequencies`: Angular frequencies \\[rad/s\\] for raw data, in sample order.
+- `legend`: Channel labels as a string or vector of strings. Default: `nothing`,
+  selecting channel coordinates as labels. `[""]` also selects these labels.
+- `plots`: Existing `PlotBuilder.UIPlot` or vector of handles to receive the curves.
+  Default: `nothing`, creating new figures.
+- `title`: Figure title. Default: `"Bode plot"`.
+- `display_plot`: Whether to display new figures. Default: `true`.
+- `kwargs`: Additional plot recipe and rendering keywords, including `channels`.
+
+# Returns
+
+- Vector of `PlotBuilder.UIPlot` handles, or the handle supplied as `plots`.
+
+# Errors
+
+- Throws `ArgumentError` for invalid raw response formats, labels, plot targets, or
+  plot options, or when a requested backend is unavailable.
+- Throws `DimensionMismatch` for inconsistent dimensions, frequency counts, label counts,
+  or existing figure layouts.
+- Throws `BoundsError` for channel coordinates outside the response.
+- Propagates `MethodError` when the Makie plotting extension is unloaded.
+"""
 function bodeplot(
     response::FrequencyResponseResult;
     legend=nothing,
@@ -1110,6 +1180,36 @@ function bodeplot(response, frequencies; kwargs...)
     return bodeplot(completed; kwargs...)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+    passivity(response::FrequencyResponseResult, title::AbstractString; kwargs...)
+    passivity(response, frequencies, title="Passivity assessment"; kwargs...)
+
+Calculate and plot the minimum eigenvalue of each response matrix plus its adjoint.
+Load a Makie backend before plotting.
+
+# Arguments
+
+- `response`: Completed `FrequencyResponseResult` or raw admittance \\[S\\]. Raw data
+  are a vector of scalar samples, a vector of square matrices, or an `n × n × nf` tensor.
+- `frequencies`: Angular frequencies \\[rad/s\\] for raw data, in sample order.
+- `title`: Figure title. Default: `"Passivity assessment"`.
+- `display_plot`: Whether to display the created figure. Default: `true`.
+- `kwargs`: Additional plot recipe and rendering keywords.
+
+# Returns
+
+- Vector of passivity indices in the response's physical unit, one per frequency.
+  A nonnegative index satisfies the assessed passivity condition at that frequency.
+
+# Errors
+
+- Throws `ArgumentError` for an invalid raw response format or plot option, or when
+  a requested backend is unavailable.
+- Throws `DimensionMismatch` for inconsistent raw response dimensions or frequency counts.
+- Propagates `MethodError` when the Makie plotting extension is unloaded.
+"""
 function passivity(
     response::FrequencyResponseResult;
     title="Passivity assessment",
@@ -1130,6 +1230,39 @@ function passivity(response, frequencies, title::AbstractString="Passivity asses
     return passivity(completed; title, kwargs...)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+    small_gain(first::FrequencyResponseResult, second::FrequencyResponseResult,
+               title::AbstractString; kwargs...)
+    small_gain(first, second, frequencies, title="Small-gain assessment"; kwargs...)
+
+Calculate maximum singular values of two responses and their ordered matrix product,
+then plot the gains. Load a Makie backend before plotting.
+
+# Arguments
+
+- `first`: First completed frequency response or raw matrix response.
+- `second`: Second completed frequency response or raw matrix response. Their ordered
+  matrix product is dimensionless. Raw responses are vectors of scalar samples,
+  vectors of square matrices, or `n × n × nf` tensors.
+- `frequencies`: Shared angular frequencies \\[rad/s\\] for raw data, in sample order.
+- `title`: Figure title. Default: `"Small-gain assessment"`.
+- `display_plot`: Whether to display the created figure. Default: `true`.
+- `kwargs`: Additional plot recipe and rendering keywords.
+
+# Returns
+
+- Vector of maximum singular values of `first * second` \\[dimensionless\\],
+  one per frequency. Values below one satisfy the assessed small-gain condition.
+
+# Errors
+
+- Throws `ArgumentError` for differing completed frequency axes, invalid raw response
+  formats or plot options, or an unavailable requested backend.
+- Throws `DimensionMismatch` for incompatible matrix dimensions or raw frequency counts.
+- Propagates `MethodError` when the Makie plotting extension is unloaded.
+"""
 function small_gain(
     first::FrequencyResponseResult,
     second::FrequencyResponseResult;
@@ -1166,6 +1299,65 @@ function small_gain(
     return small_gain(first_result, second_result; title, kwargs...)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+    EVD(response, frequencies, fmin, fmax, determinant=false; kwargs...)
+
+Track nodal-impedance eigenvalues and normalized eigenvectors across frequency.
+Assess modal damping and negative real parts at imaginary-axis crossings, and plot
+the results. The assessed band uses the samples nearest `fmin` and `fmax`.
+Load a Makie backend before plotting.
+
+# Arguments
+
+- `response`: Completed nodal-impedance response or raw impedance \\[Ω\\]. Raw data
+  are a vector of scalar samples, a vector of square matrices, or an `n × n × nf` tensor.
+- `frequencies`: Angular frequencies \\[rad/s\\] for raw data, in sample order.
+- `fmin`: Positive lower assessment frequency \\[Hz\\].
+- `fmax`: Upper assessment frequency \\[Hz\\], greater than `fmin`.
+- `determinant`: Whether to return the inverse-determinant magnitude. Default: `false`.
+- `title`: Figure title. Default: `"Eigenvalue analysis"`.
+- `display_plot`: Whether to display the created figures. Default: `true`.
+- `kwargs`: Additional plot recipe and rendering keywords.
+
+# Returns
+
+A named tuple containing:
+
+- `eigenvalues`: Tracked modal impedances \\[Ω\\], indexed by frequency and mode.
+- `eigenvectors`: Unit-norm right eigenvector matrices, one per frequency.
+- `observability`: Normalized right-eigenvector magnitudes by frequency, node, and mode.
+- `controllability`: Normalized inverse-eigenvector magnitudes in the same order.
+- `participation`: Normalized magnitudes of products of corresponding right and left
+  eigenvector entries in the same order.
+- `dominant_mode`: Mode with the largest impedance magnitude in the assessed band.
+- `critical_frequency`: Peak frequency \\[Hz\\] of the dominant mode.
+- `pmd_unstable`: Whether the modal-damping test detects an unstable peak.
+- `pmd_modes`: Detected modal-damping frequencies \\[Hz\\], grouped by mode.
+- `pnd_unstable`: Whether the negative-real-part test detects an unstable crossing.
+- `pnd_modes`: Detected crossing frequencies \\[Hz\\], grouped by mode.
+- `pnd_critical`: Crossing with the smallest real impedance, or `nothing`.
+  Its fields are `real_part` \\[Ω\\], `mode`, sample `index`, and `frequency` \\[Hz\\].
+- `determinant_index`: Inverse-determinant magnitudes \\[Ω⁻ⁿ\\] for matrix order `n`,
+  or `nothing` when `determinant=false`.
+- `frequencies`: Angular-frequency vector \\[rad/s\\].
+- `fmin`: Lower assessment frequency \\[Hz\\].
+- `fmax`: Upper assessment frequency \\[Hz\\].
+
+# Notes
+
+The damping and crossing tests exclude frequencies within 0.5 \\[Hz\\] of 50 \\[Hz\\].
+The eigenvector factors are normalized to sum to one over nodes for each mode.
+
+# Errors
+
+- Throws `ArgumentError` unless `0 < fmin < fmax`, or for invalid raw response formats,
+  plot options, or an unavailable requested backend.
+- Throws `DimensionMismatch` for inconsistent raw response dimensions or frequency counts.
+- Propagates singular-matrix errors from eigenvector inversion and `MethodError`
+  when the Makie plotting extension is unloaded.
+"""
 function EVD(
     response::FrequencyResponseResult,
     fmin,
@@ -1188,6 +1380,37 @@ function EVD(response, frequencies, fmin, fmax, determinant::Bool=false; kwargs.
     return EVD(completed, fmin, fmax, determinant; kwargs...)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+    unstable_frequency(locus::AbstractVector{<:Number}, frequencies; kwargs...)
+
+Detect oscillatory frequencies from peaks of the reciprocal of one plus each tracked
+loop-gain eigenlocus. Retain peaks whose unwrapped phase has a positive local derivative.
+Endpoint peaks are excluded.
+
+# Arguments
+
+- `response`: Completed loop-gain frequency response \\[dimensionless\\].
+- `locus`: Raw scalar eigenlocus samples \\[dimensionless\\].
+- `frequencies`: Angular frequencies \\[rad/s\\] corresponding to `locus`.
+- `order_maxima`: Positive neighborhood order for peak detection. Default: `5`.
+- `title`: Figure title. Default: `"Unstable-frequency analysis"`.
+- `display_plot`: Whether to display the created figures. Default: `true`.
+- `make_plot`: Whether to construct plots through a loaded Makie backend. Default: `true`.
+- `kwargs`: Additional plot recipe and rendering keywords.
+
+# Returns
+
+- Vector of detected frequencies \\[Hz\\], concatenated in eigenmode order.
+
+# Errors
+
+- Throws `ArgumentError` for a nonpositive peak order, invalid plot options, or an
+  unavailable requested backend.
+- Throws `DimensionMismatch` when locus and frequency counts differ.
+- Propagates `MethodError` when plotting is requested with the Makie extension unloaded.
+"""
 function unstable_frequency(
     response::FrequencyResponseResult;
     order_maxima::Integer=5,
@@ -1216,6 +1439,39 @@ function unstable_frequency(
     return unstable_frequency(completed; order_maxima, make_plot, kwargs...)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Partition an active element from the remaining network at its connected AC or DC nodes.
+Linearize the network, calculate inverse remaining-network admittance times device
+admittance, apply generalized Nyquist analysis, and plot its eigenloci.
+Load a Makie backend before plotting.
+
+# Arguments
+
+- `builder`: Materialized network state.
+- `element`: Name of the active element to assess.
+- `direction`: Terminal domain, `:ac` or `:dc`. Default: `:dc`.
+- `freq_range`: Frequency bounds \\[Hz\\] and sample count as `(minimum, maximum, count)`.
+  Default: `(1.0, 1.0e3, 1000)`. Samples are logarithmically spaced.
+- `order_maxima`: Positive neighborhood order for oscillatory peak detection. Default: `5`.
+- `title`: Figure title. Default: `"Nyquist plot"`.
+- `display_plot`: Whether to display the created figure. Default: `true`.
+- `kwargs`: Additional plot recipe and rendering keywords.
+
+# Returns
+
+- `StabilityResult` with angular frequencies \\[rad/s\\], loop-gain eigenloci
+  \\[dimensionless\\], encirclement counts, assessment, margin records, and detected
+  frequencies \\[Hz\\] in `output`. Its diagnostics store `element` and `direction`.
+
+# Errors
+
+- Throws `ArgumentError` for an absent or passive element, an ideal source, invalid
+  direction, missing connected terminals, invalid frequencies, or a nonpositive peak order.
+- Propagates linearization, power-flow, singular-matrix, and plot-option errors.
+- Propagates `MethodError` when the Makie plotting extension is unloaded.
+"""
 function check_stability(
     builder::NetworkBuilder.NetworkState,
     element::Symbol;
