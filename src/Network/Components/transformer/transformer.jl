@@ -17,13 +17,13 @@ opposite shift. It applies this rotation to the complete `:YY` T-model,
 including its capacitive paths. Its internal zero-sequence block is an identity
 placeholder decoupled from both other sequences, discarded by the supported
 dq transformation. It does not represent physical zero-sequence transfer.
-Construct three-phase `:ΔY` elements with `transformation=true`.
+Connect three-phase `:ΔY` models to an `ACDQ` bus.
 
 $(TYPEDFIELDS)
 """
 @with_kw mutable struct Transformer <: AbstractLinFreqDomain
 	"Number of phase-domain terminals per side: one or three."
-	pins::Int = 1                     # marks single or three phase
+	conductors::Int = 1                     # marks single or three phase
 	"Winding organization: `:YY` or `:ΔY` (Dyn11)."
 	organization::Symbol = :YY        # three phase organization (:YY or :ΔY)
 
@@ -73,14 +73,14 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Construct a one-phase or balanced three-phase transformer element.
+Construct a one-phase or balanced three-phase transformer model.
 
 # Arguments
 
 - `def`: Parameterization mode. `:explicit` uses the supplied equivalent-circuit
   values. `:tests` derives them from the open- and short-circuit test fields.
   Default: `:explicit`.
-- `pins`: Number of phase-domain terminals. Default: `1`.
+- `conductors`: Number of phase-domain terminals. Default: `1`.
 - `organization`: Three-phase winding organization, `:YY` or `:ΔY` (Dyn11:
   delta primary, grounded-Y secondary, secondary positive sequence leading by 30°).
 - `ω`: Rated angular frequency `\\[rad/s\\]`.
@@ -99,8 +99,6 @@ Construct a one-phase or balanced three-phase transformer element.
 - `Cₜ`, `Cₛ`: Turn-to-turn and stray capacitances `\\[F\\]`.
 - `hasRω`: Whether winding resistance is frequency dependent.
 - `k`: Winding-resistance frequency exponent `\\[dimensionless\\]`.
-- `transformation`: Whether to expose dq coordinates, discarding zero sequence.
-  Required for three-phase `:ΔY`; default: `false`.
 
 For three phases, test data is per phase: phase-RMS voltages, phase currents,
 and per-phase losses. Power-flow voltage ratings use the same phase-RMS
@@ -123,7 +121,7 @@ for dq conversion; delta-to-Y zero-sequence isolation has no phase-domain ABCD.
 
 # Returns
 
-- An `Element` containing the detailed transformer model.
+- A `Transformer` containing the supplied or derived circuit parameters.
 
 # Notes
 
@@ -138,16 +136,14 @@ formulas; no three-phase test-data conversion is applied.
 
 # Errors
 
-- Throws `ArgumentError` for an unknown transformer keyword or an untransformed
-  three-phase `:ΔY` element. Invalid or zero
-  test data can also make the `:tests` calculation undefined.
+- Invalid or zero test data can make the `:tests` calculation undefined.
 
 # Examples
 
 ```julia
 transformer_element = transformer(
     :explicit;
-    pins = 3,
+    conductors = 3,
     organization = :YY,
     n = 1.1,
     Rₚ = 0.1,
@@ -158,24 +154,17 @@ transformer_element = transformer(
 ```
 """
 function transformer(def=:explicit; args...)
+	if any(key -> key in (:pins, :transformation, :connection, :setpoint), keys(args))
+		Base.kwerr((; args...), transformer, def)
+	end
 	t = Transformer()
-	transformation = false
-	connection = true
 	for (key, val) in pairs(args)
 		if in(key, propertynames(t))
 			setfield!(t, key, val)
-		elseif key == :transformation
-			transformation = val
 		else
 			throw(ArgumentError("Transformer does not have a property $(key)."))
 		end
 	end
-
-    if t.pins == 3 && t.organization == :ΔY && !transformation
-        throw(ArgumentError(
-            "An untransformed :ΔY transformer cannot represent delta-to-Y zero-sequence isolation in phase-domain ABCD; use transformation=true for the supported Dyn11 dq model.",
-        ))
-    end
 
 	# compute equivalent circuit parameters from OC/SC tests
 	if def == :tests
@@ -194,8 +183,7 @@ function transformer(def=:explicit; args...)
 	end
 
 	# DO NOT build t.ABCD here anymore (no symbolics)
-	return Element(input_pins = t.pins, output_pins = t.pins,
-		element_value = t, transformation = transformation, connection = connection)
+	return t
 end
 
 """
@@ -229,7 +217,7 @@ zero-sequence identity is a placeholder removed by the supported dq transformati
 
 ```julia
 using PowerImpedance
-model = transformer(n=2.0, Rₚ=0.1, Lₚ=1e-3).element_model
+model = transformer(n=2.0, Rₚ=0.1, Lₚ=1e-3)
 PowerImpedance.eval_abcd(model, 2π*im*50)
 ```
 """
@@ -281,7 +269,7 @@ function eval_abcd(t::Transformer, s::ComplexF64)
 	end
 
 	# ---- Lift to requested pin count / topology ----
-	if (t.pins == 1)
+	if (t.conductors == 1)
 		return Z
 	end
 
@@ -343,7 +331,7 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
 	branch["transformer"] = true
     # PowerModels uses t = tap*exp(j*shift), with V_to = V_from/t
     # (core/data.jl:15-22, core/admittance_matrix.jl:55-59).
-    branch["shift"] = t.pins == 3 && t.organization == :ΔY ? -π / 6 : 0
+    branch["shift"] = t.conductors == 3 && t.organization == :ΔY ? -π / 6 : 0
 	branch["c_rating_a"] = 1
 
 	## Update voltage limits to match the transformer voltage ratings
@@ -399,7 +387,7 @@ function convert!(data, elem::Element{<:Transformer}, ::Type{PMACDC}, key_branch
 end
 
 function electricalconnections(model::Transformer)
-    n = model.pins
+    n = model.conductors
     n in (1, 2, 3) ||
         throw(ArgumentError("Transformer ports do not support $n conductors."))
     domain = n == 3 ? ACABC : DC_CM
@@ -420,7 +408,7 @@ function convert!(data, t::Transformer, ::Type{PMACDC}, component_key,
     branch["transformer"] = true
     # PowerModels uses t = tap*exp(j*shift), with V_to = V_from/t
     # (core/data.jl:15-22, core/admittance_matrix.jl:55-59).
-    branch["shift"] = t.pins == 3 && t.organization == :ΔY ? -π / 6 : 0
+    branch["shift"] = t.conductors == 3 && t.organization == :ΔY ? -π / 6 : 0
     branch["c_rating_a"] = 1
 
     ## Update voltage limits to match the transformer voltage ratings

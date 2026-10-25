@@ -1,5 +1,5 @@
-@gridconstructor P.inductionmachine P.Element
-@gridconstructor P.synchronousmachine P.Element
+@gridconstructor P.inductionmachine P.InductionMachine
+@gridconstructor P.synchronousmachine P.SynchronousMachine
 
 @gridconstructor P.ElectricalIM P.ElectricalIM
 @gridconstructor P.MechanicalIM P.MechanicalIM

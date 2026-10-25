@@ -127,7 +127,7 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -315,7 +315,7 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)

@@ -197,7 +197,7 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -267,7 +267,7 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -329,7 +329,7 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -396,7 +396,7 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -463,7 +463,7 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -537,7 +537,7 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 values = (ac = ACPortValues(380sqrt(2/3), 0.0, -100.0, 0.0),
     dc = DCPortValues(640.0, 100.0))
 inputs, point_pu = P.pftoinputs(model, values)
@@ -600,7 +600,7 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -651,26 +651,25 @@ control, and modulation blocks.
 - `sigma_control`: MMC sum-current and energy-control assembly.
 - `modulation`: MMC insertion-index calculation and delay block. Default:
   `UncompensatedModulation()`.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\]. Default: `Setpoint()`.
 - `limits`: Operating limits on the component power base \\[dimensionless\\]. Default:
   `Limits()`.
 - `powerflow`: Partial power-flow seeds on converter bases \\[dimensionless\\].
   Default: `(;)`.
-- `connection`: Whether the element participates in network construction. Default:
-  `true`.
 
 # Returns
 
-- An `Element` with one DC terminal group and one transformed AC terminal group.
+- An immutable `MMC` with `ac` and `dc` ports.
 
 # Notes
+
+Set control references and power-flow seeds with `component` or `withinputs`.
+References and seeds use the converter bases.
 
 The selected synchronization and outer-control blocks determine the AC and DC
 power-flow control modes. The power bounds multiply `limits` by `Sbase`; the
 current-limit estimate instead compares their unscaled values with physical `Pac`.
 Construction does not solve an equilibrium or populate linearization matrices.
-`update!` solves and linearizes the converter at a supplied operating point;
+`linearize` solves and linearizes the converter at a supplied operating point;
 frequency-domain evaluation then uses those stored matrices.
 
 # Examples
@@ -684,8 +683,13 @@ converter = mmc(
         occ = InnerCurrentPIControl(),
     ),
     sigma_control = ΣdqzControlTEC(),
-    setpoint = Setpoint(Pac = 100.0, Qac = 0.0, Vac = 220.0, Vdc = 640.0),
 )
+
+b = bases(converter)
+converter = component(converter;
+    delta_control = (outer_active = (p_ref = 100.0 / b.S,),
+        outer_reactive = (q_ref = 0.0 / b.S,)),
+    powerflow = (v_ac = 220.0 / b.v_ac, v_dc = 640.0 / b.v_dc))
 ```
 """
 function mmc(;
@@ -695,23 +699,14 @@ function mmc(;
     delta_control::AbstractΔdqControl,
     sigma_control::AbstractΣdqzControl,
     modulation::AbstractModulationMMC = UncompensatedModulation(),
-    setpoint::Setpoint=Setpoint(),
     limits::Limits = Limits(),
-    powerflow::NamedTuple = (;),
-    connection::Bool = true)
+    powerflow::NamedTuple = (;))
 
     defaults = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
     seeds = _withinputs(defaults, _CONVERTER_POWERFLOW_INPUTS,
         powerflow, "powerflow")
-    return Element(
-        input_pins = 1,
-        output_pins = 2,
-        element_model = MMC(meas, sync, delta_control, sigma_control, modulation, elec,
-            limits, seeds, LinearizationCache()),
-        transformation = false; 
-        connection,
-        setpoint,
-        limits)
+    return MMC(meas, sync, delta_control, sigma_control, modulation, elec,
+        limits, seeds, LinearizationCache())
 end
 
 ##################### SI Scaling ######################################
@@ -766,7 +761,7 @@ P = PowerImpedance
 model = mmc(sync = PLLSynchronization(),
     delta_control = ΔdqControlGFL(outer_active = OuterActivePowerControl(),
         outer_reactive = OuterReactiveQControl(), occ = InnerCurrentPIControl()),
-    sigma_control = ΣdqzControlTEC()).element_model
+    sigma_control = ΣdqzControlTEC())
 scale = P.SI_scale(model)
 ```
 """

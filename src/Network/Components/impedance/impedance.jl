@@ -94,19 +94,17 @@ Construct a constant or frequency-dependent network of terminal-pair impedances.
 # Arguments
 
 - `z`: Branch impedance specification \\[Ω\\]. A scalar repeats on the diagonal; a
-  vector with `pins` entries defines unequal diagonal branches, and `pins²` array
-  entries define all input-to-output branches in column-major order. A `Function`
-  `z(s)` returns a scalar or compatible array at complex Laplace frequency
+  vector with `conductors` entries defines unequal diagonal branches. An array with
+  `conductors²` entries defines all input-to-output branches in column-major order.
+  A `Function` `z(s)` returns a scalar or compatible array at complex Laplace frequency
   \\[s⁻¹\\]. Default: `0`.
-- `pins`: Number of terminals per side. For constant data, zero infers the matrix
+- `conductors`: Number of terminals per side. For constant data, zero infers the matrix
   order from a square entry count, or one for a scalar. For a callback, zero leaves
   the external terminal count at one. Default: `0`.
-- `transformation`: Whether the element exposes transformed external coordinates.
-  Default: `false`.
 
 # Returns
 
-- An `Element` containing a dense branch-impedance array or a frequency callback.
+- An `Impedance` containing a dense branch-impedance array or a frequency callback.
 
 # Notes
 
@@ -117,49 +115,43 @@ An off-diagonal entry adds a cross-terminal branch, rather than a mutual impedan
 
 # Errors
 
-- Throws `ArgumentError` when the impedance shape is incompatible with `pins`
-  or when `pins=0` cannot be inferred from the supplied array.
+- Throws `ArgumentError` when the impedance shape is incompatible with `conductors`
+  or when `conductors=0` cannot be inferred from the supplied array.
 - A singular branch-to-ABCD conversion propagates a linear-solve error; the default
   all-zero specification is one such case.
 
 # Examples
 
 ```julia
-single = impedance(z = 5.0, pins = 1)
-diagonal = impedance(z = [1.0, 2.0, 3.0], pins = 3)
-cross_connected = impedance(z = [1.0 0.1; 0.1 2.0], pins = 2)
-dynamic = impedance(z = s -> 0.1 + s * 2e-3, pins = 1)
+single = impedance(z = 5.0, conductors = 1)
+diagonal = impedance(z = [1.0, 2.0, 3.0], conductors = 3)
+cross_connected = impedance(z = [1.0 0.1; 0.1 2.0], conductors = 2)
+dynamic = impedance(z = s -> 0.1 + s * 2e-3, conductors = 1)
 ```
 """
-function impedance(; z = 0, pins::Int = 0, transformation = false)
+function impedance(; z = 0, conductors::Int = 0)
 	imp = Impedance()
-	connection = true
 	if z isa Function
 		# z(s) must return Number or array-like; we normalize it to a matrix every call.
 		imp.value = (s::Complex) -> begin
 			Zs = z(s)
-			_z_matrix(Zs, pins)
+			_z_matrix(Zs, conductors)
 		end
 		imp.ABCD = nothing
-		inferred_pins = pins == 0 ? 1 : pins
+		inferred_pins = conductors == 0 ? 1 : conductors
         imp.conductors = inferred_pins
-		element = Element(element_value = imp, input_pins = inferred_pins,
-			output_pins = inferred_pins,
-			transformation = transformation, connection = connection)
-		return element
+		return imp
 	end
 
 	# constant z: normalize once and cache ABCD
-	Z = _z_matrix(z, pins)
+	Z = _z_matrix(z, conductors)
 	pins_eff = size(Z, 1)
     imp.conductors = pins_eff
 
 	imp.value = Z
 	imp.ABCD  = _abcd_from_z(Z, pins_eff)
 
-	element = Element(element_model = imp, input_pins = pins_eff, output_pins = pins_eff,
-		transformation = transformation,connection = connection)
-	return element
+	return imp
 end
 
 function eval_abcd(imp::Impedance, s::Complex)

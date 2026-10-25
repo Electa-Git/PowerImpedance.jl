@@ -46,6 +46,19 @@
 
 ### Changed
 
+- **Breaking:** component constructors return their models directly.
+- **Breaking:** `conductors` replaces `pins` for `impedance` and `transformer`,
+  including the `Transformer` field.
+- **Breaking:** remove the constructor keywords `pins`, `transformation`,
+  `connection` and `setpoint`. Set topology with `Bus`/`Net`, omit components with
+  `exclude`, and set references and power-flow seeds with `component` or `withinputs`.
+- **Breaking:** `ac_source` always has three conductors. `dc_source` has one.
+- **Breaking:** `Source` is immutable and stores physical `v`, `theta`, `p`, `q`,
+  conductor count, domain, limits and its ideal ABCD matrix. Remove the legacy
+  fields `V`, `P`, `Q`, `P_min`, `P_max`, `Q_min`, `Q_max` and `pins`.
+- **Breaking:** `ac_source` takes no `limits` keyword. Set source limits with
+  `component(source; limits = x)`.
+
 - **Breaking:** PSCAD current probes measure current into the component.
 
 - **Breaking:** `export_pscad` accepts only a `NetworkState`, with an optional

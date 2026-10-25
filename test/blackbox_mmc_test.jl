@@ -147,8 +147,8 @@ end
     model = P.Blackbox_MMC(; itp = interpolant,
         powerflow = (p_ac = 10.0, q_ac = 3.0, v_ac = 220 / sqrt(3),
             p_dc = 10.0, v_dc = 640.0))
-    ac = component(ac_source(pins = 3).element_model; v = 220sqrt(2/3), theta = 0.0)
-    dc = component(dc_source().element_model; v = 640.0)
+    ac = component(ac_source(); v = 220sqrt(2/3), theta = 0.0)
+    dc = component(dc_source(); v = 640.0)
     state = NB.define((; mmc = model, ac, dc), (
         NB.Bus(:AC; ports = ((:ac, :ac), (:mmc, :ac))),
         NB.Net(:DC; terminals = ((:dc, :dc, :dc), (:mmc, :dc, :dc))),

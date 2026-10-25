@@ -25,13 +25,13 @@
 """
     mmc(Grid; kwargs...)
 
-Construct a lazy MMC `Gridspace` with the modular constructor keywords.
+Construct a lazy `Gridspace{MMC}` with the modular constructor keywords.
 """
-P.mmc(::typeof(Grid); kwargs...) = _keyword_gridspace(P.Element, P.mmc; kwargs...)
+P.mmc(::typeof(Grid); kwargs...) = _keyword_gridspace(P.MMC, P.mmc; kwargs...)
 
 """
     tlc(Grid; kwargs...)
 
-Construct a lazy two-level-converter `Gridspace` with the modular constructor keywords.
+Construct a lazy `Gridspace{TLC}` with the modular constructor keywords.
 """
-P.tlc(::typeof(Grid); kwargs...) = _keyword_gridspace(P.Element, P.tlc; kwargs...)
+P.tlc(::typeof(Grid); kwargs...) = _keyword_gridspace(P.TLC, P.tlc; kwargs...)

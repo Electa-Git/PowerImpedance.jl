@@ -107,21 +107,17 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Create an induction machine element.
+Construct an induction-machine model from electrical and mechanical subsystems.
 
 # Arguments
 
 - `elec`: Electrical subsystem and its physical base quantities. Default:
   `ElectricalIM()`.
 - `mech`: Mechanical subsystem. Default: `MechanicalIM()`.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\]. Default: `Setpoint()`.
-- `connection`: Whether the element participates in network construction. Default:
-  `true`.
 
 # Returns
 
-- An `Element` containing an `InductionMachine` model.
+- An immutable `InductionMachine` with an `ACDQ` port.
 
 # Examples
 
@@ -131,18 +127,8 @@ im = inductionmachine(
     mech = MechanicalIM(T_0 = 0.9))
 ```
 """
-function inductionmachine(; elec = ElectricalIM(), mech = MechanicalIM(), setpoint = Setpoint(), connection = true)
-
-    indm = InductionMachine(elec, mech, LinearizationCache())
-
-    return Element(
-        input_pins = 3,
-        output_pins = 3,
-        element_model = indm,
-        transformation = true;
-        connection,
-        setpoint
-    )
+function inductionmachine(; elec = ElectricalIM(), mech = MechanicalIM())
+    return InductionMachine(elec, mech, LinearizationCache())
 end
 
 statenames(m::InductionMachine) =
@@ -190,7 +176,7 @@ power base to get the machine's absorbed powers.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = inductionmachine().element_model
+model = inductionmachine()
 values = (ac = ACPortValues(220sqrt(2/3), 0.0, 100.0, 0.0),)
 inputs, point_pu = P.pftoinputs(model, values)
 ```
@@ -266,7 +252,7 @@ derivatives include stator/rotor loss, synchronous-frame coupling, and slip term
 using PowerImpedance
 P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = inductionmachine(setpoint=point).element_model
+model = inductionmachine()
 inputs, point_pu = P.pftoinputs(model, point)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.elec
@@ -345,7 +331,7 @@ Torques and rotor speed use machine bases \\[dimensionless\\]; ``H`` uses \\[s\\
 using PowerImpedance
 P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = inductionmachine(setpoint=point).element_model
+model = inductionmachine()
 inputs, point_pu = P.pftoinputs(model, point)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.mech
@@ -395,7 +381,7 @@ derivatives into `F`.
 using PowerImpedance
 P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = inductionmachine(setpoint=point).element_model
+model = inductionmachine()
 inputs, point_pu = P.pftoinputs(model, point)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 F = zeros(P.n_states(model))
@@ -529,7 +515,7 @@ for explicit use; core `eval_y` does not automatically apply them to induction m
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = inductionmachine().element_model
+model = inductionmachine()
 scale = P.SI_scale(model)
 ```
 """

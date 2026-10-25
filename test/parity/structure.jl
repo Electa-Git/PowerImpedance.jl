@@ -1,6 +1,7 @@
 module ParityData
 using PowerImpedance, LinearAlgebra, Printf, SHA, Logging
 include("fixtures.jl")
+include("names.jl")
 include("../pscad/probe_names.jl")
 using .ParityFixtures
 const PI = PowerImpedance
@@ -211,7 +212,7 @@ end
 function oracle_droop!(rows, labels)
     for kind in (:mmc, :tlc), order in (0, 2)
 
-        model = ParityFixtures.Droop.converter(kind).element_model
+        model = ParityFixtures.Droop.converter(kind)
         block = kind == :mmc ? model.delta_control.outer_active : model.outerActive
         point = PI.TerminalValuesPU(p_ac = 0.3, v_dc = 1.05)
         x = (; ξ_vdc_supp = 0.017, ξ_P_ac = 0.071)
@@ -238,7 +239,8 @@ function pscad_operating_point!(rows, labels, name, state)
         NB._node_bus_mapping(state.topology), mapping, point, (;))
     list = P.netlist(state, pf)
     plan = P.build_plan(list)
-    probe_mapping = PSCADProbeNames.name_map(list, plan.probes)
+    probe_mapping = PSCADProbeNames.name_map(list, plan.probes;
+        ParityNames.pscad_names(name, list)...)
     names = probe_mapping.names
     frozen = load_labels(joinpath(@__DIR__, "../reference/v2/labels.tsv"))
     voltage_order = String[]

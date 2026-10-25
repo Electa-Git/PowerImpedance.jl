@@ -139,7 +139,7 @@ Overhead_line(::Any, ::Any, ::Any, ::Any, ::Any)
 """
 $(TYPEDSIGNATURES)
 
-Construct a frequency-dependent overhead transmission-line element.
+Construct a frequency-dependent overhead transmission-line model.
 
 # Arguments
 
@@ -150,13 +150,11 @@ Construct a frequency-dependent overhead transmission-line element.
   relative permittivity `\\[dimensionless\\]`, and resistivity `\\[Ω·m\\]`.
 - `transposition`: Phase transposition, `:none` (default) or `:ideal` for
   exactly three phase bundles.
-- `transformation`: Whether to expose a supported transformed representation.
-- `connection`: Whether NetworkBuilder includes the element in the system.
 - `args...`: Remaining component-field keywords described above.
 
 # Returns
 
-- An `Element` with one input and output terminal per conductor bundle.
+- An `Overhead_line` with conductor count derived from its bundle geometry.
 
 # Notes
 
@@ -170,8 +168,8 @@ sections short relative to the wavelength.
 
 # Errors
 
-- Throws `ArgumentError` for an unknown keyword or an unsupported conductor
-  organization/order during parameter evaluation.
+- Unsupported conductor organizations or orders raise `ArgumentError` during
+  parameter evaluation.
 - Throws `ArgumentError` for an unsupported transposition or ideal
   transposition with a phase-bundle count other than three.
 
@@ -195,19 +193,16 @@ line = overhead_line(
 ```
 """
 function overhead_line(; args...)
+	if any(key -> key in (:pins, :transformation, :connection, :setpoint), keys(args))
+		Base.kwerr((; args...), overhead_line)
+	end
 	tl = Overhead_line()
 	transposition = :none
-	transformation = false
-	connection = true
 	for (key, val) in pairs(args)
 		if key == :transposition
 			transposition = val
 		elseif in(key, propertynames(tl))
 			setfield!(tl, key, val)
-		elseif key == :transformation
-			transformation = val
-		elseif key == :connection
-			connection = val
 		else
 			throw(ArgumentError("Unknown property $(key) of the overhead line."))
 		end
@@ -218,13 +213,7 @@ function overhead_line(; args...)
 	# No P/Z assembly here anymore (no symbolics).
 	# P and Z fields remain in the struct (architecture unchanged), but are unused.
 
-	return Element(
-		input_pins = tl.conductors.nᵇ,
-		output_pins = tl.conductors.nᵇ,
-		element_value = tl,
-		transformation = transformation,
-		connection = connection,
-	)
+	return tl
 end
 
 function _ohl_flat(c::Conductors)
@@ -406,7 +395,7 @@ P = PowerImpedance
 model = overhead_line(length=1000.0,
     conductors=Conductors(nᵇ=3, nˢᵇ=1, organization=:flat,
         yᵇᶜ=20.0, Δxᵇᶜ=5.0, rᶜ=0.015, Rᵈᶜ=0.1),
-    earth_parameters=(1.0, 1.0, 100.0)).element_model
+    earth_parameters=(1.0, 1.0, 100.0))
 result = P.eval_parameters(model, 2π*im*50)
 ```
 """
@@ -567,7 +556,7 @@ P = PowerImpedance
 model = overhead_line(length=1000.0,
     conductors=Conductors(nᵇ=3, nˢᵇ=1, organization=:flat,
         yᵇᶜ=20.0, Δxᵇᶜ=5.0, rᶜ=0.015, Rᵈᶜ=0.1),
-    earth_parameters=(1.0, 1.0, 100.0)).element_model
+    earth_parameters=(1.0, 1.0, 100.0))
 result = P.eval_abcd(model, 2π*im*50)
 ```
 """

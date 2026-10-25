@@ -96,8 +96,6 @@ Construct a frequency-dependent group of coaxial power cables.
 - `type`: Installation identifier. Default: `:underground`.
 - `eliminate`: Whether all conducting layers except the first core in each cable are
   Kron-reduced. Default: `true`.
-- `transformation`: Whether to expose a supported transformed representation.
-- `connection`: Whether NetworkBuilder includes the element in the system.
 - `C1`, `C2`, ...: Named `Conductor` layers, in radial order. A metallic screen
   may be supplied as `SC` together with sheath `C2`.
 - `I1`, `I2`, ...: Named `Insulator` layers, in radial order.
@@ -105,7 +103,7 @@ Construct a frequency-dependent group of coaxial power cables.
 
 # Returns
 
-- An `Element` with one input and output terminal per cable position.
+- A `Cable` with conductor count derived from its cable positions.
 
 # Notes
 
@@ -145,9 +143,10 @@ cable_element = cable(
 ```
 """
 function cable(; args...)
+	if any(key -> key in (:pins, :transformation, :connection, :setpoint), keys(args))
+		Base.kwerr((; args...), cable)
+	end
 	c = Cable()
-	transformation = false
-	connection = true
 	for (key, val) in pairs(args)
 		if key == :positions
 			for v in val
@@ -159,10 +158,6 @@ function cable(; args...)
 			c.conductors[key] = val
 		elseif isa(val, Insulator)
 			c.insulators[key] = val
-		elseif key == :transformation
-			transformation = val
-		elseif key == :connection
-			connection = val	
 		else
 			throw(ArgumentError("Unknown cable property name."))
 		end
@@ -214,15 +209,7 @@ function cable(; args...)
 		c.insulators[:I1].ϵᵣ *= x
 	end
 
-	n = length(c.positions)
-
-	elem = Element(
-		input_pins = n,
-		output_pins = n,
-		element_value = c,
-		transformation = transformation,
-		connection = connection,
-	)
+	return c
 end
 
 """
@@ -265,7 +252,7 @@ model = cable(length=1000.0, positions=[(0.0, 1.0)],
     I1=Insulator(rᵢ=0.02, rₒ=0.04, ϵᵣ=2.3),
     C2=Conductor(rᵢ=0.04, rₒ=0.042, ρ=2.2e-7),
     I2=Insulator(rᵢ=0.042, rₒ=0.045, ϵᵣ=2.3),
-    earth_parameters=(1.0, 1.0, 100.0)).element_model
+    earth_parameters=(1.0, 1.0, 100.0))
 result = P.eval_parameters(model, 2π*im*50)
 ```
 """
@@ -474,7 +461,7 @@ model = cable(length=1000.0, positions=[(0.0, 1.0)],
     I1=Insulator(rᵢ=0.02, rₒ=0.04, ϵᵣ=2.3),
     C2=Conductor(rᵢ=0.04, rₒ=0.042, ρ=2.2e-7),
     I2=Insulator(rᵢ=0.042, rₒ=0.045, ϵᵣ=2.3),
-    earth_parameters=(1.0, 1.0, 100.0)).element_model
+    earth_parameters=(1.0, 1.0, 100.0))
 result = P.eval_abcd(model, 2π*im*50)
 ```
 """

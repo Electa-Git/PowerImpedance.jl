@@ -191,7 +191,7 @@ Configure model inputs and optionally replace its stored limits.
 # Examples
 
 ```julia
-component(ac_source().element_model; v = 130.0)
+component(ac_source(); v = 130.0)
 ```
 """
 function component(model; limits = nothing, inputs...)

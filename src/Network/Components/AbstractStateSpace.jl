@@ -93,7 +93,7 @@ electrical input names.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 names = P.elecinputnames(model)
 ```
 """
@@ -134,7 +134,7 @@ index.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -272,7 +272,7 @@ after a failed default solve.
 
 ```julia
 using PowerImpedance
-model = synchronousmachine().element_model
+model = synchronousmachine()
 values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 A, B, C, D = linearize(model, values)
 ```
@@ -376,7 +376,7 @@ when the values compare equal with `isequal`. Otherwise, call [`linearize`](@ref
 # Examples
 
 ```julia
-model = synchronousmachine().element_model
+model = synchronousmachine()
 values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 x = steady_state(model, values)
 @assert steady_state(model, values) === x

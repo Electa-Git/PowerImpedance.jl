@@ -38,9 +38,11 @@ else
     include("fixtures.jl")
     include("topology.jl")
     include("probe_names.jl")
+    include("../parity/names.jl")
     include("networks.jl")
     using TOML
     P = PowerImpedance.PSCAD
+    include("../parity/pscad_test.jl")
     include("ztool_xml_test.jl")
     runner = Module(:GeometryRunner)
     Core.eval(runner, :(include(path) = Base.include($runner, path)))
@@ -338,7 +340,8 @@ else
             @test Set(summary.pgbs) == Set(c.name for c in plan.probes.channels)
             stem = endswith(name, "_builder") ? chopsuffix(name, "_builder") :
                 name == "mmc_pq_default_ramp" ? "mmc_pq" : "tlc_case2"
-            mapping = PSCADProbeNames.name_map(model.netlist, model.probes)
+            mapping = PSCADProbeNames.name_map(model.netlist, model.probes;
+                ParityNames.pscad_names(stem, model.netlist)...)
             expected_probes = Set(get(mapping.names, probe, probe)
                 for probe in probe_names[stem])
             signal_suffixes = (
@@ -422,7 +425,8 @@ else
                     @test Set(keys(graphs)) == Set(keys(reference))
                     for (canvas, graph) in graphs
                         expected = deepcopy(reference[canvas])
-                        PSCADProbeNames.map_graph!(expected, mapping.names)
+                        PSCADProbeNames.map_graph!(expected, mapping.names;
+                            components = mapping.components)
                         PSCADProbeNames.turn_meters!(expected, mapping.polarities)
                         row_names = Dict(stem * ":" * line.name =>
                             name * ":" * line.name for line in plan.lines)
@@ -1165,7 +1169,7 @@ else
     end
     @testset "network IEEE9 XML" begin
         path = joinpath(only(ARGS), "network_ieee9.pscx")
-        state = PSCADFixtures.state_from_classic(PSCADFixtures.ieee9_network())
+        state = PSCADFixtures.ieee9_network()
         model = export_pscad(state; path,
             settings = P.SimulationSettings(simulation_time = 3.0))
         root = etree.parse(path).getroot()
@@ -1239,5 +1243,4 @@ else
         end
     end
     include("induction_machine_xml_test.jl")
-    include("../parity/pscad_test.jl")
 end

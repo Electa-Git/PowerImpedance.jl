@@ -6,7 +6,7 @@ const P = PowerImpedance.PSCAD
 
 @testset "IEEE9 physical fixture and power-flow dispatch" begin
     classic = ieee9_network()
-    net = PSCADFixtures.state_from_classic(classic)
+    net = classic
     @test length(net.elements) == 15
     @test net.options.voltageBase == 220 / sqrt(3)
     for (name, voltage) in ((:g1, 16.5), (:g2, 18.0), (:g3, 13.8))

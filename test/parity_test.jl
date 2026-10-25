@@ -34,7 +34,7 @@ function default_power_seed(name, value)
 end
 
 const TOLERANCES = Dict(
-    "pm" => (rtol = 1e-13, atol = 1e-13),
+    "pm" => (rtol = 1e-15, atol = 1e-15),
     "nodes" => (rtol = 0.0, atol = 0.0),
     "pf" => (rtol = 1e-12, atol = 1e-12),
     "op" => (rtol = 1e-12, atol = 1e-12),
@@ -155,7 +155,16 @@ function run_parity()
             @test length(fixtures) == parse(Int, metadata["fixture_count"])
             pscad_names = join((f.name for f in fixtures if f.probes.pscad), ',')
             @test pscad_names == metadata["pscad_fixtures"]
-            reference = arrays(D.load_rows(joinpath(DIRECTORY, "numeric.csv")))
+            mappings = Dict{String, Dict{Symbol, Vector{Symbol}}}()
+            for fixture in fixtures
+                state = fixture.build()
+                mapping = D.ParityNames.net_map(fixture.name, state)
+                mappings[string(fixture.name)] = mapping
+                @test fixture.probes.nets ==
+                    D.ParityNames.retained_nets(fixture.name, state, mapping)
+            end
+            reference = D.ParityNames.mapped_datasets(
+                arrays(D.load_rows(joinpath(DIRECTORY, "numeric.csv"))), mappings)
             rows, labels = D.Row[], Dict{String, String}()
             skipped, network_skipped, conversion_skipped = String[], String[], String[]
             reference_skipped = split(metadata["skipped"], ','; keepempty = false)
@@ -184,7 +193,8 @@ function run_parity()
             @test network_skipped == reference_network_skipped
             @test join(conversion_skipped, ',') == metadata["pm_conversion_skipped"]
             @test result.stability_fixture == metadata["stability_fixture"]
-            reference_labels = D.load_labels(joinpath(DIRECTORY, "labels.tsv"))
+            reference_labels = D.ParityNames.mapped_datasets(
+                D.load_labels(joinpath(DIRECTORY, "labels.tsv")), mappings)
             @test Set(first(split(key, '.')) for (key, label) in reference_labels
                 if endswith(key, ".pf.termination_status") && label == "not_required") ==
                   Set(string.(D.POWERFLOW_SOLVE_EXCEPTIONS))

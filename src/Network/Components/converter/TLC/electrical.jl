@@ -234,7 +234,7 @@ zero DC input voltage.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)

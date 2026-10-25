@@ -55,34 +55,13 @@ const _DC_SOURCE_INPUTS = (
 """
 $(TYPEDEF)
 
-Store the legacy ideal-voltage-source model and its cached ABCD representation. Source
-constructors store the operating-point targets separately in `Element.setpoint`.
+Store an ideal voltage source with physical operating targets and its ideal ABCD matrix.
 
 $(TYPEDFIELDS)
 """
-@with_kw mutable struct Source <: AbstractLinFreqDomain
-    "Legacy voltage \\[kV\\]; for DC this initializes the pole-to-pole bus voltage. AC power flow uses `Element.setpoint`."
-    V::Union{Float64, Int} = 0
-
-    "Legacy active-power parameter \\[MW\\]; power flow uses `Element.setpoint`."
-    P::Union{Float64, Int}     = 0
-    "Legacy reactive-power parameter \\[MVAr\\]; power flow uses `Element.setpoint`."
-    Q::Union{Float64, Int}     = 0
-    "Legacy minimum active power \\[MW\\]; power flow uses `Element.limits`."
-    P_min::Union{Float64, Int} = 0
-    "Legacy maximum active power \\[MW\\]; power flow uses `Element.limits`."
-    P_max::Union{Float64, Int} = 0
-    "Legacy minimum reactive power \\[MVAr\\]; power flow uses `Element.limits`."
-    Q_min::Union{Float64, Int} = 0
-    "Legacy maximum reactive power \\[MVAr\\]; power flow uses `Element.limits`."
-    Q_max::Union{Float64, Int} = 0
-
-    "Cached number of phase-domain or conductor terminals."
-    pins::Int = 1
-    "Cached ideal-source ABCD matrix; A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
-    ABCD::Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
+@with_kw struct Source <: AbstractLinFreqDomain
     "Number of physical conductors supplied to the source constructor."
-    conductors::Int = 1
+    conductors::Int = 3
     "Electrical coordinate domain selected by the source constructor."
     domain::AbstractDomain = ACABC
     "Voltage magnitude \\[kV\\], AC phase peak or DC pole to pole."
@@ -97,24 +76,23 @@ $(TYPEDFIELDS)
     q::Float64 = _AC_SOURCE_INPUTS.q.default
     "Operating limits in \\[MW\\] and \\[MVAr\\]."
     limits::Limits = Limits()
+    "Ideal ABCD matrix; A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
+    ABCD::Matrix{ComplexF64} = _source_abcd(conductors)
 end
 
 """
 $(TYPEDSIGNATURES)
 
-Initialize and cache the ideal-source ABCD matrix for the requested terminal count.
+Compute the ideal-source ABCD matrix for the requested conductor count.
 
 # Arguments
 
-- `source`: Ideal-source parameters and cached ABCD matrix.
-- `p`: Number of phase-domain or conductor terminals per side.
+- `p`: Number of physical conductors.
 
 # Returns
 
-- `A`: Identity voltage-transfer matrix \\[dimensionless\\].
-- `B`: Zero series impedance matrix \\[Ω\\].
-- `C`: Zero shunt admittance matrix \\[S\\].
-- `D`: Identity current-transfer matrix \\[dimensionless\\].
+- Block matrix `[A B; C D]`: A/D are identity \\[dimensionless\\], B is zero
+  series impedance \\[Ω\\], and C is zero shunt admittance \\[S\\].
 
 # Notes
 
@@ -122,30 +100,25 @@ Initialize and cache the ideal-source ABCD matrix for the requested terminal cou
 A=D=I_p,\\qquad B=C=0.
 ```
 
-The complete matrix is cached on the source. The returned blocks use the terminal count
-`p`.
+The source constructor stores the complete matrix.
 
 # Examples
 
 ```julia
 using PowerImpedance
-PowerImpedance.make_abcd(PowerImpedance.Source(), 3)
+PowerImpedance._source_abcd(3)
 ```
 """
-function make_abcd(source::Source, p)
-    source.pins = p
-
+function _source_abcd(p)
     A = Matrix{ComplexF64}(I, p, p)
     B = zeros(ComplexF64, p, p)
     C = zeros(ComplexF64, p, p)
     D = Matrix{ComplexF64}(I, p, p)
 
-    source.ABCD = [A B; C D]
-    return A, B, C, D
+    return [A B; C D]
 end
 
 function eval_abcd(source::Source, s::Complex)
-    isempty(source.ABCD) && make_abcd(source, source.pins)
     return source.ABCD
 end
 
@@ -174,13 +147,13 @@ The frequency argument is unused by this ideal-source model.
 
 ```julia
 using PowerImpedance
-model = ac_source(pins=3).element_model
+model = ac_source()
 PowerImpedance.eval_y(model, 2π*im*50)
 ```
 """
 function eval_y(source::Source, s::Complex)
     abcd = eval_abcd(source, s)
-    p = source.pins
+    p = source.conductors
 
 	abcd = copy(abcd)
 	abcd[1:p, (p+1):end] .= 1e-6 .* Matrix{ComplexF64}(I, p, p)
@@ -490,7 +463,7 @@ function convert!(data, model::Source, ::Type{PMACDC}, component_key,
     gendc["cost"] = 0
     gendc["ncost"] = 0
     busdc = data["busdc"][string(dc_bus)]
-    busdc["Vdc"] = model.V * 1e3 / (data["dcpol"] * global_dict["V"])
+    busdc["Vdc"] = 0.0
     busdc["Vdcmax"] = 1.1 * busdc["Vdc"]
     busdc["Vdcmin"] = 0.9 * busdc["Vdc"]
     data["busdc"][string(dc_bus)] = set_bus_type_dc(busdc, 2)

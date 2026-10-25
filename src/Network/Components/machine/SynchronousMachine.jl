@@ -332,7 +332,7 @@ and the configured AVR reference is retained.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = synchronousmachine().element_model
+model = synchronousmachine()
 values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
 inputs, point_pu = P.pftoinputs(model, values)
 ```
@@ -413,7 +413,7 @@ machine bases \\[dimensionless\\].
 using PowerImpedance
 P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
+model = synchronousmachine()
 inputs, point_pu = P.pftoinputs(model, point)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.elec
@@ -514,7 +514,7 @@ angle \\[rad\\].
 using PowerImpedance
 P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
+model = synchronousmachine()
 inputs, point_pu = P.pftoinputs(model, point)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.mech
@@ -577,7 +577,7 @@ normalized \\[dimensionless\\].
 using PowerImpedance
 P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
+model = synchronousmachine()
 inputs, point_pu = P.pftoinputs(model, point)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.gov
@@ -644,7 +644,7 @@ derivatives. Voltages use machine bases \\[dimensionless\\]; time constants use 
 using PowerImpedance
 P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
+model = synchronousmachine()
 inputs, point_pu = P.pftoinputs(model, point)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.avr
@@ -710,7 +710,7 @@ dynamics, writing state derivatives into `F`.
 using PowerImpedance
 P = PowerImpedance
 point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
+model = synchronousmachine()
 inputs, point_pu = P.pftoinputs(model, point)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 F = zeros(P.n_states(model))
@@ -767,7 +767,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Construct a network element containing the requested component model.
+Construct a synchronous-machine model from electrical and mechanical subsystems.
 
 # Arguments
 
@@ -776,34 +776,27 @@ Construct a network element containing the requested component model.
 - `mech`: Mechanical subsystem. Default: `MechanicalSM()`.
 - `avr`: Automatic voltage regulator. Default: `AVRSM()`.
 - `gov`: Governor subsystem. Default: `GovernorSM()`.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\]. Default: `Setpoint()`.
 - `powerflow`: Partial power-flow seeds on machine bases \\[dimensionless\\].
   Default: `(;)`.
-- `connection`: Whether the element participates in network construction. Default:
-  `true`.
 
 # Returns
 
-- An `Element` containing the configured component model.
+- An immutable `SynchronousMachine` with an `ACDQ` port.
 
 # Examples
 
 ```julia
 using PowerImpedance
-component = synchronousmachine(setpoint=Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0))
+machine = component(synchronousmachine();
+    powerflow = (p = 0.1, q = 0.0, v = 1.0))
 ```
 """
 function synchronousmachine(; elec = ElectricalSM(), mech = MechanicalSM(),
-        avr = AVRSM(), gov = GovernorSM(), setpoint = Setpoint(), connection = true,
-        powerflow::NamedTuple = (;))
+        avr = AVRSM(), gov = GovernorSM(), powerflow::NamedTuple = (;))
     defaults = map(input -> input.default, _MACHINE_POWERFLOW_INPUTS)
     seeds = _withinputs(defaults, _MACHINE_POWERFLOW_INPUTS,
         powerflow, "powerflow")
-    gen = SynchronousMachine(elec, mech, avr, gov, Limits(), seeds, LinearizationCache())
-    # Transformation property set to false, as model is natively defined in dq-frame. TODO: Fix this; outpins 0 bcs oneport, kept for legacy
-    elem = Element(input_pins = 2, output_pins = 2, element_model = gen, transformation = false; connection, setpoint)
-    return elem
+    return SynchronousMachine(elec, mech, avr, gov, Limits(), seeds, LinearizationCache())
 end
 
 
@@ -867,7 +860,7 @@ for explicit use by the network admittance calculation.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = synchronousmachine().element_model
+model = synchronousmachine()
 scale = P.SI_scale(model)
 ```
 """

@@ -8,6 +8,7 @@ let previous_threads = BLAS.get_num_threads()
         BLAS.set_num_threads(previous_threads)
     end
 end
+include("names.jl")
 include("../pscad/topology.jl")
 include("../pscad/probe_names.jl")
 const P = PowerImpedance.PSCAD
@@ -31,7 +32,8 @@ function export_fixture(fixture, directory)
     probes = sort!([c.name
                     for c in model.probes.channels
                     if startswith(c.name, "V_") || startswith(c.name, "I_")])
-    mapping = PSCADProbeNames.name_map(model.netlist, model.probes)
+    mapping = PSCADProbeNames.name_map(model.netlist, model.probes;
+        ParityNames.pscad_names(fixture.name, model.netlist)...)
     return (; graphs, probes, path, mapping)
 end
 
@@ -70,7 +72,8 @@ function run_parity()
                         for (canvas, graph) in fresh.graphs
                             expected = reference["canvases"][canvas]
                             rewritten += PSCADProbeNames.map_graph!(
-                                expected, fresh.mapping.names)
+                                expected, fresh.mapping.names;
+                                components = fresh.mapping.components)
                             PSCADProbeNames.turn_meters!(expected,
                                 fresh.mapping.polarities)
                             @test PSCADTopology.equivalent(expected, graph)
@@ -81,6 +84,8 @@ function run_parity()
                         count = sum(p -> haskey(fresh.mapping.names, p), old_probes)
                         println("PSCAD names fixture=", fixture.name,
                             " graph=", rewritten, " probes=", count,
+                            " voltage=", join(sort!(["$old->$new" for (old, new) in
+                                fresh.mapping.names if startswith(old, "V_")]), ','),
                             " truncated=", fresh.mapping.truncated,
                             " turned=", join(sort!([name for (name, polarity) in
                                 fresh.mapping.polarities if polarity == -1]), ','))

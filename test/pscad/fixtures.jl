@@ -41,14 +41,13 @@ function _im_circuit(; elec = ElectricalIM(r_s = 0.01),
         mech = MechanicalIM(T_0 = 0.9, A = 0.0, B = 0.0, C = 1.0, m = 0))
     voltage = 220 / sqrt(3)
     elements = (;
-        g1 = ac_source(setpoint = Setpoint(Vac = voltage * sqrt(2), Pac = -500, θac = 0.0),
-            pins = 3, transformation = true),
+        g1 = ac_source(v = voltage * sqrt(2), theta = 0.0, p = -500),
         im1 = inductionmachine(; elec, mech),
-        imp = impedance(z = 0.01, pins = 3, transformation = true))
-    rows = [(node = Symbol(bus * suffix), element, side, terminal)
-            for (element, side, bus) in ((:im1, 1, "machine_"), (:imp, 1, "machine_"),
-                (:imp, 2, "grid_"), (:g1, 1, "grid_"))
-            for (terminal, suffix) in enumerate(("d", "q"))]
+        imp = impedance(; z = 0.01, conductors = 3))
+    rows = [NetworkBuilder.Bus(Symbol(name); ports = ((element, port),), domain = ACDQ)
+            for (element, port, name) in ((:im1, :ac, "machine_"),
+                (:imp, :side1, "machine_"), (:imp, :side2, "grid_"),
+                (:g1, :ac, "grid_"))]
     return (; elements, rows, options = (;
         voltageBase = voltage, power_flow = (; is_bounded = (; bus_voltage = true))))
 end
@@ -56,16 +55,15 @@ end
 function _small_ac_circuit()
     voltage = 380 / sqrt(3)
     elements = (;
-        source = ac_source(; pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = voltage * sqrt(2), θac = 0.0)),
-        line = impedance(; z = s -> 0.19 + s * 0.0122, pins = 3, transformation = true),
-        load = impedance(; z = s -> 400.0, pins = 3, transformation = true))
-    rows = [(node = Symbol(bus * suffix), element = name, side = side, terminal = terminal)
-            for (name, side, bus) in ((:source, 1, "B1"), (:line, 1, "B1"),
-        (:line, 2, "B2"), (:load, 1, "B2"))
-            for (terminal, suffix) in enumerate(("d", "q"))]
-    append!(rows, [(node = :gnd, element = :load, side = 2, terminal = terminal)
-                   for terminal in 1:2])
+        source = ac_source(v = voltage * sqrt(2), theta = 0.0),
+        line = impedance(; z = s -> 0.19 + s * 0.0122, conductors = 3),
+        load = impedance(; z = s -> 400.0, conductors = 3))
+    rows = (
+        NetworkBuilder.Bus(:B1; ports = ((:source, :ac),), domain = ACDQ),
+        NetworkBuilder.Bus(:B1; ports = ((:line, :side1),), domain = ACDQ),
+        NetworkBuilder.Bus(:B2; ports = ((:line, :side2),), domain = ACDQ),
+        NetworkBuilder.Bus(:B2; ports = ((:load, :side1),), domain = ACDQ),
+        NetworkBuilder.Bus(:gnd; ports = ((:load, :side2),), domain = ACDQ))
     return (; elements, rows, options = (;
         voltageBase = voltage))
 end
@@ -73,20 +71,22 @@ end
 function _sm_circuit()
     voltage = 380 / sqrt(3)
     elements = (;
-        sg1 = synchronousmachine(;
-            setpoint = Setpoint(Vac = 1.000177992 * voltage * sqrt(2), Pac = 900),
-            elec = ElectricalSM(Vᵃᶜ_base = 380.0)),
-        g2 = ac_source(; pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = voltage * sqrt(2))))
-    rows = [(node = Symbol("Bus2" * suffix), element, side = 1, terminal)
-            for element in (:sg1, :g2)
-            for (terminal, suffix) in enumerate(("d", "q"))]
+        sg1 = let model = synchronousmachine(;
+            elec = ElectricalSM(Vᵃᶜ_base = 380.0))
+            b = bases(model)
+            component(model; powerflow = (p = 900 / b.S,
+                q = model.powerflow.q * b.S / b.S,
+                    v = 1.000177992 * voltage * sqrt(2) / b.v_ac))
+        end,
+        g2 = ac_source(v = voltage * sqrt(2)))
+    rows = [NetworkBuilder.Bus(:Bus2; ports = ((element, :ac),), domain = ACDQ)
+            for element in (:sg1, :g2)]
     return (; elements, rows, options = (; voltageBase = voltage))
 end
 
 function _passive_ohl_circuit()
     circuit = _small_ac_circuit()
-    tl1 = overhead_line(length = 25e3,
+    tl1 = overhead_line(; length = 25e3,
         conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1,
             Rᵈᶜ = 0.063,
             rᶜ = 0.015, yᵇᶜ = 30,
@@ -99,14 +99,14 @@ function _passive_ohl_circuit()
             Δyᵍ = 7.5,
             dᵍˢᵃᵍ = 10
         ),
-        earth_parameters = (1, 1, 100), transformation = true)
+        earth_parameters = (1, 1, 100))
     elements = merge(circuit.elements, (; line = tl1))
     return (; elements, circuit.rows, circuit.options)
 end
 
 function _transformer_circuit(; organization = :YY, Rₘ = 1e6, Lₘ = 1000.0)
     circuit = _small_ac_circuit()
-    winding = transformer(; pins = 3, transformation = true, organization,
+    winding = transformer(; conductors = 3, organization,
         n = 380 / 150, Rₚ = 10.0, Lₚ = 0.1, Rₛ = 1.0, Lₛ = 0.05,
         Rₘ, Lₘ, Cₜ = 0.0, Cₛ = 0.0)
     elements = merge(circuit.elements, (; line = winding))
@@ -115,26 +115,26 @@ end
 
 function _dc_circuit()
     elements = (;
-        ac = ac_source(; pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = 320sqrt(2), θac = 0.0)),
-        from = dc_source(; setpoint = Setpoint(Vdc = 640.0)),
-        to = dc_source(; setpoint = Setpoint(Vdc = 636.0)),
-        line = impedance(; z = s -> 2.0 + s * 0.05, pins = 1),
-        ac_load = impedance(; z = s -> 400.0, pins = 3, transformation = true))
-    rows = [(node = Symbol("AC$k"), element, side = 1, terminal = k)
-            for element in (:ac, :ac_load) for k in 1:2]
-    append!(rows, [(node = :gnd, element = :ac_load, side = 2, terminal = k) for k in 1:2])
-    for (element, side, node) in ((:from, 1, :D1), (:to, 1, :D2),
-        (:line, 1, :D1), (:line, 2, :D2))
-        push!(rows, (; node, element, side, terminal = 1))
-    end
+        ac = ac_source(v = 320sqrt(2), theta = 0.0),
+        from = dc_source(v = 640.0),
+        to = dc_source(v = 636.0),
+        line = impedance(; z = s -> 2.0 + s * 0.05, conductors = 1),
+        ac_load = impedance(; z = s -> 400.0, conductors = 3))
+    rows = (
+        NetworkBuilder.Bus(:AC; ports = ((:ac, :ac),), domain = ACDQ),
+        NetworkBuilder.Bus(:AC; ports = ((:ac_load, :side1),), domain = ACDQ),
+        NetworkBuilder.Bus(:gnd; ports = ((:ac_load, :side2),), domain = ACDQ),
+        NetworkBuilder.Bus(:D1; ports = ((:from, :dc),)),
+        NetworkBuilder.Bus(:D2; ports = ((:to, :dc),)),
+        NetworkBuilder.Bus(:D1; ports = ((:line, :side1),)),
+        NetworkBuilder.Bus(:D2; ports = ((:line, :side2),)))
     return (; elements, rows, options = (;
         voltageBase = 320.0))
 end
 
 function _dc_cable_circuit()
     circuit = _dc_circuit()
-    ugc = cable(
+    ugc = cable(;
         length = 50e3,
         positions = [(-0.5, 1), (0.5, 1)],
         C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
@@ -143,9 +143,7 @@ function _dc_cable_circuit()
         I2 = Insulator(rᵢ = 0.06336, rₒ = 0.06636, ϵᵣ = 2.3, μᵣ = 1.0),
         C3 = Conductor(rᵢ = 0.06636, rₒ = 0.06651, ρ = 2.826e-8, μᵣ = 1.0),
         I3 = Insulator(rᵢ = 0.06651, rₒ = 0.07256, ϵᵣ = 2.3, μᵣ = 1.0),
-        earth_parameters = (1, 1, 100.0),
-        transformation = true
-    )
+        earth_parameters = (1, 1, 100.0))
     elements = merge(circuit.elements, (; line = ugc))
     return (; elements, circuit.rows, circuit.options)
 end
@@ -179,7 +177,8 @@ tlc_case2_network() = tlc_network(false)
 
 function tlc_vac_network()
     tlc_network(false,
-        PowerImpedance.OuterReactiveVacControl(pi_ctrl = PowerImpedance.PIControl(Kp = 0.0, Ki = 100.0)))
+        PowerImpedance.OuterReactiveVacControl(
+            pi_ctrl = PowerImpedance.PIControl(Kp = 0.0, Ki = 100.0)))
 end
 
 function _tlc_circuit(vdc_control, reactive = nothing)
@@ -187,14 +186,15 @@ function _tlc_circuit(vdc_control, reactive = nothing)
     elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08zbase / (2π * 50), Rᵣ = 0.0008zbase,
         Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = 640.0)
     active = vdc_control ?
-             PowerImpedance.OuterActiveVdcControl(pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0)) :
+             PowerImpedance.OuterActiveVdcControl(
+                 pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0)) :
              PowerImpedance.OuterActivePowerControl(
         pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
         support = PowerImpedance.FrequencySupportLag(Kω = 5.0, ωc = 2.0))
     support = vdc_control ? PowerImpedance.VoltageSupportLag(K = 5.0, ωc = 2.0) :
               PowerImpedance.NoVoltageSupport()
     elements = (;
-        DUT = tlc(elec = elec,
+        DUT = let model = tlc(; elec = elec,
             meas = PowerImpedance.Measurement(
                 v_ac = PowerImpedance.Butterworth(order = 2, ωc = 5000.0),
                 i_ac = PowerImpedance.Butterworth(order = 2, ωc = 5000.0)),
@@ -208,47 +208,60 @@ function _tlc_circuit(vdc_control, reactive = nothing)
                 pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
                 support = support) : reactive,
             innerVoltage = PowerImpedance.NoInnerVoltageControl(),
-            innerCurrent = PowerImpedance.InnerCurrentPIControl(pi_ctrl = PowerImpedance.PIControl(
-                Kp = 0.254647908947033, Ki = 0.8)),
-            mod = PowerImpedance.PadeModulation(timeDelay = 200e-6, padeOrderNum = 3, padeOrderDen = 3),
-            setpoint = Setpoint(
-                Pac = 70.0, Qac = 20.0, Vac = 220sqrt(2 / 3), Pdc = 70.0, Vdc = 640.0),
+            innerCurrent = PowerImpedance.InnerCurrentPIControl(
+                pi_ctrl = PowerImpedance.PIControl(Kp = 0.254647908947033, Ki = 0.8)),
+            mod = PowerImpedance.PadeModulation(timeDelay = 200e-6, padeOrderNum = 3,
+                padeOrderDen = 3),
             limits = vdc_control ?
-                     PowerImpedance.Limits(P_min = -100.0, P_max = 100.0, Q_min = -50.0, Q_max = 50.0) :
-                     PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0, Q_min = -1000.0, Q_max = 1000.0)),
-        G3 = ac_source(pins = 3, transformation = true, setpoint = Setpoint(Vac = 220sqrt(2 /
-                                                                                          3))),
-        G_DC = dc_source(setpoint = Setpoint(Vdc = 640.0)),
-        CableDC12 = cable(length = 10e3, positions = [(-0.5, 1.0), (0.5, 1.0)],
+                     PowerImpedance.Limits(P_min = -100.0, P_max = 100.0, Q_min = -50.0,
+                         Q_max = 50.0) :
+                     PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
+                         Q_min = -1000.0, Q_max = 1000.0))
+            b = bases(model)
+            active_inputs = vdc_control ?
+                (; v_dc_ref = (640.0) / b.v_dc) : (; p_ref = (70.0) / b.S)
+            active_seeds = vdc_control ?
+                (; p_ac = (70.0) / b.S) : (; v_dc = (640.0) / b.v_dc)
+            reactive_inputs = reactive isa PowerImpedance.OuterReactiveVacControl ?
+                (; v_ac_ref = (220sqrt(2 / 3)) / b.v_ac) :
+                vdc_control ? (; q_ref = (20.0) / b.S,
+                    support = (v_ac_ref = (220sqrt(2 / 3)) / b.v_ac,)) :
+                (; q_ref = (20.0) / b.S)
+            reactive_seeds = reactive isa PowerImpedance.OuterReactiveVacControl ?
+                (; q_ac = (20.0) / b.S) : vdc_control ? (;) :
+                (; v_ac = (220sqrt(2 / 3)) / b.v_ac)
+            component(model; outerActive = active_inputs,
+                outerReactive = reactive_inputs,
+                powerflow = (; active_seeds...,
+                    reactive_seeds...,
+                    p_dc = (70.0) / b.S))
+        end,
+        G3 = ac_source(v = 220sqrt(2 / 3)),
+        G_DC = dc_source(v = 640.0),
+        CableDC12 = cable(; length = 10e3, positions = [(-0.5, 1.0), (0.5, 1.0)],
             C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8),
             I1 = Insulator(rᵢ = 24.25e-3, rₒ = 41.75e-3, ϵᵣ = 2.3),
             C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8),
             I2 = Insulator(rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
             C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10.0),
-            I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3), transformation = true))
+            I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3)))
     if reactive isa PowerImpedance.OuterReactiveVacControl
         # Give VAC its own voltage-controlled bus, as in the MMC VAC script.
         elements = merge(elements, (;
-            Grid = impedance(z = s -> 0.1s, pins = 3, transformation = true)))
+            Grid = impedance(; z = s -> 0.1s, conductors = 3)))
     end
-    rows = [(node = Symbol("AC" * axis), element, side, terminal)
-            for (element, side) in ((:DUT, 2), (:G3, 1))
-            for (terminal, axis) in enumerate(("d", "q"))]
+    rows = NetworkBuilder.Bus[
+        NetworkBuilder.Bus(:AC; ports = ((:DUT, :ac),), domain = ACDQ),
+        NetworkBuilder.Bus(reactive isa PowerImpedance.OuterReactiveVacControl ?
+            :Grid : :AC; ports = ((:G3, :ac),), domain = ACDQ)]
     if reactive isa PowerImpedance.OuterReactiveVacControl
-        rows = [(; node = r.element == :G3 ? Symbol("Grid" * string(r.terminal)) : r.node,
-                    r.element, r.side, r.terminal) for r in rows]
-        append!(rows,
-            [(node = Symbol("Grid" * string(t)), element = :Grid, side = 1, terminal = t)
-             for t in 1:2])
-        append!(rows,
-            [(node = Symbol("AC" * axis), element = :Grid, side = 2, terminal = t)
-             for (t, axis) in enumerate(("d", "q"))])
+        append!(rows, (
+            NetworkBuilder.Bus(:Grid; ports = ((:Grid, :side1),), domain = ACDQ),
+            NetworkBuilder.Bus(:AC; ports = ((:Grid, :side2),), domain = ACDQ)))
     end
-    append!(rows,
-        [(node = :DC1, element = :DUT, side = 1, terminal = 1),
-            (node = :DC1, element = :CableDC12, side = 1, terminal = 1),
-            (node = :DC2, element = :CableDC12, side = 2, terminal = 1),
-            (node = :DC2, element = :G_DC, side = 1, terminal = 1)])
+    append!(rows, (
+        NetworkBuilder.Bus(:DC1; ports = ((:DUT, :dc), (:CableDC12, :side1))),
+        NetworkBuilder.Bus(:DC2; ports = ((:CableDC12, :side2), (:G_DC, :dc)))))
     return (; elements, rows, options = (;
         voltageBase = 220 / sqrt(3)))
 end
@@ -278,7 +291,7 @@ function _mmc_circuit(mode)
         support = mode == :qv ? PI.VoltageSupportLag(K = 20.0, ωc = 100.0) :
                   PI.NoVoltageSupport())
     elements = (;
-        DUT = mmc(
+        DUT = let model = mmc(;
             elec = PI.ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07,
                 Cₐᵣₘ = 10e-3, N = 400, turnsRatio = 333 / 380,
                 Lᵣ = 0.1305zbase / (100π), Rᵣ = 0.0037zbase,
@@ -289,69 +302,84 @@ function _mmc_circuit(mode)
             delta_control = PI.ΔdqControlGFL(
                 outer_active = active,
                 outer_reactive = reactive,
-                occ = PI.InnerCurrentPIControl(pi_ctrl = PI.PIControl(Kp = 0.7691, Ki = 522.7654))),
+                occ = PI.InnerCurrentPIControl(pi_ctrl = PI.PIControl(Kp = 0.7691,
+                    Ki = 522.7654))),
             sigma_control = PI.ΣdqzControlTEC(
-                tec = PI.TotalEnergyControl(pi_control = PI.PIControl(Kp = 1.386, Ki = 29.70)),
-                zscc = PI.ZeroSequenceCurrentControl(PI.PIControl(Kp = 0.1048, Ki = 48.1914)),
-                ccsc = PI.CirculatingCurrentSuppressionControl(PI.PIControl(Kp = 0.1048, Ki = 48.1914))),
+                tec = PI.TotalEnergyControl(pi_control = PI.PIControl(Kp = 1.386,
+                    Ki = 29.70)),
+                zscc = PI.ZeroSequenceCurrentControl(PI.PIControl(Kp = 0.1048,
+                    Ki = 48.1914)),
+                ccsc = PI.CirculatingCurrentSuppressionControl(PI.PIControl(Kp = 0.1048,
+                    Ki = 48.1914))),
             modulation = PI.UncompensatedModulation(),
-            setpoint = Setpoint(Pac = 600.0, Qac = 200.0, Vac = 380sqrt(2 / 3),
-                Vdc = 800.0, Pdc = 600.0),
-            limits = PI.Limits(P_min = -1500.0, P_max = 1500.0, Q_min = -1000.0, Q_max = 1000.0)),
-        G_AC = ac_source(pins = 3, transformation = true, setpoint = Setpoint(Vac = 380sqrt(2 /
-                                                                                            3))),
-        G_DC = dc_source(setpoint = Setpoint(Vdc = 800.0)))
+            limits = PI.Limits(P_min = -1500.0, P_max = 1500.0, Q_min = -1000.0,
+                Q_max = 1000.0))
+            b = bases(model)
+            active_inputs = mode == :vdc ?
+                (; v_dc_ref = (800.0) / b.v_dc) : (; p_ref = (600.0) / b.S)
+            active_seeds = mode == :vdc ?
+                (; p_ac = (600.0) / b.S) : (; v_dc = (800.0) / b.v_dc)
+            reactive_inputs = mode == :vac ?
+                (; v_ac_ref = (380sqrt(2 / 3)) / b.v_ac) :
+                mode == :qv ? (; q_ref = (200.0) / b.S,
+                    support = (v_ac_ref = (380sqrt(2 / 3)) / b.v_ac,)) :
+                (; q_ref = (200.0) / b.S)
+            reactive_seeds = mode == :vac ?
+                (; q_ac = (200.0) / b.S) : mode == :qv ? (;) :
+                (; v_ac = (380sqrt(2 / 3)) / b.v_ac)
+            component(model; delta_control = (outer_active = active_inputs,
+                    outer_reactive = reactive_inputs,),
+                powerflow = (; active_seeds...,
+                    reactive_seeds...,
+                    p_dc = (600.0) / b.S))
+        end,
+        G_AC = ac_source(v = 380sqrt(2 / 3)),
+        G_DC = dc_source(v = 800.0))
     if mode in (:qv, :vac)
         # Q-V saved source R: Q-V_Droop/GFL_MMC_Validation.pscx:687–710.
         # VAC script's explicit grid reactor: VAC_Control/VAC_Control.jl:116.
-        grid = mode == :qv ? impedance(z = s -> 0.01, pins = 3, transformation = true) :
-               impedance(z = s -> 0.1s, pins = 3, transformation = true)
+        grid = mode == :qv ? impedance(; z = s -> 0.01, conductors = 3) :
+               impedance(; z = s -> 0.1s, conductors = 3)
         elements = merge(elements, (; Grid = grid))
     elseif mode == :vdc
         # DVC saved project supplies current, not a stiff voltage (2565–2573).
         # Its Julia validation supplies that DC side with a remote PQ MMC and
         # 60 km cable: DC_Voltage_Control.jl:62–104,126–133.
         remote = deepcopy(_mmc_circuit(:pq).elements.DUT)
-        remote.setpoint = Setpoint(Pac = -608.3578, Qac = -200.0,
-            Vac = 380sqrt(2 / 3), Vdc = 800 * 1.00009, Pdc = -608.3578)
-        dc_cable = cable(length = 60e3, positions = [(-0.5, 1.0), (0.5, 1.0)],
+        b = bases(remote)
+        remote = component(remote;
+            delta_control = (outer_active = (p_ref = (-608.3578) / b.S,),
+                outer_reactive = (q_ref = (-200.0) / b.S,),),
+            powerflow = (; v_dc = (800 * 1.00009) / b.v_dc,
+                v_ac = (380sqrt(2 / 3)) / b.v_ac,
+                p_dc = (-608.3578) / b.S))
+        dc_cable = cable(; length = 60e3, positions = [(-0.5, 1.0), (0.5, 1.0)],
             C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8),
             I1 = Insulator(rᵢ = 24.25e-3, rₒ = 41.75e-3, ϵᵣ = 2.3),
             C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8),
             I2 = Insulator(rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
             C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10.0),
-            I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3), transformation = true)
+            I3 = Insulator(rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3))
         elements = (; elements.DUT, elements.G_AC, SEND = remote,
             G_SEND = deepcopy(elements.G_AC), CableDC = dc_cable)
     end
-    rows = [(node = Symbol("AC" * axis), element, side, terminal)
-            for (element, side) in ((:DUT, 2), (:G_AC, 1))
-            for (terminal, axis) in enumerate(("d", "q"))]
+    rows = NetworkBuilder.Bus[
+        NetworkBuilder.Bus(:AC; ports = ((:DUT, :ac),), domain = ACDQ),
+        NetworkBuilder.Bus(mode in (:qv, :vac) ? :Grid : :AC;
+            ports = ((:G_AC, :ac),), domain = ACDQ)]
     if mode in (:qv, :vac)
-        rows = [(;
-                    node = r.element == :G_AC ? Symbol("Grid" * string(r.terminal)) :
-                           r.node,
-                    r.element, r.side, r.terminal) for r in rows]
-        append!(rows,
-            [(node = Symbol("Grid" * string(t)), element = :Grid, side = 1, terminal = t)
-             for t in 1:2])
-        append!(rows,
-            [(node = Symbol("AC" * axis), element = :Grid, side = 2, terminal = t)
-             for (t, axis) in enumerate(("d", "q"))])
+        append!(rows, (
+            NetworkBuilder.Bus(:Grid; ports = ((:Grid, :side1),), domain = ACDQ),
+            NetworkBuilder.Bus(:AC; ports = ((:Grid, :side2),), domain = ACDQ)))
     end
     if mode == :vdc
-        append!(rows,
-            [(node = Symbol("Send" * axis), element, side, terminal)
-             for (element, side) in ((:SEND, 2), (:G_SEND, 1))
-             for (terminal, axis) in enumerate(("d", "q"))])
-        append!(rows,
-            [(node = :DC, element = :DUT, side = 1, terminal = 1),
-                (node = :DC, element = :CableDC, side = 2, terminal = 1),
-                (node = :DC_SEND, element = :SEND, side = 1, terminal = 1),
-                (node = :DC_SEND, element = :CableDC, side = 1, terminal = 1)])
+        append!(rows, (
+            NetworkBuilder.Bus(:Send; ports = ((:SEND, :ac),), domain = ACDQ),
+            NetworkBuilder.Bus(:Send; ports = ((:G_SEND, :ac),), domain = ACDQ),
+            NetworkBuilder.Bus(:DC; ports = ((:DUT, :dc), (:CableDC, :side2))),
+            NetworkBuilder.Bus(:DC_SEND; ports = ((:SEND, :dc), (:CableDC, :side1)))))
     else
-        append!(rows, [(node = :DC, element, side = 1, terminal = 1)
-                       for element in (:DUT, :G_DC)])
+        push!(rows, NetworkBuilder.Bus(:DC; ports = ((:DUT, :dc), (:G_DC, :dc))))
     end
     return (; elements, rows, options = (;
         voltageBase = voltage))
@@ -445,14 +473,6 @@ function _mmc_gfm_circuit()
         padeOrderDen = 5,
     )
 
-    setpoint = PowerImpedance.Setpoint(
-        Pac = Pmmc,
-        Qac = Qmmc,
-        θac = 0.0,
-        Vac = Vm * sqrt(2),
-        Pdc = Pmmc,
-        Vdc = Vdc,
-    )
 
     limits = PowerImpedance.Limits(
         P_min = -1500.0,
@@ -462,17 +482,22 @@ function _mmc_gfm_circuit()
     )
 
     elements = (;
-        DUT = mmc(elec = elec, meas = meas, sync = synch,
+        DUT = let model = mmc(; elec = elec, meas = meas, sync = synch,
             delta_control = delta_control, sigma_control = sigma_control,
-            modulation = mod, setpoint = setpoint, limits = limits),
-        G3 = ac_source(pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = Vm * sqrt(2))),
-        G_DC = dc_source(setpoint = Setpoint(Vdc = Vdc)))
-    rows = [(node = Symbol("AC" * axis), element, side, terminal)
-            for (element, side) in ((:DUT, 2), (:G3, 1))
-            for (terminal, axis) in enumerate(("d", "q"))]
-    append!(rows, [(node = :DC, element, side = 1, terminal = 1)
-                  for element in (:DUT, :G_DC)])
+            modulation = mod, limits = limits)
+            b = bases(model)
+            component(model; sync = (p_ref = (Pmmc) / b.S,),
+                delta_control = (outer_reactive = (q_ref = (Qmmc) / b.S,),),
+                powerflow = (; v_dc = (Vdc) / b.v_dc,
+                    v_ac = (Vm * sqrt(2)) / b.v_ac,
+                    p_dc = (Pmmc) / b.S))
+        end,
+        G3 = ac_source(v = Vm * sqrt(2)),
+        G_DC = dc_source(v = Vdc))
+    rows = (
+        NetworkBuilder.Bus(:AC; ports = ((:DUT, :ac),), domain = ACDQ),
+        NetworkBuilder.Bus(:AC; ports = ((:G3, :ac),), domain = ACDQ),
+        NetworkBuilder.Bus(:DC; ports = ((:DUT, :dc), (:G_DC, :dc))))
     return (; elements, rows, options = (; voltageBase = Vm))
 end
 
@@ -550,14 +575,6 @@ function _mmc_compensated_circuit()
     mod = PowerImpedance.CompensatedModulation(
         timeDelay = 200e-6, padeOrderNum = 5, padeOrderDen = 5)
 
-    setpoint = PowerImpedance.Setpoint(
-        Pac = Pmmc,
-        Qac = Qmmc,
-        θac = 0.0,
-        Vac = Vm * sqrt(2),
-        Pdc = Pmmc,
-        Vdc = Vdc,
-    )
 
     limits = PowerImpedance.Limits(
         P_min = -1500.0,
@@ -567,17 +584,22 @@ function _mmc_compensated_circuit()
     )
 
     elements = (;
-        DUT = mmc(elec = elec, meas = meas, sync = synch,
+        DUT = let model = mmc(; elec = elec, meas = meas, sync = synch,
             delta_control = delta_control, sigma_control = sigma_control,
-            modulation = mod, setpoint = setpoint, limits = limits),
-        G3 = ac_source(pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = Vm * sqrt(2))),
-        G_DC = dc_source(setpoint = Setpoint(Vdc = Vdc)))
-    rows = [(node = Symbol("AC" * axis), element, side, terminal)
-            for (element, side) in ((:DUT, 2), (:G3, 1))
-            for (terminal, axis) in enumerate(("d", "q"))]
-    append!(rows, [(node = :DC, element, side = 1, terminal = 1)
-                  for element in (:DUT, :G_DC)])
+            modulation = mod, limits = limits)
+            b = bases(model)
+            component(model; sync = (p_ref = (Pmmc) / b.S,),
+                delta_control = (outer_reactive = (q_ref = (Qmmc) / b.S,),),
+                powerflow = (; v_dc = (Vdc) / b.v_dc,
+                    v_ac = (Vm * sqrt(2)) / b.v_ac,
+                    p_dc = (Pmmc) / b.S))
+        end,
+        G3 = ac_source(v = Vm * sqrt(2)),
+        G_DC = dc_source(v = Vdc))
+    rows = (
+        NetworkBuilder.Bus(:AC; ports = ((:DUT, :ac),), domain = ACDQ),
+        NetworkBuilder.Bus(:AC; ports = ((:G3, :ac),), domain = ACDQ),
+        NetworkBuilder.Bus(:DC; ports = ((:DUT, :dc), (:G_DC, :dc))))
     return (; elements, rows, options = (; voltageBase = Vm))
 end
 

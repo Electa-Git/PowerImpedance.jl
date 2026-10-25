@@ -41,16 +41,22 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Import sampled transmission-line parameters and construct a line element.
+Import sampled transmission-line parameters and construct a `Blackbox_line` model.
 
 # Arguments
 
-- `args...`: Component-field and element-option keywords described in the corresponding
-  component type.
+- `n`: Number of conductors. Default: `3`.
+- `length`: Physical line length \\[m\\]. Default: `1.0`.
+- `data_type`: Import selector, `:PSCAD`, `:LCMjl` or `:Ztool`. Default: `:PSCAD`.
+- `path`: Input filename or filename prefix. Default: `""`.
+- `Y`, `Z`: Sampled shunt admittances \\[S/m\\] and series impedances \\[Ω/m\\].
+  Default: empty vectors. The importer replaces them.
+- `ABCD`: Sampled full-length ABCD matrices. Default: an empty vector.
+- `f`: Sample frequencies \\[Hz\\]. Default: an empty vector.
 
 # Returns
 
-- An `Element` containing the configured component model.
+- A `Blackbox_line` containing the imported parameters and conductor count.
 
 # Notes
 
@@ -63,8 +69,7 @@ currently unimplemented.
 
 # Errors
 
-- Propagates file-reading and parsing errors. Unknown component keywords raise
-  `ArgumentError`; incompatible scan dimensions raise an error.
+- Propagates file-reading and parsing errors. Incompatible scan dimensions raise an error.
 
 # Examples
 
@@ -84,17 +89,13 @@ end
 ```
 """
 function blackbox_line(;args...)
-    
+    if any(key -> key in (:pins, :transformation, :connection, :setpoint), keys(args))
+        Base.kwerr((; args...), blackbox_line)
+    end
     bbl = Blackbox_line()
-    transformation = false #variable transformation is defined false (park transformation not operated)
-    connection = true #variable connection is defined true (element is connected to the network)
     for (key, val) in pairs(args)
         if in(key, propertynames(bbl))
-            setfield!(bbl, key, val) 
-        elseif (key == :transformation)
-            transformation = val
-        elseif (key == :connection)
-            connection = val
+            setfield!(bbl, key, val)
         else
             throw(ArgumentError("Unknown power line property name.")) #If no one of the value specified above -> display an error
         end
@@ -197,8 +198,7 @@ function blackbox_line(;args...)
     end 
 
 
-    elem = Element(input_pins = bbl.n, output_pins = bbl.n, element_value = bbl,
-        transformation = transformation, connection = connection)
+    return bbl
     
 end
 

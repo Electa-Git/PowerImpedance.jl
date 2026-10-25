@@ -126,7 +126,7 @@ models specialize this interface for their external terminals.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 names = P.inputnames(model)
 ```
 """
@@ -155,7 +155,7 @@ models specialize this interface for their external terminals.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 names = P.outputnames(model)
 ```
 """
@@ -199,7 +199,7 @@ DC voltage is divided by the pole-to-pole DC base.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),
     dc = DCPortValues(640.0, 100.0))
 inputs, point_pu = P.pftoinputs(model, values)
@@ -258,7 +258,7 @@ The AC quantities are rotated into the synchronization frame before filtering.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -346,7 +346,7 @@ written into the electrical block state slice after modulation commands are avai
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
 point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
 x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
@@ -411,24 +411,23 @@ control, and modulation blocks.
 - `innerCurrent`: Inner-current controller producing voltage references. Default:
   `NoInnerCurrentControl()`.
 - `mod`: TLC modulation and delay block. Default: `NoModulation()`.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\]. Default: `Setpoint()`.
 - `limits`: Active-power limits \\[MW\\] and reactive-power limits \\[MVAr\\],
   passed directly to the TLC power-flow adapter. Default: `Limits()`.
 - `powerflow`: Partial power-flow seeds on converter bases \\[dimensionless\\].
   Default: `(;)`.
-- `connection`: Whether the element participates in network construction. Default:
-  `true`.
 
 # Returns
 
-- An `Element` with one DC terminal group and one transformed AC terminal group.
+- An immutable `TLC` with `ac` and `dc` ports.
 
 # Notes
 
+Set control references and power-flow seeds with `component` or `withinputs`.
+References and seeds use the converter bases.
+
 The selected synchronization and outer-control blocks determine the converter's
 AC and DC power-flow modes. Construction does not solve an equilibrium or populate linearization matrices.
-`update!` solves and linearizes the numeric model at a supplied operating point;
+`linearize` solves and linearizes the numeric model at a supplied operating point;
 frequency-domain evaluation then uses those stored matrices.
 
 # Examples
@@ -439,8 +438,13 @@ converter = tlc(
     outerActive = OuterActivePowerControl(),
     outerReactive = OuterReactiveQControl(),
     innerCurrent = InnerCurrentPIControl(),
-    setpoint = Setpoint(Pac = 100.0, Qac = 0.0, Vac = 220.0, Vdc = 640.0),
 )
+
+b = bases(converter)
+converter = component(converter;
+    outerActive = (p_ref = 100.0 / b.S,),
+    outerReactive = (q_ref = 0.0 / b.S,),
+    powerflow = (v_ac = 220.0 / b.v_ac, v_dc = 640.0 / b.v_dc))
 ```
 """
 function tlc(;
@@ -452,26 +456,14 @@ function tlc(;
     innerVoltage::AbstractInnerVoltage = NoInnerVoltageControl(),
     innerCurrent::AbstractInnerCurrentControl = NoInnerCurrentControl(),
     mod::AbstractModulationTLC = NoModulation(),
-    setpoint::Setpoint = Setpoint(),
     limits::Limits = Limits(),
-    powerflow::NamedTuple = (;),
-    connection::Bool = true
+    powerflow::NamedTuple = (;)
 )
     defaults = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
     seeds = _withinputs(defaults, _CONVERTER_POWERFLOW_INPUTS,
         powerflow, "powerflow")
-    conv = TLC(elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent,
+    return TLC(elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent,
         mod, limits, seeds, LinearizationCache())
-
-    return Element(
-        input_pins = 1,
-        output_pins = 2,
-        element_model = conv,
-        transformation = false;
-        connection,
-        setpoint,
-        limits,
-    )
 end
 
 ##################### SI Scaling ######################################
@@ -503,7 +495,7 @@ Rows follow `(:i_dc, :i_d, :i_q)` and columns follow `(:v_dc, :vG_d, :vG_q)`.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 scale = P.SI_scale(model)
 ```
 """
