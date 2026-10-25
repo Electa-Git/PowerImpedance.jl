@@ -376,7 +376,7 @@ docs_check:
 
 
 prose_check:
-  image: debian:bookworm-slim
+  image: node:24-bookworm-slim
   stage: docs
   needs:
     - job: docs_check
@@ -397,19 +397,26 @@ prose_check:
       test -n "$expected"
       echo "$expected  $tools/vale.tar.gz" | sha256sum --check
       tar -xzf "$tools/vale.tar.gz" -C "$tools"
-      export PATH="$tools:$PATH"
+      cp .gitlab/prose/package{,-lock}.json "$tools/"
+      npm ci --prefix "$tools"
+      export PATH="$tools:$tools/node_modules/.bin:$PATH"
       vale --version
+      cspell --version
       vale sync --no-global --config=.gitlab/prose/vale.ini
       bash .gitlab/prose/files.sh
+      lint_status=0
       vale test --no-global --config=.gitlab/prose/vale.ini --coverage \
         .gitlab/prose/styles/PI .gitlab/prose/styles/Project .gitlab/prose/fixtures \
-        | tee prose-reports/rules.log
+        | tee prose-reports/rules.log || lint_status=$?
+      bash .gitlab/prose/fixtures/check.sh | tee prose-reports/checks.log || lint_status=$?
       mapfile -t files < prose-reports/vale-files.txt
-      lint_status=0
       vale --no-global --config=.gitlab/prose/vale.ini --no-color --output=JSON \
         "${files[@]}" > prose-reports/vale.json || lint_status=$?
       vale --no-global --config=.gitlab/prose/vale.ini --no-color --output=line \
         "${files[@]}" | tee prose-reports/vale.log || lint_status=$?
+      mapfile -t files < prose-reports/cspell-files.txt
+      cspell lint --config=.gitlab/prose/cspell.json --no-progress --no-cache \
+        "${files[@]}" 2>&1 | tee prose-reports/cspell.log || lint_status=$?
       exit "$lint_status"
   artifacts:
     when: always

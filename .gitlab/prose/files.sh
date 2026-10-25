@@ -21,6 +21,7 @@ test -s docs/build/index.html
 test -d docs/src/examples
 find docs/src/examples -type f -name '*.md' -print | sort > "$reports/generated-files.txt"
 test -s "$reports/generated-files.txt"
+cat "$source_files" "$reports/generated-files.txt" | sort -u > "$reports/cspell-files.txt"
 find docs/build -type f -name '*.html' -print | sort > "$reports/html-files.txt"
 test -s "$reports/html-files.txt"
 cat "$source_files" "$reports/generated-files.txt" "$reports/html-files.txt" | sort -u > "$reports/vale-files.txt"
