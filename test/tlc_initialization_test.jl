@@ -4,7 +4,7 @@
     conv = tlc(elec = plant,
         meas = Measurement(
             v_ac = P.Butterworth(order = 2, ωc = 0.5e4),
-            i_ac = P.Butterworth(order = 2, ωc = 0.5e4))).element_model
+            i_ac = P.Butterworth(order = 2, ωc = 0.5e4)))
 
     @testset "Nonzero seeds and measurement filters" begin
         cases = (

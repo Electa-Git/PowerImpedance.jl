@@ -2,6 +2,15 @@ using PowerImpedance
 using Test
 using LinearAlgebra
 
+if !isdefined(@__MODULE__, :build_compensated_mmc_grid)
+    include("adm_MMC_compensated_test.jl")
+end
+
+function mmc_raw_y(model, s)
+    A, B, C, D = model.cache.A, model.cache.B, model.cache.C, model.cache.D
+    return C * ((s * I - A) \ B) + D
+end
+
 # The independent conversion fixes operation order, including floating-point rounding.
 function mmc_scaling_before(Y, elec)
     Y = copy(Y)
@@ -17,32 +26,31 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
 @testset "Modular MMC physical terminal scaling" begin
     # These constructors and the independent element_y reference are defined
     # by adm_MMC_compensated_test.jl, which precedes this file in runtests.jl.
-    network = build_mmc_grid()
+    network = build_compensated_mmc_grid()
     original = network.elements[:DUT]
     frequencies = ComplexF64.(im .* [2π * 0.1, 2π * 10, 2π * 1000])
-    # transitional
-    values = PowerImpedance._terminal_values(original.element_model, original.setpoint)
-    cached = PowerImpedance.NetworkBuilder.build(original.element_model, values, :dq)
+    values = original.cache.values
+    cached = PowerImpedance.NetworkBuilder.build(original, values, :dq)
     builder_response = zeros(ComplexF64, 3, 3, length(frequencies))
     cached(builder_response, frequencies)
     for (index, s) in enumerate(frequencies)
         reference = element_y(original, s)
-        @test PowerImpedance.get_y(original, s) ≈ reference
+        @test PowerImpedance._mmc_si_scale!(mmc_raw_y(original, s), original.elec) ≈
+              reference
         @test builder_response[:, :, index] ≈ reference
     end
 
     for ratio in (0.5, 320 / 400, 333 / 380, 1.0, 1.25, 2.0)
-        element = deepcopy(original)
-        model = element.element_model
+        model = deepcopy(original)
         elec = model.elec
         fields = ntuple(
             index -> fieldname(typeof(elec), index) == :turnsRatio ? ratio :
                      getfield(elec, index),
             fieldcount(typeof(elec)))
         physical = PowerImpedance.ElectricalMMC(fields...)
-        element.element_model = PowerImpedance.MMC(model.meas, model.sync,
+        element = PowerImpedance.MMC(model.meas, model.sync,
             model.delta_control, model.sigma_control, model.modulation, physical,
-            model.limits, model.powerflow, PowerImpedance.LinearizationCache())
+            model.limits, model.powerflow, deepcopy(model.cache))
         old_scale = mmc_scaling_before(ones(3, 3), physical)
         new_scale = PowerImpedance.SI_scale(element)
         @test mmc_scaling_bits(new_scale[1:1, 1:1]) == mmc_scaling_bits(old_scale[1:1, 1:1])
@@ -52,18 +60,18 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
         if ratio == 1.0
             @test mmc_scaling_bits(new_scale) == mmc_scaling_bits(old_scale)
         end
-        cache = PowerImpedance.freqresp_cache(element.A, element.B,
-            element.C, element.D; scale = new_scale)
+        cache = PowerImpedance.freqresp_cache(element.cache.A, element.cache.B,
+            element.cache.C, element.cache.D; scale = new_scale)
         response = zeros(ComplexF64, 3, 3, length(frequencies))
         cache(response, frequencies)
-        old_cache = PowerImpedance.freqresp_cache(element.A, element.B,
-            element.C, element.D; scale = old_scale)
+        old_cache = PowerImpedance.freqresp_cache(element.cache.A, element.cache.B,
+            element.cache.C, element.cache.D; scale = old_scale)
         old_response = similar(response)
         old_cache(old_response, frequencies)
         for (index, s) in enumerate(frequencies)
-            raw = PowerImpedance.eval_y(element, s; SI_units = false)
+            raw = mmc_raw_y(element, s)
             before = mmc_scaling_before(raw, physical)
-            actual = PowerImpedance.get_y(element, s)
+            actual = PowerImpedance._mmc_si_scale!(copy(raw), element.elec)
             reference = element_y(element, s)
             @test mmc_scaling_bits(response[1:1, 1:1, index]) ==
                   mmc_scaling_bits(old_response[1:1, 1:1, index])

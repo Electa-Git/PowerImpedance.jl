@@ -10,14 +10,14 @@ function line_models()
             Rᵈᶜ = 0.063, rᶜ = 0.015, yᵇᶜ = 30, Δxᵇᶜ = 10, dˢᵃᵍ = 10),
         groundwires = Groundwires(nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
             Δxᵍ = 6.5, Δyᵍ = 7.5, dᵍˢᵃᵍ = 10),
-        earth_parameters = (1, 1, 100)).element_model
+        earth_parameters = (1, 1, 100))
     ugc = cable(length = 1000.0,
         positions = [(-0.5, 1.0), (0.0, 1.3), (0.7, 1.1)],
         C1 = Conductor(rₒ = 30e-3, ρ = 2.82e-8),
         I1 = Insulator(rᵢ = 30e-3, rₒ = 51.5e-3, ϵᵣ = 2.5),
         C2 = Conductor(rᵢ = 51.5e-3, rₒ = 55.4e-3, ρ = 1.72e-8),
         I2 = Insulator(rᵢ = 55.4e-3, rₒ = 61.2e-3, ϵᵣ = 2.3),
-        earth_parameters = (1, 1, 100), eliminate = false).element_model
+        earth_parameters = (1, 1, 100), eliminate = false)
     return (ohl, ugc)
 end
 
@@ -40,7 +40,7 @@ function overhead_models()
             Rᵈᶜ = 0.0266, rᶜ = 0.0224, yᵇᶜ = 18.0, Δxᵇᶜ = 7.3, dˢᵃᵍ = 6.0),
         groundwires = Groundwires(nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
             Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0),
-        earth_parameters = (1, 1, 100)).element_model
+        earth_parameters = (1, 1, 100))
     dc_bundle = deepcopy(dc)
     dc_bundle.conductors.nˢᵇ = 2
     dc_bundle.conductors.dˢᵇ = 0.45
@@ -52,6 +52,7 @@ end
 @testset "Overhead-line transposition" begin
     @testset "Untransposed parameter preservation" begin
         for model in overhead_models(), frequency in (1.0, 50.0, 137.0, 1e3, 1e4, 1e6)
+
             s = ComplexF64(2π * frequency * im)
             @test model.transposition == :none
             Z, Y = PI.eval_parameters(model, s)
@@ -68,6 +69,7 @@ end
         q = ComplexF64[1, cis(-2π / 3), cis(2π / 3)]
         sequence = [ones(ComplexF64, 3) q conj(q)] / sqrt(3)
         for model in overhead_models()[1:2], frequency in (1.0, 50.0, 137.0, 1e3, 1e4, 1e6)
+
             s = ComplexF64(2π * frequency * im)
             Z0, Y0 = untransposed_reference(model, s)
             # Recover reduced potential coefficients before averaging. Averaging
@@ -84,7 +86,7 @@ end
             for M in (Z, Y)
                 @test diag(M) ≈ fill(M[1, 1], 3) rtol = 1e-13
                 @test [M[i, j] for i in 1:3 for j in 1:3 if i != j] ≈
-                    fill(M[1, 2], 6) rtol = 1e-13
+                      fill(M[1, 2], 6) rtol = 1e-13
                 transformed = sequence' * M * sequence
                 @test norm(transformed - Diagonal(diag(transformed))) <= 1e-13norm(M)
             end
@@ -96,13 +98,14 @@ end
             reference = signs * forward * signs
             chain = PI.eval_abcd(transposed, s)
             for rows in (1:3, 4:6), columns in (1:3, 4:6)
+
                 @test chain[rows, columns] ≈ reference[rows, columns] rtol = 1e-10
             end
         end
     end
     @testset "Transposition input validation" begin
         @test overhead_line(conductors = Conductors(nᵇ = 3),
-            transposition = :ideal).element_model.transposition == :ideal
+            transposition = :ideal).transposition == :ideal
         for value in (:unknown, :Ideal, Symbol(), "ideal", 1, nothing, missing)
             @test_throws ArgumentError overhead_line(transposition = value)
             @test_throws ArgumentError Overhead_line(transposition = value)
@@ -124,6 +127,7 @@ end
 
 @testset "Multiconductor chain matrices" begin
     for model in line_models(), frequency in (1.0, 50.0, 1e3, 1e4, 1e5, 1e6)
+
         @testset "$(nameof(typeof(model))), $frequency Hz" begin
             s = ComplexF64(2π * frequency * im)
             Z, Y = PI.eval_parameters(model, s)
@@ -138,7 +142,8 @@ end
             chain = PI.eval_abcd(model, s)
             @test norm(Z * Y - Y * Z) / norm(Z * Y) > 1e-5
             # Check each block so the units/scale of B cannot hide C or D errors.
-            for rows in (1:n, (n+1):2n), columns in (1:n, (n+1):2n)
+            for rows in (1:n, (n + 1):2n), columns in (1:n, (n + 1):2n)
+
                 @test chain[rows, columns] ≈ reference[rows, columns] rtol = 1e-10
             end
             terminal = PI.abcd_to_y(chain)
@@ -173,6 +178,7 @@ end
         ugc.positions = [(0.0, 1.0), (0.5, 1.0)]
         ugc.eliminate = true
         for model in (ohl, ugc), frequency in (1.0, 50.0, 1e3, 1e6)
+
             s = ComplexF64(2π * frequency * im)
             Z, Y = PI.eval_parameters(model, s)
             @test PI.eval_abcd(model, s) ≈ old_chain(Z, Y, model.length) rtol = 1e-12

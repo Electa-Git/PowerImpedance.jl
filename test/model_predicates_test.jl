@@ -11,69 +11,65 @@ const PREDICATES = (PI.is_source, PI.is_converter, PI.is_generator,
 @testset "Model predicates and admittance coordinates" begin
     for fixture in ParityFixtures.FIXTURES
         state = fixture.build()
-        for (name, element) in pairs(state.elements)
-            model = element
-            rows = NB.sortedcomponentconnections(state.topology, name; withground = true)
-            frame = NB._component_frame(rows)
-            ports = electricalconnections(model)
-            transformed = frame == :dq && first(ports).domain === ACABC
-            sides = NB._legacy_port_names(model)
-            counts = Tuple(length(ports[port].terminals) for port in sides)
-            if frame == :dc && PI.is_passive(model)
-                n = size(PI.eval_abcd(model, 100π * im), 1) ÷ 2
-                counts = (n, n)
-                transformed = n == 2
-            end
-            element = PI.Element(element_model = deepcopy(model),
-                input_pins = counts[1], output_pins = last(counts),
-                transformation = transformed) # transitional
-            model isa PI.Blackbox_MMC && continue
+        for (name, model) in pairs(state.elements)
             @testset "$(fixture.name).$name" begin
-                for predicate in PREDICATES
+                ports = electricalconnections(model)
+                expected = (model isa PI.Source,
+                    model isa Union{MMC, TLC, PI.Blackbox_MMC},
+                    model isa SynchronousMachine, model isa InductionMachine,
+                    model isa Union{PI.Impedance, PI.Transformer, PI.Transmission_line},
+                    model isa Union{PI.Source, MMC, TLC, PI.Blackbox_MMC,
+                        SynchronousMachine, InductionMachine},
+                    length(ports) == 1,
+                    all(port -> port.domain in (ACABC, ACDQ), ports))
+                for (predicate, value) in zip(PREDICATES, expected)
                     @testset "$(nameof(predicate))" begin
-                        if predicate === PI.is_three_phase &&
-                           model isa Union{SynchronousMachine, InductionMachine}
-                            @test predicate(model)
-                            println("is_three_phase fixture=$(fixture.name) element=$name ",
-                                "model=$(predicate(model)) Element=$(predicate(element))")
-                        else
-                            @test predicate(model) == predicate(element)
-                        end
+                        @test predicate(model) == value
                     end
                 end
                 order = PI.admittance_order(model)
                 @testset "admittance_order" begin
-                    if model isa Union{MMC, TLC}
+                    if model isa Union{MMC, TLC, PI.Blackbox_MMC}
                         @test order === ((:dc, :dc), (:ac, :d), (:ac, :q))
                     elseif model isa Union{SynchronousMachine, InductionMachine}
                         @test order === ((:ac, :d), (:ac, :q))
                     elseif PI.is_source(model)
-                        expected = model.domain === ACABC ?
-                            ((:ac, :a), (:ac, :b), (:ac, :c)) : ((:dc, :dc),)
-                        @test order === expected
+                        expected_order = model.domain === ACABC ?
+                                         ((:ac, :a), (:ac, :b), (:ac, :c)) : ((:dc, :dc),)
+                        @test order === expected_order
                     end
-                    if !element.transformation && !PI.is_source(model)
-                        if model isa PI.AbstractStateSpace
-                            b = bases(model)
-                            point = Setpoint(Pac = 0.0, Qac = 0.0, θac = 0.0,
-                                Vac = b.v_ac, Pdc = 0.0, Vdc = something(b.v_dc, missing))
-                            PI.update!(element, point)
+                    if model isa PI.AbstractStateSpace || PI.is_passive(model)
+                        rows = if model isa PI.AbstractStateSpace
+                            PI.n_outputs(model)
+                        else
+                            frame = first(ports).domain === ACABC ? :abc : :dc
+                            size(NB.admittance(model, 2π * im * 100, frame), 1)
                         end
-                        @test length(order) == size(PI.get_y(element, 2π * im * 100), 1)
+                        @test length(order) == rows
                     end
                 end
                 if model isa Union{MMC, TLC, SynchronousMachine, InductionMachine}
                     @testset "SI_scale" begin
-                        wrapped, direct = PI.SI_scale(element), PI.SI_scale(model)
-                        @test size(wrapped) == size(direct)
-                        @test all(wrapped .=== direct)
+                        b = bases(model)
+                        currents = model isa Union{MMC, TLC} ?
+                                   [b.S / b.v_dc, 2b.S / (3b.v_ac), 2b.S / (3b.v_ac)] :
+                                   fill(2b.S / (3b.v_ac), 2)
+                        voltages = model isa Union{MMC, TLC} ?
+                                   [b.v_dc, b.v_ac, b.v_ac] : fill(b.v_ac, 2)
+                        if model isa MMC
+                            currents[2:3] .*= model.elec.turnsRatio
+                        end
+                        reference = currents ./ transpose(voltages)
+                        scale = PI.SI_scale(model)
+                        @test size(scale) == size(reference)
+                        @test scale ≈ reference rtol = 1e-14
                     end
                 end
             end
         end
     end
-    @test PI.admittance_order(impedance(z = 1.0).element_model) ===
-        ((:side1, :dc), (:side2, :dc))
+    @test PI.admittance_order(impedance(z = 1.0)) ===
+          ((:side1, :dc), (:side2, :dc))
     @test all(predicate -> nameof(predicate) ∉ names(PI), PREDICATES)
     @test :admittance_order ∉ names(PI)
 end
