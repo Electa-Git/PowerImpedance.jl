@@ -156,7 +156,7 @@ end
 function pscad_export_after_explicit_solve(factories)
     @testset "PSCAD export after explicit power flow" begin
         if Base.get_extension(PI, :PowerImpedancePSCADExt) === nothing
-            @test_skip false # Run with PythonCall for actual XML exports.
+            @test_skip false # Actual XML exports run in test/pscad/run_xml_tests.jl.
         else
             for factory in factories
                 state = factory()

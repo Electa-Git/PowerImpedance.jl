@@ -1244,4 +1244,8 @@ else
         end
     end
     include("induction_machine_xml_test.jl")
+    @testset "PSCAD power-flow idempotence" begin
+        include("../power_flow_idempotence_test.jl")
+        include("power_flow_idempotence_test.jl")
+    end
 end
