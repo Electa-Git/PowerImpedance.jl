@@ -32,6 +32,25 @@ function excluded(path)
     end
 end
 
+function tracked_files(root)
+    command = `git -C $root ls-files -z -- src ext test docs/src examples integration`
+    files = try
+        inside = read(pipeline(`git -C $root rev-parse --is-inside-work-tree`;
+            stderr = devnull), String)
+        strip(inside) == "true" ?
+            read(pipeline(command; stderr = devnull), String) : nothing
+    catch error
+        error isa Base.IOError || error isa ProcessFailedException || rethrow()
+        nothing
+    end
+    if files === nothing
+        println("Skipping removed API names: the guard needs a git checkout.")
+        @test_skip false
+        return String[]
+    end
+    return split(files, '\0'; keepempty = false)
+end
+
 function migration_text_lines(lines)
     skipped = falses(length(lines))
     migration = false
@@ -57,36 +76,29 @@ end
 
 @testset "Removed API names" begin
     root = dirname(@__DIR__)
-    relative(path) = replace(relpath(path, root), '\\' => '/')
-    for directory in ("src", "ext", "test", "docs/src", "examples", "integration")
-        for (folder, directories, files) in walkdir(joinpath(root, directory))
-            filter!(name -> !excluded(relative(joinpath(folder, name))), directories)
-            for file in files
-                path = joinpath(folder, file)
-                name = relative(path)
-                excluded(name) && continue
-                content = read(path, String)
-                # As in a text search, omit binary images and serialized numeric data.
-                (isvalid(content) && !occursin('\0', content)) || continue
-                lines = split(content, '\n')
-                skipped = name == "docs/src/network.md" ?
-                    migration_text_lines(lines) : falses(length(lines))
-                allowed = get(ALLOWED, name, ())
-                failures = String[]
-                for (number, line) in enumerate(lines)
-                    skipped[number] && continue
-                    checked = line
-                    for pattern in allowed
-                        checked = replace(checked, pattern => "")
-                    end
-                    for pattern in FORBIDDEN
-                        occursin(pattern, checked) || continue
-                        push!(failures, "$name:$number $pattern: $line")
-                    end
-                end
-                @test failures == String[]
+    for name in tracked_files(root)
+        excluded(name) && continue
+        path = joinpath(root, name)
+        content = read(path, String)
+        # As in a text search, omit binary images and serialized numeric data.
+        (isvalid(content) && !occursin('\0', content)) || continue
+        lines = split(content, '\n')
+        skipped = name == "docs/src/network.md" ?
+            migration_text_lines(lines) : falses(length(lines))
+        allowed = get(ALLOWED, name, ())
+        failures = String[]
+        for (number, line) in enumerate(lines)
+            skipped[number] && continue
+            checked = line
+            for pattern in allowed
+                checked = replace(checked, pattern => "")
+            end
+            for pattern in FORBIDDEN
+                occursin(pattern, checked) || continue
+                push!(failures, "$name:$number $pattern: $line")
             end
         end
+        @test failures == String[]
     end
 end
 end
