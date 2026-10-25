@@ -543,4 +543,16 @@ function load_labels(path)
 end
 load_metadata(path) = Dict(Tuple(split(line, '='; limit = 2)) for line in eachline(path))
 file_sha(path) = bytes2hex(sha256(read(path)))
+
+function frozen_environment(metadata;
+    manifest = joinpath(pkgdir(PowerImpedance), "Manifest.toml"))
+    frozen_version = metadata["julia_version"]
+    frozen_sha = metadata["dependency_manifest_sha256"]
+    current_sha = isfile(manifest) ? file_sha(manifest) : "missing"
+    matched = string(VERSION) == frozen_version && current_sha == frozen_sha
+    message = "Skipping frozen numerical comparisons: " *
+        "frozen Julia $frozen_version, Manifest SHA-256 $(first(frozen_sha, 12)); " *
+        "current Julia $VERSION, Manifest SHA-256 $(first(current_sha, 12))."
+    return matched, message
+end
 end

@@ -1,7 +1,8 @@
 module TerminalValuesTests
 using Test, PowerImpedance
 const PI = PowerImpedance
-include("parity/fixtures.jl")
+include("parity/structure.jl")
+using .ParityData: ParityFixtures
 using .ParityFixtures: PSCADFixtures
 
 @testset "Physical terminal values" begin
@@ -25,6 +26,12 @@ empty_cache(cache) = all(f -> getfield(cache, f) === nothing, fieldnames(typeof(
 
 @testset "Solved port powers and frozen physical inputs" begin
     path = joinpath(@__DIR__, "reference/v2/numeric.csv")
+    metadata = ParityData.load_metadata(joinpath(@__DIR__, "reference/v2/metadata.txt"))
+    matched, message = ParityData.frozen_environment(metadata)
+    if !matched
+        @info message
+        @test_skip matched
+    end
     for (name, element) in ((:im, :im1), (:sm, :sg1), (:mmc_pq, :DUT), (:tlc_case1, :DUT))
         @testset "$name" begin
             fixture = only(filter(f -> f.name == name, ParityFixtures.FIXTURES))
@@ -33,26 +40,30 @@ empty_cache(cache) = all(f -> getfield(cache, f) === nothing, fieldnames(typeof(
             @test solved.result["termination_status"] == PI.MOI.LOCALLY_SOLVED
             model = network.elements[element]
             values = solved.operating_point[element]
-            prefix = "$name.op.$element."
-            fields = Dict(Symbol(split(line, ',')[1][length(prefix) + 1:end]) =>
-                parse(Float64, split(line, ',')[5]) for line in eachline(path)
-                if startswith(line, prefix))
-            frozen = (; fields...)
-            if model isa PI.InductionMachine
-                @test values.ac.p === frozen.Pac
-                @test values.ac.q === frozen.Qac
-            else
-                @test values.ac.p === -frozen.Pac
-                @test values.ac.q === -frozen.Qac
-                if model isa Union{MMC, TLC}
-                    @test values.dc.p === frozen.Pdc
+            if matched
+                prefix = "$name.op.$element."
+                fields = Dict(Symbol(split(line, ',')[1][length(prefix) + 1:end]) =>
+                    parse(Float64, split(line, ',')[5]) for line in eachline(path)
+                    if startswith(line, prefix))
+                frozen = (; fields...)
+                if model isa PI.InductionMachine
+                    @test values.ac.p === frozen.Pac
+                    @test values.ac.q === frozen.Qac
+                else
+                    @test values.ac.p === -frozen.Pac
+                    @test values.ac.q === -frozen.Qac
+                    if model isa Union{MMC, TLC}
+                        @test values.dc.p === frozen.Pdc
+                    end
                 end
             end
             inputs, pu = PI.pftoinputs(model, values)
-            @test pu.p_ac === frozen.Pac / bases(model).S
-            @test pu.q_ac === frozen.Qac / bases(model).S
-            if model isa Union{MMC, TLC}
-                @test pu.p_dc === frozen.Pdc / bases(model).S
+            if matched
+                @test pu.p_ac === frozen.Pac / bases(model).S
+                @test pu.q_ac === frozen.Qac / bases(model).S
+                if model isa Union{MMC, TLC}
+                    @test pu.p_dc === frozen.Pdc / bases(model).S
+                end
             end
         end
     end

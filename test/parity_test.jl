@@ -163,67 +163,74 @@ function run_parity()
                 @test fixture.probes.nets ==
                     D.ParityNames.retained_nets(fixture.name, state, mapping)
             end
-            reference = D.ParityNames.mapped_datasets(
-                arrays(D.load_rows(joinpath(DIRECTORY, "numeric.csv"))), mappings)
-            rows, labels = D.Row[], Dict{String, String}()
-            skipped, network_skipped, conversion_skipped = String[], String[], String[]
-            reference_skipped = split(metadata["skipped"], ','; keepempty = false)
-            reference_network_skipped = split(metadata["network_level_skipped"], ',';
-                keepempty = false)
-            for fixture in fixtures
-                println("Recomputing ", fixture.name)
-                flush(stdout)
-                result = D.collect_fixture(fixture;
-                    network_level_skipped =
-                        string(fixture.name) in reference_network_skipped,
-                    skipped_families = reference_skipped)
+            matched, message = D.frozen_environment(metadata)
+            if matched
+                reference = D.ParityNames.mapped_datasets(
+                    arrays(D.load_rows(joinpath(DIRECTORY, "numeric.csv"))), mappings)
+                rows, labels = D.Row[], Dict{String, String}()
+                skipped, network_skipped, conversion_skipped = String[], String[], String[]
+                reference_skipped = split(metadata["skipped"], ','; keepempty = false)
+                reference_network_skipped = split(metadata["network_level_skipped"], ',';
+                    keepempty = false)
+                for fixture in fixtures
+                    println("Recomputing ", fixture.name)
+                    flush(stdout)
+                    result = D.collect_fixture(fixture;
+                        network_level_skipped =
+                            string(fixture.name) in reference_network_skipped,
+                        skipped_families = reference_skipped)
+                    append!(rows, result.rows)
+                    merge!(labels, result.labels)
+                    append!(skipped, result.skipped)
+                    result.network_level_skipped &&
+                        push!(network_skipped, string(fixture.name))
+                    result.conversion_skipped &&
+                        push!(conversion_skipped, string(fixture.name))
+                end
+                result = D.collect_oracles()
                 append!(rows, result.rows)
                 merge!(labels, result.labels)
                 append!(skipped, result.skipped)
-                result.network_level_skipped &&
-                    push!(network_skipped, string(fixture.name))
-                result.conversion_skipped &&
-                    push!(conversion_skipped, string(fixture.name))
-            end
-            result = D.collect_oracles()
-            append!(rows, result.rows)
-            merge!(labels, result.labels)
-            append!(skipped, result.skipped)
-            @test sort!(unique(skipped)) == reference_skipped
-            @test network_skipped == reference_network_skipped
-            @test join(conversion_skipped, ',') == metadata["pm_conversion_skipped"]
-            @test result.stability_fixture == metadata["stability_fixture"]
-            reference_labels = D.ParityNames.mapped_datasets(
-                D.load_labels(joinpath(DIRECTORY, "labels.tsv")), mappings)
-            @test Set(first(split(key, '.')) for (key, label) in reference_labels
-                if endswith(key, ".pf.termination_status") && label == "not_required") ==
-                  Set(string.(D.POWERFLOW_SOLVE_EXCEPTIONS))
-            for fixture in D.POWERFLOW_SOLVE_EXCEPTIONS
-                key = "$fixture.pf.termination_status"
-                @test labels[key] == string(D.PI.MOI.LOCALLY_SOLVED)
-                reference_labels[key] = string(D.PI.MOI.LOCALLY_SOLVED)
-            end
-            for (key, label) in reference_labels
-                parts = split(key, '.')
-                first(parts) == "pscad_op" && last(parts) == "name" || continue
-                names = result.pscad_name_maps[parts[2]]
-                mapped = get(names, label, label)
-                reference_labels[key] = mapped
-                row = chop(key; tail = 5)
-                quantity = reference_labels[row * ".quantity"]
-                if get(result.pscad_polarities[parts[2]], mapped, 1) == -1 &&
-                   quantity in ("machine_p", "machine_q", "converter_p", "converter_q")
-                    for field in ("pscad", "powerflow")
-                        reference[row * "." * field] = -reference[row * "." * field]
+                @test sort!(unique(skipped)) == reference_skipped
+                @test network_skipped == reference_network_skipped
+                @test join(conversion_skipped, ',') == metadata["pm_conversion_skipped"]
+                @test result.stability_fixture == metadata["stability_fixture"]
+                reference_labels = D.ParityNames.mapped_datasets(
+                    D.load_labels(joinpath(DIRECTORY, "labels.tsv")), mappings)
+                @test Set(first(split(key, '.')) for (key, label) in reference_labels
+                    if endswith(key, ".pf.termination_status") &&
+                        label == "not_required") ==
+                      Set(string.(D.POWERFLOW_SOLVE_EXCEPTIONS))
+                for fixture in D.POWERFLOW_SOLVE_EXCEPTIONS
+                    key = "$fixture.pf.termination_status"
+                    @test labels[key] == string(D.PI.MOI.LOCALLY_SOLVED)
+                    reference_labels[key] = string(D.PI.MOI.LOCALLY_SOLVED)
+                end
+                for (key, label) in reference_labels
+                    parts = split(key, '.')
+                    first(parts) == "pscad_op" && last(parts) == "name" || continue
+                    names = result.pscad_name_maps[parts[2]]
+                    mapped = get(names, label, label)
+                    reference_labels[key] = mapped
+                    row = chop(key; tail = 5)
+                    quantity = reference_labels[row * ".quantity"]
+                    if get(result.pscad_polarities[parts[2]], mapped, 1) == -1 &&
+                       quantity in ("machine_p", "machine_q", "converter_p", "converter_q")
+                        for field in ("pscad", "powerflow")
+                            reference[row * "." * field] = -reference[row * "." * field]
+                        end
                     end
                 end
+                filter!(pair -> !stored_only(first(pair)), reference_labels)
+                extra_labels = setdiff(Set(keys(labels)), Set(keys(reference_labels)))
+                @test all(new_powerflow_solution, extra_labels)
+                filter!(pair -> first(pair) ∉ extra_labels, labels)
+                @test labels == reference_labels
+                compare_numeric(reference, rows)
+            else
+                @info message
+                @test_skip matched
             end
-            filter!(pair -> !stored_only(first(pair)), reference_labels)
-            extra_labels = setdiff(Set(keys(labels)), Set(keys(reference_labels)))
-            @test all(new_powerflow_solution, extra_labels)
-            filter!(pair -> first(pair) ∉ extra_labels, labels)
-            @test labels == reference_labels
-            compare_numeric(reference, rows)
         end
     finally
         BLAS.set_num_threads(previous_threads)
