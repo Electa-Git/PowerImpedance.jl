@@ -29,7 +29,7 @@ empty_cache(cache) = all(f -> getfield(cache, f) === nothing, fieldnames(typeof(
     metadata = ParityData.load_metadata(joinpath(@__DIR__, "reference/v2/metadata.txt"))
     matched, message = ParityData.frozen_environment(metadata)
     if !matched
-        @info message
+        println(message)
         @test_skip matched
     end
     for (name, element) in ((:im, :im1), (:sm, :sg1), (:mmc_pq, :DUT), (:tlc_case1, :DUT))

@@ -228,7 +228,7 @@ function run_parity()
                 @test labels == reference_labels
                 compare_numeric(reference, rows)
             else
-                @info message
+                println(message)
                 @test_skip matched
             end
         end
