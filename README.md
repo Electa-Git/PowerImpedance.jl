@@ -264,7 +264,7 @@ For local Conventional Commit warnings, enable the tracked advisory hook with:
 git config core.hooksPath .githooks
 ```
 
-The hook never blocks a commit.
+The hook reports advisory warnings.
 
 ## Acknowledgements
 

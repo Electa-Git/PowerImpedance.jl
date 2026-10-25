@@ -1,7 +1,7 @@
 # # Hybrid AC/DC network diagram
 #
 # Network diagrams are an optional GraphMakie extension. The active Makie
-# backend owns display and export; `diagram` only builds and returns a figure.
+# backend displays and exports the figure returned by `diagram`.
 # A legend beside the diagram identifies the glyphs for its buses, branches and components.
 
 using PowerImpedance
@@ -34,8 +34,7 @@ network = define(elements, connections)
 view = diagram(network; interactive = false)
 view.figure
 
-# CairoMakie uses its ordinary save path; no PowerImpedance-specific export
-# helper is needed.
+# CairoMakie saves the figure with `save`.
 
 output = joinpath(mktempdir(), "hybrid-network.svg")
 CairoMakie.save(output, view.figure)

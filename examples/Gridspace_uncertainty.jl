@@ -5,7 +5,7 @@ using Measurements
 
 const NB = PowerImpedance.NetworkBuilder
 
-# A Gridspace owns the network constructor and its parameter axes. Product
+# A Gridspace stores the network constructor and its parameter axes. Product
 # composition enumerates the deterministic impedance values below.
 
 function impedance_space(axis)
@@ -33,7 +33,7 @@ deterministic = compute(
 
 response_shapes = size.(getproperty.(deterministic.values, :response))
 
-# Measurements remain outside the scalar solver. Monte Carlo draws one numeric
+# Monte Carlo draws one numeric
 # network realization for each trial and retains the completed responses needed
 # by later plotting recipes.
 

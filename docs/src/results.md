@@ -4,8 +4,8 @@ CurrentModule = PowerImpedance
 
 # Impedance and stability analysis
 
-Power-flow, frequency-response, and stability calculations return completed result objects. They do not create,
-display, or store graphics.
+Power-flow, frequency-response, and stability calculations return numerical result objects.
+Plotting uses those completed results.
 
 ## Primitive calculations
 
@@ -76,7 +76,7 @@ gain = compute(
 
 Every call returns `StabilityResult(formulation, analysis, output,
 diagnostics)`. The `output` field contains the complete numerical payload used
-by its plot definition. There is no graphics field.
+by its plot definition.
 
 ## Plot completed results
 
@@ -98,5 +98,4 @@ calculation before invoking PlotBuilder. See the [PlotBuilder guide](developers/
 
 `ParametricResult`, `LinearErrorResult`, and `MonteCarloResult` retain aligned
 configuration data and execution metadata. Stability plotting consumes their
-completed values or retained `details.plot_data` trajectories. It never repeats
-power flow, linearization, or a stability calculation.
+completed values or retained `details.plot_data` trajectories.

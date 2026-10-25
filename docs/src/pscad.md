@@ -1,8 +1,8 @@
 # PSCAD export and simulation
 
 `export_pscad(::NetworkBuilder.NetworkState)` writes runnable PSCAD 5 projects from PowerImpedance networks. Load `PythonCall`
-to activate the writer; CondaPkg installs `mhi-xml` and its XML dependencies.
-Export runs locally and does not contact PSCAD. `compute(model, PSCADRun();
+to activate the writer. CondaPkg installs `mhi-xml` and its XML dependencies.
+Export runs locally. `compute(model, PSCADRun();
 options)` runs the project on a Windows station with PSCAD 5.1.0, and
 `compare_operating_point` compares the simulated steady state with the retained
 power-flow solution.
@@ -40,7 +40,7 @@ model = export_pscad(net; path = "pscad_exports/solved.pscx", settings, powerflo
 
 `line_options` overrides supported ground and frequency-dependent fitting
 fields. AC/DC line and cable fit targets default to `YMaxE=AMaxE=0.02%`. `dc_reference = :midpoint_resistors` adds two 10 MΩ ground references
-at DC buses without a local source midpoint or grounded shunt; use `:none`
+at DC buses without a local source midpoint or grounded shunt. Use `:none`
 when those additional references are unwanted.
 
 ## Z-tool scan probes
@@ -92,7 +92,7 @@ parameters use the library defaults: `T_inj=Tdecoupling=1e8`,
 The first export with scan probes downloads Z-tool v0.1.52 into
 `artifacts/ztool/v0.1.52` under the first Julia depot and checks its SHA-256.
 Later exports reuse and check that file. `ztool_library = "/path/Z_tool.pslx"`
-selects a local library instead. The export copies `Z_tool.pslx` beside the
+selects a local library. The export copies `Z_tool.pslx` beside the
 project and writes a `.pswx` workspace with relative library and project paths.
 The workspace opens the library and project for Z-tool scans.
 
@@ -201,7 +201,7 @@ needs access to the exchange directory and the configured transport.
 
 `RemoteConfig` supports `:ssh`, `:local` (Windows callers) and `:command`.
 `local_root` and `shared_root` identify the same exchange directory from the
-caller and station; `remote_root` is station scratch space. Store configuration
+caller and station. `remote_root` is station scratch space. Store configuration
 outside the project export. This TOML template contains placeholders for
 station-specific values:
 
@@ -221,18 +221,18 @@ transport = "ssh"
 Replace the placeholders. For SSH, uncomment `pscad_port` and supply a
 station-local integer in `1024:65535`, reserved for this automation workflow.
 `timeout` is the execution limit in seconds (default 1800). A relative
-`local_root` is resolved against the TOML file's directory; station paths are
-retained verbatim. For command transport, add a `command` argument array;
-an exact `"{host}"` argument is replaced by `host`.
+`local_root` is resolved against the TOML file's directory. Station paths are
+retained verbatim. For command transport, add a `command` argument array.
+An exact `"{host}"` argument is replaced by `host`.
 
 With `pscad_port` set, the runner attaches to a responsive listener. If none
 listens, the supervisor starts PSCAD in the logged-on desktop through a
 transient interactive scheduled task. An attached existing application is
-left running and its original `silence` flag is restored; an application
+left running and its original `silence` flag is restored. An application
 started for the run is stopped afterwards. Without a port, a private PSCAD
-is launched in the caller's Windows session; SSH execution fails fast.
+is launched in the caller's Windows session. SSH execution fails fast.
 The runner sets `app.silence=true` before applying settings or loading projects.
-A separate 60 s responsiveness probe precedes attachment.
+Before attachment, a separate probe checks responsiveness with a 60 s timeout.
 
 ## Run and retain results
 
@@ -244,16 +244,15 @@ all(rows.within_tolerance)
 ```
 
 Alternatively, set `POWERIMPEDANCE_PSCAD_CONFIG` to the TOML filename and use
-`RemoteConfig()` or omit `remote` from the options. Remote computation does
-not require Python on the caller. Existing hand-built projects can be wrapped
-as `PSCADModel("case.pscx")`; their external files and libraries must already
+`RemoteConfig()` or omit `remote` from the options. Python runs on the station for remote computation. Existing hand-built projects can be wrapped
+as `PSCADModel("case.pscx")`. Their external files and libraries must already
 be available on the station, and comparison requires an exported model with
 solved references.
 
 A call starts a fresh run in a persistent `run-XXXXXX/` directory under
 `remote.local_root`, or under `work_root` within it. The supervisor copies the
 case into station scratch. `result.paths` locates output, console, build messages
-and run records; `result.diagnostics` includes settings readback, solver identity
+and run records. `result.diagnostics` includes settings readback, solver identity
 and build warnings. Retain the model alongside the result for comparison.
 
 Completed-run reuse is explicit:
@@ -264,24 +263,24 @@ reused = compute(model, PSCADRun(); options = (;
 ```
 
 `:latest` selects the latest matching completed run. Reuse checks input,
-project, runner and output hashes plus the current station identity; it does
-not continue an interrupted simulation. `snapshot_time` saves a snapshot
-during a fresh run and does not restart from one.
+project, runner and output hashes plus the current station identity. Interrupted
+simulations require a fresh run. `snapshot_time` saves a snapshot during a fresh run.
+Snapshot restarts are unsupported.
 
 ## Supported elements and controls
 
 | Component | Variants | Notes |
 |:--|:--|:--|
 | Sources and lumped impedances | Three-phase AC, two-pole DC, supported scalar R/L/C realizations | Sources follow solved voltages. Terminal probes preserve physical order. |
-| Overhead lines | Three-conductor AC; two-conductor DC | Frequency-dependent phase model, with geometry, earth and fitting parameters. |
-| Cables | Coaxial underground or aerial, AC/DC | Ordered layers and positions; eliminated sheath/armour interfaces. |
+| Overhead lines | Three-conductor AC. Two-conductor DC | Frequency-dependent phase model, with geometry, earth and fitting parameters. |
+| Cables | Coaxial underground or aerial, AC/DC | Ordered layers and positions. Eliminated sheath and armour interfaces. |
 | Transformers | YY and ΔY (Dyn11) | Three-phase winding ratings use the solved primary voltage. |
 | Synchronous machines | Native synchronous machine with AVR, governor and steam turbine | Control references and initial states follow the solved operating point. |
-| TLC controls | Grid following: P/Q, P-f, Q-V, VAC and Vdc | PLL, current PI control, supported measurement filters and modulation delay. |
-| MMC controls | Grid following: P/Q, P-f, Q-V, VAC and Vdc; grid forming: VSM with CCVI/OCC | TEC/ZSCC/CCSC, optional disabled Σ controls, or leg-energy Σ/Δ control with circulating-current control; uncompensated and compensated modulation. |
+| TLC controls | Grid-following P/Q, P-f, Q-V, VAC and Vdc | PLL, current PI control, supported measurement filters and modulation delay. |
+| MMC controls | Grid-following P/Q, P-f, Q-V, VAC and Vdc. Grid-forming VSM with CCVI/OCC | TEC/ZSCC/CCSC, optional disabled Σ controls, or leg-energy Σ/Δ control with circulating-current control. Uncompensated and compensated modulation. |
 
 The [developer mapping](developers/pscad_mapping.md) records supported control
-types, equations, units, deliberate realization differences and station evidence.
+types, equations, units, realization differences and station evidence.
 Unsupported elements or control objects produce element-specific errors.
 Transformer `V₁ᵒ`/`V₂ᵒ` power-flow ratings use volts per phase (phase RMS).
 
@@ -308,18 +307,18 @@ throwing.
 `PowerImpedance.PSCAD.steady_state(result; window_cycles = 10)` also exposes
 channel means and fundamental phasors. Sampling must be uniform, with an
 integer number of samples per cycle. A relative change above `1e-3` between
-the window halves warns that a channel has not settled; lengthen the run and
+the window halves warns that a channel has not settled. Lengthen the run and
 inspect traces and build warnings before interpreting comparison rows.
 
 | Quantity | Default comparison rule |
 |:--|:--|
-| AC voltage and relative angle | Positive-sequence phase RMS magnitude within 1%; angle relative to the model's reference bus within 1 degree. |
-| AC current | Fundamental RMS magnitude within 2%; raw probe signs follow the terminal-current convention below. |
+| AC voltage and relative angle | Positive-sequence phase RMS magnitude within 1%. Angle relative to the model's reference bus within 1 degree. |
+| AC current | Fundamental RMS magnitude within 2%. Raw probe signs follow the terminal-current convention below. |
 | DC voltage | Mean pole-to-pole voltage within 1%. |
-| DC current | Magnitude error within 2%; converter-connected DC networks use `abs(diff)/max(abs(reference), Sbase/vDCbase)` with MVA/kV giving kA. Converter-free networks use relative error. Differing converter current bases in one DC network raise an error. |
-| Machine and converter P/Q | Absolute MW/MVAr error divided by the device MVA rating within 1%; converter internal P/Q means use the same rating. Machine terminal voltage also uses the 1% voltage rule. |
-| MMC arm capacitors | Each of six capacitor cycle means within 1% of solved pole-to-pole DC voltage; instantaneous ripple is retained. |
-| MMC DC current identity | Signed `i_dc = 3 iS_z`, converting `iS_z` from pu with `Sbase/vDC_base`; 2% with the same current-base floor. The identity reference comes from measured `iS_z`; its equilibrium value is diagnostic. |
+| DC current | Magnitude error within 2%. Converter-connected DC networks use `abs(diff)/max(abs(reference), Sbase/vDCbase)` with MVA/kV giving kA. Converter-free networks use relative error. Differing converter current bases in one DC network raise an error. |
+| Machine and converter P/Q | Absolute MW/MVAr error divided by the device MVA rating within 1%. Converter internal P/Q means use the same rating. Machine terminal voltage also uses the 1% voltage rule. |
+| MMC arm capacitors | Each of six capacitor cycle means within 1% of solved pole-to-pole DC voltage. Instantaneous ripple is retained. |
+| MMC DC current identity | Signed `i_dc = 3 iS_z`, converting `iS_z` from pu with `Sbase/vDC_base`. 2% with the same current-base floor. The identity reference comes from measured `iS_z`. Its equilibrium value is diagnostic. |
 | Machine or MMC VSM speed | Mean speed within `1e-3` pu of 1. |
 
 
@@ -350,43 +349,42 @@ Previous exports used outward current at some ports. AC RMS and DC magnitude
 comparison rows alone cannot detect reversed polarity.
 
 All durations and steps in Julia are in seconds. A 10 μs integration step is
-typical; **use the measured 1 μs step for compensated MMC modulation**
+typical. Use the measured 1 μs step for compensated MMC modulation
 (10 μs grew unstable in the recorded case). Export warns above 1 μs without
-changing the requested step. Machines use 15 s runs to settle; converter
-fixtures commonly use 10 s, or 5 s at 1 μs for compensated MMCs. Output sampling
+changing the requested step. Machines use 15 s runs to settle. Converter
+validation cases commonly use 10 s, or 5 s at 1 μs for compensated MMCs. Output sampling
 is independent, must be at least the integration step, and 250 μs is a typical
-50 Hz comparison interval. The default source ramp is 0.05 s; any finite,
+50 Hz comparison interval. The default source ramp is 0.05 s. Any finite,
 nonnegative ramp is accepted.
 
 The MMC startup selector fixes the measured DC-voltage divisor at its solved value
-for `t < 0.2 s`; all current and energy feedback remains live. TLC startup
+for `t < 0.2 s`. All current and energy feedback remains live. TLC startup
 uses nominal DC voltage in its measurement, modulation and electrical power
 divisions until 0.2 s. Both retain converged controller states and delay histories.
-The selectors release to measured voltage without a permanent floor.
+After startup, the selectors use the measured voltage directly.
 
 Residual modulation delays are rounded to the nearest integration step, with
 half-step ties upward. For a positive model delay, the requested residual is
-`tau_model - dt`; the realized total is `dt + rounded_residual`. A warning names
-the converter and records the model delay, step, requested/realized residual and
+`tau_model - dt`. The realized total is `dt + rounded_residual`. A warning names
+the converter and records the model delay, step, requested and realized residuals and
 error, bounded by `dt/2`. Carrier corrections and initialization use the realized
-residual. Positive delays below one step remain rejected; a zero model delay
+residual. Positive delays below one step remain rejected. A zero model delay
 retains one inherent interface step.
 
 A DC island without a permanent DC voltage source is pre-charged when it contains
 at least one TLC with `OuterActiveVdcControl`, or a GFL MMC with that active
-controller. DC branches join islands; shared ground and converter AC terminals
-do not. Every bus selected for pre-charge requires positive solved pole voltages.
+controller. DC branches define the islands independently of shared ground and converter AC terminals. Every bus selected for pre-charge requires positive solved pole voltages.
 Temporary ideal DC sources fix each bus at `+vm_pu * base_kV` and its negative
 until their series breakers open at 0.2 s, including at nonzero current. Sources
-have zero ramp; breakers have `RON=0` and `1e100 ohm` open resistance
+have zero ramp. Breakers have `RON=0` and `1e100 ohm` open resistance
 (residual conductance `1e-100 S`). Feedback, gains, loads and the solved final
 operating point are retained. A source anywhere in the island suppresses this
-startup addition. Pre-charge is independent of `dc_reference`; existing final
+startup addition. Pre-charge is independent of `dc_reference`. Existing final
 midpoint references remain in place.
 
 The validation suite includes measured Vdc-controlled load cases with pre-charge.
 Inspect release and startup again after changing the circuit or settings. The
-developer mapping lists the saved source/breaker fields, pins and release command.
+developer mapping lists the saved source and breaker fields, pins and release command.
 
 ## Limitations
 
@@ -396,14 +394,14 @@ developer mapping lists the saved source/breaker fields, pins and release comman
   The recorded IEEE39 builds have 528 live nodes. The complete IEEE14 circuit has 216 live nodes.
 - A distributed line or cable cannot run when its travel time is shorter than
   one integration step. Export warns conservatively using length divided by the
-  speed of light; PSCAD uses its calculated travel time. Reduce the step or
+  speed of light. PSCAD uses its calculated travel time. Reduce the step or
   change the physical section length explicitly.
 - `DCVoltageSupportLag` and controller-local VAC/DC filters are not yet
   exportable. Cable `eliminate = false` requires unsupported exposed
-  sheath/armour interfaces. AC phase counts other than three and DC line
+  sheath and armour interfaces. AC phase counts other than three and DC line
   conductor counts other than two are unsupported.
 - Untransposed AC lines can produce negative-sequence unbalance and ±100 Hz image coupling,
-  invalidating fixed-frame dq comparisons; compare in the phase domain. The option
+  invalidating fixed-frame dq comparisons. Compare in the phase domain. The option
   `transposition = :ideal` maps to `Transp = 1`, but PSCAD 5.1 runs with this flag exit
   abnormally at termination in the validation measurement projects, so it is not a working
   PSCAD route.
@@ -418,8 +416,8 @@ and output names as the standalone meter. This avoids a separate meter whose
 position can change during native project loading. With `PythonCall` loaded,
 `PowerImpedance.PSCAD.check_connectivity(path)` also checks the coordinates in
 an exported project or a project saved after loading. Export performs this
-serialized check automatically; offline checks do not establish native build
-or scientific acceptance.
+serialized check automatically. Native build checks and scientific comparisons
+use a PSCAD run.
 
 ## Abbreviations
 
@@ -439,7 +437,7 @@ or scientific acceptance.
 | CCSC / CCC | Circulating-current suppression control / circulating-current control |
 | LEC | Leg-energy control |
 | CCVI | Current-controlled virtual impedance, which maps voltage error to current references through virtual resistance and inductance |
-| VSM / VSE | Virtual synchronous machine / virtual swing equation; `VSEWithDamping` implements the synchronization equation |
+| VSM / VSE | Virtual synchronous machine / virtual swing equation. `VSEWithDamping` implements the synchronization equation |
 | AVR | Automatic voltage regulator |
 | PI | Proportional-integral control |
 | SCR | Short-circuit ratio: grid short-circuit apparent power divided by the declared converter MVA rating, at rated external voltage |
@@ -452,11 +450,11 @@ or scientific acceptance.
 | RL / RLC | Resistance and inductance / resistance, inductance and capacitance |
 | OHL / P2P | Overhead line / point-to-point link |
 | RC | Resistance and capacitance |
-| YY / Dyn11 | Star–star transformer / delta–star transformer with neutral and a 30 degree secondary lead |
+| YY / Dyn11 | Star-star transformer / delta-star transformer with neutral and a 30 degree secondary lead |
 | IEEE9 | Institute of Electrical and Electronics Engineers nine-bus test network |
 | LTI | Linear model with coefficients constant in time |
 | abc / dq | Phase coordinates a/b/c / direct and quadrature rotating coordinates |
 | Y / Z / ABCD | Admittance / impedance / multiport voltage-current transmission matrices |
-| P/Q, P-f, Q-V | Active/reactive power regulation, active-power/frequency support, reactive-power/voltage support |
+| P/Q, P-f, Q-V | Active and reactive power regulation, active power support from frequency, reactive power support from voltage |
 | VAC / Vdc | AC-voltage regulation / DC-voltage regulation |
 | DSOUT / DSDYN | EMTDC electrical-output / dynamics execution phases |

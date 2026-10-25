@@ -46,8 +46,7 @@ active power together with its selected AC-side quantity.
 ![Power-flow equivalent of an AC/DC converter.](pictures/power_flow/converter_pf.png)
 
 Once power flow is solved, the operating point is used for the nonlinear
-equilibrium and active-device linearization. Power-flow warnings refer to the sampled physical converter and its constraints, not to an
-aggregated uncertain model.
+equilibrium and active-device linearization. Power-flow warnings identify the sampled physical converter and its constraints.
 
 ## Calculated operating point
 
@@ -72,7 +71,7 @@ uses that exact result and returns a `LinearizationResult`. Its `network_model`
 contains the frequency-domain `NetworkModel`. Its `operating_point` records
 the values used for active admittances. Without a supplied result, power flow
 is calculated before the nonlinear models are linearized. A network of linear
-models instead uses an empty operating point for linearization alone.
+models uses an empty operating point for linearization alone.
 
 For one state-space model, `linearize(model, values)` takes a NamedTuple keyed
 by port and computes `A, B, C, D`. `steady_state(model, values)` returns the
@@ -112,7 +111,6 @@ Every materialized configuration performs its own required power flow before
 linearization. Passive parameters can change solved voltages and powers.
 
 An explicit `preprocess` call can pair completed parametric `PowerFlowResult`
-values with their originating configurations. This reuses only those exact
-results. Each Monte Carlo trial samples a complete numeric network before
+values with their originating configurations. Each Monte Carlo trial samples a complete numeric network before
 calling the power-flow solver. Supported bus-level `Measurement` values are
 reconstructed after the numeric solves.

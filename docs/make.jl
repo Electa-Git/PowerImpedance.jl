@@ -23,10 +23,8 @@ const GITLAB_REPOSITORY_PATH = get(
     "CI_PROJECT_PATH",
     "electa/controlgroup/PowerImpedance.jl"
 )
-const GITLAB_REPOSITORY_GROUP, GITLAB_REPOSITORY_NAME =
-    rsplit(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
-const GITLAB_REPOSITORY_NAMESPACE, GITLAB_REPOSITORY_PAGES_PATH =
-    split(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
+const GITLAB_REPOSITORY_GROUP, GITLAB_REPOSITORY_NAME = rsplit(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
+const GITLAB_REPOSITORY_NAMESPACE, GITLAB_REPOSITORY_PAGES_PATH = split(GITLAB_REPOSITORY_PATH, "/"; limit = 2)
 const GITLAB_REPOSITORY_URL = get(
     ENV,
     "CI_PROJECT_URL",
@@ -246,7 +244,7 @@ end
 
 function sanitize_rendered_log_paths(content::AbstractString)
     location = Regex(raw"(?m)(└ @ [^\s<]+) (?:~|/)[^\r\n<]*/" *
-        raw"(src|ext|docs|examples|test)/([^\r\n<]+:\d+)")
+                     raw"(src|ext|docs|examples|test)/([^\r\n<]+:\d+)")
     return replace(content, location => s"\1 \2/\3")
 end
 
@@ -296,7 +294,7 @@ function build_pages()
     )
 
     if isfile(joinpath(DOCS_SRC_DIR, "reference.md"))
-        push!(pages, "API Reference" => "reference.md")
+        push!(pages, "API reference" => "reference.md")
     end
 
     development_pages = Any[
@@ -361,8 +359,8 @@ makedocs(;
         mathengine = math_engine(),
         prettyurls = running_in_ci(),
         footer = "[$(metadata.name).jl]($(REPOSITORY_URL)) v$(metadata.version) " *
-            "supported by the Etch Competence Hub of EnergyVille, " *
-            "financed by the Flemish Government.",
+                 "supported by the Etch Competence Hub of EnergyVille, " *
+                 "financed by the Flemish Government.",
         size_threshold = nothing
     ),
     pages = build_pages(),

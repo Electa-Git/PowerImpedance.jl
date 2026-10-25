@@ -49,11 +49,11 @@
   `withinputs`. Control references and converter or machine seeds are per unit
   on the model's `BaseValues`. Source inputs use physical units.
 - **Breaking:** `Source` is immutable and stores physical `v`, `theta`, `p`, `q`,
-  conductor count, domain, limits and its ideal ABCD matrix. Set source limits
+  conductor count, domain, limits and its ideal ABCD matrix. Set the source limits
   with `component(source; limits = x)`. `ac_source` has no `limits` keyword.
 - **Breaking:** the scan-based MMC accepts `ac_control`, `dc_control`, `powerflow`
-  in physical MW, MVAr, AC phase-peak kV and DC pole-to-pole kV, and `limits`
-  instead of controller objects. Its scan uses solved terminal values.
+  in physical MW, MVAr, AC phase-peak kV and DC pole-to-pole kV, and `limits`.
+  Controller objects are unsupported. Its scan uses solved terminal values.
 - **Breaking:** `OperatingPoint.values` stores values by component and port,
   accessed as `op[:c1].ac.p`. Port powers and signed currents are positive into
   the component, with `Y = I_in / V`. Source, synchronous-machine and converter
@@ -74,9 +74,9 @@
   use `grounded_ports` and per-port operating values.
 - **Breaking:** rename the `AVRSM` field `vref_SG` to `v_ref`.
 - **Breaking:** transformer `V₁ᵒ`/`V₂ᵒ` power-flow ratings use volts per phase,
-  previously kV per phase.
+  formerly kV per phase.
 - **Breaking:** `dc_source` voltage is pole to pole in kV, consistently with
-  converters. Callers that previously halved it must pass the full voltage.
+  converters. Callers that halved it before must pass the full voltage.
 - The IEEE 39-bus example is a NetworkBuilder tutorial with a modular STATCOM
   and an impedance-based stability check at Bus 9. The documentation runs it.
 - PSCAD operating-point comparison reports `settling` and checks the change
@@ -86,7 +86,7 @@
   `YMaxE`/`AMaxE` from 0.2% to 0.02%, overridable through `line_options`.
 - Tighten power-flow defaults to `tol=1e-6`, `constr_viol_tol=1e-5` and
   `max_iter=300`. Accept returned points within the configured primal feasibility
-  tolerance with a warning regardless of solver status, without relaxation.
+  tolerance with a warning regardless of solver status, with the configured tolerances.
   Comparable raw bus magnitudes and angles change by up to 8.72589e-05 pu and
   1080 degrees. Converter and generator P/Q change by up to 0.437079 MW and
   1.329107 MVAr,
@@ -132,7 +132,7 @@
   step, with half-step ties upward and a warning when the delay changes.
 - Set PSCAD sheets to size 5 and reject coordinates outside the sheet or component
   relocation on load. Count output rows after file sizes stabilize, without a timeout.
-- Correct the Wedepohl–Wilcox cable earth-return logarithmic constant to
+- Correct the Wedepohl-Wilcox cable earth-return logarithmic constant to
   `exp(γ_E) ≈ 1.781072418` in self and mutual terms. For earth relative
   permeability 1, this removes excess reactance of approximately
   `1.41592 f μΩ/m` (70.7961 μΩ/m at 50 Hz) from each earth coefficient. The
@@ -208,7 +208,7 @@
 - Remove graphics objects from calculation result payloads. Stability analyses
   retain the completed numerical trajectories and summaries required by the
   plotting recipes.
-- Remove the former plotting backend and package compatibility entry points.
+- Remove the former plotting backend and the compatibility methods for packages.
 - Add a harmonic nodal-impedance definition with driving-point and transfer
   entries. It supports overlay, panel, and page selections, interactive
   controls, and SVG export from the current figure state.
@@ -217,7 +217,7 @@
 - Rename the materialized and linearized NetworkBuilder structures to
   `NetworkState`, `NetworkTopology`, `AdmittanceLookup`, `NetworkLookup`, and
   `NetworkModel`, with hard-error migration shims for the retired type names.
-- Add the public problem/formulation/result calculation interface for power
+- Add the public calculation interface with problems, formulations and results for power
   impedance, nodal and edge admittance, loop gain, and downstream stability
   analysis.
 - Use one typed `PowerFlowResult → OperatingPoint → LinearizationResult`

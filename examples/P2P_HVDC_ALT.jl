@@ -1,14 +1,13 @@
 # # P2P HVDC parametric OHL/UGC transition
 #
-# This example demonstrates the `NetworkBuilder` workflow for reusing a cached
-# power-flow solution while sweeping the relative share of overhead line and
-# underground cable in a point-to-point HVDC system.
+# This `NetworkBuilder` study reuses a cached power-flow solution across
+# overhead-line and underground-cable shares in a point-to-point HVDC system.
 
 using PowerImpedance
 using CairoMakie
 using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState
 
-# The P and Q defined here are what is injected into the network.
+# P and Q are active and reactive power injected into the network.
 transmissionVoltage = 380 / sqrt(3)
 pHVDC1 = 100
 qC1 = 100
@@ -167,9 +166,7 @@ function ohl_to_ugc(x)
     )
 end
 
-# The transition is one deterministic Gridspace axis. The axis keeps the OHL
-# and UGC lengths paired, so the study never evaluates an impossible Cartesian
-# product of independent corridor lengths.
+# One deterministic Gridspace axis pairs OHL and UGC lengths at each corridor share.
 function transition_network_space(x_values)
     shares = Grid(collect(x_values))
     return Gridspace{NetworkState}(

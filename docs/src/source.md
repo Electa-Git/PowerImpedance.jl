@@ -25,7 +25,7 @@ declared physical inputs. `inputs(source)` describes those inputs, while
 `nothing`.
 
 The source's configured `p` and `q` use generator output targets for power flow.
-Solved `ACPortValues` and `DCPortValues` instead report power into the source:
+Solved `ACPortValues` and `DCPortValues` report power into the source:
 a source delivering 900 MW has `p = -900` at its port.
 
 Connect an AC source to a bus with `domain = ACDQ` when the external network

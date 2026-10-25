@@ -23,7 +23,7 @@ matrix.
 
 ![Examples for which a direct impedance or admittance parameterization is not finite.](pictures/abcd/examples.png)
 
-ABCD parameters instead relate the input-port variables directly to the
+ABCD parameters relate the input-port variables directly to the
 output-port variables. For an ``n``-port system,
 
 ```math
@@ -42,7 +42,7 @@ output-port variables. For an ``n``-port system,
 \end{bmatrix},
 ```
 
-where each block is ``n\times n``. A port may represent a single conductor, a
+where each block is ``n\times n``. A port can represent one conductor, a
 polyphase AC terminal, a multipole DC terminal, or the terminals of a larger
 subnetwork.
 
@@ -92,12 +92,12 @@ with Kron reduction used to eliminate internal nodes when needed
 
 The complete workflow is:
 
-1. construct and connect the physical components;
-2. solve the AC/DC power flow when nonlinear operating points are required;
-3. linearize active devices and assemble frequency-dependent passive models;
-4. construct the desired impedance, nodal admittance, edge admittance, or loop
-   gain; and
-5. apply the relevant stability or sensitivity analysis.
+1. Construct and connect the physical components.
+2. Solve the AC/DC power flow when nonlinear operating points are required.
+3. Linearize active devices and assemble frequency-dependent passive models.
+4. Construct the desired impedance, nodal admittance, edge admittance, or loop
+   gain.
+5. Apply the relevant stability or sensitivity analysis.
 
 The scalar workflow and Gridspace workflow use the same component and solver
 kernels. A deterministic or uncertain study evaluates repeated numeric cases

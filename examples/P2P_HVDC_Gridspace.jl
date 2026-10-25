@@ -2,9 +2,9 @@
 #
 # This tutorial constructs three studies directly from `Grid` objects:
 #
-# 1. the deterministic OHL/UGC length transition;
-# 2. bounded uncertainty on every nonzero cable geometry dimension; and
-# 3. bounded uncertainty on physically meaningful MMC parameters.
+# 1. the deterministic OHL/UGC length transition
+# 2. bounded uncertainty on each nonzero dimension of the cable geometry
+# 3. bounded uncertainty on MMC electrical parameters
 #
 # `MonteCarlo` samples all uncertain axes together. Each trial materializes a
 # numeric network before PowerModels runs. The completed responses remain
@@ -41,9 +41,9 @@ const builder_options = (;
     power_flow = (; is_bounded = (; bus_voltage = true))
 );
 
-# These elements do not change in the length or cable-geometry studies. The
-# lazy constructors still return singleton Gridspaces; `only` makes the
-# fixed scalar elements explicit.
+# These elements are fixed in the length and cable-geometry studies. The
+# lazy constructors return singleton Gridspaces. `only` extracts the scalar
+# elements.
 const fixed_element_specs = (;
     g1 = ac_source(Grid; v = transmission_voltage * sqrt(2), p = p_hvdc),
     c1 = mmc(Grid;
@@ -187,8 +187,8 @@ const corridor_groundwires = only(Groundwires(Grid;
     dᵍˢᵃᵍ = 6.0
 ));
 
-# Cable layer boundaries are generated from positive thicknesses. Independent
-# perturbations therefore cannot invert or overlap adjacent layers.
+# Positive layer thicknesses define ordered cable radii under independent
+# perturbations.
 @gridspace struct P2PCableGeometry
     spacing::Float64
     burial_depth::Float64
@@ -213,10 +213,9 @@ const nominal_geometry = only(P2PCableGeometry(
 
 # ## Deterministic OHL/UGC transition
 #
-# One explicit `Grid` holds the paired lengths. Treating the OHL and UGC
-# lengths as independent grids would create an unphysical Cartesian product.
-# A 100 m endpoint regularization avoids the singular zero-length line model;
-# the labels retain the requested 0% and 100% values.
+# One explicit `Grid` holds paired OHL and UGC lengths at each corridor share.
+# A 100 m endpoint regularization avoids the singular zero-length line model.
+# The labels retain the requested 0% and 100% values.
 
 const characteristic_shares = (0.0, 0.05, 0.1, 0.5, 0.9, 1.0)
 const endpoint_fraction = 1e-3
@@ -414,13 +413,12 @@ end;
 # ## Converter-parameter uncertainty
 #
 # This pass fixes the corridor at 50% UGC and samples both MMCs. Arm-reactor
-# inductance and submodule capacitance use bounded ±5% manufacturing tolerances;
-# equivalent arm resistance uses ±10% to cover conductor tolerance and operating
-# temperature. These are defensible screening assumptions, not substitutes for
-# project-specific procurement distributions.
+# inductance and submodule capacitance use bounded ±5% manufacturing tolerances.
+# Equivalent arm resistance uses ±10% to cover conductor tolerance and operating
+# temperature. These screening distributions represent the stated tolerances.
+# For a project study, use its procurement distributions.
 #
-# Every converter trial gets its own numeric power flow, equilibrium, and
-# linearization. Measurements do not enter PowerModels.
+# Each converter trial computes numeric power flow, equilibrium, and linearization.
 
 const half_corridor = corridor_lengths[4];
 
@@ -550,8 +548,7 @@ converter_uq = compute(
 );
 
 # Peak impedance and its frequency are direct resonance-screening KPIs. They
-# retain the nonlinear effect of every trial; computing them from the mean
-# impedance would hide trial-to-trial resonance movement.
+# retain the nonlinear effect and resonance movement of each trial.
 converter_responses = only(converter_uq.details.plot_data.values)
 converter_frequency = real.(first(converter_responses).frequencies) ./ (2π)
 converter_kpis = map(enumerate((:B3d, :B5, :B6d))) do (net_index, net)

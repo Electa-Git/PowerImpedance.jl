@@ -140,7 +140,7 @@ An explicit `PowerFlowProblem` always solves, including networks containing only
 sources and passives. `solve(network)` returns the same `PowerFlowResult` type.
 The result retains `result`, `data`, `nodes2bus`, `elem2comp`, diagnostics, and
 an `OperatingPoint`. The state retains the converged solver starting values for
-later solves. It does not store the calculated `OperatingPoint`.
+later solves. The calculated `OperatingPoint` belongs to the result.
 
 `OperatingPoint.values` stores a NamedTuple per non-passive component, keyed by
 port name. AC ports use `ACPortValues(v, theta, p, q)` in phase-peak kV, rad, MW
@@ -186,8 +186,8 @@ The [Gridspace guide](gridspace.md) describes deterministic and uncertain studie
 ## Single-line network diagrams
 
 Network diagrams are provided by the optional GraphMakie extension. Install and
-load `GraphMakie`, `Graphs`, and `NetworkLayout` together with one Makie backend;
-they are weak dependencies and are not loaded by core PowerImpedance.
+load `GraphMakie`, `Graphs`, and `NetworkLayout` together with one Makie backend.
+These packages are weak dependencies.
 
 ```julia
 using PowerImpedance
@@ -205,8 +205,7 @@ view.figure
 bipartite layout: physical buses and named PowerImpedance components are both
 vertices. AC and DC bus numbers remain distinct through their `(domain, bus)`
 identity, transformed conductor coordinates aggregate at one busbar, parallel
-components remain separate, and ground is represented on the component rather
-than as one global bus vertex.
+components remain separate, and each component shows its ground connections.
 
 If power flow has already been computed, pass the completed result explicitly:
 
@@ -215,9 +214,8 @@ powerflow = compute(PowerFlowProblem(network), ACDCPowerFlow())
 view = diagram(network, powerflow; interactive = false)
 ```
 
-Rendering never solves or reconverts the network. The network remains the
-source of topology, component names, ports, terminals, and net names. The
-supplied `PowerFlowResult` only enriches that projection from its retained
+The network supplies topology, component names, ports, terminals, and net names. The
+supplied `PowerFlowResult` enriches that projection from its retained
 `data`, `result`, `nodes2bus`, and `elem2comp` payloads. A result whose mappings
 do not agree with the network raises an error.
 
@@ -259,9 +257,8 @@ CairoMakie exports the same figure through ordinary Makie functions:
 save("network.svg", view.figure)
 ```
 
-For browser rendering, activate WGLMakie instead; the diagram construction path
-is unchanged and the figure can be embedded by a Bonito application without
-making Bonito a PowerImpedance dependency:
+For browser rendering, activate WGLMakie. The same diagram construction produces
+a figure that a Bonito application can embed:
 
 ```julia
 using WGLMakie
@@ -319,7 +316,7 @@ A source's `p` input is its generated power, as `Pac` was, while its solved
 Move converter references into the selected control-block input tree. Divide
 physical references by the appropriate model base. Use `exclude` for omitted
 components, let the bus select the frame, and use symbol terminal labels in
-`Net`. The old wrapper no longer holds the result of power flow:
+`Net`. Read the power-flow result from `PowerFlowResult`:
 
 Before:
 

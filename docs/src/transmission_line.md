@@ -29,8 +29,8 @@ length. Matrix products retain the displayed order for untransposed geometries.
 
 ## Overhead lines
 
-An overhead-line model combines phase conductors, optional ground wires, and
-an earth-return model. Conductors may be arranged in flat, vertical, delta,
+An overhead line comprises phase conductors, optional ground wires, and
+an earth-return model. Conductors can be arranged in flat, vertical, delta,
 offset, or concentric organizations, or supplied through explicit positions.
 Bundle geometry, sag correction, conductor resistance and radius, ground-wire
 data, and earth properties determine the full self and mutual parameter
@@ -50,7 +50,7 @@ per end.
 
 A cable group contains coaxial conducting and insulating layers at specified
 burial positions. The implemented native geometry supports core, sheath, and
-armor/screen arrangements, layer material properties, and earth-return mutual
+armor and screen arrangements, layer material properties, and earth-return mutual
 coupling. Internal grounded layers can be eliminated by Kron reduction to
 obtain a compact terminal model [Ametani1980, RivasMarti2002](@cite).
 
@@ -64,7 +64,7 @@ names apply to `blackbox_line` models imported from Z/Y data.
 
 LineCableModels interoperability is temporarily dormant while
 LineCableModels.jl awaits registration. Native line constructors remain
-available; the compatibility extension and its tests will be restored once
+available. The compatibility extension and its tests will be restored once
 LineCableModels can be declared as a registered weak dependency.
 
 See [`overhead_line`](@ref), [`cable`](@ref), [`Conductors`](@ref),

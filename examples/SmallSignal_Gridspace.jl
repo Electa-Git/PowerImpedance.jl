@@ -44,8 +44,8 @@ stability = compute(
     analysis = stability.details.categorical.analysis
 )
 
-# Plot definitions consume the completed result without rerunning the analysis.
-# Building the render definition does not load Makie.
+# Plot definitions use the completed numerical result. A Makie backend renders
+# the definition.
 
 render = PlotBuilder.make_render(
     NyquistPlotDefinition,

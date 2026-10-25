@@ -15,8 +15,8 @@ derived from open-circuit and short-circuit test data. For three phases, `n` is
 always the primary-to-secondary **line-to-line voltage ratio**, for both `:YY`
 and `:ΔY`. All T-model parameters retain their per-phase, Y-equivalent `:YY`
 meaning: winding resistances `Rₚ`, `Rₛ` [Ω] and leakage inductances `Lₚ`, `Lₛ`
-[H] are referred to their own side; `Rₘ` [Ω] and `Lₘ` [H] form the primary
-excitation branch; `Cₜ` and `Cₛ` [F] retain the same per-phase capacitive paths.
+[H] are referred to their own side. `Rₘ` [Ω] and `Lₘ` [H] form the primary
+excitation branch. `Cₜ` and `Cₛ` [F] retain the same per-phase capacitive paths.
 Zero `Rₘ` or `Lₘ` means that excitation term is absent. `hasRω` and `k` use the
 same winding-resistance multiplier `(abs(s)/(2π*50))^k` in both organizations.
 
@@ -46,12 +46,11 @@ T = \begin{bmatrix}1&1&1\\1&a^2&a\\1&a&a^2\end{bmatrix},
 
 Delta-to-Y zero-sequence isolation has no phase-domain ABCD representation.
 The internal zero-sequence block is an identity placeholder exactly decoupled
-from positive and negative sequence; it does not model physical zero-sequence
-transfer. Connect a three-phase `:ΔY` transformer to an `ACDQ` bus. The builder discards
+from positive and negative sequence. Physical zero-sequence transfer is unsupported. Connect a three-phase `:ΔY` transformer to an `ACDQ` bus. The builder discards
 zero sequence and produces the dq model. An abc topology raises `ArgumentError`
 when the network is defined. In dq, Dyn11 rotates the
 secondary frame by +30° relative to the primary. The repository uses a lagging
-q axis, `[d,q] = [V cos θ, -V sin θ]`; with
+q axis, `[d,q] = [V cos θ, -V sin θ]`. With
 `R(θ) = [cos θ -sin θ; sin θ cos θ]`, the ideal voltage ABCD block is
 `n·R(+π/6)` and the ideal current block is `R(+π/6)/n`. For primary dq voltage
 `[n,0]`, the secondary is `[cos(π/6), -sin(π/6)]`.
@@ -59,7 +58,7 @@ q axis, `[d,q] = [V cos θ, -V sin θ]`; with
 For power flow, the detailed ABCD model is converted to a balanced branch tap,
 series admittance, and shunt admittance. These values are identical for `:YY`
 and `:ΔY` with the same parameters. PowerModels defines the complex tap as
-`tap·exp(j·shift)` and the unloaded voltage as `V_to = V_from/t`; Dyn11 uses `shift = -π/6` [rad]. Frequency-domain analysis retains the detailed
+`tap·exp(j·shift)` and the unloaded voltage as `V_to = V_from/t`. Dyn11 uses `shift = -π/6` [rad]. Frequency-domain analysis retains the detailed
 transformer model.
 
 ```@example transformers

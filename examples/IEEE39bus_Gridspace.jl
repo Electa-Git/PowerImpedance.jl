@@ -10,7 +10,7 @@ using GraphMakie
 using PowerImpedance
 using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState, define
 
-# The shared fixture supplies the system's model functions and constants.
+# The shared test file supplies the system's model functions and constants.
 # The example and tests use these same definitions.
 # Line `T8_9` is excluded from the network in this study.
 function include_ieee39_networkbuilder_fixture()
@@ -23,7 +23,7 @@ end;
 include_ieee39_networkbuilder_fixture();
 
 # The requested input repeats 1000 Ωm. Duplicate values produce identical
-# solves and curves, so the grid retains its three unique physical cases.
+# solves and curves. The grid contains three unique physical cases.
 const IEEE39_REQUESTED_SOIL_RESISTIVITY = (10.0, 100.0, 1000.0, 1000.0)
 const IEEE39_SOIL_RESISTIVITY = Tuple(unique(IEEE39_REQUESTED_SOIL_RESISTIVITY))
 const IEEE39_REPRESENTATIVE_BUSES = (9, 16, 29)
@@ -35,8 +35,8 @@ const IEEE39_BUILDER_OPTIONS = (;
 
 # ## Inspect the network topology
 #
-# `NetworkDiagramDefinition` projects the materialized network directly; it
-# does not run power flow or repeat a conversion. The Cairo backend renders the
+# `NetworkDiagramDefinition` projects the materialized network directly.
+# The Cairo backend renders the
 # same PlotBuilder recipe used by the interactive GL and WGL backends. Its
 # automatic figure size follows the portrait-oriented IEEE39 layout while the
 # reset and SVG-export controls remain visible.
@@ -133,9 +133,8 @@ function ieee39_soil_builder_space(
     )
 end;
 
-# Soil resistivity changes the passive frequency-domain models. Each case owns
-# its power flow and linearization, which keeps calculation state out of the
-# network definitions.
+# Soil resistivity changes the passive frequency-domain models. Each case
+# computes its own power flow and linearization.
 
 function ieee39_bus_nets(buses)
     return reduce(vcat, ([Symbol("Bus$(bus)d"), Symbol("Bus$(bus)q")] for bus in buses))
@@ -168,8 +167,7 @@ end;
 # `maximum_spread_db` quantifies whether soil resistivity visibly separates the
 # curves and makes the sensitivity check reproducible. A reduced validation
 # scan gave maximum separations of about 0.97 dB at Bus 9, 0.82 dB at Bus 16,
-# and 1.08 dB at Bus 29, so soil resistivity remains a visible KPI and no
-# fallback parameter scan is needed.
+# and 1.08 dB at Bus 29.
 
 function ieee39_impedance_db(case, bus_index)
     net_index = 2bus_index - 1

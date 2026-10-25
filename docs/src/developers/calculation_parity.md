@@ -7,7 +7,7 @@ energy control, modulation, filters, the IEEE 39-bus system, and the larger
 HVDC and converter-machine examples.
 
 `test/reference/v2/metadata.txt` records the source commit, package versions,
-dependency-manifest hash, numeric and label hashes, fixture names, frequency
+dependency-manifest hash, numeric and label hashes, test-case names, frequency
 axis, and omitted calculations. The generator is retained under
 `test/reference/` for the frozen source API. The current comparison builds
 networks from `test/parity/fixtures.jl` using direct models and named ports.
@@ -47,13 +47,14 @@ Each numeric comparison uses `abs(live - reference) <= atol + rtol*abs(reference
 | Control-equation checks and PSCAD comparison rows (`oracle`, `pscad_op`) | `1e-12` | `1e-12` |
 
 The test prints maximum absolute and relative differences per dataset and per
-fixture family. These limits compare the refactor with stored calculations. Agreement with measured
+test-case family. These limits compare the refactor with stored calculations. Agreement with measured
 equipment or an EMT response requires separate measurements.
 
-The comparison explicitly accounts for newly solved power flow in `small_ac`,
-`passive_ohl`, `transformer_yy`, `transformer_dy`, `dc` and `dc_cable`. Those
-fixtures formerly recorded power flow as unnecessary. Their current solutions
-must be locally solved. Additional zero generator-power seeds are checked as
+The comparison accounts for newly solved power flow in the small AC circuit
+(`small_ac`), passive overhead line (`passive_ohl`), YY and Dyn11 transformers
+(`transformer_yy`, `transformer_dy`), DC circuit (`dc`) and DC cable (`dc_cable`).
+These cases formerly recorded power flow as unnecessary. Their current solutions
+require local solves. Additional zero generator-power seeds are checked as
 zero. Stored droop state and output arrays for the removed keyword construction are
 retained in the reference but omitted from live comparison. The listed arrays
 are checked for presence in the reference and absence from live data.
@@ -64,8 +65,7 @@ are checked for presence in the reference and absence from live data.
 `test/parity/topology_08f3d2e.tsv`. `net_map` matches each row by
 `(component, port, terminal)` and checks that row order, bus number, electrical
 domain and frame are unchanged. Nongrounded nets map one to one. A grounded
-net may split into coordinate-specific ground names. Different old nets may
-not merge. `mapped_datasets` applies this map to node and bus dataset keys.
+net may split into coordinate-specific ground names. Different old nets remain distinct. `mapped_datasets` applies this map to node and bus dataset keys.
 `retained_nets` checks the ordered nodes used for reduced responses.
 
 Physical operating values are grouped by component and named port. Powers and
@@ -79,8 +79,8 @@ and converter AC delivery have negative port powers.
 `test/parity/pscad_test.jl`, included by `test/pscad/run_xml_tests.jl`, compares
 fresh local exports with the frozen PSCAD graphs and probe lists. It checks
 electrical graph equivalence with `PSCADTopology.equivalent` after applying the
-name and meter-polarity maps. It does not contact a PSCAD station.
-The fixture list in reference metadata selects 27 exports from the 33 networks.
+name and meter-polarity maps. It runs locally.
+The test-case list in reference metadata selects 27 exports from the 33 networks.
 
 `test/pscad/probe_names.jl` maps former numeric current-probe suffixes to named
 ports. Converters map 1 to `dc` and 2 to `ac`. Two-port passives map 1 to

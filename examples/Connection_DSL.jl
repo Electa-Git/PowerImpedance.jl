@@ -5,7 +5,7 @@
 # A `Net` joins individual terminals with explicit names. Both declarations
 # retain the order of their ports or terminals in the constructed topology.
 #
-# - `Bus(name; ports, domain)` takes ordered `(component, port)` pairs;
+# - `Bus(name; ports, domain)` takes ordered `(component, port)` pairs.
 # - `Net(name; terminals, domain)` takes ordered `(component, port, terminal)`
 #   triples.
 #
@@ -42,8 +42,8 @@ dc_connections = (
 dc_network = define(dc_elements, dc_connections);
 dc_network.topology.connections
 
-# The ideal source has one external port. It therefore receives one connection;
-# no source-to-ground row is part of `NetworkTopology`.
+# The ideal source has one external port and receives one connection in
+# `NetworkTopology`.
 # During small-signal construction the ideal source terminal is placed in the
 # grounded-node selection because an ideal voltage source is a short circuit
 # for perturbations.
@@ -80,7 +80,7 @@ ac_topology.connections
 #
 # A three-conductor line exposes terminals `a`, `b` and `c` on both ports.
 # `Net` gives each terminal its own name. Mutual terms remain in the dense
-# component matrices; the nets do not reduce the line to independent phases.
+# component matrices.
 
 multiconductor_elements = (
     line = overhead_line(
@@ -226,8 +226,8 @@ duplicate_terminal_error
 
 # ## Deterministic parameter grids
 #
-# Only the parameters receiving `Grid` values vary. The topology remains
-# ordinary fixed data for each stochastic study case.
+# Parameters receiving `Grid` values vary. The topology is fixed for each
+# stochastic study case.
 
 grid_elements = (
     branch = impedance(
@@ -262,9 +262,8 @@ grid_impedance
 # LineCableModels interoperability is dormant until LineCableModels.jl is
 # registered and restored as a PowerImpedance weak dependency.
 # A phase-domain, per-metre `LineParameters` result then replaces only the line
-# model definition; the topology is unchanged. The documentation environment
-# does not install LineCableModels, so this executable pattern is shown without
-# importing the optional package:
+# model definition and keeps the topology unchanged. After interoperability
+# is restored, install LineCableModels to run this pattern:
 #
 # ```julia
 # using LineCableModels

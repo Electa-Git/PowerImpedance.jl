@@ -1,7 +1,6 @@
 # Package extensions
 
-Optional packages activate focused interoperability or rendering methods. Core
-calculations do not load a graphics package.
+Optional packages activate focused interoperability or rendering methods. Graphics packages load through the rendering extensions.
 
 | Extension | Activated by | Purpose |
 |:--|:--|:--|
@@ -22,15 +21,13 @@ using PowerImpedance
 using Measurements
 ```
 
-Shared Measurement primitives are drawn once per numeric trial, so Gridspace
-Monte Carlo preserves covariance within supported containers.
+Gridspace Monte Carlo draws shared Measurement primitives once per numeric trial
+to preserve covariance within supported containers.
 `LinearError` reconstructs Measurements only after its numeric base and
 perturbation responses complete.
 
-PowerModels never receives Measurements values. A power-flow study with
-Measurements-valued components runs a local Monte Carlo sequence of numeric
-network realizations. The
-aggregate reconstructs Measurements for solved AC and DC bus fields only.
+A power-flow study with Measurements-valued components runs a local Monte Carlo sequence of numeric
+network realizations. The aggregate reconstructs Measurements for solved AC and DC bus fields only.
 
 ## PSCAD
 
