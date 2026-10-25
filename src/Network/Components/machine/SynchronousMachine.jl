@@ -108,11 +108,11 @@ $(TYPEDFIELDS)
     "Crossover time constant \\[s\\]."
     T_CO :: Float64 = 1 # Cross-over time constant [s]
     "High-pressure turbine torque fraction \\[dimensionless\\]."
-    F_HP :: Float64 = 0.3 # High presure turbine fraction [pu]
+    F_HP :: Float64 = 0.3 # High pressure turbine fraction [pu]
     "Intermediate-pressure turbine torque fraction \\[dimensionless\\]."
-    F_IP :: Float64 = 0.4 # Intermediate presure turbine fraction [pu]
+    F_IP :: Float64 = 0.4 # Intermediate pressure turbine fraction [pu]
     "Low-pressure turbine torque fraction \\[dimensionless\\]."
-    F_LP :: Float64 = 0.3 # Low presure turbine fraction [pu]
+    F_LP :: Float64 = 0.3 # Low pressure turbine fraction [pu]
 
 end
 statenames(::MechanicalSM) = (:ω_pu,:θ_sg)
@@ -140,7 +140,7 @@ $(TYPEDFIELDS)
 end
 
 statenames(::GovernorSM) = (:δω_filt, :flow, :TchHP, :TreIP, :TcrLP)
-initialvalues(::GovernorSM;inputs) =  NamedTuple{(:flow, :TchHP, :TreIP, :TcrLP)}(ntuple(i -> inputs.Tm0, 4)) #Initalize those to same value
+initialvalues(::GovernorSM;inputs) =  NamedTuple{(:flow, :TchHP, :TreIP, :TcrLP)}(ntuple(i -> inputs.Tm0, 4)) #Initialize those to same value
 
 
 
@@ -358,7 +358,7 @@ function outputequations!(F, x, inputs, y, gen::SynchronousMachine)
     d = get_state(:θ_sg, x) - theta_grid; # New reference frame angle - old RF angle
     T_inv = [cos(d) sin(d);
         -sin(d)  cos(d)]; # Rotation to stator's RF
-    F[1:2] = -T_inv* [x.i_d;x.i_q] #Grid ref frame currentst
+    F[1:2] = -T_inv* [x.i_d;x.i_q] #Grid ref frame currents
 end
 
 
@@ -728,22 +728,22 @@ function state_space!(F, x, inputs, gen::SynchronousMachine)
     # `z = merge(z,(;vd,vq, Tm0))`
 
     ### ElectricalSM
-    index_end = index + n_states(gen.elec) -1  #Nb of equatinos
+    index_end = index + n_states(gen.elec) -1  #Nb of equations
     Te, didq_dt = state_space!(@view(F[index:index_end]), x, v_dq, gen.elec ;gen)
     index = index_end+1
 
     ### MechanicalSM
-    index_end = index + n_states(gen.mech)-1 #Nb of equatinos
+    index_end = index + n_states(gen.mech)-1 #Nb of equations
     state_space!(@view(F[index:index_end]), x, Te, gen.mech;gen)
     index = index_end+1
     
     ### Governor
-    index_end = index + n_states(gen.gov)-1 #Nb of equatinos
+    index_end = index + n_states(gen.gov)-1 #Nb of equations
     state_space!(@view(F[index:index_end]), x, Tm, gen.gov;gen)
     index = index_end+1
 
     ### AVR
-    index_end = index + n_states(gen.avr)-1 #Nb of equatinos
+    index_end = index + n_states(gen.avr)-1 #Nb of equations
     state_space!(@view(F[index:index_end]), x, v_dq, didq_dt, gen.avr;
         gen, vref=get(inputs, :vref_SG, gen.avr.v_ref))
     index = index_end+1

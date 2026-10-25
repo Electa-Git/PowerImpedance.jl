@@ -24,7 +24,7 @@ struct ElectricalMMC <: AbstractStateSpace
 
     ## Base values
     "Base electrical angular frequency \\[rad/s\\]."
-    ωbase :: Float64        # Base angular frequncy [rad/s]
+    ωbase :: Float64        # Base angular frequency [rad/s]
     "Converter-side AC phase-peak voltage base \\[kV\\]."
     vAC_base :: Float64     # TODO complete this
     "Pole-to-pole DC voltage base \\[kV\\]."

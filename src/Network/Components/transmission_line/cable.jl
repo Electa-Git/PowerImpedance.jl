@@ -1,4 +1,4 @@
-export cable #function row 81 -> possible up to 4 conducting and insultating layers. Cable group of n cables possible.
+export cable #function row 81 -> possible up to 4 conducting and insulating layers. Cable group of n cables possible.
 export Insulator, Conductor #mutable structures row 4, 13 and 23
 # Mutable types begin with a capital letter (Cable, Insulator, Conductor).
 # Functions begin with a lowercase letter (cable).
@@ -475,7 +475,7 @@ function eval_abcd(c::Cable, s::Complex)
 	γ = sqrt(convert(Array{ComplexF64}, Z*Y)) # conversion of arrays product Z*Y and then Γ=sqrt(Z*Y) -> Simulator tutorial pag 19, bottom page (Calculations same as transmission line case)
 	# `γ = sqrt(Z*Y)` replaced the preceding expression after failures for single
 	# DC cables without transformation. TODO verify its effect on other components.
-	Yc = Z \ γ #Always ottom page 19 simulator_tutorial
+	Yc = Z \ γ #Always bottom page 19 simulator_tutorial
 	n = Int(size(Yc, 1)) #Saves in n the number of rows present in the vector Yc
 	abcd = zeros(Complex, 2n, 2n) #Creation of the ABCD matrix-> zeros matrix with dimension 2n*2n
 

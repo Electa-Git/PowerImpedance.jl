@@ -37,7 +37,7 @@ function Base.fill!(Y::Array{ComplexF64, 3}, admcoll::AdmittanceLookup{ComplexF6
     end
 
     #Y array of size (N, N, length(s)) where N is the number of nodes in the network
-    # Allocate matrix to store temporary results (inplace operation)
+    # Allocate matrix to store temporary results (in-place operation)
     maxsize = maximum(size.(admcoll.indices))
     # Holds the largest admittance matrix in admvec.
     Ytemp = zeros(ComplexF64, maxsize..., length(s))

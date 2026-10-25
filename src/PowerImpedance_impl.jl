@@ -71,7 +71,7 @@ include("Network/Components/predicates.jl")
 # Impedance
 include("Network/Components/impedance/impedance.jl")
 
-# Transfromer
+# Transformer
 include("Network/Components/transformer/transformer.jl")
 
 # Cables and transmission lines

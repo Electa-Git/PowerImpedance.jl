@@ -288,7 +288,7 @@ function linearize(m::AbstractStateSpace, values::NamedTuple)
     # Initial values
     init = orderedinitialvalues(m; terminal_pu, inputs)
 
-    # Parameters for equilibirum with NonlinearSolve.jl
+    # Parameters for equilibrium with NonlinearSolve.jl
     p_equil = (; inputs = inputs_vec, m = m, terminal_pu)
 
     # Initialize problem

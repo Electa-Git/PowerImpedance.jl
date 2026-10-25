@@ -149,7 +149,7 @@ function state_space!(F, x, inputs, b::UncompensatedModulation, conv::AbstractMM
     (; vMΔ_d_ref_c, vMΔ_q_ref_c) = out_delta
     (; vMΣ_d_ref_c, vMΣ_q_ref_c, vMΣ_z_ref) = out_sigma
 
-    # First, the references are converter to grid reference framoe
+    # First, the references are converted to grid reference frame
     Δθ_c = syncangle(conv.sync, x)
     vMΔ_d_ref, vMΔ_q_ref = inverse_frame_transform(vMΔ_d_ref_c, vMΔ_q_ref_c, Δθ_c)
     # Zero sequence is independent of the reference frame.
@@ -338,7 +338,7 @@ function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
     (; vMΔ_d_ref_c, vMΔ_q_ref_c) = out_delta
     (; vMΣ_d_ref_c, vMΣ_q_ref_c, vMΣ_z_ref) = out_sigma
     
-    # First, the references are converter to grid reference framoe
+    # First, the references are converted to grid reference frame
     Δθ_c = syncangle(conv.sync, x)
     vMΔ_d_ref, vMΔ_q_ref = inverse_frame_transform(vMΔ_d_ref_c, vMΔ_q_ref_c, Δθ_c)
     vMΣ_d_ref, vMΣ_q_ref = vMΣ_d_ref_c, vMΣ_q_ref_c

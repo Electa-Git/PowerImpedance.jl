@@ -55,7 +55,7 @@ function branch_dc!(data, key_branch, (bus1,bus2), global_dict)
 	((data["branchdc"])[string(key_branch)])["rateC"] = 100
 	((data["branchdc"])[string(key_branch)])["status"] = 1
 
-	#Copied these from element-specific definitions bcs everytime zero
+	#Copied these from element-specific definitions bcs every time zero
 	((data["branchdc"])[string(key_branch)])["l"] = 0
 	((data["branchdc"])[string(key_branch)])["c"] = 0
 
@@ -66,7 +66,7 @@ end
 	function add_interm_bus_ac!(data)
 
 Add intermediate AC bus to PowerModels data, which has no corresponding node(s). 
-An example is the Synchronous Machine wich has an intermediate bus, connecting the
+An example is the Synchronous Machine which has an intermediate bus, connecting the
 generator and RL-branch (transformer)
 """
 function add_interm_bus_ac!(data, global_dict)
