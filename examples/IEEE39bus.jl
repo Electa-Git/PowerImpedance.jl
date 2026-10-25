@@ -37,12 +37,12 @@ earth_parameters = (1, 1, 100);
 # ## Generators, lines, transformers and loads
 #
 # Each ideal AC source has a series impedance between it and its generator bus.
-# `Setpoint.Vac` is phase-voltage amplitude in kilovolts. Multiply the RMS voltage
-# by `sqrt(2)` to get this amplitude. The impedance function takes complex frequency `s`
-# in inverse seconds and returns ohms. Its inductance is in henries.
+# The source input `v` is phase-voltage amplitude in kilovolts. Multiply the RMS
+# voltage by `sqrt(2)` to get this amplitude. The impedance function takes complex
+# frequency `s` in inverse seconds and returns ohms. Its inductance is in henries.
 #
-# `pins = 3` specifies a three-phase element. `transformation = true` exposes
-# its synchronous d/q representation: terminals 1 and 2 are d and q coordinates.
+# `conductors = 3` specifies a three-phase passive. The `ACDQ` buses below
+# represent its port voltages and currents in synchronous d/q coordinates.
 
 generator_buses = 30:39;
 
@@ -156,29 +156,26 @@ load_parameters = [
 # The comprehensions repeat that constructor over its data table. Names such as
 # `T8_9` identify the elements in the connection rows and impedance calculations.
 # `T8_9` and `T9_39` are the only lines at Bus 9, where the STATCOM connects.
-# `connection = false` takes an element out of service.
+# `exclude` in `define` takes a component out of service.
 
 elements = (;
-    (Symbol("G", bus) => ac_source(
-        pins = 3, setpoint = Setpoint(Vac = sqrt(2) * Vm1), transformation = true,
-    ) for bus in generator_buses)...,
+    (Symbol("G", bus) => ac_source(v = sqrt(2) * Vm1) for bus in generator_buses)...,
     (Symbol("Zg", bus) => impedance(
-        z = s -> 0.191736 + s * 0.0122063, pins = 3, transformation = true,
+        z = s -> 0.191736 + s * 0.0122063, conductors = 3,
     ) for bus in generator_buses)...,
     (row.name => transformer(
         n = 345 / 345,
         Lₚ = (row.x / 2) * Lb_345, Lₛ = (row.x / 2) * Lb_345,
         Rₚ = (row.r / 2) * Rb_345, Rₛ = (row.r / 2) * Rb_345,
-        pins = 3, transformation = true,
+        conductors = 3,
     ) for row in transformer_data)...,
     (row.name => overhead_line(
         length = row.length, conductors = conductors, groundwires = groundwires,
-        earth_parameters = earth_parameters, transformation = true, connection = true,
+        earth_parameters = earth_parameters,
     ) for row in line_data)...,
     (load.name => impedance(
-        z = s -> load.R +
-            (load.kind === :L ? s * load.L_or_C : 1 / (s * load.L_or_C)),
-        pins = 3, transformation = true,
+        z = s -> load.R + (load.kind === :L ? s * load.L_or_C : 1 / (s * load.L_or_C)),
+        conductors = 3,
     ) for load in load_parameters)...,
 );
 
@@ -247,18 +244,13 @@ inner_current = InnerCurrentPIControl(
 
 modulation = PadeModulation(timeDelay = 200e-6, padeOrderNum = 3, padeOrderDen = 3);
 
-# `Setpoint` gives AC and DC power in MW, reactive power in Mvar, phase-voltage
-# amplitude and pole-to-pole DC voltage in kilovolts, and AC angle in radians.
-# The outer controls select which quantities power flow solves. `Vac` sets the
-# voltage-support reference to 0.9 of the nominal phase-voltage amplitude.
-# `Qac` sets -0.5 pu on the 269 MVA base.
+# Control references and power-flow seeds use per unit on the model's bases.
+# The outer controls select which quantities power flow solves. The voltage
+# support reference is 0.9 of the nominal phase-voltage amplitude. Its reactive
+# power reference is -0.5 pu on the 269 MVA base.
 
 Q_ST = -0.5;
 Vac_ref_ST = 0.9;
-statcom_setpoint = Setpoint(
-    Pac = 0.0, Qac = Q_ST * S_ST, θac = 0.0,
-    Vac = Vm1 * sqrt(2) * Vac_ref_ST, Pdc = 0.0, Vdc = Vdc_ST,
-);
 
 # `PowerImpedance.Limits` specifies active- and reactive-power limits in the
 # converter's per-unit power base. The limits of ±1000 pu leave the converter
@@ -275,62 +267,61 @@ statcom_limits = PowerImpedance.Limits(
 
 elements = (;
     elements...,
-    G_DC = dc_source(pins = 1, setpoint = Setpoint(Vdc = 110)),
-    STATCOM = tlc(
+    G_DC = dc_source(v = 110),
+    STATCOM = let model = tlc(
         elec = electrical, meas = measurements, sync = synchronization,
         outerActive = outer_active, outerReactive = outer_reactive,
         innerVoltage = inner_voltage, innerCurrent = inner_current,
-        mod = modulation, setpoint = statcom_setpoint, limits = statcom_limits,
-    ),
-    dummy_impedance = impedance(z = 1e4, pins = 1),
+        mod = modulation, limits = statcom_limits,
+    )
+        b = bases(model)
+        component(model; outerActive = (v_dc_ref = Vdc_ST / b.v_dc,),
+            outerReactive = (q_ref = (Q_ST * S_ST) / b.S,
+                support = (v_ac_ref = (Vm1 * sqrt(2) * Vac_ref_ST) / b.v_ac,)),
+            powerflow = (p_ac = 0.0 / b.S, p_dc = 0.0 / b.S))
+    end,
+    dummy_impedance = impedance(z = 1e4, conductors = 1),
 );
 
 # ## Topology
 #
-# Each row attaches one element terminal to a node. The first
-# row connects the STATCOM's AC side, terminal 1, to the d coordinate of Bus 9.
-# Repeated node names join terminals electrically. Side 1 of the TLC is DC and
-# side 2 is AC. Ideal sources expose only their external side. Load side 2
-# connects to the d/q ground nodes.
+# Each bus attaches complete component ports and creates d and q nets.
+# Repeated bus names join the listed ports. The TLC exposes `ac` and `dc`.
+# Ideal sources expose one port. Each load's `side2` port connects to ground.
 
 statcom_connections = (
-    (node = :Bus9d, element = :STATCOM, side = 2, terminal = 1),
-    (node = :Bus9q, element = :STATCOM, side = 2, terminal = 2),
-    (node = :STATCOM_DC, element = :STATCOM, side = 1, terminal = 1),
-    (node = :STATCOM_DC, element = :dummy_impedance, side = 1, terminal = 1),
-    (node = :DC_source, element = :dummy_impedance, side = 2, terminal = 1),
-    (node = :DC_source, element = :G_DC, side = 1, terminal = 1),
+    NetworkBuilder.Bus(:Bus9; ports = ((:STATCOM, :ac),), domain = ACDQ),
+    NetworkBuilder.Bus(:STATCOM_DC;
+        ports = ((:STATCOM, :dc), (:dummy_impedance, :side1))),
+    NetworkBuilder.Bus(:DC_source;
+        ports = ((:dummy_impedance, :side2), (:G_DC, :dc))),
 );
 
-# Generator rows join each source to its impedance and the impedance to its bus.
+# Generator buses join each source to its impedance and the impedance to its bus.
 
 generator_rows = (
-    ((node = Symbol("link_G", bus, "_Zg", bus, "_", terminal),
-        element = element, side = 1, terminal = terminal)
-        for bus in generator_buses for terminal in 1:2
-        for element in (Symbol("G", bus), Symbol("Zg", bus)))...,
-    ((node = Symbol("Bus", bus, coordinate), element = Symbol("Zg", bus),
-        side = 2, terminal = terminal)
-        for bus in generator_buses for (terminal, coordinate) in ((1, "d"), (2, "q")))...,
+    (NetworkBuilder.Bus(Symbol("link_G", bus, "_Zg", bus, "_");
+        ports = ((Symbol("G", bus), :ac), (Symbol("Zg", bus), :side1)),
+        domain = ACDQ) for bus in generator_buses)...,
+    (NetworkBuilder.Bus(Symbol("Bus", bus);
+        ports = ((Symbol("Zg", bus), :side2),), domain = ACDQ)
+        for bus in generator_buses)...,
 );
 
-# Branch rows join each line or transformer to its `from` and `to` buses.
+# Branch buses join each line or transformer to its `from` and `to` buses.
 
 branch_rows = (
-    (node = Symbol("Bus", bus, coordinate), element = row.name,
-        side = side, terminal = terminal)
+    NetworkBuilder.Bus(Symbol("Bus", bus); ports = ((row.name, port),), domain = ACDQ)
     for row in (line_data..., transformer_data...)
-    for (side, bus) in ((1, row.from), (2, row.to))
-    for (terminal, coordinate) in ((1, "d"), (2, "q"))
+    for (port, bus) in ((:side1, row.from), (:side2, row.to))
 );
 
-# Load rows connect side 1 to the load's bus and side 2 to the d/q ground nodes.
+# Loads connect `side1` to their bus and `side2` to the d/q ground nets.
 
 load_rows = (
-    (node = node, element = load.name, side = side, terminal = terminal)
-    for load in load_data for (terminal, coordinate) in ((1, "d"), (2, "q"))
-    for (side, node) in ((1, Symbol("Bus", load.bus, coordinate)),
-        (2, Symbol("gnd", uppercase(coordinate))))
+    NetworkBuilder.Bus(bus; ports = ((load.name, port),), domain = ACDQ)
+    for load in load_data
+    for (port, bus) in ((:side1, Symbol("Bus", load.bus)), (:side2, :gnd))
 );
 connections = (statcom_connections..., generator_rows..., branch_rows..., load_rows...);
 
@@ -347,22 +338,24 @@ network = NetworkBuilder.define(elements, connections; options = (;
 #
 # `PowerFlowProblem` with `ACDCPowerFlow` solves the AC/DC operating point.
 # The result retains solver output, input data, node-to-bus and element-to-component
-# mappings, diagnostics and the active elements' solved `Setpoint` values.
+# mappings, diagnostics and the active components' per-port operating values.
 # `result` is the PowerModelsACDC result dictionary. `nodes2bus` maps a node name
 # to its domain and bus index. `vm` gives the magnitude of bus voltage in per unit.
-# `operating_point[:STATCOM]` gives the solved converter powers in MW and Mvar.
+# `operating_point[:STATCOM].ac` gives AC-port values in kV, rad, MW and Mvar.
+# Port powers are positive into the component.
 
 power_flow = compute(PowerFlowProblem(network), ACDCPowerFlow());
 _, bus9_index = power_flow.nodes2bus[:Bus9d];
 bus9_solution = power_flow.result["solution"]["bus"][string(bus9_index)];
 bus9_voltage = (pu = bus9_solution["vm"], kV_LL_RMS = 345 * bus9_solution["vm"]);
 statcom_point = power_flow.operating_point[:STATCOM];
-statcom_power = (MW = statcom_point.Pac, Mvar = statcom_point.Qac);
+statcom_power = (MW = statcom_point.ac.p, Mvar = statcom_point.ac.q);
 (voltage = bus9_voltage, power = statcom_power)
 
 # Bus 9 solves to 0.9674 pu, or 333.76 kV line-to-line RMS. The STATCOM's
-# solved active and reactive powers are -0.161 MW and -225.18 Mvar.
-# The reactive-power setpoint `Q_ST = -0.5` pu gives -134.5 Mvar on the 269 MVA base.
+# AC-port powers are 0.161 MW and 225.18 Mvar, positive into the STATCOM.
+# The control references describe power injected into the AC grid.
+# The reactive-power reference `Q_ST = -0.5` pu gives -134.5 Mvar on the 269 MVA base.
 # Voltage support adds `K * (0.9 - v)`, where `v` is the solved Bus 9 voltage:
 # 5 × (0.9 - 0.9674) ≈ -0.337 pu. The total is about -0.837 pu, or -225.18 Mvar
 # on the same power base.
@@ -466,6 +459,6 @@ nyquist
 #
 # To study another bus, change `nodes` in both impedance problems to its d/q names.
 # Select `eliminated_elements` so one scan retains the grid and the other retains
-# the converter and its DC circuit. Change the converter `setpoint` and control
+# the converter and its DC circuit. Change the converter inputs and control
 # blocks to describe the device, then repeat power flow and linearization.
 # Set `frequency_range` to the frequency interval and resolution of interest.

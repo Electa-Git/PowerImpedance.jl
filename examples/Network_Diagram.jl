@@ -10,13 +10,15 @@ using CairoMakie
 
 # This compact network has two physical AC buses, two DC buses, one converter,
 # parallel AC coordinates on each physical bus, and a grounded DC load.
+# Diagram details identify each connected `port` and list `grounded_ports`
+# for components connected to ground.
 
 elements = (
-    source = ac_source(pins = 3),
-    ac_branch = impedance(z = 0.2 + 0.8im, pins = 3),
+    source = ac_source(),
+    ac_branch = impedance(z = 0.2 + 0.8im, conductors = 3),
     converter = tlc(),
-    dc_branch = impedance(z = 1.0, pins = 1),
-    load = impedance(z = 10.0, pins = 1)
+    dc_branch = impedance(z = 1.0, conductors = 1),
+    load = impedance(z = 10.0, conductors = 1)
 )
 
 connections = (

@@ -27,28 +27,13 @@ const soil_resistivity = 100.0
 const corridor_length = 100e3;
 
 const connections = (
-    (node = :B3d, element = :tl1, side = 2, terminal = 1),
-    (node = :B3d, element = :c1, side = 2, terminal = 1),
-    (node = :B3q, element = :tl1, side = 2, terminal = 2),
-    (node = :B3q, element = :c1, side = 2, terminal = 2),
-    (node = :B2d, element = :g4, side = 1, terminal = 1),
-    (node = :B2d, element = :tl1, side = 1, terminal = 1),
-    (node = :B2q, element = :g4, side = 1, terminal = 2),
-    (node = :B2q, element = :tl1, side = 1, terminal = 2),
-    (node = :B4, element = :ugc, side = 1, terminal = 1),
-    (node = :B4, element = :c1, side = 1, terminal = 1),
-    (node = :BX, element = :ugc, side = 2, terminal = 1),
-    (node = :BX, element = :ohl, side = 1, terminal = 1),
-    (node = :B5, element = :ohl, side = 2, terminal = 1),
-    (node = :B5, element = :c2, side = 1, terminal = 1),
-    (node = :B6d, element = :tl78, side = 1, terminal = 1),
-    (node = :B6d, element = :c2, side = 2, terminal = 1),
-    (node = :B6q, element = :tl78, side = 1, terminal = 2),
-    (node = :B6q, element = :c2, side = 2, terminal = 2),
-    (node = :B7d, element = :g1, side = 1, terminal = 1),
-    (node = :B7d, element = :tl78, side = 2, terminal = 1),
-    (node = :B7q, element = :g1, side = 1, terminal = 2),
-    (node = :B7q, element = :tl78, side = 2, terminal = 2),
+    NetworkBuilder.Bus(:B3; ports = ((:tl1, :side2), (:c1, :ac)), domain = ACDQ),
+    NetworkBuilder.Bus(:B2; ports = ((:g4, :ac), (:tl1, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:B4; ports = ((:ugc, :side1), (:c1, :dc))),
+    NetworkBuilder.Bus(:BX; ports = ((:ugc, :side2), (:ohl, :side1))),
+    NetworkBuilder.Bus(:B5; ports = ((:ohl, :side2), (:c2, :dc))),
+    NetworkBuilder.Bus(:B6; ports = ((:tl78, :side1), (:c2, :ac)), domain = ACDQ),
+    NetworkBuilder.Bus(:B7; ports = ((:g1, :ac), (:tl78, :side2)), domain = ACDQ)
 );
 
 const builder_options = (;
@@ -60,22 +45,11 @@ const builder_options = (;
 # lazy constructors still return singleton Gridspaces; `only` makes the
 # fixed scalar elements explicit.
 const fixed_element_specs = (;
-    g1 = ac_source(Grid;
-        setpoint = Setpoint(Vac = transmission_voltage * sqrt(2),
-        Pac = p_hvdc),
-        P_min = -2000,
-        P_max = 2000,
-        Q_min = -1000,
-        Q_max = 1000,
-        pins = 3,
-        transformation = true
-    ),
+    g1 = ac_source(Grid; v = transmission_voltage * sqrt(2), p = p_hvdc),
     c1 = mmc(Grid;
         elec = ElectricalMMC(
             Sbase = 1000.0, vDC_base = 640.0,
             vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
-        setpoint = Setpoint(Pac = -p_hvdc, Qac = q_c1,
-            Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
         limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
             Q_min = -500.0, Q_max = 500.0),
         sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -100,8 +74,6 @@ const fixed_element_specs = (;
             Lᵣ = 0.0461, Rᵣ = 0.4103,
             Lₐᵣₘ = 30e-3
         ),
-        setpoint = Setpoint(Pac = p_hvdc, Qac = q_c2,
-            Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
         limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
             Q_min = -1000.0, Q_max = 1000.0),
         sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -119,16 +91,7 @@ const fixed_element_specs = (;
         modulation = UncompensatedModulation(timeDelay = 200e-6,
             padeOrderNum = 5, padeOrderDen = 5)
     ),
-    g4 = ac_source(Grid;
-        setpoint = Setpoint(Vac = transmission_voltage * sqrt(2),
-        Pac = p_hvdc),
-        P_min = -2000,
-        P_max = 2000,
-        Q_min = -1000,
-        Q_max = 1000,
-        pins = 3,
-        transformation = true
-    ),
+    g4 = ac_source(Grid; v = transmission_voltage * sqrt(2), p = p_hvdc),
     tl1 = overhead_line(Grid;
         length = 25e3,
         conductors = Conductors(Grid;
@@ -152,9 +115,7 @@ const fixed_element_specs = (;
             Δyᵍ = 7.5,
             dᵍˢᵃᵍ = 10.0
         ),
-        earth_parameters = (1, 1, soil_resistivity),
-        transformation = true
-    ),
+        earth_parameters = (1, 1, soil_resistivity)),
     tl78 = overhead_line(Grid;
         length = 90e3,
         conductors = Conductors(Grid;
@@ -178,12 +139,30 @@ const fixed_element_specs = (;
             Δyᵍ = 7.5,
             dᵍˢᵃᵍ = 10.0
         ),
-        earth_parameters = (1, 1, soil_resistivity),
-        transformation = true
-    )
+        earth_parameters = (1, 1, soil_resistivity))
 );
 
-const fixed_elements = map(only, fixed_element_specs);
+const fixed_elements = let models = map(only, fixed_element_specs)
+    c1 = let model = models.c1
+        b = bases(model)
+        component(model;
+            delta_control = (outer_active = (v_dc_ref = 640.0 / b.v_dc,),
+                outer_reactive = (q_ref = q_c1 / b.S,)),
+            powerflow = (; p_ac = -p_hvdc / b.S,
+                v_ac = (transmission_voltage * sqrt(2)) / b.v_ac,
+                p_dc = 0.0 / b.S))
+    end
+    c2 = let model = models.c2
+        b = bases(model)
+        component(model;
+            delta_control = (outer_active = (p_ref = p_hvdc / b.S,),
+                outer_reactive = (q_ref = q_c2 / b.S,)),
+            powerflow = (; v_dc = 640.0 / b.v_dc,
+                v_ac = (transmission_voltage * sqrt(2)) / b.v_ac,
+                p_dc = 0.0 / b.S))
+    end
+    merge(models, (; c1, c2))
+end;
 
 const corridor_conductors = only(Conductors(Grid;
     organization = :flat,
@@ -264,9 +243,7 @@ transition_builders = Gridspace{NetworkState}(
                 length = lengths.ohl,
                 conductors = corridor_conductors,
                 groundwires = corridor_groundwires,
-                earth_parameters = (1, 1, soil_resistivity),
-                transformation = true
-            )),
+                earth_parameters = (1, 1, soil_resistivity))),
             ugc = only(cable(Grid;
                 length = lengths.ugc,
                 positions = [
@@ -279,9 +256,7 @@ transition_builders = Gridspace{NetworkState}(
                 I2 = Insulator(rᵢ = r3, rₒ = r4, ϵᵣ = 2.3, μᵣ = 1.0),
                 C3 = Conductor(rᵢ = r4, rₒ = r5, ρ = 2.826e-8, μᵣ = 1.0),
                 I3 = Insulator(rᵢ = r5, rₒ = r6, ϵᵣ = 2.3, μᵣ = 1.0),
-                earth_parameters = (1, 1, soil_resistivity),
-                transformation = true
-            ))
+                earth_parameters = (1, 1, soil_resistivity)))
         )
         define(merge(deepcopy(fixed_elements), affected_elements), connections;
             options = builder_options)
@@ -295,27 +270,28 @@ frequency_points = 400 #src
 
 transition_problems = PowerImpedanceProblem(
     transition_builders;
-    nodes=[:B5],
-    eliminated_elements=[:c2],
-    frequency_range=(100.0, 5e3, frequency_points),
+    nodes = [:B5],
+    eliminated_elements = [:c2],
+    frequency_range = (100.0, 5e3, frequency_points)
 );
 
 transition = compute(
     ParametricProblem(transition_problems),
-    Combinatorial(NodalImpedance()),
+    Combinatorial(NodalImpedance())
 );
 
 transition_labels = ["UGC = $(round(Int, 100share))%" for share in characteristic_shares];
-transition_groups = [Symbol("ugc_", round(Int, 100share)) for share in characteristic_shares];
+transition_groups = [Symbol("ugc_", round(Int, 100share))
+                     for share in characteristic_shares];
 transition_plot = only(PowerImpedance.plot(
     transition;
-    entries=(:B5, :B5),
-    labels=transition_labels,
-    series_groups=transition_groups,
-    title="P2P OHL/UGC transition at B5",
-    figure_size=(1000, 620),
-    display_plot=false,
-    controls=false,
+    entries = (:B5, :B5),
+    labels = transition_labels,
+    series_groups = transition_groups,
+    title = "P2P OHL/UGC transition at B5",
+    figure_size = (1000, 620),
+    display_plot = false,
+    controls = false
 ));
 transition_plot.figure
 
@@ -351,8 +327,7 @@ cable_uq_builders = Gridspace{NetworkState}(
                 length = lengths.ohl,
                 conductors = corridor_conductors,
                 groundwires = corridor_groundwires,
-                earth_parameters = (1, 1, soil_resistivity),
-                transformation = true
+                earth_parameters = (1, 1, soil_resistivity)
             )),
             ugc = only(cable(Grid;
                 length = lengths.ugc,
@@ -366,8 +341,7 @@ cable_uq_builders = Gridspace{NetworkState}(
                 I2 = Insulator(rᵢ = r3, rₒ = r4, ϵᵣ = 2.3, μᵣ = 1.0),
                 C3 = Conductor(rᵢ = r4, rₒ = r5, ρ = 2.826e-8, μᵣ = 1.0),
                 I3 = Insulator(rᵢ = r5, rₒ = r6, ϵᵣ = 2.3, μᵣ = 1.0),
-                earth_parameters = (1, 1, soil_resistivity),
-                transformation = true
+                earth_parameters = (1, 1, soil_resistivity)
             ))
         )
         define(merge(deepcopy(fixed_elements), affected_elements), connections;
@@ -381,39 +355,37 @@ cable_trials = 200 #src
 #md cable_trials = 4
 cable_uq_problems = PowerImpedanceProblem(
     cable_uq_builders;
-    nodes=[:B5],
-    eliminated_elements=[:c2],
-    frequency_range=(100.0, 5e3, frequency_points),
+    nodes = [:B5],
+    eliminated_elements = [:c2],
+    frequency_range = (100.0, 5e3, frequency_points)
 );
 
 cable_uq = compute(
     ParametricProblem(cable_uq_problems),
     MonteCarlo(
         NodalImpedance();
-        trials=cable_trials,
-        distribution=:uniform,
-        seed=2027,
-        return_samples=true,
-    ),
+        trials = cable_trials,
+        distribution = :uniform,
+        seed = 2027,
+        return_samples = true
+    )
 );
 
-cable_plot_labels = reduce(vcat, [
-    fill("UGC = $(round(Int, 100share))%, ±10% geometry", length(group))
-    for (share, group) in zip(characteristic_shares, cable_uq.details.plot_data.values)
-]);
-cable_plot_groups = reduce(vcat, [
-    fill(Symbol("ugc_", round(Int, 100share)), length(group))
-    for (share, group) in zip(characteristic_shares, cable_uq.details.plot_data.values)
-]);
+cable_plot_labels = reduce(vcat,
+    [fill("UGC = $(round(Int, 100share))%, ±10% geometry", length(group))
+     for (share, group) in zip(characteristic_shares, cable_uq.details.plot_data.values)]);
+cable_plot_groups = reduce(vcat,
+    [fill(Symbol("ugc_", round(Int, 100share)), length(group))
+     for (share, group) in zip(characteristic_shares, cable_uq.details.plot_data.values)]);
 cable_plot = only(PowerImpedance.plot(
     cable_uq;
-    entries=(:B5, :B5),
-    labels=cable_plot_labels,
-    series_groups=cable_plot_groups,
-    title="P2P cable-geometry uncertainty at B5",
-    figure_size=(1000, 680),
-    display_plot=false,
-    controls=false,
+    entries = (:B5, :B5),
+    labels = cable_plot_labels,
+    series_groups = cable_plot_groups,
+    title = "P2P cable-geometry uncertainty at B5",
+    figure_size = (1000, 680),
+    display_plot = false,
+    controls = false
 ));
 cable_plot.figure
 
@@ -422,20 +394,20 @@ cable_plot.figure
 # suitable for automated screening.
 cable_geometry_kpis = map(
     characteristic_shares,
-    cable_uq.details.plot_data.values,
+    cable_uq.details.plot_data.values
 ) do share, responses
     frequencies_hz = real.(first(responses).frequencies) ./ (2π)
     curves_db = hcat((20 .* log10.(abs.(vec(response.response[1, 1, :])))
-                      for response in responses)...)
-    peaks_db = vec(maximum(curves_db; dims=1))
+    for response in responses)...)
+    peaks_db = vec(maximum(curves_db; dims = 1))
     peak_frequencies = [frequencies_hz[argmax(view(curves_db, :, trial))]
                         for trial in axes(curves_db, 2)]
     return (;
-        ugc_share=share,
-        peak_db_median=median(peaks_db),
-        peak_db_q05=quantile(peaks_db, 0.05),
-        peak_db_q95=quantile(peaks_db, 0.95),
-        peak_frequency_median=median(peak_frequencies),
+        ugc_share = share,
+        peak_db_median = median(peaks_db),
+        peak_db_q05 = quantile(peaks_db, 0.05),
+        peak_db_q95 = quantile(peaks_db, 0.95),
+        peak_frequency_median = median(peak_frequencies)
     )
 end;
 
@@ -460,67 +432,86 @@ converter_uq_elements = merge(
         tl78 = fixed_element_specs.tl78
     ),
     (;
-        c1 = mmc(Grid;
-            elec = ElectricalMMC(Grid;
-                Sbase = 1000.0, vDC_base = 640.0,
-                vACbase_LL_RMS = 380.0, turnsRatio = 1.0,
-                Lₐᵣₘ = Grid(50e-3, 5 / sqrt(3)),
-                Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
-                Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))
-            ),
-            setpoint = Setpoint(Pac = -p_hvdc, Qac = q_c1,
-                Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
-            limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
-                Q_min = -500.0, Q_max = 500.0),
-            sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
-            delta_control = ΔdqControlGFL(
-                outer_active = OuterActiveVdcControl(
-                    pi_ctrl = PIControl(Kp = 6.0, Ki = 15.0)),
-                outer_reactive = OuterReactiveQControl(
-                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
-                occ = InnerCurrentPIControl(
-                    pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
-                    activate_ω_c_multiplication = false)),
-            sigma_control = ΣdqzControlTEC(
-                ccsc = CirculatingCurrentSuppressionControl(
-                    PIControl(Kp = 0.1048, Ki = 48.1914))),
-            modulation = UncompensatedModulation(timeDelay = 200e-6,
-                padeOrderNum = 5, padeOrderDen = 5)
+        c1 = Gridspace{PowerImpedance.MMC}(
+            model -> begin
+                b = bases(model)
+                component(model;
+                    delta_control = (outer_active = (v_dc_ref = 640.0 / b.v_dc,),
+                        outer_reactive = (q_ref = q_c1 / b.S,)),
+                    powerflow = (; p_ac = -p_hvdc / b.S,
+                        v_ac = (transmission_voltage * sqrt(2)) / b.v_ac,
+                        p_dc = 0.0 / b.S))
+            end,
+            (mmc(Grid;
+                elec = ElectricalMMC(Grid;
+                    Sbase = 1000.0, vDC_base = 640.0,
+                    vACbase_LL_RMS = 380.0, turnsRatio = 1.0,
+                    Lₐᵣₘ = Grid(50e-3, 5 / sqrt(3)),
+                    Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
+                    Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))
+                ),
+                limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
+                    Q_min = -500.0, Q_max = 500.0),
+                sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+                delta_control = ΔdqControlGFL(
+                    outer_active = OuterActiveVdcControl(
+                        pi_ctrl = PIControl(Kp = 6.0, Ki = 15.0)),
+                    outer_reactive = OuterReactiveQControl(
+                        pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                    occ = InnerCurrentPIControl(
+                        pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                        activate_ω_c_multiplication = false)),
+                sigma_control = ΣdqzControlTEC(
+                    ccsc = CirculatingCurrentSuppressionControl(
+                        PIControl(Kp = 0.1048, Ki = 48.1914))),
+                modulation = UncompensatedModulation(timeDelay = 200e-6,
+                    padeOrderNum = 5, padeOrderDen = 5)
+            ),),
+            (:model,)
         ),
-        c2 = mmc(Grid;
-            elec = ElectricalMMC(Grid;
-                Sbase = 1000.0, vDC_base = 640.0,
-                vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
-                Lᵣ = 0.0461, Rᵣ = 0.4103,
-                Lₐᵣₘ = Grid(30e-3, 5 / sqrt(3)),
-                Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
-                Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))
-            ),
-            setpoint = Setpoint(Pac = p_hvdc, Qac = q_c2,
-                Vac = transmission_voltage * sqrt(2), Vdc = 640.0, θac = 0.0, Pdc = 0.0),
-            limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
-                Q_min = -1000.0, Q_max = 1000.0),
-            sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
-            delta_control = ΔdqControlGFL(
-                outer_active = OuterActivePowerControl(
-                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
-                outer_reactive = OuterReactiveQControl(
-                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
-                occ = InnerCurrentPIControl(
-                    pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
-                    activate_ω_c_multiplication = false)),
-            sigma_control = ΣdqzControlTEC(
-                ccsc = CirculatingCurrentSuppressionControl(
-                    PIControl(Kp = 0.1048, Ki = 48.1914))),
-            modulation = UncompensatedModulation(timeDelay = 200e-6,
-                padeOrderNum = 5, padeOrderDen = 5)
+        c2 = Gridspace{PowerImpedance.MMC}(
+            model -> begin
+                b = bases(model)
+                component(model;
+                    delta_control = (outer_active = (p_ref = p_hvdc / b.S,),
+                        outer_reactive = (q_ref = q_c2 / b.S,)),
+                    powerflow = (; v_dc = 640.0 / b.v_dc,
+                        v_ac = (transmission_voltage * sqrt(2)) / b.v_ac,
+                        p_dc = 0.0 / b.S))
+            end,
+            (mmc(Grid;
+                elec = ElectricalMMC(Grid;
+                    Sbase = 1000.0, vDC_base = 640.0,
+                    vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
+                    Lᵣ = 0.0461, Rᵣ = 0.4103,
+                    Lₐᵣₘ = Grid(30e-3, 5 / sqrt(3)),
+                    Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
+                    Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))
+                ),
+                limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
+                    Q_min = -1000.0, Q_max = 1000.0),
+                sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+                delta_control = ΔdqControlGFL(
+                    outer_active = OuterActivePowerControl(
+                        pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                    outer_reactive = OuterReactiveQControl(
+                        pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                    occ = InnerCurrentPIControl(
+                        pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                        activate_ω_c_multiplication = false)),
+                sigma_control = ΣdqzControlTEC(
+                    ccsc = CirculatingCurrentSuppressionControl(
+                        PIControl(Kp = 0.1048, Ki = 48.1914))),
+                modulation = UncompensatedModulation(timeDelay = 200e-6,
+                    padeOrderNum = 5, padeOrderDen = 5)
+            ),),
+            (:model,)
         ),
         ohl = overhead_line(Grid;
             length = half_corridor.ohl,
             conductors = corridor_conductors,
             groundwires = corridor_groundwires,
-            earth_parameters = (1, 1, soil_resistivity),
-            transformation = true
+            earth_parameters = (1, 1, soil_resistivity)
         ),
         ugc = cable(Grid;
             length = half_corridor.ugc,
@@ -531,8 +522,7 @@ converter_uq_elements = merge(
             I2 = Insulator(rᵢ = 0.06336, rₒ = 0.06636, ϵᵣ = 2.3, μᵣ = 1.0),
             C3 = Conductor(rᵢ = 0.06636, rₒ = 0.06651, ρ = 2.826e-8, μᵣ = 1.0),
             I3 = Insulator(rᵢ = 0.06651, rₒ = 0.07256, ϵᵣ = 2.3, μᵣ = 1.0),
-            earth_parameters = (1, 1, soil_resistivity),
-            transformation = true
+            earth_parameters = (1, 1, soil_resistivity)
         )
     )
 );
@@ -544,19 +534,19 @@ converter_trials = 100 #src
 #md converter_trials = 2
 converter_uq_problems = PowerImpedanceProblem(
     converter_uq_builders;
-    nodes=[:B3d, :B5, :B6d],
-    frequency_range=(100.0, 5e3, frequency_points),
+    nodes = [:B3d, :B5, :B6d],
+    frequency_range = (100.0, 5e3, frequency_points)
 );
 
 converter_uq = compute(
     ParametricProblem(converter_uq_problems),
     MonteCarlo(
         NodalImpedance();
-        trials=converter_trials,
-        distribution=:uniform,
-        seed=2028,
-        return_samples=true,
-    ),
+        trials = converter_trials,
+        distribution = :uniform,
+        seed = 2028,
+        return_samples = true
+    )
 );
 
 # Peak impedance and its frequency are direct resonance-screening KPIs. They
@@ -567,7 +557,7 @@ converter_frequency = real.(first(converter_responses).frequencies) ./ (2π)
 converter_kpis = map(enumerate((:B3d, :B5, :B6d))) do (net_index, net)
     samples_db = hcat((
         20 .* log10.(abs.(vec(response.response[net_index, net_index, :])))
-        for response in converter_responses
+    for response in converter_responses
     )...)
     peak_db = vec(maximum(samples_db; dims = 1))
     peak_frequency = [converter_frequency[argmax(view(samples_db, :, trial))]
@@ -585,14 +575,14 @@ end;
 
 converter_plot = only(PowerImpedance.plot(
     converter_uq;
-    entries=[(:B3d, :B3d), (:B5, :B5), (:B6d, :B6d)],
-    grouping=:panels,
-    labels=fill("bounded converter parameters", length(converter_responses)),
-    series_groups=fill(:converter_uncertainty, length(converter_responses)),
-    title="P2P converter-parameter uncertainty",
-    figure_size=(1000, 1050),
-    display_plot=false,
-    controls=false,
+    entries = [(:B3d, :B3d), (:B5, :B5), (:B6d, :B6d)],
+    grouping = :panels,
+    labels = fill("bounded converter parameters", length(converter_responses)),
+    series_groups = fill(:converter_uncertainty, length(converter_responses)),
+    title = "P2P converter-parameter uncertainty",
+    figure_size = (1000, 1050),
+    display_plot = false,
+    controls = false
 ));
 converter_plot.figure
 
