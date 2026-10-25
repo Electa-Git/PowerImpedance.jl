@@ -77,7 +77,7 @@ The public repository needs:
   installed for this repository
 - GitHub Actions enabled, including permission for the registration workflow's
   `contents: write`
-- the existing `DOCUMENTER_KEY` Actions secret: a base64-encoded private SSH
+- the existing `DOCUMENTER_KEY` Actions secret containing a base64-encoded private SSH
   deploy key with write access to this repository
 - GitHub Pages configured to serve the `gh-pages` branch at its root
 
@@ -321,8 +321,9 @@ publication and registration.
 
 Do not repeatedly move it. Determine whether General already accepted that
 version. If registration is still pending and a premature tag is blocking it,
-an authorized administrator must remove the premature public tag, after
-checking the exact repository and target, then leave tag creation to TagBot.
+an authorized administrator must first check the exact repository and target.
+The administrator must then remove the premature public tag and leave tag
+creation to TagBot.
 GitLab and GitHub tags require separate deletion.
 
 Do not delete or move a correctly registered version tag.

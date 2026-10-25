@@ -28,8 +28,8 @@ edge admittances support generalized Nyquist, Bode, passivity, small-gain,
 stability-margin, unstable-frequency, and eigenvalue analyses.
 
 Gridspace extends the same physical constructors to deterministic parameter
-sweeps and uncertainty quantification. It preserves the ordinary scalar API,
-samples each uncertain network into ordinary numeric components, and performs
+sweeps and uncertainty quantification.
+Gridspace samples each uncertain network into ordinary numeric components and performs
 the required power flow and linearization for every materialized configuration.
 
 ## Installation

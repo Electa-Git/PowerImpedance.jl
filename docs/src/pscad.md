@@ -365,7 +365,7 @@ After startup, the selectors use the measured voltage directly.
 
 Residual modulation delays are rounded to the nearest integration step, with
 half-step ties upward. For a positive model delay, the requested residual is
-`tau_model - dt`. The realized total is `dt + rounded_residual`. A warning names
+`tau_model - dt`. The realized total is `dt + rounded_residual`. A warning identifies
 the converter and records the model delay, step, requested and realized residuals and
 error, bounded by `dt/2`. Carrier corrections and initialization use the realized
 residual. Positive delays below one step remain rejected. A zero model delay
@@ -402,9 +402,8 @@ developer mapping lists the saved source and breaker fields, pins and release co
   conductor counts other than two are unsupported.
 - Untransposed AC lines can produce negative-sequence unbalance and ±100 Hz image coupling,
   invalidating fixed-frame dq comparisons. Compare in the phase domain. The option
-  `transposition = :ideal` maps to `Transp = 1`, but PSCAD 5.1 runs with this flag exit
-  abnormally at termination in the validation measurement projects, so it is not a working
-  PSCAD route.
+  `transposition = :ideal` maps to `Transp = 1`. PSCAD 5.1 runs with this flag exit
+  abnormally at termination in the validation measurement projects.
 - An unstable Julia operating point diverges in PSCAD. The P2P example reproduces the predicted
   mode near 3.48 kHz, within 2 % in frequency. Its growth rate cannot be fitted from a fresh start
   because AC line energisation makes the record nonlinear. See the

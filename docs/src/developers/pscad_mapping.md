@@ -308,8 +308,8 @@ Synchronous-machine terminal Y is converted from pu by `Sbase/VLL^2`.
 
 ## Modules, canvases and layout
 
-Main and each module connect ports through named nodes. A connecting wire is
-straight, has two vertices, and joins one known port to a label or ground.
+Main and each module connect ports through named nodes. Each connecting wire is
+a straight segment with two vertices. It joins one known port to a label or ground.
 Ports cannot coincide. Stubs cannot share endpoints or pass through another
 port or label. Every electrical port, signal input and label requires a stub.
 Signal names are case-insensitive and require one same-canvas writer. Imports
@@ -530,7 +530,7 @@ parameters. `R2` is `r_r`, before the inverse-Γ conversion.
 The stator sums include `rt` and `lt` on the same machine base.
 
 Julia power flow uses `r_s+rt` and `l_sl+lt` for the stator series impedance.
-The state equations do not use `p_f`. Speed and torque have no extra pole factor.
+The state equations omit `p_f`. Speed and torque have no extra pole factor.
 
 Power flow scales `T_0`, the initial air-gap power and the power limits by the
 ratio of the machine power base to the network power base.
@@ -805,8 +805,8 @@ snapshots. Fresh measured q voltage drives the PLL rate.
 
 SIGMA and compensated MOD share six initialized snapshots of applied physical
 capacitor states. Each snapshot reads the physical integrator output directly.
-Physical states advance in DSDYN and remain fixed through the solve and DSOUT,
-so the next snapshot matches acquired arm currents. Delaying a DSOUT copy
+Physical states advance in DSDYN and remain fixed through the solve and DSOUT.
+The next snapshot then matches acquired arm currents. Delaying a DSOUT copy
 again would add an extra step. Source products and probes use advancing states.
 
 Kept native builds verify one inherent measurement-to-source step for TLC,
@@ -855,8 +855,9 @@ by an unsettled voltage.
 `emitters/dc_precharge.jl` finds connected DC buses through DC terminals.
 DC islands are defined independently of ground and converter AC terminals. An island receives
 pre-charge when it has no DC `Source` and has a TLC or grid-following MMC with
-`OuterActiveVdcControl`. PQ-only and GFM-only islands receive none. Every bus
-requires a positive solved pole voltage. Pre-charge planning uses the supplied power-flow result.
+`OuterActiveVdcControl`. PQ-only and GFM-only islands receive none. Pre-charge
+requires a positive solved pole voltage at each bus. Pre-charge planning uses
+the supplied power-flow result.
 
 Each bus receives temporary ideal sources at its positive and negative solved
 pole-to-ground voltage behind `master:breaker1`. Sources have zero ramp.

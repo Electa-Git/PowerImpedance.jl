@@ -424,8 +424,8 @@ nyquist_outcome = (counts = stability.output.encirclements,
 # Both axes use impedance magnitude in ohms against frequency in Hz.
 # The q-axis magnitudes cross six times between 0.95 and 1.34 kHz around the grid
 # resonance, while the d-axis curves do not cross.
-# At each intersection, the ratio of the diagonal entries has unit magnitude,
-# so their phase difference indicates the interaction margin on that axis.
+# At each intersection, the ratio of the diagonal entries has unit magnitude.
+# Their phase difference then indicates the interaction margin on that axis.
 # The generalized Nyquist calculation uses the full 2 × 2 matrices.
 
 comparison = Figure(size = (850, 600));

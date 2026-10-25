@@ -224,7 +224,7 @@ The returned handle exposes `figure`, `axis`, `plots`, `model`, and resolved
 key, or a component key. `details` is another `Observable` with structured bus
 or component information suitable for an external side panel. Component details include
 `grounded_ports` and `terminal_rows`. Each terminal row uses `port` for its
-named port. The `operating_point` entry contains per-port values. With an
+port name. The `operating_point` entry contains per-port values. With an
 interactive backend, clicking a bus or component updates both observables.
 
 The same renderer is available as the `NetworkDiagramDefinition` PlotBuilder

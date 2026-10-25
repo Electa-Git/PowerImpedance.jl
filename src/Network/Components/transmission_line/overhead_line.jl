@@ -19,7 +19,7 @@ $(TYPEDFIELDS)
 	Δyᵇᶜ::Union{Int, Float64} = 0     # vertical offset between the bundles   [m]
 	"Horizontal bundle offset `\\[m\\]`."
 	Δxᵇᶜ::Union{Int, Float64} = 0     # horizontal offset between the lowest bundles  [m]
-	"Secondary horizontal offset used by offset/concentric layouts `\\[m\\]`."
+	"Secondary horizontal offset used by offset and concentric layouts `\\[m\\]`."
 	Δ̃xᵇᶜ::Union{Int, Float64} = 0     # horizontal offset in group of bundles    [m]
 	"Maximum conductor sag `\\[m\\]`."
 	dˢᵃᵍ::Union{Int, Float64} = 0     # sag offset    [m]

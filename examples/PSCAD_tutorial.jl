@@ -162,9 +162,9 @@ model = export_pscad(state;
 # through an interactive scheduled task. The runner leaves an attached instance
 # open. An instance started for the run closes afterwards.
 #
-# `RemoteConfig` reads the file. `identify` starts a temporary PSCAD instance,
-# reads the installation and compiler information, and closes it without
-# loading a project. The dictionary includes `version` and `fortran_version`.
+# `RemoteConfig` reads the file. `identify` reads the installation and compiler
+# information from a temporary PSCAD instance. It starts and closes that instance
+# without loading a project. The dictionary includes `version` and `fortran_version`.
 
 remote = RemoteConfig("station.toml")
 station = PowerImpedance.PSCAD.identify(remote)
