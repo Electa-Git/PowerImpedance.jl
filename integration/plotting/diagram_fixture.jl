@@ -5,13 +5,13 @@ const DiagramExtension = Base.get_extension(
 
 function diagram_hybrid_network()
     elements = (
-        ac_grid = ac_source(pins = 3),
-        ac_line = impedance(z = 0.2 + 0.8im, pins = 3),
-        ac_parallel = impedance(z = 0.3 + 0.9im, pins = 3),
+        ac_grid = ac_source(),
+        ac_line = impedance(z = 0.2 + 0.8im, conductors = 3),
+        ac_parallel = impedance(z = 0.3 + 0.9im, conductors = 3),
         converter = tlc(),
-        dc_line = impedance(z = 1.0, pins = 1),
-        dc_load = impedance(z = 10.0, pins = 1),
-        ac_shunt = impedance(z = 20.0, pins = 3),
+        dc_line = impedance(z = 1.0, conductors = 1),
+        dc_load = impedance(z = 10.0, conductors = 1),
+        ac_shunt = impedance(z = 20.0, conductors = 3),
         machine = synchronousmachine()
     )
     connections = (

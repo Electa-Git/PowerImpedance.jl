@@ -240,9 +240,9 @@ end
 
 @testset "GraphMakie diagram transformer and omission roles" begin
     elements = (
-        source = ac_source(pins = 3),
+        source = ac_source(),
         transformer = transformer(
-            pins = 3,
+            conductors = 3,
             n = 1.0,
             Rₚ = 0.1,
             Lₚ = 1.0e-3,
@@ -259,7 +259,7 @@ end
     )
     network = PowerImpedance.NetworkBuilder.define(elements, connections)
     isolated = PowerImpedance.NetworkBuilder.define(
-        (; isolated = impedance(z = 2.0, pins = 1)),
+        (; isolated = impedance(z = 2.0, conductors = 1)),
         (PowerImpedance.NetworkBuilder.Bus(:isolated; ports = ((:isolated, :side1),)),)
     ).elements.isolated
     disconnected = PowerImpedance.NetworkBuilder.NetworkState(
