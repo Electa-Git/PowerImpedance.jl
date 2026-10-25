@@ -117,6 +117,15 @@
     f[3] #hide
     f[4] #hide
   want: ""
+- name: Literate Markdown-only code
+  format: jl
+  view: Julia
+  input: |
+    #md contract = 1
+    # provenance
+  contains: '2:3:Project.BannedTerms:'
+  absent:
+    - '1:'
 - name: GetDP comments
   rule: ../styles/Project/BannedTerms.yml
   format: pro

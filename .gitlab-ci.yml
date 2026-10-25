@@ -405,8 +405,12 @@ prose_check:
         .gitlab/prose/styles/PI .gitlab/prose/styles/Project .gitlab/prose/fixtures \
         | tee prose-reports/rules.log
       mapfile -t files < prose-reports/vale-files.txt
+      lint_status=0
       vale --no-global --config=.gitlab/prose/vale.ini --no-color --output=JSON \
-        "${files[@]}" > prose-reports/vale.json
+        "${files[@]}" > prose-reports/vale.json || lint_status=$?
+      vale --no-global --config=.gitlab/prose/vale.ini --no-color --output=line \
+        "${files[@]}" | tee prose-reports/vale.log || lint_status=$?
+      exit "$lint_status"
   artifacts:
     when: always
     expire_in: 30 days

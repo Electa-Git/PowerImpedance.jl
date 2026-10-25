@@ -1,0 +1,13 @@
+extends: ai-tells.VerbTricolon
+# These technical enumerations contain nouns or two arm expressions. The
+# inherited patterns read their first words as three parallel verbs in HTML.
+exceptions:
+  - ': AC sources, synchronous machines, converter AC ports'
+  - 'requested and realized residual, realized total and signed error'
+  - ': each upper arm uses \*+, each lower arm \*+, followed by the existing exact \*+ primitive'
+  - 'contains its AC and DC terminals, series reactor, loss model'
+  - 'can represent one conductor, a polyphase AC terminal, a multipole DC terminal'
+  - 'there are \*+ equations, one for each node in the network, expressing'
+  - 'Earth relative permeability'
+  - 'Minimum frequency, maximum frequency, and point count in hertz'
+  - 'to a balanced branch tap, series admittance, and shunt admittance'

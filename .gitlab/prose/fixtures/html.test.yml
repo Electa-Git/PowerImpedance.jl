@@ -1,0 +1,75 @@
+- name: Julia default expressions remain code in rendered fields
+  format: html
+  input: |
+    <p><code>limits::Limits</code>: provenance. Default: Limits()</p>
+  contains: Project.BannedTerms
+  absent:
+    - Project.ColonUsage
+- name: Julia default expressions end at the field paragraph
+  format: html
+  input: |
+    <p><code>powerflow::NamedTuple</code>: power-flow seeds. Default: map((input-&gt;begin #= /home/builder/src/MMC.jl:63 =# input.default end), <em>CONVERTER</em>INPUTS)</p>
+    <p>Note: Contract.</p>
+  contains: '2:'
+  absent:
+    - '1:'
+- name: genuine verb tricolon in HTML
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p>The runner samples each network, solves its power flow, and plots the response.</p>'
+  contains: Project.VerbTricolon
+- name: genuine verb tricolon after a colon
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p>The runner has three stages: sample the network, solve its power flow, and plot the response.</p>'
+  contains: Project.VerbTricolon
+- name: noun enumeration leaves a later verb tricolon active
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p><code>earth_parameters</code>: Earth relative permeability [dimensionless], relative permittivity [dimensionless], and resistivity [Ω·m]. The runner samples each network, solves its power flow, and plots the response.</p>'
+  contains: Project.VerbTricolon
+- name: current-probe component enumeration
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p>The polarity map reverses meters that formerly measured outward: AC sources, synchronous machines, converter AC ports, and the second port of nongrounded passive branches.</p>'
+  want: ''
+- name: residual-delay quantity enumeration
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p>Fractional residuals warn with converter name, model delay, step, requested and realized residual, realized total and signed error, bounded by <code>dt/2</code>.</p>'
+  want: ''
+- name: compensated arm expressions
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p>The standard EMT compensated realization uses physical arm-capacitor division: each upper arm uses <code>(vΣref-vΔref)/v_Ctot,u</code>, each lower arm <code>(vΣref+vΔref)/v_Ctot,l</code>, followed by the existing exact <code>tdelay</code> primitive.</p>'
+  want: ''
+- name: converter quantity enumeration
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p>A power-flow converter contains its AC and DC terminals, series reactor, loss model, and control mode.</p>'
+  want: ''
+- name: multiport terminal enumeration
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p>A port can represent one conductor, a polyphase AC terminal, a multipole DC terminal, or the terminals of a larger subnetwork.</p>'
+  want: ''
+- name: node-balance equation description
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p><strong>Node-balance equations:</strong> there are <code>n_n</code> equations, one for each node in the network, expressing the sum of currents entering and leaving that node.</p>'
+  want: ''
+- name: earth-parameter enumeration
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p><code>earth_parameters</code>: Earth relative permeability [dimensionless], relative permittivity [dimensionless], and resistivity [Ω·m].</p>'
+  want: ''
+- name: frequency-range enumeration
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p><code>frequency_range</code>: Minimum frequency, maximum frequency, and point count in hertz.</p>'
+  want: ''
+- name: transformer branch quantity enumeration
+  rule: ../styles/Project/VerbTricolon.yml
+  format: html
+  input: '<p>For power flow, the detailed ABCD model is converted to a balanced branch tap, series admittance, and shunt admittance.</p>'
+  want: ''
