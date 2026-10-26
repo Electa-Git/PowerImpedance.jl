@@ -15,7 +15,7 @@ Gridspace construction, study definitions, and result containers belong to
 Component ports are declared by `Port`, `ACDQ`, `ACABC`, `DC_CM` and
 `electricalconnections`. Configurable inputs use `Input`, `inputs`, `inputvalues`,
 `withinputs` and `component`. Bases and limits are available through `BaseValues`,
-`bases` and `limits`. Control references and converter or machine power-flow seeds use
+`bases` and `limits`. Control references and converter or machine power-flow setpoints use
 the model bases. Source and scan-based MMC inputs use physical units.
 
 Terminal operating points use `ACPortValues` and `DCPortValues`, keyed by port name

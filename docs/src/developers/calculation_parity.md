@@ -54,7 +54,7 @@ The comparison accounts for newly solved power flow in the small AC circuit
 (`small_ac`), passive overhead line (`passive_ohl`), YY and Dyn11 transformers
 (`transformer_yy`, `transformer_dy`), DC circuit (`dc`) and DC cable (`dc_cable`).
 These cases formerly recorded power flow as unnecessary. Their current solutions
-require local solves. Additional zero generator-power seeds are checked as
+require local solves. Additional zero initial values for generator power are checked as
 zero. Stored droop state and output arrays for the removed keyword construction are
 retained in the reference but omitted from live comparison. The listed arrays
 are checked for presence in the reference and absence from live data.

@@ -221,7 +221,7 @@ during linearization.
 
 Without a complete operating point, the AVR uses `avr.v_ref` and turbine
 torque is `Tm0 = Pac/S_base`. Initial states use synchronous-speed and governor
-seeds without phasor initialization. A complete setpoint supplied to `pftoinputs`
+initial values without phasor initialization. A complete setpoint supplied to `pftoinputs`
 gives the same reference conversion as a solver-provided point. Construction
 alone leaves references
 unchanged and requires a separate power-flow solve.
@@ -244,7 +244,7 @@ largest differences at low frequencies.
     Vᵃᶜ_base::Float64
     "Power, voltage and angular-frequency bases of the model equations."
     bases::BaseValues
-    "Power-flow seeds on machine bases \\[dimensionless\\]."
+    "Power-flow setpoints on machine bases \\[dimensionless\\]."
     powerflow::NamedTuple
     "Retained terminal values, converged state and linearization matrices."
     cache::LinearizationCache = LinearizationCache()
@@ -765,7 +765,7 @@ Construct a synchronous-machine model from electrical and mechanical subsystems.
 - `mech`: Mechanical subsystem. Default: `MechanicalSM()`.
 - `avr`: Automatic voltage regulator. Default: `AVRSM()`.
 - `gov`: Governor subsystem. Default: `GovernorSM()`.
-- `powerflow`: Partial power-flow seeds on machine bases \\[dimensionless\\].
+- `powerflow`: Partial power-flow setpoints on machine bases \\[dimensionless\\].
   Default: `(;)`.
 
 # Keywords

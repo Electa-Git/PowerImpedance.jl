@@ -115,7 +115,7 @@ configured = component(source; v = 390sqrt(2/3),
 (inputvalues(source).v, inputvalues(configured).v, limits(configured).P_max)
 ```
 
-Converter control references and power-flow seeds are per unit on `bases(model)`.
+Converter control references and power-flow setpoints are per unit on `bases(model)`.
 `BaseValues` contains `S` in MVA, `v_ac` in phase-peak kV, `v_dc` in pole-to-pole
 kV, and `omega` in rad/s. AC-only machines have `v_dc = nothing`. Sources,
 passives and the scan-based MMC return `nothing` from `bases`.

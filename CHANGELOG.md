@@ -45,15 +45,29 @@
   devices, `dc` for DC sources, and `(ac, dc)` for converters. Terminal labels
   are symbols. AC coordinates follow the bus: `ACABC` ports on an `ACDQ` bus
   are transformed to dq. A three-phase `:ΔY` transformer requires an `ACDQ` bus.
-- **Breaking:** configure references and power-flow seeds with `component` or
-  `withinputs`. Control references and converter or machine seeds are per unit
+- **Breaking:** configure references and power-flow setpoints with `component` or
+  `withinputs`. Control references and converter or machine setpoints are per unit
   on the model's `BaseValues`. Source inputs use physical units.
+- **Breaking:** move base keywords from `ElectricalMMC`, `ElectricalTLC`,
+  `ElectricalSM` and `ElectricalIM` to `mmc`, `tlc`, `synchronousmachine` and
+  `inductionmachine`. Keep their names, units and defaults. Return the model's
+  `bases` field from `bases(model)`. Replace electrical base fields `Sbase`,
+  `vAC_base`/`vACbase`, `vDC_base`/`vDCbase`, `ωbase`, `S_base` and `ωn` with
+  `bases(model).S`, `.v_ac`, `.v_dc` and `.omega`. Read derived electrical values
+  `Lₑ`, `Rₑ`, `zAC_base`, `lAC_base`, `baseConv1`, `baseConv2`, `baseConv3`,
+  `zACbase`, `lACbase`, `iACbase` and `iDCbase` from `perunit(elec, bases)`.
+  Store MMC arm fields `Lₐᵣₘ`, `Rₐᵣₘ`, `Cₐᵣₘ` in H, Ω and F, and TLC `Lᵣ`,
+  `Rᵣ` in H and Ω. Move the machines' line-to-line RMS voltage bases `Vᵃᶜ_base` and
+  `Vac_base` from their electrical sub-models to the models.
 - **Breaking:** `Source` is immutable and stores physical `v`, `theta`, `p`, `q`,
   conductor count, domain, limits and its ideal ABCD matrix. Set the source limits
   with `component(source; limits = x)`. `ac_source` has no `limits` keyword.
 - **Breaking:** the scan-based MMC accepts `ac_control`, `dc_control`, `powerflow`
   in physical MW, MVAr, AC phase-peak kV and DC pole-to-pole kV, and `limits`.
   Controller objects are unsupported. Its scan uses solved terminal values.
+- **Breaking:** evaluate scan-based MMC admittance with `eval_parameters(model, values, s)`
+  from solved `(ac, dc)` port values. Remove the `Blackbox_MMC.cache` field and
+  `update!(::Blackbox_MMC, ...)`.
 - **Breaking:** `OperatingPoint.values` stores values by component and port,
   accessed as `op[:c1].ac.p`. Port powers and signed currents are positive into
   the component, with `Y = I_in / V`. Source, synchronous-machine and converter
@@ -116,6 +130,8 @@
 
 ### Fixed
 
+- Use each component's solved operating point when components share a scan-based MMC
+  model. Before this change, both components used the operating point written last.
 - Build network models for networks with no passive elements.
 - Apply the synchronous-machine admittance base in network admittance assembly.
 - Use induction-machine torque on the network power base and include transformer
@@ -138,8 +154,9 @@
   `1.41592 f μΩ/m` (70.7961 μΩ/m at 50 Hz) from each earth coefficient. The
   correction vanishes at DC. Evaluate self earth return at each cable's own
   burial depth. Common-depth groups retain bit-identical results from the constant fix.
-- Start repeated power-flow solves from the converged point and seed converter
-  current from apparent power, eliminating drift in the TLC DC-voltage-control case.
+- Start repeated power-flow solves from the converged point and set the converter
+  current's initial value from apparent power, eliminating drift in the
+  TLC DC-voltage-control case.
 - Correct inferred voltage levels for unrated transformers and set PSCAD winding
   ratings from the solved primary voltage.
 - Correct the Δ-triplen energy-balancing frame direction, changing compensated-MMC
@@ -168,7 +185,7 @@
   power-flow mapping remains unchanged.
 - Correct terminal scaling in network calculations, changing cross-admittances
   of modular MMCs with a converter transformer.
-- Preserve TLC electrical current seeds and accept zero-voltage initialization.
+- Preserve TLC electrical current initial values and accept zero-voltage initialization.
 - Classify six-terminal three-phase models as AC for power flow, including abc
   sources, impedances and lines.
 - Use one default voltage base (`NetworkBuilder.DEFAULT_VOLTAGE_BASE`, 320 kV)

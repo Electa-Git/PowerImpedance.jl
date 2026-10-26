@@ -61,7 +61,7 @@ $(TYPEDFIELDS)
     limits::Limits = Limits()
     "Power, voltage and angular-frequency bases of the model equations."
     bases::BaseValues
-    "Power-flow seeds on converter bases \\[dimensionless\\]."
+    "Power-flow setpoints on converter bases \\[dimensionless\\]."
     powerflow::NamedTuple = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
     "Retained terminal values, converged state and linearization matrices."
     cache::LinearizationCache = LinearizationCache()
@@ -655,7 +655,7 @@ control, and modulation blocks.
   `UncompensatedModulation()`.
 - `limits`: Operating limits on the component power base \\[dimensionless\\]. Default:
   `Limits()`.
-- `powerflow`: Partial power-flow seeds on converter bases \\[dimensionless\\].
+- `powerflow`: Partial power-flow setpoints on converter bases \\[dimensionless\\].
   Default: `(;)`.
 
 # Keywords
@@ -671,8 +671,8 @@ control, and modulation blocks.
 
 # Notes
 
-Set control references and power-flow seeds with `component` or `withinputs`.
-References and seeds use the converter bases.
+Set control references and power-flow setpoints with `component` or `withinputs`.
+References and setpoints use the converter bases.
 
 The selected synchronization and outer-control blocks determine the AC and DC
 power-flow control modes. The power bounds multiply `limits` by `Sbase`. The

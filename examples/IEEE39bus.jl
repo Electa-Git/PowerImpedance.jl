@@ -241,7 +241,7 @@ inner_current = InnerCurrentPIControl(
 
 modulation = PadeModulation(timeDelay = 200e-6, padeOrderNum = 3, padeOrderDen = 3);
 
-# Control references and power-flow seeds use per unit on the model's bases.
+# Control references and power-flow setpoints use per unit on the model's bases.
 # The outer controls select which quantities power flow solves. The voltage
 # support reference is 0.9 of the nominal phase-voltage amplitude. Its reactive
 # power reference is -0.5 pu on the 269 MVA base.

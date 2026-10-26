@@ -26,7 +26,7 @@ configured = withinputs(converter;
 inputvalues(configured).outerActive
 ```
 
-References and converter power-flow seeds are per unit on `bases(converter)`.
+References and converter power-flow setpoints are per unit on `bases(converter)`.
 `BaseValues` reports MVA, phase-peak AC kV, pole-to-pole DC kV, and rad/s.
 `inputs` describes the nested input tree selected by the control blocks.
 `inputvalues` returns the configured values. `component` also accepts replacement
@@ -34,7 +34,7 @@ limits. TLC `Limits` use MW and MVAr for power-flow bounds.
 
 The `powerflow` group contains `p_ac`, `q_ac`, `v_ac`, `p_dc` and `v_dc`.
 Selected loops supply their controlled quantities. Remaining quantities use the
-stored seeds. A seed for a quantity already supplied by a loop warns and is
+stored setpoints. A setpoint for a quantity already supplied by a loop warns and is
 ignored during target selection. `powerflow.p_dc` is positive into the DC port.
 
 After power flow, `op[:c1]` contains physical values at `ac` and `dc` for a

@@ -44,19 +44,19 @@ Input(default; unit = "", type = typeof(default), description = "") =
     Input(default, unit, type, description)
 
 const _CONVERTER_POWERFLOW_INPUTS = (
-    p_ac = Input(0.0; unit = "pu", description = "AC active-power seed"),
-    q_ac = Input(0.0; unit = "pu", description = "AC reactive-power seed"),
-    v_ac = Input(1.0; unit = "pu", description = "AC-voltage power-flow seed"),
+    p_ac = Input(0.0; unit = "pu", description = "AC active-power setpoint"),
+    q_ac = Input(0.0; unit = "pu", description = "AC reactive-power setpoint"),
+    v_ac = Input(1.0; unit = "pu", description = "AC-voltage power-flow setpoint"),
     p_dc = Input(0.0; unit = "pu",
-        description = "DC power into the converter on its base; " *
-            "603 MW in gives p_dc = 603/Sbase"),
-    v_dc = Input(1.0; unit = "pu", description = "DC-voltage power-flow seed"),
+        description = "DC power into the converter on its base. " *
+            "603 MW in gives p_dc = 603/Sbase."),
+    v_dc = Input(1.0; unit = "pu", description = "DC-voltage power-flow setpoint"),
 )
 
 const _MACHINE_POWERFLOW_INPUTS = (
-    p = Input(0.0; unit = "pu", description = "machine active-power seed"),
-    q = Input(0.0; unit = "pu", description = "machine reactive-power seed"),
-    v = Input(1.0; unit = "pu", description = "machine voltage seed"),
+    p = Input(0.0; unit = "pu", description = "machine active-power setpoint"),
+    q = Input(0.0; unit = "pu", description = "machine reactive-power setpoint"),
+    v = Input(1.0; unit = "pu", description = "machine voltage setpoint"),
 )
 
 """
@@ -141,7 +141,7 @@ Return a copy with the supplied nested input values.
 # Notes
 
 Setting a converter `powerflow` quantity owned by a control loop emits a warning.
-The seed is stored. `powerflow_targets` selects the loop reference for that quantity.
+The setpoint is stored. `powerflow_targets` selects the loop reference for that quantity.
 
 # Errors
 
@@ -208,7 +208,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Select converter power-flow targets from loop references and stored seeds.
+Select converter power-flow targets from loop references and stored setpoints.
 
 # Arguments
 
@@ -217,7 +217,7 @@ Select converter power-flow targets from loop references and stored seeds.
 # Returns
 
 - NamedTuple `(p_ac, q_ac, v_ac, p_dc, v_dc)` on converter bases
-  \\[dimensionless\\]. Loop references replace owned quantities. `p_dc` uses its seed
+  \\[dimensionless\\]. Loop references replace owned quantities. `p_dc` uses its setpoint
   for power flowing into the converter through its DC port.
 """
 function powerflow_targets end

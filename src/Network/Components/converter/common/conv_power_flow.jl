@@ -1,4 +1,4 @@
-# Replace the dependency's signed-active-power seed with apparent current.
+# Replace the dependency's signed-active-power initial value with apparent current.
 function _initialize_converter_current!(pm)
     for (id, converter) in _PM.ref(pm, :convdc)
         voltage = _PM.ref(pm, :bus, converter["busac_i"])["vm"]

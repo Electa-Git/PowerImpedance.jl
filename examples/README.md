@@ -2,7 +2,7 @@
 
 The documentation renders the tutorials below under
 [Examples](https://electa-git.github.io/PowerImpedance.jl/stable/).
-Models are the components. Configure their references and power-flow seeds with
+Models are the components. Configure their references and power-flow setpoints with
 `component`, connect named ports with `NetworkBuilder.Bus` or `Net`, and pass the
 components and topology to `NetworkBuilder.define`.
 Control references use per unit on `bases(model)`. Source inputs use physical units.

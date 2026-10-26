@@ -80,7 +80,7 @@ The AC port uses d/q coordinates. The DC port uses pole-to-pole voltage.
 Admittance rows follow DC, AC d, AC q.
 
 `ac_control` selects `:pq` or `:pv`. `dc_control` selects constant AC active power
-(`:p`) or constant DC voltage (`:vdc`). `powerflow` stores targets and seeds in
+(`:p`) or constant DC voltage (`:vdc`). `powerflow` stores setpoints in
 physical units. Admittance evaluation receives solved terminal values separately.
 
 $(TYPEDFIELDS)
@@ -116,7 +116,7 @@ Base.@kwdef struct Blackbox_MMC <: AbstractLinFreqDomain
     ac_control::Symbol = _BLACKBOX_MMC_INPUTS.ac_control.default
     "DC power-flow mode: `:p` or `:vdc`."
     dc_control::Symbol = _BLACKBOX_MMC_INPUTS.dc_control.default
-    "AC/DC power seeds \\[MW\\], reactive power \\[MVAr\\] and voltage targets \\[kV\\]."
+    "AC/DC power \\[MW\\], reactive power \\[MVAr\\] and voltage \\[kV\\] setpoints."
     powerflow::NamedTuple = map(input -> input.default, _BLACKBOX_MMC_INPUTS.powerflow)
     "Active- and reactive-power limits in \\[MW\\] and \\[MVAr\\]."
     limits::Limits = Limits(P_min = -100, P_max = 100, Q_min = -50, Q_max = 50)
@@ -173,7 +173,7 @@ a direct black-box converter model.
 
 - `ac_control`: AC power-flow mode, `:pq` or `:pv`. Default: `:pq`.
 - `dc_control`: DC power-flow mode, `:p` or `:vdc`. Default: `:p`.
-- `powerflow`: Power-flow targets and seeds `(p_ac, q_ac, v_ac, p_dc, v_dc)` in
+- `powerflow`: Power-flow setpoints `(p_ac, q_ac, v_ac, p_dc, v_dc)` in
   \\[MW\\], \\[MVAr\\], AC phase-peak \\[kV\\], \\[MW\\] and DC pole-to-pole \\[kV\\].
   Defaults: `(-10.0, 3.0, 333.0, 100.0, 640.0)`.
 - `limits`: Power limits in \\[MW\\] and \\[MVAr\\]. Defaults: active `[-100, 100]`,

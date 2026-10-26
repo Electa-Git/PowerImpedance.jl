@@ -78,9 +78,9 @@ by port and computes `A, B, C, D`. `steady_state(model, values)` returns the
 converged state, reusing it when cached port values compare equal with `isequal`.
 A configured copy made with `withinputs` has a fresh cache.
 
-## References and power-flow seeds
+## References and power-flow setpoints
 
-Control-loop references and converter or machine power-flow seeds use per-unit
+Control-loop references and converter or machine power-flow setpoints use per-unit
 values on `bases(model)`. Source inputs and scan-based MMC inputs use physical
 units. `inputs(model)` lists defaults, units, declared types and descriptions.
 `inputvalues(model)` lists configured values.
@@ -95,7 +95,7 @@ For a converter, the selected loops supply their controlled quantities:
 | AC voltage | `OuterReactiveVacControl.v_ac_ref` or `VoltageSupportLag.v_ac_ref` |
 | DC power | `powerflow.p_dc` |
 
-Uncontrolled quantities use the `powerflow` group. Setting a seed for a quantity
+Uncontrolled quantities use the `powerflow` group. Setting a setpoint for a quantity
 already controlled by a loop warns. The loop reference is used. Converter
 `powerflow.p_dc` is positive into the DC port. Detailed control equations are
 initialized from the solved port values.

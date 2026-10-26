@@ -64,7 +64,7 @@ plant. `state_space!` evaluates the blocks in this dependency order.
     limits::Limits
     "Power, voltage and angular-frequency bases of the model equations."
     bases::BaseValues
-    "Power-flow seeds on converter bases \\[dimensionless\\]."
+    "Power-flow setpoints on converter bases \\[dimensionless\\]."
     powerflow::NamedTuple
     "Retained terminal values, converged state and linearization matrices."
     cache::LinearizationCache = LinearizationCache()
@@ -412,7 +412,7 @@ control, and modulation blocks.
 - `mod`: TLC modulation and delay block. Default: `NoModulation()`.
 - `limits`: Active-power limits \\[MW\\] and reactive-power limits \\[MVAr\\],
   passed directly to the TLC power-flow adapter. Default: `Limits()`.
-- `powerflow`: Partial power-flow seeds on converter bases \\[dimensionless\\].
+- `powerflow`: Partial power-flow setpoints on converter bases \\[dimensionless\\].
   Default: `(;)`.
 
 # Keywords
@@ -428,8 +428,8 @@ control, and modulation blocks.
 
 # Notes
 
-Set control references and power-flow seeds with `component` or `withinputs`.
-References and seeds use the converter bases.
+Set control references and power-flow setpoints with `component` or `withinputs`.
+References and setpoints use the converter bases.
 
 The selected synchronization and outer-control blocks determine the converter's
 AC and DC power-flow modes. `linearize` solves the equilibrium and populates

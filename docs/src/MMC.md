@@ -42,7 +42,7 @@ references in a copy, and `component` can also replace `limits`.
 
 The `powerflow` group declares `p_ac`, `q_ac`, `v_ac`, `p_dc` and `v_dc`.
 A selected loop supplies the quantity it controls. Other quantities use the
-stored seeds. Setting a seed already supplied by a loop warns and leaves the
+stored setpoints. Setting a setpoint already supplied by a loop warns and leaves the
 loop reference in use. `powerflow.p_dc` is positive into the DC port.
 MMC power bounds interpret `Limits` as per unit on `b.S`.
 

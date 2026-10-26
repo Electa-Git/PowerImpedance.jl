@@ -441,8 +441,8 @@ fractions are assumed to sum to one. Solved `values.ac.p` and `values.ac.q`
 contain inward terminal powers. Generation in the equations above uses their
 negatives. `values.ac.v` and `values.ac.theta` describe the receiving-bus voltage. The core
 reconstructs terminal phasors using the high-voltage solution of that branch,
-then seeds rotor angle, stator and field currents, speed, governor and turbine states
-and AVR states from the same point. Damper currents and speed error start at
+then sets initial values for rotor angle, stator and field currents, speed, governor,
+turbine and AVR states from the same point. Damper currents and speed error start at
 zero. The nonlinear solver's existing iteration limit and tolerances are unchanged.
 
 
@@ -685,7 +685,7 @@ physical voltage assembly `vMu=vMS-vMD`, `vMl=vMS+vMD`.
 Uncompensated modulation uses five scalar transport channels: two Δ, two Σ
 and one zero-sequence channel. `phase_compensated_dq` applies +ωbase delay
 rotation for Δ, -2ωbase for Σ and none for zero sequence. The residual-delay
-calculation below supplies the realized delay and matching history seeds.
+calculation below supplies the realized delay and matching initial history values.
 Exact transport and Padé responses differ away from steady state.
 
 Initial arm capacitor voltages reconstruct the solved harmonic coordinates at
@@ -824,8 +824,8 @@ At zero model delay, explicit transport is zero and the inherent interface step 
 Zero residual bypasses the queue.
 
 TLC and uncompensated MMC use residual carrier rotations (+omega for Δ,
--2omega for Σ) and inverse-rotated history seeds. Compensated MMC delays abc
-insertion indices and keeps physical history seeds without a dq rotation.
+-2omega for Σ) and inverse-rotated initial history values. Compensated MMC delays abc
+insertion indices and keeps physical initial history values without a dq rotation.
 For `dt=10 us`, model delay 25 us requests 15 us residual, realizes 20 us
 residual and 30 us total. Exact transport and Julia Padé delay differ away
 from steady state with delay compensation.
