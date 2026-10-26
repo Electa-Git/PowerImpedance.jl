@@ -81,7 +81,7 @@ Admittance rows follow DC, AC d, AC q.
 
 `ac_control` selects `:pq` or `:pv`. `dc_control` selects constant AC active power
 (`:p`) or constant DC voltage (`:vdc`). `powerflow` stores targets and seeds in
-physical units, independently of the solved values in `cache`.
+physical units. Admittance evaluation receives solved terminal values separately.
 
 $(TYPEDFIELDS)
 
@@ -120,8 +120,6 @@ Base.@kwdef struct Blackbox_MMC <: AbstractLinFreqDomain
     powerflow::NamedTuple = map(input -> input.default, _BLACKBOX_MMC_INPUTS.powerflow)
     "Active- and reactive-power limits in \\[MW\\] and \\[MVAr\\]."
     limits::Limits = Limits(P_min = -100, P_max = 100, Q_min = -50, Q_max = 50)
-    "Solved physical terminal values, keyed by port name."
-    cache::LinearizationCache = LinearizationCache()
 
     @doc """
     $(TYPEDSIGNATURES)
@@ -145,24 +143,23 @@ Base.@kwdef struct Blackbox_MMC <: AbstractLinFreqDomain
       phase-peak \\[kV\\], \\[MW\\] and pole-to-pole \\[kV\\]. Defaults:
       `(-10.0, 3.0, 333.0, 100.0, 640.0)`.
     - `limits`: Power limits in \\[MW\\] and \\[MVAr\\].
-    - `cache`: Solved terminal storage. Default: empty `LinearizationCache()`.
 
     # Returns
 
-    - An immutable `Blackbox_MMC` with mutable terminal storage.
+    - An immutable `Blackbox_MMC` with scan data and power-flow inputs.
 
     # Errors
 
     - Throws `ArgumentError` for an unsupported control symbol.
     """
     function Blackbox_MMC(ω₀, vACbase, vDCbase, Rₘₑ, itp, path_f, path_MMC, data,
-            ac_control, dc_control, powerflow, limits, cache)
+            ac_control, dc_control, powerflow, limits)
         ac_control in (:pq, :pv) ||
             throw(ArgumentError("ac_control must be :pq or :pv."))
         dc_control in (:p, :vdc) ||
             throw(ArgumentError("dc_control must be :p or :vdc."))
         new(ω₀, vACbase, vDCbase, Rₘₑ, itp, path_f, path_MMC, data,
-            ac_control, dc_control, powerflow, limits, cache)
+            ac_control, dc_control, powerflow, limits)
     end
 end
 
@@ -359,43 +356,15 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Store physical power-flow values in the model's terminal cache.
+Evaluate the imported admittance at the supplied solved terminal values.
 
 # Arguments
 
 - `converter`: Scan-based MMC model.
-- `Vm`: AC phase-peak voltage \\[kV\\].
-- `θ`: AC voltage angle \\[rad\\].
-- `Pac`: Active power injected into the AC bus \\[MW\\].
-- `Qac`: Negative of reactive power injected into the AC bus \\[MVAr\\].
-- `Vdc`: Pole-to-pole DC voltage \\[kV\\].
-- `Pdc`: Active power absorbed from the DC bus \\[MW\\].
-
-# Returns
-
-- Stored `(ac, dc)` port values. Powers are positive into the converter.
-
-# Notes
-
-The cache stores `p = -Pac`, `q = Qac` and `dc.p = Pdc`, positive into the converter.
-Scan evaluation negates both AC powers to recover the solved bus injections.
-"""
-function update!(converter::Blackbox_MMC, Vm, θ, Pac, Qac, Vdc, Pdc)
-    # Operating point from power flow
-    converter.cache.values = (
-        ac = ACPortValues(Vm, θ, -Pac, Qac),
-        dc = DCPortValues(Vdc, Pdc),
-    )
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-Evaluate the imported admittance at the cached solved terminal values.
-
-# Arguments
-
-- `converter`: Scan-based MMC with cached AC/DC port values in physical units.
+- `values`: Solved `(ac = ACPortValues, dc = DCPortValues)` tuple. AC voltage
+  is phase-peak \\[kV\\], AC angle is in \\[rad\\], and DC voltage is pole-to-pole
+  \\[kV\\]. Active and reactive powers are positive into the converter in
+  \\[MW\\] and \\[MVAr\\], respectively.
 - `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses
   `s = 2π * im * f` for frequency `f` \\[Hz\\].
 
@@ -425,22 +394,18 @@ The scan receives the solved active- and reactive-power injections into the AC b
 The imported interpolant uses linear extrapolation outside the sampled intervals.
 DC voltage is fixed across the interpolation grid.
 
-# Errors
-
-- Throws `ArgumentError` when solved terminal values have not been stored.
-
 # Examples
 
 ```julia
 P = PowerImpedance
 model = P.Blackbox_MMC(itp = (v, p, q, f) -> ComplexF64[1 0 0; 0 1 0; 0 0 1])
-P.update!(model, 380sqrt(2/3), 0.0, 100.0, -3.0, 640.0, 100.0)
-Y = P.eval_parameters(model, 2π * im * 50)
+values = (ac = ACPortValues(380sqrt(2/3), 0.0, -100.0, -3.0),
+    dc = DCPortValues(640.0, 100.0))
+Y = P.eval_parameters(model, values, 2π * im * 50)
+@assert Y == ComplexF64[1 0 0; 0 1 0; 0 0 1]
 ```
 """
-function eval_parameters(converter::Blackbox_MMC, s::Complex)
-    values = converter.cache.values
-    values === nothing && throw(ArgumentError("Blackbox_MMC needs solved terminal values."))
+function eval_parameters(converter::Blackbox_MMC, values::NamedTuple, s::Complex)
     ac = values.ac
     # Operating point from power flow
     Vpu = ac.v / (sqrt(2/3) * converter.vACbase) # Convert from LN-PK to pu
@@ -450,13 +415,6 @@ function eval_parameters(converter::Blackbox_MMC, s::Complex)
     TdqDC_0 = [1 0 0; 0 cos(ac.theta) -sin(ac.theta); 0 sin(ac.theta) cos(ac.theta)]
     return inv(TdqDC_0) * Y1 * TdqDC_0
 end
-
-"""
-$(TYPEDSIGNATURES)
-
-Return the scan admittance in \\[S\\] at complex frequency `s` \\[s⁻¹\\].
-"""
-eval_abcd(model::Blackbox_MMC, s::Complex) = eval_parameters(model, s)
 
 """
 $(TYPEDSIGNATURES)
@@ -473,32 +431,6 @@ Return the declared AC/DC modes and physical power-flow inputs.
   power \\[MVAr\\], AC voltage phase-peak \\[kV\\] and DC voltage pole-to-pole \\[kV\\].
 """
 inputs(::Blackbox_MMC) = _BLACKBOX_MMC_INPUTS
-
-"""
-$(TYPEDSIGNATURES)
-
-Copy the selected MMC inputs and allocate empty solved-terminal storage.
-
-# Arguments
-
-- `model`: Scan-based MMC model.
-- `declarations`: Nested input declarations.
-- `changes`: Partial nested input values in the declared units.
-- `path`: Input path used in error messages.
-
-# Returns
-
-- Configured `Blackbox_MMC` with a fresh `LinearizationCache`.
-
-# Errors
-
-- Throws `ArgumentError` for unknown inputs, wrong types or unsupported modes.
-"""
-function _withinputs(model::Blackbox_MMC, declarations::NamedTuple, changes, path)
-    configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
-        model, declarations, changes, path)
-    return Parameters.reconstruct(configured; cache = LinearizationCache())
-end
 
 """
 $(TYPEDSIGNATURES)

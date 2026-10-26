@@ -51,7 +51,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Store solved MMC port values and construct its frequency-admittance function.
+Construct an MMC frequency-admittance function at the supplied solved port values.
 
 # Arguments
 
@@ -63,21 +63,18 @@ Store solved MMC port values and construct its frequency-admittance function.
 
 # Returns
 
-- In-place admittance function returning terminal matrices in \\[S\\].
+- In-place admittance function capturing `values` and returning terminal matrices
+  in \\[S\\].
 """
 function build(model::P.Blackbox_MMC, values::NamedTuple, frame::Symbol)
-    model.cache.values = values
-    return invoke(build, Tuple{P.AbstractLinFreqDomain, NamedTuple, Symbol},
-        model, values, frame)
+    function admittance!(output, complex_frequencies)
+        @simd for index in eachindex(complex_frequencies)
+            copyto!(@view(output[:, :, index]),
+                P.eval_parameters(model, values, complex_frequencies[index]))
+        end
+    end
+    return admittance!
 end
-
-"""
-$(TYPEDSIGNATURES)
-
-Return the MMC scan admittance in \\[S\\] at frequency `s` \\[s⁻¹\\].
-The cached voltage angle supplies its d/q rotation. `frame` is the network frame.
-"""
-admittance(model::P.Blackbox_MMC, s::Complex, frame::Symbol) = P.eval_parameters(model, s)
 
 function admittance(model::P.AbstractLinFreqDomain, s::Complex, frame::Symbol)
     domain = first(P.electricalconnections(model)).domain

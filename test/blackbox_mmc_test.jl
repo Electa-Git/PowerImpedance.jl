@@ -12,13 +12,11 @@ const SCAN_Y = ComplexF64[1+2im 2-im 3+im; 4+im 5+3im 6-im; 7-im 8+im 9+2im]
         copy(SCAN_Y)
     end
     model = P.Blackbox_MMC(; itp = interpolant, vACbase = 380.0)
-    @test_throws ArgumentError P.eval_parameters(model, 2π * im * 73.0)
     values = (ac = ACPortValues(315.0, 0.37, -24.0, 7.0),
         dc = DCPortValues(635.0, 24.5))
     response! = NB.build(model, values, :dq)
-    @test model.cache.values === values
     s = 2π * im * 73.0
-    actual = P.eval_parameters(model, s)
+    actual = P.eval_parameters(model, values, s)
     @test arguments[] === (315.0 / (sqrt(2/3) * 380.0), 24.0, -7.0, real(s / (2π * im)))
     theta = values.ac.theta
     T = [1 0 0; 0 cos(theta) -sin(theta); 0 sin(theta) cos(theta)]
@@ -28,14 +26,7 @@ const SCAN_Y = ComplexF64[1+2im 2-im 3+im; 4+im 5+3im 6-im; 7-im 8+im 9+2im]
     output = zeros(ComplexF64, 3, 3, 1)
     response!(output, [s])
     @test output[:, :, 1] == expected
-    @test P.eval_abcd(model, s) == expected
-
-    classic = P.Blackbox_MMC(; itp = interpolant)
-    P.update!(classic, values.ac.v, values.ac.theta, -values.ac.p, values.ac.q,
-        values.dc.v, values.dc.p)
-    @test classic.cache.values === values
-    @test P.eval_parameters(classic, s) == actual
-    @test classic.powerflow == model.powerflow
+    @test P.eval_parameters(P.Blackbox_MMC(; itp = interpolant), values, s) == expected
 end
 
 @testset "Direct inputs and model data" begin
@@ -61,22 +52,27 @@ end
     @test electricalconnections(model) == (ac = Port(ACDQ), dc = Port(DC_CM))
     @test P.admittance_order(model) === ((:dc, :dc), (:ac, :d), (:ac, :q))
     @test P.is_converter(model) && P.is_active(model) && !P.islinear(model)
-    P.update!(model, 310.0, 0.1, 20.0, -4.0, 640.0, 20.2)
+    terminal_values = (ac = ACPortValues(310.0, 0.1, -20.0, -4.0),
+        dc = DCPortValues(640.0, 20.2))
+    s = 2π * im * 73.0
+    T = [1 0 0; 0 cos(0.1) -sin(0.1); 0 sin(0.1) cos(0.1)]
+    expected = inv(T) * SCAN_Y * T
+    @test P.eval_parameters(model, terminal_values, s) == expected
     configured = withinputs(model; ac_control = :pv, dc_control = :vdc,
         powerflow = (p_ac = 25.0, v_ac = 320.0))
     @test configured.powerflow === merge(defaults, (p_ac = 25.0, v_ac = 320.0))
     @test configured.ac_control === :pv && configured.dc_control === :vdc
     @test inputs(configured) == inputs(model)
     @test configured.itp === model.itp && configured.data === model.data
-    @test configured.cache !== model.cache
-    @test configured.cache.values === nothing
+    @test P.eval_parameters(configured, terminal_values, s) == expected
     @test model.powerflow === defaults
     lm = P.Limits(P_min = -80, P_max = 90, Q_min = -30, Q_max = 40)
     configured = component(model; limits = lm, dc_control = :vdc,
         powerflow = (q_ac = -8.0,))
     @test limits(configured) === lm
     @test inputvalues(configured).powerflow.q_ac === -8.0
-    @test configured.cache.values === nothing
+    @test P.eval_parameters(configured, terminal_values, s) == expected
+    @test P.eval_parameters(model, terminal_values, s) == expected
     for invalid in (:vac, :vac_supp, :invalid)
         @test_throws ArgumentError P.Blackbox_MMC(ac_control = invalid)
         @test_throws ArgumentError withinputs(model; ac_control = invalid)
@@ -106,7 +102,8 @@ end
     for ac_control in (:pq, :pv), dc_control in (:p, :vdc)
         @testset "$ac_control/$dc_control" begin
             model = P.Blackbox_MMC(; ac_control, dc_control, powerflow = seeds,
-                limits = lm, Rₘₑ = 1.2, ω₀ = 100π)
+                limits = lm, Rₘₑ = 1.2, ω₀ = 100π,
+                itp = (v, p, q, f) -> copy(SCAN_Y))
             direct = deepcopy(initial)
             P.convert!(direct, model, P.PMACDC,
                 (name = :mmc, index = 7, pmtype = "convdc"), (ac = 2, dc = 3), gd)
@@ -128,7 +125,9 @@ end
                 [-80.0, 90.0, -30.0, 40.0]
             @test direct["busdc"]["3"]["Vdc"] == 1.6
             @test model.ω₀ == 100π
-            @test model.cache.values === nothing
+            terminal_values = (ac = ACPortValues(220.0, 0.0, -40.0, 6.0),
+                dc = DCPortValues(640.0, 42.0))
+            @test P.eval_parameters(model, terminal_values, 2π * im * 73.0) == SCAN_Y
         end
     end
 end
@@ -160,11 +159,13 @@ end
     @test op.dc.v ≈ dc.v
     @test op.dc.p > 0.0
     frequency_model = NB.NetworkModel(state, result.operating_point)
-    @test model.cache.values === op
     @test model.powerflow.p_ac === 10.0
     s = 2π * im * 73.0
     actual = NB.get_y(frequency_model, :mmc, [s])[:, :, 1]
-    @test actual == P.eval_parameters(model, s)
+    theta = op.ac.theta
+    T = [1 0 0; 0 cos(theta) -sin(theta); 0 sin(theta) cos(theta)]
+    expected = inv(T) * SCAN_Y * T
+    @test actual == P.eval_parameters(model, op, s) == expected
     @test arguments[] == (op.ac.v / (sqrt(2/3) * model.vACbase),
         -op.ac.p, -op.ac.q, real(s / (2π * im)))
     @test NB.sortedcomponentconnections(state.topology, :mmc).port == [:dc, :ac, :ac]
@@ -174,6 +175,42 @@ end
         model, P.PMACDC, P.PIACDC)
     @test physical.ac.p == -10.0 && physical.ac.q == -3.0
     @test physical.dc.p == 10.1 && physical.dc.v == 640.0
+end
+
+@testset "Shared scan model at distinct operating points" begin
+    interpolant = (v, p, q, f) -> (v + p / 100 + q / 1000 + f / 10000) * SCAN_Y
+    model = P.Blackbox_MMC(; itp = interpolant)
+    state = NB.define((; first = model, second = model,
+        line = impedance(z = 1.0, conductors = 3)), (
+        NB.Bus(:AC1; ports = ((:first, :ac), (:line, :side1))),
+        NB.Bus(:AC2; ports = ((:second, :ac), (:line, :side2))),
+        NB.Bus(:DC1; ports = ((:first, :dc),)),
+        NB.Bus(:DC2; ports = ((:second, :dc),)),
+    ))
+    points = OperatingPoint(Dict(
+        :first => (ac = ACPortValues(315.0, 0.37, -24.0, 7.0),
+            dc = DCPortValues(635.0, 24.5)),
+        :second => (ac = ACPortValues(310.0, 0.1, -20.0, -4.0),
+            dc = DCPortValues(640.0, 20.2)),
+    ))
+    @test state.elements.first === state.elements.second === model
+    frequency_model = NB.NetworkModel(state, points)
+    frequencies = 2π * im * [73.0, 155.0]
+    expected = Dict{Symbol, Array{ComplexF64, 3}}()
+    for name in (:first, :second)
+        ac = points[name].ac
+        T = [1 0 0; 0 cos(ac.theta) -sin(ac.theta); 0 sin(ac.theta) cos(ac.theta)]
+        scan_voltage = ac.v / (sqrt(2/3) * model.vACbase)
+        expected[name] = cat((inv(T) *
+            ((scan_voltage - ac.p / 100 - ac.q / 1000 + f / 10000) * SCAN_Y) * T
+            for f in (73.0, 155.0))...; dims = 3)
+        @test cat((P.eval_parameters(model, points[name], s) for s in frequencies)...;
+            dims = 3) == expected[name]
+    end
+    @test expected[:first] != expected[:second]
+    for name in (:first, :second, :first)
+        @test NB.get_y(frequency_model, name, frequencies) == expected[name]
+    end
 end
 
 @testset "Scan-file construction" begin
@@ -202,7 +239,10 @@ end
             @test model.powerflow ===
                 (p_ac = 15.0, q_ac = 3.0, v_ac = 333.0, p_dc = 100.0, v_dc = 640.0)
             @test model.itp(1.0, 15.0, 1.5, 55.0) ≈ 1.055 * SCAN_Y
-            @test model.cache.values === nothing
+            terminal_values = (ac = ACPortValues(380sqrt(2/3), 0.0, -15.0, -1.5),
+                dc = DCPortValues(640.0, 15.0))
+            @test P.eval_parameters(model, terminal_values, 2π * im * 55.0) ≈
+                1.055 * SCAN_Y
         end
     end
 end

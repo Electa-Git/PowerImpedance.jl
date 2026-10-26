@@ -19,6 +19,7 @@ const EXAMPLES = (
     (:eval_abcd, Tuple{PI.Overhead_line, Complex}),
     (:eval_abcd, Tuple{PI.Transformer, ComplexF64}),
     (:eval_parameters, Tuple{PI.Cable, Complex}),
+    (:eval_parameters, Tuple{PI.Blackbox_MMC, NamedTuple, Complex}),
     (:eval_parameters, Tuple{PI.Overhead_line, Complex}),
     (:eval_y, Tuple{PI.Source, Complex}),
     (:impedance, Tuple{}),
