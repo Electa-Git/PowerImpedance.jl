@@ -116,13 +116,7 @@ const IEEE39_OUTPUT_PINS = [:gndd, :gndq]
 const IEEE39_ELIM_ELEMENTS = [:STATCOM]
 const IEEE39_FREQ_RANGE = (1e0, 5e3, 10)
 function ieee39bus_elements()
-    elec = PowerImpedance.ElectricalTLC(
-        Lᵣ = Lf_ST,
-        Rᵣ = Rf_ST,
-        Sbase = S_ST,
-        vACbase_LL_RMS = 345,
-        vDCbase = Vdc_ST
-    )
+    elec = PowerImpedance.ElectricalTLC(Lᵣ = Lf_ST, Rᵣ = Rf_ST)
 
     meas = PowerImpedance.Measurement(
         v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
@@ -218,16 +212,10 @@ function ieee39bus_elements()
         G_DC = dc_source(v = Vdc_ST),
 
         STATCOM = let model = PowerImpedance.tlc(;
-            elec = elec,
-            meas = meas,
-            sync = sync,
-            outerActive = outerActive,
-            outerReactive = outerReactive,
-            innerVoltage = innerVoltage,
-            innerCurrent = innerCurrent,
-            mod = mod,
-            limits = limits
-        )
+                Sbase = S_ST, vACbase_LL_RMS = 345, vDCbase = Vdc_ST, elec = elec,
+                meas = meas, sync = sync, outerActive = outerActive,
+                outerReactive = outerReactive, innerVoltage = innerVoltage,
+                innerCurrent = innerCurrent, mod = mod, limits = limits)
             b = bases(model)
             component(model; outerActive = (v_dc_ref = (Vdc_ST) / b.v_dc,),
                 outerReactive = (q_ref = (Q_ST*S_ST) / b.S,
@@ -1049,15 +1037,16 @@ function converter(kind; K = 5.0, voltage = 672.0, dcbase = 640.0)
     sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.085, Ki = 32.0))
     occ = InnerCurrentPIControl(pi_ctrl = PIControl(Kp = 0.1, Ki = 43.0))
     return kind === :mmc ?
-           let model = mmc(;
-        elec = ElectricalMMC(Sbase = 500.0, vDC_base = dcbase),
-        delta_control = ΔdqControlGFL(outer_active = outer,
-            outer_reactive = reactive, occ = occ),
-        sigma_control = ΣdqzControlTEC(
-            tec = TotalEnergyControl(pi_control = PIControl(Kp = 1.4, Ki = 30.0)),
-            zscc = ZeroSequenceCurrentControl(PIControl(Kp = 0.1, Ki = 43.0)),
-            ccsc = CirculatingCurrentSuppressionControl(PIControl(Kp = 0.1, Ki = 43.0))),
-        sync = sync, limits = limits)
+           let model = mmc(; Sbase = 500.0, vDC_base = dcbase, elec = ElectricalMMC(),
+                   delta_control = ΔdqControlGFL(outer_active = outer,
+                       outer_reactive = reactive, occ = occ),
+                   sigma_control = ΣdqzControlTEC(
+                       tec = TotalEnergyControl(
+                           pi_control = PIControl(Kp = 1.4, Ki = 30.0)),
+                       zscc = ZeroSequenceCurrentControl(PIControl(Kp = 0.1, Ki = 43.0)),
+                       ccsc = CirculatingCurrentSuppressionControl(
+                           PIControl(Kp = 0.1, Ki = 43.0))),
+                   sync = sync, limits = limits)
                b = bases(model)
                component(model; delta_control = (outer_active = (p_ref = (50.0) / b.S,
                        support = (v_dc_ref = voltage / b.v_dc,)),
@@ -1065,10 +1054,9 @@ function converter(kind; K = 5.0, voltage = 672.0, dcbase = 640.0)
                    powerflow = (; v_ac = (380sqrt(2/3)) / b.v_ac,
                        p_dc = (50.0) / b.S))
            end :
-           let model = tlc(;
-        elec = ElectricalTLC(Sbase = 500.0, vACbase_LL_RMS = 380.0, vDCbase = dcbase),
-        outerActive = outer, outerReactive = reactive, innerCurrent = occ,
-        sync = sync, limits = limits)
+           let model = tlc(; Sbase = 500.0, vACbase_LL_RMS = 380.0, vDCbase = dcbase,
+                   elec = ElectricalTLC(), outerActive = outer, outerReactive = reactive,
+                   innerCurrent = occ, sync = sync, limits = limits)
                b = bases(model)
                component(model; outerActive = (p_ref = (50.0) / b.S,
                        support = (v_dc_ref = voltage / b.v_dc,)),
@@ -1165,26 +1153,24 @@ function ohl_to_ugc(x)
         g1 = ac_source(v = transmissionVoltage*sqrt(2), p = pHVDC1),
 
         c1 = let model = only(mmc(Grid;
-            elec = ElectricalMMC(
-                Sbase = 1000.0, vDC_base = 640.0,
-                vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
-            limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
-                Q_min = -500.0, Q_max = 500.0),
-            sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
-            delta_control = ΔdqControlGFL(
-                outer_active = OuterActiveVdcControl(
-                    pi_ctrl = PIControl(Kp = 6.0, Ki = 15.0)),
-                outer_reactive = OuterReactiveQControl(
-                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
-                occ = InnerCurrentPIControl(
-                    pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
-                    activate_ω_c_multiplication = false)),
-            sigma_control = ΣdqzControlTEC(
-                ccsc = CirculatingCurrentSuppressionControl(
-                    PIControl(Kp = 0.1048, Ki = 48.1914))),
-            modulation = UncompensatedModulation(timeDelay = 200e-6,
-                padeOrderNum = 5, padeOrderDen = 5)
-        ))
+                Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 380.0,
+                elec = ElectricalMMC(turnsRatio = 1.0),
+                limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
+                    Q_min = -500.0, Q_max = 500.0),
+                sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+                delta_control = ΔdqControlGFL(
+                    outer_active = OuterActiveVdcControl(
+                        pi_ctrl = PIControl(Kp = 6.0, Ki = 15.0)),
+                    outer_reactive = OuterReactiveQControl(
+                        pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                    occ = InnerCurrentPIControl(
+                        pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                        activate_ω_c_multiplication = false)),
+                sigma_control = ΣdqzControlTEC(
+                    ccsc = CirculatingCurrentSuppressionControl(
+                        PIControl(Kp = 0.1048, Ki = 48.1914))),
+                modulation = UncompensatedModulation(timeDelay = 200e-6,
+                    padeOrderNum = 5, padeOrderDen = 5)))
             b = bases(model)
             component(model; delta_control = (outer_active = (v_dc_ref = (640.0) / b.v_dc,),
                     outer_reactive = (q_ref = (qC1) / b.S,),),
@@ -1194,29 +1180,25 @@ function ohl_to_ugc(x)
         end,
 
         c2 = let model = only(mmc(Grid;
-            elec = ElectricalMMC(
-                Sbase = 1000.0, vDC_base = 640.0,
-                vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
-                Lᵣ = 0.0461, Rᵣ = 0.4103,
-                Lₐᵣₘ = 30e-3
-            ),
-            limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
-                Q_min = -1000.0, Q_max = 1000.0),
-            sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
-            delta_control = ΔdqControlGFL(
-                outer_active = OuterActivePowerControl(
-                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
-                outer_reactive = OuterReactiveQControl(
-                    pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
-                occ = InnerCurrentPIControl(
-                    pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
-                    activate_ω_c_multiplication = false)),
-            sigma_control = ΣdqzControlTEC(
-                ccsc = CirculatingCurrentSuppressionControl(
-                    PIControl(Kp = 0.1048, Ki = 48.1914))),
-            modulation = UncompensatedModulation(timeDelay = 200e-6,
-                padeOrderNum = 5, padeOrderDen = 5)
-        ))
+                Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 333.0,
+                elec = ElectricalMMC(turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
+                    Lₐᵣₘ = 30e-3),
+                limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
+                    Q_min = -1000.0, Q_max = 1000.0),
+                sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+                delta_control = ΔdqControlGFL(
+                    outer_active = OuterActivePowerControl(
+                        pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                    outer_reactive = OuterReactiveQControl(
+                        pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                    occ = InnerCurrentPIControl(
+                        pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                        activate_ω_c_multiplication = false)),
+                sigma_control = ΣdqzControlTEC(
+                    ccsc = CirculatingCurrentSuppressionControl(
+                        PIControl(Kp = 0.1048, Ki = 48.1914))),
+                modulation = UncompensatedModulation(timeDelay = 200e-6,
+                    padeOrderNum = 5, padeOrderDen = 5)))
             b = bases(model)
             component(model; delta_control = (outer_active = (p_ref = (pHVDC1) / b.S,),
                     outer_reactive = (q_ref = (qC2) / b.S,),),
@@ -1298,10 +1280,8 @@ const builder_options = (;
 # fixed scalar elements explicit.
 const fixed_element_specs = (;
     g1 = ac_source(Grid; v = transmission_voltage * sqrt(2), p = p_hvdc),
-    c1 = mmc(Grid;
-        elec = ElectricalMMC(
-            Sbase = 1000.0, vDC_base = 640.0,
-            vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
+    c1 = mmc(Grid; Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 380.0,
+        elec = ElectricalMMC(turnsRatio = 1.0),
         limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
             Q_min = -500.0, Q_max = 500.0),
         sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -1317,15 +1297,10 @@ const fixed_element_specs = (;
             ccsc = CirculatingCurrentSuppressionControl(
                 PIControl(Kp = 0.1048, Ki = 48.1914))),
         modulation = UncompensatedModulation(timeDelay = 200e-6,
-            padeOrderNum = 5, padeOrderDen = 5)
-    ),
-    c2 = mmc(Grid;
-        elec = ElectricalMMC(
-            Sbase = 1000.0, vDC_base = 640.0,
-            vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
-            Lᵣ = 0.0461, Rᵣ = 0.4103,
-            Lₐᵣₘ = 30e-3
-        ),
+            padeOrderNum = 5, padeOrderDen = 5)),
+    c2 = mmc(Grid; Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 333.0,
+        elec = ElectricalMMC(turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
+            Lₐᵣₘ = 30e-3),
         limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
             Q_min = -1000.0, Q_max = 1000.0),
         sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -1341,8 +1316,7 @@ const fixed_element_specs = (;
             ccsc = CirculatingCurrentSuppressionControl(
                 PIControl(Kp = 0.1048, Ki = 48.1914))),
         modulation = UncompensatedModulation(timeDelay = 200e-6,
-            padeOrderNum = 5, padeOrderDen = 5)
-    ),
+            padeOrderNum = 5, padeOrderDen = 5)),
     g4 = ac_source(Grid; v = transmission_voltage * sqrt(2), p = p_hvdc),
     tl1 = overhead_line(Grid;
         length = 25e3,
@@ -1528,9 +1502,8 @@ voltage = 220 / sqrt(3);
 transformer_base = 333^2 / 1000;
 compensation_inductance = 3 * voltage^2 / (2π * 50 * 50);
 
-electrical = ElectricalMMC(vDC_base = 640, Sbase = 1000, vACbase_LL_RMS = 333,
-    turnsRatio = 333/220, Lᵣ = 0.18 * transformer_base / (2π * 50), Rᵣ = 0.005 *
-                                                                         transformer_base);
+electrical = ElectricalMMC(turnsRatio = 333/220, Lᵣ = 0.18 * transformer_base / (2π * 50),
+    Rᵣ = 0.005 * transformer_base);
 
 mmc_measurement = Measurement();
 
@@ -1554,8 +1527,9 @@ pq_control = ΔdqControlGFL(
 vdc_control = ΔdqControlGFL(outer_active = dc_control,
     outer_reactive = reactive_control, occ = current_control);
 
-MMC1 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
-    delta_control = pq_control, sigma_control = internal_control, modulation = modulation)
+MMC1 = let model = mmc(; vDC_base = 640, Sbase = 1000, vACbase_LL_RMS = 333,
+        elec = electrical, meas = mmc_measurement, sync = sync, delta_control = pq_control,
+        sigma_control = internal_control, modulation = modulation)
     b = bases(model)
     component(model; delta_control = (outer_active = (p_ref = (700/3) / b.S,),
             outer_reactive = (q_ref = (0) / b.S,),),
@@ -1564,8 +1538,9 @@ MMC1 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
             p_dc = model.powerflow.p_dc * b.S / b.S))
 end;
 
-MMC2 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
-    delta_control = pq_control, sigma_control = internal_control, modulation = modulation)
+MMC2 = let model = mmc(; vDC_base = 640, Sbase = 1000, vACbase_LL_RMS = 333,
+        elec = electrical, meas = mmc_measurement, sync = sync, delta_control = pq_control,
+        sigma_control = internal_control, modulation = modulation)
     b = bases(model)
     component(model; delta_control = (outer_active = (p_ref = (-1400/3) / b.S,),
             outer_reactive = (q_ref = (0) / b.S,),),
@@ -1574,8 +1549,9 @@ MMC2 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
             p_dc = model.powerflow.p_dc * b.S / b.S))
 end;
 
-MMC3 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
-    delta_control = vdc_control, sigma_control = internal_control, modulation = modulation)
+MMC3 = let model = mmc(; vDC_base = 640, Sbase = 1000, vACbase_LL_RMS = 333,
+        elec = electrical, meas = mmc_measurement, sync = sync, delta_control = vdc_control,
+        sigma_control = internal_control, modulation = modulation)
     b = bases(model)
     component(model; delta_control = (outer_active = (v_dc_ref = (640) / b.v_dc,),
             outer_reactive = (q_ref = (0) / b.S,),),
@@ -1584,8 +1560,7 @@ MMC3 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
             p_dc = model.powerflow.p_dc * b.S / b.S))
 end;
 
-wind_electrical = ElectricalTLC(Lᵣ = 0.01232, Rᵣ = 0.03872, Sbase = 1000,
-    vACbase_LL_RMS = 220);
+wind_electrical = ElectricalTLC(Lᵣ = 0.01232, Rᵣ = 0.03872);
 
 wind_measurement = Measurement(v_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4),
     i_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4));
@@ -1600,9 +1575,10 @@ wind_reactive = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.01, Ki = 10));
 wind_current = InnerCurrentPIControl(pi_ctrl = PIControl(Kp = 0.254647908947033, Ki = 0.8));
 wind_limits = PowerImpedance.Limits(
     P_min = 0.9 * 1000, P_max = 1.1 * 1000, Q_min = -0.5 * 1000, Q_max = 0.5 * 1000);
-OWF = let model = tlc(; elec = wind_electrical, meas = wind_measurement, sync = wind_sync,
-    outerActive = wind_power, outerReactive = wind_reactive, innerCurrent = wind_current,
-    innerVoltage = NoInnerVoltageControl(), mod = NoModulation(), limits = wind_limits)
+OWF = let model = tlc(; Sbase = 1000, vACbase_LL_RMS = 220, elec = wind_electrical,
+        meas = wind_measurement, sync = wind_sync, outerActive = wind_power,
+        outerReactive = wind_reactive, innerCurrent = wind_current,
+        innerVoltage = NoInnerVoltageControl(), mod = NoModulation(), limits = wind_limits)
     b = bases(model)
     component(model; outerActive = (p_ref = (700) / b.S,),
         outerReactive = (q_ref = (-150) / b.S,),
@@ -1704,8 +1680,8 @@ using PowerImpedance.NetworkBuilder
 # Rewritten from `examples/Converter_machine_interaction.jl:8`.
 voltage = 380 / sqrt(3);
 
-machine_electrical = ElectricalSM(Vᵃᶜ_base = 380, S_base = 1000, ωn = 100π,
-    lt = 0.065, rt = 0.0026, La_d = 1.66, La_q = 1.61, Ll = 0.15, Ra = 0.0015);
+machine_electrical = ElectricalSM(lt = 0.065, rt = 0.0026, La_d = 1.66, La_q = 1.61,
+    Ll = 0.15, Ra = 0.0015);
 
 machine_mechanical = MechanicalSM(
     H = 4, T_CH = 2, T_RH = 5, T_CO = 1, F_HP = 0.3, F_IP = 0.4, F_LP = 0.3);
@@ -1714,8 +1690,9 @@ machine_governor = GovernorSM(R = 0.05, T_w = 0.1, T_G = 0.2);
 
 machine_avr = AVRSM(v_ref = 1.01, T_R = 0.05, T_B = 1, T_C = 0.1, T_A = 0.02, K_A = 200);
 
-sg1 = let model = synchronousmachine(; elec = machine_electrical, mech = machine_mechanical,
-    gov = machine_governor, avr = machine_avr)
+sg1 = let model = synchronousmachine(; Vᵃᶜ_base = 380, S_base = 1000, ωn = 100π,
+        elec = machine_electrical, mech = machine_mechanical, gov = machine_governor,
+        avr = machine_avr)
     b = bases(model)
     component(model; powerflow = (p = 900 / b.S,
         q = -100 / b.S, v = voltage * sqrt(2) / b.v_ac))
@@ -1723,8 +1700,8 @@ end;
 sg1 = component(sg1; limits = PowerImpedance.Limits(P_min = -2000,
     P_max = 2000, Q_min = -2000, Q_max = 2000));
 
-electrical = ElectricalMMC(vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
-    Lₐᵣₘ = 0.05, Rₐᵣₘ = 1.07, Cₐᵣₘ = 0.01, N = 400, Lᵣ = 0.06, Rᵣ = 0.535);
+electrical = ElectricalMMC(Lₐᵣₘ = 0.05, Rₐᵣₘ = 1.07, Cₐᵣₘ = 0.01, N = 400, Lᵣ = 0.06,
+    Rᵣ = 0.535);
 
 measurement = Measurement();
 
@@ -1760,9 +1737,9 @@ bus5_control = ΔdqControlGFL(
 remote_limits = PowerImpedance.Limits(P_min = -1.5, P_max = 1.5, Q_min = -0.5, Q_max = 0.5);
 receiving_limits = PowerImpedance.Limits(P_min = -1, P_max = 1, Q_min = -1, Q_max = 1);
 
-c1 = let model = mmc(;
-    elec = electrical, meas = measurement, sync = sync, delta_control = remote_control,
-    sigma_control = internal_control, modulation = modulation, limits = remote_limits)
+c1 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = remote_control,
+        sigma_control = internal_control, modulation = modulation, limits = remote_limits)
     b = bases(model)
     component(model; delta_control = (outer_active = (v_dc_ref = (800) / b.v_dc,),
             outer_reactive = (q_ref = (0) / b.S,),),
@@ -1771,9 +1748,10 @@ c1 = let model = mmc(;
             p_dc = model.powerflow.p_dc * b.S / b.S))
 end;
 
-c2 = let model = mmc(; elec = electrical, meas = measurement, sync = sync,
-    delta_control = bus7_control,
-    sigma_control = internal_control, modulation = modulation, limits = receiving_limits)
+c2 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = bus7_control,
+        sigma_control = internal_control, modulation = modulation,
+        limits = receiving_limits)
     b = bases(model)
     component(model; delta_control = (outer_active = (p_ref = (600) / b.S,),
             outer_reactive = (v_ac_ref = (voltage * sqrt(2)) / b.v_ac,),),
@@ -1782,9 +1760,9 @@ c2 = let model = mmc(; elec = electrical, meas = measurement, sync = sync,
             p_dc = model.powerflow.p_dc * b.S / b.S))
 end;
 
-c3 = let model = mmc(;
-    elec = electrical, meas = measurement, sync = sync, delta_control = remote_control,
-    sigma_control = internal_control, modulation = modulation, limits = remote_limits)
+c3 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = remote_control,
+        sigma_control = internal_control, modulation = modulation, limits = remote_limits)
     b = bases(model)
     component(model; delta_control = (outer_active = (v_dc_ref = (800) / b.v_dc,),
             outer_reactive = (q_ref = (0) / b.S,),),
@@ -1793,9 +1771,10 @@ c3 = let model = mmc(;
             p_dc = model.powerflow.p_dc * b.S / b.S))
 end;
 
-c4 = let model = mmc(; elec = electrical, meas = measurement, sync = sync,
-    delta_control = bus5_control,
-    sigma_control = internal_control, modulation = modulation, limits = receiving_limits)
+c4 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = bus5_control,
+        sigma_control = internal_control, modulation = modulation,
+        limits = receiving_limits)
     b = bases(model)
     component(model; delta_control = (outer_active = (p_ref = (600) / b.S,),
             outer_reactive = (q_ref = (100) / b.S,

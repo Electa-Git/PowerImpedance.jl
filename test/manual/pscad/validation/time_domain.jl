@@ -220,7 +220,7 @@ function time_domain_channels(c,spec)
     vb=spec.voltage_base_kV
     for node in c.nodes;push!(labels,"V:"*string(node));push!(bases,vb);end
     for name in sort(c.devices)
-        b=device_bases(c.net.elements[name].elec)
+        b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
         for axis in ("d","q");push!(labels,"I:$name:$axis");push!(bases,b.ac_current);end
     end
     for (name,e) in sort!(collect(pairs(c.net.elements));by=first)
@@ -238,7 +238,8 @@ function time_domain_response(c,spec; discrete=false,forms=nothing)
         voltage=full\drive
         output=Matrix{ComplexF64}[voltage]
         for name in sort(c.devices)
-            b=device_bases(c.net.elements[name].elec);h=component_incidence(c,name)
+            b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases);
+                h=component_incidence(c, name)
             push!(output,(functions[name](s)*h'*voltage)[b.ac_indices,:])
         end
         for (name,e) in sort!(collect(pairs(c.net.elements));by=first)
@@ -288,7 +289,7 @@ function time_domain_samples(result,model,c)
         found || error("missing time-domain nodal voltage $node")
     end
     for name in sort(c.devices)
-        b=device_bases(c.net.elements[name].elec)
+        b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
         p=only(filter(p->p.kind==:current&&p.element==string(name)&&p.port==:ac,
             model.probes.channels))
         data=composed_current(result, model, p)

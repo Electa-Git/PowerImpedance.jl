@@ -269,26 +269,27 @@ end
 
 # Native state-space voltage inputs and inward-current outputs retain each
 # converter's normalization. Measurement bases refer to the external terminal.
-function device_bases(e::PowerImpedance.ElectricalTLC)
-    return (voltage_inputs=[e.vDCbase,e.vACbase,e.vACbase],
-        current_outputs=[e.iDCbase,e.iACbase,e.iACbase],
-        ac_voltage=e.vACbase, ac_current=e.iACbase, dc_voltage=e.vDCbase, power=e.Sbase,
+function device_bases(e::PowerImpedance.ElectricalTLC, b::PowerImpedance.BaseValues)
+    pu = PowerImpedance.perunit(e, b)
+    return (voltage_inputs=[b.v_dc, b.v_ac, b.v_ac],
+        current_outputs=[pu.iDCbase, pu.iACbase, pu.iACbase],
+        ac_voltage=b.v_ac, ac_current=pu.iACbase, dc_voltage=b.v_dc, power=b.S,
             ac_port=:ac, ac_indices=2:3)
 end
 
-function device_bases(e::PowerImpedance.ElectricalMMC)
-    current = 2e.Sbase / (3e.vAC_base) * e.turnsRatio
-    return (voltage_inputs=[e.vDC_base,e.vAC_base,e.vAC_base],
-        current_outputs=[e.Sbase/e.vDC_base,current,current],
-        ac_voltage=e.vAC_base/e.turnsRatio, ac_current=current,
-        dc_voltage=e.vDC_base, power=e.Sbase, ac_port=:ac, ac_indices=2:3)
+function device_bases(e::PowerImpedance.ElectricalMMC, b::PowerImpedance.BaseValues)
+    current = 2b.S / (3b.v_ac) * e.turnsRatio
+    return (voltage_inputs=[b.v_dc, b.v_ac, b.v_ac],
+        current_outputs=[b.S/b.v_dc, current, current],
+        ac_voltage=b.v_ac/e.turnsRatio, ac_current=current,
+        dc_voltage=b.v_dc, power=b.S, ac_port=:ac, ac_indices=2:3)
 end
 
-function device_bases(e::PowerImpedance.ElectricalSM)
-    voltage=e.Vᵃᶜ_base*sqrt(2/3)
-    current=2e.S_base/(3voltage)
+function device_bases(e::PowerImpedance.ElectricalSM, b::PowerImpedance.BaseValues)
+    voltage=b.v_ac
+    current=2b.S/(3voltage)
     return (voltage_inputs=fill(voltage,2), current_outputs=fill(current,2),
-        ac_voltage=voltage, ac_current=current, dc_voltage=nothing, power=e.S_base,
+        ac_voltage=voltage, ac_current=current, dc_voltage=nothing, power=b.S,
         ac_port=:ac, ac_indices=1:2)
 end
 
@@ -305,7 +306,7 @@ end
 function device_scan_definition(net,list; id="tlc_pq_freq_support")
     old=passive_settings()
     elec=net.elements[:DUT].elec
-    bases=device_bases(elec)
+    bases=device_bases(elec, net.elements[:DUT].bases)
     bus=port_probe(list,:DUT,bases.ac_port)
     frequencies=filter(!=(50.0),old.frequencies)
     spec=merge(old,(; id,quantity="Y",dimension=2,buses=[bus],
@@ -344,7 +345,7 @@ end
 # because the meter measures DUT current alone (the load has no AC terminal).
 function device_port_y(net, s)
     y = physical_y(net.elements[:DUT],s)
-    indices=device_bases(net.elements[:DUT].elec).ac_indices
+    indices=device_bases(net.elements[:DUT].elec, net.elements[:DUT].bases).ac_indices
     haskey(net.elements,:DC_load) || return y[indices,indices]
     g = physical_y(net.elements[:DC_load],s)[1,1]
     return y[2:3,2:3] - y[2:3,1:1]*((y[1,1]+g)\y[1:1,2:3])

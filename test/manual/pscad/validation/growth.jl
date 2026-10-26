@@ -167,7 +167,7 @@ function system_exact_modulation_y(e)
     d=findall(in(delayed),collect(names));r=setdiff(1:length(names),d)
     tau=m.modulation.delay1.timeDelay
     scalar=PowerImpedance.PadeDelay(timeDelay=tau,padeOrderNum=5,padeOrderDen=5)
-    b=device_bases(m.elec);n=length(r)
+    b=device_bases(m.elec, m.bases);n=length(r)
     function response(s)
         g=only(scalar.C*((s*I-scalar.A)\scalar.B)+scalar.D)
         feedback=vcat(e.cache.A[r,d],e.cache.C[:,d])*((s*I-e.cache.A[d,
@@ -276,7 +276,7 @@ end
 function system_growth_channels(result,model,c)
     columns=Vector{ComplexF64}[];labels=String[];bases=Float64[];reference=ComplexF64[]
     for name in c.devices
-        b=device_bases(c.net.elements[name].elec)
+        b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
         bus=port_probe(model.netlist, name, b.ac_port).name
         voltage=only(filter(p->p.kind==:voltage && p.bus==bus, model.probes.channels))
         current=only(filter(

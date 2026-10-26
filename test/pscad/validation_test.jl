@@ -924,7 +924,7 @@ end
         @test inputvalues(parent)==inputvalues(dut)
         point=compute(PowerFlowProblem(net), ACDCPowerFlow());list=V.fixture_netlist(net,
             point)
-        bases=V.device_bases(dut.elec)
+        bases=V.device_bases(dut.elec, dut.bases)
         form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
         @test (bases.ac_voltage*sqrt(3/2))^2/bases.power/hypot(form.R,2π*50*form.L)≈scr
         @test 2π*50*form.L/form.R≈10
@@ -1061,7 +1061,7 @@ end
         point=compute(PowerFlowProblem(net), ACDCPowerFlow());list=V.fixture_netlist(net,
             point)
         spec,reference=V.applicable_scan(id,net,list)
-        bases=V.device_bases(m.elec)
+        bases=V.device_bases(m.elec, m.bases)
         @test spec.voltage_bases≈fill(380sqrt(2/3),2)
         @test spec.current_bases≈fill(1000sqrt(2)/(sqrt(3)*380),2)
         @test spec.dc_voltage_base_kV==800. && spec.power_base_MVA==1000.
@@ -1220,8 +1220,8 @@ end
     ac=Matrix{Float64}(I,2,2)
     # Use native per-unit variables for the independent descriptor so tiny SI
     # conductances do not spoil the generalized eigenvalue backward error.
-    zbase=el.vACbase/el.iACbase
-    dc_conductance_pu=(70/640^2)*el.vDCbase/el.iDCbase
+    zbase=e.bases.v_ac/PowerImpedance.perunit(el, e.bases).iACbase
+    dc_conductance_pu=(70/640^2)*e.bases.v_dc/PowerImpedance.perunit(el, e.bases).iDCbase
     full=[e.cache.A zeros(n,2) e.cache.B;
         zeros(2,n) -form.R/zbase*ac-form.L/zbase*rotation zeros(2,1) ac;
         e.cache.C vcat(zeros(1,2),ac) e.cache.D+diagm([dc_conductance_pu,0.,0.])]
@@ -1259,11 +1259,12 @@ end
         simulation_time=2.,injection_time=0.,tone_peak_pu=5e-5))
     time=collect(0.:.001:2.)
     wave=cos.(2π*7*time)
-    input=zeros(length(time),2); input[:,1].=el.vACbase
+    input=zeros(length(time), 2); input[:, 1].=e.bases.v_ac
     baseline=(;input,output=zeros(length(time),2),input_base=spec.voltage_bases,
         output_base=spec.current_bases,drive=zeros(length(time),2),drive_base=spec.current_bases,dc_voltage=fill(640.,length(time)))
-    drive=hcat(5e-5*el.iACbase*wave,zeros(length(time)))
-    run=merge(baseline,(;input=input+hcat(1e-4*el.vACbase*wave,zeros(length(time))),drive,
+    drive=hcat(5e-5*PowerImpedance.perunit(el, e.bases).iACbase*wave, zeros(length(time)))
+    run=merge(baseline, (;input=input+hcat(1e-4*e.bases.v_ac*wave, zeros(length(time))),
+        drive,
         dc_voltage=640 .+ 0.001wave))
     @test V.scan_quality(time,baseline,[run],short;columns=[1])["valid"]
     @test !V.scan_quality(time,baseline,[run],merge(short,(dc_clamped=true,));columns=[1])["valid"]
@@ -1273,7 +1274,7 @@ end
     outputs=[zeros(length(time),2) for _ in 1:2]
     mixing=[0.4 0.15;-0.1 0.35]
     for column in 1:2, (k,f) in enumerate(frequencies)
-        v=mixing[:,column]*1e-4*el.vACbase
+        v=mixing[:, column]*1e-4*e.bases.v_ac
         current=known[:,:,k]*v
         for row in 1:2
             inputs[column][:,row].+=real.(v[row]*cis.(2π*f*time))
@@ -1320,7 +1321,7 @@ end
             @test !V.interface_step_eligible(m) # existing fixture has positive delay
             values = m.cache.values
             el = MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
-                CompensatedModulation(), m.elec, m.limits, m.powerflow,
+                CompensatedModulation(), m.elec, m.limits, m.bases, m.powerflow,
                 PowerImpedance.LinearizationCache())
             linearize(el, values)
             net.elements = merge(net.elements, (; DUT = el))
@@ -1328,7 +1329,7 @@ end
         if id == "tlc_vdc_q"
             el = net.elements[:DUT]; m = el
             replacement = TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
-                m.innerVoltage, m.innerCurrent, NoModulation(), m.limits,
+                m.innerVoltage, m.innerCurrent, NoModulation(), m.limits, m.bases,
                 m.powerflow, PowerImpedance.LinearizationCache())
             linearize(replacement, m.cache.values)
             net.elements = merge(net.elements, (; DUT = replacement))
@@ -2401,7 +2402,7 @@ end
             @test refs["aggregate_Y"][:,:,k]≈aggregate rtol=1e-10
             @test refs["C1_Y"][:,:,k]≈yd rtol=1e-10
             @test refs["direct_Z"][:,:,k]≈inv(aggregate+grid) rtol=1e-10
-            b=V.device_bases(net.elements[:C1].elec)
+            b=V.device_bases(net.elements[:C1].elec, net.elements[:C1].bases)
             expected=V.injection_readout_factor(f,spec).*spec.current_bases[1].*
                 [local_voltage./b.ac_voltage;(yd*local_voltage)./b.ac_current]
             @test predicted["C1_Y"][:,1,k]≈expected rtol=1e-10
@@ -2465,7 +2466,7 @@ end
             count(x->x isa P.ComponentPlan && x.defn=="master:ammeter",plan.main.components)
         @test all(p.kind in (:voltage,:current,:injection_current) for p in measured.probes.channels)
         for name in c.devices
-            b=V.device_bases(net.elements[name].elec)
+            b=V.device_bases(net.elements[name].elec, net.elements[name].bases)
             @test any(
                 p->p.kind==:voltage && p.bus==V.port_probe(list, name, b.ac_port).name,
                 measured.probes.channels)
@@ -2479,7 +2480,7 @@ end
             functions=V.composed_device_functions(c;time_step=spec.time_step)
             native=V.composed_device_functions(c)
             for name in c.devices
-                e=net.elements[name];b=V.device_bases(e.elec)
+                e=net.elements[name];b=V.device_bases(e.elec, e.bases)
                 changed=V.interface_step_eligible(e)
                 @test changed==(id!="mmc_gfm_gfl_shared_bus" || name==:C2)
                 for f in (7.,137.,750.)
@@ -2547,7 +2548,7 @@ end
         if id=="mmc_gfm_gfl_shared_bus"
             @test occursin("equilibrium",spec.settling["scope"])
             @test occursin("400-to-380",only(filter(x->occursin("equilibrium",x),V.fixture(id).differences)))
-            b=V.device_bases(net.elements[:C1].elec)
+            b=V.device_bases(net.elements[:C1].elec, net.elements[:C1].bases)
             @test b.power==1060. && b.dc_voltage==640.
             @test b.ac_voltage≈400sqrt(2/3)
         end
@@ -2683,7 +2684,8 @@ end
         @test norm(run.device_voltages["C1_Y"]-run.voltage)>1e-3
         @test haskey(run.outputs,"C1_Y")
         bad_voltages=Dict(k=>copy(v) for (k,v) in run.device_voltages)
-        bad_voltages["C1_Y"][:,1].+=.02V.device_bases(net.elements[:C1].elec).ac_voltage
+        bad_voltages["C1_Y"][:, 1].+=.02V.device_bases(net.elements[:C1].elec,
+            net.elements[:C1].bases).ac_voltage
         bad=merge(run,(;device_voltages=bad_voltages))
         individual=V.composed_quality(times,base,[bad],spec,c,"C1_Y";columns=[1])
         @test !individual["valid"] && "input_departure_pu" in individual["invalid_reasons"]
@@ -2818,7 +2820,7 @@ end
             end
         else
             @test net.elements[:C1] isa PowerImpedance.SynchronousMachine
-            b=V.device_bases(net.elements[:C1].elec)
+            b=V.device_bases(net.elements[:C1].elec, net.elements[:C1].bases)
             @test b.power==1000. && b.ac_port==:ac && b.dc_voltage===nothing
             @test spec.power_base_MVA==2000.
             @test isempty(c.dc_references)

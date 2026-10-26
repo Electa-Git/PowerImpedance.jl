@@ -21,7 +21,7 @@ const PI = PowerImpedance
         ccsc in (m.sigma_control.ccsc, PI.NoCirculatingCurrentSuppressionControl())
         sigma = PI.ΣdqzControlTEC(; tec, zscc, ccsc)
         model = PI.MMC(; m.meas, m.sync, m.delta_control, sigma_control = sigma,
-            m.modulation, m.elec)
+            m.modulation, m.elec, m.bases)
         e = converter_element(original, model)
         definition = P.mmc_sigma("SIGMA", e, eq, transforms)
         modules = Dict(d.name => d for d in (abc, dq, definition))
@@ -35,10 +35,10 @@ const PI = PowerImpedance
             phases = (0.0, -2π / 3, 2π / 3)
             signals = Dict{String, Any}("theta_c" => 0.0, "P_ac_f" => 0.43,
                 "v_dc_f" => voltage, "v_dc_divisor" => eq.outputs.meas.v_dc_f,
-                "iS_abc" => m.elec.Sbase / m.elec.vDC_base .* (d .* cos.(phases) .+
+                "iS_abc" => m.bases.S / m.bases.v_dc .* (d .* cos.(phases) .+
                     q .* sin.(phases) .+ z))
             for half in ("u", "l"), phase in ("a", "b", "c")
-                signals["v_Ctot_" * half * "_" * phase] = energy * m.elec.vDC_base
+                signals["v_Ctot_" * half * "_" * phase] = energy * m.bases.v_dc
             end
             states = merge(eq.states, (; iΣ_d = d, iΣ_q = q, iΣ_z = z,
                 Δθ_pll = 0.0, vCΣ_z = energy, vCΣ_d = 0.0, vCΣ_q = 0.0,

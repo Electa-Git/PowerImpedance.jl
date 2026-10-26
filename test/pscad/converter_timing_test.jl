@@ -35,7 +35,7 @@ end
                 Dict("theta_rel_next" => 1.23, "theta_pll_rel_next" => -2.34), time)
             relative = gfm ? -0.17 : 0.31
             @test measured["theta_rel"] == relative
-            @test measured["theta_c"] ≈ time * e.model.elec.ωbase + relative
+            @test measured["theta_c"] ≈ time * e.model.bases.omega + relative
             gfm && @test measured["theta_pll_rel"] == 0.31
         end
         plan = P.build_plan(list)

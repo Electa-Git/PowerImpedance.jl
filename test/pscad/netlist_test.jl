@@ -19,11 +19,11 @@ function pscad_ac_fixture(; abc = false, machine_first = false)
     load = P.Impedance(; conductors = 3,
         value = s -> Matrix(Diagonal(fill(load_R + s * load_L, 3))))
     elements = if machine_first
-        machine = P.SynchronousMachine(; elec = ElectricalSM(Vᵃᶜ_base = 380.0),
+        machine = P.synchronousmachine(; Vᵃᶜ_base = 380.0, elec = ElectricalSM(),
             mech = MechanicalSM(), avr = AVRSM(), gov = GovernorSM(),
-            limits = P.Limits(), powerflow = (; p = 0.0, q = 0.0, v = 1.0))
+            powerflow = (; p = 0.0, q = 0.0, v = 1.0))
         machine = component(machine; powerflow =
-            (; p = 900.0 / machine.elec.S_base, q = 0.0, v = 1.0))
+            (; p = 900.0 / machine.bases.S, q = 0.0, v = 1.0))
         (; machine, source, line, load)
     else
         (; source, line, load)

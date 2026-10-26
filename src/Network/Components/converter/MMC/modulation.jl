@@ -156,8 +156,8 @@ function state_space!(F, x, inputs, b::UncompensatedModulation, conv::AbstractMM
     vMΣ_d_ref, vMΣ_q_ref = inverse_frame_transform(vMΣ_d_ref_c, vMΣ_q_ref_c, -2*Δθ_c)
 
     # Δ variables multiplied by -1 * baseConv1 * 2/v_dc_f
-    mΔd = -conv.elec.baseConv1 * 2/v_dc_f * vMΔ_d_ref 
-    mΔq = -conv.elec.baseConv1 * 2/v_dc_f * vMΔ_q_ref
+    mΔd = -perunit(conv.elec, conv.bases).baseConv1 * 2/v_dc_f * vMΔ_d_ref
+    mΔq = -perunit(conv.elec, conv.bases).baseConv1 * 2/v_dc_f * vMΔ_q_ref
 
     # Σ variables multiplied by 2/v_dc_f
     mΣd = 2/v_dc_f * vMΣ_d_ref
@@ -166,10 +166,10 @@ function state_space!(F, x, inputs, b::UncompensatedModulation, conv::AbstractMM
 
     # Pade delays
     y, i = state_space_block!(F, x, (mΔd, mΔq), b.delay1, conv, 1)
-    mΔd, mΔq = phase_compensated_dq(y, conv.elec.ωbase * b.delay1.timeDelay)
+    mΔd, mΔq = phase_compensated_dq(y, conv.bases.omega * b.delay1.timeDelay)
 
     y, i = state_space_block!(F, x, (mΣd, mΣq), b.delay2, conv, i)
-    mΣd, mΣq = phase_compensated_dq(y, -2*conv.elec.ωbase * b.delay2.timeDelay)
+    mΣd, mΣq = phase_compensated_dq(y, -2*conv.bases.omega * b.delay2.timeDelay)
 
     mΣz = state_space_block!(F, x, (mΣz, ), b.delay3, conv, i)[1][1]
 
@@ -343,7 +343,9 @@ function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
     vMΔ_d_ref, vMΔ_q_ref = inverse_frame_transform(vMΔ_d_ref_c, vMΔ_q_ref_c, Δθ_c)
     vMΣ_d_ref, vMΣ_q_ref = vMΣ_d_ref_c, vMΣ_q_ref_c
 
-    vMΔ_d_ref *= conv.elec.baseConv1; vMΔ_q_ref *= conv.elec.baseConv1 # Δ variables multiplied by baseConv1 (DC -> AC base conversion)
+    # Scale Δ references with baseConv1 computed from the parent model bases.
+    vMΔ_d_ref *= perunit(conv.elec, conv.bases).baseConv1;
+    vMΔ_q_ref *= perunit(conv.elec, conv.bases).baseConv1
 
     VΣΔ_CmdqZ = 1/4 * [ 2 * vCΣ_z       0              2 * vCΣ_d               vCΔ_d + vCΔ_Zd       vCΔ_Zq - vCΔ_q       vCΔ_d       vCΔ_q
                         0              2 * vCΣ_z       2 * vCΣ_q               -vCΔ_q - vCΔ_Zq      vCΔ_Zd - vCΔ_d       vCΔ_q       -vCΔ_d
@@ -364,18 +366,20 @@ function state_space!(F, x, inputs, b::CompensatedModulation, conv::AbstractMMC)
 
     # Pade delays
     y, i = state_space_block!(F, x, (mΔd, mΔq), b.delay1, conv, 1)
-    mΔd, mΔq = phase_compensated_dq(y, conv.elec.ωbase * b.delay1.timeDelay)
+    mΔd, mΔq = phase_compensated_dq(y, conv.bases.omega * b.delay1.timeDelay)
     # TODO improve this part
     mΔZd_res, i = state_space_block!(F, x, (mΔZd, ), b.delay2a, conv, i)
     mΔZq_res, i = state_space_block!(F, x, (mΔZq, ), b.delay2b, conv, i)
 
-    T = [cos(3 * conv.elec.ωbase * b.delay2a.timeDelay) sin(3 * conv.elec.ωbase * b.delay2a.timeDelay)
-         -sin(3 * conv.elec.ωbase * b.delay2a.timeDelay) cos(3 * conv.elec.ωbase * b.delay2a.timeDelay)]
+    T = [cos(3 * conv.bases.omega * b.delay2a.timeDelay) sin(3 * conv.bases.omega *
+        b.delay2a.timeDelay)
+         -sin(3 * conv.bases.omega * b.delay2a.timeDelay) cos(3 * conv.bases.omega *
+             b.delay2a.timeDelay)]
 
     mΔZd, mΔZq = T * [mΔZd_res[1]; mΔZq_res[1]]
 
     y, i = state_space_block!(F, x, (mΣd, mΣq), b.delay3, conv, i)
-    mΣd, mΣq = phase_compensated_dq(y, -2*conv.elec.ωbase * b.delay3.timeDelay)
+    mΣd, mΣq = phase_compensated_dq(y, -2*conv.bases.omega * b.delay3.timeDelay)
 
     mΣz = state_space_block!(F, x, (mΣz, ), b.delay4, conv, i)[1][1]
     return (; mΣd, mΣq, mΣz, mΔd, mΔq, mΔZd, mΔZq)

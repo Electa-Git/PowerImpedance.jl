@@ -19,9 +19,10 @@ function tlc_qv_fixture()
     b = bases(m)
     reactive = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0),
         support = VoltageSupportLag(K = 5.0, ωc = 2.0))
-    converter = component(tlc(; m.elec, m.meas, m.sync, m.outerActive,
-        outerReactive = reactive, m.innerVoltage, m.innerCurrent, m.mod,
-        limits = limits(m));
+    converter = component(TLC(; m.bases,
+        powerflow = map(input -> input.default, PowerImpedance.inputs(m).powerflow), m.elec,
+        m.meas, m.sync, m.outerActive, outerReactive = reactive, m.innerVoltage,
+        m.innerCurrent, m.mod, limits = limits(m));
         outerReactive = (q_ref = 20.0 / b.S,
             support = (v_ac_ref = (220sqrt(2 / 3)) / b.v_ac,)),
         powerflow = (v_dc = 640.0 / b.v_dc, p_dc = 70.0 / b.S))
@@ -46,7 +47,7 @@ function consumer_values(net::NB.NetworkState, flow)
         residual = zeros(length(solution.u))
         f!(residual, solution.u, parameters)
         @test norm(residual, Inf) <= 1e-6
-        @test sp.q_ac == -point.ac.q / m.elec.Sbase
+        @test sp.q_ac == -point.ac.q / m.bases.S
         converters[name] = (; state = copy(solution.u), A = copy(m.cache.A),
             B = copy(m.cache.B), C = copy(m.cache.C), D = copy(m.cache.D),
             y = NB.get_y(model, name, ComplexF64.(2π * im .* [1.0, 100.0, 5000.0])))
@@ -148,7 +149,7 @@ end
         @test -point.ac.q > 1e-6
         e = only(filter(e -> e.name == n, a.elements))
         @test e.values == point
-        @test PI.pftoinputs(e.model, e.values)[2].q_ac == -point.ac.q / e.model.elec.Sbase
+        @test PI.pftoinputs(e.model, e.values)[2].q_ac == -point.ac.q / e.model.bases.S
     end
 end
 
@@ -195,7 +196,7 @@ function pscad_export_after_explicit_solve(factories)
                         second_q = PSC.converter_equilibrium(reused).terminal_pu.q_ac
                         system_base = a.operating_point.bases.S_MVA
                         @test abs(first_q - second_q) <=
-                              tolerance * system_base / x.model.elec.Sbase
+                              tolerance * system_base / x.model.bases.S
                         @test abs(a.operating_point.branch_flows[x.name].qt -
                                   c.operating_point.branch_flows[x.name].qt) /
                               system_base <=

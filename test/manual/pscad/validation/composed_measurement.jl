@@ -36,7 +36,7 @@ function composed_samples(result, model, spec, c)
     clamps=Dict{String,Vector{Float64}}()
     device_voltages=Dict{String,Matrix{Float64}}()
     for name in c.devices
-        b=device_bases(c.net.elements[name].elec)
+        b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
         bus=port_probe(model.netlist,name,b.ac_port).name
         vp=only(filter(p->p.kind==:voltage && p.bus==bus,model.probes.channels))
         device_voltages[string(name)*"_Y"]=fixed_dq(result.time,probe_samples(result,vp))
@@ -76,7 +76,8 @@ function composed_target_spec(spec,c,target)
     target=="DC_current_T" && return merge(spec,(;quantity="T",response_output_bases=fill(1.25,2),dc_clamped=false))
     target=="direct_Z" && return merge(spec,(;quantity="Z",dc_clamped=false))
     target=="aggregate_Y" && return merge(spec,(;dc_clamped=false))
-    name=Symbol(chop(target;tail=2));b=device_bases(c.net.elements[name].elec)
+    name=Symbol(chop(target;tail=2));b=device_bases(c.net.elements[name].elec,
+        c.net.elements[name].bases)
     return merge(spec,(;quantity="Y",voltage_bases=fill(b.ac_voltage,length(spec.axes)),
         current_bases=fill(b.ac_current,length(spec.axes)),dc_clamped=false))
 end
@@ -97,7 +98,8 @@ function composed_quality(time, baseline, runs, spec, c, target; columns=eachind
     quality=scan_quality(time,bs,rs,ts;columns)
     clamp=0.
     for (name,held) in baseline.clamps
-        b=device_bases(c.net.elements[Symbol(name)].elec)
+        b=device_bases(c.net.elements[Symbol(name)].elec,
+            c.net.elements[Symbol(name)].bases)
         # Only source-clamped DC terminals have this clamp limit. Internal DC nodes in a
         # coupled circuit are measured responses, rather than ideal voltage clamps.
         node=only(port_nets(c.net, Symbol(name), :dc))
@@ -231,7 +233,7 @@ function composed_predicted_columns(c,spec,column,forms)
                 physical=[voltage;refs[target][:,:,k]*voltage]
             else
                 name=Symbol(chop(target;tail=2));h=component_incidence(c,name)
-                b=device_bases(c.net.elements[name].elec)
+                b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
                 local_current=(functions[name](s)*h'*all_voltage)[b.ac_indices]
                 if np==2
                     local_voltage=(h'*all_voltage)[b.ac_indices]
@@ -252,7 +254,7 @@ end
 function composed_score_indices(c,target)
     target in ("aggregate_Y","direct_Z") && return collect(1:2length(c.ports))
     name=Symbol(chop(target;tail=2));h=component_incidence(c,name)
-    b=device_bases(c.net.elements[name].elec)
+    b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
     rows=findall(x->!iszero(x),vec(sum(abs.(h[1:2length(c.ports),b.ac_indices]);dims=2)))
     # A sole device behind a passive line is scored at its local terminal.
     return isempty(rows) ? [1,2] : rows

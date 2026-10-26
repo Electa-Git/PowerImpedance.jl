@@ -11,12 +11,11 @@ voltage = 380 / sqrt(3);
 # ## Converter blocks
 #
 # The electrical blocks contain 50 mH arm inductors and 400 submodules per arm.
-electrical1 = ElectricalMMC(vDC_base = 800);
+electrical1 = ElectricalMMC();
 
 # The inverter transformer has a 333/380 ratio and 46.1 mH leakage inductance on its
 # converter side.
-electrical2 = ElectricalMMC(vDC_base = 800, vACbase_LL_RMS = 333,
-    turnsRatio = 333/380, Lᵣ = 0.0461, Rᵣ = 0.4103);
+electrical2 = ElectricalMMC(turnsRatio = 333/380, Lᵣ = 0.0461, Rᵣ = 0.4103);
 
 # Instantaneous measurements supply AC voltage, AC current and DC voltage to the controls.
 measurement = Measurement();
@@ -55,7 +54,7 @@ sync2 = PLLSynchronization(pi_ctrl = PIControl(Kp = 7, Ki = 12.5664),
 modulation = UncompensatedModulation();
 # The rectifier combines DC-voltage and reactive-power control at the AC triangle.
 
-c1 = let model = mmc(elec = electrical1, meas = measurement, sync = sync1,
+c1 = let model = mmc(vDC_base = 800, elec = electrical1, meas = measurement, sync = sync1,
         delta_control = ΔdqControlGFL(outer_active = dc_control,
             outer_reactive = reactive_control, occ = current_control),
         sigma_control = internal_control, modulation = modulation)
@@ -69,7 +68,8 @@ end;
 
 # The inverter controls active and reactive power at Bus 6.
 
-c2 = let model = mmc(elec = electrical2, meas = measurement, sync = sync2,
+c2 = let model = mmc(vDC_base = 800, vACbase_LL_RMS = 333, elec = electrical2,
+        meas = measurement, sync = sync2,
         delta_control = ΔdqControlGFL(outer_active = power_control,
             outer_reactive = reactive_control, occ = current_control),
         sigma_control = internal_control, modulation = modulation)

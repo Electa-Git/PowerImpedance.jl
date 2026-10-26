@@ -12,7 +12,9 @@
     for name in (:c1,:c2)
         m=redesigned.elements[name]
         @test m.elec.turnsRatio==333/380
-        @test m.elec.Rₑ*m.elec.zAC_base-m.elec.Rₐᵣₘ*(640^2/1000)/2 ≈ 1.10889
+        @test PowerImpedance.perunit(m.elec, m.bases).Rₑ*PowerImpedance.perunit(m.elec,
+            m.bases).zAC_base-PowerImpedance.perunit(m.elec,
+            m.bases).Rₐᵣₘ*(640^2/1000)/2 ≈ 1.10889
         @test m.modulation.delay1.timeDelay==25e-6
         @test m.delta_control.occ.pi_ctrl==PIControl(Kp=.25,Ki=100.)
         @test m.delta_control.occ.activate_ω_c_multiplication
@@ -83,7 +85,7 @@ end
         @test all(size(sampled.outputs[target],2)==size(refs[target],1) for target in keys(refs))
         for name in c.devices
             element=net.elements[name];
-            b=V.device_bases(element.elec)
+            b=V.device_bases(element.elec, element.bases)
             bus=V.port_probe(list, name, b.ac_port).name
             vp=only(filter(p->p.kind==:voltage && p.bus==bus, plan.probes.channels))
             ip=only(filter(p->p.kind==:current && p.element==string(name) && p.port==

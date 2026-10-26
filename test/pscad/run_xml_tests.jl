@@ -588,7 +588,7 @@ else
                 converter = only(filter(e -> e.model isa PowerImpedance.TLC, model.netlist.elements))
                 @test parse(Float64,
                     pyconvert(String, guarded.xpath("string(./paramlist/param[@name='OL']/@value)"))) ==
-                      converter.model.elec.vDCbase
+                      converter.model.bases.v_dc
                 @test pylen(root.xpath("./definitions/Definition[@name='$(parent.name)']/schematic/User[@defn='master:voltmeter'][paramlist/param[@name='Name'][@value='v_dc_m']]")) ==
                       1
                 for label in root.xpath(".//User[@defn='master:datalabel']/paramlist/param[@name='Name']")
@@ -677,7 +677,7 @@ else
                     @test all(endswith(value, " [$unit]") for value in values)
                     reference_value = if startswith(name, "mmc_gfm") || startswith(name, "mmc_compensated")
                         element = only(filter(e -> e.name == :DUT, model.netlist.elements))
-                        si = P.mmc_si(element.model.elec)
+                        si = P.mmc_si(element.model.elec, element.model.bases)
                         field == "L" ? si.L_arm : si.R_arm
                     else
                         P._pscad_number(replace(values[1], " [$unit]" => ""))

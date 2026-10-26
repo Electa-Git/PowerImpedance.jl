@@ -8,15 +8,16 @@ function element_y(elem, s::Complex)
     Y = C * ((s * Iₙ - A) \ B) + D
 
     elec = elem.elec
-    iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
-    iDCbase = elec.Sbase / elec.vDC_base
+    b = elem.bases
+    iACbase = 2 * b.S / (3 * b.v_ac)
+    iDCbase = b.S / b.v_dc
 
     Y = Matrix{ComplexF64}(Y)
     Y[1, :] .*= iDCbase
     Y[2:3, :] .*= iACbase * elec.turnsRatio
 
-    Y[:, 1] ./= elec.vDC_base
-    Y[:, 2:3] ./= elec.vAC_base
+    Y[:, 1] ./= b.v_dc
+    Y[:, 2:3] ./= b.v_ac
 
     return Y
 end
@@ -27,9 +28,6 @@ end
 
 function compensated_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
     elec = PowerImpedance.ElectricalMMC(
-        vDC_base = 640.0,
-        Sbase = 1060.0,
-        vACbase_LL_RMS = 320.0,
         turnsRatio = 320 / 400,
         Lᵣ = 0.18 * (320^2 / 1060) / (2π * 50),
         Rᵣ = 0.001 * (320^2 / 1060),
@@ -128,15 +126,9 @@ function build_compensated_mmc_grid()
     elec, meas, synch, delta_control, sigma_control,
     mod, limits = compensated_mmc_blocks(; Pmmc, Qmmc, Vm, Vdc)
 
-    dut = PowerImpedance.mmc(
-        elec = elec,
-        meas = meas,
-        sync = synch,
-        delta_control = delta_control,
-        sigma_control = sigma_control,
-        modulation = mod,
-        limits = limits
-    )
+    dut = PowerImpedance.mmc(vDC_base = 640.0, Sbase = 1060.0, vACbase_LL_RMS = 320.0,
+        elec = elec, meas = meas, sync = synch, delta_control = delta_control,
+        sigma_control = sigma_control, modulation = mod, limits = limits)
 
     b = bases(dut)
     dut = component(dut; sync = (p_ref = Pmmc / b.S,),
@@ -144,8 +136,8 @@ function build_compensated_mmc_grid()
         powerflow = (v_ac = Vm * sqrt(2) / b.v_ac,
             p_dc = Pmmc / b.S, v_dc = Vdc / b.v_dc))
 
-    voltage = elec.vAC_base / elec.turnsRatio
-    magnitude = (voltage * sqrt(3 / 2))^2 / elec.Sbase / 8
+    voltage = b.v_ac / elec.turnsRatio
+    magnitude = (voltage * sqrt(3 / 2))^2 / b.S / 8
     resistance = magnitude / sqrt(101)
     inductance = 10resistance / (2π * 50)
     elements = (; DUT = dut, G3 = ac_source(v = voltage),

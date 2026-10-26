@@ -464,21 +464,44 @@ end
     @test BaseValues(S = 300.0, v_ac = 20.0, omega = 100π).v_dc === nothing
     mm = gfl()
     bm = bases(mm)
+    @test bm === mm.bases
+    @test withinputs(mm).bases === bm
+    @test component(mm).bases === bm
     @test (bm.S, bm.v_ac, bm.v_dc, bm.omega) ===
-          (mm.elec.Sbase, mm.elec.vAC_base, mm.elec.vDC_base, mm.elec.ωbase)
+          (1000.0, 380.0 * sqrt(2/3), 640.0, 100π)
     tl = tlc()
     bt = bases(tl)
+    @test bt === tl.bases
+    @test withinputs(tl).bases === bt
+    @test component(tl).bases === bt
     @test (bt.S, bt.v_ac, bt.v_dc, bt.omega) ===
-          (tl.elec.Sbase, tl.elec.vACbase, tl.elec.vDCbase, tl.elec.ωbase)
+          (500.0, 220.0 * sqrt(2/3), 640.0, 100π)
     for (model, voltage) in (
-        (synchronousmachine(), ElectricalSM().Vᵃᶜ_base),
-        (inductionmachine(), ElectricalIM().Vac_base))
+        (synchronousmachine(), 220.0),
+        (inductionmachine(), 220.0))
         b = bases(model)
-        @test b.S === model.elec.S_base
+        @test b === model.bases
+        @test b.S === 1000.0
         @test b.v_ac == voltage * sqrt(2/3)
         @test b.v_dc === nothing
-        @test b.omega === model.elec.ωn
+        @test b.omega === 100π
     end
+    for (constructor, keywords) in (
+        (ElectricalMMC, (:Sbase, :vACbase_LL_RMS, :vDC_base, :ωbase)),
+        (ElectricalTLC, (:Sbase, :vACbase_LL_RMS, :vDCbase, :ωbase)),
+        (ElectricalSM, (:S_base, :Vᵃᶜ_base, :ωn)),
+        (ElectricalIM, (:S_base, :Vac_base, :ωn)))
+        for keyword in keywords
+            @test_throws MethodError constructor(; NamedTuple{(keyword,)}((1.0,))...)
+            @test !hasfield(constructor, keyword)
+        end
+    end
+    physical_mmc = ElectricalMMC(Lₐᵣₘ = 0.037, Rₐᵣₘ = 0.82, Cₐᵣₘ = 0.006, Lᵣ = 0.045,
+        Rᵣ = 0.37)
+    @test (physical_mmc.Lₐᵣₘ, physical_mmc.Rₐᵣₘ, physical_mmc.Cₐᵣₘ,
+        physical_mmc.Lᵣ, physical_mmc.Rᵣ) === (0.037, 0.82, 0.006, 0.045, 0.37)
+    physical_tlc = ElectricalTLC(Lᵣ = 0.017, Rᵣ = 0.24)
+    @test (physical_tlc.Lᵣ, physical_tlc.Rᵣ) === (0.017, 0.24)
     for model in passive_models(3)
         @test bases(model) === nothing
         @test limits(model) === nothing

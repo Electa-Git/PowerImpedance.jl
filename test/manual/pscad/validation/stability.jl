@@ -59,7 +59,7 @@ function stability_gate(net, entry)
     entry.category == :passive && return passive_gate(net,entry)
     entry.category == :device || error("no complete-network gate for $(entry.id)")
     dut=net.elements[:DUT]
-    bases=device_bases(dut.elec)
+    bases=device_bases(dut.elec, dut.bases)
     form=P.identify_rlc(net.elements[:Grid]; name=:Grid).form
     grid_y(s)=physical_y(net.elements[:Grid],s)[1:2,1:2]
     inductance = something(form.L, 0.0)

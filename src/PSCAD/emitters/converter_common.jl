@@ -70,7 +70,7 @@ function converter_angle_snapshot!(canvas, e, equilibrium; origin)
     graph = BlockGraph(ControlBlock[
         _ConverterStateSnapshot(Signal("theta_rel_next"), Signal("theta_rel"), initial),
         TimeStep(Signal("angle_clock_s")),
-        Gain(Signal("angle_clock_s"), Signal("angle_nominal"), e.model.elec.ωbase),
+        Gain(Signal("angle_clock_s"), Signal("angle_nominal"), e.model.bases.omega),
         Sum(Signal.(["angle_nominal", "theta_rel"]), [1, 1], Signal("theta_c"))])
     if gfm
         push!(graph.nodes, _ConverterStateSnapshot(Signal("theta_pll_rel_next"),
@@ -177,8 +177,9 @@ function converter_filter!(graph, parameters, input, output, filter, names, stat
 end
 
 function converter_measurements(name, e, equilibrium, transforms,
-        bases = (; v = e.model.elec.vACbase, i = e.model.elec.iACbase,
-            dc = e.model.elec.vDCbase))
+        bases = (; v = e.model.bases.v_ac, i = PowerImpedance.perunit(e.model.elec,
+            e.model.bases).iACbase,
+            dc = e.model.bases.v_dc))
     m = e.model
     parameters = ModuleParameterPlan[]
     graph = BlockGraph()
@@ -203,7 +204,7 @@ function converter_measurements(name, e, equilibrium, transforms,
     inputs = [("v_abc", 3), ("i_abc", 3), ("v_dc", 1), ("theta_c", 1), ("theta_rel", 1)]
     if m isa PowerImpedance.MMC
         invcurrent = converter_parameter!(parameters, "invDCcurrent", bases.dc /
-                                                                      m.elec.Sbase)
+                                                                      m.bases.S)
         append!(graph.nodes,
             ControlBlock[Import("i_dc_si", Signal("i_dc_si")),
                 Gain(Signal("i_dc_si"), Signal("i_dc"), invcurrent)])
@@ -275,7 +276,7 @@ function converter_pll(name, e, equilibrium, block = e.model.sync)
     append!(graph.nodes, ControlBlock[Gain(Signal("v_pll"), Signal("error"), -1.0)])
     converter_pi!(graph, parameters, Signal("error"), Signal("dw"), block.pi_ctrl,
         equilibrium.states.ξ_pll, "pll")
-    w = converter_parameter!(parameters, "wbase", e.model.elec.ωbase)
+    w = converter_parameter!(parameters, "wbase", e.model.bases.omega)
     initial = converter_parameter!(parameters, "theta0", equilibrium.states.Δθ_pll)
     append!(graph.nodes,
         ControlBlock[Const(Signal("one"), 1.0),
@@ -296,7 +297,7 @@ function converter_vsm(name, e, equilibrium, block::PowerImpedance.VSEWithDampin
     for (n, v, unit) in (("p_reference", equilibrium.terminal_pu.p_ac, ""),
         ("omega_reference", block.ω_ref, ""), ("Kd", block.K_d, ""),
         ("Kw", block.K_ω, ""), ("inv2H", 1 / (2block.H), ""),
-        ("wbase", e.model.elec.ωbase, ""),
+        ("wbase", e.model.bases.omega, ""),
         ("omega0", equilibrium.states.ω_VSM, ""),
         ("theta0", equilibrium.states.Δθ_VSM, ""))
         converter_parameter!(parameters, n, v, unit)
@@ -485,7 +486,8 @@ function converter_occ(name, e, equilibrium, block = e.model.innerCurrent)
     inputs = [(n, 1)
               for n in ("i_d_ref", "i_q_ref", "i_d_f", "i_q_f", "vG_d_f", "vG_q_f", "omega_c")]
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
-    l = converter_parameter!(parameters, "Lpu", PowerImpedance.elec_inductance(e.model.elec))
+    l = converter_parameter!(parameters, "Lpu",
+        PowerImpedance.elec_inductance(e.model.elec, e.model.bases))
     for (axis, other, sign, initial) in (("d", "q", 1, equilibrium.states.ξ_id), (
         "q", "d", -1, equilibrium.states.ξ_iq))
         error, pi, feed, cross, term, output = Signal.([axis * s

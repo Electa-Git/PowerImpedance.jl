@@ -11,9 +11,8 @@ imp_topology = let
 
     # HVDC link 1
     # MMC1 controls the DC voltage, and is situated at the remote end.
-    c1 = let model = PowerImpedance.mmc(
-            elec = PowerImpedance.ElectricalMMC(vDC_base = 800,
-            ),
+    c1 = let model = PowerImpedance.mmc(vDC_base = 800,
+            elec = PowerImpedance.ElectricalMMC(),
             sync = PowerImpedance.PLLSynchronization(
                 pi_ctrl = PowerImpedance.PIControl(Kp = 0.28, Ki = 12.5664),
             ),
@@ -31,16 +30,15 @@ imp_topology = let
             ),
             sigma_control = PowerImpedance.ΣdqzControlTEC(
                 ccsc = PowerImpedance.CirculatingCurrentSuppressionControl(
-                PowerImpedance.PIControl(Kp = 0.1048, Ki = 48.1914),
-            ),
+                    PowerImpedance.PIControl(Kp = 0.1048, Ki = 48.1914),
+                ),
             ),
             limits = PowerImpedance.Limits(
                 P_min = -1500,
                 P_max = 1500,
                 Q_min = -500,
                 Q_max = 500
-            )
-        )
+            ))
         b = bases(model)
         #Amplitude LN for Vac setpoint
         component(model;
@@ -51,14 +49,9 @@ imp_topology = let
     end
     # MMC2 controls P&Q. It is connected to bus 7. Define the transformer impedance
     # parameters at the converter side!
-    c2 = let model = PowerImpedance.mmc(
-            elec = PowerImpedance.ElectricalMMC(
-                vDC_base = 800,
-                vACbase_LL_RMS = 333,
-                turnsRatio = 333 / 380,
-                Lᵣ = 0.0461,
-                Rᵣ = 0.4103
-            ),
+    c2 = let model = PowerImpedance.mmc(vDC_base = 800, vACbase_LL_RMS = 333,
+            elec = PowerImpedance.ElectricalMMC(turnsRatio = 333 / 380, Lᵣ = 0.0461,
+                Rᵣ = 0.4103),
             sync = PowerImpedance.PLLSynchronization(
                 pi_ctrl = PowerImpedance.PIControl(Kp = 0.28, Ki = 12.5664),
             ),
@@ -76,16 +69,15 @@ imp_topology = let
             ),
             sigma_control = PowerImpedance.ΣdqzControlTEC(
                 ccsc = PowerImpedance.CirculatingCurrentSuppressionControl(
-                PowerImpedance.PIControl(Kp = 0.1048, Ki = 48.1914),
-            ),
+                    PowerImpedance.PIControl(Kp = 0.1048, Ki = 48.1914),
+                ),
             ),
             limits = PowerImpedance.Limits(
                 P_min = -1000,
                 P_max = 1000,
                 Q_min = -1000,
                 Q_max = 1000
-            )
-        )
+            ))
         b = bases(model)
         #Amplitude LN for Vac setpoint
         component(model;

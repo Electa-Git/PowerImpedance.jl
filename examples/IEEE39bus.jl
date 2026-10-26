@@ -181,26 +181,23 @@ elements = (;
 
 # ## The STATCOM
 #
-# `ElectricalTLC` models the series reactor. Its inputs use henries and ohms,
-# apparent power in MVA, AC line-to-line RMS voltage in kilovolts and pole-to-pole
-# DC voltage in kilovolts. The electrical block converts these inputs to its
-# per-unit system. `Z_ST_base` is the AC impedance base in ohms. The reactor
-# inductance is 0.08 pu on the STATCOM base of 269 MVA and 345 kV. Its resistance
-# is 1 % of that reactance.
+# `ElectricalTLC` stores reactor inductance in henries and resistance in ohms.
+# The `tlc` constructor supplies apparent power in MVA, AC line-to-line RMS voltage
+# in kilovolts and pole-to-pole DC voltage in kilovolts. The equations normalize
+# reactor values with these parent-model bases. `Z_ST_base` is the AC impedance
+# base in ohms. The reactor inductance is 0.08 pu on the STATCOM base of 269 MVA
+# and 345 kV. Its resistance is 1 % of that reactance.
 
 Vdc_ST = 110;
 S_ST = 269;
 Z_ST_base = 345^2 / S_ST;
 Lf_ST = 0.08 * Z_ST_base / 2 / pi / 50;
 Rf_ST = 0.01 * 0.08 * Z_ST_base;
-electrical = ElectricalTLC(
-    Lᵣ = Lf_ST, Rᵣ = Rf_ST, Sbase = S_ST,
-    vACbase_LL_RMS = 345, vDCbase = Vdc_ST,
-);
+electrical = ElectricalTLC(Lᵣ = Lf_ST, Rᵣ = Rf_ST);
 
 # `Measurement` filters AC voltage and current before synchronization and control.
 # The Butterworth `order` is dimensionless and `ωc` is a cutoff in radians per
-# second. The measured signals use the electrical block's per-unit bases.
+# second. The measured signals use the parent model's per-unit bases.
 
 measurements = Measurement(
     v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
@@ -268,12 +265,11 @@ statcom_limits = PowerImpedance.Limits(
 elements = (;
     elements...,
     G_DC = dc_source(v = 110),
-    STATCOM = let model = tlc(
-        elec = electrical, meas = measurements, sync = synchronization,
-        outerActive = outer_active, outerReactive = outer_reactive,
-        innerVoltage = inner_voltage, innerCurrent = inner_current,
-        mod = modulation, limits = statcom_limits,
-    )
+    STATCOM = let model = tlc(Sbase = S_ST, vACbase_LL_RMS = 345, vDCbase = Vdc_ST,
+            elec = electrical, meas = measurements, sync = synchronization,
+            outerActive = outer_active, outerReactive = outer_reactive,
+            innerVoltage = inner_voltage, innerCurrent = inner_current, mod = modulation,
+            limits = statcom_limits)
         b = bases(model)
         component(model; outerActive = (v_dc_ref = Vdc_ST / b.v_dc,),
             outerReactive = (q_ref = (Q_ST * S_ST) / b.S,

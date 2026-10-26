@@ -11,10 +11,9 @@ function system_original_p2p_network(; redesigned=false)
     end
     for (name,active,arm_l) in ((:c1,true,.05),(:c2,false,.03))
         referred=redesigned || name==:c2
-        elec=PowerImpedance.ElectricalMMC(Lₐᵣₘ=arm_l,Rₐᵣₘ=1.07,Cₐᵣₘ=.01,N=400,
-            turnsRatio=referred ? 333/380 : 1.,Lᵣ=referred ? .0461 : .06,
-            Rᵣ=redesigned ? 1.10889 : referred ? .4103 : .535,
-            vACbase_LL_RMS=referred ? 333 : 380,Sbase=1000,vDC_base=640)
+        elec=PowerImpedance.ElectricalMMC(Lₐᵣₘ = arm_l, Rₐᵣₘ = 1.07, Cₐᵣₘ = .01, N = 400,
+            turnsRatio = referred ? 333/380 : 1., Lᵣ = referred ? .0461 : .06,
+            Rᵣ = redesigned ? 1.10889 : referred ? .4103 : .535)
         outer=active ? PowerImpedance.OuterActiveVdcControl(pi_ctrl=PIControl(Kp=redesigned ? 3. : 6.,Ki=redesigned ? 7.5 : 15.)) :
             PowerImpedance.OuterActivePowerControl(pi_ctrl=PIControl(Kp=redesigned ? .05 : .1,Ki=redesigned ? 15.70795 : 31.4159))
         delta=PowerImpedance.ΔdqControlGFL(outer_active=outer,
@@ -23,15 +22,21 @@ function system_original_p2p_network(; redesigned=false)
                 filter=redesigned ? PowerImpedance.Butterworth(order=2,ωc=2π*500) : PowerImpedance.NoFilter(),
                 activate_ω_c_multiplication=redesigned))
         sigma=PowerImpedance.ΣdqzControlTEC(ccsc=PowerImpedance.CirculatingCurrentSuppressionControl(pi_control=PIControl(Kp=.1048,Ki=48.1914)))
-        elements = merge(elements, (; name => let model = mmc(; elec,
-            delta_control=delta,
-            sigma_control=sigma,
-            sync=PowerImpedance.PLLSynchronization(pi_ctrl=PIControl(Kp=redesigned ? .14 : .28,Ki=redesigned ? 3.1416 : 12.5664),
-                filter=redesigned ? PowerImpedance.Butterworth(order=1,ωc=2π*40) : PowerImpedance.NoFilter()),
-            meas=PowerImpedance.Measurement(v_ac=redesigned ? PowerImpedance.Butterworth(order=1,ωc=2π*2000) : PowerImpedance.NoFilter()),
-            modulation=PowerImpedance.UncompensatedModulation(timeDelay=redesigned ? 25e-6 : 200e-6,padeOrderNum=5,padeOrderDen=5),
-            limits=PowerImpedance.Limits(P_min=active ? -1500 : -1000,P_max=active ? 1500 : 1000,
-                Q_min=active ? -500 : -1000,Q_max=active ? 500 : 1000))
+        elements = merge(elements, (; name => let model = mmc(;
+                vACbase_LL_RMS = referred ? 333 : 380, Sbase = 1000, vDC_base = 640, elec,
+                delta_control = delta, sigma_control = sigma,
+                sync = PowerImpedance.PLLSynchronization(pi_ctrl=PIControl(
+                        Kp=redesigned ? .14 : .28, Ki=redesigned ? 3.1416 : 12.5664),
+                    filter=redesigned ? PowerImpedance.Butterworth(order=1,
+                        ωc=2π*40) : PowerImpedance.NoFilter()),
+                meas = PowerImpedance.Measurement(
+                    v_ac=redesigned ? PowerImpedance.Butterworth(order=1,
+                        ωc=2π*2000) : PowerImpedance.NoFilter()),
+                modulation = PowerImpedance.UncompensatedModulation(
+                    timeDelay=redesigned ? 25e-6 : 200e-6, padeOrderNum=5, padeOrderDen=5),
+                limits = PowerImpedance.Limits(P_min=active ? -1500 : -1000,
+                    P_max=active ? 1500 : 1000,
+                    Q_min=active ? -500 : -1000, Q_max=active ? 500 : 1000))
             b = bases(model)
             active_inputs = active ? (; v_dc_ref = 640 / b.v_dc) :
                 (; p_ref = 100 / b.S)
@@ -110,23 +115,17 @@ function system_ieee14_network()
     elements = merge(elements, (; DC_WF3 = dc_source(v = 640)))
     elements = merge(elements, (; Zg1 = impedance(z=s->0.2874  + 0.0091*s, conductors = 3)))
     elements = merge(elements, (; Zg2 = impedance(z=s->1.026 + 1*0.0327*s, conductors = 3)))
-    elements = merge(elements, (; MMC1 = let model = mmc(elec=PowerImpedance.ElectricalMMC(
-                Lₐᵣₘ=46.125e-3,
-                Rₐᵣₘ=0.4,
-                Cₐᵣₘ=11.3867e-3,
-                N=400,
-                Lᵣ=0.18 * (333^2/1000) /2/pi/50,
-                Rᵣ=0.001 *(333^2/1000),
-                vACbase_LL_RMS=333,
-                Sbase=1000,
-                vDC_base=640,
-                turnsRatio=333/380
-            ),
-            meas=PowerImpedance.Measurement(
+    elements = merge(elements, (; MMC1 = let model = mmc(
+            vACbase_LL_RMS = 333, Sbase = 1000, vDC_base = 640,
+            elec = PowerImpedance.ElectricalMMC(Lₐᵣₘ = 46.125e-3, Rₐᵣₘ = 0.4,
+                Cₐᵣₘ = 11.3867e-3,
+                N = 400, Lᵣ = 0.18 * (333^2/1000) /2/pi/50, Rᵣ = 0.001 *(333^2/1000),
+                turnsRatio = 333/380),
+            meas = PowerImpedance.Measurement(
                 P_ac=PowerImpedance.Butterworth(order=2, ωc=140*2*pi),
                 Q_ac=PowerImpedance.Butterworth(order=2, ωc=140*2*pi)
             ),
-            sync=PowerImpedance.VSEWithDamping(
+            sync = PowerImpedance.VSEWithDamping(
                 H=5,
                 K_d=100,
                 K_ω=10,
@@ -136,7 +135,7 @@ function system_ieee14_network()
                     filter=PowerImpedance.Butterworth(order=1, ωc=75*2*pi)
                 )
             ),
-            delta_control=PowerImpedance.ΔdqControlGFM(
+            delta_control = PowerImpedance.ΔdqControlGFM(
                 outer_reactive=PowerImpedance.OuterReactiveQControl(
                     pi_ctrl=PowerImpedance.PIControl(Kp=0.0, Ki=3),
                     support=PowerImpedance.NoVoltageSupport()
@@ -154,7 +153,7 @@ function system_ieee14_network()
                     activate_ω_c_multiplication=false
                 )
             ),
-            sigma_control=PowerImpedance.ΣdqzControlTEC(
+            sigma_control = PowerImpedance.ΣdqzControlTEC(
                 tec=PowerImpedance.TotalEnergyControl(
                     pi_control=PowerImpedance.PIControl(Kp=1.469, Ki=31.4819),
                     power_filter=PowerImpedance.Butterworth(order=2, ωc=140*2*pi)
@@ -166,35 +165,29 @@ function system_ieee14_network()
                     PowerImpedance.PIControl(Kp=0.0936, Ki=40.5396)
                 )
             ),
-            modulation=PowerImpedance.UncompensatedModulation(
+            modulation = PowerImpedance.UncompensatedModulation(
                 timeDelay=200e-6,
                 padeOrderNum=5,
                 padeOrderDen=5
             ),
-            limits=PowerImpedance.Limits(P_min=-1500, P_max=1500, Q_min=-500, Q_max=500))
+            limits = PowerImpedance.Limits(P_min=-1500, P_max=1500, Q_min=-500, Q_max=500))
             b = bases(model)
             component(model; sync = (; p_ref = (P_MMC1) / b.S),
                 delta_control = (; outer_reactive = (; q_ref = (Q_MMC1) / b.S)),
                 powerflow = (; v_ac = ((Vm)*sqrt(2)) / b.v_ac,
                     v_dc = (640) / b.v_dc, p_dc = (100.) / b.S))
         end))
-    elements = merge(elements, (; MMC2 = let model = mmc(elec=PowerImpedance.ElectricalMMC(
-                Lₐᵣₘ=46.125e-3,
-                Rₐᵣₘ=0.4,
-                Cₐᵣₘ=11.3867e-3,
-                N=400,
-                Lᵣ=0.18 * (333^2/1000) /2/pi/50,
-                Rᵣ=0.001 *(333^2/1000),
-                vACbase_LL_RMS=333,
-                Sbase=1000,
-                vDC_base=640,
-                turnsRatio=333/380
-            ),
-            meas=PowerImpedance.Measurement(
+    elements = merge(elements, (; MMC2 = let model = mmc(
+            vACbase_LL_RMS = 333, Sbase = 1000, vDC_base = 640,
+            elec = PowerImpedance.ElectricalMMC(Lₐᵣₘ = 46.125e-3, Rₐᵣₘ = 0.4,
+                Cₐᵣₘ = 11.3867e-3,
+                N = 400, Lᵣ = 0.18 * (333^2/1000) /2/pi/50, Rᵣ = 0.001 *(333^2/1000),
+                turnsRatio = 333/380),
+            meas = PowerImpedance.Measurement(
                 P_ac=PowerImpedance.Butterworth(order=2, ωc=140*2*pi),
                 Q_ac=PowerImpedance.Butterworth(order=2, ωc=140*2*pi)
             ),
-            sync=PowerImpedance.VSEWithDamping(
+            sync = PowerImpedance.VSEWithDamping(
                 H=5,
                 K_d=100,
                 K_ω=10,
@@ -204,7 +197,7 @@ function system_ieee14_network()
                     filter=PowerImpedance.Butterworth(order=1, ωc=75*2*pi)
                 )
             ),
-            delta_control=PowerImpedance.ΔdqControlGFM(
+            delta_control = PowerImpedance.ΔdqControlGFM(
                 outer_reactive=PowerImpedance.OuterReactiveQControl(
                     pi_ctrl=PowerImpedance.PIControl(Kp=0.0, Ki=3),
                     support=PowerImpedance.NoVoltageSupport()
@@ -222,7 +215,7 @@ function system_ieee14_network()
                     activate_ω_c_multiplication=false
                 )
             ),
-            sigma_control=PowerImpedance.ΣdqzControlTEC(
+            sigma_control = PowerImpedance.ΣdqzControlTEC(
                 tec=PowerImpedance.TotalEnergyControl(
                     pi_control=PowerImpedance.PIControl(Kp=1.469, Ki=31.4819),
                     power_filter=PowerImpedance.Butterworth(order=2, ωc=140*2*pi)
@@ -234,36 +227,28 @@ function system_ieee14_network()
                     PowerImpedance.PIControl(Kp=0.0936, Ki=40.5396)
                 )
             ),
-            modulation=PowerImpedance.UncompensatedModulation(
+            modulation = PowerImpedance.UncompensatedModulation(
                 timeDelay=250e-6,
                 padeOrderNum=5,
                 padeOrderDen=5
             ),
-            limits=PowerImpedance.Limits(P_min=-1500, P_max=1500, Q_min=-500, Q_max=500))
+            limits = PowerImpedance.Limits(P_min=-1500, P_max=1500, Q_min=-500, Q_max=500))
             b = bases(model)
             component(model; sync = (; p_ref = (P_MMC2) / b.S),
                 delta_control = (; outer_reactive = (; q_ref = (Q_MMC2) / b.S)),
                 powerflow = (; v_ac = ((Vm)*sqrt(2)) / b.v_ac,
                     v_dc = (640) / b.v_dc, p_dc = (100.) / b.S))
         end))
-    elements = merge(elements, (; MMC3 = let model = mmc(elec=PowerImpedance.ElectricalMMC(
-                Lₐᵣₘ=50e-3,
-                Rₐᵣₘ=1.07,
-                Cₐᵣₘ=10e-3,
-                N=400,
-                Lᵣ=0.1305*(333^2/1000)/2/pi/50,
-                Rᵣ=0.0037*(333^2/1000),
-                vACbase_LL_RMS=333,
-                Sbase=1000,
-                vDC_base=640,
-                turnsRatio=333/380
-            ),
-            meas=PowerImpedance.Measurement(),
-            sync=PowerImpedance.PLLSynchronization(
+    elements = merge(elements, (; MMC3 = let model = mmc(
+            vACbase_LL_RMS = 333, Sbase = 1000, vDC_base = 640,
+            elec = PowerImpedance.ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07, Cₐᵣₘ = 10e-3,
+                N = 400, Lᵣ = 0.1305*(333^2/1000)/2/pi/50, Rᵣ = 0.0037*(333^2/1000),
+                turnsRatio = 333/380), meas = PowerImpedance.Measurement(),
+            sync = PowerImpedance.PLLSynchronization(
                 pi_ctrl=PowerImpedance.PIControl(Kp=0.28, Ki=12.5664),
                 filter=PowerImpedance.NoFilter()
             ),
-            delta_control=PowerImpedance.ΔdqControlGFL(
+            delta_control = PowerImpedance.ΔdqControlGFL(
                 outer_active=PowerImpedance.OuterActiveVdcControl(
                     pi_ctrl=PowerImpedance.PIControl(Kp=5, Ki=15),
                     filter=PowerImpedance.NoFilter()
@@ -278,7 +263,7 @@ function system_ieee14_network()
                     activate_ω_c_multiplication=false
                 )
             ),
-            sigma_control=PowerImpedance.ΣdqzControlTEC(
+            sigma_control = PowerImpedance.ΣdqzControlTEC(
                 tec=PowerImpedance.TotalEnergyControl(
                     pi_control=PowerImpedance.PIControl(Kp=1.2894, Ki=27.63),
                     power_filter=PowerImpedance.NoFilter()
@@ -290,12 +275,12 @@ function system_ieee14_network()
                     PowerImpedance.PIControl(Kp=0.1048, Ki=48.1914)
                 )
             ),
-            modulation=PowerImpedance.UncompensatedModulation(
+            modulation = PowerImpedance.UncompensatedModulation(
                 timeDelay=200e-6,
                 padeOrderNum=5,
                 padeOrderDen=5
             ),
-            limits=PowerImpedance.Limits(P_min=-1500, P_max=1500, Q_min=-500, Q_max=500))
+            limits = PowerImpedance.Limits(P_min=-1500, P_max=1500, Q_min=-500, Q_max=500))
             b = bases(model)
             component(model; delta_control = (; outer_active = (; v_dc_ref =
                 (640) / b.v_dc),
@@ -303,24 +288,16 @@ function system_ieee14_network()
                 powerflow = (; p_ac = (-10.) / b.S, v_ac = ((Vm)*sqrt(2)) / b.v_ac,
                     p_dc = (100.) / b.S))
         end))
-    elements = merge(elements, (; MMC4 = let model = mmc(elec=PowerImpedance.ElectricalMMC(
-                Lₐᵣₘ=50e-3,
-                Rₐᵣₘ=1.07,
-                Cₐᵣₘ=10e-3,
-                N=400,
-                Lᵣ=0.1305*(333^2/1000)/2/pi/50,
-                Rᵣ=0.0037*(333^2/1000),
-                vACbase_LL_RMS=333,
-                Sbase=1000,
-                vDC_base=640,
-                turnsRatio=333/380
-            ),
-            meas=PowerImpedance.Measurement(),
-            sync=PowerImpedance.PLLSynchronization(
+    elements = merge(elements, (; MMC4 = let model = mmc(
+            vACbase_LL_RMS = 333, Sbase = 1000, vDC_base = 640,
+            elec = PowerImpedance.ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07, Cₐᵣₘ = 10e-3,
+                N = 400, Lᵣ = 0.1305*(333^2/1000)/2/pi/50, Rᵣ = 0.0037*(333^2/1000),
+                turnsRatio = 333/380), meas = PowerImpedance.Measurement(),
+            sync = PowerImpedance.PLLSynchronization(
                 pi_ctrl=PowerImpedance.PIControl(Kp=0.28, Ki=12.5664),
                 filter=PowerImpedance.NoFilter()
             ),
-            delta_control=PowerImpedance.ΔdqControlGFL(
+            delta_control = PowerImpedance.ΔdqControlGFL(
                 outer_active=PowerImpedance.OuterActiveVdcControl(
                     pi_ctrl=PowerImpedance.PIControl(Kp=5, Ki=15),
                     filter=PowerImpedance.NoFilter()
@@ -335,7 +312,7 @@ function system_ieee14_network()
                     activate_ω_c_multiplication=false
                 )
             ),
-            sigma_control=PowerImpedance.ΣdqzControlTEC(
+            sigma_control = PowerImpedance.ΣdqzControlTEC(
                 tec=PowerImpedance.TotalEnergyControl(
                     pi_control=PowerImpedance.PIControl(Kp=1.2894, Ki=27.63),
                     power_filter=PowerImpedance.NoFilter()
@@ -347,12 +324,12 @@ function system_ieee14_network()
                     PowerImpedance.PIControl(Kp=0.1048, Ki=48.1914)
                 )
             ),
-            modulation=PowerImpedance.UncompensatedModulation(
+            modulation = PowerImpedance.UncompensatedModulation(
                 timeDelay=200e-6,
                 padeOrderNum=5,
                 padeOrderDen=5
             ),
-            limits=PowerImpedance.Limits(P_min=-1500, P_max=1500, Q_min=-500, Q_max=500))
+            limits = PowerImpedance.Limits(P_min=-1500, P_max=1500, Q_min=-500, Q_max=500))
             b = bases(model)
             component(model; delta_control = (; outer_active = (; v_dc_ref =
                 (640) / b.v_dc),
@@ -474,24 +451,16 @@ function system_p2p_ac_network(; unstable=false)
     elements = merge(elements, (; Zg2 = impedance(z=s->1+s*0.01, conductors =3)))
     elements = merge(elements, (; g3 = ac_source(v = (transmissionVoltage)*sqrt(2))))
     elements = merge(elements, (; Zg3 = impedance(z=s->1+s*0.01, conductors =3)))
-    elements = merge(elements, (; c1 = let model = mmc(elec=PowerImpedance.ElectricalMMC(
-                Lₐᵣₘ=50e-3,
-                Rₐᵣₘ=1.07,
-                Cₐᵣₘ=10e-3,
-                N=400,
-                Lᵣ=60e-3,
-                Rᵣ=0.535,
-                vACbase_LL_RMS=380,
-                Sbase=1000,
-                vDC_base=800,
-                turnsRatio=1
-            ),
-            meas=PowerImpedance.Measurement(),
-            sync=PowerImpedance.PLLSynchronization(
+    elements = merge(elements, (; c1 = let model = mmc(
+            vACbase_LL_RMS = 380, Sbase = 1000, vDC_base = 800,
+            elec = PowerImpedance.ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07, Cₐᵣₘ = 10e-3,
+                N = 400, Lᵣ = 60e-3, Rᵣ = 0.535, turnsRatio = 1),
+            meas = PowerImpedance.Measurement(),
+            sync = PowerImpedance.PLLSynchronization(
                 pi_ctrl=PowerImpedance.PIControl(Kp=0.28, Ki=12.5664),
                 filter=PowerImpedance.NoFilter()
             ),
-            delta_control=PowerImpedance.ΔdqControlGFL(
+            delta_control = PowerImpedance.ΔdqControlGFL(
                 outer_active=PowerImpedance.OuterActiveVdcControl(
                     pi_ctrl=PowerImpedance.PIControl(Kp=5, Ki=15),
                     filter=PowerImpedance.NoFilter()
@@ -506,17 +475,17 @@ function system_p2p_ac_network(; unstable=false)
                     activate_ω_c_multiplication=false
                 )
             ),
-            sigma_control=PowerImpedance.ΣdqzControlTEC(
+            sigma_control = PowerImpedance.ΣdqzControlTEC(
                 ccsc=PowerImpedance.CirculatingCurrentSuppressionControl(
                     PowerImpedance.PIControl(Kp=0.1048, Ki=48.1914)
                 )
             ),
-            modulation=PowerImpedance.UncompensatedModulation(
+            modulation = PowerImpedance.UncompensatedModulation(
                 timeDelay=0.,
                 padeOrderNum=0,
                 padeOrderDen=0
             ),
-            limits=PowerImpedance.Limits(P_min=-100., P_max=100., Q_min=-50., Q_max=50.))
+            limits = PowerImpedance.Limits(P_min=-100., P_max=100., Q_min=-50., Q_max=50.))
             b = bases(model)
             component(model; delta_control = (; outer_active = (; v_dc_ref =
                 (800) / b.v_dc),
@@ -524,24 +493,16 @@ function system_p2p_ac_network(; unstable=false)
                 powerflow = (; p_ac = (-pHVDC1) / b.S, v_ac = ((220.)*sqrt(2)) / b.v_ac,
                     p_dc = (100.) / b.S))
         end))
-    elements = merge(elements, (; c2 = let model = mmc(elec=PowerImpedance.ElectricalMMC(
-                Lₐᵣₘ=50e-3,
-                Rₐᵣₘ=1.07,
-                Cₐᵣₘ=10e-3,
-                N=400,
-                Lᵣ=0.0461,
-                Rᵣ=0.4103,
-                vACbase_LL_RMS=333,
-                Sbase=1000,
-                vDC_base=800,
-                turnsRatio=333/380
-            ),
-            meas=PowerImpedance.Measurement(),
-            sync=PowerImpedance.PLLSynchronization(
+    elements = merge(elements, (; c2 = let model = mmc(
+            vACbase_LL_RMS = 333, Sbase = 1000, vDC_base = 800,
+            elec = PowerImpedance.ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07, Cₐᵣₘ = 10e-3,
+                N = 400, Lᵣ = 0.0461, Rᵣ = 0.4103, turnsRatio = 333/380),
+            meas = PowerImpedance.Measurement(),
+            sync = PowerImpedance.PLLSynchronization(
                 pi_ctrl=PowerImpedance.PIControl(Kp=7, Ki=12.5664),
                 filter=PowerImpedance.Butterworth(order=1, ωc=2*pi*50)
             ),
-            delta_control=PowerImpedance.ΔdqControlGFL(
+            delta_control = PowerImpedance.ΔdqControlGFL(
                 outer_active=PowerImpedance.OuterActivePowerControl(
                     pi_ctrl=PowerImpedance.PIControl(Kp=0.1, Ki=31.4159),
                     support=PowerImpedance.NoFrequencySupport()
@@ -556,17 +517,17 @@ function system_p2p_ac_network(; unstable=false)
                     activate_ω_c_multiplication=false
                 )
             ),
-            sigma_control=PowerImpedance.ΣdqzControlTEC(
+            sigma_control = PowerImpedance.ΣdqzControlTEC(
                 ccsc=PowerImpedance.CirculatingCurrentSuppressionControl(
                     PowerImpedance.PIControl(Kp=0.1048, Ki=48.1914)
                 )
             ),
-            modulation=PowerImpedance.UncompensatedModulation(
+            modulation = PowerImpedance.UncompensatedModulation(
                 timeDelay=0.,
                 padeOrderNum=0,
                 padeOrderDen=0
             ),
-            limits=PowerImpedance.Limits(P_min=-100., P_max=100., Q_min=-50., Q_max=50.))
+            limits = PowerImpedance.Limits(P_min=-100., P_max=100., Q_min=-50., Q_max=50.))
             b = bases(model)
             component(model; delta_control = (; outer_active = (; p_ref = (pHVDC1) / b.S),
                     outer_reactive = (; q_ref = (qC2) / b.S)),
@@ -619,37 +580,32 @@ end
 # 640 kV.
 
 function system_windfarm()
-    return let model = tlc(elec=PowerImpedance.ElectricalTLC(
-            Lᵣ=0.08*(380^2/600)/2/pi/50,
-            Rᵣ=0.0008*(380^2/600),
-            vACbase_LL_RMS=380,
-            Sbase=600,
-            vDCbase=640
-        ),
-            meas=PowerImpedance.Measurement(
-            v_ac=PowerImpedance.Butterworth(order=1, ωc=1e4),
-            i_ac=PowerImpedance.Butterworth(order=1, ωc=1e4)
-        ),
-            sync=PowerImpedance.PLLSynchronization(
-            pi_ctrl=PowerImpedance.PIControl(Kp=0.397887357729738, Ki=7.957747154594767),
-            filter=PowerImpedance.Butterworth(order=1, ωc=2*pi*80)
-        ),
-            outerActive=PowerImpedance.OuterActivePowerControl(
-            pi_ctrl=PowerImpedance.PIControl(Kp=0.01, Ki=10),
-            support=PowerImpedance.NoFrequencySupport()
-        ),
-            outerReactive=PowerImpedance.OuterReactiveQControl(
-            pi_ctrl=PowerImpedance.PIControl(Kp=0.01, Ki=10),
-            support=PowerImpedance.NoVoltageSupport()
-        ),
-            innerVoltage=PowerImpedance.NoInnerVoltageControl(),
-            innerCurrent=PowerImpedance.InnerCurrentPIControl(
-            pi_ctrl=PowerImpedance.PIControl(Kp=0.254647908947033, Ki=0.8),
-            filter=PowerImpedance.NoFilter(),
-            activate_ω_c_multiplication=true
-        ),
-            mod=PowerImpedance.NoModulation(),
-            limits=PowerImpedance.Limits(P_min=-100., P_max=100., Q_min=-50., Q_max=50.))
+    return let model = tlc(vACbase_LL_RMS = 380, Sbase = 600, vDCbase = 640,
+            elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08*(380^2/600)/2/pi/50,
+                Rᵣ = 0.0008*(380^2/600)),
+            meas = PowerImpedance.Measurement(
+                v_ac=PowerImpedance.Butterworth(order=1, ωc=1e4),
+                i_ac=PowerImpedance.Butterworth(order=1, ωc=1e4)
+            ),
+            sync = PowerImpedance.PLLSynchronization(
+                pi_ctrl=PowerImpedance.PIControl(Kp=0.397887357729738,
+                    Ki=7.957747154594767),
+                filter=PowerImpedance.Butterworth(order=1, ωc=2*pi*80)
+            ),
+            outerActive = PowerImpedance.OuterActivePowerControl(
+                pi_ctrl=PowerImpedance.PIControl(Kp=0.01, Ki=10),
+                support=PowerImpedance.NoFrequencySupport()
+            ),
+            outerReactive = PowerImpedance.OuterReactiveQControl(
+                pi_ctrl=PowerImpedance.PIControl(Kp=0.01, Ki=10),
+                support=PowerImpedance.NoVoltageSupport()
+            ), innerVoltage = PowerImpedance.NoInnerVoltageControl(),
+            innerCurrent = PowerImpedance.InnerCurrentPIControl(
+                pi_ctrl=PowerImpedance.PIControl(Kp=0.254647908947033, Ki=0.8),
+                filter=PowerImpedance.NoFilter(),
+                activate_ω_c_multiplication=true
+            ), mod = PowerImpedance.NoModulation(),
+            limits = PowerImpedance.Limits(P_min=-100., P_max=100., Q_min=-50., Q_max=50.))
             b = bases(model)
             component(model; outerActive = (; p_ref = (600) / b.S),
                 outerReactive = (; q_ref = (0) / b.S),

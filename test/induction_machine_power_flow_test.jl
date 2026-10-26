@@ -10,8 +10,8 @@ include("pscad/fixtures.jl")
 @testset "Induction machine power flow and dynamic steady state" begin
     for (sbase, rt, lt) in ((1000.0, 0.0, 0.0), (2000.0, 0.0, 0.0),
             (1000.0, 0.017, 0.0), (1000.0, 0.0, 0.04), (2000.0, 0.017, 0.04))
-        elec = ElectricalIM(S_base = sbase, r_s = 0.01, rt = rt, lt = lt)
-        network = PSCADFixtures.im_network(; elec)
+        elec = ElectricalIM(r_s = 0.01, rt = rt, lt = lt)
+        network = PSCADFixtures.im_network(; S_base = sbase, elec)
         @testset "S_base=$sbase rt=$rt lt=$lt" begin
             solved = compute(PowerFlowProblem(network), ACDCPowerFlow())
             result, data = solved.result, solved.data
@@ -25,7 +25,7 @@ include("pscad/fixtures.jl")
             PI.outputequations!(current, x, inputs, nothing, m)
             power = complex(inputs.vd, -inputs.vq) *
                     conj(complex(current[1], -current[2])) *
-                    m.elec.S_base / data["baseMVA"]
+                    m.bases.S / data["baseMVA"]
             flow = only(values(result["solution"]["im"]))
             @test real(power) ≈ flow["pg"] atol = POWER_FLOW_ATOL rtol = 0
             @test imag(power) ≈ flow["qg"] atol = POWER_FLOW_ATOL rtol = 0

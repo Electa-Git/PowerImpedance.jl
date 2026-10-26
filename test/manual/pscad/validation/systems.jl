@@ -8,7 +8,7 @@ function system_spec(id,list)
     vll=380.;power=1000.
     vb=vll*sqrt(2/3);ib=2power/(3vb);h=1.25e-6
     converter=first(e for e in list.elements if e.model isa Union{PowerImpedance.MMC,PowerImpedance.TLC})
-    dcbase=device_bases(converter.model.elec).dc_voltage
+    dcbase=device_bases(converter.model.elec, converter.model.bases).dc_voltage
     # Native peak bounds are evaluated for the preselected amplitudes; the measured limit
     # is .01 pu.
     amplitude=id=="p2p_redesigned" ? .0002916349 : .0001
@@ -64,10 +64,11 @@ function system_sizing(c,spec)
     # Measurement bases use physical ratings, independently of the power-flow
     # solver's shared voltage base across transformer sides.
     list=fixture_netlist(c.net,nothing)
-    dcbase=device_bases(c.net.elements[first(c.devices)].elec).dc_voltage
+    dcbase=device_bases(c.net.elements[first(c.devices)].elec,
+        c.net.elements[first(c.devices)].bases).dc_voltage
     vb=[only(filter(b->node in b.nets,list.buses)).kind==:dc ? dcbase : spec.voltage_base_kV for node in c.nodes]
     for name in c.devices
-        e=c.net.elements[name];b=device_bases(e.elec)
+        e=c.net.elements[name];b=device_bases(e.elec, e.bases)
         for axis in 1:2
             j=findfirst(==(port_nets(c.net, name, :ac)[axis]),c.nodes)
             j===nothing || (vb[j]=b.ac_voltage)
@@ -75,7 +76,7 @@ function system_sizing(c,spec)
     end
     vpeak=maximum(voltage./vb)*spec.tone_peak_pu
     ipeak=maximum(maximum(currents[n]./
-        device_bases(c.net.elements[n].elec).current_outputs)
+        device_bases(c.net.elements[n].elec, c.net.elements[n].bases).current_outputs)
         for n in c.devices)*spec.tone_peak_pu
     return Dict("voltage_peak_bound_pu"=>vpeak,"device_current_peak_bound_pu"=>ipeak,
         "method"=>"sum of per-tone magnitudes; native full-network response; no cancellation assumed",

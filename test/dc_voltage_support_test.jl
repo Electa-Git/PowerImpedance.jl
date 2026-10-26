@@ -15,8 +15,7 @@ function converter(kind; K = 5.0, voltage = 672.0, dcbase = 640.0)
     reactive = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.2, Ki = 10.0))
     sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.085, Ki = 32.0))
     occ = InnerCurrentPIControl(pi_ctrl = PIControl(Kp = 0.1, Ki = 43.0))
-    model = kind === :mmc ? mmc(
-        elec = ElectricalMMC(Sbase = 500.0, vDC_base = dcbase),
+    model = kind === :mmc ? mmc(Sbase = 500.0, vDC_base = dcbase, elec = ElectricalMMC(),
         delta_control = ΔdqControlGFL(outer_active = outer,
             outer_reactive = reactive, occ = occ),
         sigma_control = ΣdqzControlTEC(
@@ -24,9 +23,9 @@ function converter(kind; K = 5.0, voltage = 672.0, dcbase = 640.0)
             zscc = ZeroSequenceCurrentControl(PIControl(Kp = 0.1, Ki = 43.0)),
             ccsc = CirculatingCurrentSuppressionControl(PIControl(Kp = 0.1, Ki = 43.0))),
         sync = sync, limits = limits) : tlc(
-        elec = ElectricalTLC(Sbase = 500.0, vACbase_LL_RMS = 380.0, vDCbase = dcbase),
-        outerActive = outer, outerReactive = reactive, innerCurrent = occ,
-        sync = sync, limits = limits)
+            Sbase = 500.0, vACbase_LL_RMS = 380.0, vDCbase = dcbase, elec = ElectricalTLC(),
+            outerActive = outer, outerReactive = reactive, innerCurrent = occ, sync = sync,
+            limits = limits)
     b = bases(model)
     powerflow = (v_ac = 380sqrt(2/3) / b.v_ac, p_dc = 50.0 / b.S)
     active_inputs = (p_ref = 50.0 / b.S, support = (v_dc_ref = voltage / b.v_dc,))
@@ -147,9 +146,8 @@ end
         p_filter = order == 0 ? PI.NoFilter() : PI.Butterworth(order = order, ωc = 80.0)
         q_filter = order == 0 ? PI.NoFilter() : PI.Butterworth(order = order, ωc = 120.0)
         energy_filter = PI.measurement_filter_ss(q_filter)
-        e = mmc(
-            elec = ElectricalMMC(Sbase = 500.0, vDC_base = 640.0,
-                vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
+        e = mmc(Sbase = 500.0, vDC_base = 640.0, vACbase_LL_RMS = 380.0,
+            elec = ElectricalMMC(turnsRatio = 1.0),
             meas = Measurement(P_ac = p_filter, Q_ac = q_filter),
             sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.085, Ki = 32.0)),
             delta_control = ΔdqControlGFL(

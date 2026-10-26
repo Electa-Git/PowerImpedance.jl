@@ -473,9 +473,9 @@ component definition and the validated `IM.pscx` instance.
 | Machine field | Julia value or selected setting | Effect |
 |---|---|---|
 | `Name` | Component name | Identification |
-| `Pbase` | `elec.S_base` MVA | Rated power |
-| `Vbase` | `elec.Vac_base` kV | Line-to-line RMS base in single-line view |
-| `OMEG` | `elec.ωn` rad/s | Base angular frequency |
+| `Pbase` | `bases(model).S` MVA | Rated power |
+| `Vbase` | `model.Vac_base` kV | Line-to-line RMS base in single-line view |
+| `OMEG` | `bases(model).omega` rad/s | Base angular frequency |
 | `TRN` | `1` | Stator/rotor turns ratio retained from the reference instance |
 | `J` | `2*mech.H` s | Angular inertia coefficient |
 | `D` | `0` pu | Zero mechanical damping |
@@ -613,7 +613,8 @@ PLL uses `dξ_pll/dt=-Ki*v_pll`, `Δω=-Kp*v_pll+ξ_pll`,
 `dΔθ_pll/dt=ωbase*Δω`. The EMT angle is `ωbase*t+Δθ_pll`.
 OCC includes voltage feedforward and `+Lpu*omega_c*i_q_f` /
 `-Lpu*omega_c*i_d_f`, or the configured constant-frequency factor.
-MMC inductance is `Lₑ=(L_arm/2+Lr)/L_AC_base`, obtained from `elec_inductance`.
+MMC inductance is `Lₑ=(L_arm/2+Lr)/L_AC_base`, obtained from
+`elec_inductance(elec, bases(model))`.
 
 | Control | Generated equation / initialization | Saved evidence |
 |---|---|---|

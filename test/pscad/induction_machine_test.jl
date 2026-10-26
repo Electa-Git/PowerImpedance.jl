@@ -74,8 +74,8 @@ end
             Tuple(steady_state(e.model, e.values)))
         @test flow.pf ≈ e.values.ac.p
         @test flow.qf ≈ e.values.ac.q
-        @test abs(flow.pf - 915.754) / e.model.elec.S_base < 0.01
-        @test abs(flow.qf - 881.512) / e.model.elec.S_base < 0.01
+        @test abs(flow.pf - 915.754) / e.model.bases.S < 0.01
+        @test abs(flow.qf - 881.512) / e.model.bases.S < 0.01
         @test 0.97 < flow.speed_pu == states.ω_r < 1.0
         machine = parameters(plan.main, "wound_rotor")
         @test Set(keys(machine)) == Set(keys(reference))
@@ -124,10 +124,8 @@ end
     @test_throws r"requires solved operating-point data" P.build_plan(P.netlist(state, nothing))
     # Series transformer terms enter the same stator coefficients in Julia's equations.
     e = only(filter(e -> e.name == :im1, list.elements))
-    modified = InductionMachine(;
-        elec = ElectricalIM(r_s = 0.023, rt = 0.017, l_sl = 0.21,
-            lt = 0.04, r_r = 0.031, l_rl = 0.19, l_m = 1.72),
-        mech = MechanicalIM(H = 5.0))
+    modified = inductionmachine(; elec = ElectricalIM(r_s = 0.023, rt = 0.017, l_sl = 0.21,
+            lt = 0.04, r_r = 0.031, l_rl = 0.19, l_m = 1.72), mech = MechanicalIM(H = 5.0))
     changed = copy(list.elements)
     changed[findfirst(x -> x.name == :im1, changed)] = P.NetlistElement(e.name, e.pscad,
         modified, electricalconnections(modified), e.terminals, e.role, e.values)

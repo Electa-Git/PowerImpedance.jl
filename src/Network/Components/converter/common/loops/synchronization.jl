@@ -160,7 +160,7 @@ function state_space!(F, x, meas, ::TerminalValuesPU, block::PLLSynchronization,
     Δω = -block.pi_ctrl.Kp * v_pll + x.ξ_pll
 
     F[i] = -block.pi_ctrl.Ki * v_pll
-    F[i + 1] = conv.elec.ωbase * Δω
+    F[i + 1] = conv.bases.omega * Δω
 
     return (ω_c = Δω + 1,)
 end
@@ -315,7 +315,7 @@ function state_space!(F, x, meas, terminal_pu::TerminalValuesPU, b::VSEWithDampi
         b.K_ω * (ω_VSM-b.ω_ref)) / (2*b.H)
 
     # dΔθ_VSM/dt
-    F[i+1] = conv.elec.ωbase * (ω_VSM-1)
+    F[i+1] = conv.bases.omega * (ω_VSM-1)
     
     return (; ω_c = ω_VSM, P_ac_f = P_ac_f)
 end

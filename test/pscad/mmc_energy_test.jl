@@ -18,7 +18,7 @@ function diagnostic(definition, names)
 end
 
 function arm_signals(x, m, angle)
-    caps = P.mmc_arm_capacitors(x, m.elec.vDC_base, angle)
+    caps = P.mmc_arm_capacitors(x, m.bases.v_dc, angle)
     return Dict{String, Any}("v_Ctot_" * arm * "_" * phase => voltage
     for (arm, values) in (("u", caps.upper), ("l", caps.lower))
     for (phase, voltage) in zip(("a", "b", "c"), values))
@@ -44,8 +44,8 @@ end
                   nothing
         end
         @test length(eq.states) == 89
-        @test m.elec.Sbase == 1060.0 && m.elec.vDC_base == 640.0
-        @test P.mmc_si(m.elec).vAC_base_LL_RMS ≈ 320.0
+        @test m.bases.S == 1060.0 && m.bases.v_dc == 640.0
+        @test P.mmc_si(m.elec, m.bases).vAC_base_LL_RMS ≈ 320.0
         @test m.elec.turnsRatio == 320/400
         @test m.sigma_control.wsigma.pi_control.Kp == 0.4*1.386
         @test m.sigma_control.wdelta.pi_control.Ki == 0.2*29.70
@@ -99,7 +99,7 @@ end
             signals = merge(arm_signals(x, m, 0.0),
                 Dict(
                     "iS_abc" =>
-                        (m.elec.Sbase / m.elec.vDC_base) .* collect(
+                        (m.bases.S / m.bases.v_dc) .* collect(
                             x.iΣ_z .+ x.iΣ_d .* cos.((0.0, -2π/3, 2π/3)) .+
                             x.iΣ_q .* sin.((0.0, -2π/3, 2π/3))),
                     "P_ac_f" => meas.P_ac_f, "v_dc_f" => meas.v_dc_f, "v_dc_divisor" =>
@@ -123,8 +123,8 @@ end
         fs, fd = zeros(9), zeros(12)
         PI.state_space!(fs, x, input, m.sigma_control.wsigma, m)
         PI.state_space!(fd, x, input, m.sigma_control.wdelta, m)
-        expected_energy = [-fs[1:3] ./ (sqrt(2)*2m.elec.ωbase);
-                           -fd[1:4] ./ (sqrt(2)*m.elec.ωbase)]
+        expected_energy = [-fs[1:3] ./ (sqrt(2)*2m.bases.omega);
+                           -fd[1:4] ./ (sqrt(2)*m.bases.omega)]
         energy_names = ["lec_sum_" * axis * "_measured" for axis in ("d", "q", "z")]
         append!(energy_names, ["lec_delta_" * axis * "_measured"
                                for axis in ("d", "q", "Zd", "Zq")])
@@ -149,9 +149,9 @@ end
             for (arm, values) in (("u", upper), ("l", lower)),
                 (phase, value) in zip(("a", "b", "c"), values)
 
-                signals["v_Ctot_" * arm * "_" * phase] = value * m.elec.vDC_base
+                signals["v_Ctot_" * arm * "_" * phase] = value * m.bases.v_dc
             end
-            angle = m.elec.ωbase * time
+            angle = m.bases.omega * time
             sigma, delta = upper .^ 2 + lower .^ 2, lower .^ 2 - upper .^ 2
             project(values, theta) = [2/3 * sum(values .* cos.(theta .+ phases)),
                 2/3 * sum(values .* sin.(theta .+ phases))]
@@ -163,7 +163,7 @@ end
         end
         # Rising capacitors must reach the energy/CCC feedback during the hold.
         for time in (0.0, 0.05, 0.2 - SETTINGS.time_step)
-            signals = merge(arm_signals(eq.states, m, m.elec.ωbase*time),
+            signals = merge(arm_signals(eq.states, m, m.bases.omega*time),
                 Dict("iS_abc" => fill(25.0, 3), "P_ac_f" => eq.outputs.meas.P_ac_f,
                     "v_dc_f" => eq.outputs.meas.v_dc_f, "v_dc_divisor" =>
                         eq.outputs.meas.v_dc_f))
@@ -179,12 +179,12 @@ end
                               (energy_after - energy_before) / eq.outputs.meas.v_dc_f
             @test after["vMS_z_ref"] - before["vMS_z_ref"] ≈ expected_change atol=1e-6
             @test after["iS_z"] == before["iS_z"] &&
-                  after["iS_z"] ≈ 25.0 * m.elec.vDC_base / m.elec.Sbase
+                  after["iS_z"] ≈ 25.0 * m.bases.v_dc / m.bases.S
         end
         averaged = zeros(7)
         for i in 0:63
             time = 0.3 + i/(64*50)
-            signals = merge(arm_signals(x, m, m.elec.ωbase*time),
+            signals = merge(arm_signals(x, m, m.bases.omega*time),
                 Dict("iS_abc" => zeros(3),
                     "P_ac_f" => 0.0, "v_dc_f" => 1.0))
             measured = evaluate(def, signals, time)
@@ -203,10 +203,10 @@ end
             (; meas = (; v_dc_f = 1.0), power = (; P_ac_f = 0.7), sync = eq.outputs.sync),
             eq.terminal_pu, m.sigma_control, m)
         for time in (0.0, 0.05, 0.2 - SETTINGS.time_step, 0.2)
-            phases = (-2m.elec.ωbase*time) .+ (0.0, -2π/3, 2π/3)
+            phases = (-2m.bases.omega*time) .+ (0.0, -2π/3, 2π/3)
             currents = (0.11 .* cos.(phases) .- 0.07 .* sin.(phases) .+ 0.24) .*
-                       (m.elec.Sbase/m.elec.vDC_base)
-            signals = merge(arm_signals(live_states, m, m.elec.ωbase*time),
+                       (m.bases.S/m.bases.v_dc)
+            signals = merge(arm_signals(live_states, m, m.bases.omega*time),
                 Dict("iS_abc" => collect(currents), "P_ac_f" => 0.7, "v_dc_f" => 0.3, "v_dc_divisor" =>
                     1.0))
             measured = evaluate(diagnostic(modules["SIGMA_DUT"], [["iS_d", "iS_q"]; rates]), signals, time)
@@ -240,10 +240,10 @@ end
             for (i, phase) in enumerate(("a", "b", "c")),
                 (arm, sign) in (("u", -1), ("l", 1))
 
-                vs = m.elec.vDC_base *
-                     (0.49 + 0.021*cos(-2*(m.elec.ωbase*time + phases[i])) -
-                      0.017*sin(-2*(m.elec.ωbase*time + phases[i])))
-                vd = m.elec.vAC_base *
+                vs = m.bases.v_dc *
+                     (0.49 + 0.021*cos(-2*(m.bases.omega*time + phases[i])) -
+                      0.017*sin(-2*(m.bases.omega*time + phases[i])))
+                vd = m.bases.v_ac *
                      (0.93*cos(theta + phases[i]) - 0.12*sin(theta + phases[i]))
                 stem = arm * "_" * phase
                 @test emitted["m_" * stem] * signals["v_Ctot_" * stem] ≈ vs + sign*vd atol=1e-6
@@ -279,7 +279,7 @@ end
         third = zeros(2)
         for i in 0:63
             time = 0.3 + i/(64*50)
-            angle = m.elec.ωbase*time
+            angle = m.bases.omega*time
             signals = merge(arm_signals(x, m, angle),
                 Dict("vM_d_ref" => 0.93,
                     "vM_q_ref" => -0.12, "vMS_d_ref" => 0.0, "vMS_q_ref" => 0.0,
@@ -290,7 +290,8 @@ end
         end
         denominator = sqrt(1-ripple^2)
         ratio = -ripple/(1+denominator)
-        expected_third = -2m.elec.baseConv1/denominator .*
+        expected_third = -2 * PowerImpedance.perunit(m.elec,
+            m.bases).baseConv1/denominator .*
                          [0.93*(ratio+ratio^2), -0.12*(ratio-ratio^2)]
         @test third ≈ expected_third atol=1e-6
         @test all(!iszero, third)
@@ -298,7 +299,7 @@ end
         # The exact tdelay primitive and buffer sizing apply to each physical arm. Each
         # history is initialized from its own solved arm ratio.
         params = Dict(p.name => p.default for p in modules["MOD_DUT"].parameters)
-        caps = P.mmc_arm_capacitors(eq.states, m.elec.vDC_base)
+        caps = P.mmc_arm_capacitors(eq.states, m.bases.v_dc)
         initial_signals = merge(arm_signals(eq.states, m, 0.0),
             Dict(
                 "vM_d_ref" => eq.outputs.delta.vMΔ_d_ref_c, "vM_q_ref" =>
@@ -344,11 +345,11 @@ end
                 add_three_phase!(channels, c.name, times,
                         2complex(flow.pgrid, -flow.qgrid)/(3conj(voltage)))
             else
-                value = c.kind == :converter_p ? flow.pt/m.elec.Sbase :
-                        c.kind == :converter_q ? flow.qt/m.elec.Sbase :
+                value = c.kind == :converter_p ? flow.pt/m.bases.S :
+                        c.kind == :converter_q ? flow.qt/m.bases.S :
                         c.kind == :converter_arm_voltage ? vdc :
                         c.kind == :converter_sum_current ?
-                        flow.pf*m.elec.vDC_base/(3m.elec.Sbase*vdc) :
+                        flow.pf*m.bases.v_dc/(3m.bases.S*vdc) :
                         c.kind == :machine_speed ? 1.0 :
                         c.kind == :current ? flow.pf/vdc :
                         c.kind == :voltage ? (c.pole == "P" ? vdc/2 : -vdc/2) : 1.0

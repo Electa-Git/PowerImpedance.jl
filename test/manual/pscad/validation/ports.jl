@@ -190,7 +190,7 @@ function scan_plan(list, spec, axis; name = lowercase(replace(spec.id, '-' => '_
         device_currents=Set{Tuple{String,String}}(get(spec,:recorded_terminal_currents,Tuple{String,String}[]))
         for e in list.elements
             e.model isa Union{PowerImpedance.TLC,PowerImpedance.MMC,PowerImpedance.SynchronousMachine} || continue
-            bases=device_bases(e.model.elec)
+            bases=device_bases(e.model.elec, e.model.bases)
             push!(voltage_buses,port_probe(list,e.name,bases.ac_port).name)
             bases.dc_voltage===nothing || push!(voltage_buses,port_probe(list,e.name,
                 :dc).name)

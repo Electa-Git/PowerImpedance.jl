@@ -42,7 +42,7 @@ function ztool_ports(id, net, list, spec)
     entry = fixture(id)
     entry.category in (:passive, :device) || throw(ArgumentError("$id is outside the component sweep"))
     if entry.category == :device
-        bases = device_bases(net.elements[:DUT].elec)
+        bases = device_bases(net.elements[:DUT].elec, net.elements[:DUT].bases)
         ac = (; kind = :ac, name = "AC_scan", element = :DUT, port = bases.ac_port,
             bus = port_probe(list, :DUT, bases.ac_port), measured_side = 2,
             voltage = fill(bases.ac_voltage, 2), current = fill(bases.ac_current, 2))

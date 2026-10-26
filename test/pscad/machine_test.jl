@@ -155,9 +155,9 @@ end
         MechanicalSM(
             T_CH = 0.7, T_RH = 3.1, T_CO = 0.4, F_HP = 0.2, F_IP = 0.5, F_LP = 0.3),
         AVRSM(v_ref = 1.02, T_R = 0.03, T_B = 0.8, T_C = 0.12, T_A = 0.04, K_A = 123.0),
-        GovernorSM(T_w = 0.15, T_G = 0.25, R = 0.04),
-        PowerImpedance.Limits(), (p = 0.0, q = 0.0, v = 1.0),
-        PowerImpedance.LinearizationCache())
+        GovernorSM(T_w = 0.15, T_G = 0.25, R = 0.04), PowerImpedance.Limits(), 220.0,
+        BaseValues(S = 1000.0, v_ac = 220.0 * sqrt(2/3), omega = 100π),
+        (p = 0.0, q = 0.0, v = 1.0), PowerImpedance.LinearizationCache())
     avr = P.machine_avr("AVR_custom", machine, 0.99)
     gov = P.machine_governor("GOV_custom", machine, 0.72)
     @test Dict(p.name => p.default for p in avr.parameters) == Dict(
@@ -300,7 +300,7 @@ end
               (element.elec.Rf_d*element.avr.K_A)
         @test defaults["Verror0"] == effective.vref_SG-defaults["Vt0"]
         @test defaults["Vreg0"] == element.avr.K_A*defaults["Verror0"]
-        @test effective.Tm0 ≈ -values.ac.p/element.elec.S_base +
+        @test effective.Tm0 ≈ -values.ac.p/element.bases.S +
               element.elec.Ra*(equilibrium.i_d^2+equilibrium.i_q^2)
         @test isempty(components(avr.canvas, "const"))
         @test parameters(gov.canvas, "const")["Value"] == "1.0"
@@ -353,7 +353,7 @@ end
         avr_instance = only(filter(c -> c.defn == "sm:AVR_sg1", instances))
         @test pin_signal(plan.main, (avr_instance.x - 54, avr_instance.y)) == "sg1_Vt_meas"
         @test defaults["Vt0"] == netlist.operating_point.branch_flows[:sg1].terminal_voltage_kV *
-              sqrt(3) / element.elec.Vᵃᶜ_base
+              sqrt(3) / element.Vᵃᶜ_base
         @test Dict(first(components(avr.canvas, "realpole")).params)["YO"] == "Vt0"
         blocks = voltage_measurement_blocks(plan.main)
         @test [c.defn for c in blocks] == "master:" .* [

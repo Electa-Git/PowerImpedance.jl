@@ -133,10 +133,10 @@ end
     direct, direct_pu = PI.pftoinputs(model, values)
     @test direct_pu === nothing
     @test direct.vref_SG === 1.07
-    @test direct.Tm0 === -values.ac.p / model.elec.S_base
+    @test direct.Tm0 === -values.ac.p / model.bases.S
     @test direct.vd === values.ac.v * cos(values.ac.theta) /
-        (model.elec.Vᵃᶜ_base * sqrt(2/3))
+        model.bases.v_ac
     @test direct.vq === -values.ac.v * sin(values.ac.theta) /
-        (model.elec.Vᵃᶜ_base * sqrt(2/3))
+        model.bases.v_ac
 end
 end

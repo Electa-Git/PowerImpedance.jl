@@ -162,8 +162,10 @@ function state_space!(F, x, meas, b::CirculatingCurrentSuppressionControl, conv:
     # vMΣ_d_ref = 2/Vdc*(- Ki_Σ * xiΣ_d - Kp_Σ * (iΣ_d_ref -  iΣ_d) + 2*Larm*iΣ_q)
     # vMΣ_q_ref = 2/Vdc*(- Ki_Σ * xiΣ_q - Kp_Σ * (iΣ_q_ref -  iΣ_q) - 2*Larm*iΣ_d)
     # Assuming constant w
-    vMΣ_d_ref_c = (- ξ_iΣ_d - b.pi_control.Kp * (iΣ_d_ref - iΣ_d_c) + 2 * conv.elec.Lₐᵣₘ * iΣ_q_c)
-    vMΣ_q_ref_c = (- ξ_iΣ_q - b.pi_control.Kp * (iΣ_q_ref - iΣ_q_c) - 2 * conv.elec.Lₐᵣₘ * iΣ_d_c)
+    vMΣ_d_ref_c = (- ξ_iΣ_d - b.pi_control.Kp * (iΣ_d_ref - iΣ_d_c) + 2 *
+        perunit(conv.elec, conv.bases).Lₐᵣₘ * iΣ_q_c)
+    vMΣ_q_ref_c = (- ξ_iΣ_q - b.pi_control.Kp * (iΣ_q_ref - iΣ_q_c) - 2 *
+        perunit(conv.elec, conv.bases).Lₐᵣₘ * iΣ_d_c)
 
     # Output are in converter reference frame!
     return (vMΣ_d_ref_c=vMΣ_d_ref_c, vMΣ_q_ref_c=vMΣ_q_ref_c)
@@ -316,7 +318,7 @@ function state_space!(F, x, inputs, b::CirculatingCurrentControl, conv::Abstract
     J = [ 0 1 0
          -1 0 0
           0 0 0]
-    J_min2ω = -2 * conv.elec.ωbase * J
+    J_min2ω = -2 * conv.bases.omega * J
 
     F[1:3] = Ki_iΣ * (iΣ_ref - iΣ) - J_min2ω * ξ_iΣ
 

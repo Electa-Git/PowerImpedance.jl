@@ -239,7 +239,7 @@ end
         model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
             P.SimulationSettings(), list.operating_point, (; source = :fixture))
         converter = only(filter(e -> e.model isa PowerImpedance.TLC, list.elements))
-        base = converter.model.elec.Sbase / converter.model.elec.vDCbase
+        base = converter.model.bases.S / converter.model.bases.v_dc
         @test base == 0.15625
         @test Set(c.name for c in probes.channels) == Set(keys(station_currents))
         @test P._dc_converter_current_bases(list) ==
@@ -306,8 +306,8 @@ end
             list.voltageBase, list.frequency)
         @test P._dc_converter_current_bases(shared) ==
               Dict(b.key => base for b in list.buses if b.kind == :dc)
-        different_element = tlc(elec = PowerImpedance.ElectricalTLC(Sbase = 200.0,
-            vDCbase = 640.0))
+        different_element = tlc(Sbase = 200.0, vDCbase = 640.0,
+            elec = PowerImpedance.ElectricalTLC())
         different_base = P.NetlistElement(:DUT2, "DUT2", different_element,
             electricalconnections(different_element), second_terminals,
             converter.role, converter.values)
@@ -494,9 +494,9 @@ end
     end
     index = findfirst(e -> e.name == :sg1, netlist.elements)
     e = netlist.elements[index]
-    rated = SynchronousMachine(
-        ElectricalSM(Vᵃᶜ_base = 380.0, S_base = 2000.0),
-        e.model.mech, e.model.avr, e.model.gov, e.model.limits, e.model.powerflow,
+    rated = SynchronousMachine(ElectricalSM(), e.model.mech, e.model.avr, e.model.gov,
+        e.model.limits, 380.0,
+        BaseValues(S = 2000.0, v_ac = 380.0 * sqrt(2/3), omega = 100π), e.model.powerflow,
         PowerImpedance.LinearizationCache())
     elements = copy(netlist.elements)
     elements[index] = P.NetlistElement(e.name, e.pscad, rated, electricalconnections(rated),
@@ -642,9 +642,9 @@ end
             end
         else
             reference = channel.kind == :converter_p ?
-                        flow.pt / converter.model.elec.Sbase :
+                        flow.pt / converter.model.bases.S :
                         channel.kind == :converter_q ?
-                        flow.qt / converter.model.elec.Sbase : -123.0
+                        flow.qt / converter.model.bases.S : -123.0
             channels[channel.name] = fill(reference, length(times))
         end
     end
@@ -689,7 +689,7 @@ end
     wrong_sign["DUT_Q_ac_f"] .*= -1
     row = only(filter(r -> r.name == "DUT_Q_ac_f",
         compare_operating_point(synthetic_result(times, wrong_sign), model)))
-    @test row.error ≈ 2abs(flow.qt) / converter.model.elec.Sbase
+    @test row.error ≈ 2abs(flow.qt) / converter.model.bases.S
     @test !row.within_tolerance
     wrong_units = deepcopy(channels)
     wrong_units["DUT_P_ac_f"] .*= 100
@@ -706,7 +706,7 @@ end
     case1 = tlc_case1_network()
     list1 = P.netlist(case1, compute(PowerFlowProblem(case1), ACDCPowerFlow()))
     flow1 = list1.operating_point.branch_flows[:DUT]
-    rating = only(filter(e -> e.name == :DUT, list1.elements)).model.elec.Sbase
+    rating = only(filter(e -> e.name == :DUT, list1.elements)).model.bases.S
     internal_probes = P.ProbeManifest(
         filter(c -> c.kind in (:converter_p, :converter_q),
             plan.probes.channels), nothing)

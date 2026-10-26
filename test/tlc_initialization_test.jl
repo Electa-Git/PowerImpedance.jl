@@ -1,7 +1,7 @@
 @testset "TLC current initialization" begin
     P = PowerImpedance
-    plant = ElectricalTLC(Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = 640.0)
-    conv = tlc(elec = plant,
+    plant = ElectricalTLC()
+    conv = tlc(Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = 640.0, elec = plant,
         meas = Measurement(
             v_ac = P.Butterworth(order = 2, ωc = 0.5e4),
             i_ac = P.Butterworth(order = 2, ωc = 0.5e4)))

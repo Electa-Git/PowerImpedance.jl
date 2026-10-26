@@ -103,12 +103,20 @@ end
     @test @inferred(PowerFlowProblem(networks)) isa
           Gridspace{PowerFlowProblem{NB.NetworkState}}
 
-    converters = @inferred mmc(Grid; sync = PLLSynchronization(),
+    converters = @inferred mmc(Grid; Sbase = Grid([500.0, 1000.0]),
+        sync = PLLSynchronization(),
         delta_control = ΔdqControlGFL(outer_active = OuterActivePowerControl(),
             outer_reactive = OuterReactiveQControl(), occ = InnerCurrentPIControl()),
         sigma_control = ΣdqzControlTEC())
     @test converters isa Gridspace{MMC}
-    @test only(converters) isa MMC
+    @test all(model -> model isa MMC, converters)
+    @test [bases(model).S for model in converters] == [500.0, 1000.0]
+
+    for (constructor, keyword) in ((tlc, :Sbase),
+        (synchronousmachine, :S_base), (inductionmachine, :S_base))
+        models = constructor(Grid; NamedTuple{(keyword,)}((Grid([500.0, 1000.0]),))...)
+        @test [bases(model).S for model in models] == [500.0, 1000.0]
+    end
 
     macro_grid = GridspaceMacroExample(x = Grid([1, 2]))
     @test [(case.x, case.y) for case in macro_grid] == [(1, 2), (2, 2)]

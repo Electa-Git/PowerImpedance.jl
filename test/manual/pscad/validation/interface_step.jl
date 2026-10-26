@@ -17,14 +17,14 @@ one_step_modulation(::PowerImpedance.CompensatedModulation, dt) =
     PowerImpedance.CompensatedModulation(timeDelay = dt, padeOrderNum = 3, padeOrderDen = 3)
 function one_step_model(m::PowerImpedance.MMC, dt)
     return PowerImpedance.MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
-        one_step_modulation(m.modulation, dt), m.elec, m.limits, m.powerflow,
+        one_step_modulation(m.modulation, dt), m.elec, m.limits, m.bases, m.powerflow,
         PowerImpedance.LinearizationCache())
 end
 function one_step_model(m::PowerImpedance.TLC, dt)
     return PowerImpedance.TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
         m.innerVoltage, m.innerCurrent,
         PowerImpedance.DelayModulation(timeDelay = dt, padeOrderNum = 3, padeOrderDen = 3),
-        m.limits, m.powerflow, PowerImpedance.LinearizationCache())
+        m.limits, m.bases, m.powerflow, PowerImpedance.LinearizationCache())
 end
 modulation_states(m::PowerImpedance.MMC) = PowerImpedance.statenames(m.modulation)
 modulation_states(m::PowerImpedance.TLC) = PowerImpedance.statenames(m.mod)
@@ -39,7 +39,7 @@ function one_step_full_y(original,h)
     names=PowerImpedance.statenames(e);delayed=Set(modulation_states(e))
     d=findall(in(delayed),collect(names));r=setdiff(1:length(names),d)
     pade=PowerImpedance.PadeDelay(timeDelay=h,padeOrderNum=3,padeOrderDen=3)
-    base=device_bases(e.elec);n=length(r)
+    base=device_bases(e.elec, e.bases);n=length(r)
     function response(s)
         gp=only(pade.C*((s*I-pade.A)\pade.B)+pade.D)
         effect=vcat(e.cache.A[r,d],e.cache.C[:,d])*((s*I-e.cache.A[d,
@@ -58,7 +58,7 @@ function interface_step_reference(net, spec; dc_conductance = nothing)
     dt = spec.time_step
     isfinite(dt) && dt > 0 || error("interface reference requires a positive finite step")
     full_y = one_step_full_y(original, dt)
-    bases = device_bases(original.elec)
+    bases = device_bases(original.elec, original.bases)
     matrices = Matrix{ComplexF64}[]
     for frequency in spec.frequencies
         s = ComplexF64(im * 2π * frequency)

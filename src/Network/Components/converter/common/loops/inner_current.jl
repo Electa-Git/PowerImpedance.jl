@@ -171,7 +171,7 @@ function state_space!(F, x, inputs, block::InnerCurrentPIControl, conv::Abstract
     v_d, i = filter_step!(F, 1, x, block.filter, filter_statenames(:vG_d_occ_f, block.filter), meas.vG_d_f)
     v_q, i = filter_step!(F, i, x, block.filter, filter_statenames(:vG_q_occ_f, block.filter), meas.vG_q_f)
 
-    Lᵣ = elec_inductance(conv.elec)
+    Lᵣ = elec_inductance(conv.elec, conv.bases)
 
     e_d = i_d_ref - i_d
     e_q = i_q_ref - i_q

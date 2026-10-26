@@ -12,12 +12,12 @@ function mmc_raw_y(model, s)
 end
 
 # The independent conversion fixes operation order, including floating-point rounding.
-function mmc_scaling_before(Y, elec)
+function mmc_scaling_before(Y, elec, b)
     Y = copy(Y)
-    Y[1, :] .*= elec.Sbase / elec.vDC_base
-    Y[2:3, :] .*= 2 * elec.Sbase / (3 * elec.vAC_base)
-    Y[:, 1] ./= elec.vDC_base
-    Y[:, 2:3] ./= elec.vAC_base / elec.turnsRatio
+    Y[1, :] .*= b.S / b.v_dc
+    Y[2:3, :] .*= 2 * b.S / (3 * b.v_ac)
+    Y[:, 1] ./= b.v_dc
+    Y[:, 2:3] ./= b.v_ac / elec.turnsRatio
     return Y
 end
 
@@ -35,7 +35,8 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
     cached(builder_response, frequencies)
     for (index, s) in enumerate(frequencies)
         reference = element_y(original, s)
-        @test PowerImpedance._mmc_si_scale!(mmc_raw_y(original, s), original.elec) ≈
+        @test PowerImpedance._mmc_si_scale!(mmc_raw_y(original, s), original.elec,
+            original.bases) ≈
               reference
         @test builder_response[:, :, index] ≈ reference
     end
@@ -48,10 +49,10 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
                      getfield(elec, index),
             fieldcount(typeof(elec)))
         physical = PowerImpedance.ElectricalMMC(fields...)
-        element = PowerImpedance.MMC(model.meas, model.sync,
-            model.delta_control, model.sigma_control, model.modulation, physical,
-            model.limits, model.powerflow, deepcopy(model.cache))
-        old_scale = mmc_scaling_before(ones(3, 3), physical)
+        element = PowerImpedance.MMC(model.meas, model.sync, model.delta_control,
+            model.sigma_control, model.modulation, physical, model.limits, model.bases,
+            model.powerflow, deepcopy(model.cache))
+        old_scale = mmc_scaling_before(ones(3, 3), physical, model.bases)
         new_scale = PowerImpedance.SI_scale(element)
         @test mmc_scaling_bits(new_scale[1:1, 1:1]) == mmc_scaling_bits(old_scale[1:1, 1:1])
         @test mmc_scaling_bits(new_scale[2:3, 2:3]) == mmc_scaling_bits(old_scale[2:3, 2:3])
@@ -70,8 +71,8 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
         old_cache(old_response, frequencies)
         for (index, s) in enumerate(frequencies)
             raw = mmc_raw_y(element, s)
-            before = mmc_scaling_before(raw, physical)
-            actual = PowerImpedance._mmc_si_scale!(copy(raw), element.elec)
+            before = mmc_scaling_before(raw, physical, model.bases)
+            actual = PowerImpedance._mmc_si_scale!(copy(raw), element.elec, element.bases)
             reference = element_y(element, s)
             @test mmc_scaling_bits(response[1:1, 1:1, index]) ==
                   mmc_scaling_bits(old_response[1:1, 1:1, index])

@@ -107,29 +107,33 @@ system_input_columns(m,spec)=collect(eachindex(spec.axes))
 system_input_columns(m::SystemPortVoltage,spec)=m.columns
 
 function system_output_bases(m::SystemDeviceCurrent,c)
-    b=device_bases(c.net.elements[m.element].elec)
+    b=device_bases(c.net.elements[m.element].elec, c.net.elements[m.element].bases)
     return m.dc ? [b.current_outputs[1]] : fill(b.ac_current,2)
 end
 system_output_bases(m::SystemACVoltage,
-    c)=fill(device_bases(c.net.elements[m.element].elec).ac_voltage,2)
+    c)=fill(device_bases(c.net.elements[m.element].elec,
+        c.net.elements[m.element].bases).ac_voltage, 2)
 system_output_bases(m::SystemDCVoltage,
-    c)=[device_bases(c.net.elements[first(c.devices)].elec).dc_voltage]
+    c)=[device_bases(c.net.elements[first(c.devices)].elec,
+        c.net.elements[first(c.devices)].bases).dc_voltage]
 system_output_bases(m::SystemBranchCurrent,c)=fill(system_current_base(c,m),
     passive_dimension(c.net.elements[m.element]))
 function system_current_base(c,m)
     if c.net.elements[m.element] isa PowerImpedance.Transformer
         transformer=c.net.elements[m.element]
         phase_rms_V=m.port==:side1 ? transformer.V₁ᵒ : transformer.V₂ᵒ
-        power=device_bases(c.net.elements[first(c.devices)].elec).power
+        power=device_bases(c.net.elements[first(c.devices)].elec,
+            c.net.elements[first(c.devices)].bases).power
         return 2power/(3phase_rms_V/1000*sqrt(2))
     end
     for name in c.devices
-        e=c.net.elements[name];b=device_bases(e.elec)
+        e=c.net.elements[name];b=device_bases(e.elec, e.bases)
         node=first(port_nets(c.net, m.element, m.port))
         node==only(port_nets(c.net, name, :dc)) && return b.current_outputs[1]
         node==first(port_nets(c.net, name, :ac)) && return b.ac_current
     end
-    b=device_bases(c.net.elements[first(c.devices)].elec)
+    b=device_bases(c.net.elements[first(c.devices)].elec,
+        c.net.elements[first(c.devices)].bases)
     return passive_dimension(c.net.elements[m.element])==1 ?
         b.current_outputs[1] : b.ac_current
 end
@@ -154,7 +158,7 @@ function system_response(m::SystemPortVoltage,c,s,functions,forms,v)
     return v[m.rows,:]
 end
 function system_response(m::SystemDeviceCurrent,c,s,functions,forms,v)
-    b=device_bases(c.net.elements[m.element].elec)
+    b=device_bases(c.net.elements[m.element].elec, c.net.elements[m.element].bases)
     rows=m.dc ? [1] : collect(b.ac_indices)
     return (functions[m.element](s)*component_incidence(c,m.element)'*v)[rows,:]
 end
@@ -165,7 +169,7 @@ function system_response(m::SystemBranchCurrent,c,s,functions,forms,v)
     return (yy*component_incidence(c,m.element)'*v)[m.port == :side1 ? (1:n) : (n+1:2n),:]
 end
 function system_response(m::SystemACVoltage,c,s,functions,forms,v)
-    b=device_bases(c.net.elements[m.element].elec)
+    b=device_bases(c.net.elements[m.element].elec, c.net.elements[m.element].bases)
     return (component_incidence(c,m.element)'*v)[b.ac_indices,:]
 end
 function system_response(m::SystemDCVoltage,c,s,functions,forms,v)
@@ -197,7 +201,7 @@ function system_current_samples(result, model, element, port)
 end
 system_samples(m::SystemPortVoltage,result,model,c,voltage)=voltage[:,m.rows]
 function system_samples(m::SystemDeviceCurrent,result,model,c,voltage)
-    b=device_bases(c.net.elements[m.element].elec)
+    b=device_bases(c.net.elements[m.element].elec, c.net.elements[m.element].bases)
     return system_current_samples(result,model,m.element,m.dc ? :dc : :ac)
 end
 system_samples(m::SystemBranchCurrent,result,model,c,

@@ -44,8 +44,8 @@ function write_reference(model, directory = EXPERIMENTS)
             row(element.name, "omega_c", y.sync.ω_c, "pu")
             if m isa PowerImpedance.MMC
                 row(element.name, "iS_z", x.iΣ_z, "pu")
-                row(element.name, "i_dc_internal", 3x.iΣ_z*m.elec.Sbase/m.elec.vDC_base, "kA")
-                caps = P.mmc_arm_capacitors(x, m.elec.vDC_base)
+                row(element.name, "i_dc_internal", 3x.iΣ_z*m.bases.S/m.bases.v_dc, "kA")
+                caps = P.mmc_arm_capacitors(x, m.bases.v_dc)
                 for (half, voltages) in (("u", caps.upper), ("l", caps.lower)),
                     (phase, voltage) in zip(("a", "b", "c"), voltages)
 

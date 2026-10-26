@@ -34,7 +34,7 @@ const P = PowerImpedance.PSCAD
             m = e.model
             altered = kind == :tlc ? converter_element(e, TLC(m.elec, m.meas, m.sync,
                 m.outerActive, m.outerReactive, m.innerVoltage, m.innerCurrent, block,
-                m.limits, m.powerflow, PowerImpedance.LinearizationCache())) :
+                m.limits, m.bases, m.powerflow, PowerImpedance.LinearizationCache())) :
                 converter_element(e, with_modulation(m, block))
             build() = kind == :tlc ? P.tlc_modulation("MOD", altered, eq, transforms, settings) :
                 P.mmc_modulation("MOD", altered, eq, transforms, settings)
@@ -56,7 +56,7 @@ const P = PowerImpedance.PSCAD
             end
             @test (kind == :tlc ? altered.model.mod.delay.timeDelay : altered.model.modulation.delay1.timeDelay) == tau
             if kind == :tlc
-                @test parameters["compensation"] ≈ m.elec.ωbase * residual
+                @test parameters["compensation"] ≈ m.bases.omega * residual
                 if !isempty(queues)
                     restored = PowerImpedance.phase_compensated_dq(
                         [parameters["dDelay0"], parameters["qDelay0"]], parameters["compensation"])
@@ -65,7 +65,7 @@ const P = PowerImpedance.PSCAD
             elseif kind == :uncompensated
                 for (stem, frame, expected) in (("mD", 1, [eq.outputs.mod.mΔd, eq.outputs.mod.mΔq]),
                     ("mS", -2, [eq.outputs.mod.mΣd, eq.outputs.mod.mΣq]))
-                    @test parameters[stem * "phase"] ≈ frame * m.elec.ωbase * residual
+                    @test parameters[stem * "phase"] ≈ frame * m.bases.omega * residual
                     if !isempty(queues)
                         restored = PowerImpedance.phase_compensated_dq(
                             [parameters[stem * "dY0"], parameters[stem * "qY0"]], parameters[stem * "phase"])
@@ -84,9 +84,9 @@ const P = PowerImpedance.PSCAD
             total = dt + residual
             for harmonic in (1, -2, 3), frequency in (0.0, 75.0, 1000.0)
                 s = 2pi * frequency * im
-                realized = exp(-s*dt + im*harmonic*m.elec.ωbase*dt) *
-                    exp(-s*residual + im*harmonic*m.elec.ωbase*residual)
-                @test realized ≈ exp(-s*total + im*harmonic*m.elec.ωbase*total)
+                realized = exp(-s*dt + im*harmonic*m.bases.omega*dt) *
+                    exp(-s*residual + im*harmonic*m.bases.omega*residual)
+                @test realized ≈ exp(-s*total + im*harmonic*m.bases.omega*total)
             end
             !iszero(tau) && @test abs(total - tau) <= dt/2 + eps(tau)
         end

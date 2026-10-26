@@ -113,17 +113,17 @@ grid_response = compute(
 # arm inductance. The current PI gains follow from loop bandwidths and damping
 # ratio 0.7, then convert with the corresponding per-unit impedance bases.
 
-electrical = ElectricalMMC(
-    Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07, Cₐᵣₘ = 10e-3, N = 400,
-    Lᵣ = 60e-3, Rᵣ = 0.535, turnsRatio = 1,
-    vACbase_LL_RMS = 230, Sbase = 1000, vDC_base = 640
-);
+electrical = ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07, Cₐᵣₘ = 10e-3, N = 400, Lᵣ = 60e-3,
+    Rᵣ = 0.535, turnsRatio = 1);
+converter_bases = BaseValues(S = 1000, v_ac = 230 * sqrt(2/3),
+    v_dc = 640, omega = 100π);
 dc_impedance_base = 640^2 / 1000;
-ac_current_base = 2 * 1000e6 / (3 * electrical.vAC_base * 1e3);
+ac_current_base = 2 * 1000e6 / (3 * converter_bases.v_ac * 1e3);
 energy_scale = 3 * 10e-3 * (640e3)^2 / (400 * 1000e6);
 ac_current_pi = PIControl(
-    Kp = (2 * 0.7 * 1000 * 0.085 - 1.07) / electrical.zAC_base,
-    Ki = 0.085 * 1000^2 / electrical.zAC_base
+    Kp = (2 * 0.7 * 1000 * 0.085 - 1.07) / PowerImpedance.perunit(electrical,
+        converter_bases).zAC_base,
+    Ki = 0.085 * 1000^2 / PowerImpedance.perunit(electrical, converter_bases).zAC_base
 );
 internal_current_pi = PIControl(
     Kp = (2 * 0.7 * 300 * 50e-3 - 1.07) / dc_impedance_base,
@@ -162,7 +162,7 @@ sigma_control = ΣdqzControlTEC(
 
 converter_elements = merge(elements,
     (
-        c1 = let model = mmc(
+        c1 = let model = mmc(vACbase_LL_RMS = 230, Sbase = 1000, vDC_base = 640,
                 elec = electrical, meas = Measurement(), sync = NoSynchronization(),
                 delta_control = delta_control, sigma_control = sigma_control,
                 modulation = UncompensatedModulation(

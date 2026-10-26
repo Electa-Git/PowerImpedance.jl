@@ -11,9 +11,9 @@ voltage = 380 / sqrt(3);
 #
 # The electrical model includes d/q magnetizing inductances, rotor windings and
 # transformer leakage.
-# Its parameters use a 1000 MVA, 380 kV base.
-machine_electrical = ElectricalSM(Vᵃᶜ_base = 380, S_base = 1000, ωn = 100π,
-    lt = 0.065, rt = 0.0026, La_d = 1.66, La_q = 1.61, Ll = 0.15, Ra = 0.0015);
+# The synchronousmachine constructor below sets the 1000 MVA, 380 kV base.
+machine_electrical = ElectricalSM(lt = 0.065, rt = 0.0026, La_d = 1.66, La_q = 1.61,
+    Ll = 0.15, Ra = 0.0015);
 # The rotor has an inertia constant of 4 s, with steam-chest, reheater and crossover time
 # constants of 2, 5 and 1 s.
 machine_mechanical = MechanicalSM(
@@ -24,9 +24,9 @@ machine_governor = GovernorSM(R = 0.05, T_w = 0.1, T_G = 0.2);
 # compensation and gain 200.
 machine_avr = AVRSM(v_ref = 1.01, T_R = 0.05, T_B = 1, T_C = 0.1, T_A = 0.02, K_A = 200);
 # The machine supplies 900 MW at Bus 4.
-sg1 = let model = synchronousmachine(;
-        elec = machine_electrical, mech = machine_mechanical,
-        gov = machine_governor, avr = machine_avr)
+sg1 = let model = synchronousmachine(; Vᵃᶜ_base = 380, S_base = 1000, ωn = 100π,
+        elec = machine_electrical, mech = machine_mechanical, gov = machine_governor,
+        avr = machine_avr)
     b = bases(model)
     component(model; powerflow = (p = 900 / b.S,
         q = -100 / b.S, v = voltage * sqrt(2) / b.v_ac))
@@ -35,9 +35,10 @@ sg1 = component(sg1; limits = PowerImpedance.Limits(P_min = -2000,
     P_max = 2000, Q_min = -2000, Q_max = 2000));
 # ## MMC controls
 #
-# Each MMC has 50 mH arms, 10 mF submodules and a 60 mH reactor on a 1000 MVA base.
-electrical = ElectricalMMC(vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
-    Lₐᵣₘ = 0.05, Rₐᵣₘ = 1.07, Cₐᵣₘ = 0.01, N = 400, Lᵣ = 0.06, Rᵣ = 0.535);
+# Each MMC has 50 mH arms, 10 mF submodules and a 60 mH reactor.
+# The mmc constructors below set the 1000 MVA base.
+electrical = ElectricalMMC(Lₐᵣₘ = 0.05, Rₐᵣₘ = 1.07, Cₐᵣₘ = 0.01, N = 400, Lᵣ = 0.06,
+    Rᵣ = 0.535);
 # The measurements pass terminal voltages and currents directly to the controllers.
 measurement = Measurement();
 # The PLL sets the angle of each grid-following MMC from its terminal voltage.
@@ -74,7 +75,7 @@ bus5_control = ΔdqControlGFL(
 remote_limits = PowerImpedance.Limits(P_min = -1.5, P_max = 1.5, Q_min = -0.5, Q_max = 0.5);
 receiving_limits = PowerImpedance.Limits(P_min = -1, P_max = 1, Q_min = -1, Q_max = 1);
 # Converter `c1` regulates the first link's DC voltage at its remote AC grid.
-c1 = let model = mmc(;
+c1 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
         elec = electrical, meas = measurement, sync = sync, delta_control = remote_control,
         sigma_control = internal_control, modulation = modulation, limits = remote_limits)
     b = bases(model)
@@ -85,10 +86,10 @@ c1 = let model = mmc(;
             v_ac = (voltage * sqrt(2)) / b.v_ac))
 end;
 # Converter `c2` injects 600 MW at Bus 7 while regulating AC voltage.
-c2 = let model = mmc(; elec = electrical, meas = measurement, sync = sync,
-        delta_control = bus7_control,
+c2 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = bus7_control,
         sigma_control = internal_control, modulation = modulation,
-            limits = receiving_limits)
+        limits = receiving_limits)
     b = bases(model)
     component(model;
         delta_control = (outer_active = (p_ref = 600 / b.S,),
@@ -97,7 +98,7 @@ c2 = let model = mmc(; elec = electrical, meas = measurement, sync = sync,
             q_ac = 100 / b.S))
 end;
 # Converter `c3` regulates the second link's DC voltage at its remote AC grid.
-c3 = let model = mmc(;
+c3 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
         elec = electrical, meas = measurement, sync = sync, delta_control = remote_control,
         sigma_control = internal_control, modulation = modulation, limits = remote_limits)
     b = bases(model)
@@ -108,10 +109,10 @@ c3 = let model = mmc(;
             v_ac = (voltage * sqrt(2)) / b.v_ac))
 end;
 # Converter `c4` injects 600 MW and supports the AC voltage at Bus 5.
-c4 = let model = mmc(; elec = electrical, meas = measurement, sync = sync,
-        delta_control = bus5_control,
+c4 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = bus5_control,
         sigma_control = internal_control, modulation = modulation,
-            limits = receiving_limits)
+        limits = receiving_limits)
     b = bases(model)
     component(model;
         delta_control = (outer_active = (p_ref = 600 / b.S,),

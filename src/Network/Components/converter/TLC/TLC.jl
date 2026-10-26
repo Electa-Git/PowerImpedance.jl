@@ -44,7 +44,7 @@ plant. `state_space!` evaluates the blocks in this dependency order.
     IC<:AbstractInnerCurrentControl,
     Mod<:AbstractModulationTLC} <: AbstractTLC
 
-    "Electrical reactor model and physical bases."
+    "Electrical reactor model."
     elec::E
     "Signal measurement and filtering assembly."
     meas::Meas
@@ -62,6 +62,8 @@ plant. `state_space!` evaluates the blocks in this dependency order.
     mod::Mod
     "Active-power limits \\[MW\\] and reactive-power limits \\[MVAr\\]."
     limits::Limits
+    "Power, voltage and angular-frequency bases of the model equations."
+    bases::BaseValues
     "Power-flow seeds on converter bases \\[dimensionless\\]."
     powerflow::NamedTuple
     "Retained terminal values, converged state and linearization matrices."
@@ -206,15 +208,15 @@ inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
 function pftoinputs(c::TLC, values::NamedTuple)
-    vACbase = c.elec.vACbase
+    vACbase = c.bases.v_ac
     v_ac = values.ac.v / vACbase
     v_bus_d = v_ac * cos(values.ac.theta)
     v_bus_q = -v_ac * sin(values.ac.theta)
-    v_dc = values.dc.v / c.elec.vDCbase
+    v_dc = values.dc.v / c.bases.v_dc
 
-    p_ac = -values.ac.p / c.elec.Sbase
-    q_ac = -values.ac.q / c.elec.Sbase
-    p_dc = values.dc.p / c.elec.Sbase
+    p_ac = -values.ac.p / c.bases.S
+    q_ac = -values.ac.q / c.bases.S
+    p_dc = values.dc.p / c.bases.S
     
     return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),
         TerminalValuesPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
@@ -394,7 +396,7 @@ control, and modulation blocks.
 
 # Arguments
 
-- `elec`: Electrical subsystem and its physical base quantities. Default:
+- `elec`: Electrical subsystem. Default:
   `ElectricalTLC()`.
 - `meas`: Measurement and signal-filtering block. Default: `Measurement()`.
 - `sync`: Synchronization block supplying the converter control frame. Default:
@@ -412,6 +414,13 @@ control, and modulation blocks.
   passed directly to the TLC power-flow adapter. Default: `Limits()`.
 - `powerflow`: Partial power-flow seeds on converter bases \\[dimensionless\\].
   Default: `(;)`.
+
+# Keywords
+
+- `Sbase`: Three-phase apparent-power base \\[MVA\\]. Default: `500.0`.
+- `vACbase_LL_RMS`: Line-to-line RMS voltage base \\[kV\\]. Default: `220.0`.
+- `vDCbase`: Pole-to-pole DC voltage base \\[kV\\]. Default: `640.0`.
+- `ωbase`: Electrical angular-frequency base \\[rad/s\\]. Default: `100 * π`.
 
 # Returns
 
@@ -445,6 +454,10 @@ converter = component(converter;
 ```
 """
 function tlc(;
+    Sbase = 500.0,
+    vACbase_LL_RMS = 220.0,
+    vDCbase = 640.0,
+    ωbase = 100 * π,
     elec::ElectricalTLC = ElectricalTLC(),
     meas::Measurement = Measurement(),
     sync::AbstractSynchronization = NoSynchronization(),
@@ -456,11 +469,13 @@ function tlc(;
     limits::Limits = Limits(),
     powerflow::NamedTuple = (;)
 )
+    b = BaseValues(S = Sbase, v_ac = vACbase_LL_RMS * sqrt(2 / 3),
+        v_dc = vDCbase, omega = ωbase)
     defaults = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
     seeds = _withinputs(defaults, _CONVERTER_POWERFLOW_INPUTS,
         powerflow, "powerflow")
-    return TLC(elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent,
-        mod, limits, seeds, LinearizationCache())
+    return TLC(; elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent,
+        mod, limits, bases = b, powerflow = seeds)
 end
 
 # SI scaling
@@ -497,11 +512,11 @@ scale = P.SI_scale(model)
 ```
 """
 function SI_scale(model::TLC)
-    elec = model.elec
+    b = model.bases
 
-    vACbase = elec.vACbase
-    iACbase = 2 * elec.Sbase / (3 * vACbase)
-    iDCbase = elec.Sbase / elec.vDCbase
+    vACbase = b.v_ac
+    iACbase = 2 * b.S / (3 * vACbase)
+    iDCbase = b.S / b.v_dc
 
     scale = ones(3,3)
 
@@ -510,7 +525,7 @@ function SI_scale(model::TLC)
     scale[2:3, :] .*= iACbase
 
     # column scaling = input voltage bases
-    scale[:, 1]   ./= elec.vDCbase
+    scale[:, 1]   ./= b.v_dc
     scale[:, 2:3] ./= vACbase
 
     return scale
@@ -554,8 +569,7 @@ _powerflow_references(model::TLC) = merge(_powerflow_references(model.sync),
     _powerflow_references(model.outerActive), _powerflow_references(model.outerReactive))
 powerflow_targets(model::TLC) = merge(model.powerflow, _powerflow_references(model))
 
-bases(model::TLC) = BaseValues(S = model.elec.Sbase, v_ac = model.elec.vACbase,
-    v_dc = model.elec.vDCbase, omega = model.elec.ωbase)
+bases(model::TLC) = model.bases
 
 limits(model::TLC) = model.limits
 
@@ -606,10 +620,10 @@ function convert!(data, conv::TLC, ::Type{PMACDC}, component_key,
 
     droop = pf_acq_droop(conv.outerReactive)
     convdc["acq_droop"] = droop.enabled
-    convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
+    convdc["kq_droop"] = droop.kq * (conv.bases.S / (global_dict["S"] * 1e-6))
 
     convdc["droop"] = pf_dc_droop(conv.outerActive,
-        conv.elec.vDCbase, conv.elec.Sbase, global_dict, data)
+        conv.bases.v_dc, conv.bases.S, global_dict, data)
     convdc["Vdcset"] = v_dc / (data["dcpol"] * global_dict["V"] / 1e3)
     convdc["Pacset"] = -p_ac
     convdc["Pdcset"] = !iszero(p_dc) ? p_dc : -p_ac
@@ -625,8 +639,9 @@ function convert!(data, conv::TLC, ::Type{PMACDC}, component_key,
     convdc["reactor"] = 1
 
     zbase = global_dict["Z"]
-    convdc["rc"] = (conv.elec.Rᵣ*conv.elec.zACbase) / zbase
-    convdc["xc"] = (conv.elec.Lᵣ*conv.elec.lACbase) * global_dict["omega"] / zbase
+    pu = perunit(conv.elec, conv.bases)
+    convdc["rc"] = (pu.Rᵣ*pu.zACbase) / zbase
+    convdc["xc"] = (pu.Lᵣ*pu.lACbase) * global_dict["omega"] / zbase
 
     convdc["Vmmax"] = 1.1 * convdc["Vtar"]
     convdc["Vmmin"] = 0.9 * convdc["Vtar"]

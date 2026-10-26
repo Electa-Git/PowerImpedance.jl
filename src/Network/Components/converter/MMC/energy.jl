@@ -262,13 +262,14 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΣEne
     wΣz = (vCΔ_d^2 + vCΔ_q^2 + vCΔ_Zd^2 + vCΔ_Zq^2 + vCΣ_d^2 + vCΣ_q^2 + 2*vCΣ_z^2)/2;
 
     # notch filter. Expressed in dqz in -2ω_c reference frame.
-    ω_n = 2 * conv.elec.ωbase # TODO change by actual frequency? (depends on how it is implemented in PSCAD)
+    # TODO change by actual frequency? (depends on how it is implemented in PSCAD)
+    ω_n = 2 * conv.bases.omega
     ζ = sqrt(2)/2    
     FΣ1 = [x.FΣ1_d, x.FΣ1_q, x.FΣ1_z]; FΣ2 = [x.FΣ2_d, x.FΣ2_q, x.FΣ2_z]; wΣ = 2 .* [wΣd, wΣq, wΣz] # Defining the vectors
     J = [ 0 1 0
          -1 0 0
           0 0 0]
-    J_min2ω = -2 * conv.elec.ωbase * J 
+    J_min2ω = -2 * conv.bases.omega * J
 
     F[1:3] = FΣ2 - 2 * ζ * ω_n * (FΣ1 + wΣ) - J_min2ω * FΣ1
     F[4:6] = -ω_n^2 * FΣ1 - J_min2ω * FΣ2
@@ -383,7 +384,8 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΔEne
     wΔZq = vCΔ_q * vCΣ_d - vCΔ_d * vCΣ_q + 2 * vCΔ_Zq * vCΣ_z
 
     # notch filter. Expressed in dqz in ω_c reference frame
-    ω_n = conv.elec.ωbase # TODO change by actual frequency? (depends on how it is implemented in PSCAD)
+    # TODO change by actual frequency? (depends on how it is implemented in PSCAD)
+    ω_n = conv.bases.omega
     ζ = sqrt(2)/2
     FΔ1 = [x.FΔ1_d, x.FΔ1_q, x.FΔ1_Zd, x.FΔ1_Zq]; FΔ2 = [x.FΔ2_d, x.FΔ2_q, x.FΔ2_Zd, x.FΔ2_Zq]; wΔ = -2 .* [wΔd, wΔq, wΔZd, wΔZq] # PSCAD implementation has a minus sign for wΔ, and *2 TODO check if it is a problem?
     J_dq = [ 0 1
@@ -391,8 +393,8 @@ function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, b::ΔEne
     # Triplen reconstruction `T = [cos(3θ) sin(3θ); sin(3θ) -cos(3θ)]`
     # gives (dT/dt)*T = -3ωbase*J_dq. Since the equations use -J_G*x,
     # its triplen block is +3ωbase*J_dq for both notch and PI states.
-    J_G = [ J_dq * conv.elec.ωbase zeros(2,2)
-            zeros(2,2) J_dq * (3*conv.elec.ωbase)]
+    J_G = [ J_dq * conv.bases.omega zeros(2, 2)
+            zeros(2, 2) J_dq * (3*conv.bases.omega)]
 
     F[1:4] = FΔ2 - 2 * ζ * ω_n * (FΔ1 + wΔ) - J_G * FΔ1
     F[5:8] = -ω_n^2 * FΔ1 - J_G * FΔ2

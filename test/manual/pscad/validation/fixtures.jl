@@ -309,9 +309,11 @@ function tlc_strong_network(; mode = :pq, scr = 8.0)
     mode in (:pq, :pf, :qv, :vac, :vdc) || error("unknown TLC fixture mode $mode")
     # A resistive DC load consumes power: Vdc-control case rectifies from AC.
     power = mode == :vdc ? -70.0 : 70.0
-    model = tlc(elec=m.elec, meas=m.meas, sync=m.sync, outerActive=active,
-        outerReactive=reactive, innerVoltage=m.innerVoltage,
-        innerCurrent=m.innerCurrent, mod=m.mod, limits=limits(m))
+    model = TLC(; m.bases,
+        powerflow = map(input -> input.default, PowerImpedance.inputs(m).powerflow),
+        elec = m.elec, meas = m.meas, sync = m.sync, outerActive = active,
+        outerReactive = reactive, innerVoltage = m.innerVoltage,
+        innerCurrent = m.innerCurrent, mod = m.mod, limits = limits(m))
     b = bases(model)
     active_inputs = mode == :vdc ? (; v_dc_ref = 640.0 / b.v_dc) :
         (; p_ref = power / b.S)
@@ -388,12 +390,12 @@ function mmc_grid_network(; mode = :pq, scr = 8.0)
     model = deepcopy(parent.elements.DUT)
     elec = model.elec
     b = bases(model)
-    voltage = elec.vAC_base / elec.turnsRatio
+    voltage = b.v_ac / elec.turnsRatio
     power = mode == :vdc ? -600.0 : 600.0
-    active_inputs = mode == :vdc ? (; v_dc_ref = elec.vDC_base / b.v_dc) :
+    active_inputs = mode == :vdc ? (; v_dc_ref = b.v_dc / b.v_dc) :
         (; p_ref = power / b.S)
     active_seeds = mode == :vdc ? (; p_ac = power / b.S) :
-        (; v_dc = elec.vDC_base / b.v_dc)
+        (; v_dc = b.v_dc / b.v_dc)
     reactive_inputs = mode == :vac ? (; v_ac_ref = voltage / b.v_ac) :
         mode == :qv ? (; q_ref = 200.0 / b.S,
             support = (; v_ac_ref = voltage / b.v_ac)) : (; q_ref = 200.0 / b.S)
@@ -402,18 +404,18 @@ function mmc_grid_network(; mode = :pq, scr = 8.0)
     dut = component(model; delta_control = (; outer_active = active_inputs,
             outer_reactive = reactive_inputs),
         powerflow = (; active_seeds..., reactive_seeds..., p_dc = power / b.S))
-    impedance_magnitude = (voltage * sqrt(3/2))^2 / elec.Sbase / scr
+    impedance_magnitude = (voltage * sqrt(3/2))^2 / b.S / scr
     resistance = impedance_magnitude / sqrt(101)
     inductance = 10resistance / (2π*50)
     elements = (; DUT = dut, G3 = deepcopy(parent.elements.G_AC),
-        G_DC = dc_source(v = mode == :vdc ? 0.0 : elec.vDC_base),
+        G_DC = dc_source(v = mode == :vdc ? 0.0 : b.v_dc),
         Grid = impedance(z = s -> resistance+inductance*s, conductors = 3))
     topology = NetworkBuilder.Bus[
         NetworkBuilder.Bus(:AC; ports = ((:DUT, :ac), (:Grid, :side1)), domain = ACDQ),
         NetworkBuilder.Bus(:Grid; ports = ((:Grid, :side2), (:G3, :ac)), domain = ACDQ),
         NetworkBuilder.Bus(:DC; ports = ((:DUT, :dc),))]
     if mode == :vdc
-        resistance_dc = elec.vDC_base^2 / abs(power)
+        resistance_dc = b.v_dc^2 / abs(power)
         elements = merge(elements,
             (; DC_load = impedance(z = s -> resistance_dc, conductors = 1)))
         append!(topology, [
@@ -441,7 +443,7 @@ end
 
 function active_device_network(kind; scr=8.)
     dut=active_device(kind)
-    b=device_bases(dut.elec)
+    b=device_bases(dut.elec, dut.bases)
     z=(b.ac_voltage*sqrt(3/2))^2/b.power/scr
     resistance=z/sqrt(101);inductance=10resistance/(2π*50)
     elements = (; DUT = dut, G3 = ac_source(v = b.ac_voltage),

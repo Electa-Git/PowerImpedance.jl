@@ -32,10 +32,10 @@ function write_reference(model)
         for e in model.netlist.elements
             e.model isa PowerImpedance.AbstractConverter || continue
             eq = P.converter_equilibrium(e)
-            row(e.name, "P_ac_internal", eq.outputs.meas.P_ac_f * e.model.elec.Sbase, "MW")
-            row(e.name, "Q_ac_internal", eq.outputs.meas.Q_ac_f * e.model.elec.Sbase, "MVAr")
+            row(e.name, "P_ac_internal", eq.outputs.meas.P_ac_f * e.model.bases.S, "MW")
+            row(e.name, "Q_ac_internal", eq.outputs.meas.Q_ac_f * e.model.bases.S, "MVAr")
             row(e.name, "Vdc_internal", eq.inputs.v_dc *
-                (e.model isa PowerImpedance.MMC ? e.model.elec.vDC_base : e.model.elec.vDCbase), "kV")
+                (e.model isa PowerImpedance.MMC ? e.model.bases.v_dc : e.model.bases.v_dc), "kV")
             for (quantity, value) in pairs(eq.states)
                 row(e.name, quantity, value, "model_state")
             end

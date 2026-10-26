@@ -18,7 +18,7 @@ const P = PowerImpedance.PSCAD
     list = V.fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
     spec, reference = V.applicable_scan("induction_machine", net, list)
     dut = net.elements[:DUT]
-    bases = V.device_bases(dut.elec)
+    bases = V.device_bases(dut.elec, dut.bases)
     @test bases.ac_voltage ≈ 220sqrt(2 / 3)
     @test bases.ac_current ≈ 1000sqrt(2) / (sqrt(3) * 220)
     @test bases.ac_current / bases.ac_voltage ≈ 1000 / 220^2

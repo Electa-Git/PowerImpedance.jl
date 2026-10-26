@@ -16,8 +16,7 @@ compensation_inductance = 3 * voltage^2 / (2π * 50 * 50);
 # Each MMC uses a 333/220 transformer with 0.18 pu leakage reactance and 0.005 pu
 # resistance.
 # The arms contain 400 submodules with 10 mF capacitance and 50 mH inductance.
-electrical = ElectricalMMC(vDC_base = 640, Sbase = 1000, vACbase_LL_RMS = 333,
-    turnsRatio = 333/220, Lᵣ = 0.18 * transformer_base / (2π * 50),
+electrical = ElectricalMMC(turnsRatio = 333/220, Lᵣ = 0.18 * transformer_base / (2π * 50),
     Rᵣ = 0.005 * transformer_base);
 
 # The MMC measurements pass AC voltage, AC current and DC voltage directly to the
@@ -52,9 +51,9 @@ vdc_control = ΔdqControlGFL(outer_active = dc_control, outer_reactive = reactiv
     occ = current_control);
 
 # Converter `MMC1` injects one third of the wind farm's 700 MW into its AC grid.
-MMC1 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
-        delta_control = pq_control, sigma_control = internal_control,
-            modulation = modulation)
+MMC1 = let model = mmc(; vDC_base = 640, Sbase = 1000, vACbase_LL_RMS = 333,
+        elec = electrical, meas = mmc_measurement, sync = sync, delta_control = pq_control,
+        sigma_control = internal_control, modulation = modulation)
     b = bases(model)
     component(model;
         delta_control = (outer_active = (p_ref = (700/3) / b.S,),
@@ -64,9 +63,9 @@ MMC1 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
 end;
 
 # Converter `MMC2` withdraws two thirds of the wind power from the central AC bus.
-MMC2 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
-        delta_control = pq_control, sigma_control = internal_control,
-            modulation = modulation)
+MMC2 = let model = mmc(; vDC_base = 640, Sbase = 1000, vACbase_LL_RMS = 333,
+        elec = electrical, meas = mmc_measurement, sync = sync, delta_control = pq_control,
+        sigma_control = internal_control, modulation = modulation)
     b = bases(model)
     component(model;
         delta_control = (outer_active = (p_ref = (-1400/3) / b.S,),
@@ -76,9 +75,9 @@ MMC2 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
 end;
 
 # Converter `MMC3` regulates the DC voltage and exchanges power with the second AC grid.
-MMC3 = let model = mmc(; elec = electrical, meas = mmc_measurement, sync = sync,
-        delta_control = vdc_control, sigma_control = internal_control,
-            modulation = modulation)
+MMC3 = let model = mmc(; vDC_base = 640, Sbase = 1000, vACbase_LL_RMS = 333,
+        elec = electrical, meas = mmc_measurement, sync = sync, delta_control = vdc_control,
+        sigma_control = internal_control, modulation = modulation)
     b = bases(model)
     component(model;
         delta_control = (outer_active = (v_dc_ref = 640 / b.v_dc,),
@@ -90,8 +89,7 @@ end;
 # ## Wind-farm converter
 #
 # The two-level converter connects the wind farm through 12.32 mH and 0.03872 ohm.
-wind_electrical = ElectricalTLC(Lᵣ = 0.01232, Rᵣ = 0.03872, Sbase = 1000,
-    vACbase_LL_RMS = 220);
+wind_electrical = ElectricalTLC(Lᵣ = 0.01232, Rᵣ = 0.03872);
 
 # First-order filters remove fast components from the measured AC voltage and current.
 wind_measurement = Measurement(v_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4),
@@ -113,9 +111,9 @@ wind_reactive = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.01, Ki = 10));
 wind_current = InnerCurrentPIControl(pi_ctrl = PIControl(Kp = 0.254647908947033, Ki = 0.8));
 wind_limits = PowerImpedance.Limits(
     P_min = 0.9 * 1000, P_max = 1.1 * 1000, Q_min = -0.5 * 1000, Q_max = 0.5 * 1000);
-OWF = let model = tlc(; elec = wind_electrical, meas = wind_measurement, sync = wind_sync,
-        outerActive = wind_power, outerReactive = wind_reactive,
-            innerCurrent = wind_current,
+OWF = let model = tlc(; Sbase = 1000, vACbase_LL_RMS = 220, elec = wind_electrical,
+        meas = wind_measurement, sync = wind_sync, outerActive = wind_power,
+        outerReactive = wind_reactive, innerCurrent = wind_current,
         innerVoltage = NoInnerVoltageControl(), mod = NoModulation(), limits = wind_limits)
     b = bases(model)
     component(model; outerActive = (p_ref = 700 / b.S,),

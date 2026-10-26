@@ -3,12 +3,13 @@ using PowerImpedance
 include("ieee9_network.jl")
 
 # The 220 kV case from adm_IM_test.jl, with independent elements in each representation.
-function _im_circuit(; elec = ElectricalIM(r_s = 0.01),
+function _im_circuit(; S_base = 1000, Vac_base = 220, ωn = 100π,
+        elec = ElectricalIM(r_s = 0.01),
         mech = MechanicalIM(T_0 = 0.9, A = 0.0, B = 0.0, C = 1.0, m = 0))
     voltage = 220 / sqrt(3)
     elements = (;
         g1 = ac_source(v = voltage * sqrt(2), theta = 0.0, p = -500),
-        im1 = inductionmachine(; elec, mech),
+        im1 = inductionmachine(; S_base, Vac_base, ωn, elec, mech),
         imp = impedance(; z = 0.01, conductors = 3))
     rows = [NetworkBuilder.Bus(Symbol(name); ports = ((element, port),), domain = ACDQ)
             for (element, port, name) in ((:im1, :ac, "machine_"),
@@ -37,8 +38,7 @@ end
 function _sm_circuit()
     voltage = 380 / sqrt(3)
     elements = (;
-        sg1 = let model = synchronousmachine(;
-            elec = ElectricalSM(Vᵃᶜ_base = 380.0))
+        sg1 = let model = synchronousmachine(; Vᵃᶜ_base = 380.0, elec = ElectricalSM())
             b = bases(model)
             component(model; powerflow = (p = 900 / b.S,
                 q = model.powerflow.q * b.S / b.S,
@@ -149,8 +149,7 @@ end
 
 function _tlc_circuit(vdc_control, reactive = nothing)
     zbase = 220.0^2 / 100.0
-    elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08zbase / (2π * 50), Rᵣ = 0.0008zbase,
-        Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = 640.0)
+    elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08zbase / (2π * 50), Rᵣ = 0.0008zbase)
     active = vdc_control ?
              PowerImpedance.OuterActiveVdcControl(
                  pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0)) :
@@ -160,29 +159,30 @@ function _tlc_circuit(vdc_control, reactive = nothing)
     support = vdc_control ? PowerImpedance.VoltageSupportLag(K = 5.0, ωc = 2.0) :
               PowerImpedance.NoVoltageSupport()
     elements = (;
-        DUT = let model = tlc(; elec = elec,
-            meas = PowerImpedance.Measurement(
-                v_ac = PowerImpedance.Butterworth(order = 2, ωc = 5000.0),
-                i_ac = PowerImpedance.Butterworth(order = 2, ωc = 5000.0)),
-            sync = PowerImpedance.PLLSynchronization(
-                pi_ctrl = PowerImpedance.PIControl(Kp = 0.397887357729738,
-                    Ki = 7.957747154594767),
-                filter = PowerImpedance.Butterworth(order = 2, ωc = 2π * 80)),
-            outerActive = active,
-            outerReactive = isnothing(reactive) ?
-                            PowerImpedance.OuterReactiveQControl(
-                pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
-                support = support) : reactive,
-            innerVoltage = PowerImpedance.NoInnerVoltageControl(),
-            innerCurrent = PowerImpedance.InnerCurrentPIControl(
-                pi_ctrl = PowerImpedance.PIControl(Kp = 0.254647908947033, Ki = 0.8)),
-            mod = PowerImpedance.PadeModulation(timeDelay = 200e-6, padeOrderNum = 3,
-                padeOrderDen = 3),
-            limits = vdc_control ?
-                     PowerImpedance.Limits(P_min = -100.0, P_max = 100.0, Q_min = -50.0,
-                         Q_max = 50.0) :
-                     PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
-                         Q_min = -1000.0, Q_max = 1000.0))
+        DUT = let model = tlc(; Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = 640.0,
+                elec = elec,
+                meas = PowerImpedance.Measurement(
+                    v_ac = PowerImpedance.Butterworth(order = 2, ωc = 5000.0),
+                    i_ac = PowerImpedance.Butterworth(order = 2, ωc = 5000.0)),
+                sync = PowerImpedance.PLLSynchronization(
+                    pi_ctrl = PowerImpedance.PIControl(Kp = 0.397887357729738,
+                        Ki = 7.957747154594767),
+                    filter = PowerImpedance.Butterworth(order = 2, ωc = 2π * 80)),
+                outerActive = active,
+                outerReactive = isnothing(reactive) ?
+                PowerImpedance.OuterReactiveQControl(
+                    pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
+                    support = support) : reactive,
+                innerVoltage = PowerImpedance.NoInnerVoltageControl(),
+                innerCurrent = PowerImpedance.InnerCurrentPIControl(
+                    pi_ctrl = PowerImpedance.PIControl(Kp = 0.254647908947033, Ki = 0.8)),
+                mod = PowerImpedance.PadeModulation(timeDelay = 200e-6, padeOrderNum = 3,
+                    padeOrderDen = 3),
+                limits = vdc_control ?
+                PowerImpedance.Limits(P_min = -100.0, P_max = 100.0, Q_min = -50.0,
+                    Q_max = 50.0) :
+                PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
+                    Q_min = -1000.0, Q_max = 1000.0))
             b = bases(model)
             active_inputs = vdc_control ?
                 (; v_dc_ref = (640.0) / b.v_dc) : (; p_ref = (70.0) / b.S)
@@ -257,29 +257,27 @@ function _mmc_circuit(mode)
         support = mode == :qv ? PI.VoltageSupportLag(K = 20.0, ωc = 100.0) :
                   PI.NoVoltageSupport())
     elements = (;
-        DUT = let model = mmc(;
-            elec = PI.ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07,
-                Cₐᵣₘ = 10e-3, N = 400, turnsRatio = 333 / 380,
-                Lᵣ = 0.1305zbase / (100π), Rᵣ = 0.0037zbase,
-                vACbase_LL_RMS = 333.0, Sbase = 1000.0, vDC_base = 800.0),
-            meas = PI.Measurement(),
-            sync = PI.PLLSynchronization(pi_ctrl = PI.PIControl(Kp = 0.28, Ki = 12.5664),
-                filter = PI.NoFilter()),
-            delta_control = PI.ΔdqControlGFL(
-                outer_active = active,
-                outer_reactive = reactive,
-                occ = PI.InnerCurrentPIControl(pi_ctrl = PI.PIControl(Kp = 0.7691,
-                    Ki = 522.7654))),
-            sigma_control = PI.ΣdqzControlTEC(
-                tec = PI.TotalEnergyControl(pi_control = PI.PIControl(Kp = 1.386,
-                    Ki = 29.70)),
-                zscc = PI.ZeroSequenceCurrentControl(PI.PIControl(Kp = 0.1048,
-                    Ki = 48.1914)),
-                ccsc = PI.CirculatingCurrentSuppressionControl(PI.PIControl(Kp = 0.1048,
-                    Ki = 48.1914))),
-            modulation = PI.UncompensatedModulation(),
-            limits = PI.Limits(P_min = -1500.0, P_max = 1500.0, Q_min = -1000.0,
-                Q_max = 1000.0))
+        DUT = let model = mmc(; vACbase_LL_RMS = 333.0, Sbase = 1000.0, vDC_base = 800.0,
+                elec = PI.ElectricalMMC(Lₐᵣₘ = 50e-3, Rₐᵣₘ = 1.07, Cₐᵣₘ = 10e-3, N = 400,
+                    turnsRatio = 333 / 380, Lᵣ = 0.1305zbase / (100π), Rᵣ = 0.0037zbase),
+                meas = PI.Measurement(),
+                sync = PI.PLLSynchronization(
+                    pi_ctrl = PI.PIControl(Kp = 0.28, Ki = 12.5664),
+                    filter = PI.NoFilter()),
+                delta_control = PI.ΔdqControlGFL(
+                    outer_active = active,
+                    outer_reactive = reactive,
+                    occ = PI.InnerCurrentPIControl(pi_ctrl = PI.PIControl(Kp = 0.7691,
+                            Ki = 522.7654))),
+                sigma_control = PI.ΣdqzControlTEC(
+                    tec = PI.TotalEnergyControl(pi_control = PI.PIControl(Kp = 1.386,
+                            Ki = 29.70)),
+                    zscc = PI.ZeroSequenceCurrentControl(PI.PIControl(Kp = 0.1048,
+                            Ki = 48.1914)),
+                    ccsc = PI.CirculatingCurrentSuppressionControl(PI.PIControl(Kp = 0.1048,
+                            Ki = 48.1914))), modulation = PI.UncompensatedModulation(),
+                limits = PI.Limits(P_min = -1500.0, P_max = 1500.0, Q_min = -1000.0,
+                    Q_max = 1000.0))
             b = bases(model)
             active_inputs = mode == :vdc ?
                 (; v_dc_ref = (800.0) / b.v_dc) : (; p_ref = (600.0) / b.S)
@@ -357,9 +355,6 @@ function _mmc_gfm_circuit()
     Pmmc, Qmmc = 0.7 * 1060, 0.0
     Vm, Vdc = 400 / sqrt(3), 640.0
     elec = PowerImpedance.ElectricalMMC(
-        vDC_base = 640.0,
-        Sbase = 1060.0,
-        vACbase_LL_RMS = 320.0,
         turnsRatio = 320 / 400,
         Lᵣ = 0.18 * (320^2 / 1060) / (2π * 50),
         Rᵣ = 0.001 * (320^2 / 1060),
@@ -448,9 +443,9 @@ function _mmc_gfm_circuit()
     )
 
     elements = (;
-        DUT = let model = mmc(; elec = elec, meas = meas, sync = synch,
-            delta_control = delta_control, sigma_control = sigma_control,
-            modulation = mod, limits = limits)
+        DUT = let model = mmc(; Sbase = 1060.0, vACbase_LL_RMS = 320.0, vDC_base = 640.0,
+                elec = elec, meas = meas, sync = synch, delta_control = delta_control,
+                sigma_control = sigma_control, modulation = mod, limits = limits)
             b = bases(model)
             component(model; sync = (p_ref = (Pmmc) / b.S,),
                 delta_control = (outer_reactive = (q_ref = (Qmmc) / b.S,),),
@@ -473,9 +468,6 @@ function _mmc_compensated_circuit()
     Pmmc, Qmmc = 0.7 * 1060, 0.0
     Vm, Vdc = 400 / sqrt(3), 640.0
     elec = PowerImpedance.ElectricalMMC(
-        vDC_base = 640.0,
-        Sbase = 1060.0,
-        vACbase_LL_RMS = 320.0,
         turnsRatio = 320 / 400,
         Lᵣ = 0.18 * (320^2 / 1060) / (2π * 50),
         Rᵣ = 0.001 * (320^2 / 1060),
@@ -550,9 +542,9 @@ function _mmc_compensated_circuit()
     )
 
     elements = (;
-        DUT = let model = mmc(; elec = elec, meas = meas, sync = synch,
-            delta_control = delta_control, sigma_control = sigma_control,
-            modulation = mod, limits = limits)
+        DUT = let model = mmc(; Sbase = 1060.0, vACbase_LL_RMS = 320.0, vDC_base = 640.0,
+                elec = elec, meas = meas, sync = synch, delta_control = delta_control,
+                sigma_control = sigma_control, modulation = mod, limits = limits)
             b = bases(model)
             component(model; sync = (p_ref = (Pmmc) / b.S,),
                 delta_control = (outer_reactive = (q_ref = (Qmmc) / b.S,),),
@@ -569,9 +561,10 @@ function _mmc_compensated_circuit()
     return (; elements, rows, options = (; voltageBase = Vm))
 end
 
-function im_network(; elec = ElectricalIM(r_s = 0.01),
+function im_network(; S_base = 1000, Vac_base = 220, ωn = 100π,
+        elec = ElectricalIM(r_s = 0.01),
         mech = MechanicalIM(T_0 = 0.9, A = 0.0, B = 0.0, C = 1.0, m = 0))
-    (; elements, rows, options) = _im_circuit(; elec, mech)
+    (; elements, rows, options) = _im_circuit(; S_base, Vac_base, ωn, elec, mech)
     return NetworkBuilder.define(deepcopy(elements), rows; options)
 end
 

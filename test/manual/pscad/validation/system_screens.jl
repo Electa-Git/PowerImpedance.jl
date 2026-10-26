@@ -3,7 +3,8 @@
 function system_circuit(net)
     devices=sort!([name for (name,e) in pairs(net.elements) if
         e isa Union{PowerImpedance.MMC,PowerImpedance.TLC}])
-    ports=[(name,device_bases(net.elements[name].elec).ac_port) for name in devices]
+    ports=[(name, device_bases(net.elements[name].elec,
+        net.elements[name].bases).ac_port) for name in devices]
     grids=sort!([name for (name,e) in pairs(net.elements) if startswith(string(name),"Zg")])
     c=composed_circuit(net,devices,grids,ports)
     for (name,e) in pairs(net.elements)
@@ -69,7 +70,7 @@ function system_root_search(c,functions,initial)
     foreach(track,initial)
     # A 50 Hz nominal frame separates opposite circular regions by about 100 Hz. These
     # offsets give initial root guesses, without an assumed modal identity.
-    omega=2c.net.elements[first(c.devices)].elec.ωbase
+    omega=2c.net.elements[first(c.devices)].bases.omega
     growing=unique([z for (z,residual) in tracks if real(z)>0 && imag(z)>0 && residual<1e-6])
     partners=[z+im*direction*omega for z in growing for direction in (-1,1)]
     append!(selected,partners);foreach(track,partners)
@@ -189,7 +190,8 @@ function system_taylor_seeds(c)
     K=zeros(ComplexF64,nx+nv,nx+nv);E=copy(K);vi=(nx+1):(nx+nv)
     K[vi,vi]=-(y0-s0*dy);E[vi,vi]=dy;offset=0
     for name in c.devices
-        e=c.net.elements[name];b=device_bases(e.elec);h=component_incidence(c,name)
+        e=c.net.elements[name];b=device_bases(e.elec, e.bases);h=component_incidence(c,
+            name)
         ix=(offset+1):(offset+size(e.cache.A,1));offset=last(ix)
         K[ix,ix]=e.cache.A;E[ix,ix]=I(length(ix));K[ix,vi]=(e.cache.B./b.voltage_inputs')*h'
         K[vi,ix]=-h*(e.cache.C.*b.current_outputs)

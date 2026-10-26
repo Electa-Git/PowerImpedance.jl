@@ -70,9 +70,8 @@ function ohl_to_ugc(x)
     return (;
         g1 = ac_source(v = transmissionVoltage*sqrt(2), p = pHVDC1),
         c1 = let model = only(mmc(Grid;
-                elec = ElectricalMMC(
-                    Sbase = 1000.0, vDC_base = 640.0,
-                    vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
+                Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 380.0,
+                elec = ElectricalMMC(turnsRatio = 1.0),
                 limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
                     Q_min = -500.0, Q_max = 500.0),
                 sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -88,8 +87,7 @@ function ohl_to_ugc(x)
                     ccsc = CirculatingCurrentSuppressionControl(
                         PIControl(Kp = 0.1048, Ki = 48.1914))),
                 modulation = UncompensatedModulation(timeDelay = 200e-6,
-                    padeOrderNum = 5, padeOrderDen = 5)
-            ))
+                    padeOrderNum = 5, padeOrderDen = 5)))
             b = bases(model)
             component(model;
                 delta_control = (outer_active = (v_dc_ref = 640.0 / b.v_dc,),
@@ -99,12 +97,9 @@ function ohl_to_ugc(x)
                     p_dc = 0.0 / b.S))
         end,
         c2 = let model = only(mmc(Grid;
-                elec = ElectricalMMC(
-                    Sbase = 1000.0, vDC_base = 640.0,
-                    vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
-                    Lᵣ = 0.0461, Rᵣ = 0.4103,
-                    Lₐᵣₘ = 30e-3
-                ),
+                Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 333.0,
+                elec = ElectricalMMC(turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
+                    Lₐᵣₘ = 30e-3),
                 limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
                     Q_min = -1000.0, Q_max = 1000.0),
                 sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -120,8 +115,7 @@ function ohl_to_ugc(x)
                     ccsc = CirculatingCurrentSuppressionControl(
                         PIControl(Kp = 0.1048, Ki = 48.1914))),
                 modulation = UncompensatedModulation(timeDelay = 200e-6,
-                    padeOrderNum = 5, padeOrderDen = 5)
-            ))
+                    padeOrderNum = 5, padeOrderDen = 5)))
             b = bases(model)
             component(model;
                 delta_control = (outer_active = (p_ref = pHVDC1 / b.S,),

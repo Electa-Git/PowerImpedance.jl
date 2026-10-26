@@ -15,16 +15,9 @@ $(TYPEDFIELDS)
 """
 @with_kw struct ElectricalIM <: AbstractStateSpace
 
-    "Base electrical angular frequency \\[rad/s\\]."
-    ωn :: Float64 = 100π
     "Legacy parameter unused by the current state equations."
     p_f :: Float64 = 2
 
-    # Base values
-    "Line-to-line RMS voltage base \\[kV\\]."
-    Vac_base :: Float64 = 220
-    "Three-phase apparent-power base \\[MVA\\]."
-    S_base :: Float64 = 1000
 
     # Transformer
     "External transformer inductance on the machine base \\[dimensionless\\]."
@@ -101,6 +94,10 @@ $(TYPEDFIELDS)
     elec::ElectricalIM
     "Machine mechanical subsystem."
     mech::MechanicalIM
+    "Line-to-line RMS voltage base \\[kV\\]."
+    Vac_base::Float64
+    "Power, voltage and angular-frequency bases of the model equations."
+    bases::BaseValues
     "Retained terminal values, converged state and linearization matrices."
     cache::LinearizationCache = LinearizationCache()
 end
@@ -111,9 +108,15 @@ Construct an induction-machine model from electrical and mechanical subsystems.
 
 # Arguments
 
-- `elec`: Electrical subsystem and its physical base quantities. Default:
+- `elec`: Electrical subsystem. Default:
   `ElectricalIM()`.
 - `mech`: Mechanical subsystem. Default: `MechanicalIM()`.
+
+# Keywords
+
+- `S_base`: Three-phase apparent-power base \\[MVA\\]. Default: `1000`.
+- `Vac_base`: Line-to-line RMS voltage base \\[kV\\]. Default: `220`.
+- `ωn`: Electrical angular-frequency base \\[rad/s\\]. Default: `100π`.
 
 # Returns
 
@@ -127,8 +130,15 @@ im = inductionmachine(
     mech = MechanicalIM(T_0 = 0.9))
 ```
 """
-function inductionmachine(; elec = ElectricalIM(), mech = MechanicalIM())
-    return InductionMachine(elec, mech, LinearizationCache())
+function inductionmachine(;
+    S_base = 1000,
+    Vac_base = 220,
+    ωn = 100π,
+    elec = ElectricalIM(),
+    mech = MechanicalIM())
+    Vac_base = Float64(Vac_base)
+    b = BaseValues(S = S_base, v_ac = Vac_base * sqrt(2/3), omega = ωn)
+    return InductionMachine(; elec, mech, Vac_base, bases = b)
 end
 
 statenames(m::InductionMachine) =
@@ -183,9 +193,8 @@ inputs, point_pu = P.pftoinputs(model, values)
 """
 function pftoinputs(m::InductionMachine, values::NamedTuple)
 
-    Sbase = m.elec.S_base
-    Vacbase_LL = m.elec.Vac_base
-    Vac_base_phpk = sqrt(2/3)* Vacbase_LL
+    Sbase = m.bases.S
+    Vac_base_phpk = m.bases.v_ac
     v_bus_d = values.ac.v*cos(values.ac.theta) / Vac_base_phpk
 
     v_bus_q = -values.ac.v*sin(values.ac.theta) / (Vac_base_phpk) # Inputs are in dq-lagging
@@ -275,10 +284,10 @@ function state_space!(F, x, v_dq, block::ElectricalIM; indm::InductionMachine)
     v_d, v_q = v_dq
 
     #Equations
-    F[1] = block.ωn/l_σ*(v_d-(r_eq+r_R)*i_d+l_σ*i_q+ω_r*Ψ_qf+r_R/l_M*Ψ_df)
-    F[2] = block.ωn/l_σ*(v_q-(r_eq+r_R)*i_q-l_σ*i_d-ω_r*Ψ_df+r_R/l_M*Ψ_qf)
-    F[3] = block.ωn*(r_R*i_d-(r_R/l_M)*Ψ_df+(1-ω_r)*Ψ_qf)
-    F[4] = block.ωn*(r_R*i_q-(r_R/l_M)*Ψ_qf-(1-ω_r)*Ψ_df)
+    F[1] = indm.bases.omega/l_σ*(v_d-(r_eq+r_R)*i_d+l_σ*i_q+ω_r*Ψ_qf+r_R/l_M*Ψ_df)
+    F[2] = indm.bases.omega/l_σ*(v_q-(r_eq+r_R)*i_q-l_σ*i_d-ω_r*Ψ_df+r_R/l_M*Ψ_qf)
+    F[3] = indm.bases.omega*(r_R*i_d-(r_R/l_M)*Ψ_df+(1-ω_r)*Ψ_qf)
+    F[4] = indm.bases.omega*(r_R*i_q-(r_R/l_M)*Ψ_qf-(1-ω_r)*Ψ_df)
 
     # Algebraic variables
     τ_e = Ψ_df*i_q - Ψ_qf*i_d
@@ -434,7 +443,7 @@ scale = P.SI_scale(model)
 """
 function SI_scale(model::InductionMachine)
     elec = model.elec
-    Ybase = elec.S_base / elec.Vac_base^2 
+    Ybase = model.bases.S / model.Vac_base^2
     scale = fill(Ybase,2,2)
     
     return scale
@@ -449,8 +458,7 @@ admittance_order(::InductionMachine) = ((:ac, :d), (:ac, :q))
 
 inputs(::InductionMachine) = (;)
 
-bases(model::InductionMachine) = BaseValues(S = model.elec.S_base,
-    v_ac = model.elec.Vac_base * sqrt(2/3), omega = model.elec.ωn)
+bases(model::InductionMachine) = model.bases
 
 function _withinputs(model::InductionMachine, declarations::NamedTuple, changes, path)
     configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
@@ -474,9 +482,9 @@ function convert!(data, indm::InductionMachine, ::Type{PMACDC}, component_key,
     mech = indm.mech
     Sbase = global_dict["S"]
     Vbase = global_dict["V"]
-    impscale = ((elec.Vac_base)^2/elec.S_base)/global_dict["Z"]
+    impscale = ((indm.Vac_base)^2/indm.bases.S)/global_dict["Z"]
     # Convert torque from the machine MVA base to the network VA base.
-    T_0 = mech.T_0 * elec.S_base * 1e6 / Sbase
+    T_0 = mech.T_0 * indm.bases.S * 1e6 / Sbase
     # Power flow initial values
     data["im"][key_str]["P_ag"] = T_0
     data["im"][key_str]["Q_ag"] = 0.0

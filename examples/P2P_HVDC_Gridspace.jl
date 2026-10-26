@@ -46,10 +46,8 @@ const builder_options = (;
 # elements.
 const fixed_element_specs = (;
     g1 = ac_source(Grid; v = transmission_voltage * sqrt(2), p = p_hvdc),
-    c1 = mmc(Grid;
-        elec = ElectricalMMC(
-            Sbase = 1000.0, vDC_base = 640.0,
-            vACbase_LL_RMS = 380.0, turnsRatio = 1.0),
+    c1 = mmc(Grid; Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 380.0,
+        elec = ElectricalMMC(turnsRatio = 1.0),
         limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
             Q_min = -500.0, Q_max = 500.0),
         sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -65,15 +63,10 @@ const fixed_element_specs = (;
             ccsc = CirculatingCurrentSuppressionControl(
                 PIControl(Kp = 0.1048, Ki = 48.1914))),
         modulation = UncompensatedModulation(timeDelay = 200e-6,
-            padeOrderNum = 5, padeOrderDen = 5)
-    ),
-    c2 = mmc(Grid;
-        elec = ElectricalMMC(
-            Sbase = 1000.0, vDC_base = 640.0,
-            vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
-            Lᵣ = 0.0461, Rᵣ = 0.4103,
-            Lₐᵣₘ = 30e-3
-        ),
+            padeOrderNum = 5, padeOrderDen = 5)),
+    c2 = mmc(Grid; Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 333.0,
+        elec = ElectricalMMC(turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
+            Lₐᵣₘ = 30e-3),
         limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
             Q_min = -1000.0, Q_max = 1000.0),
         sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -89,8 +82,7 @@ const fixed_element_specs = (;
             ccsc = CirculatingCurrentSuppressionControl(
                 PIControl(Kp = 0.1048, Ki = 48.1914))),
         modulation = UncompensatedModulation(timeDelay = 200e-6,
-            padeOrderNum = 5, padeOrderDen = 5)
-    ),
+            padeOrderNum = 5, padeOrderDen = 5)),
     g4 = ac_source(Grid; v = transmission_voltage * sqrt(2), p = p_hvdc),
     tl1 = overhead_line(Grid;
         length = 25e3,
@@ -440,14 +432,10 @@ converter_uq_elements = merge(
                         v_ac = (transmission_voltage * sqrt(2)) / b.v_ac,
                         p_dc = 0.0 / b.S))
             end,
-            (mmc(Grid;
-                elec = ElectricalMMC(Grid;
-                    Sbase = 1000.0, vDC_base = 640.0,
-                    vACbase_LL_RMS = 380.0, turnsRatio = 1.0,
-                    Lₐᵣₘ = Grid(50e-3, 5 / sqrt(3)),
-                    Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
-                    Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))
-                ),
+            (mmc(Grid; Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 380.0,
+                elec = ElectricalMMC(Grid; turnsRatio = 1.0,
+                    Lₐᵣₘ = Grid(50e-3, 5 / sqrt(3)), Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
+                    Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))),
                 limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
                     Q_min = -500.0, Q_max = 500.0),
                 sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -463,8 +451,7 @@ converter_uq_elements = merge(
                     ccsc = CirculatingCurrentSuppressionControl(
                         PIControl(Kp = 0.1048, Ki = 48.1914))),
                 modulation = UncompensatedModulation(timeDelay = 200e-6,
-                    padeOrderNum = 5, padeOrderDen = 5)
-            ),),
+                    padeOrderNum = 5, padeOrderDen = 5)),),
             (:model,)
         ),
         c2 = Gridspace{PowerImpedance.MMC}(
@@ -477,15 +464,10 @@ converter_uq_elements = merge(
                         v_ac = (transmission_voltage * sqrt(2)) / b.v_ac,
                         p_dc = 0.0 / b.S))
             end,
-            (mmc(Grid;
-                elec = ElectricalMMC(Grid;
-                    Sbase = 1000.0, vDC_base = 640.0,
-                    vACbase_LL_RMS = 333.0, turnsRatio = 333 / 380,
-                    Lᵣ = 0.0461, Rᵣ = 0.4103,
-                    Lₐᵣₘ = Grid(30e-3, 5 / sqrt(3)),
-                    Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
-                    Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))
-                ),
+            (mmc(Grid; Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 333.0,
+                elec = ElectricalMMC(Grid; turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
+                    Lₐᵣₘ = Grid(30e-3, 5 / sqrt(3)), Rₐᵣₘ = Grid(1.07, 10 / sqrt(3)),
+                    Cₐᵣₘ = Grid(10e-3, 5 / sqrt(3))),
                 limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
                     Q_min = -1000.0, Q_max = 1000.0),
                 sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
@@ -501,8 +483,7 @@ converter_uq_elements = merge(
                     ccsc = CirculatingCurrentSuppressionControl(
                         PIControl(Kp = 0.1048, Ki = 48.1914))),
                 modulation = UncompensatedModulation(timeDelay = 200e-6,
-                    padeOrderNum = 5, padeOrderDen = 5)
-            ),),
+                    padeOrderNum = 5, padeOrderDen = 5)),),
             (:model,)
         ),
         ohl = overhead_line(Grid;

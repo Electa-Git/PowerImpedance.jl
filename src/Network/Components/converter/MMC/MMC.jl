@@ -55,10 +55,12 @@ $(TYPEDFIELDS)
     sigma_control::Σ
     "Modulation and delay block."
     modulation::Mod                      
-    "MMC electrical plant and physical bases."
+    "MMC electrical plant."
     elec::ElectricalMMC
     "Active- and reactive-power limits on converter bases \\[dimensionless\\]."
     limits::Limits = Limits()
+    "Power, voltage and angular-frequency bases of the model equations."
+    bases::BaseValues
     "Power-flow seeds on converter bases \\[dimensionless\\]."
     powerflow::NamedTuple = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
     "Retained terminal values, converged state and linearization matrices."
@@ -544,11 +546,13 @@ inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
 function pftoinputs(c::MMC, values::NamedTuple)
-    v_ac = values.ac.v / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
-    v_dc = values.dc.v / c.elec.vDC_base
-    p_ac = -values.ac.p / c.elec.Sbase
-    q_ac = -values.ac.q / c.elec.Sbase
-    p_dc = values.dc.p / c.elec.Sbase
+    # Scale grid-side phase-peak voltage with the parent converter phase-peak base.
+    # TODO check why this base is used and how it affects the other calculations.
+    v_ac = values.ac.v / c.bases.v_ac
+    v_dc = values.dc.v / c.bases.v_dc
+    p_ac = -values.ac.p / c.bases.S
+    q_ac = -values.ac.q / c.bases.S
+    p_dc = values.dc.p / c.bases.S
     
     vG_d = v_ac * cos(values.ac.theta)   # d component of the grid voltage in the grid frame
     vG_q = -v_ac * sin(values.ac.theta)  # q component of the grid voltage in the grid frame
@@ -641,7 +645,7 @@ control, and modulation blocks.
 
 # Arguments
 
-- `elec`: Electrical subsystem and its physical base quantities. Default:
+- `elec`: Electrical subsystem. Default:
   `ElectricalMMC()`.
 - `meas`: Measurement and signal-filtering block. Default: `Measurement()`.
 - `sync`: Synchronization block supplying the converter control frame.
@@ -653,6 +657,13 @@ control, and modulation blocks.
   `Limits()`.
 - `powerflow`: Partial power-flow seeds on converter bases \\[dimensionless\\].
   Default: `(;)`.
+
+# Keywords
+
+- `Sbase`: Three-phase apparent-power base \\[MVA\\]. Default: `1000`.
+- `vACbase_LL_RMS`: Line-to-line RMS voltage base \\[kV\\]. Default: `380`.
+- `vDC_base`: Pole-to-pole DC voltage base \\[kV\\]. Default: `640`.
+- `ωbase`: Electrical angular-frequency base \\[rad/s\\]. Default: `100π`.
 
 # Returns
 
@@ -691,6 +702,10 @@ converter = component(converter;
 ```
 """
 function mmc(;
+    Sbase = 1000,
+    vACbase_LL_RMS = 380,
+    vDC_base = 640,
+    ωbase = 100π,
     elec::ElectricalMMC = ElectricalMMC(),
     meas::Measurement = Measurement(),
     sync::AbstractSynchronization,
@@ -700,29 +715,31 @@ function mmc(;
     limits::Limits = Limits(),
     powerflow::NamedTuple = (;))
 
+    b = BaseValues(S = Sbase, v_ac = vACbase_LL_RMS*sqrt(2/3),
+        v_dc = vDC_base, omega = ωbase)
     defaults = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
     seeds = _withinputs(defaults, _CONVERTER_POWERFLOW_INPUTS,
         powerflow, "powerflow")
-    return MMC(meas, sync, delta_control, sigma_control, modulation, elec,
-        limits, seeds, LinearizationCache())
+    return MMC(; meas, sync, delta_control, sigma_control, modulation, elec, limits,
+        bases = b, powerflow = seeds)
 end
 
 # SI scaling
-function _mmc_si_scale!(Y, elec::ElectricalMMC)
-    iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
-    iDCbase = elec.Sbase / elec.vDC_base
+function _mmc_si_scale!(Y, elec::ElectricalMMC, b::BaseValues)
+    iACbase = 2 * b.S / (3 * b.v_ac)
+    iDCbase = b.S / b.v_dc
 
     Y[1:1, 1:1] .*= iDCbase
-    Y[1:1, 1:1] ./= elec.vDC_base
+    Y[1:1, 1:1] ./= b.v_dc
     Y[1:1, 2:3] .*= iDCbase
-    Y[1:1, 2:3] ./= elec.vAC_base
+    Y[1:1, 2:3] ./= b.v_ac
     Y[2:3, 1:1] .*= iACbase * elec.turnsRatio
-    Y[2:3, 1:1] ./= elec.vDC_base
+    Y[2:3, 1:1] ./= b.v_dc
 
     # Equivalent AC-current/AC-voltage scaling preserves the rounding of the AC-AC block.
     # The physical cross terms use the winding current base.
     Y[2:3, 2:3] .*= iACbase
-    Y[2:3, 2:3] ./= elec.vAC_base / elec.turnsRatio
+    Y[2:3, 2:3] ./= b.v_ac / elec.turnsRatio
     return Y
 end
 
@@ -764,7 +781,7 @@ scale = P.SI_scale(model)
 ```
 """
 function SI_scale(model::MMC)
-    return _mmc_si_scale!(ones(3, 3), model.elec)
+    return _mmc_si_scale!(ones(3, 3), model.elec, model.bases)
 end
 
 
@@ -846,8 +863,7 @@ _powerflow_references(model::MMC) = merge(
     _powerflow_references(model.sync), _powerflow_references(model.delta_control))
 powerflow_targets(model::MMC) = merge(model.powerflow, _powerflow_references(model))
 
-bases(model::MMC) = BaseValues(S = model.elec.Sbase, v_ac = model.elec.vAC_base,
-    v_dc = model.elec.vDC_base, omega = model.elec.ωbase)
+bases(model::MMC) = model.bases
 
 limits(model::MMC) = model.limits
 
@@ -899,9 +915,9 @@ function convert!(data, conv::MMC, ::Type{PMACDC}, component_key,
     convdc["type_dc"] = pf_type_dc(conv.delta_control, conv.sync)
     droop = pf_acq_droop(conv.delta_control.outer_reactive)
     convdc["acq_droop"] = droop.enabled
-    convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
+    convdc["kq_droop"] = droop.kq * (conv.bases.S / (global_dict["S"] * 1e-6))
     convdc["droop"] = pf_dc_droop(conv.delta_control,
-        conv.elec.vDC_base, conv.elec.Sbase, global_dict, data)
+        conv.bases.v_dc, conv.bases.S, global_dict, data)
     convdc["Vdcset"] = v_dc / (data["dcpol"] * global_dict["V"] / 1e3)
     convdc["Pacset"] = -p_ac
     convdc["Pdcset"] = (!ismissing(p_dc) && !iszero(p_dc)) ? p_dc : p_ac
@@ -916,10 +932,11 @@ function convert!(data, conv::MMC, ::Type{PMACDC}, component_key,
     convdc["bf"] = 0.0
     convdc["reactor"] = 1
 
+    pu = perunit(conv.elec, conv.bases)
     convdc["rc"] = conv.elec.turnsRatio^(-2) *
-        (conv.elec.Rₑ * conv.elec.zAC_base) / global_dict["Z"]
+        (pu.Rₑ * pu.zAC_base) / global_dict["Z"]
     convdc["xc"] = conv.elec.turnsRatio^(-2) *
-        (conv.elec.Lₑ * conv.elec.lAC_base) * global_dict["omega"] / global_dict["Z"]
+        (pu.Lₑ * pu.lAC_base) * global_dict["omega"] / global_dict["Z"]
 
     convdc["Vmmax"] = 1.1 * convdc["Vtar"]
     convdc["Vmmin"] = 0.9 * convdc["Vtar"]
@@ -932,10 +949,10 @@ function convert!(data, conv::MMC, ::Type{PMACDC}, component_key,
     convdc["LossB"] = 0.0
     convdc["LossCrec"] = 0.0
     convdc["LossCinv"] = 0.0
-    convdc["Qacmax"] = lm.Q_max*conv.elec.Sbase
-    convdc["Qacmin"] = lm.Q_min*conv.elec.Sbase
-    convdc["Pacmax"] = lm.P_max*conv.elec.Sbase
-    convdc["Pacmin"] = lm.P_min*conv.elec.Sbase
+    convdc["Qacmax"] = lm.Q_max*conv.bases.S
+    convdc["Qacmin"] = lm.Q_min*conv.bases.S
+    convdc["Pacmax"] = lm.P_max*conv.bases.S
+    convdc["Pacmin"] = lm.P_min*conv.bases.S
 
     if data["bus"][string(ac_bus)]["bus_type"] == 1
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]

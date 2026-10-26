@@ -64,19 +64,10 @@ n_f=100 # Discretization of the frequency, high value needed for PMD
 Vm=380/sqrt(3)
 
 # MMCs
-MMC1 = let model = PowerImpedance.mmc(
-        elec = PowerImpedance.ElectricalMMC(
-            Lᵣ = 0.18 * (333^2 / 1000) / (2 * pi * 50),
-            Rᵣ = 0.001 * (333^2 / 1000),
-            Rₐᵣₘ = 0.4,
-            Lₐᵣₘ = 46.125e-3,
-            Cₐᵣₘ = 11.3867e-3,
-            N = 400,
-            turnsRatio = 333 / 380,
-            vACbase_LL_RMS = 333,
-            Sbase = 1000,
-            vDC_base = 640
-        ),
+MMC1 = let model = PowerImpedance.mmc(vACbase_LL_RMS = 333, Sbase = 1000, vDC_base = 640,
+        elec = PowerImpedance.ElectricalMMC(Lᵣ = 0.18 * (333^2 / 1000) / (2 * pi * 50),
+            Rᵣ = 0.001 * (333^2 / 1000), Rₐᵣₘ = 0.4, Lₐᵣₘ = 46.125e-3, Cₐᵣₘ = 11.3867e-3,
+            N = 400, turnsRatio = 333 / 380),
         meas = PowerImpedance.Measurement(
             P_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π),
             Q_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π)
@@ -129,8 +120,7 @@ MMC1 = let model = PowerImpedance.mmc(
             P_max = 1500.0,
             Q_min = -1000.0,
             Q_max = 1000.0
-        )
-    )
+        ))
     b = bases(model)
     component(model; sync = (p_ref = (P_MMC1) / b.S,),
         delta_control = (outer_reactive = (q_ref = (Q_MMC1) / b.S,),),
@@ -138,19 +128,10 @@ MMC1 = let model = PowerImpedance.mmc(
             v_dc = (640) / b.v_dc))
 end
 
-MMC2 = let model = PowerImpedance.mmc(
-        elec = PowerImpedance.ElectricalMMC(
-            Lᵣ = 0.18 * (333^2 / 1000) / (2 * pi * 50),
-            Rᵣ = 0.001 * (333^2 / 1000),
-            Rₐᵣₘ = 0.4,
-            Lₐᵣₘ = 46.125e-3,
-            Cₐᵣₘ = 11.3867e-3,
-            N = 400,
-            turnsRatio = 333 / 380,
-            vACbase_LL_RMS = 333,
-            Sbase = 1000,
-            vDC_base = 640
-        ),
+MMC2 = let model = PowerImpedance.mmc(vACbase_LL_RMS = 333, Sbase = 1000, vDC_base = 640,
+        elec = PowerImpedance.ElectricalMMC(Lᵣ = 0.18 * (333^2 / 1000) / (2 * pi * 50),
+            Rᵣ = 0.001 * (333^2 / 1000), Rₐᵣₘ = 0.4, Lₐᵣₘ = 46.125e-3, Cₐᵣₘ = 11.3867e-3,
+            N = 400, turnsRatio = 333 / 380),
         meas = PowerImpedance.Measurement(
             P_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π),
             Q_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π)
@@ -203,8 +184,7 @@ MMC2 = let model = PowerImpedance.mmc(
             P_max = 1500.0,
             Q_min = -1000.0,
             Q_max = 1000.0
-        )
-    )
+        ))
     b = bases(model)
     component(model; sync = (p_ref = (P_MMC2) / b.S,),
         delta_control = (outer_reactive = (q_ref = (Q_MMC2) / b.S,),),
@@ -212,19 +192,10 @@ MMC2 = let model = PowerImpedance.mmc(
             v_dc = (640) / b.v_dc))
 end
 
-MMC3 = let model = PowerImpedance.mmc(
-        elec = PowerImpedance.ElectricalMMC(
-            Lᵣ = 0.1305 * (333^2 / 1000) / (2 * pi * 50),
-            Rᵣ = 0.0037 * (333^2 / 1000),
-            Rₐᵣₘ = 0.4,
-            Lₐᵣₘ = 46.125e-3,
-            Cₐᵣₘ = 11.3867e-3,
-            N = 400,
-            turnsRatio = 333 / 380,
-            vACbase_LL_RMS = 333,
-            Sbase = 1000,
-            vDC_base = 640
-        ),
+MMC3 = let model = PowerImpedance.mmc(vACbase_LL_RMS = 333, Sbase = 1000, vDC_base = 640,
+        elec = PowerImpedance.ElectricalMMC(Lᵣ = 0.1305 * (333^2 / 1000) / (2 * pi * 50),
+            Rᵣ = 0.0037 * (333^2 / 1000), Rₐᵣₘ = 0.4, Lₐᵣₘ = 46.125e-3, Cₐᵣₘ = 11.3867e-3,
+            N = 400, turnsRatio = 333 / 380),
         meas = PowerImpedance.Measurement(
             P_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π),
             Q_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π)
@@ -267,8 +238,7 @@ MMC3 = let model = PowerImpedance.mmc(
             P_max = 1500.0,
             Q_min = -1000.0,
             Q_max = 1000.0
-        )
-    )
+        ))
     b = bases(model)
     component(model;
         delta_control = (outer_active = (v_dc_ref = (640) / b.v_dc,),
@@ -277,19 +247,10 @@ MMC3 = let model = PowerImpedance.mmc(
             v_ac = (Vm * sqrt(2)) / b.v_ac, p_dc = (0.0) / b.S))
 end
 
-MMC4 = let model = PowerImpedance.mmc(
-        elec = PowerImpedance.ElectricalMMC(
-            Lᵣ = 0.1305 * (333^2 / 1000) / (2 * pi * 50),
-            Rᵣ = 0.0037 * (333^2 / 1000),
-            Rₐᵣₘ = 0.4,
-            Lₐᵣₘ = 46.125e-3,
-            Cₐᵣₘ = 11.3867e-3,
-            N = 400,
-            turnsRatio = 333 / 380,
-            vACbase_LL_RMS = 333,
-            Sbase = 1000,
-            vDC_base = 640
-        ),
+MMC4 = let model = PowerImpedance.mmc(vACbase_LL_RMS = 333, Sbase = 1000, vDC_base = 640,
+        elec = PowerImpedance.ElectricalMMC(Lᵣ = 0.1305 * (333^2 / 1000) / (2 * pi * 50),
+            Rᵣ = 0.0037 * (333^2 / 1000), Rₐᵣₘ = 0.4, Lₐᵣₘ = 46.125e-3, Cₐᵣₘ = 11.3867e-3,
+            N = 400, turnsRatio = 333 / 380),
         meas = PowerImpedance.Measurement(
             P_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π),
             Q_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π)
@@ -332,8 +293,7 @@ MMC4 = let model = PowerImpedance.mmc(
             P_max = 1500.0,
             Q_min = -1000.0,
             Q_max = 1000.0
-        )
-    )
+        ))
     b = bases(model)
     component(model;
         delta_control = (outer_active = (v_dc_ref = (640) / b.v_dc,),
@@ -343,14 +303,9 @@ MMC4 = let model = PowerImpedance.mmc(
 end
 
 # TLCs
-WF1 = let model = PowerImpedance.tlc(
-        elec = PowerImpedance.ElectricalTLC(
-            Lᵣ = 0.08 * (380^2 / 600) / (2 * pi * 50),
-            Rᵣ = 0.0008 * (380^2 / 600),
-            Sbase = 600,
-            vACbase_LL_RMS = 380,
-            vDCbase = 640
-        ),
+WF1 = let model = PowerImpedance.tlc(Sbase = 600, vACbase_LL_RMS = 380, vDCbase = 640,
+        elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08 * (380^2 / 600) / (2 * pi * 50),
+            Rᵣ = 0.0008 * (380^2 / 600)),
         meas = PowerImpedance.Measurement(
             v_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4),
             i_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4)
@@ -366,19 +321,16 @@ WF1 = let model = PowerImpedance.tlc(
         outerReactive = PowerImpedance.OuterReactiveQControl(
             pi_ctrl = PowerImpedance.PIControl(Kp = 0.01, Ki = 10),
             support = PowerImpedance.NoVoltageSupport()
-        ),
-        innerVoltage = PowerImpedance.NoInnerVoltageControl(),
+        ), innerVoltage = PowerImpedance.NoInnerVoltageControl(),
         innerCurrent = PowerImpedance.InnerCurrentPIControl(
             pi_ctrl = PowerImpedance.PIControl(Kp = 0.254647908947033, Ki = 0.8),
-        ),
-        mod = PowerImpedance.NoModulation(),
+        ), mod = PowerImpedance.NoModulation(),
         limits = PowerImpedance.Limits(
             P_min = -1000.0,
             P_max = 1000.0,
             Q_min = -1000.0,
             Q_max = 1000.0
-        )
-    )
+        ))
     b = bases(model)
     component(model; outerActive = (p_ref = (Pwf) / b.S,),
         outerReactive = (q_ref = (Qwf) / b.S,),
@@ -386,14 +338,9 @@ WF1 = let model = PowerImpedance.tlc(
             v_dc = (640) / b.v_dc))
 end
 
-WF2 = let model = PowerImpedance.tlc(
-        elec = PowerImpedance.ElectricalTLC(
-            Lᵣ = 0.08 * (380^2 / 600) / (2 * pi * 50),
-            Rᵣ = 0.0008 * (380^2 / 600),
-            Sbase = 600,
-            vACbase_LL_RMS = 380,
-            vDCbase = 640
-        ),
+WF2 = let model = PowerImpedance.tlc(Sbase = 600, vACbase_LL_RMS = 380, vDCbase = 640,
+        elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08 * (380^2 / 600) / (2 * pi * 50),
+            Rᵣ = 0.0008 * (380^2 / 600)),
         meas = PowerImpedance.Measurement(
             v_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4),
             i_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4)
@@ -409,19 +356,16 @@ WF2 = let model = PowerImpedance.tlc(
         outerReactive = PowerImpedance.OuterReactiveQControl(
             pi_ctrl = PowerImpedance.PIControl(Kp = 0.01, Ki = 10),
             support = PowerImpedance.NoVoltageSupport()
-        ),
-        innerVoltage = PowerImpedance.NoInnerVoltageControl(),
+        ), innerVoltage = PowerImpedance.NoInnerVoltageControl(),
         innerCurrent = PowerImpedance.InnerCurrentPIControl(
             pi_ctrl = PowerImpedance.PIControl(Kp = 0.254647908947033, Ki = 0.8),
-        ),
-        mod = PowerImpedance.NoModulation(),
+        ), mod = PowerImpedance.NoModulation(),
         limits = PowerImpedance.Limits(
             P_min = -1000.0,
             P_max = 1000.0,
             Q_min = -1000.0,
             Q_max = 1000.0
-        )
-    )
+        ))
     b = bases(model)
     component(model; outerActive = (p_ref = (Pwf) / b.S,),
         outerReactive = (q_ref = (Qwf) / b.S,),
@@ -429,14 +373,9 @@ WF2 = let model = PowerImpedance.tlc(
             v_dc = (640) / b.v_dc))
 end
 
-WF3 = let model = PowerImpedance.tlc(
-        elec = PowerImpedance.ElectricalTLC(
-            Lᵣ = 0.08 * (380^2 / 600) / (2 * pi * 50),
-            Rᵣ = 0.0008 * (380^2 / 600),
-            Sbase = 600,
-            vACbase_LL_RMS = 380,
-            vDCbase = 640
-        ),
+WF3 = let model = PowerImpedance.tlc(Sbase = 600, vACbase_LL_RMS = 380, vDCbase = 640,
+        elec = PowerImpedance.ElectricalTLC(Lᵣ = 0.08 * (380^2 / 600) / (2 * pi * 50),
+            Rᵣ = 0.0008 * (380^2 / 600)),
         meas = PowerImpedance.Measurement(
             v_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4),
             i_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4)
@@ -452,19 +391,16 @@ WF3 = let model = PowerImpedance.tlc(
         outerReactive = PowerImpedance.OuterReactiveQControl(
             pi_ctrl = PowerImpedance.PIControl(Kp = 0.01, Ki = 10),
             support = PowerImpedance.NoVoltageSupport()
-        ),
-        innerVoltage = PowerImpedance.NoInnerVoltageControl(),
+        ), innerVoltage = PowerImpedance.NoInnerVoltageControl(),
         innerCurrent = PowerImpedance.InnerCurrentPIControl(
             pi_ctrl = PowerImpedance.PIControl(Kp = 0.254647908947033, Ki = 0.8),
-        ),
-        mod = PowerImpedance.NoModulation(),
+        ), mod = PowerImpedance.NoModulation(),
         limits = PowerImpedance.Limits(
             P_min = -1000.0,
             P_max = 1000.0,
             Q_min = -1000.0,
             Q_max = 1000.0
-        )
-    )
+        ))
     b = bases(model)
     component(model; outerActive = (p_ref = (Pwf) / b.S,),
         outerReactive = (q_ref = (Qwf) / b.S,),
@@ -791,8 +727,8 @@ function ieee14_y(model, s)
         Y[1, :] .*= b.S / b.v_dc
         Y[2:3, :] .*= 2b.S / (3b.v_ac) * ratio
     else
-        Y[1, :] .*= model.elec.iDCbase
-        Y[2:3, :] .*= model.elec.iACbase
+        Y[1, :] .*= PowerImpedance.perunit(model.elec, model.bases).iDCbase
+        Y[2:3, :] .*= PowerImpedance.perunit(model.elec, model.bases).iACbase
     end
     Y[:, 1] ./= b.v_dc
     Y[:, 2:3] ./= b.v_ac

@@ -15,7 +15,8 @@ function converter_element(e, m)
         e.terminals, e.role, e.values)
 end
 function with_modulation(m, modulation)
-    return PI.MMC(; m.meas, m.sync, m.delta_control, m.sigma_control, modulation, m.elec)
+    return PI.MMC(; m.meas, m.sync, m.delta_control, m.sigma_control, modulation, m.elec,
+        m.bases)
 end
 
 @testset "MMC live feedback and DC-divisor handover" begin
@@ -46,7 +47,7 @@ end
             "v_dc" => 0.0, "i_dc_si" => 0.0, "theta_c" => 0.0, "theta_rel" => 0.0,
             "iS_abc" => zeros(3))
         for half in ("u", "l"), phase in ("a", "b", "c")
-            signals["v_Ctot_" * half * "_" * phase] = e.model.elec.vDC_base
+            signals["v_Ctot_" * half * "_" * phase] = e.model.bases.v_dc
         end
         merge!(signals, evaluate(modules["MEAS_DUT"], signals, sample_time))
         for n in ("vG_d_f", "vG_q_f", "i_d_f", "i_q_f", "v_dc_f", "P_ac_f", "Q_ac_f")
@@ -83,11 +84,12 @@ end
         live_states = merge(eq.states, (; iΣ_d = 0.0, iΣ_q = 0.0, iΣ_z = current,
             vCΔ_d = 0.0, vCΔ_q = 0.0, vCΔ_Zd = 0.0, vCΔ_Zq = 0.0,
             vCΣ_d = 0.0, vCΣ_q = 0.0, vCΣ_z = level))
-        signals = Dict{String, Any}("iS_abc" => fill(current * e.model.elec.Sbase / e.model.elec.vDC_base, 3),
+        signals = Dict{String, Any}("iS_abc" => fill(current * e.model.bases.S /
+            e.model.bases.v_dc, 3),
             "theta_c" => 0.0, "P_ac_f" => 0.43, "v_dc_f" => 0.27,
             "v_dc_divisor" => eq.outputs.meas.v_dc_f)
         for half in ("u", "l"), phase in ("a", "b", "c")
-            signals["v_Ctot_" * half * "_" * phase] = level * e.model.elec.vDC_base
+            signals["v_Ctot_" * half * "_" * phase] = level * e.model.bases.v_dc
         end
         expected = PI.state_space!(zeros(4), live_states,
             (; meas = merge(eq.outputs.meas, (; P_ac_f = 0.43)), power = (; P_ac_f = 0.43), sync = eq.outputs.sync),
@@ -102,8 +104,8 @@ end
     phases = (0.0, -2π / 3, 2π / 3)
     for sample_time in (0.0, 0.05, 0.2 - SETTINGS.time_step, 0.2, 0.2 + SETTINGS.time_step, 9.8), voltage in (0.0, 0.94)
         signals = Dict{String, Any}(
-            "v_abc" => e.model.elec.vAC_base .* (0.91 .* cos.(phases)),
-            "i_abc" => (2e.model.elec.Sbase / (3e.model.elec.vAC_base)) .*
+            "v_abc" => e.model.bases.v_ac .* (0.91 .* cos.(phases)),
+            "i_abc" => (2e.model.bases.S / (3e.model.bases.v_ac)) .*
                        (0.43 .* cos.(phases) .- 0.17 .* sin.(phases)),
             "v_dc" => voltage * 800, "i_dc_si" => 0.35,
             "theta_c" => 0.0, "theta_rel" => 0.14)
@@ -225,19 +227,21 @@ end
         @test all(Dict(c.params)["Tc"] == "0.05 [s]"
         for c in default_plan.main.components
         if c.defn in ("master:source_1", "master:source_3"))
-        for m in (PI.MMC(; e.model.meas, sync = PI.NoSynchronization(), e.model.delta_control,
-            e.model.sigma_control, e.model.modulation, e.model.elec),
+        for m in (PI.MMC(; e.model.meas, sync = PI.NoSynchronization(),
+            e.model.delta_control, e.model.sigma_control, e.model.modulation, e.model.elec,
+            e.model.bases),
             PI.MMC(; e.model.meas, e.model.sync,
-            delta_control = PI.ΔdqControlGFL(;
-                e.model.delta_control.outer_active, e.model.delta_control.outer_reactive,
-                occ = PI.NoInnerCurrentControl()),
-            e.model.sigma_control, e.model.modulation, e.model.elec))
+                delta_control = PI.ΔdqControlGFL(;
+                    e.model.delta_control.outer_active,
+                    e.model.delta_control.outer_reactive,
+                    occ = PI.NoInnerCurrentControl()), e.model.sigma_control,
+                e.model.modulation, e.model.elec, e.model.bases))
             future = P.Netlist(list.buses,
                 [converter_element(e, m); filter(x -> x.name != e.name, list.elements)],
                 list.operating_point, list.voltageBase, list.frequency)
             @test_throws r"not yet exportable" P.build_plan(future; settings = SETTINGS)
         end
-        unity_si = P.mmc_si(e.model.elec)
+        unity_si = P.mmc_si(e.model.elec, e.model.bases)
         unity = merge(unity_si, (; turnsRatio = 1.0))
         unity_canvas = P.mmc_electrical_canvas(e, equilibrium, unity)
         P.converter_angle_snapshot!(unity_canvas, e, equilibrium; origin = (5400, 2160))
@@ -258,12 +262,12 @@ end
         x, y = equilibrium.states, equilibrium.outputs
         signals = Dict{String, Any}(
             "v_abc" =>
-                e.model.elec.vAC_base .*
+                e.model.bases.v_ac .*
                 collect(y.sig_in.vG_d_g .* cos.(phases) .+ y.sig_in.vG_q_g .* sin.(phases)),
             "i_abc" =>
-                (2e.model.elec.Sbase / (3e.model.elec.vAC_base)) .*
+                (2e.model.bases.S / (3e.model.bases.v_ac)) .*
                 collect(x.iΔ_d .* cos.(phases) .+ x.iΔ_q .* sin.(phases)),
-            "v_dc" => 800.0, "i_dc_si" => y.sig_in.i_dc * e.model.elec.Sbase / 800.0,
+            "v_dc" => 800.0, "i_dc_si" => y.sig_in.i_dc * e.model.bases.S / 800.0,
             "theta_c" => x.Δθ_pll, "theta_rel" => x.Δθ_pll)
         merge!(signals, evaluate(meas, signals))
         for signal in ("P_ac_f", "Q_ac_f", "v_dc_f", "i_d_f", "i_q_f", "vG_d_f", "vG_q_f")
@@ -315,7 +319,7 @@ end
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(e)
     transforms = (; abc = "network:ABC_DQ", dq = "network:DQ_ABC")
-    base = e.model.elec.Sbase / e.model.elec.vDC_base
+    base = e.model.bases.S / e.model.bases.v_dc
     for phase_angle in (0.0, 0.37, 1.4), relative_angle in (0.0, -0.21, 0.49)
 
         x = merge(eq.states,
@@ -380,7 +384,7 @@ end
             measured = evaluate(definition, signals, sample_time)
             mod = eq.outputs.mod
             for (i, phase) in enumerate(("a", "b", "c"))
-                angle = m.elec.ωbase * sample_time - 2π * (i - 1) / 3
+                angle = m.bases.omega * sample_time - 2π * (i - 1) / 3
                 delta = mod.mΔd * cos(angle) + mod.mΔq * sin(angle)
                 sigma = mod.mΣd * cos(-2angle) + mod.mΣq * sin(-2angle) + mod.mΣz
                 @test measured["m_u_" * phase] ≈ (sigma + delta) / 2
@@ -406,7 +410,7 @@ end
                 "v_dc_divisor" => meas.v_dc_f, "theta_rel" => relative_angle),
             sample_time)
         for (i, phase) in enumerate(("a", "b", "c"))
-            angle = e.model.elec.ωbase * sample_time - 2π * (i - 1) / 3
+            angle = e.model.bases.omega * sample_time - 2π * (i - 1) / 3
             md = expected.mΔd * cos(angle) + expected.mΔq * sin(angle)
             ms = expected.mΣd * cos(-2angle) + expected.mΣq * sin(-2angle) + expected.mΣz
             @test measured["m_u_" * phase] ≈ (ms + md) / 2
@@ -416,7 +420,7 @@ end
     for direction in (-1.0, 1.0)
         delta = direction * 80.0
         measured = evaluate(definition,
-            Dict("vM_d_ref" => delta / e.model.elec.vAC_base,
+            Dict("vM_d_ref" => delta / e.model.bases.v_ac,
                 "vM_q_ref" => 0.0, "vMS_d_ref" => 0.0, "vMS_q_ref" => 0.0,
                 "vMS_z_ref" => 0.5, "v_dc_divisor" => 1.0, "theta_rel" => 0.0))
         @test 800measured["m_u_a"] ≈ 400 - delta
@@ -430,6 +434,7 @@ end
     e = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(e)
     b = e.model.elec
+    pu = PI.perunit(b, e.model.bases)
     x = merge(eq.states,
         (; iΔ_d = 0.41, iΔ_q = -0.19, iΣ_d = 0.024,
             iΣ_q = -0.013, iΣ_z = 0.17, vCΔ_d = 0.037, vCΔ_q = -0.021,
@@ -442,7 +447,7 @@ end
             inputs = eq.inputs),
         b, e.model)
     projection = zeros(12)
-    si = P.mmc_si(b)
+    si = P.mmc_si(b, e.model.bases)
     cap_gain = (si.N / si.C_SM) * (si.Sbase / si.vDC_base) / si.vDC_base
     samples = 256
     for sample in 0:(samples - 1)
@@ -451,7 +456,7 @@ end
         caps = P.mmc_arm_capacitors(x, 1.0, theta)
         md = mod.mΔd .* cos.(phases) .+ mod.mΔq .* sin.(phases)
         ms = mod.mΣz .+ mod.mΣd .* cos.(-2 .* phases) .+ mod.mΣq .* sin.(-2 .* phases)
-        id = b.baseConv3 .* (x.iΔ_d .* cos.(phases) .+ x.iΔ_q .* sin.(phases))
+        id = pu.baseConv3 .* (x.iΔ_d .* cos.(phases) .+ x.iΔ_q .* sin.(phases))
         is = x.iΣ_z .+ x.iΣ_d .* cos.(-2 .* phases) .+ x.iΣ_q .* sin.(-2 .* phases)
         upper_m, lower_m = (ms .+ md) ./ 2, (ms .- md) ./ 2
         upper_i, lower_i = is .+ id ./ 2, is .- id ./ 2
@@ -462,8 +467,8 @@ end
         cs, cd = (upper_rate .+ lower_rate) ./ 2, (upper_rate .- lower_rate) ./ 2
         # Fourier projections retain exactly the harmonics represented by the
         # current core, independent of its hard-coded matrix implementation.
-        projection[1] += (2 / 3) * sum(vd .* cos.(phases)) / samples * b.baseConv2
-        projection[2] += (2 / 3) * sum(vd .* sin.(phases)) / samples * b.baseConv2
+        projection[1] += (2 / 3) * sum(vd .* cos.(phases)) / samples * pu.baseConv2
+        projection[2] += (2 / 3) * sum(vd .* sin.(phases)) / samples * pu.baseConv2
         projection[3] += (2 / 3) * sum(vs .* cos.(-2 .* phases)) / samples
         projection[4] += (2 / 3) * sum(vs .* sin.(-2 .* phases)) / samples
         projection[5] += sum(vs) / (3samples)
@@ -475,15 +480,17 @@ end
         projection[11] += (2 / 3) * sum(cs .* sin.(-2 .* phases)) / samples
         projection[12] += sum(cs) / (3samples)
     end
-    projection[1] = -(eq.outputs.sig_in.vG_d_g - projection[1] + b.Rₑ * x.iΔ_d +
-                      b.Lₑ * x.iΔ_q) / b.Lₑ * b.ωbase
-    projection[2] = -(eq.outputs.sig_in.vG_q_g - projection[2] + b.Rₑ * x.iΔ_q -
-                      b.Lₑ * x.iΔ_d) / b.Lₑ * b.ωbase
-    projection[3] = -(projection[3] + b.Rₐᵣₘ * x.iΣ_d - 2b.Lₐᵣₘ * x.iΣ_q) / b.Lₐᵣₘ * b.ωbase
-    projection[4] = -(projection[4] + b.Rₐᵣₘ * x.iΣ_q + 2b.Lₐᵣₘ * x.iΣ_d) / b.Lₐᵣₘ * b.ωbase
-    projection[5] = -(projection[5] - eq.inputs.v_dc / 2 + b.Rₐᵣₘ * x.iΣ_z) / b.Lₐᵣₘ *
-                    b.ωbase
-    projection[6:12] .+= b.ωbase .* [-x.vCΔ_q, x.vCΔ_d, -3x.vCΔ_Zq,
+    projection[1] = -(eq.outputs.sig_in.vG_d_g - projection[1] + pu.Rₑ * x.iΔ_d +
+                      pu.Lₑ * x.iΔ_q) / pu.Lₑ * e.model.bases.omega
+    projection[2] = -(eq.outputs.sig_in.vG_q_g - projection[2] + pu.Rₑ * x.iΔ_q -
+                      pu.Lₑ * x.iΔ_d) / pu.Lₑ * e.model.bases.omega
+    projection[3] = -(projection[3] + pu.Rₐᵣₘ * x.iΣ_d - 2pu.Lₐᵣₘ * x.iΣ_q) / pu.Lₐᵣₘ *
+        e.model.bases.omega
+    projection[4] = -(projection[4] + pu.Rₐᵣₘ * x.iΣ_q + 2pu.Lₐᵣₘ * x.iΣ_d) / pu.Lₐᵣₘ *
+        e.model.bases.omega
+    projection[5] = -(projection[5] - eq.inputs.v_dc / 2 + pu.Rₐᵣₘ * x.iΣ_z) / pu.Lₐᵣₘ *
+                    e.model.bases.omega
+    projection[6:12] .+= e.model.bases.omega .* [-x.vCΔ_q, x.vCΔ_d, -3x.vCΔ_Zq,
         3x.vCΔ_Zd, 2x.vCΣ_q, -2x.vCΣ_d, 0.0]
     @test projection ≈ core
 end
@@ -631,8 +638,8 @@ end
         # Current units follow the MMC's electrical bases.
         m = e.model
         changed = converter_element(e,
-            PI.MMC(; m.meas, m.sync, m.delta_control,
-                m.sigma_control, m.modulation, elec = PI.ElectricalMMC(Sbase = 500.0, vDC_base = 1000.0)))
+            PI.mmc(; Sbase = 500.0, vDC_base = 1000.0, m.meas, m.sync, m.delta_control,
+                m.sigma_control, m.modulation, elec = PI.ElectricalMMC()))
         netlist = P.Netlist(
             list.buses, [c.name == e.name ? changed : c for c in list.elements],
             point, list.voltageBase, list.frequency)

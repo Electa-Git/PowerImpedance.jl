@@ -14,7 +14,7 @@ function voltage_fixture(reactive)
         (; q_ref = 200.0 / bases(m).S, support = (; v_ac_ref = v_ac))
     reactive_seeds = reactive isa OuterReactiveVacControl ?
         (; q_ac = 200.0 / bases(m).S) : (;)
-    e = component(PI.mmc(; m.elec, m.meas, m.sync, m.sigma_control, m.modulation,
+    e = component(PI.MMC(; m.bases, m.elec, m.meas, m.sync, m.sigma_control, m.modulation,
         delta_control = PI.ΔdqControlGFL(outer_active = m.delta_control.outer_active,
             outer_reactive = reactive, occ = m.delta_control.occ), limits = limits(m));
         delta_control = (outer_reactive = reactive_inputs,),
@@ -89,7 +89,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
         @test bus["vm"]==c["Vtar"]
         @test c["acq_droop"]==(reactive isa OuterReactiveVacControl ? 0 : 1)
         @test c["kq_droop"]==(reactive isa OuterReactiveVacControl ? 0.0 :
-                              reactive.support.K*(model.elec.Sbase/(bases["S"]*1e-6)))
+                              reactive.support.K*(model.bases.S/(bases["S"]*1e-6)))
         alternate_bases=PI.PowerModelsACDC._get_pu_bases(250.0, state.options.voltageBase)
         alternate_bases["omega"]=100π
         alternate=deepcopy(data)
@@ -136,10 +136,11 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             (; elements, rows) = PSCADFixtures._tlc_circuit(false)
             e=deepcopy(elements.DUT)
             m=e
-            e=PI.tlc(elec = m.elec, meas = m.meas, sync = m.sync,
-                outerActive = m.outerActive, outerReactive = reactive,
-                innerVoltage = m.innerVoltage, innerCurrent = m.innerCurrent,
-                mod = m.mod, limits = limits(m))
+            e=PI.TLC(; m.bases,
+                powerflow = map(input -> input.default, PowerImpedance.inputs(m).powerflow),
+                elec = m.elec, meas = m.meas, sync = m.sync, outerActive = m.outerActive,
+                outerReactive = reactive, innerVoltage = m.innerVoltage,
+                innerCurrent = m.innerCurrent, mod = m.mod, limits = limits(m))
             b = PI.bases(m)
             reactive_inputs = reactive isa OuterReactiveVacControl ?
                 (; v_ac_ref = 220sqrt(2/3) / b.v_ac) :
@@ -170,7 +171,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
                                    reactive.support isa VoltageSupportLag ? 1 : 0)
             @test c["kq_droop"]==(reactive isa OuterReactiveQControl &&
                                   reactive.support isa VoltageSupportLag ?
-                                  5.0*(m.elec.Sbase/(bases["S"]*1e-6)) : 0.0)
+                                  5.0*(m.bases.S/(bases["S"]*1e-6)) : 0.0)
             sp=PI.TerminalValuesPU(v_ac = 0.973, q_ac = -0.217)
             meas=(; vG_d_f = 0.891, vG_q_f = -0.133, Q_ac_f = -0.178)
             x=(; ξ_v_ac = 0.071, ξ_Q_ac = -0.087, ξ_vac_supp = 0.013)
@@ -205,11 +206,12 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             state = fixture
             original = PSCADFixtures._tlc_circuit(vdc_control).elements.DUT
             m = original
-            element = PI.tlc(elec = m.elec, meas = m.meas, sync = m.sync,
-                outerActive = m.outerActive,
+            element = PI.TLC(; m.bases,
+                powerflow = map(input -> input.default, PowerImpedance.inputs(m).powerflow),
+                elec = m.elec, meas = m.meas, sync = m.sync, outerActive = m.outerActive,
                 outerReactive = OuterReactiveVacControl(pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0)),
-                innerVoltage = m.innerVoltage, innerCurrent = m.innerCurrent,
-                mod = m.mod, limits = limits(original))
+                innerVoltage = m.innerVoltage, innerCurrent = m.innerCurrent, mod = m.mod,
+                limits = limits(original))
             b = PI.bases(m)
             active_seeds = vdc_control ? (; p_ac = 70.0 / b.S) :
                 (; v_dc = 640.0 / b.v_dc)
@@ -233,7 +235,7 @@ bits(x::AbstractArray{Float64}) = reinterpret(UInt64, vec(x))
             for p in NB.powerflow_optimizer(state.options).params
             if p.first == PI.JuMP.MOI.RawOptimizerAttribute("constr_viol_tol"))
             power_tolerance = vdc_control ?
-                              tolerance * solved.data["baseMVA"] / m.elec.Sbase :
+                              tolerance * solved.data["baseMVA"] / m.bases.S :
                               1e-6
             @test abs(measured.P_ac_f - sp.p_ac) <= power_tolerance
             @test abs(measured.Q_ac_f - sp.q_ac) <= 1e-6

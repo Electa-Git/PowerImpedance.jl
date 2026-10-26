@@ -22,11 +22,11 @@ end
             (220.0, 500.0, 0.37, 0.004, 0.012, 0.09, 0.65, 0.18, 1.04, 123.0),
             (110.0, 100.0, -0.28, 0.0, 0.0, 0.0, 0.3, -0.12, 0.98, 150.0),
             (220.0, 1000.0, -0.1, 0.0015, 1e-10, 1e-10, 24.2, 0.0, 1/sqrt(2), 200.0))
-        electrical = ElectricalSM(Vᵃᶜ_base=vbase, S_base=sbase, Ra=Ra, rt=rt, lt=lt,
-            L23_d=0.01, L23_q=0.02)
+        electrical = ElectricalSM(Ra = Ra, rt = rt, lt = lt, L23_d = 0.01, L23_q = 0.02)
         m = SynchronousMachine(electrical, MechanicalSM(), AVRSM(v_ref=1.2, K_A=gain),
-            GovernorSM(), PI.Limits(), (p = 0.0, q = 0.0, v = 1.0),
-            PI.LinearizationCache())
+            GovernorSM(), PI.Limits(), vbase,
+            BaseValues(S = sbase, v_ac = vbase * sqrt(2/3), omega = 100π),
+            (p = 0.0, q = 0.0, v = 1.0), PI.LinearizationCache())
         # Independent fixture starts at the machine terminal, not the bus.
         Vterminal = v * cis(θ)
         Igen = conj(complex(p, q) / Vterminal)
@@ -54,7 +54,8 @@ end
         F = zeros(PI.n_states(m))
         PI._state_space!(F, collect(values(seed)), collect(values(inputs)), pu, m, PI.Equil())
         @test norm(F, Inf) <= DYNAMIC_ATOL
-        element = synchronousmachine(elec = electrical, avr = m.avr)
+        element = synchronousmachine(S_base = sbase, Vᵃᶜ_base = vbase, elec = electrical,
+            avr = m.avr)
         _, B, _, D = linearize(element, sp)
         state = steady_state(element, sp)
         actual = terminal_quantities(m, inputs, state)
@@ -77,9 +78,9 @@ end
 end
 
 @testset "Synchronous machine without a complete power-flow point" begin
-    m = SynchronousMachine(ElectricalSM(), MechanicalSM(), AVRSM(v_ref=1.03),
-        GovernorSM(), PI.Limits(), (p = 0.0, q = 0.0, v = 1.0),
-        PI.LinearizationCache())
+    m = SynchronousMachine(ElectricalSM(), MechanicalSM(), AVRSM(v_ref=1.03), GovernorSM(),
+        PI.Limits(), 220.0, BaseValues(S = 1000.0, v_ac = 220.0 * sqrt(2/3), omega = 100π),
+        (p = 0.0, q = 0.0, v = 1.0), PI.LinearizationCache())
     sp = (ac = ACPortValues(220sqrt(2/3), 0.12, -50.0, NaN),)
     inputs, pu = PI.pftoinputs(m, sp)
     @test pu === nothing
@@ -118,13 +119,13 @@ include("pscad/fixtures.jl")
             terminal_voltage_kV = bus["vm"] * base, terminal_angle_rad = bus["va"])
         inputs, pu = PI.pftoinputs(m, point)
         actual = terminal_quantities(m, inputs, state)
-        Vt_pf = flow.terminal_voltage_kV*sqrt(3)/m.elec.Vᵃᶜ_base * cis(flow.terminal_angle_rad)
-        @test real(actual.Sterminal) ≈ flow.pg/m.elec.S_base atol=DYNAMIC_ATOL rtol=0
-        @test imag(actual.Sterminal) ≈ flow.qg/m.elec.S_base atol=DYNAMIC_ATOL rtol=0
+        Vt_pf = flow.terminal_voltage_kV*sqrt(3)/m.Vᵃᶜ_base * cis(flow.terminal_angle_rad)
+        @test real(actual.Sterminal) ≈ flow.pg/m.bases.S atol=DYNAMIC_ATOL rtol=0
+        @test imag(actual.Sterminal) ≈ flow.qg/m.bases.S atol=DYNAMIC_ATOL rtol=0
         @test actual.Vterminal ≈ Vt_pf atol=POWER_FLOW_ATOL rtol=0
         @test abs(actual.Vterminal) ≈ abs(Vt_pf) atol=POWER_FLOW_ATOL rtol=0
         @test inputs.vref_SG != m.avr.v_ref
-        @test inputs.Tm0 > -point.ac.p/m.elec.S_base
+        @test inputs.Tm0 > -point.ac.p/m.bases.S
         F = zeros(16)
         PI._state_space!(F, state, collect(values(inputs)), pu, m, PI.Equil())
         @test norm(F, Inf) <= DYNAMIC_ATOL

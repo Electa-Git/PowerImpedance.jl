@@ -76,7 +76,7 @@ using PowerImpedance, Test
         state = PSCADFixtures.small_ac_network()
         # An isolated PV generator prescribes nonzero active power, while its
         # bus balance requires zero: relaxation cannot make this case feasible.
-        machine = synchronousmachine(elec = ElectricalSM(Vᵃᶜ_base = 380.0))
+        machine = synchronousmachine(Vᵃᶜ_base = 380.0, elec = ElectricalSM())
         b = bases(machine)
         machine = component(machine;
             powerflow = (p = 100.0 / b.S, v = (380sqrt(2 / 3)) / b.v_ac))

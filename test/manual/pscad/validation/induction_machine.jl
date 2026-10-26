@@ -10,12 +10,12 @@ function induction_machine_network()
     return NetworkBuilder.define(elements, topology; options = parent.options)
 end
 
-function device_bases(e::PowerImpedance.ElectricalIM)
-    voltage = e.Vac_base * sqrt(2 / 3)
-    current = 2e.S_base / (3voltage)
+function device_bases(e::PowerImpedance.ElectricalIM, b::PowerImpedance.BaseValues)
+    voltage = b.v_ac
+    current = 2b.S / (3voltage)
     return (voltage_inputs = fill(voltage, 2), current_outputs = fill(current, 2),
         ac_voltage = voltage, ac_current = current, dc_voltage = nothing,
-        power = e.S_base, ac_port = :ac, ac_indices = 1:2)
+        power = b.S, ac_port = :ac, ac_indices = 1:2)
 end
 
 # Use the same frequency-model API and SI scaling as adm_IM_test.jl. Replay the
@@ -82,7 +82,7 @@ function induction_machine_crosscheck(path; directory)
     reference = induction_machine_reference(net, list, frequencies)
     errors = [norm(reference[:, :, k] - measured[:, :, k]) / norm(measured[:, :, k])
               for k in eachindex(frequencies)]
-    bases = device_bases(net.elements[:DUT].elec)
+    bases = device_bases(net.elements[:DUT].elec, net.elements[:DUT].bases)
     report = Dict("diagnostic_only" => true, "data_file" => abspath(path),
         "data_sha256" => digest(path), "frequency_count" => length(frequencies),
         "frequency_band_Hz" => [minimum(frequencies), maximum(frequencies)],

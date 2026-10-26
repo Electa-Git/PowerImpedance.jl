@@ -125,7 +125,7 @@ end
     model = PSCADModel("synthetic.pscx", "synthetic", list, probes,
         P.SimulationSettings(), list.operating_point, (;))
     times = collect(0.0:250e-6:0.3)
-    rating = only(filter(e -> e.name == :DUT, list.elements)).model.elec.Sbase
+    rating = only(filter(e -> e.name == :DUT, list.elements)).model.bases.S
     flow = list.operating_point.branch_flows[:DUT]
     channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()
     for probe in probes.channels
@@ -164,7 +164,7 @@ end
     flow = list.operating_point.branch_flows[:sg1]
     power = complex(flow.pf, flow.qf)
     current = conj(power / (3voltage))
-    rating = only(filter(e -> e.name == :sg1, list.elements)).model.elec.S_base
+    rating = only(filter(e -> e.name == :sg1, list.elements)).model.bases.S
     delta = 0.01
     angles = ifelse.(times .<= 0.2, -delta, delta)
     channels = PowerImpedance.OrderedDict{String, Vector{Float64}}()

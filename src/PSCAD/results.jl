@@ -200,8 +200,8 @@ function _dc_converter_current_bases(netlist)
             (bus === nothing || bus.domain != 2) && continue
             key = root(bus)
             base = element.model isa PowerImpedance.MMC ?
-                   element.model.elec.Sbase / element.model.elec.vDC_base :
-                   element.model.elec.iDCbase
+                   element.model.bases.S / element.model.bases.v_dc :
+                   PowerImpedance.perunit(element.model.elec, element.model.bases).iDCbase
             if haskey(bases, key) && bases[key] != base
                 throw(ArgumentError("DC current comparison for :$(element.name) is not yet supported in a DC network with different converter current bases"))
             end
@@ -286,7 +286,7 @@ S = \\frac{1}{2}\\sum_k V_k I_k^*,
 where ``V_k`` and ``I_k`` are peak phasors \\[kV, kA\\], with current directed
 into the component. Compare with terminal `pf/qf` for the machine or
 `pgrid/qgrid` at converter port `ac`. Normalize power error by the device rating
-(`elec.S_base` for machines, `elec.Sbase` for converters) \\[MVA\\], with tolerance
+(`bases(model).S`) \\[MVA\\], with tolerance
 `0.01`. Filtered converter `P_ac_f/Q_ac_f` use that rating as their per-unit base
 and an absolute error tolerance of `0.01`. The sine q basis gives
 `Q_ac = -v_q*i_d + v_d*i_q`, so its reference is `-values.ac.q/Sbase`, equal to
@@ -384,7 +384,7 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                     throw(ArgumentError("missing PSCAD MMC DC current probe $(current.name)"))
                 current.unit == "kA" ||
                     throw(ArgumentError("MMC DC current probe $(current.name) must use kA"))
-                base = e.model.elec.Sbase / e.model.elec.vDC_base
+                base = e.model.bases.S / e.model.bases.v_dc
                 reference = 3settled[channel.name].mean * base
                 add_row(:converter_dc_current_identity,
                     channel.name, map(state -> state[current.name].mean, states),
@@ -405,7 +405,7 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 throw(ArgumentError("missing solved converter terminal data for :$(e.name)"))
             # Filtered powers use the native AC-injection Q convention and pu.
             # Both references are solved terminal flows divided by the rating.
-            reference = flow[field] / e.model.elec.Sbase
+            reference = flow[field] / e.model.bases.S
             add_row(
                 channel.kind, channel.name, map(state -> state[channel.name].mean, states),
                 reference, 0.01;
@@ -529,15 +529,15 @@ function compare_operating_point(result::PSCADResult, model::PSCADModel;
                 i = map(value -> value.phasors, values)
                 power = map((v, i) -> sum(v .* conj.(i)) / 2, v, i)
                 elec = e.model.elec
-                rating = machine ? elec.S_base : elec.Sbase
+                rating = e.model.bases.S
                 add_row(machine ? :machine_p : :converter_p, channel.name, real.(power),
                     flow[fields[1]], 0.01, rating)
                 add_row(machine ? :machine_q : :converter_q, channel.name, imag.(power),
                     flow[fields[2]], 0.01, rating)
                 synchronous || continue
-                zbase = elec.Vᵃᶜ_base^2 / elec.S_base
+                zbase = e.model.Vᵃᶜ_base^2 / e.model.bases.S
                 r = _pscad_number(pscad_value(elec.rt * zbase))
-                l = _pscad_number(pscad_value(elec.lt * zbase / elec.ωn))
+                l = _pscad_number(pscad_value(elec.lt * zbase / e.model.bases.omega))
                 z = complex(r, 2π * result.settings.frequency * l)
                 terminal_voltage = map(
                     (v, i) -> abs(_sequence_phasor(v .- z .* i)) / sqrt(2), v, i)

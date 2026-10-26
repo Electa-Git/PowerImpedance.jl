@@ -244,7 +244,7 @@ function state_space!(F, x, inputs, block::DelayModulation, conv::AbstractTLC)
     m_d, m_q = inverse_frame_transform(md_c, mq_c, syncangle(conv.sync, x))
 
     y = state_space!(F, x, (m_d, m_q), block.delay, conv)
-    m_dq_ref = phase_compensated_dq(y, conv.elec.ωbase * block.delay.timeDelay)
+    m_dq_ref = phase_compensated_dq(y, conv.bases.omega * block.delay.timeDelay)
 
     return (
         m_d = m_dq_ref.d,

@@ -1,7 +1,7 @@
 function synchronousmachinecircuit()
     # Values used in the SG validation
     voltage = 380 / sqrt(3)
-    machine = synchronousmachine(elec = ElectricalSM(Vᵃᶜ_base = 380.0))
+    machine = synchronousmachine(Vᵃᶜ_base = 380.0, elec = ElectricalSM())
     b = bases(machine)
     elements = (;
         sg1 = component(machine; powerflow = (p = 900 / b.S,

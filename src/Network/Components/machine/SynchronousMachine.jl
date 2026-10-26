@@ -26,14 +26,7 @@ $(TYPEDFIELDS)
 
     # eq::EquationInfo = electricalsmeq()
 
-    "Base electrical angular frequency \\[rad/s\\]."
-    ωn :: Float64 = 100*π
     
-    # Base values
-    "Line-to-line RMS voltage base \\[kV\\]."
-    Vᵃᶜ_base :: Float64 = 220 # Converter AC voltage base, LL, RMS [kV]
-    "Three-phase apparent-power base \\[MVA\\]."
-    S_base :: Float64 = 1000 # Converter AC voltage base, LL, RMS [kV]
 
     
    
@@ -247,6 +240,10 @@ largest differences at low frequencies.
     gov::GovernorSM
     "Operating limits in \\[MW\\] and \\[MVAr\\]."
     limits::Limits
+    "Line-to-line RMS voltage base \\[kV\\]."
+    Vᵃᶜ_base::Float64
+    "Power, voltage and angular-frequency bases of the model equations."
+    bases::BaseValues
     "Power-flow seeds on machine bases \\[dimensionless\\]."
     powerflow::NamedTuple
     "Retained terminal values, converged state and linearization matrices."
@@ -338,15 +335,15 @@ inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
 function pftoinputs(m::SynchronousMachine, values::NamedTuple)
-    v_bus_d = values.ac.v * cos(values.ac.theta) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
-    v_bus_q = -values.ac.v * sin(values.ac.theta) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
-    p_ac = -values.ac.p / m.elec.S_base
+    v_bus_d = values.ac.v * cos(values.ac.theta) / m.bases.v_ac
+    v_bus_q = -values.ac.v * sin(values.ac.theta) / m.bases.v_ac
+    p_ac = -values.ac.p / m.bases.S
     if isnan(values.ac.q)
         return (; vd=v_bus_d, vq=v_bus_q, Tm0=p_ac,
             vref_SG=m.avr.v_ref), nothing
     end
-    sp = TerminalValuesPU(p_ac=p_ac, q_ac=-values.ac.q / m.elec.S_base,
-        θ_ac=values.ac.theta, v_ac=values.ac.v / (m.elec.Vᵃᶜ_base * sqrt(2/3)))
+    sp = TerminalValuesPU(p_ac=p_ac, q_ac=-values.ac.q / m.bases.S,
+        θ_ac=values.ac.theta, v_ac=values.ac.v / m.bases.v_ac)
     point = _machine_powerflow_state(m, sp)
     return (; vd=v_bus_d, vq=v_bus_q, Tm0=point.Tm0,
         vref_SG=point.vref_SG), sp
@@ -450,11 +447,11 @@ function state_space!(F, x, v_dq, block::ElectricalSM; gen::SynchronousMachine)
     
     w_pu = get_state(:ω_pu, x)
 
-    RHS_D = block.ωn*[(v_d  +	(block.Ra+block.rt)*i_d	- w_pu*Ψ_q);
+    RHS_D = gen.bases.omega*[(v_d  +	(block.Ra+block.rt)*i_d	- w_pu*Ψ_q);
                     (v_df -	block.Rf_d*i_df)
                     (0    - block.R1_d*i_d1)]
 
-    RHS_Q = block.ωn*[(v_q  +  (block.Ra+block.rt)*i_q + w_pu*Ψ_d)
+    RHS_Q = gen.bases.omega*[(v_q  +  (block.Ra+block.rt)*i_q + w_pu*Ψ_d)
                 (0    -  block.R1_q*i_q1)
                 (0    -  block.R2_q*i_q2)]
 
@@ -525,7 +522,7 @@ function state_space!(F, x, Te, block::MechanicalSM; gen::SynchronousMachine)
     T_turb = block.F_HP*TchHP + block.F_IP*TreIP + block.F_LP*TcrLP
     
     F[1] = (T_turb - Te)/(2*block.H)   # Newton's II Law
-    F[2] = gen.elec.ωn*(w_pu - 1)
+    F[2] = gen.bases.omega*(w_pu - 1)
 
     # return z
 end
@@ -660,8 +657,10 @@ function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;
     x_AVR = get_state(:ξ_AVR, x)
     
     # AVR and exciter (split up for speed gains)
-    v_td = v_d +gen.elec.rt*i_d + w_pu*gen.elec.lt*i_q + gen.elec.lt/gen.elec.ωn*did_dt # Machine terminal voltage
-    v_tq = v_q +gen.elec.rt*i_q - w_pu*gen.elec.lt*i_d + gen.elec.lt/gen.elec.ωn*diq_dt # Machine terminal voltage
+    # Machine terminal voltage
+    v_td = v_d +gen.elec.rt*i_d + w_pu*gen.elec.lt*i_q + gen.elec.lt/gen.bases.omega*did_dt
+    # Machine terminal voltage
+    v_tq = v_q +gen.elec.rt*i_q - w_pu*gen.elec.lt*i_d + gen.elec.lt/gen.bases.omega*diq_dt
 
     F[1] = 1/block.T_R*(sqrt(v_td^2+v_tq^2)- v_f)        # Voltage magnitude measurement (LPF)
     dv = vref - v_f                                     # Fixed effective reference
@@ -761,13 +760,19 @@ Construct a synchronous-machine model from electrical and mechanical subsystems.
 
 # Arguments
 
-- `elec`: Electrical subsystem and its physical base quantities. Default:
+- `elec`: Electrical subsystem. Default:
   `ElectricalSM()`.
 - `mech`: Mechanical subsystem. Default: `MechanicalSM()`.
 - `avr`: Automatic voltage regulator. Default: `AVRSM()`.
 - `gov`: Governor subsystem. Default: `GovernorSM()`.
 - `powerflow`: Partial power-flow seeds on machine bases \\[dimensionless\\].
   Default: `(;)`.
+
+# Keywords
+
+- `S_base`: Three-phase apparent-power base \\[MVA\\]. Default: `1000`.
+- `Vᵃᶜ_base`: Line-to-line RMS voltage base \\[kV\\]. Default: `220`.
+- `ωn`: Electrical angular-frequency base \\[rad/s\\]. Default: `100*π`.
 
 # Returns
 
@@ -781,12 +786,22 @@ machine = component(synchronousmachine();
     powerflow = (p = 0.1, q = 0.0, v = 1.0))
 ```
 """
-function synchronousmachine(; elec = ElectricalSM(), mech = MechanicalSM(),
-        avr = AVRSM(), gov = GovernorSM(), powerflow::NamedTuple = (;))
+function synchronousmachine(;
+    S_base = 1000,
+    Vᵃᶜ_base = 220,
+    ωn = 100*π,
+    elec = ElectricalSM(),
+    mech = MechanicalSM(),
+    avr = AVRSM(),
+    gov = GovernorSM(),
+    powerflow::NamedTuple = (;))
+    Vᵃᶜ_base = Float64(Vᵃᶜ_base)
+    b = BaseValues(S = S_base, v_ac = Vᵃᶜ_base * sqrt(2/3), omega = ωn)
     defaults = map(input -> input.default, _MACHINE_POWERFLOW_INPUTS)
     seeds = _withinputs(defaults, _MACHINE_POWERFLOW_INPUTS,
         powerflow, "powerflow")
-    return SynchronousMachine(elec, mech, avr, gov, Limits(), seeds, LinearizationCache())
+    return SynchronousMachine(; elec, mech, avr, gov, limits = Limits(), Vᵃᶜ_base,
+        bases = b, powerflow = seeds)
 end
 
 
@@ -833,8 +848,8 @@ Return the factors that convert per-unit machine admittance to siemens.
 Y_{ij}^{SI}=Y_{ij}^{pu}\\frac{I_{b,i}}{V_{b,j}}.
 ```
 
-The common entry is `S_base/Vᵃᶜ_base²` \\[S\\], using the three-phase power base
-in \\[MVA\\] and line-to-line RMS voltage base in \\[kV\\]. These factors are returned
+The common entry is `bases(model).S/model.Vᵃᶜ_base²` \\[S\\]. It uses three-phase
+power \\[MVA\\] and line-to-line RMS voltage \\[kV\\] bases. These factors are returned
 for explicit use by the network admittance calculation.
 
 # Examples
@@ -848,7 +863,7 @@ scale = P.SI_scale(model)
 """
 function SI_scale(model::SynchronousMachine)
     elec = model.elec
-    return fill(elec.S_base / elec.Vᵃᶜ_base^2, 2, 2)
+    return fill(model.bases.S / model.Vᵃᶜ_base^2, 2, 2)
 end
 
 
@@ -865,8 +880,7 @@ inputs(model::SynchronousMachine) = (
     powerflow = _MACHINE_POWERFLOW_INPUTS,
 )
 
-bases(model::SynchronousMachine) = BaseValues(S = model.elec.S_base,
-    v_ac = model.elec.Vᵃᶜ_base * sqrt(2/3), omega = model.elec.ωn)
+bases(model::SynchronousMachine) = model.bases
 
 limits(model::SynchronousMachine) = model.limits
 
@@ -945,9 +959,9 @@ function convert!(data, machine::SynchronousMachine, ::Type{PMACDC}, component_k
     branch["shift"] = 0
     branch["c_rating_a"] = 1
     branch["br_r"] = machine.elec.rt *
-        (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
+        (machine.Vᵃᶜ_base^2 / machine.bases.S) / global_dict["Z"]
     branch["br_x"] = machine.elec.lt *
-        (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
+        (machine.Vᵃᶜ_base^2 / machine.bases.S) / global_dict["Z"]
     branch["g_fr"] = 0
     branch["b_fr"] = 0
     branch["g_to"] = 0

@@ -175,10 +175,10 @@ end
                     add_three_phase!(channels, c.name, times,
                         2complex(flow.pgrid, -flow.qgrid)/(3conj(voltage)))
                 else
-                    value = c.kind == :converter_p ? flow.pt/m.elec.Sbase :
-                            c.kind == :converter_q ? flow.qt/m.elec.Sbase :
+                    value = c.kind == :converter_p ? flow.pt/m.bases.S :
+                            c.kind == :converter_q ? flow.qt/m.bases.S :
                             c.kind == :converter_arm_voltage ? vdc :
-                            c.kind == :converter_sum_current ? flow.pf/(3m.elec.Sbase) :
+                            c.kind == :converter_sum_current ? flow.pf/(3m.bases.S) :
                             flow.pf/vdc
                     channels[c.name] = fill(value, length(times))
                 end

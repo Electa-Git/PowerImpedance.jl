@@ -26,7 +26,7 @@ function coupled_network(id)
             deepcopy(mmc_grid_network(mode=id=="two_mmc_dc_cable" && name==:C1 ?
                 :vdc : id=="two_mmc_shared_bus" && name==:C2 ? :qv : :pq).elements.DUT)
         end
-        b=device_bases(d.elec)
+        b=device_bases(d.elec, d.bases)
         elements = merge(elements, (; name => d))
         bus = id=="mmc_pi_line" ? :Remote : id=="two_mmc_dc_cable" ? name : :AC
         push!(topology, NetworkBuilder.Bus(bus; ports = ((name, :ac),), domain = ACDQ))
@@ -214,7 +214,7 @@ function prepare_composed(id;directory=joinpath(ROOT,"data",id),remote=nothing)
     record["aggregate_bases"]=Dict("power_MVA"=>spec.power_base_MVA,"voltage_kVpeak"=>spec.voltage_bases,"current_kApeak"=>spec.current_bases)
     individual_bases=Dict{String,Any}()
     for n in c.devices
-        bases=device_bases(net.elements[n].elec)
+        bases=device_bases(net.elements[n].elec, net.elements[n].bases)
         individual_bases[string(n)]=Dict("voltage_kVpeak"=>bases.ac_voltage,
             "current_kApeak"=>bases.ac_current,"power_MVA"=>bases.power)
     end

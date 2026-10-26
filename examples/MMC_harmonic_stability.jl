@@ -17,7 +17,7 @@ converter_limits = PowerImpedance.Limits(P_min = -1, P_max = 1, Q_min = -1, Q_ma
 # submodule capacitance.
 # Transformer leakage contributes 60 mH, with zero transformer resistance in this case.
 
-electrical = ElectricalMMC(vDC_base = 640, Lᵣ = 60e-3, Rᵣ = 0);
+electrical = ElectricalMMC(Lᵣ = 60e-3, Rᵣ = 0);
 
 # Instantaneous measurements supply AC voltage, AC current and DC voltage to the controls.
 
@@ -64,7 +64,7 @@ rectifier_modulation = UncompensatedModulation();
 
 # The rectifier controls DC voltage and reactive power at its AC terminal.
 
-c1 = let model = mmc(elec = electrical, meas = measurement, sync = sync,
+c1 = let model = mmc(vDC_base = 640, elec = electrical, meas = measurement, sync = sync,
         delta_control = ΔdqControlGFL(outer_active = dc_control,
             outer_reactive = reactive_control, occ = current_control),
         sigma_control = internal_control, modulation = rectifier_modulation,
@@ -79,7 +79,7 @@ end;
 
 # The inverter controls active and reactive power through the delayed current response.
 
-c2 = let model = mmc(elec = electrical, meas = measurement, sync = sync,
+c2 = let model = mmc(vDC_base = 640, elec = electrical, meas = measurement, sync = sync,
         delta_control = ΔdqControlGFL(outer_active = power_control,
             outer_reactive = reactive_control, occ = current_control),
         sigma_control = internal_control, modulation = inverter_modulation,

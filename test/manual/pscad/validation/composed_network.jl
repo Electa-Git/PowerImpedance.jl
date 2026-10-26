@@ -11,7 +11,7 @@ function composed_circuit(net, devices, grids, ports)
     # Each un-clamped DC bus has the exporter's two 10 Mohm pole references.
     dc_references=Dict{Symbol,Float64}()
     for name in devices
-        b=device_bases(net.elements[name].elec)
+        b=device_bases(net.elements[name].elec, net.elements[name].bases)
         b.dc_voltage===nothing && continue
         node=only(port_nets(net, name, :dc))
         node in nodes && (dc_references[node]=2P.DC_REFERENCE_RESISTANCE)
@@ -117,7 +117,8 @@ function composed_reference(c, spec; time_step = nothing, forms = nothing)
             push!(targets["DC_current_T"],physical_y(e,ComplexF64(s))*dc)
         end
         for name in c.devices
-            h = component_incidence(c,name); b = device_bases(c.net.elements[name].elec)
+            h = component_incidence(c, name); b = device_bases(c.net.elements[name].elec,
+                c.net.elements[name].bases)
             yy=functions[name](s)
             if b.dc_voltage===nothing || all(iszero,h[:,1])
                 # Local device Y uses its own measured terminal voltage, even
@@ -158,7 +159,8 @@ function composed_descriptor(c)
     K = zeros(ComplexF64,n,n); E = similar(K); fill!(E,0)
     offset = 0
     for name in c.devices
-        e=c.net.elements[name];b=device_bases(e.elec);h=component_incidence(c,name)
+        e=c.net.elements[name];b=device_bases(e.elec, e.bases);h=component_incidence(c,
+            name)
         ix=(offset+1):(offset+size(e.cache.A,1));offset=last(ix)
         E[ix,ix]=I(length(ix));K[ix,ix]=e.cache.A
         K[ix,vi]=(e.cache.B./b.voltage_inputs')*h'

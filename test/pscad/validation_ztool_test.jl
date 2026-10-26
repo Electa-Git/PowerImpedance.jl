@@ -192,9 +192,10 @@ end
             e = dut.elec
             expected =
                 dut.cache.C * ((2π * im * 40I - dut.cache.A) \ dut.cache.B) + dut.cache.D
-            expected .*= [e.Sbase / e.vDC_base, 2e.Sbase / (3e.vAC_base) * e.turnsRatio,
-                2e.Sbase / (3e.vAC_base) * e.turnsRatio]
-            expected ./= [e.vDC_base e.vAC_base e.vAC_base]
+            expected .*= [dut.bases.S / dut.bases.v_dc, 2dut.bases.S /
+                (3dut.bases.v_ac) * e.turnsRatio,
+                2dut.bases.S / (3dut.bases.v_ac) * e.turnsRatio]
+            expected ./= [dut.bases.v_dc dut.bases.v_ac dut.bases.v_ac]
             @test definition.reference[:, :, 9] ≈ expected rtol = 1e-12
             @test all(!iszero, definition.reference[1, :, 9])
             @test all(!iszero, definition.reference[:, 1, 9])

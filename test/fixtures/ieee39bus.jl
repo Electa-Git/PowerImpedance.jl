@@ -159,13 +159,7 @@ const IEEE39_ELIM_ELEMENTS = [:STATCOM]
 const IEEE39_FREQ_RANGE = (1e0, 5e3, 10)
 
 function ieee39bus_elements()
-    elec = PowerImpedance.ElectricalTLC(
-        Lᵣ = Lf_ST,
-        Rᵣ = Rf_ST,
-        Sbase = S_ST,
-        vACbase_LL_RMS = 345,
-        vDCbase = Vdc_ST
-    )
+    elec = PowerImpedance.ElectricalTLC(Lᵣ = Lf_ST, Rᵣ = Rf_ST)
 
     meas = PowerImpedance.Measurement(
         v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
@@ -265,16 +259,10 @@ function ieee39bus_elements()
         G_DC = dc_source(v = Vdc_ST),
 
         STATCOM = let model = PowerImpedance.tlc(;
-            elec = elec,
-            meas = meas,
-            sync = sync,
-            outerActive = outerActive,
-            outerReactive = outerReactive,
-            innerVoltage = innerVoltage,
-            innerCurrent = innerCurrent,
-            mod = mod,
-            limits = limits
-        )
+                Sbase = S_ST, vACbase_LL_RMS = 345, vDCbase = Vdc_ST, elec = elec,
+                meas = meas, sync = sync, outerActive = outerActive,
+                outerReactive = outerReactive, innerVoltage = innerVoltage,
+                innerCurrent = innerCurrent, mod = mod, limits = limits)
             b = bases(model)
             component(model; outerActive = (v_dc_ref = (Vdc_ST) / b.v_dc,),
                 outerReactive = (q_ref = (Q_ST*S_ST) / b.S,

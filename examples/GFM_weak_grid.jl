@@ -11,10 +11,8 @@ voltage = 380 / sqrt(3);
 # ## Grid-forming MMC
 #
 # The MMC has a 66/380 transformer and 400 submodules per arm.
-# Its 200 MVA base converts the physical arm and transformer parameters to per unit.
-electrical = ElectricalMMC(vDC_base = 150, Sbase = 200, vACbase_LL_RMS = 66,
-    turnsRatio = 66/380, Lᵣ = 0.18 * (66^2/200) / (2π * 50), Rᵣ = 0.001 * (66^2/200),
-    Rₐᵣₘ = 0.4, Lₐᵣₘ = 46.125e-3, Cₐᵣₘ = 11.3867e-3, N = 400);
+electrical = ElectricalMMC(turnsRatio = 66/380, Lᵣ = 0.18 * (66^2/200) / (2π * 50),
+    Rᵣ = 0.001 * (66^2/200), Rₐᵣₘ = 0.4, Lₐᵣₘ = 46.125e-3, Cₐᵣₘ = 11.3867e-3, N = 400);
 
 # Second-order filters with a 140 Hz cutoff smooth the measured active and reactive powers.
 measurement = Measurement(P_ac = PowerImpedance.Butterworth(order = 2, ωc = 140 * 2π),
@@ -62,8 +60,9 @@ sigma_control = ΣdqzControlTEC(tec = energy_control, zscc = zero_control,
 # Modulation applies a 200 microsecond delay represented by a 5/5 Padé approximation.
 modulation = UncompensatedModulation(timeDelay = 200e-6, padeOrderNum = 5,
     padeOrderDen = 5);
-MMC1 = let model = mmc(
-        elec = electrical, meas = measurement, sync = sync, delta_control = delta_control,
+# The mmc constructor sets the 200 MVA base used to normalize arm and transformer values.
+MMC1 = let model = mmc(vDC_base = 150, Sbase = 200, vACbase_LL_RMS = 66, elec = electrical,
+        meas = measurement, sync = sync, delta_control = delta_control,
         sigma_control = sigma_control, modulation = modulation)
     b = bases(model)
     component(model; sync = (p_ref = 0.0,),
@@ -74,9 +73,10 @@ end;
 
 # ## Wind farms
 #
-# Each wind farm uses a two-level converter rated at 600 MVA with a 0.08 pu reactor.
-wind_electrical = ElectricalTLC(Sbase = 600, vACbase_LL_RMS = 380, vDCbase = 640,
-    Lᵣ = 0.08 * (380^2/600) / (2π * 50), Rᵣ = 0.0008 * (380^2/600));
+# Each wind farm uses a two-level converter with a 0.08 pu reactor.
+# The tlc constructors below set its 600 MVA base.
+wind_electrical = ElectricalTLC(Lᵣ = 0.08 * (380^2/600) / (2π * 50),
+    Rᵣ = 0.0008 * (380^2/600));
 
 # First-order filters smooth measured AC voltages and currents with a 10000 rad/s cutoff.
 wind_measurement = Measurement(v_ac = PowerImpedance.Butterworth(order = 1, ωc = 1e4),
@@ -100,10 +100,11 @@ wind_limits = PowerImpedance.Limits(
     P_min = 0.9 * 600, P_max = 1.1 * 600, Q_min = -0.5 * 600, Q_max = 0.5 * 600);
 
 # Wind farm `WF1` injects its power at Bus 12.
-WF1 = let model = tlc(elec = wind_electrical, meas = wind_measurement, sync = wind_sync,
+WF1 = let model = tlc(Sbase = 600, vACbase_LL_RMS = 380, vDCbase = 640,
+        elec = wind_electrical, meas = wind_measurement, sync = wind_sync,
         outerActive = wind_power, outerReactive = wind_reactive,
-        innerCurrent = wind_current,
-        innerVoltage = NoInnerVoltageControl(), mod = NoModulation(), limits = wind_limits)
+        innerCurrent = wind_current, innerVoltage = NoInnerVoltageControl(),
+        mod = NoModulation(), limits = wind_limits)
     b = bases(model)
     component(model; outerActive = (p_ref = 600 / b.S,),
         outerReactive = (q_ref = 0.0,),
@@ -113,10 +114,11 @@ WF1 = let model = tlc(elec = wind_electrical, meas = wind_measurement, sync = wi
 end;
 
 # Wind farm `WF2` injects its power at Bus 13.
-WF2 = let model = tlc(elec = wind_electrical, meas = wind_measurement, sync = wind_sync,
+WF2 = let model = tlc(Sbase = 600, vACbase_LL_RMS = 380, vDCbase = 640,
+        elec = wind_electrical, meas = wind_measurement, sync = wind_sync,
         outerActive = wind_power, outerReactive = wind_reactive,
-        innerCurrent = wind_current,
-        innerVoltage = NoInnerVoltageControl(), mod = NoModulation(), limits = wind_limits)
+        innerCurrent = wind_current, innerVoltage = NoInnerVoltageControl(),
+        mod = NoModulation(), limits = wind_limits)
     b = bases(model)
     component(model; outerActive = (p_ref = 600 / b.S,),
         outerReactive = (q_ref = 0.0,),
@@ -126,10 +128,11 @@ WF2 = let model = tlc(elec = wind_electrical, meas = wind_measurement, sync = wi
 end;
 
 # Wind farm `WF3` injects its power at Bus 14.
-WF3 = let model = tlc(elec = wind_electrical, meas = wind_measurement, sync = wind_sync,
+WF3 = let model = tlc(Sbase = 600, vACbase_LL_RMS = 380, vDCbase = 640,
+        elec = wind_electrical, meas = wind_measurement, sync = wind_sync,
         outerActive = wind_power, outerReactive = wind_reactive,
-        innerCurrent = wind_current,
-        innerVoltage = NoInnerVoltageControl(), mod = NoModulation(), limits = wind_limits)
+        innerCurrent = wind_current, innerVoltage = NoInnerVoltageControl(),
+        mod = NoModulation(), limits = wind_limits)
     b = bases(model)
     component(model; outerActive = (p_ref = 600 / b.S,),
         outerReactive = (q_ref = 0.0,),

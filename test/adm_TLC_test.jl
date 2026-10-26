@@ -30,14 +30,15 @@ function tlc_y(elem, s::Complex)
 
     conv = elem
     elec = conv.elec
+    b = conv.bases
 
     Y = Matrix{ComplexF64}(Y)
 
-    Y[1, :] .*= elec.iDCbase
-    Y[:, 1] ./= elec.vDCbase
+    Y[1, :] .*= PowerImpedance.perunit(elec, b).iDCbase
+    Y[:, 1] ./= b.v_dc
 
-    Y[2:3, :] .*= elec.iACbase
-    Y[:, 2:3] ./= elec.vACbase
+    Y[2:3, :] .*= PowerImpedance.perunit(elec, b).iACbase
+    Y[:, 2:3] ./= b.v_ac
 
     return Y
 end
@@ -47,13 +48,7 @@ function tlc_plot_convention(Y::AbstractMatrix)
 end
 
 function common_tlc_blocks(; Vm, Vdc, Lf, Rf)
-    elec = PowerImpedance.ElectricalTLC(
-        Lᵣ = Lf,
-        Rᵣ = Rf,
-        Sbase = 100.0,
-        vACbase_LL_RMS = 220.0,
-        vDCbase = Vdc
-    )
+    elec = PowerImpedance.ElectricalTLC(Lᵣ = Lf, Rᵣ = Rf)
 
     meas = PowerImpedance.Measurement(
         v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
@@ -107,9 +102,9 @@ function build_case1_grid()
     elec, meas, sync, innerVoltage, innerCurrent,
     mod, limits = common_tlc_blocks(; Vm, Vdc, Lf, Rf)
 
-    q_ref_pu = -Qowf / elec.Sbase
-    vdc_ref_pu = Vdc / elec.vDCbase
-    vac_ref_pu = Vac_peak / (elec.vACbase)
+    q_ref_pu = -Qowf / 100.0
+    vdc_ref_pu = Vdc / 640.0
+    vac_ref_pu = Vac_peak / (220.0 * sqrt(2 / 3))
 
     limits = PowerImpedance.Limits(
         P_min = -100.0,
@@ -118,7 +113,7 @@ function build_case1_grid()
         Q_max = 50.0
     )
 
-    vac_ref_pu = Vac_peak / (elec.vACbase)
+    vac_ref_pu = Vac_peak / (220.0 * sqrt(2 / 3))
 
     outerActive = PowerImpedance.OuterActiveVdcControl(
         pi_ctrl = PowerImpedance.PIControl(Kp = 5.0, Ki = 5.0),
@@ -132,17 +127,10 @@ function build_case1_grid()
         )
     )
 
-    dut = PowerImpedance.tlc(
-        elec = elec,
-        meas = meas,
-        sync = sync,
-        outerActive = outerActive,
-        outerReactive = outerReactive,
-        innerVoltage = innerVoltage,
-        innerCurrent = innerCurrent,
-        mod = mod,
-        limits = limits
-    )
+    dut = PowerImpedance.tlc(Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = Vdc,
+        elec = elec, meas = meas, sync = sync, outerActive = outerActive,
+        outerReactive = outerReactive, innerVoltage = innerVoltage,
+        innerCurrent = innerCurrent, mod = mod, limits = limits)
 
     b = bases(dut)
     dut = component(dut; outerActive = (v_dc_ref = Vdc / b.v_dc,),
@@ -184,8 +172,8 @@ function build_case2_grid()
     elec, meas, sync, innerVoltage, innerCurrent,
     mod, limits = common_tlc_blocks(; Vm, Vdc, Lf, Rf)
 
-    p_ref_pu = Powf / elec.Sbase
-    q_ref_pu = -Qowf / elec.Sbase
+    p_ref_pu = Powf / 100.0
+    q_ref_pu = -Qowf / 100.0
 
     limits = PowerImpedance.Limits(
         P_min = -1000.0,
@@ -206,17 +194,10 @@ function build_case2_grid()
         pi_ctrl = PowerImpedance.PIControl(Kp = 0.04, Ki = 40.0),
     )
 
-    dut = PowerImpedance.tlc(
-        elec = elec,
-        meas = meas,
-        sync = sync,
-        outerActive = outerActive,
-        outerReactive = outerReactive,
-        innerVoltage = innerVoltage,
-        innerCurrent = innerCurrent,
-        mod = mod,
-        limits = limits
-    )
+    dut = PowerImpedance.tlc(Sbase = 100.0, vACbase_LL_RMS = 220.0, vDCbase = Vdc,
+        elec = elec, meas = meas, sync = sync, outerActive = outerActive,
+        outerReactive = outerReactive, innerVoltage = innerVoltage,
+        innerCurrent = innerCurrent, mod = mod, limits = limits)
 
     b = bases(dut)
     dut = component(dut; outerActive = (p_ref = Powf / b.S,),
