@@ -37,8 +37,8 @@ broadcasts singleton axes. Reusing one Grid object couples its selections.
 structure and `configuration_manifest` preserves parameter order. Component
 spaces materialize direct models. Place reference grids in the selected control
 block constructors. Reference units remain per unit on each materialized model
-base. Sources keep physical input units. Each materialized model has its own
-linearization cache.
+base. Sources keep physical input units. State-space linearization computes a
+separate equilibrium and system for each realization.
 
 ## Deterministic evaluation
 

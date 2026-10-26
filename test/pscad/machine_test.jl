@@ -157,7 +157,7 @@ end
         AVRSM(v_ref = 1.02, T_R = 0.03, T_B = 0.8, T_C = 0.12, T_A = 0.04, K_A = 123.0),
         GovernorSM(T_w = 0.15, T_G = 0.25, R = 0.04), PowerImpedance.Limits(), 220.0,
         BaseValues(S = 1000.0, v_ac = 220.0 * sqrt(2/3), omega = 100π),
-        (p = 0.0, q = 0.0, v = 1.0), PowerImpedance.LinearizationCache())
+        (p = 0.0, q = 0.0, v = 1.0))
     avr = P.machine_avr("AVR_custom", machine, 0.99)
     gov = P.machine_governor("GOV_custom", machine, 0.72)
     @test Dict(p.name => p.default for p in avr.parameters) == Dict(

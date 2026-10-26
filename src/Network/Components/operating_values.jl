@@ -119,26 +119,3 @@ $(TYPEDFIELDS)
     "Pole-to-pole DC voltage on the component base \\[dimensionless\\]."
     v_dc::Float64 = 1
 end
-
-"""
-$(TYPEDEF)
-
-Retain the terminal values, converged state and matrices of the last linearization.
-Fields default to `nothing`.
-
-$(TYPEDFIELDS)
-"""
-@with_kw mutable struct LinearizationCache
-    "Last terminal values, keyed by port name, in physical units."
-    values::Union{Nothing, NamedTuple} = nothing
-    "Converged state vector in the model's state coordinates."
-    state::Union{Nothing, Vector{Float64}} = nothing
-    "State matrix in the model's state coordinates."
-    A::Union{Nothing, Matrix{Float64}} = nothing
-    "Electrical-input matrix in the model's input and state coordinates."
-    B::Union{Nothing, Matrix{Float64}} = nothing
-    "Output matrix in the model's state and output coordinates."
-    C::Union{Nothing, Matrix{Float64}} = nothing
-    "Electrical feedthrough matrix in the model's input and output coordinates."
-    D::Union{Nothing, Matrix{Float64}} = nothing
-end

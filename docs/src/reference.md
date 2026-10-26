@@ -22,9 +22,10 @@ Terminal operating points use `ACPortValues` and `DCPortValues`, keyed by port n
 in a NamedTuple. `OperatingPoint` stores these NamedTuples by element name:
 `op[:c1].ac.p` accesses AC active power into the component, and `op[:c1].dc.v` accesses DC voltage.
 `get(op, :missing, nothing)` returns `nothing` for an absent element.
-`linearize(model, values)` computes the state-space matrices and
-stores the converged state. `steady_state(model, values)` reuses that state when
-the terminal values compare equal with `isequal`.
+`linearize(model, values)` returns a `StateSpaceLinearization` with equilibrium
+`state` and continuous-time `system`. `steady_state(model, values)` computes the
+same equilibrium without forming the electrical system. Each call computes a new
+result and leaves the model unchanged.
 
 ```@autodocs
 Modules = [PowerImpedance]

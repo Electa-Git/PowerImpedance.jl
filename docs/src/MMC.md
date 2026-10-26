@@ -54,9 +54,10 @@ named `c1`, `op[:c1].ac.p` is AC power into the converter, while
 delivering 600 MW to AC has `dc.p = 603` and `ac.p = -600`.
 
 `linearize(converter, op[:c1])` solves the detailed nonlinear equilibrium and
-returns `A, B, C, D`. `steady_state(converter, op[:c1])` returns its converged
-state. Control equations are initialized from the solved terminal values.
-A copy configured with `withinputs` starts with a fresh linearization cache.
+returns a `StateSpaceLinearization` with the converged `state` and continuous-time
+`system`. `steady_state(converter, op[:c1])` computes the equilibrium without
+forming the electrical system. Each call uses the solved terminal values and leaves
+the model unchanged.
 Electrical and control uncertainty is sampled before power flow, equilibrium,
 and linearization. Each numeric sample repeats those calculations.
 

@@ -1921,7 +1921,7 @@ function replace_model(fixture, name; replacements...)
     fields = merge(
         NamedTuple{fieldnames(typeof(model))}(
             Tuple(getfield(model, f) for f in fieldnames(typeof(model)))),
-        (; replacements..., cache = PI.LinearizationCache()))
+        (; replacements...))
     replacement = Base.typename(typeof(model)).wrapper(values(fields)...)
     elements = merge(fixture.elements, NamedTuple{(name,)}((replacement,)))
     return NB.NetworkState(elements, fixture.topology, fixture.options)

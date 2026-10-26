@@ -18,8 +18,8 @@ function read_validation_data(path::AbstractString)
     return omegas, transpose.(matrices)
 end
 
-function mmc_y(elem, s::Complex)
-    A, B, C, D = elem.cache.A, elem.cache.B, elem.cache.C, elem.cache.D
+function mmc_y(elem, system, s::Complex)
+    A, B, C, D = system.A, system.B, system.C, system.D
     n = size(A, 1)
     Iₙ = Matrix{ComplexF64}(I, n, n)
     Y = C * ((s * Iₙ - A) \ B) + D
@@ -160,20 +160,19 @@ function build_mmc_grid()
         NetworkBuilder.Bus(:DC; ports = ((:G_DC, :dc), (:DUT, :dc))))
     grid = NetworkBuilder.define(elements, topology; options = (; voltageBase = Vm))
     result = compute(PowerFlowProblem(grid), ACDCPowerFlow())
-    linearize(grid.elements.DUT, result.operating_point[:DUT])
-
-    return grid
+    return grid, result.operating_point
 end
 
 omegas,
 Y_validation = read_validation_data(joinpath(@__DIR__, "data",
     "data_MMC_validation.txt"))
-grid = build_mmc_grid()
+grid, point = build_mmc_grid()
 elem = grid.elements[:DUT]
+system = linearize(elem, point[:DUT]).system
 
 Y_MMC = Matrix{ComplexF64}[]
 for ω in omegas
-    Y1 = mmc_y(elem, 1im * ω)
+    Y1 = mmc_y(elem, system, 1im * ω)
     push!(Y_MMC, mmc_plot_convention(Y1))
 end
 

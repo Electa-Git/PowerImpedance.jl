@@ -22,8 +22,8 @@ function read_validation_data(path::AbstractString)
     return omegas, transpose.(matrices)
 end
 
-function tlc_y(elem, s::Complex)
-    A, B, C, D = elem.cache.A, elem.cache.B, elem.cache.C, elem.cache.D
+function tlc_y(elem, system, s::Complex)
+    A, B, C, D = system.A, system.B, system.C, system.D
     n = size(A, 1)
     Iₙ = Matrix{ComplexF64}(I, n, n)
     Y = C * ((s * Iₙ - A) \ B) + D
@@ -153,9 +153,7 @@ function build_case1_grid()
         NetworkBuilder.Bus(:DC2; ports = ((:CableDC12, :side2), (:G_DC, :dc))))
     grid = NetworkBuilder.define(elements, topology; options = (; voltageBase = Vm))
     result = compute(PowerFlowProblem(grid), ACDCPowerFlow())
-    linearize(grid.elements.DUT, result.operating_point[:DUT])
-
-    return grid
+    return grid, result.operating_point
 end
 
 function build_case2_grid()
@@ -211,9 +209,7 @@ function build_case2_grid()
         NetworkBuilder.Bus(:DC; ports = ((:DUT, :dc), (:G_DC, :dc))))
     grid = NetworkBuilder.define(elements, topology; options = (; voltageBase = Vm))
     result = compute(PowerFlowProblem(grid), ACDCPowerFlow())
-    linearize(grid.elements.DUT, result.operating_point[:DUT])
-
-    return grid
+    return grid, result.operating_point
 end
 
 #
@@ -223,12 +219,13 @@ end
 omegas,
 Y_validation = read_validation_data(joinpath(@__DIR__, "data",
     "data_TLC_validation_1.txt"))
-grid = build_case1_grid()
+grid, point = build_case1_grid()
 elem = grid.elements[:DUT]
+system = linearize(elem, point[:DUT]).system
 
 Y_TLC = Matrix{ComplexF64}[]
 for ω in omegas
-    Y1 = tlc_y(elem, 1im * ω)
+    Y1 = tlc_y(elem, system, 1im * ω)
     push!(Y_TLC, tlc_plot_convention(Y1))
 end
 
@@ -247,8 +244,9 @@ end
 omegas,
 Y_validation = read_validation_data(joinpath(@__DIR__, "data",
     "data_TLC_validation_2.txt"))
-grid = build_case2_grid()
+grid, point = build_case2_grid()
 elem = grid.elements[:DUT]
+system = linearize(elem, point[:DUT]).system
 
 for i in eachindex(Y_validation)
     Y_validation[i][1, :] *= -1
@@ -265,7 +263,7 @@ end
 
 Y_TLC = Matrix{ComplexF64}[]
 for ω in omegas
-    Y1 = tlc_y(elem, 1im * ω)
+    Y1 = tlc_y(elem, system, 1im * ω)
     push!(Y_TLC, tlc_plot_convention(Y1))
 end
 

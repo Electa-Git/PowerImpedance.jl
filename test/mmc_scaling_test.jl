@@ -6,8 +6,8 @@ if !isdefined(@__MODULE__, :build_compensated_mmc_grid)
     include("adm_MMC_compensated_test.jl")
 end
 
-function mmc_raw_y(model, s)
-    A, B, C, D = model.cache.A, model.cache.B, model.cache.C, model.cache.D
+function mmc_raw_y(system, s)
+    A, B, C, D = system.A, system.B, system.C, system.D
     return C * ((s * I - A) \ B) + D
 end
 
@@ -26,16 +26,17 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
 @testset "Modular MMC physical terminal scaling" begin
     # These constructors and the independent element_y reference are defined
     # by adm_MMC_compensated_test.jl, which precedes this file in runtests.jl.
-    network = build_compensated_mmc_grid()
+    network, point = build_compensated_mmc_grid()
     original = network.elements[:DUT]
     frequencies = ComplexF64.(im .* [2π * 0.1, 2π * 10, 2π * 1000])
-    values = original.cache.values
+    values = point[:DUT]
+    system = linearize(original, values).system
     cached = PowerImpedance.NetworkBuilder.build(original, values, :dq)
     builder_response = zeros(ComplexF64, 3, 3, length(frequencies))
     cached(builder_response, frequencies)
     for (index, s) in enumerate(frequencies)
-        reference = element_y(original, s)
-        @test PowerImpedance._mmc_si_scale!(mmc_raw_y(original, s), original.elec,
+        reference = element_y(original, system, s)
+        @test PowerImpedance._mmc_si_scale!(mmc_raw_y(system, s), original.elec,
             original.bases) ≈
               reference
         @test builder_response[:, :, index] ≈ reference
@@ -51,7 +52,7 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
         physical = PowerImpedance.ElectricalMMC(fields...)
         element = PowerImpedance.MMC(model.meas, model.sync, model.delta_control,
             model.sigma_control, model.modulation, physical, model.limits, model.bases,
-            model.powerflow, deepcopy(model.cache))
+            model.powerflow)
         old_scale = mmc_scaling_before(ones(3, 3), physical, model.bases)
         new_scale = PowerImpedance.SI_scale(element)
         @test mmc_scaling_bits(new_scale[1:1, 1:1]) == mmc_scaling_bits(old_scale[1:1, 1:1])
@@ -61,19 +62,19 @@ mmc_scaling_bits(Y) = reinterpret(UInt64, vec(Y))
         if ratio == 1.0
             @test mmc_scaling_bits(new_scale) == mmc_scaling_bits(old_scale)
         end
-        cache = PowerImpedance.freqresp_cache(element.cache.A, element.cache.B,
-            element.cache.C, element.cache.D; scale = new_scale)
+        cache = PowerImpedance.freqresp_cache(system.A, system.B,
+            system.C, system.D; scale = new_scale)
         response = zeros(ComplexF64, 3, 3, length(frequencies))
         cache(response, frequencies)
-        old_cache = PowerImpedance.freqresp_cache(element.cache.A, element.cache.B,
-            element.cache.C, element.cache.D; scale = old_scale)
+        old_cache = PowerImpedance.freqresp_cache(system.A, system.B,
+            system.C, system.D; scale = old_scale)
         old_response = similar(response)
         old_cache(old_response, frequencies)
         for (index, s) in enumerate(frequencies)
-            raw = mmc_raw_y(element, s)
+            raw = mmc_raw_y(system, s)
             before = mmc_scaling_before(raw, physical, model.bases)
             actual = PowerImpedance._mmc_si_scale!(copy(raw), element.elec, element.bases)
-            reference = element_y(element, s)
+            reference = element_y(element, system, s)
             @test mmc_scaling_bits(response[1:1, 1:1, index]) ==
                   mmc_scaling_bits(old_response[1:1, 1:1, index])
             @test mmc_scaling_bits(response[2:3, 2:3, index]) ==

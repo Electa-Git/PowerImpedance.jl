@@ -107,7 +107,8 @@ declaration = inputs(source).v
 values to their declared types and reports unknown keys with their full path.
 `component(model; limits = nothing, inputs...)` also replaces stored limits when
 requested. The original model is unchanged. Unchanged sub-blocks are reused.
-Configured state-space models start with a fresh linearization cache.
+State-space models hold their parameters and configured inputs. Each linearization
+returns a separate value.
 
 ```@example network
 configured = component(source; v = 390sqrt(2/3),
@@ -174,9 +175,10 @@ its admittances. Starting from `NetworkState` first performs the required
 power flow and linearization.
 
 For an individual state-space model, `linearize(model, values)` computes
-`A, B, C, D` from physical per-port values and stores the converged state.
-`steady_state(model, values)` reuses that state when the values compare equal
-with `isequal`. Otherwise it recomputes. See [Power-flow initialization](initialization.md)
+a `StateSpaceLinearization` from physical per-port values. Its `state` holds the
+equilibrium and its `system` holds the continuous-time matrices `A`, `B`, `C` and `D`.
+`steady_state(model, values)` computes the same equilibrium without forming
+the electrical system. Each call leaves the model unchanged. See [Power-flow initialization](initialization.md)
 and [Impedance and stability analysis](results.md).
 
 `define` returns a `Gridspace{NetworkState}` when a component or direct option

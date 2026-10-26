@@ -1,4 +1,19 @@
-export linearize, steady_state
+export StateSpaceLinearization, linearize, steady_state
+
+"""
+$(TYPEDEF)
+
+Store a nonlinear model's equilibrium and continuous-time electrical linearization.
+The state and matrices use the model's state, input and output coordinates.
+
+$(TYPEDFIELDS)
+"""
+struct StateSpaceLinearization
+    "Equilibrium in `statenames(model)` order and the model's state coordinates."
+    state::Vector{Float64}
+    "Continuous-time electrical state-space system, with matrix units set by the model coordinates."
+    system::ControlSystemsBase.StateSpace{ControlSystemsBase.Continuous, Float64}
+end
 
 
 
@@ -214,20 +229,20 @@ outputequations!(F, x, inputs, y, m::AbstractStateSpace) = nothing
 
 function _state_space!(F, x, inputs, terminal_pu::Union{TerminalValuesPU, Nothing},
         m::AbstractStateSpace, solvekind::AbstractSolveKind)
-    
+
     # Convert vector states to NamedTuple with keys the statenames (we enforce the same order)
     x_names = statenames(m)
     # TODO consider `F_names = (x_names..., solvekindnames(m, solvekind)...)`.
     x_nt = NamedTuple{x_names}(x)
     inputs_nt = NamedTuple{inputnames(m)}(inputs)
-    
+
     # To where state space equations fill up F
     index_stsp = n_states(m)
 
     # Call the modeler's state-space functions. Returned algebraic variables can be used
     # by outputequations or equilibriumequations.
     y = state_space!(@view(F[1:index_stsp]), x_nt, inputs_nt, terminal_pu, m)
-    
+
     # Modify output or equilibrium equations
     solvekindequations!(F, x_nt, inputs_nt, terminal_pu, y, m, solvekind)
 
@@ -248,11 +263,8 @@ the electrical linearization.
 
 # Returns
 
-- `A`: Linearized state matrix.
-- `B`: Linearized electrical-input matrix.
-- `C`: Linearized output matrix.
-- `D`: Linearized electrical feedthrough matrix. Matrix units follow the declared state,
-  input, and output coordinates.
+- [`StateSpaceLinearization`](@ref) containing the equilibrium and the continuous-time
+  electrical system. Matrix units follow the declared state, input and output coordinates.
 
 # Notes
 
@@ -261,8 +273,8 @@ f(x_0,u_0)=0,\\quad A=\\left.\\frac{\\partial f}{\\partial x}\\right|_0,\\quad B
 ```
 
 Electrical inputs ``u_e`` exclude auxiliary reference inputs, which remain fixed during
-differentiation. Each call recomputes and stores the terminal values, state and
-matrices in the model cache. Converter solves retry with a trust-region algorithm
+differentiation. Each call computes a new equilibrium and system without changing the
+model. Converter solves retry with a trust-region algorithm
 after a failed default solve.
 
 # Errors
@@ -276,11 +288,69 @@ after a failed default solve.
 using PowerImpedance
 model = synchronousmachine()
 values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
-A, B, C, D = linearize(model, values)
+lin = linearize(model, values)
+A, B, C, D = lin.system.A, lin.system.B, lin.system.C, lin.system.D
 ```
 """
 function linearize(m::AbstractStateSpace, values::NamedTuple)
 
+    equilibrium, inputs_vec, terminal_pu = __equilibrium(m, values)
+
+    nb_states = n_states(m)
+    nb_inputs = n_inputs(m)
+    nb_elec_inputs = n_elec_inputs(m)
+    nb_addit_inputs = nb_inputs - nb_elec_inputs
+    nb_outputs = n_outputs(m)
+
+    h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end],
+        terminal_pu, m, Jac())
+    jac = zeros(nb_states+nb_outputs, nb_states+nb_inputs)
+    x = [equilibrium; inputs_vec]; F = fill(zero(eltype(x)), nb_states+nb_outputs)
+    ForwardDiff.jacobian!(jac, h!, F, x)
+
+    A = jac[1:nb_states, 1:nb_states]
+    B = jac[1:nb_states, nb_states+1:end-nb_addit_inputs]
+    C = jac[nb_states+1:end, 1:nb_states]
+    D = jac[nb_states+1:end, nb_states+1:end-nb_addit_inputs]
+
+    return StateSpaceLinearization(equilibrium, ss(A, B, C, D))
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Solve the nonlinear equilibrium at the supplied terminal values. Each call computes
+a new state vector without forming the electrical system or changing the model.
+
+# Arguments
+
+- `model`: State-space component model.
+- `values`: NamedTuple keyed by port name with `ACPortValues` and `DCPortValues`.
+
+# Returns
+
+- State vector in `statenames(model)` order and the model's state coordinates,
+  bit-identical to `linearize(model, values).state`.
+
+# Errors
+
+- Raises an error when equilibrium cannot be found. Propagates unsupported-model errors.
+
+# Examples
+
+```julia
+model = synchronousmachine()
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
+x = steady_state(model, values)
+@assert steady_state(model, values) == x
+```
+"""
+function steady_state(model::AbstractStateSpace, values::NamedTuple)
+    equilibrium, _, _ = __equilibrium(model, values)
+    return equilibrium
+end
+
+function __equilibrium(m::AbstractStateSpace, values::NamedTuple)
     # Power flow to inputs of state_space function
     inputs, terminal_pu = pftoinputs(m, values)
     inputs_vec = collect(Base.values(inputs))
@@ -325,66 +395,9 @@ function linearize(m::AbstractStateSpace, values::NamedTuple)
         error("$name steady-state solution not found!")
     end
 
-    equilibrium = sol.u[1:n_states(m)] # discard equilibrium states if any
+    equilibrium = Vector{Float64}(@view sol.u[1:n_states(m)]) # discard equilibrium states if any
 
     ϵ = 1e-15
     equilibrium[abs.(equilibrium) .< ϵ] .= 0
-
-
-    nb_states = n_states(m)
-    nb_inputs = n_inputs(m)
-    nb_elec_inputs = n_elec_inputs(m)
-    nb_addit_inputs = nb_inputs - nb_elec_inputs
-    nb_outputs = n_outputs(m)
-
-    h!(F,x) = _state_space!(F, x[1:end-nb_inputs], x[end-nb_inputs+1:end],
-        terminal_pu, m, Jac())
-    jac = zeros(nb_states+nb_outputs, nb_states+nb_inputs)
-    x = [equilibrium; inputs_vec]; F = fill(zero(eltype(x)), nb_states+nb_outputs)
-    ForwardDiff.jacobian!(jac, h!, F, x)
-     
-    A = jac[1:nb_states, 1:nb_states]
-    B = jac[1:nb_states, nb_states+1:end-nb_addit_inputs]
-    C = jac[nb_states+1:end, 1:nb_states]
-    D = jac[nb_states+1:end, nb_states+1:end-nb_addit_inputs]
-
-    m.cache.values = values
-    m.cache.state = equilibrium
-    m.cache.A, m.cache.B, m.cache.C, m.cache.D = A, B, C, D
-    return A,B,C,D 
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-Return the converged state at the supplied terminal values, reusing the model cache
-when the values compare equal with `isequal`. Otherwise, call [`linearize`](@ref).
-
-# Arguments
-
-- `model`: State-space component model.
-- `values`: NamedTuple keyed by port name with `ACPortValues` and `DCPortValues`.
-
-# Returns
-
-- Cached state vector in `statenames(model)` order and the model's state coordinates.
-  Repeated calls with equal values return the same vector object. Changes to this
-  vector also change the cached state.
-
-# Errors
-
-- Propagates equilibrium-solve and differentiation errors from `linearize`.
-
-# Examples
-
-```julia
-model = synchronousmachine()
-values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
-x = steady_state(model, values)
-@assert steady_state(model, values) === x
-```
-"""
-function steady_state(model::AbstractStateSpace, values::NamedTuple)
-    isequal(model.cache.values, values) || linearize(model, values)
-    return model.cache.state
+    return equilibrium, inputs_vec, terminal_pu
 end

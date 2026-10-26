@@ -21,7 +21,8 @@ function ztool_references(id, record, directory; net = nothing)
         policy in ("plain_model", "discrete_realization") || error("unknown suite reference: $policy")
         policy == "discrete_realization" && !eligible && error("suite one-step reference needs zero-delay modulation")
         if eligible
-            response = one_step_full_y(net.elements[:DUT], record["settings"]["time_step_s"])
+            point = compute(PowerFlowProblem(net), ACDCPowerFlow()).operating_point
+            response = one_step_full_y(net.elements[:DUT], point[:DUT], record["settings"]["time_step_s"])
             one_step = cat((response(ComplexF64(2π * im * f)) for f in frequencies)...; dims = 3)
         else
             one_step = continuous
@@ -91,7 +92,8 @@ function ztool_reference(id, net, list, spec, ports, frequencies)
     if id == "induction_machine"
         return induction_machine_reference(net, list, frequencies)
     elseif fixture(id).category == :device
-        return cat((physical_y(net.elements[:DUT], ComplexF64(2π * im * f))
+        lin = linearize(net.elements[:DUT], list.operating_point.values[:DUT])
+        return cat((physical_y(net.elements[:DUT], lin, ComplexF64(2π * im * f))
                     for f in frequencies)...; dims = 3)
     elseif id == "passive_ac_rlc"
         return cat((physical_y(net.elements[:branch], ComplexF64(2π * im * f))

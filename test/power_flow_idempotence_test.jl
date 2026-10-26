@@ -48,8 +48,9 @@ function consumer_values(net::NB.NetworkState, flow)
         f!(residual, solution.u, parameters)
         @test norm(residual, Inf) <= 1e-6
         @test sp.q_ac == -point.ac.q / m.bases.S
-        converters[name] = (; state = copy(solution.u), A = copy(m.cache.A),
-            B = copy(m.cache.B), C = copy(m.cache.C), D = copy(m.cache.D),
+        system = linearize(m, point).system
+        converters[name] = (; state = copy(solution.u), A = copy(system.A),
+            B = copy(system.B), C = copy(system.C), D = copy(system.D),
             y = NB.get_y(model, name, ComplexF64.(2π * im .* [1.0, 100.0, 5000.0])))
     end
     omega, s = NB._frequency_axis((1.0, 5000.0, 3))

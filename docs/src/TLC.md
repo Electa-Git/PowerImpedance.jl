@@ -40,10 +40,10 @@ ignored during target selection. `powerflow.p_dc` is positive into the DC port.
 After power flow, `op[:c1]` contains physical values at `ac` and `dc` for a
 converter named `c1`. Powers are positive into each port. A converter receiving
 603 MW from DC and delivering 600 MW to AC has `dc.p = 603` and `ac.p = -600`.
-`linearize(converter, op[:c1])` returns `A, B, C, D`, and
-`steady_state(converter, op[:c1])` returns the converged state. The detailed
-control equations use the solved terminal values. Configured copies have a
-fresh linearization cache.
+`linearize(converter, op[:c1])` returns a `StateSpaceLinearization` with the
+converged `state` and continuous-time `system`. `steady_state(converter, op[:c1])`
+computes the equilibrium without forming the electrical system. Each call computes
+from the solved terminal values and leaves the model unchanged.
 
 Gridspace accepts deterministic and uncertain values in the constructor tree.
 A numeric sample is solved and linearized before its response contributes

@@ -347,11 +347,12 @@ end
 function record_state_space!(rows, labels, name, state, point)
     for (element, value) in pairs(state.elements)
         !PI.islinear(value) && PI.is_active(value) || continue
-        A, B, C, D = PI.linearize(value, point[element])
+        lin = PI.linearize(value, point[element])
+        A, B, C, D = lin.system.A, lin.system.B, lin.system.C, lin.system.D
         for (field, matrix) in (("A", A), ("B", B), ("C", C), ("D", D))
             record!(rows, labels, "$name.ss.$element.$field", matrix)
         end
-        record!(rows, labels, "$name.ss.$element.x", value.cache.state)
+        record!(rows, labels, "$name.ss.$element.x", lin.state)
         eig = sort!(eigvals(A); by = v -> (real(v), imag(v)))
         record!(rows, labels, "$name.ss.$element.eig", eig)
     end

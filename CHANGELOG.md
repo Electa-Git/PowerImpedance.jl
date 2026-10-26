@@ -37,6 +37,10 @@
 
 ### Changed
 
+- **Breaking:** `linearize(model, values)` returns a `StateSpaceLinearization`
+  with equilibrium `state` and continuous-time `system`. Remove `LinearizationCache`
+  and the `cache` fields from MMC, TLC, synchronous-machine and induction-machine models.
+  `steady_state(model, values)` computes the equilibrium on each call.
 - **Breaking:** component constructors return models directly.
   `NetworkState.elements` stores the models under their NamedTuple names.
 - **Breaking:** passives use `conductors` for conductor count, including the

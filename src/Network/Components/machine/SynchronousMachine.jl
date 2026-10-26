@@ -246,8 +246,6 @@ largest differences at low frequencies.
     bases::BaseValues
     "Power-flow setpoints on machine bases \\[dimensionless\\]."
     powerflow::NamedTuple
-    "Retained terminal values, converged state and linearization matrices."
-    cache::LinearizationCache = LinearizationCache()
 end
 
 statenames(m::SynchronousMachine) = (statenames(m.elec)..., statenames(m.mech)...,statenames(m.gov)...,statenames(m.avr)...)
@@ -884,11 +882,7 @@ bases(model::SynchronousMachine) = model.bases
 
 limits(model::SynchronousMachine) = model.limits
 
-function _withinputs(model::SynchronousMachine, declarations::NamedTuple, changes, path)
-    configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
-        model, declarations, changes, path)
-    return Parameters.reconstruct(configured; cache = LinearizationCache())
-end
+
 
 
 pmtype(::SynchronousMachine, rows) = "gen"

@@ -63,8 +63,6 @@ $(TYPEDFIELDS)
     bases::BaseValues
     "Power-flow setpoints on converter bases \\[dimensionless\\]."
     powerflow::NamedTuple = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
-    "Retained terminal values, converged state and linearization matrices."
-    cache::LinearizationCache = LinearizationCache()
 end
 
 statenames(c::MMC) = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
@@ -677,9 +675,8 @@ References and setpoints use the converter bases.
 The selected synchronization and outer-control blocks determine the AC and DC
 power-flow control modes. The power bounds multiply `limits` by `Sbase`. The
 current-limit estimate compares their unscaled values with physical `Pac`.
-`linearize` solves the equilibrium and populates the linearization matrices at
-a supplied operating point.
-Frequency-domain evaluation then uses those stored matrices.
+`linearize` returns the equilibrium and electrical system at a supplied operating
+point. Frequency-domain evaluation uses the system's matrices.
 
 # Examples
 
@@ -867,11 +864,7 @@ bases(model::MMC) = model.bases
 
 limits(model::MMC) = model.limits
 
-function _withinputs(model::MMC, declarations::NamedTuple, changes, path)
-    configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
-        model, declarations, changes, path)
-    return Parameters.reconstruct(configured; cache = LinearizationCache())
-end
+
 
 
 pmtype(::MMC, rows) = "convdc"

@@ -190,8 +190,9 @@ end
             @test size(definition.reference) == (3, 3, 16)
             dut = net.elements[:DUT]
             e = dut.elec
+            system = linearize(dut, list.operating_point.values[:DUT]).system
             expected =
-                dut.cache.C * ((2π * im * 40I - dut.cache.A) \ dut.cache.B) + dut.cache.D
+                system.C * ((2π * im * 40I - system.A) \ system.B) + system.D
             expected .*= [dut.bases.S / dut.bases.v_dc, 2dut.bases.S /
                 (3dut.bases.v_ac) * e.turnsRatio,
                 2dut.bases.S / (3dut.bases.v_ac) * e.turnsRatio]

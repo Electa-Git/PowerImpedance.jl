@@ -98,8 +98,6 @@ $(TYPEDFIELDS)
     Vac_base::Float64
     "Power, voltage and angular-frequency bases of the model equations."
     bases::BaseValues
-    "Retained terminal values, converged state and linearization matrices."
-    cache::LinearizationCache = LinearizationCache()
 end
 """
 $(TYPEDSIGNATURES)
@@ -460,11 +458,7 @@ inputs(::InductionMachine) = (;)
 
 bases(model::InductionMachine) = model.bases
 
-function _withinputs(model::InductionMachine, declarations::NamedTuple, changes, path)
-    configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
-        model, declarations, changes, path)
-    return Parameters.reconstruct(configured; cache = LinearizationCache())
-end
+
 
 
 pmtype(::InductionMachine, rows) = "im"

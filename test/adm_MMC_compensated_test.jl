@@ -1,8 +1,8 @@
 using PowerImpedance, LinearAlgebra, Test
 using DelimitedFiles: readdlm
 
-function element_y(elem, s::Complex)
-    A, B, C, D = elem.cache.A, elem.cache.B, elem.cache.C, elem.cache.D
+function element_y(elem, system, s::Complex)
+    A, B, C, D = system.A, system.B, system.C, system.D
     n = size(A, 1)
     Iₙ = Matrix{ComplexF64}(I, n, n)
     Y = C * ((s * Iₙ - A) \ B) + D
@@ -150,9 +150,7 @@ function build_compensated_mmc_grid()
     grid = NetworkBuilder.define(elements, topology;
         options = (; voltageBase = voltage / sqrt(2)))
     result = compute(PowerFlowProblem(grid), ACDCPowerFlow())
-    linearize(grid.elements.DUT, result.operating_point[:DUT])
-
-    return grid
+    return grid, result.operating_point
 end
 
 # The test compares AC terminal admittance with the DC voltage held fixed.
@@ -162,13 +160,14 @@ end
     omegas = 2π .* data[:, 1]
     Y_validation = [reshape(complex.(row[2:2:end], row[3:2:end]), 2, 2)
                     for row in eachrow(data)]
-    grid = build_compensated_mmc_grid()
+    grid, point = build_compensated_mmc_grid()
     elem = grid.elements[:DUT]
-    @test all(pole -> real(pole) < 0, eigvals(elem.cache.A))
+    system = linearize(elem, point[:DUT]).system
+    @test all(pole -> real(pole) < 0, eigvals(system.A))
 
     Y_MMC = Matrix{ComplexF64}[]
     for ω in omegas
-        Y1 = element_y(elem, 1im * ω)
+        Y1 = element_y(elem, system, 1im * ω)
         push!(Y_MMC, compensated_mmc_plot_convention(Y1)[2:3, 2:3])
     end
 

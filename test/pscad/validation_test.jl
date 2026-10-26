@@ -825,7 +825,7 @@ end
     @test gate["most_positive_located_real_per_s"]≈-1.991781088 rtol=1e-6
     list=V.fixture_netlist(net, point);
     original, reference=V.applicable_scan("tlc_pq_freq_support", net, list)
-    @test reference[:, :, 1]≈V.physical_y(net.elements[:DUT], 2π*im)[2:3, 2:3]
+    @test reference[:, :, 1]≈V.physical_y(net.elements[:DUT],linearize(net.elements[:DUT],list.operating_point.values[:DUT]), 2π*im)[2:3, 2:3]
     @test original.drive=="current" && original.active
     @test original.time_step==2.5e-6 && original.tone_peak_pu==5e-5
     for band in (original,V.step_definition(original,18.0),V.step_definition(original,1000.0))
@@ -928,19 +928,21 @@ end
         form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
         @test (bases.ac_voltage*sqrt(3/2))^2/bases.power/hypot(form.R,2π*50*form.L)≈scr
         @test 2π*50*form.L/form.R≈10
-        B=dut.cache.B./bases.voltage_inputs';C=dut.cache.C.*bases.current_outputs
-        D=dut.cache.D.*bases.current_outputs./bases.voltage_inputs'
+        lin = linearize(dut, point.operating_point[:DUT])
+        system = lin.system
+        B=system.B./bases.voltage_inputs';C=system.C.*bases.current_outputs
+        D=system.D.*bases.current_outputs./bases.voltage_inputs'
         ix=bases.ac_indices;B=B[:,ix];C=C[ix,:];D=D[ix,ix]
         @test iszero(D)
         rotation=real.((inv(V.physical_y(net.elements[:Grid],0.0im)[1:2,
             1:2])-form.R*I)/form.L)
         # Independent ODE: differentiate grid KCL ig=-C*x and eliminate only
         # terminal voltage. This has no algebraic-infinity classification.
-        closed=dut.cache.A-B*((I+form.L*C*B)\
-            (form.L*C*dut.cache.A+form.R*C+form.L*rotation*C))
+        closed=system.A-B*((I+form.L*C*B)\
+            (form.L*C*system.A+form.R*C+form.L*rotation*C))
         poles=eigvals(closed)
         gate=V.stability_gate(net,V.fixture(id))
-        @test length(gate["poles_real_per_s"])==size(dut.cache.A,1)
+        @test length(gate["poles_real_per_s"])==size(system.A,1)
         @test gate["most_positive_located_real_per_s"]≈maximum(real,poles) rtol=1e-3 atol=1e-8
         if id=="mmc_gfm_weak_grid"
             @test maximum(real,poles)>0
@@ -955,8 +957,8 @@ end
         @test spec.dc_clamped==(kind!=:machine)
         @test spec.time_step==(kind==:compensated ? 1e-6 : 2.5e-6)
         for f in (1.,75.,1000.)
-            z=ComplexF64(2π*im*f);full=V.physical_y(dut,z)
-            @test C*((z*I-dut.cache.A)\B)+D≈full[ix,ix] rtol=1e-10 atol=1e-12
+            z=ComplexF64(2π*im*f);full=V.physical_y(dut,lin,z)
+            @test C*((z*I-system.A)\B)+D≈full[ix,ix] rtol=1e-10 atol=1e-12
             @test reference[:,:,only(findall(==(f),spec.frequencies))]≈full[ix,ix]
         end
         if kind==:disabled
@@ -975,9 +977,9 @@ end
             @test V.step_definition(spec,1000.).time_step==1.25e-6
             @test first(spec.window_starts)>=1-12/gate["most_positive_located_real_per_s"]
             @test !haskey(net.elements,:G_DC)
-            cache=dut.cache
-            per_unit=cache.C*((2π*im*I-cache.A)\cache.B)+cache.D
-            @test V.physical_y(dut,2π*im)≈per_unit*(1000/380^2)
+            system=lin.system
+            per_unit=system.C*((2π*im*I-system.A)\system.B)+system.D
+            @test V.physical_y(dut,lin,2π*im)≈per_unit*(1000/380^2)
         end
         plan,settings=V.scan_plan(list,spec,"baseline")
         @test P.check_connectivity(plan)===nothing
@@ -994,7 +996,7 @@ end
     spec=merge(original,(frequencies=[1.,75.,1000.],phases=zeros(3),
         window_starts=(0.,2.),simulation_time=4.,injection_time=0.))
     time=collect(0.:spec.sample_step:4.)
-    known=cat((V.physical_y(net.elements[:DUT],ComplexF64(2π*im*f)) for f in spec.frequencies)...;dims=3)
+    known=cat((V.physical_y(net.elements[:DUT],linearize(net.elements[:DUT],list.operating_point.values[:DUT]),ComplexF64(2π*im*f)) for f in spec.frequencies)...;dims=3)
     models=Dict{String,P.PSCADModel}();results=Dict{String,P.PSCADResult}()
     for (j,axis) in enumerate(["baseline";spec.axes])
         plan,settings=V.scan_plan(list,spec,axis)
@@ -1071,12 +1073,14 @@ end
         @test V.scan_record(spec)["power_base_MVA"]==1000.
         # Verify state-space SI scaling against native full three-port Y,
         # including both transformer cross terms and the DC-current factor.
-        B=dut.cache.B./bases.voltage_inputs';C=dut.cache.C.*bases.current_outputs
-        D=dut.cache.D.*bases.current_outputs./bases.voltage_inputs'
+        lin = linearize(dut, point.operating_point[:DUT])
+        system = lin.system
+        B=system.B./bases.voltage_inputs';C=system.C.*bases.current_outputs
+        D=system.D.*bases.current_outputs./bases.voltage_inputs'
         for f in (1.,75.,1000.)
             z=ComplexF64(2π*im*f)
-            y=V.physical_y(dut,z)
-            @test C*((z*I-dut.cache.A)\B)+D≈y rtol=1e-11 atol=1e-12
+            y=V.physical_y(dut,lin,z)
+            @test C*((z*I-system.A)\B)+D≈y rtol=1e-11 atol=1e-12
             k=only(findall(==(f),spec.frequencies))
             if mode==:vdc
                 # Independent full-node KCL with the physical resistor.
@@ -1206,7 +1210,7 @@ end
     @test spec.time_step==0.625e-6 && spec.window_starts==(8.,9.)
     @test V.step_definition(spec,18.0).time_step==0.3125e-6
     for (k,f) in enumerate(spec.frequencies)
-        y=V.physical_y(net.elements[:DUT],ComplexF64(2π*im*f))
+        y=V.physical_y(net.elements[:DUT],linearize(net.elements[:DUT],list.operating_point.values[:DUT]),ComplexF64(2π*im*f))
         g=70/640^2
         # Direct 3-node KCL solve, independent of the Schur reference formula.
         voltage=vcat(-(y[1,1]+g)\y[1:1,2:3],Matrix{ComplexF64}(I,2,2))
@@ -1214,7 +1218,8 @@ end
         @test norm(reference[:,:,k]-y[2:3,2:3])>0
     end
     # Independent unreduced complete descriptor retains the DC algebraic node.
-    e=net.elements[:DUT];el=e.elec;n=size(e.cache.A,1)
+    e=net.elements[:DUT];el=e.elec
+    system=linearize(e,point.operating_point[:DUT]).system;n=size(system.A,1)
     form=P.identify_rlc(net.elements[:Grid];name=:Grid).form
     rotation=real.((inv(V.physical_y(net.elements[:Grid],0.0im)[1:2,1:2])-form.R*I)/form.L)
     ac=Matrix{Float64}(I,2,2)
@@ -1222,9 +1227,9 @@ end
     # conductances do not spoil the generalized eigenvalue backward error.
     zbase=e.bases.v_ac/PowerImpedance.perunit(el, e.bases).iACbase
     dc_conductance_pu=(70/640^2)*e.bases.v_dc/PowerImpedance.perunit(el, e.bases).iDCbase
-    full=[e.cache.A zeros(n,2) e.cache.B;
+    full=[system.A zeros(n,2) system.B;
         zeros(2,n) -form.R/zbase*ac-form.L/zbase*rotation zeros(2,1) ac;
-        e.cache.C vcat(zeros(1,2),ac) e.cache.D+diagm([dc_conductance_pu,0.,0.])]
+        system.C vcat(zeros(1,2),ac) system.D+diagm([dc_conductance_pu,0.,0.])]
     storage=diagm([ones(n);fill(form.L/zbase,2);zeros(3)])
     pencil=schur(full,storage)
     # Algebraic constraints have beta=0 in QZ. Round-off can report a finite
@@ -1319,25 +1324,21 @@ end
         if id == "mmc_gfm_lec_compensated"
             el = net.elements[:DUT]; m = el
             @test !V.interface_step_eligible(m) # existing fixture has positive delay
-            values = m.cache.values
             el = MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
-                CompensatedModulation(), m.elec, m.limits, m.bases, m.powerflow,
-                PowerImpedance.LinearizationCache())
-            linearize(el, values)
+                CompensatedModulation(), m.elec, m.limits, m.bases, m.powerflow)
             net.elements = merge(net.elements, (; DUT = el))
         end
         if id == "tlc_vdc_q"
             el = net.elements[:DUT]; m = el
             replacement = TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
                 m.innerVoltage, m.innerCurrent, NoModulation(), m.limits, m.bases,
-                m.powerflow, PowerImpedance.LinearizationCache())
-            linearize(replacement, m.cache.values)
+                m.powerflow)
             net.elements = merge(net.elements, (; DUT = replacement))
         end
         short = merge(spec, (; frequencies = [18.0, 1000.0]))
-        original = deepcopy(net.elements[:DUT].cache.A)
+        original = repr(net.elements[:DUT])
         realization = V.interface_step_reference(net, short)
-        @test net.elements[:DUT].cache.A == original
+        @test repr(net.elements[:DUT]) == original
         if id == "tlc_pq_freq_support"
             @test realization === nothing # positive 200 us model delay
             continue
@@ -1347,7 +1348,6 @@ end
         delayed = deepcopy(net)
         el = delayed.elements[:DUT]
         replacement = V.one_step_model(el, short.time_step)
-        linearize(replacement, el.cache.values)
         delayed.elements = merge(delayed.elements, (; DUT = replacement))
         rational = cat((V.device_port_y(delayed, ComplexF64(im*2π*f)) for f in short.frequencies)...; dims = 3)
         # At these small steps the independent 3/3 rational evaluation is
@@ -2294,8 +2294,8 @@ end
                 @test net.elements[name].mod.delay.timeDelay==200e-6
             end
             # Preserve every native state, including an injected unstable mode.
-            net.elements[:C1].cache.A[1,:].=0;net.elements[:C1].cache.A[:,1].=0;
-                net.elements[:C1].cache.A[1,1]=10.
+            c.linearizations[:C1].system.A[1,:].=0;c.linearizations[:C1].system.A[:,1].=0;
+                c.linearizations[:C1].system.A[1,1]=10.
             @test maximum(real,V.composed_descriptor(c).poles)>0
             @test V.composed_stability(c)["status"]=="failed"
             continue
@@ -2322,7 +2322,7 @@ end
             for (k,f) in enumerate(spec.frequencies)
                 s=ComplexF64(im*2π*f);e=net.elements[:C1]
                 isolated=(;elements=(;DUT=e))
-                yy=V.interface_step_reference(isolated,merge(spec,(;frequencies=[f])))[:,:,1]
+                yy=V.interface_step_reference(isolated,merge(spec,(;frequencies=[f])); values=c.point[:C1])[:,:,1]
                 sh=V.composed_passive_y(net.elements[:Filter],forms[:Filter],s)[1:2,1:2]
                 gy=V.composed_passive_y(net.elements[:Grid_A],forms[:Grid_A],s)[1:2,1:2]
                 @test discrete["C1_Y"][:,:,k]≈yy
@@ -2487,7 +2487,7 @@ end
                     s=ComplexF64(im*2π*f)
                     if changed
                         isolated=(;elements=(;DUT=e))
-                        independent=V.interface_step_reference(isolated,merge(spec,(;frequencies=[f])))[:,:,1]
+                        independent=V.interface_step_reference(isolated,merge(spec,(;frequencies=[f])); values=c.point[name])[:,:,1]
                         @test functions[name](s)[b.ac_indices,b.ac_indices]≈independent rtol=1e-12
                         @test norm(functions[name](s)-native[name](s))>1e-8
                     else
@@ -2776,7 +2776,7 @@ end
             for z in (1.0+2im,10.0+100im,100.0+1000im)
                 expected=zeros(ComplexF64,6,6)
                 for (name,indices) in ((:C1,[5,1,2]),(:C2,[6,3,4]))
-                    expected[indices,indices]+=V.physical_y(net.elements[name],ComplexF64(z))
+                    expected[indices,indices]+=V.physical_y(net.elements[name],c.linearizations[name],ComplexF64(z))
                 end
                 for (name,indices) in ((:Grid_A,1:2),(:Grid_B,3:4))
                     expected[indices,indices]+=V.physical_y(net.elements[name],
@@ -2827,9 +2827,9 @@ end
             @test gate["descriptor_native_residual"]<1e-10
             for f in (7.,137.,1000.)
                 s=ComplexF64(im*2π*f)
-                cache=net.elements[:C1].cache
-                per_unit=cache.C*((s*I-cache.A)\cache.B)+cache.D
-                @test V.physical_y(net.elements[:C1],s)≈per_unit*(1000/380^2) rtol=1e-13
+                system=c.linearizations[:C1].system
+                per_unit=system.C*((s*I-system.A)\system.B)+system.D
+                @test V.physical_y(net.elements[:C1],c.linearizations[:C1],s)≈per_unit*(1000/380^2) rtol=1e-13
             end
             roots=[-0.197848174398, -0.505043508764, -0.556037275142, -0.556037275142, -0.677090835342, -0.677090835342, -0.99071859314, -1.22745914574, -5.03878595255, -8.83912810113, -8.83912810113, -9.95933156807, -10.3954069054, -10.9519683927, -10.9519683927, -14.0706176343, -14.0706176343, -16.3174413701, -16.3174413701, -19.6875986198, -23.1732754543, -28.2453019593, -29.2722119223, -43.954456081, -43.954456081, -50.0133992244, -147.500439893, -147.500439893, -504.092563463, -504.092563463, -570.663616705, -570.663616705, -629.5652126, -629.5652126, -721.232531646, -721.232531646, -735.140066216, -735.140066216]
             @test sort(gate["poles_real_per_s"];rev=true)≈roots rtol=1e-9

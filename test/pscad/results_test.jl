@@ -496,8 +496,7 @@ end
     e = netlist.elements[index]
     rated = SynchronousMachine(ElectricalSM(), e.model.mech, e.model.avr, e.model.gov,
         e.model.limits, 380.0,
-        BaseValues(S = 2000.0, v_ac = 380.0 * sqrt(2/3), omega = 100π), e.model.powerflow,
-        PowerImpedance.LinearizationCache())
+        BaseValues(S = 2000.0, v_ac = 380.0 * sqrt(2/3), omega = 100π), e.model.powerflow)
     elements = copy(netlist.elements)
     elements[index] = P.NetlistElement(e.name, e.pscad, rated, electricalconnections(rated),
         e.terminals, e.role, e.values)

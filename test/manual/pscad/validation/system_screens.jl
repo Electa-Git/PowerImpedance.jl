@@ -51,7 +51,7 @@ function system_line_seeds(c)
     net=NetworkBuilder.define(elements,topology;options=c.net.options)
     seeds=system_taylor_seeds(c)
     if !any(e isa PowerImpedance.Transformer for (name,e) in pairs(net.elements))
-        lumped=composed_circuit(net,c.devices,c.grids,c.ports)
+        lumped=composed_circuit(net,c.devices,c.grids,c.ports; c.point, c.linearizations)
         append!(seeds,composed_descriptor(merge(lumped,(;dc_references=c.dc_references))).poles)
     end
     return seeds
@@ -104,7 +104,7 @@ function system_stability(c; checkpoint=nothing, analysis_scope="post-line-fix")
     isempty(located) || (gate["most_positive_located_real_per_s"]=real(first(located)[1]))
     checkpoint===nothing || open(io->TOML.print(io,gate;sorted=true),checkpoint,"w")
     open_rhp=sum(count(z->real(z)>1e-6,
-        eigvals(c.net.elements[n].cache.A)) for n in c.devices)
+        eigvals(c.linearizations[n].system.A)) for n in c.devices)
     gate["open_RHP_count"]=open_rhp
     for fs in (exp10.(range(-2,5;length=6001)),exp10.(range(-6,6;length=12001)))
         values=ComplexF64[];margin=Inf
@@ -186,16 +186,17 @@ function system_taylor_seeds(c)
     s0=ComplexF64(1e-3);delta=1e-4
     y0=composed_nodal(c,s0,functions;which=:passive)
     dy=(composed_nodal(c,s0+delta,functions;which=:passive)-composed_nodal(c,s0-delta,functions;which=:passive))/(2delta)
-    nv=length(c.nodes);nx=sum(size(c.net.elements[n].cache.A,1) for n in c.devices)
+    nv=length(c.nodes);nx=sum(size(c.linearizations[n].system.A,1) for n in c.devices)
     K=zeros(ComplexF64,nx+nv,nx+nv);E=copy(K);vi=(nx+1):(nx+nv)
     K[vi,vi]=-(y0-s0*dy);E[vi,vi]=dy;offset=0
     for name in c.devices
         e=c.net.elements[name];b=device_bases(e.elec, e.bases);h=component_incidence(c,
             name)
-        ix=(offset+1):(offset+size(e.cache.A,1));offset=last(ix)
-        K[ix,ix]=e.cache.A;E[ix,ix]=I(length(ix));K[ix,vi]=(e.cache.B./b.voltage_inputs')*h'
-        K[vi,ix]=-h*(e.cache.C.*b.current_outputs)
-        K[vi,vi]-=h*(e.cache.D.*b.current_outputs./b.voltage_inputs')*h'
+        system = c.linearizations[name].system
+        ix=(offset+1):(offset+size(system.A,1));offset=last(ix)
+        K[ix,ix]=system.A;E[ix,ix]=I(length(ix));K[ix,vi]=(system.B./b.voltage_inputs')*h'
+        K[vi,ix]=-h*(system.C.*b.current_outputs)
+        K[vi,vi]-=h*(system.D.*b.current_outputs./b.voltage_inputs')*h'
     end
     q=schur(K,E);finite=abs.(q.β).>100eps()*max(norm(E),1.)
     return q.α[finite]./q.β[finite]
@@ -251,7 +252,7 @@ function system_finite_contour(c,functions,frequencies,roots;shift=1e-6,maxdepth
     increments=[angle(polygon[mod1(j+1,length(polygon))]/polygon[j]) for j in eachindex(polygon)]
     turns=sum(increments)/(2π);net=-round(Int,turns)
     openrhp=sum(count(z->real(z)>shift,
-        eigvals(c.net.elements[n].cache.A)) for n in c.devices)
+        eigvals(c.linearizations[n].system.A)) for n in c.devices)
     peak=argmin([evaluate(f).separation for f in retained])
     return Dict("frequency_count"=>length(retained),"frequency_band_Hz"=>[first(frequencies),last(frequencies)],
         "shift_per_s"=>shift,"nyquist_net"=>net,"closed_RHP_count"=>net+openrhp,"turns"=>turns,

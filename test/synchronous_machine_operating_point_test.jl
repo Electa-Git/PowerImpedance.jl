@@ -26,7 +26,7 @@ end
         m = SynchronousMachine(electrical, MechanicalSM(), AVRSM(v_ref=1.2, K_A=gain),
             GovernorSM(), PI.Limits(), vbase,
             BaseValues(S = sbase, v_ac = vbase * sqrt(2/3), omega = 100π),
-            (p = 0.0, q = 0.0, v = 1.0), PI.LinearizationCache())
+            (p = 0.0, q = 0.0, v = 1.0))
         # Independent fixture starts at the machine terminal, not the bus.
         Vterminal = v * cis(θ)
         Igen = conj(complex(p, q) / Vterminal)
@@ -56,7 +56,8 @@ end
         @test norm(F, Inf) <= DYNAMIC_ATOL
         element = synchronousmachine(S_base = sbase, Vᵃᶜ_base = vbase, elec = electrical,
             avr = m.avr)
-        _, B, _, D = linearize(element, sp)
+        lin = linearize(element, sp)
+        B, D = lin.system.B, lin.system.D
         state = steady_state(element, sp)
         actual = terminal_quantities(m, inputs, state)
         @test actual.Sterminal ≈ complex(p, q) atol=DYNAMIC_ATOL rtol=0
@@ -80,7 +81,7 @@ end
 @testset "Synchronous machine without a complete power-flow point" begin
     m = SynchronousMachine(ElectricalSM(), MechanicalSM(), AVRSM(v_ref=1.03), GovernorSM(),
         PI.Limits(), 220.0, BaseValues(S = 1000.0, v_ac = 220.0 * sqrt(2/3), omega = 100π),
-        (p = 0.0, q = 0.0, v = 1.0), PI.LinearizationCache())
+        (p = 0.0, q = 0.0, v = 1.0))
     sp = (ac = ACPortValues(220sqrt(2/3), 0.12, -50.0, NaN),)
     inputs, pu = PI.pftoinputs(m, sp)
     @test pu === nothing
@@ -98,7 +99,10 @@ end
     @test F == Fraw
     raw = synchronousmachine(avr=m.avr)
     @test raw.avr.v_ref == 1.03
-    @test raw.cache.A === nothing
+    before = repr(raw)
+    configured = withinputs(raw; avr = (v_ref = 1.02,))
+    @test repr(raw) == before
+    @test configured.avr.v_ref == 1.02
 end
 
 include("pscad/fixtures.jl")

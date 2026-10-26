@@ -1,3 +1,5 @@
+using PowerImpedance, Test, LinearAlgebra
+
 function synchronousmachinecircuit()
     # Values used in the SG validation
     voltage = 380 / sqrt(3)
@@ -11,12 +13,11 @@ function synchronousmachinecircuit()
         domain = ACDQ),)
     state = NetworkBuilder.define(elements, topology; options = (; voltageBase = voltage))
     result = compute(PowerFlowProblem(state), ACDCPowerFlow())
-    linearize(state.elements.sg1, result.operating_point[:sg1])
-    return state
+    return state, result.operating_point
 end
 
-function sm_y(machine, s)
-    A, B, C, D = machine.cache.A, machine.cache.B, machine.cache.C, machine.cache.D
+function sm_y(system, s)
+    A, B, C, D = system.A, system.B, system.C, system.D
     return C * ((s * I - A) \ B) + D
 end
 
@@ -64,20 +65,21 @@ end
 
 @testset "Synchronous machine" begin
     ω, Y_pscad = SM_pscad_data()
-    net = synchronousmachinecircuit()
+    net, point = synchronousmachinecircuit()
+    system = linearize(net.elements.sg1, point[:sg1]).system
     ## Get admittance at same freq points
     s_vec = ω .* im
     adm_ac = 0 .* Y_pscad
     Ybase = 1000/380^2
     for (i, s) in enumerate(s_vec)
-        adm_ac[i] = Ybase*sm_y(net.elements[:sg1], s)
+        adm_ac[i] = Ybase*sm_y(system, s)
     end
 
     @test isapprox(adm_ac, Y_pscad, rtol = 9e-3)
 end
 
 @testset "Synchronous machine network admittance scaling" begin
-    net = synchronousmachinecircuit()
+    net, point = synchronousmachinecircuit()
     machine = net.elements[:sg1]
     state = NetworkBuilder.define(
         (sg1 = machine, grid = net.elements[:g2],
@@ -86,12 +88,12 @@ end
             NetworkBuilder.Bus(:bus_; ports = ((:sg1, :ac), (:grid, :ac), (:load, :side1)),
                 domain = ACDQ),
             NetworkBuilder.Bus(:gnd; ports = ((:load, :side2),), domain = ACDQ)))
-    point = OperatingPoint(Dict(:sg1 => machine.cache.values))
+    system = linearize(machine, point[:sg1]).system
     model = NetworkBuilder.NetworkModel(state, point)
     frequencies = 2π * im .* [1.0, 10.0, 100.0]
     admittance = NetworkBuilder.get_y(model, :sg1, frequencies)
     Ybase = 1000 / 380^2
     for (index, s) in enumerate(frequencies)
-        @test admittance[:, :, index] ≈ Ybase * sm_y(machine, s) rtol = 1e-10
+        @test admittance[:, :, index] ≈ Ybase * sm_y(system, s) rtol = 1e-10
     end
 end

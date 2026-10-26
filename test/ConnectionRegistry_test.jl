@@ -247,7 +247,8 @@ end
             p_ac = 120.0 / b.S, q_ac = 30.0 / b.S, v_ac = 210.0 / b.v_ac,
             p_dc = -121.0 / b.S, v_dc = 630.0 / b.v_dc)
         @test limits(model) == limits(converter)
-        @test model.cache !== original.cache
+        @test model.elec === original.elec
+        @test inputvalues(model) != inputvalues(original)
         @test state.topology.connections.port == [:dc, :ac, :ac]
     end
 

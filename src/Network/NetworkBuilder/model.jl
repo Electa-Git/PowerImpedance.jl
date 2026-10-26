@@ -34,7 +34,8 @@ fwrap(f, ::Type{T}) where {T <: Number} = AdmFunc{T}(f)
 const FUNDAMENTAL_ANGULAR_FREQUENCY = 100π
 
 function build(model::P.AbstractStateSpace, values::NamedTuple, frame::Symbol)
-    A, B, C, D = P.linearize(model, values)
+    lin = P.linearize(model, values)
+    A, B, C, D = lin.system.A, lin.system.B, lin.system.C, lin.system.D
     return P.freqresp_cache(A, B, C, D; scale = P.SI_scale(model))
 end
 

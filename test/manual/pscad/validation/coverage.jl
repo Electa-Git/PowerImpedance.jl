@@ -5,10 +5,8 @@ function port_probe(list, element, port)
 end
 
 function nodal_admittance(state, nodes, s; elements = keys(state.elements))
-    values = Dict{Symbol, NamedTuple}(name => model.cache.values
-        for (name, model) in pairs(state.elements)
-        if model isa PowerImpedance.AbstractStateSpace)
-    point = OperatingPoint(values)
+    point = any(m -> m isa PowerImpedance.AbstractStateSpace, values(state.elements)) ?
+        compute(PowerFlowProblem(state), ACDCPowerFlow()).operating_point : OperatingPoint()
     model = NetworkBuilder.NetworkModel(state, point)
     indices = [model.indices.elements[name] for name in elements
         if !PowerImpedance.is_source(state.elements[name])]
@@ -99,7 +97,10 @@ function scan_reference(net, list, spec)
     if spec.id == "induction_machine"
         return induction_machine_reference(net, list, spec.frequencies)
     elseif fixture(spec.id).category == :device
-        return cat((device_port_y(net, ComplexF64(im*2π*f))
+        dut = net.elements[:DUT]
+        point = list.operating_point.values[:DUT]
+        lin = linearize(dut, point)
+        return cat((device_port_y(net, ComplexF64(im*2π*f); linearization = lin)
             for f in spec.frequencies)...; dims=3)
     elseif spec.id == "passive_ac_rlc"
         return cat(
@@ -293,8 +294,8 @@ function device_bases(e::PowerImpedance.ElectricalSM, b::PowerImpedance.BaseValu
         ac_port=:ac, ac_indices=1:2)
 end
 
-function physical_y(model::PowerImpedance.AbstractStateSpace, s)
-    c = model.cache
+function physical_y(model::PowerImpedance.AbstractStateSpace, lin::StateSpaceLinearization, s)
+    c = lin.system
     return (c.C * ((s*I-c.A) \ c.B) + c.D) .* PowerImpedance.SI_scale(model)
 end
 
@@ -343,8 +344,9 @@ end
 # Exact native nodal Schur reduction of the converter plus passive DC load.
 # The zero-voltage remote reference is ground; the AC Thevenin is excluded
 # because the meter measures DUT current alone (the load has no AC terminal).
-function device_port_y(net, s)
-    y = physical_y(net.elements[:DUT],s)
+function device_port_y(net, s; linearization = linearize(net.elements[:DUT],
+        compute(PowerFlowProblem(net), ACDCPowerFlow()).operating_point[:DUT]))
+    y = physical_y(net.elements[:DUT], linearization, s)
     indices=device_bases(net.elements[:DUT].elec, net.elements[:DUT].bases).ac_indices
     haskey(net.elements,:DC_load) || return y[indices,indices]
     g = physical_y(net.elements[:DC_load],s)[1,1]

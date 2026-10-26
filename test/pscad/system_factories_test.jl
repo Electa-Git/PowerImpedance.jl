@@ -76,7 +76,8 @@
                     end
                 end
             end
-            @test all(all(isfinite,e.cache.A) for e in values(net.elements) if
+            @test all(all(isfinite, linearize(e, point.operating_point[name]).system.A)
+                for (name, e) in pairs(net.elements) if
                 e isa Union{PowerImpedance.MMC,PowerImpedance.TLC})
         end
     end

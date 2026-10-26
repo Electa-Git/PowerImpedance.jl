@@ -1,6 +1,9 @@
 # Composed circuits retain native device Jacobians and native passive models.
 # Port coordinates lead the nodal matrix; ideal-source nodes are clamped.
-function composed_circuit(net, devices, grids, ports)
+function composed_circuit(net, devices, grids, ports;
+        point = compute(PowerFlowProblem(net), ACDCPowerFlow()).operating_point,
+        linearizations = Dict(name => linearize(net.elements[name], point[name])
+            for name in devices))
     clamped = Set(clamped_nodes(net))
     nodes = reduce(vcat, [port_nets(net, name, port) for (name, port) in ports])
     length(unique(nodes)) == length(nodes) || error("duplicate composed port")
@@ -17,7 +20,7 @@ function composed_circuit(net, devices, grids, ports)
         node in nodes && (dc_references[node]=2P.DC_REFERENCE_RESISTANCE)
     end
     return (; net, devices=collect(devices), grids=collect(grids), nodes,
-        ports=collect(ports),dc_references)
+        ports=collect(ports),dc_references,point,linearizations)
 end
 
 function composed_incidence(c, nodes)
@@ -35,8 +38,8 @@ component_incidence(c, name) = composed_incidence(c, component_nets(c.net, name)
 # Positive-delay devices retain their native model, including carrier corrections.
 function composed_device_functions(c; time_step = nothing)
     return Dict(name => time_step === nothing ?
-        (s -> physical_y(c.net.elements[name], ComplexF64(s))) :
-        one_step_full_y(c.net.elements[name], time_step) for name in c.devices)
+        (s -> physical_y(c.net.elements[name], c.linearizations[name], ComplexF64(s))) :
+        one_step_full_y(c.net.elements[name], c.point[name], time_step) for name in c.devices)
 end
 
 function composed_nodal(c, s, functions; which = :full, forms = nothing)
@@ -153,7 +156,7 @@ function composed_descriptor(c)
         rot = m == 2 ? [0. 2π*50; -2π*50 0.] : zeros(m,m)
         push!(blocks,(;name,form,m,h,rot))
     end
-    nx = sum(size(c.net.elements[n].cache.A,1) for n in c.devices)
+    nx = sum(size(c.linearizations[n].system.A,1) for n in c.devices)
     ns = sum(b.m*((b.form.L!==nothing)+(b.form.C!==nothing)) for b in blocks;init=0)
     n = nx+ns+nv; vi = (n-nv+1):n
     K = zeros(ComplexF64,n,n); E = similar(K); fill!(E,0)
@@ -161,11 +164,12 @@ function composed_descriptor(c)
     for name in c.devices
         e=c.net.elements[name];b=device_bases(e.elec, e.bases);h=component_incidence(c,
             name)
-        ix=(offset+1):(offset+size(e.cache.A,1));offset=last(ix)
-        E[ix,ix]=I(length(ix));K[ix,ix]=e.cache.A
-        K[ix,vi]=(e.cache.B./b.voltage_inputs')*h'
-        K[vi,ix]=-h*(e.cache.C.*b.current_outputs)
-        K[vi,vi]-=h*(e.cache.D.*b.current_outputs./b.voltage_inputs')*h'
+        system = c.linearizations[name].system
+        ix=(offset+1):(offset+size(system.A,1));offset=last(ix)
+        E[ix,ix]=I(length(ix));K[ix,ix]=system.A
+        K[ix,vi]=(system.B./b.voltage_inputs')*h'
+        K[vi,ix]=-h*(system.C.*b.current_outputs)
+        K[vi,vi]-=h*(system.D.*b.current_outputs./b.voltage_inputs')*h'
     end
     for b in blocks
         f=b.form;m=b.m;h=b.h;rot=b.rot
@@ -226,7 +230,7 @@ function composed_stability(c; frequencies=exp10.(range(-2,5;length=6001)))
     increments=[angle(contour[mod1(j+1,length(contour))]/contour[j]) for j in eachindex(contour)]
     turns=sum(increments)/(2π);net=-round(Int,turns)
     open_rhp=sum(count(z->real(z)>1e-6,
-        eigvals(c.net.elements[n].cache.A)) for n in c.devices)
+        eigvals(c.linearizations[n].system.A)) for n in c.devices)
     stable=!isempty(pen.poles) && maximum(real,pen.poles)<-1e-7 && net+open_rhp==0 && abs(turns+net)<1e-6 && residual<=1e-6
     return Dict("method"=>"complete lumped KCL descriptor + native finite contour",
         "status"=>stable ? "passed" : "failed","frequency_count"=>length(frequencies),
@@ -357,7 +361,7 @@ function composed_distributed_stability(c)
     unresolved=count(x->!(x[2]<1e-6),located)
     filter!(x->x[2]<1e-6,located);sort!(located;by=x->real(x[1]),rev=true)
     open_rhp=sum(count(z->real(z)>1e-6,
-        eigvals(c.net.elements[n].cache.A)) for n in c.devices)
+        eigvals(c.linearizations[n].system.A)) for n in c.devices)
     contours=Dict{String,Any}[]
     for fs in (exp10.(range(-2,5;length=6001)),exp10.(range(-6,6;length=12001)))
         values=ComplexF64[];margin=Inf

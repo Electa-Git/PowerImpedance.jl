@@ -386,7 +386,7 @@ Read solved terminal values from the supplied power-flow result.
 # Notes
 
 Construction preserves model inputs, topology and the supplied power-flow data.
-An induction-machine equilibrium can update its model cache. A solved voltage
+An induction-machine equilibrium supplies its initial speed. A solved voltage
 base can differ from the declared network base.
 """
 function netlist(state::PowerImpedance.NetworkBuilder.NetworkState,

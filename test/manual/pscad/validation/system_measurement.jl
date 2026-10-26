@@ -34,6 +34,8 @@ struct CompleteSystem
     ports::Vector{Tuple{Symbol,Symbol}}
     dc_references::Dict{Symbol,Float64}
     measurands::Vector{SystemMeasurand}
+    point::OperatingPoint
+    linearizations::Dict{Symbol,StateSpaceLinearization}
 end
 
 system_ports(id)=id=="ieee14" ? [(:MMC1,:ac),(:MMC4,:ac)] : [(:c1,:ac),(:c2,:ac)]
@@ -97,7 +99,7 @@ function complete_system(id,net)
                 node)
         end
     end
-    return CompleteSystem(net,devices,grids,c.nodes,ports,c.dc_references,outputs)
+    return CompleteSystem(net,devices,grids,c.nodes,ports,c.dc_references,outputs,c.point,c.linearizations)
 end
 
 composed_targets(c::CompleteSystem)=[m.name for m in c.measurands]

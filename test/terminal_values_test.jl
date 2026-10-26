@@ -18,11 +18,14 @@ using .ParityFixtures: PSCADFixtures
     @test PI.TerminalValuesPU() === PI.TerminalValuesPU(0.0, 0.0, 0.0, 1.0, 0.0, 1.0)
     @test fieldtypes(PI.TerminalValuesPU) == ntuple(_ -> Float64, 6)
     @test all(name -> name ∉ names(PI),
-        (:current, :TerminalValuesPU, :LinearizationCache))
+        (:current, :TerminalValuesPU))
     @test PI.PSCAD.steady_state === steady_state
 end
 
-empty_cache(cache) = all(f -> getfield(cache, f) === nothing, fieldnames(typeof(cache)))
+model_fields(value::Union{Number, Symbol, AbstractString}) = value
+model_fields(value::AbstractArray) = deepcopy(value)
+model_fields(model) = (typeof(model), map(model_fields,
+    ntuple(i -> getfield(model, i), fieldcount(typeof(model)))))
 
 @testset "Solved port powers and frozen physical inputs" begin
     path = joinpath(@__DIR__, "reference/v2/numeric.csv")
@@ -69,7 +72,7 @@ empty_cache(cache) = all(f -> getfield(cache, f) === nothing, fieldnames(typeof(
     end
 end
 
-@testset "State-space terminal values and retained state" begin
+@testset "State-space linearization purity and isolation" begin
     for (factory, name) in ((PSCADFixtures.mmc_pq_network, :DUT),
             (PSCADFixtures.tlc_case1_network, :DUT),
             (PSCADFixtures.sm_network, :sg1), (PSCADFixtures.im_network, :im1))
@@ -78,53 +81,100 @@ end
         model = network.elements[name]
         values = solved.operating_point[name]
         @testset "$(nameof(typeof(model)))" begin
+            before = model_fields(model)
+            @test !ismutabletype(typeof(model))
             direct = linearize(model, values)
-            @test all(pair -> pair[1] === pair[2], zip(direct,
-                (model.cache.A, model.cache.B, model.cache.C, model.cache.D)))
+            @test isequal(model_fields(model), before)
+            @test !ismutabletype(StateSpaceLinearization)
+            @test fieldnames(StateSpaceLinearization) == (:state, :system)
+            @test fieldtypes(StateSpaceLinearization) == (Vector{Float64},
+                PI.ControlSystemsBase.StateSpace{PI.ControlSystemsBase.Continuous, Float64})
+            @test direct isa StateSpaceLinearization
+            @test length(direct.state) == length(PI.statenames(model))
+            @test size(direct.system.A) == (length(direct.state), length(direct.state))
             state = steady_state(model, values)
+            @test reinterpret(UInt64, state) == reinterpret(UInt64, direct.state)
+            @test state !== direct.state
             ac = values.ac
             equal_values = merge(values, (; ac = ACPortValues(ac.v, ac.theta, ac.p, ac.q)))
             @test isequal(equal_values, values)
-            @test steady_state(model, equal_values) === state
-            @test model.cache.state === state
+            @test isequal(steady_state(model, equal_values), state)
+            @test isequal(model_fields(model), before)
 
             for configured in (withinputs(model), component(model))
-                @test configured.cache !== model.cache
-                @test empty_cache(configured.cache)
+                @test isequal(model_fields(configured), before)
                 @test configured.elec === model.elec
             end
             changed = merge(values, (; ac = ACPortValues(ac.v, ac.theta + 0.001,
                 ac.p, ac.q)))
-            linearize(model, changed)
-            changed_state = steady_state(model, changed)
-            @test changed_state !== state
-            @test isequal(model.cache.values, changed)
-            @test steady_state(model, changed) === changed_state
-            @test steady_state(model, values) !== changed_state
-            @test isequal(model.cache.values, values)
-            previous = model.cache.state
-            linearize(model, values)
-            @test model.cache.state !== previous
+            changed_lin = linearize(model, changed)
+            @test isequal(steady_state(model, changed), changed_lin.state)
+            @test isequal(steady_state(model, values), state)
+            @test isequal(model_fields(model), before)
+            repeated = linearize(model, values)
+            @test isequal(repeated.state, direct.state)
+            @test repeated.state !== direct.state
+            for field in (:A, :B, :C, :D)
+                @test getfield(repeated.system, field) == getfield(direct.system, field)
+                @test getfield(repeated.system, field) !== getfield(direct.system, field)
+            end
+            direct.state[1] = -123.0
+            direct.system.A[1, 1] = -456.0
+            @test isequal(steady_state(model, values), state)
+            @test linearize(model, values).system.A == repeated.system.A
+            @test isequal(model_fields(model), before)
         end
     end
 end
 
-@testset "Configured cache ownership" begin
+@testset "Configured model isolation" begin
     model = synchronousmachine()
-    model.cache.values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
+    before = model_fields(model)
     configured = withinputs(model; avr = (v_ref = 1.02,))
     @test configured.avr.v_ref === 1.02
     @test model.avr.v_ref === 1.01
-    @test configured.cache !== model.cache
-    @test empty_cache(configured.cache)
+    @test isequal(model_fields(model), before)
+    @test configured.elec === model.elec
 
     configuration = first(configurations(tlc(Grid)))
     first_model = materialize(configuration)
     second_model = materialize(configuration)
-    @test first_model.cache !== second_model.cache
-    @test empty_cache(first_model.cache)
-    @test empty_cache(second_model.cache)
+    @test isequal(model_fields(first_model), model_fields(second_model))
+end
 
+@testset "Shared state-space models use each component's operating point" begin
+    for factory in (PSCADFixtures.mmc_pq_network, PSCADFixtures.tlc_case1_network,
+            PSCADFixtures.sm_network, PSCADFixtures.im_network)
+        original = factory()
+        name = first(n for (n, m) in pairs(original.elements) if m isa PI.AbstractStateSpace)
+        model = original.elements[name]
+        before = model_fields(model)
+        solved = compute(PowerFlowProblem(original), ACDCPowerFlow())
+        first_point = solved.operating_point[name]
+        ac = first_point.ac
+        second_point = merge(first_point, (; ac = ACPortValues(ac.v, ac.theta + 0.17,
+            ac.p, ac.q)))
+        points = OperatingPoint(Dict(:first => first_point, :second => second_point))
+        ports = keys(electricalconnections(model))
+        topology = Tuple(PI.NetworkBuilder.Bus(Symbol(name, "_", port);
+            ports = ((name, port),), domain = port == :ac ? ACDQ : DC_CM)
+            for name in (:first, :second) for port in ports)
+        network = PI.NetworkBuilder.define((; first = model, second = model), topology)
+        @test network.elements.first === network.elements.second === model
+        frequencies = ComplexF64.(2π * im .* [13.0, 155.0])
+        expected = Dict{Symbol, Array{ComplexF64, 3}}()
+        for n in (:first, :second)
+            sys = linearize(model, points[n]).system
+            expected[n] = cat(((sys.C * ((s * PI.I - sys.A) \ sys.B) + sys.D) .*
+                PI.SI_scale(model) for s in frequencies)...; dims = 3)
+        end
+        @test !isapprox(expected[:first], expected[:second]; rtol = 1e-6)
+        built = PI.NetworkBuilder.NetworkModel(network, points)
+        for n in (:first, :second, :first)
+            @test PI.NetworkBuilder.get_y(built, n, frequencies) ≈ expected[n] rtol = 1e-10
+        end
+        @test isequal(model_fields(model), before)
+    end
 end
 
 @testset "Unknown synchronous-machine reactive power" begin

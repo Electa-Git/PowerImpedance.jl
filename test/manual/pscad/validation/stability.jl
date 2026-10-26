@@ -65,10 +65,12 @@ function stability_gate(net, entry)
     inductance = something(form.L, 0.0)
     rotation = iszero(inductance) ? zeros(2, 2) :
         real.((inv(grid_y(0.0im))-form.R*I)/inductance)
-    A=dut.cache.A
-    B=dut.cache.B ./ bases.voltage_inputs'
-    C=dut.cache.C .* bases.current_outputs
-    D=dut.cache.D .* bases.current_outputs ./ bases.voltage_inputs'
+    point = compute(PowerFlowProblem(net), ACDCPowerFlow()).operating_point
+    system = linearize(dut, point[:DUT]).system
+    A=system.A
+    B=system.B ./ bases.voltage_inputs'
+    C=system.C .* bases.current_outputs
+    D=system.D .* bases.current_outputs ./ bases.voltage_inputs'
     if haskey(net.elements,:DC_load)
         # Only the algebraic DC node is eliminated, with converter states retained. KCL:
         # (Ddc + 1/R)*vdc = -Cdc*x - Ddc,ac*vac. Aeff retains all coupled DC-control

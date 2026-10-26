@@ -43,12 +43,13 @@ const P = PowerImpedance.PSCAD
     @test first(spec.window_starts) - spec.injection_time >=
           spec.settling["decay_times"] / spec.settling["decay_per_s"]
     # A resistive grid has no storage. Eliminating terminal voltage gives this ODE.
-    B = dut.cache.B ./ bases.voltage_inputs'
-    C = dut.cache.C .* bases.current_outputs
-    D = dut.cache.D .* bases.current_outputs ./ bases.voltage_inputs'
+    system = linearize(dut, list.operating_point.values[:DUT]).system
+    B = system.B ./ bases.voltage_inputs'
+    C = system.C .* bases.current_outputs
+    D = system.D .* bases.current_outputs ./ bases.voltage_inputs'
     resistance = P.identify_rlc(net.elements[:Grid]).form.R
     @test resistance == 0.01
-    closed = dut.cache.A - B * ((I + resistance * D) \ (resistance * C))
+    closed = system.A - B * ((I + resistance * D) \ (resistance * C))
     roots = eigvals(closed)
     screen = spec.machine_stability
     @test screen["status"] == "passed" && screen["nyquist_closed_RHP_count"] == 0
@@ -62,7 +63,7 @@ const P = PowerImpedance.PSCAD
     @test reference ≈ expected rtol = 1e-9 atol = 1e-12
     for (k, f) in enumerate(spec.frequencies)
         @test reference[:, :,
-            k] ≈ C * ((2π * im * f * I - dut.cache.A) \ B) + D rtol = 1e-10
+            k] ≈ C * ((2π * im * f * I - system.A) \ B) + D rtol = 1e-10
     end
     for f in (0.5, 1.5, 49.0, 1000.0)
         finer = V.step_definition(spec, f)

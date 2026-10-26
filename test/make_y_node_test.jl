@@ -718,8 +718,8 @@ Ynode2 = NetworkBuilder.make_y(network_model, node_elements, s, manual_indices)
 permutation = [findfirst(==(name), nodelist_node) for name in nodelist_manual]
 Ynode1 = Ynode_auto[permutation, permutation, :]
 
-function ieee14_y(model, s)
-    A, B, C, D = model.cache.A, model.cache.B, model.cache.C, model.cache.D
+function ieee14_y(model, system, s)
+    A, B, C, D = system.A, system.B, system.C, system.D
     Y = C * ((s * I - A) \ B) + D
     b = bases(model)
     if model isa MMC
@@ -735,6 +735,11 @@ function ieee14_y(model, s)
     return Y
 end
 
+ieee14_point = powerflow.operating_point
+ieee14_systems = Dict(name => linearize(model, ieee14_point[name]).system
+    for (name, model) in pairs(IEEE14bus.elements)
+    if model isa PowerImpedance.AbstractStateSpace)
+
 # Manual calculation of the Y node admittance matrix
 # Applying the node ordering from above :)
 Ynode_manual=[]
@@ -743,19 +748,19 @@ for i in eachindex(omegas)
     Ynode_manual_f=zeros(Complex{Float64}, 20, 20)
 
     # MMCs
-    MMC1_adm=ieee14_y(IEEE14bus.elements[:MMC1], omegas[i]*im)
-    MMC2_adm=ieee14_y(IEEE14bus.elements[:MMC2], omegas[i]*im)
-    MMC3_adm=ieee14_y(IEEE14bus.elements[:MMC3], omegas[i]*im)
-    MMC4_adm=ieee14_y(IEEE14bus.elements[:MMC4], omegas[i]*im)
+    MMC1_adm=ieee14_y(IEEE14bus.elements[:MMC1], ieee14_systems[:MMC1], omegas[i]*im)
+    MMC2_adm=ieee14_y(IEEE14bus.elements[:MMC2], ieee14_systems[:MMC2], omegas[i]*im)
+    MMC3_adm=ieee14_y(IEEE14bus.elements[:MMC3], ieee14_systems[:MMC3], omegas[i]*im)
+    MMC4_adm=ieee14_y(IEEE14bus.elements[:MMC4], ieee14_systems[:MMC4], omegas[i]*im)
     MMC1_adm=vcat(MMC1_adm[1:1, 1:3], MMC1_adm[2:3, 1:3])
     MMC2_adm=vcat(MMC2_adm[1:1, 1:3], MMC2_adm[2:3, 1:3])
     MMC3_adm=vcat(MMC3_adm[1:1, 1:3], MMC3_adm[2:3, 1:3])
     MMC4_adm=vcat(MMC4_adm[1:1, 1:3], MMC4_adm[2:3, 1:3])
 
     # TLCs
-    TLC1_adm=(ieee14_y(IEEE14bus.elements[:WF1], omegas[i]*im))[2:3, 2:3]
-    TLC2_adm=(ieee14_y(IEEE14bus.elements[:WF2], omegas[i]*im))[2:3, 2:3]
-    TLC3_adm=(ieee14_y(IEEE14bus.elements[:WF3], omegas[i]*im))[2:3, 2:3]
+    TLC1_adm=(ieee14_y(IEEE14bus.elements[:WF1], ieee14_systems[:WF1], omegas[i]*im))[2:3, 2:3]
+    TLC2_adm=(ieee14_y(IEEE14bus.elements[:WF2], ieee14_systems[:WF2], omegas[i]*im))[2:3, 2:3]
+    TLC3_adm=(ieee14_y(IEEE14bus.elements[:WF3], ieee14_systems[:WF3], omegas[i]*im))[2:3, 2:3]
 
     # Sources
     SRC1=NetworkBuilder.admittance(IEEE14bus.elements[:Zg1], omegas[i]*im, :dq)[1:2, 1:2]

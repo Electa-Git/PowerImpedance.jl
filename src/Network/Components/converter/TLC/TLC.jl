@@ -66,8 +66,6 @@ plant. `state_space!` evaluates the blocks in this dependency order.
     bases::BaseValues
     "Power-flow setpoints on converter bases \\[dimensionless\\]."
     powerflow::NamedTuple
-    "Retained terminal values, converged state and linearization matrices."
-    cache::LinearizationCache = LinearizationCache()
 end
 
 statenames(c::TLC) = (
@@ -432,9 +430,9 @@ Set control references and power-flow setpoints with `component` or `withinputs`
 References and setpoints use the converter bases.
 
 The selected synchronization and outer-control blocks determine the converter's
-AC and DC power-flow modes. `linearize` solves the equilibrium and populates
-the linearization matrices at a supplied operating point.
-Frequency-domain evaluation then uses those stored matrices.
+AC and DC power-flow modes. `linearize` returns the equilibrium and electrical
+system at a supplied operating point. Frequency-domain evaluation uses the system's
+matrices.
 
 # Examples
 
@@ -573,11 +571,7 @@ bases(model::TLC) = model.bases
 
 limits(model::TLC) = model.limits
 
-function _withinputs(model::TLC, declarations::NamedTuple, changes, path)
-    configured = invoke(_withinputs, Tuple{Any, NamedTuple, Any, Any},
-        model, declarations, changes, path)
-    return Parameters.reconstruct(configured; cache = LinearizationCache())
-end
+
 
 
 pmtype(::TLC, rows) = "convdc"

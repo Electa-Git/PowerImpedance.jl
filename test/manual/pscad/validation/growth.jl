@@ -161,7 +161,8 @@ function system_polarized_burst_graph(spec)
     return graph,outputs[1],outputs[2],clock
 end
 
-function system_exact_modulation_y(e)
+function system_exact_modulation_y(e, linearization)
+    system = linearization.system
     m=e;names=PowerImpedance.statenames(m)
     delayed=Set(PowerImpedance.statenames(m.modulation))
     d=findall(in(delayed),collect(names));r=setdiff(1:length(names),d)
@@ -170,10 +171,10 @@ function system_exact_modulation_y(e)
     b=device_bases(m.elec, m.bases);n=length(r)
     function response(s)
         g=only(scalar.C*((s*I-scalar.A)\scalar.B)+scalar.D)
-        feedback=vcat(e.cache.A[r,d],e.cache.C[:,d])*((s*I-e.cache.A[d,
-            d])\hcat(e.cache.A[d,r],e.cache.B[d,:]))
-        z=[e.cache.A[r,r] e.cache.B[r,:];e.cache.C[:,
-            r] e.cache.D]+feedback*((exp(-s*tau)+1)/(g+1))
+        feedback=vcat(system.A[r,d],system.C[:,d])*((s*I-system.A[d,
+            d])\hcat(system.A[d,r],system.B[d,:]))
+        z=[system.A[r,r] system.B[r,:];system.C[:,
+            r] system.D]+feedback*((exp(-s*tau)+1)/(g+1))
         y=z[n+1:end,1:n]*((s*I-z[1:n,1:n])\z[1:n,n+1:end])+z[n+1:end,n+1:end]
         return y.*b.current_outputs./b.voltage_inputs'
     end
@@ -184,8 +185,8 @@ function system_growth_sensitivity(c,modes)
     functions=composed_device_functions(c)
     list=fixture_netlist(c.net,nothing)
     dc=Set(node for bus in list.buses if bus.kind==:dc for node in bus.nets)
-    early=CompleteSystem(c.net,c.devices,c.grids,filter(!in(dc),c.nodes),c.ports,Dict{Symbol,Float64}(),c.measurands)
-    exact=Dict(n=>system_exact_modulation_y(c.net.elements[n]) for n in c.devices)
+    early=CompleteSystem(c.net,c.devices,c.grids,filter(!in(dc),c.nodes),c.ports,Dict{Symbol,Float64}(),c.measurands,c.point,c.linearizations)
+    exact=Dict(n=>system_exact_modulation_y(c.net.elements[n], c.linearizations[n]) for n in c.devices)
     discrete=any(interface_step_eligible(c.net.elements[n]) for n in c.devices)
     main_functions=discrete ? composed_device_functions(c;time_step=GROWTH_STEPS.main) : functions
     half_functions=discrete ? composed_device_functions(c;time_step=GROWTH_STEPS.half) : functions

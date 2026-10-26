@@ -74,9 +74,10 @@ is calculated before the nonlinear models are linearized. A network of linear
 models uses an empty operating point for linearization alone.
 
 For one state-space model, `linearize(model, values)` takes a NamedTuple keyed
-by port and computes `A, B, C, D`. `steady_state(model, values)` returns the
-converged state, reusing it when cached port values compare equal with `isequal`.
-A configured copy made with `withinputs` has a fresh cache.
+by port and returns a `StateSpaceLinearization` with equilibrium `state` and
+continuous-time `system`. Access the matrices as `lin.system.A`, `.B`, `.C` and `.D`.
+`steady_state(model, values)` computes the same equilibrium without forming
+the electrical system. Each call computes a new result and leaves the model unchanged.
 
 ## References and power-flow setpoints
 

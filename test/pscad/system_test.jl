@@ -57,7 +57,7 @@ end
                 for (row,node) in enumerate(nodes)
                     j=findfirst(==(node),c.nodes);j===nothing || (local_voltage[row,:]=voltage[j,:])
                 end
-                current=V.physical_y(e,ComplexF64(2π*im*f))*local_voltage
+                current=V.physical_y(e,c.linearizations[name],ComplexF64(2π*im*f))*local_voltage
                 @test refs["AC_I_"*string(name)][:,:,k] ≈ current[2:3,:] rtol=1e-9
                 @test refs["DC_I_"*string(name)][:,:,k] ≈ current[1:1,:] rtol=1e-9
             end

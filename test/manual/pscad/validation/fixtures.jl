@@ -357,7 +357,6 @@ end
 # ground gives the same circuit, converter solved point and resistor terminal-1 power,
 # with unchanged components and PSCAD fields.
 function fixture_netlist(state, point = compute(PowerFlowProblem(state), ACDCPowerFlow()))
-    point === nothing || NetworkBuilder.NetworkModel(state, point.operating_point)
     list = P.netlist(state, point)
     haskey(state.elements, :DC_load) || return list
     inputvalues(state.elements.G_DC).v == 0.0 ||

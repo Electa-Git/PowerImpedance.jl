@@ -769,9 +769,9 @@ Use 1 us and verify refinement when extending this case.
 ### Equilibrium initialization
 
 The exporter obtains the converged vector through `steady_state(model, values)`
-and evaluates the existing state-space blocks. Equal cached per-port values
-reuse the converged vector. A missing or different operating point calls
-`linearize` to solve and store it. The returned vector is the cached object.
+and evaluates the existing state-space blocks. Each export computes one equilibrium
+per state-space component from its solved per-port values. This solve leaves the
+model unchanged and omits the electrical linearization.
 The table gives TLC state mappings. MMC control blocks use the same projection
 of solved outputs, together with the arm-capacitor reconstruction above.
 

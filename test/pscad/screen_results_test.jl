@@ -211,7 +211,9 @@ end
         ACDCPowerFlow());list=V.fixture_netlist(net,point)
     for root in (0.,1.)
         MachineScreen.root[]=root
-        spec,reference=@test_logs (:warn,r"synchronous_machine machine stability result: failed") MachineScreen.device_scan_definition(net,list;id="synchronous_machine")
+        spec, reference = @test_logs (:warn, r"synchronous_machine machine stability result: failed") (:info, "Starting to solve for steady-state solution") (:info, "SynchronousMachine steady-state solution found!") begin
+            MachineScreen.device_scan_definition(net, list; id = "synchronous_machine")
+        end
         record=V.scan_record(spec)
         @test spec.machine_stability["status"]=="failed"
         @test spec.machine_stability["most_positive_located_real_per_s"]==root
