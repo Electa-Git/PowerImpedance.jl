@@ -1,0 +1,11 @@
+extends: ai-tells.ColonUsage
+# Inline code is masked with asterisks. A code label can introduce a standalone
+# description, including typed field labels. Check later colons
+# in the same description normally.
+tokens:
+  - '(?<!\*)(?<!:[^ ]+?):\s(?!I\b)[A-Z][a-z]*\b'
+exceptions:
+  # Proper names retain their original capitalization.
+  - 'Reference:\s+(?:G\.\s+Ciuprina|L\.\s+M\.\s+Wedepohl)'
+  # Exact published title, including the subtitle capitalization.
+  - 'Power-Transmission\s+Systems:\s+System-Model\s+and\s+Wave-Propagation\s+Characteristics'

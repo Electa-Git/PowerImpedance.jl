@@ -119,7 +119,7 @@ Try the fewest components first, preferring series at equal component count.
   points from 0.1 to 1e5.
 - `rtol`: Maximum relative impedance error at every sample. Default: `1e-6`.
 - `atol`: Impedance floor in the error denominator \\[Ω\\]. Default: `1e-12`.
-- `name`: Element designator for fit errors. Default: `:unnamed`.
+- `name`: Component designator for fit errors. Default: `:unnamed`.
 
 # Returns
 
@@ -184,21 +184,18 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Identify impedance in its original conductor coordinates. Read
-`element_model.value` directly because a dq-transformed ABCD model does not
-represent the original conductor impedance.
+Identify impedance in its original conductor coordinates from the model's value.
 
 # Arguments
 
-- `element`: Impedance element.
-- `name`: Designator for fit errors. Default: `element.symbol`.
+- `model`: Impedance model.
+- `name`: Designator for fit errors. Default: `:impedance`.
 - `kw`: Additional keywords for [`identify_rlc`](@ref).
 
 # Returns
 
 - The RLC record or grouped records returned by [`identify_rlc`](@ref).
 """
-function identify_rlc(element::PowerImpedance.Element{<:PowerImpedance.Impedance};
-        name = element.symbol, kw...)
-    return identify_rlc(element.element_model.value; name, kw...)
+function identify_rlc(model::PowerImpedance.Impedance; name = :impedance, kw...)
+    return identify_rlc(model.value; name, kw...)
 end

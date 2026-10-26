@@ -123,7 +123,8 @@ end
 
 @testset "time-domain response composed signal inventory and injection graph" begin
     for id in V.TIME_DOMAIN_IDS
-        net=V.coupled_network(id);point=power_flow(net);list=V.fixture_netlist(net,point)
+        net=V.coupled_network(id);point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+            list=V.fixture_netlist(net,point)
         c=V.coupled_circuit(id,net);spec=V.time_domain_spec(id,list)
         inventory=V.time_domain_channels(c,spec)
         plan,settings=V.scan_plan(list,spec,spec.driven_axis)
@@ -147,7 +148,10 @@ end
         for p in plan.probes.channels
             if p.dim==3
                 abc=time_domain_phase_wave(time,hcat(fill(1.,length(time)),fill(.2,length(time))))
-                for k in 1:3;channels[p.name*":"*string(k)]=abc[:,k];end
+                polarity=p.kind==:injection_current && p.orientation==:into ? -1 : 1
+                for k in 1:3
+                    channels[p.name*":"*string(k)]=polarity .* abc[:,k]
+                end
             else
                 channels[p.name]=zeros(length(time))
             end
@@ -232,7 +236,8 @@ end
 end
 
 @testset "time-domain response synthetic comparison and measurement qualification" begin
-    net=V.coupled_network("mmc_rc_shunt");point=power_flow(net);list=V.fixture_netlist(net,point)
+    net=V.coupled_network("mmc_rc_shunt");point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());list=V.fixture_netlist(net,point)
     c=V.coupled_circuit("mmc_rc_shunt",net);spec=merge(V.time_domain_spec("mmc_rc_shunt",list),
         (;injection_time=.05,simulation_time=.4,ringdown=(.12,.27)))
     time=collect(0.:spec.sample_step:spec.simulation_time)

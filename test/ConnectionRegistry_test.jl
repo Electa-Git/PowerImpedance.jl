@@ -3,296 +3,274 @@ using Test
 
 const NB = PowerImpedance.NetworkBuilder
 
-row(node, element, side, terminal) = (; node, element, side, terminal)
-
-@testset "NetworkTopology named rows" begin
-    elements = (
-        z1 = impedance(z = 1.0, pins = 1),
-        z2 = impedance(z = 2.0, pins = 1),
-        z3 = impedance(z = 3.0, pins = 1)
-    )
-    connections = (
-        row(:n1, :z1, 1, 1),
-        row(:n1, :z2, 1, 1),
-        row(:n1, :z3, 1, 1),
-        row(:gnd, :z1, 2, 1),
-        row(:gnd, :z2, 2, 1),
-        row(:gnd, :z3, 2, 1)
-    )
-    topology = NB.NetworkTopology(elements, connections)
-
-    @test topology.connections.node == [:n1, :n1, :n1, :gnd, :gnd, :gnd]
-    @test topology.connections.element == [:z1, :z2, :z3, :z1, :z2, :z3]
-    @test all(==(1), topology.connections.bus[1:3])
-    @test all(iszero, topology.connections.bus[4:6])
-    @test all(==(2), topology.connections.domain)
-
-    builder = NB.define(elements, collect(connections))
-    @test builder isa NB.NetworkState
-    @test builder.topology.connections == topology.connections
-    @test collect(keys(builder.elements)) == collect(keys(elements))
-
-    reordered = NB.NetworkTopology(
-        elements,
-        ((element = :z1, terminal = 1, node = :n1, side = 1),)
-    )
-    @test only(reordered.connections).node == :n1
-end
-
-@testset "NetworkTopology component ports" begin
-    overhead = overhead_line(
-        length = 1e3,
-        conductors = Conductors(organization = :flat, nᵇ = 3),
-        transformation = true
-    )
-    cable_element = cable(
-        length = 1e3,
-        positions = [(-1.0, 1.0), (0.0, 1.0), (1.0, 1.0)],
-        C1 = Conductor(rₒ = 0.01),
-        transformation = true
-    )
-    blackbox_line_element = blackbox_line(
-        data_type = :Ztool,
-        n = 3,
-        transformation = true
-    )
-    transformer_element = transformer(
-        pins = 3,
-        n = 1.0,
-        Rₚ = 0.1,
-        Lₚ = 1e-3,
-        Rₛ = 0.1,
-        Lₛ = 1e-3,
-        transformation = true
-    )
-    two_level = tlc()
-    delta_control = ΔdqControlGFL(
-        outer_active = NoOuterActiveControl(),
-        outer_reactive = NoOuterReactiveControl(),
-        occ = NoInnerCurrentControl()
-    )
-    modular_multilevel = mmc(
-        sync = NoSynchronization(),
-        delta_control = delta_control,
-        sigma_control = ΣdqzControlTEC()
-    )
-    blackbox_converter = PowerImpedance.Element(
-        input_pins = 1,
-        output_pins = 2,
-        element_model = PowerImpedance.Blackbox_MMC()
-    )
-
-    families = (
-        dc_source = dc_source(setpoint = Setpoint(Vdc = 480.0)),
-        ac_source = ac_source(pins = 3, transformation = true),
-        impedance = impedance(z = 1.0, pins = 3, transformation = true),
-        transformer = transformer_element,
-        overhead = overhead,
-        cable = cable_element,
-        blackbox_line = blackbox_line_element,
-        mmc = modular_multilevel,
-        tlc = two_level,
-        blackbox_converter = blackbox_converter,
-        synchronous_machine = synchronousmachine(),
-        induction_machine = inductionmachine()
-    )
-
-    @test [(port.side, port.terminals, port.domain)
-           for port in NB._port_descriptions(families.dc_source)] == [(1, 1, 2)]
-    @test [(port.side, port.terminals, port.domain)
-           for port in NB._port_descriptions(families.ac_source)] == [(1, 2, 1)]
-    for name in (:mmc, :tlc, :blackbox_converter)
-        @test [(port.side, port.terminals, port.domain)
-               for port in NB._port_descriptions(families[name])] ==
-              [(1, 1, 2), (2, 2, 1)]
-    end
-    for name in (:impedance, :transformer, :overhead, :cable, :blackbox_line)
-        @test [(port.side, port.terminals, port.domain)
-               for port in NB._port_descriptions(families[name])] ==
-              [(1, 2, 1), (2, 2, 1)]
-    end
-    @test only(NB._port_descriptions(families.synchronous_machine)).domain == 1
-    @test only(NB._port_descriptions(families.induction_machine)).domain == 1
-    @test all(
-        iszero(port.domain)
-    for port in NB._port_descriptions(impedance(z = 1.0, pins = 1))
-    )
-end
-
-@testset "NetworkTopology infers scalar passive domains" begin
-    elements = (
-        ac = impedance(z = 1.0, pins = 3, transformation = true),
-        d_load = impedance(z = 2.0, pins = 1)
-    )
-    connections = (
-        row(:d, :ac, 1, 1),
-        row(:d, :d_load, 1, 1),
-        row(:gnd_d, :d_load, 2, 1)
-    )
-    topology = NB.NetworkTopology(elements, connections)
-    @test all(==(1), topology.connections.domain)
-
-    dc = NB.NetworkTopology(
-        (branch = impedance(z = 2.0, pins = 1),),
-        (row(:dc, :branch, 1, 1), row(:gnd, :branch, 2, 1))
-    )
-    @test all(==(2), dc.connections.domain)
-
-    active_elements = (
-        machine = synchronousmachine(),
-        load = impedance(z = 2.0, pins = 1)
-    )
-    active_connections = (
-        row(:d, :machine, 1, 1),
-        row(:q, :machine, 1, 2),
-        row(:d, :load, 1, 1),
-        row(:gnd_d, :load, 2, 1)
-    )
-    active_network = NB.define(active_elements, active_connections)
-    error = try
-        PowerImpedance.compute(
-            NB.PowerFlowProblem(active_network),
-            NB.ACDCPowerFlow()
-        )
+function topology_error(f)
+    caught = try
+        f()
         nothing
-    catch caught
-        caught
+    catch error
+        error
     end
-    @test error isa ArgumentError
-    @test occursin("transformed three-phase element", sprint(showerror, error))
+    @test caught isa ArgumentError
+    return sprint(showerror, caught)
 end
 
-@testset "NetworkTopology physical one-port rows" begin
-    elements = (
-        grid = ac_source(pins = 3, transformation = true),
-        machine = synchronousmachine(),
-        line = impedance(z = 1.0, pins = 3, transformation = true)
-    )
-    connections = (
-        row(:grid_d, :grid, 1, 1),
-        row(:grid_d, :line, 1, 1),
-        row(:grid_q, :grid, 1, 2),
-        row(:grid_q, :line, 1, 2),
-        row(:machine_d, :line, 2, 1),
-        row(:machine_d, :machine, 1, 1),
-        row(:machine_q, :line, 2, 2),
-        row(:machine_q, :machine, 1, 2)
-    )
-    topology = NB.NetworkTopology(elements, connections)
-    @test all(
-        row -> row.side == 1,
-        filter(row -> row.element in (:grid, :machine), topology.connections)
-    )
-    @test isempty(filter(row -> PowerImpedance.isgroundnet(row.node), topology.connections))
+@testset "Bus expansion and inferred domains" begin
+    elements = (grid = ac_source(),
+        line = impedance(z = 1.0, conductors = 3),
+        dc = dc_source())
+    topology = NB.NetworkTopology(elements, (
+        NB.Bus(:Bus7; ports = ((:grid, :ac), (:line, :side1))),
+        NB.Bus(:DC1; ports = ((:dc, :dc),)),
+    ))
+    rows = topology.connections
+    @test unique(rows.net) == [:Bus7a, :Bus7b, :Bus7c, :DC1]
+    @test rows.component == [:grid, :line, :grid, :line, :grid, :line, :dc]
+    @test rows.port == [:ac, :side1, :ac, :side1, :ac, :side1, :dc]
+    @test rows.terminal == [:a, :a, :b, :b, :c, :c, :dc]
+    @test rows.domain == [1, 1, 1, 1, 1, 1, 2]
+    @test rows.frame == [:abc, :abc, :abc, :abc, :abc, :abc, :dc]
+    @test all(==(1), rows.bus)
+    @test all(net -> !PowerImpedance.isgroundnet(net), rows.net)
+    @test length(NB.acconnections(topology)) == 6
+    @test length(NB.dcconnections(topology)) == 1
+    @test fieldnames(NB.TopologyConnection) ==
+        (:net, :bus, :component, :port, :terminal, :domain, :frame)
+    @test :Bus in names(NB) && :Net in names(NB)
 
-    classic = NB.build_network(elements, topology, (;))
-    @test haskey(classic.nets, :grid_d)
-    @test haskey(classic.nets, :machine_q)
+    state = NB.define(elements, (
+        NB.Bus(:Bus7; ports = ((:grid, :ac), (:line, :side1))),
+        NB.Bus(:DC1; ports = ((:dc, :dc),)),
+    ))
+    @test state.elements === elements
+    @test NB._node_bus_mapping(state.topology) == Dict(
+        :Bus7a => (:ac, 1), :Bus7b => (:ac, 1), :Bus7c => (:ac, 1),
+        :DC1 => (:dc, 1))
 end
 
-@testset "NetworkTopology validation" begin
-    dc = impedance(z = 1.0, pins = 1)
-    ac = impedance(z = 1.0, pins = 3, transformation = true)
-    elements = (; dc, ac)
+@testset "Bus frames" begin
+    line = impedance(z = 1.0, conductors = 3)
+    machine = synchronousmachine()
+    topology = NB.NetworkTopology((; line, machine), (
+        NB.Bus(:Bus7; ports = ((:line, :side1), (:machine, :ac))),
+        NB.Bus(:Bus8; ports = ((:line, :side2),), domain = ACDQ),
+    ))
+    @test unique(topology.connections.net) == [:Bus7d, :Bus7q, :Bus8d, :Bus8q]
+    @test all(==(:dq), topology.connections.frame)
+    @test topology.connections.terminal == [:d, :d, :q, :q, :d, :q]
+    @test NB.sortedcomponentconnections(topology, :line).terminal == [:d, :q, :d, :q]
+    @test NB.sortedcomponentconnections(topology, :line).port ==
+        [:side1, :side1, :side2, :side2]
 
-    @test_throws ArgumentError NB.NetworkTopology(
-        elements,
-        ((node = :n1, element = :dc, side = 1),)
-    )
-    @test_throws ArgumentError NB.NetworkTopology(
-        elements,
-        (row(:n1, :missing, 1, 1),)
-    )
-    @test_throws ArgumentError NB.NetworkTopology(
-        elements,
-        (row(:n1, :dc, 3, 1),)
-    )
-    @test_throws ArgumentError NB.NetworkTopology(
-        elements,
-        (row(:n1, :dc, 1, 2),)
-    )
-    @test_throws ArgumentError NB.NetworkTopology(
-        elements,
-        (row(:n1, :dc, 1, 1), row(:n2, :dc, 1, 1))
-    )
-    mixed_elements = (
-        dc_source = dc_source(setpoint = Setpoint(Vdc = 480.0)),
-        ac_source = ac_source(pins = 3, transformation = true)
-    )
-    @test_throws ArgumentError NB.NetworkTopology(
-        mixed_elements,
-        (row(:mixed, :dc_source, 1, 1), row(:mixed, :ac_source, 1, 1))
-    )
-    bridge_elements = (
-        dc_source = dc_source(setpoint = Setpoint(Vdc = 480.0)),
-        ac_source = ac_source(pins = 3, transformation = true),
-        bridge = impedance(z = 1.0, pins = 1)
-    )
-    @test_throws ArgumentError NB.NetworkTopology(
-        bridge_elements,
-        (
-            row(:dc_bus, :dc_source, 1, 1),
-            row(:dc_bus, :bridge, 1, 1),
-            row(:ac_bus, :ac_source, 1, 1),
-            row(:ac_bus, :bridge, 2, 1)
-        )
-    )
+    message = topology_error() do
+        NB.NetworkTopology((; machine), (
+            NB.Bus(:ExplicitABC; ports = ((:machine, :ac),), domain = ACABC),))
+    end
+    @test occursin("ExplicitABC", message)
+    message = topology_error() do
+        NB.NetworkTopology((; line), (
+            NB.Bus(:DQ; ports = ((:line, :side1),), domain = ACDQ),
+            NB.Bus(:ABC; ports = ((:line, :side2),), domain = ACABC),))
+    end
+    @test occursin("line", message)
 
-    off = impedance(z = 2.0, pins = 1)
-    off.connection = false
-    builder = NB.define(
-        (; dc, off),
-        (row(:n1, :dc, 1, 1), row(:ignored, :off, 1, 1))
-    )
-    @test !haskey(builder.elements, :off)
-    @test all(!=(:off), builder.topology.connections.element)
-end
-
-@testset "Retired NetworkBuilder names" begin
-    replacements = (
-        BuilderState = "NetworkState",
-        ConnectionsRegistry = "NetworkTopology",
-        LinearizedAdmittanceCollection = "AdmittanceLookup",
-        LinearizedInterface = "NetworkLookup",
-        LinearizedAdmittanceNetwork = "NetworkModel"
-    )
-    for (removed, replacement) in pairs(replacements)
-        error = try
-            getfield(NB, removed)()
-            nothing
-        catch caught
-            caught
+    dc = dc_source()
+    for declaration in (
+            NB.Bus(:MixedBus; ports = ((:machine, :ac), (:dc, :dc))),
+            NB.Net(:MixedNet; terminals = ((:machine, :ac, :d), (:dc, :dc, :dc))))
+        message = topology_error() do
+            NB.NetworkTopology((; machine, dc), (declaration,))
         end
-        @test error isa ArgumentError
-        @test occursin(String(removed), sprint(showerror, error))
-        @test occursin(replacement, sprint(showerror, error))
-        @test occursin("migration", sprint(showerror, error))
+        @test occursin(string(declaration.name), message)
     end
-    @test !isdefined(NB, :pin)
-    @test !isdefined(NB, :Pin)
-    @test !isdefined(NB, :ConnectionDef)
-    @test !isdefined(NB, Symbol("⟷"))
-    @test !isdefined(NB, Symbol("↔"))
+    @test_throws ArgumentError NB.NetworkTopology((; dc), (
+        NB.Bus(:DC; ports = ((:dc, :dc),), domain = ACDQ),))
 end
 
-module ClassicNetworkDSLTest
-import PowerImpedance: @network
-using PowerImpedance: impedance
-
-function build()
-    return @network begin
-        z1 = impedance(z = 1.0, pins = 1)
-        z2 = impedance(z = 2.0, pins = 1)
-        z1[1.1] ⟷ z2[1.1] ⟷ n1
-        z1[2.1] ⟷ z2[2.1] ⟷ gnd
+@testset "Net terminals and ground" begin
+    machine = synchronousmachine()
+    line = impedance(z = 1.0, conductors = 3)
+    dc = impedance(z = 2.0, conductors = 1)
+    topology = NB.NetworkTopology((; machine, line, dc), (
+        NB.Net(:d; terminals = ((:machine, :ac, :d),)),
+        NB.Net(:gnd_q; terminals = ((:machine, :ac, :q),)),
+        NB.Net(:phase_a; terminals = ((:line, :side1, :a),)),
+        NB.Net(:phase_b; terminals = ((:line, :side1, :b),)),
+        NB.Net(:phase_c; terminals = ((:line, :side1, :c),)),
+        NB.Net(:DC; terminals = ((:dc, :side1, :dc),)),
+        NB.Net(:gnd; terminals = ((:dc, :side2, :dc),)),
+    ))
+    rows = topology.connections
+    @test rows.net == [:d, :gnd_q, :phase_a, :phase_b, :phase_c, :DC, :gnd]
+    @test rows.bus == [0, 0, 1, 1, 1, 1, 0]
+    @test rows.frame == [:dq, :dq, :abc, :abc, :abc, :dc, :dc]
+    @test length(NB.acconnections(topology)) == 3
+    @test length(NB.dcconnections(topology)) == 1
+    @test isempty(NB.sortedcomponentconnections(topology, :machine))
+    @test NB.sortedcomponentconnections(topology, :machine; withground = true).net ==
+        [:d, :gnd_q]
+    for label in (:d, :q, :wrong)
+        @test_throws ArgumentError NB.NetworkTopology((; line), (
+            NB.Net(:invalid; terminals = ((:line, :side1, label),)),))
     end
-end
+    @test_throws ArgumentError NB.NetworkTopology((; machine), (
+        NB.Net(:invalid; terminals = ((:machine, :ac, :a),)),))
+    @test_throws ArgumentError NB.NetworkTopology((; line), (
+        NB.Net(:invalid; terminals = ((:line, :side1, :a),), domain = ACDQ),))
+
+    grounded = NB.NetworkTopology((; line), (
+        NB.Bus(:gnd_bus; ports = ((:line, :side2),)),))
+    @test all(iszero, grounded.connections.bus)
 end
 
-@testset "Explicit Classic network DSL import" begin
-    classic = ClassicNetworkDSLTest.build()
-    @test Set(classic.nets[:n1]) ==
-          Set([(:z1, Symbol("1.1")), (:z2, Symbol("1.1"))])
-    @test Set(classic.nets[:gnd]) ==
-          Set([(:z1, Symbol("2.1")), (:z2, Symbol("2.1"))])
+@testset "Deterministic numbering and admittance order" begin
+    z1 = impedance(z = 1.0, conductors = 1)
+    z2 = impedance(z = 2.0, conductors = 1)
+    grid = ac_source()
+    elements = (; z1, z2, grid)
+    declarations = (
+        NB.Net(:last_alphabetically; terminals = ((:z2, :side2, :dc),)),
+        NB.Bus(:AC; ports = ((:grid, :ac),)),
+        NB.Net(:first_alphabetically; terminals = ((:z1, :side1, :dc),)),
+        NB.Net(:shared; terminals = ((:z1, :side1, :dc), (:z2, :side1, :dc))),
+    )
+    @test_throws ArgumentError NB.NetworkTopology(elements, declarations)
+    declarations = (declarations[1:3]...,
+        NB.Net(:shared; terminals = ((:z1, :side2, :dc), (:z2, :side1, :dc))))
+    topology = NB.NetworkTopology(elements, declarations)
+    @test topology.connections.bus == [1, 1, 1, 1, 2, 3, 3]
+    @test topology.connections == NB.NetworkTopology(elements, declarations).connections
+    reordered = NB.NetworkTopology(reverse(elements), declarations)
+    @test topology.connections == reordered.connections
+    @test NB.sortedcomponentconnections(topology, :z2).port == [:side1, :side2]
+
+    converter = tlc()
+    topology = NB.NetworkTopology((; converter), (
+        NB.Bus(:AC; ports = ((:converter, :ac),)),
+        NB.Bus(:DC; ports = ((:converter, :dc),)),))
+    @test NB.sortedcomponentconnections(topology, :converter).port == [:dc, :ac, :ac]
+    @test NB.sortedcomponentconnections(topology, :converter; acfirst = true).port ==
+        [:ac, :ac, :dc]
+    @test NB.sortedcomponentconnections(topology.connections, :converter;
+        admittance_order = PowerImpedance.admittance_order(converter)).port ==
+        [:dc, :ac, :ac]
+end
+
+@testset "Exclusion and validation" begin
+    z = impedance(z = 1.0, conductors = 1)
+    off = impedance(z = 2.0, conductors = 1)
+    elements = (; z, off)
+    declarations = (NB.Bus(:DC; ports = ((:z, :side1), (:off, :side1))),)
+    state = @test_logs (:info, r"Excluded elements.*off") NB.define(
+        elements, declarations; exclude = (:off,))
+    @test keys(state.elements) == (:z,)
+    @test state.topology.connections.component == [:z]
+    @test state.elements.z === z
+    @test_throws ArgumentError NB.define(elements, declarations; exclude = (:absent,))
+    message = topology_error() do
+        NB.define(elements, (NB.Bus(:DC; ports = ((:z, :side1),)),))
+    end
+    @test occursin("off", message)
+    @test_throws ArgumentError NB.define((; z), (NB.Bus(:DC; ports = ((:absent, :dc),)),))
+    @test_throws ArgumentError NB.define((; z), (NB.Bus(:DC; ports = ((:z, :absent),)),))
+    @test_throws ArgumentError NB.define((; z), (
+        NB.Bus(:DC1; ports = ((:z, :side1),)),
+        NB.Bus(:DC2; ports = ((:z, :side1),)),))
+    bad = impedance(z = 1.0, conductors = 4)
+    message = topology_error() do
+        NB.define((; bad), (NB.Bus(:DC; ports = ((:bad, :side1),)),))
+    end
+    @test occursin("bad", message)
+    @test occursin("4 conductors", message)
+
+    blackbox = PowerImpedance.Blackbox_MMC()
+    topology = (NB.Bus(:AC; ports = ((:blackbox, :ac),)),
+        NB.Bus(:DC; ports = ((:blackbox, :dc),)))
+    @test NB.NetworkTopology((; blackbox), topology).connections.port == [:ac, :ac, :dc]
+    @test NB.define((; blackbox), topology).elements.blackbox === blackbox
+end
+
+@testset "Configured models" begin
+    grid = component(ac_source(v = 132.0, theta = 0.1, p = 12.0, q = 3.0);
+        limits = PowerImpedance.Limits(P_max = 20.0))
+    dc = dc_source(v = 640.0, p = 4.0)
+    line = impedance(z = 1.0, conductors = 3)
+    off = impedance(z = 2.0, conductors = 1)
+    declarations = (
+        NB.Bus(:AC; ports = ((:grid, :ac), (:line, :side1)), domain = ACDQ),
+        NB.Bus(:DC; ports = ((:dc, :dc),)),
+        NB.Bus(:ignored; ports = ((:off, :side1),)),
+        NB.Bus(:gnd_; ports = ((:line, :side2),), domain = ACDQ),
+    )
+    state = @test_logs (:info, r"Excluded elements.*off") NB.define(
+        (; grid, dc, line, off), declarations; exclude = (:off,))
+    @test state.topology.connections.net ==
+        [:ACd, :ACd, :ACq, :ACq, :DC, :gnd_d, :gnd_q]
+    @test state.topology.connections.bus == [1, 1, 1, 1, 1, 0, 0]
+    @test state.topology.connections.terminal == [:d, :d, :q, :q, :dc, :d, :q]
+    @test inputvalues(state.elements.grid) == (v = 132.0, theta = 0.1, p = 12.0, q = 3.0)
+    @test inputvalues(state.elements.dc) == (v = 640.0, p = 4.0)
+    @test limits(state.elements.grid) == limits(grid)
+    @test state.elements.line === line
+    @test inputvalues(grid) == (v = 132.0, theta = 0.1, p = 12.0, q = 3.0)
+    @test all(model -> model isa PowerImpedance.AbstractElementModel,
+        values(state.elements))
+
+    constructors = (
+        () -> mmc(sync = PLLSynchronization(),
+            delta_control = ΔdqControlGFL(outer_active = OuterActivePowerControl(),
+                outer_reactive = OuterReactiveQControl(), occ = InnerCurrentPIControl()),
+            sigma_control = ΣdqzControlTEC()),
+        () -> tlc(outerActive = OuterActiveVdcControl(),
+            outerReactive = OuterReactiveVacControl()),
+    )
+    for constructor in constructors
+        original = constructor()
+        b = bases(original)
+        converter = if original isa MMC
+            component(original; limits = PowerImpedance.Limits(P_max = 9.0),
+                delta_control = (outer_active = (p_ref = 120.0 / b.S,),
+                    outer_reactive = (q_ref = 30.0 / b.S,)),
+                powerflow = (v_ac = 210.0 / b.v_ac, p_dc = -121.0 / b.S,
+                    v_dc = 630.0 / b.v_dc))
+        else
+            component(original; limits = PowerImpedance.Limits(P_max = 9.0),
+                outerActive = (v_dc_ref = 630.0 / b.v_dc,),
+                outerReactive = (v_ac_ref = 210.0 / b.v_ac,),
+                powerflow = (p_ac = 120.0 / b.S, q_ac = 30.0 / b.S, p_dc = -121.0 / b.S))
+        end
+        state = NB.define((; converter), (
+            NB.Bus(:DC; ports = ((:converter, :dc),)),
+            NB.Bus(:AC; ports = ((:converter, :ac),)),
+        ))
+        model = state.elements.converter
+        @test PowerImpedance.powerflow_targets(model) == (
+            p_ac = 120.0 / b.S, q_ac = 30.0 / b.S, v_ac = 210.0 / b.v_ac,
+            p_dc = -121.0 / b.S, v_dc = 630.0 / b.v_dc)
+        @test limits(model) == limits(converter)
+        @test model.elec === original.elec
+        @test inputvalues(model) != inputvalues(original)
+        @test state.topology.connections.port == [:dc, :ac, :ac]
+    end
+
+    machine = synchronousmachine()
+    b = bases(machine)
+    machine = component(machine;
+        powerflow = (p = 15.0 / b.S, q = 3.0 / b.S, v = 220.0 / b.v_ac))
+    state = NB.define((; machine), (NB.Bus(:AC; ports = ((:machine, :ac),)),))
+    b = bases(state.elements.machine)
+    @test inputvalues(state.elements.machine).powerflow ==
+        (p = 15.0 / b.S, q = 3.0 / b.S, v = 220.0 / b.v_ac)
+end
+
+@testset "Gridspace materializes direct models through define" begin
+    line = impedance(NB.Grid; z = NB.Grid((1.0, 2.0)), conductors = 1)
+    off = impedance(z = 3.0, conductors = 1)
+    declarations = (NB.Bus(:DC; ports = ((:line, :side1),)),)
+    space = NB.define((; line, off), declarations; exclude = (:off,))
+    states = [@test_logs (:info, r"Excluded elements.*off") NB.materialize(config)
+        for config in NB.configurations(space)]
+    @test length(states) == 2
+    @test all(state -> keys(state.elements) == (:line,), states)
+    @test all(state -> state.elements.line isa PowerImpedance.Impedance, states)
+    @test all(state -> state.topology.connections.net == [:DC], states)
 end

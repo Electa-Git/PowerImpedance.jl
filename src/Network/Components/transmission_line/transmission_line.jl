@@ -13,30 +13,16 @@ function eval_y(tl :: Transmission_line, s :: Complex)
     return abcd_to_y(eval_abcd(tl, s))
 end
 
-function eval_y(el::Element{<:Transmission_line}, s :: Complex)
-    return eval_y(el.element_model, s)
-end
+pmtype(model::Transmission_line, rows) = is_three_phase(model) ? "branch" : "branchdc"
 
-pmtype(elem::Element{<:Transmission_line}) = is_three_phase(elem) ? "branch" : "branchdc"
+function convert!(data, tl::Transmission_line, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+    key = component_key.index
+    buses = (ports.side1, ports.side2)
 
-function convert!(data,elem::Element{<:Transmission_line},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
 
-    if is_three_phase(elem)
-        key, bus1,bus2 = branch_ac!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
-       
-    else
-        key,bus1,bus2 = branch_dc!(data, nodes2bus, bus2nodes, elem2comp, comp2elem, elem, global_dict)
-    end
 
-    return convert!(data, elem, PMACDC, key, (bus1,bus2), global_dict)
-end
-
-function convert!(data, elem::Element{<:Transmission_line}, ::Type{PMACDC}, key, buses, global_dict)
-    tl = elem.element_model
-
-   
-
-    if pmtype(elem) == "branch"
+    if component_key.pmtype == "branch"
         branch_ac!(data, key, buses, global_dict)
         branch = data["branch"][string(key)]
         branch["transformer"] = false
@@ -51,7 +37,9 @@ function convert!(data, elem::Element{<:Transmission_line}, ::Type{PMACDC}, key,
         b = abcd[1:n, (n+1):end]
 
         z_ph = b / global_dict["Z"]
-        t_seq = [1 1 1; 1 exp(2 * pi / 3im) exp(4 * pi / 3im); 1 exp(4 * pi / 3im) exp(2 * pi / 3im)] / sqrt(3)
+        t_seq = [1 1 1;
+            1 exp(2 * pi / 3im) exp(4 * pi / 3im);
+            1 exp(4 * pi / 3im) exp(2 * pi / 3im)] / sqrt(3)
         z = (inv(t_seq) * z_ph * t_seq)[2, 2]
         y_ph = (a - id) * inv(b) * global_dict["Z"]
         y = (inv(t_seq) * y_ph * t_seq)[2, 2]

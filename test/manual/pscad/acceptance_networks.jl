@@ -32,10 +32,10 @@ function write_reference(model)
         for e in model.netlist.elements
             e.model isa PowerImpedance.AbstractConverter || continue
             eq = P.converter_equilibrium(e)
-            row(e.name, "P_ac_internal", eq.outputs.meas.P_ac_f * e.model.elec.Sbase, "MW")
-            row(e.name, "Q_ac_internal", eq.outputs.meas.Q_ac_f * e.model.elec.Sbase, "MVAr")
+            row(e.name, "P_ac_internal", eq.outputs.meas.P_ac_f * e.model.bases.S, "MW")
+            row(e.name, "Q_ac_internal", eq.outputs.meas.Q_ac_f * e.model.bases.S, "MVAr")
             row(e.name, "Vdc_internal", eq.inputs.v_dc *
-                (e.model isa PowerImpedance.MMC ? e.model.elec.vDC_base : e.model.elec.vDCbase), "kV")
+                (e.model isa PowerImpedance.MMC ? e.model.bases.v_dc : e.model.bases.v_dc), "kV")
             for (quantity, value) in pairs(eq.states)
                 row(e.name, quantity, value, "model_state")
             end
@@ -47,9 +47,9 @@ function write_reference(model)
             bus, point = P._comparison_bus(model, channel.bus)
             flow = model.operating_point.branch_flows[e.name]
             field = e.model isa PowerImpedance.Source ? :pgdc :
-                channel.side == "1" ? :pf : :pt
+                channel.port in (:side1, :dc) ? :pf : :pt
             reference = abs(flow[field]) / (2point.vm_pu * bus.base_kV)
-            row(channel.element, "I_dc_side_" * channel.side, reference, "kA")
+            row(channel.element, "I_dc_" * string(channel.port), reference, "kA")
         end
     end
 end
@@ -59,7 +59,8 @@ function export_case(name, network; settings = RECORD_SETTINGS,
     path = joinpath(OUTPUT, name * ".pscx")
     isfile(path) && rm(path)
     started = time_ns()
-    model = Base.invokelatest(export_pscad, network; path, settings)
+    powerflow = compute(PowerFlowProblem(network), ACDCPowerFlow())
+    model = Base.invokelatest(export_pscad, network; path, settings, powerflow)
     elapsed = (time_ns() - started) * 1e-9
     write_reference(model)
     counts = PSCADNetworks.inventory(model.netlist)
@@ -168,27 +169,25 @@ function native_dimensions(case, remote)
     return (live_nodes, dimension("NODES"), dimension("NNODES"), dimension("SUBSYS"))
 end
 
-cases = [
-    export_case("ieee9_classic", PSCADFixtures.ieee9_network();
-        settings = IEEE9_SETTINGS, status = "acceptance", reason = "network-scale AC case"),
-    export_case("p2p_builder", PSCADNetworks.p2p_builder(0.25);
-        reason = "dynamic validation only; unstable in Julia, no operating-point acceptance")]
-
-# The gitignored model is deliberately loaded only by this manual script.
-local_path = joinpath(pkgdir(PowerImpedance), "local", "P2P_HVDC.jl")
-local_status = "absent"
-if isfile(local_path)
-    namespace = PSCADNetworks.load_through(local_path, :net)
-    push!(cases, export_case("p2p_classic", Base.invokelatest(getproperty, namespace, :net);
-        reason = "dynamic validation only; unstable in Julia, no operating-point acceptance"))
-    local_status = "present; 25 km cable + 75 km DC overhead line"
+function acceptance_cases()
+    namespace = Module(:NetworkAcceptanceFixtures)
+    Base.include(namespace, normpath(joinpath(@__DIR__, "../../parity/fixtures.jl")))
+    fixtures = getfield(namespace, :ParityFixtures)
+    return Base.invokelatest() do
+        p2p = NetworkBuilder.define(fixtures.P2PAlt.ohl_to_ugc(0.25),
+            fixtures.P2PAlt.connections; options = fixtures.P2PAlt.builder_options)
+        [export_case("ieee9_builder", PSCADFixtures.ieee9_network();
+            settings = IEEE9_SETTINGS, status = "acceptance",
+                reason = "network-scale AC case"),
+            export_case("p2p_builder", p2p;
+                reason = "dynamic validation only; unstable in Julia, no " *
+                    "operating-point acceptance"),
+            export_case("ieee39_builder", fixtures.IEEE39.build(); status = "build-only",
+                reason = "licence: node cap; 528 live nodes exceeds EDUCATIONAL 200")]
+    end
 end
-push!(cases, export_case("ieee39_classic", PSCADNetworks.ieee39_classic();
-    status = "build-only",
-    reason = "licence: node cap; 528 live nodes exceeds EDUCATIONAL 200"))
-push!(cases, export_case("ieee39_builder", PSCADNetworks.ieee39_builder();
-    status = "build-only",
-    reason = "licence: node cap; 528 live nodes exceeds EDUCATIONAL 200"))
+
+cases = acceptance_cases()
 
 open(joinpath(OUTPUT, "inventory.tsv"), "w") do io
     println(io, "project\telements\telement_counts\tac_buses\tdc_buses\telectrical_bus_nodes\tnatural_subsystems\texport_seconds\tstatus\treason")
@@ -204,19 +203,19 @@ end
 write(joinpath(OUTPUT, "README.md"), """
 # network closing exports
 
-Only ieee9_classic is run and compared by this script. It uses 3 s / 10 us /
+Only ieee9_builder is run and compared by this script. It uses 3 s / 10 us /
 100 us at 50 Hz, default 0.05 s source ramp and the final ten cycles (2.8,3.0] s.
 Existing comparison rules are unchanged: AC voltage 1%, relative angle 1 degree
 and current 2%. The station run-Hcm4nU passed on the EDUCATIONAL licence:
 78 live nodes, 41 comparison rows, all within tolerance. Worst voltage magnitude
 error was 2.19e-5 relative, worst angle error 4.99e-4 degrees, and worst current
-error 0.169% (I_tl64_2, 3.9 A); see ieee9_classic_comparison.tsv.
+error 0.169% (I_tl64_2, 3.9 A); see ieee9_builder_comparison.tsv.
 
 The committed IEEE9 fixture copies local/IEEE9bus/IEEE9bus_abc.jl physical
 parameters and connectivity, including Ct=7 nF/Cs=12 nF on all three YY
-transformers. Old source V is already phase peak: Setpoint.Vac receives the same
-number, without sqrt(2). Symbolic impedances become functions; transformation=true
-selects the supported balanced dq frame. P/Q remain unspecified: all three sources
+transformers. Source voltage is phase peak in ac_source(v=...). The AC buses
+use ACDQ coordinates; the builder transforms the three-phase passive models.
+P/Q remain unspecified: all three sources
 become type-3 reference buses at angle zero; their P/Q dispatch follows the fixed
 voltages, load impedances and network equations. The current classic default
 voltage base 220/sqrt(3) kV is retained. Existing transformer PF-bound ratings
@@ -230,8 +229,8 @@ Changing only these ratings removed the NT_2 zero diagonal and yielded a finite
 3 s station run (Bus1 peak 13.47 kV, Bus7 approximately 189 kV).
 
 P2P builder is exported at share 0.25 (25 km cable + 75 km DC OHL).
-Classic local/P2P_HVDC.jl: $local_status. Its old phase-RMS source V mapping is
-sqrt(2)*V, separate from IEEE9's phase-peak source convention. These P2P records
+Its sources declare physical phase-peak voltage and its converter references use
+per unit on their model bases. These P2P records
 are dynamic validation only: station fit 3473.033 Hz / 0.687548 ms reproduces
 Julia's unstable modes +1374.359/+1426.121 1/s at 3428.518/3526.556 Hz dq
 (the two relevant abc sidebands are 3478.518/3476.556 Hz). c1 differential
@@ -242,11 +241,11 @@ frequencies 3500.142/8932.535/15058.576 Hz dq and Nyquist nets 10/6/2.
 The original IEEE14 hybrid also failed: +72.786701 1/s at 29.652282 Hz dq,
 full-network Nyquist net 3. No variant or correction was applied.
 
-IEEE39 classic and builder have station verdict "export verified (licence-blocked)":
+The archived IEEE39 exports have station verdict "export verified (licence-blocked)":
 528 live nodes vs the 200-node EDUCATIONAL cap, with Build: 1 errors, 0 warnings.
 The criterion is a completed export with all offline checks and a station build
 whose only error is the licence node-cap message, with no warnings.
-Classic has 90 elements; builder has 89 (T8_9 disconnected).
+The direct builder has 89 elements (T8_9 excluded).
 Both have 49 AC + 2 DC buses, 151 bus conductor nodes and 28 natural subsystems.
 The station disables subsystem splitting on the EDUCATIONAL licence and uses
 one subsystem; that message is normal. Distributed lines/cables decouple natural

@@ -1,15 +1,16 @@
 # Offline system diagnostics record the source hash and line-model choice for every
 # result. Native node counts and PSCAD validation require separate runs.
 function system_circuit(net)
-    devices=sort!([name for (name,e) in net.elements if
-        e.element_model isa Union{PowerImpedance.MMC,PowerImpedance.TLC}])
-    ports=[(name,device_bases(net.elements[name].element_model.elec).ac_side) for name in devices]
-    grids=sort!([name for (name,e) in net.elements if startswith(string(name),"Zg")])
+    devices=sort!([name for (name,e) in pairs(net.elements) if
+        e isa Union{PowerImpedance.MMC,PowerImpedance.TLC}])
+    ports=[(name, device_bases(net.elements[name].elec,
+        net.elements[name].bases).ac_port) for name in devices]
+    grids=sort!([name for (name,e) in pairs(net.elements) if startswith(string(name),"Zg")])
     c=composed_circuit(net,devices,grids,ports)
-    for e in values(net.elements)
-        e.element_model isa Union{PowerImpedance.Overhead_line,PowerImpedance.Cable} || continue
-        e.input_pins==1 || continue
-        for node in values(e.pins)
+    for (name,e) in pairs(net.elements)
+        e isa Union{PowerImpedance.Overhead_line,PowerImpedance.Cable} || continue
+        passive_dimension(e)==1 || continue
+        for node in component_nets(net, name)
             node in c.nodes && (c.dc_references[node]=2P.DC_REFERENCE_RESISTANCE)
         end
     end
@@ -20,30 +21,37 @@ end
 # 1 Hz provide seeds only. Final residuals and contours use native get_y on the
 # entire distributed network. No seed approximation is exported.
 function system_line_seeds(c)
-    net=deepcopy(c.net)
+    elements=deepcopy(c.net.elements)
+    topology=fixture_topology(c.net)
     for name in sort!(collect(keys(c.net.elements)))
-        e=c.net.elements[name];m=e.element_model
+        e=c.net.elements[name];m=e
         m isa Union{PowerImpedance.Overhead_line,PowerImpedance.Cable} || continue
-        ac=e.input_pins==2;ω=ac ? 2π*50 : 2π
+        ac=passive_dimension(e)==2;ω=ac ? 2π*50 : 2π
         z,y=PowerImpedance.eval_parameters(m,ComplexF64(im*ω))
         q=ac ? ComplexF64[1,cis(-2π/3),cis(2π/3)] : ComplexF64[1,-1]
         zz=dot(q,z*q)*m.length/(ac ? 3 : 1)
         yy=dot(q,y*q)*m.length/(ac ? 3 : 4)
         r=real(zz);l=imag(zz)/ω;cap=imag(yy)/(2ω)
         r>0 && l>0 && cap>0 || error("nonphysical line seed for $name")
-        branch=impedance(z=s->r+l*s,pins=ac ? 3 : 1,transformation=ac)
-        branch.pins=copy(e.pins)
-        net.elements[name]=branch
-        for side in 1:2
-            shunt=impedance(z=s->inv(cap*s),pins=ac ? 3 : 1,transformation=ac)
-            shunt.pins=Dict(Symbol("$i.$t")=>(i==1 ? e.pins[Symbol("$side.$t")] : :gnd)
-                for i in 1:2 for t in 1:e.input_pins)
-            net.elements[Symbol(name,"_seed_cap_",side)]=shunt
+        branch=impedance(z=s->r+l*s,conductors=ac ? 3 : 1)
+        elements=merge(elements,(;name=>branch))
+        for port in (:side1,:side2)
+            shunt=impedance(z=s->inv(cap*s),conductors=ac ? 3 : 1)
+            capname=Symbol(name,"_seed_cap_",port)
+            elements=merge(elements,(;capname=>shunt))
+            row=first(filter(row->row.component==name&&row.port==port,
+                c.net.topology.connections))
+            bus=ac ? Symbol(chop(string(row.net))) : row.net
+            domain=ac ? ACDQ : DC_CM
+            append!(topology,[
+                NetworkBuilder.Bus(bus;ports=((capname,:side1),),domain),
+                NetworkBuilder.Bus(:gnd;ports=((capname,:side2),),domain)])
         end
     end
+    net=NetworkBuilder.define(elements,topology;options=c.net.options)
     seeds=system_taylor_seeds(c)
-    if !any(e.element_model isa PowerImpedance.Transformer for e in values(net.elements))
-        lumped=composed_circuit(net,c.devices,c.grids,c.ports)
+    if !any(e isa PowerImpedance.Transformer for (name,e) in pairs(net.elements))
+        lumped=composed_circuit(net,c.devices,c.grids,c.ports; c.point, c.linearizations)
         append!(seeds,composed_descriptor(merge(lumped,(;dc_references=c.dc_references))).poles)
     end
     return seeds
@@ -62,7 +70,7 @@ function system_root_search(c,functions,initial)
     foreach(track,initial)
     # A 50 Hz nominal frame separates opposite circular regions by about 100 Hz. These
     # offsets give initial root guesses, without an assumed modal identity.
-    omega=2c.net.elements[first(c.devices)].element_model.elec.ωbase
+    omega=2c.net.elements[first(c.devices)].bases.omega
     growing=unique([z for (z,residual) in tracks if real(z)>0 && imag(z)>0 && residual<1e-6])
     partners=[z+im*direction*omega for z in growing for direction in (-1,1)]
     append!(selected,partners);foreach(track,partners)
@@ -95,7 +103,8 @@ function system_stability(c; checkpoint=nothing, analysis_scope="post-line-fix")
         "contours"=>Dict{String,Any}[])
     isempty(located) || (gate["most_positive_located_real_per_s"]=real(first(located)[1]))
     checkpoint===nothing || open(io->TOML.print(io,gate;sorted=true),checkpoint,"w")
-    open_rhp=sum(count(z->real(z)>1e-6,eigvals(c.net.elements[n].A)) for n in c.devices)
+    open_rhp=sum(count(z->real(z)>1e-6,
+        eigvals(c.linearizations[n].system.A)) for n in c.devices)
     gate["open_RHP_count"]=open_rhp
     for fs in (exp10.(range(-2,5;length=6001)),exp10.(range(-6,6;length=12001)))
         values=ComplexF64[];margin=Inf
@@ -177,15 +186,17 @@ function system_taylor_seeds(c)
     s0=ComplexF64(1e-3);delta=1e-4
     y0=composed_nodal(c,s0,functions;which=:passive)
     dy=(composed_nodal(c,s0+delta,functions;which=:passive)-composed_nodal(c,s0-delta,functions;which=:passive))/(2delta)
-    nv=length(c.nodes);nx=sum(size(c.net.elements[n].A,1) for n in c.devices)
+    nv=length(c.nodes);nx=sum(size(c.linearizations[n].system.A,1) for n in c.devices)
     K=zeros(ComplexF64,nx+nv,nx+nv);E=copy(K);vi=(nx+1):(nx+nv)
     K[vi,vi]=-(y0-s0*dy);E[vi,vi]=dy;offset=0
     for name in c.devices
-        e=c.net.elements[name];b=device_bases(e.element_model.elec);h=device_incidence(c,name)
-        ix=(offset+1):(offset+size(e.A,1));offset=last(ix)
-        K[ix,ix]=e.A;E[ix,ix]=I(length(ix));K[ix,vi]=(e.B./b.voltage_inputs')*h'
-        K[vi,ix]=-h*(e.C.*b.current_outputs)
-        K[vi,vi]-=h*(e.D.*b.current_outputs./b.voltage_inputs')*h'
+        e=c.net.elements[name];b=device_bases(e.elec, e.bases);h=component_incidence(c,
+            name)
+        system = c.linearizations[name].system
+        ix=(offset+1):(offset+size(system.A,1));offset=last(ix)
+        K[ix,ix]=system.A;E[ix,ix]=I(length(ix));K[ix,vi]=(system.B./b.voltage_inputs')*h'
+        K[vi,ix]=-h*(system.C.*b.current_outputs)
+        K[vi,vi]-=h*(system.D.*b.current_outputs./b.voltage_inputs')*h'
     end
     q=schur(K,E);finite=abs.(q.β).>100eps()*max(norm(E),1.)
     return q.α[finite]./q.β[finite]
@@ -240,7 +251,8 @@ function system_finite_contour(c,functions,frequencies,roots;shift=1e-6,maxdepth
     polygon=[conj.(reverse(values[2:end]));values]
     increments=[angle(polygon[mod1(j+1,length(polygon))]/polygon[j]) for j in eachindex(polygon)]
     turns=sum(increments)/(2π);net=-round(Int,turns)
-    openrhp=sum(count(z->real(z)>shift,eigvals(c.net.elements[n].A)) for n in c.devices)
+    openrhp=sum(count(z->real(z)>shift,
+        eigvals(c.linearizations[n].system.A)) for n in c.devices)
     peak=argmin([evaluate(f).separation for f in retained])
     return Dict("frequency_count"=>length(retained),"frequency_band_Hz"=>[first(frequencies),last(frequencies)],
         "shift_per_s"=>shift,"nyquist_net"=>net,"closed_RHP_count"=>net+openrhp,"turns"=>turns,

@@ -10,31 +10,20 @@ using GraphMakie
 using PowerImpedance
 using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState, define
 
-# The parity fixture is the authoritative NetworkBuilder version of this
-# system. Skip its top-level testsets while retaining its model functions and
-# constants. This keeps the example synchronized with the parity test rather
-# than maintaining a second thousand-line copy of the system.
+# The shared test file supplies the system's model functions and constants.
+# The example and tests use these same definitions.
+# Line `T8_9` is excluded from the network in this study.
 function include_ieee39_networkbuilder_fixture()
     isdefined(@__MODULE__, :ieee39bus_elements) && return nothing
-
-    skip_testsets(expression) =
-        if expression isa Expr &&
-           expression.head === :macrocall &&
-           expression.args[1] === Symbol("@testset")
-            :(nothing)
-        else
-            expression
-        end
-
-    path = joinpath(pkgdir(PowerImpedance), "test", "NetworkBuilder_test.jl")
-    Base.include(skip_testsets, @__MODULE__, path)
+    path = joinpath(pkgdir(PowerImpedance), "test", "fixtures", "ieee39bus.jl")
+    Base.include(@__MODULE__, path)
     return nothing
 end;
 
 include_ieee39_networkbuilder_fixture();
 
 # The requested input repeats 1000 Ωm. Duplicate values produce identical
-# solves and curves, so the grid retains its three unique physical cases.
+# solves and curves. The grid contains three unique physical cases.
 const IEEE39_REQUESTED_SOIL_RESISTIVITY = (10.0, 100.0, 1000.0, 1000.0)
 const IEEE39_SOIL_RESISTIVITY = Tuple(unique(IEEE39_REQUESTED_SOIL_RESISTIVITY))
 const IEEE39_REPRESENTATIVE_BUSES = (9, 16, 29)
@@ -46,8 +35,8 @@ const IEEE39_BUILDER_OPTIONS = (;
 
 # ## Inspect the network topology
 #
-# `NetworkDiagramDefinition` projects the materialized network directly; it
-# does not run power flow or repeat a conversion. The Cairo backend renders the
+# `NetworkDiagramDefinition` projects the materialized network directly.
+# The Cairo backend renders the
 # same PlotBuilder recipe used by the interactive GL and WGL backends. Its
 # automatic figure size follows the portrait-oriented IEEE39 layout while the
 # reset and SVG-export controls remain visible.
@@ -67,6 +56,7 @@ end;
 #md ieee39_docs_network = define(
 #md     ieee39bus_elements(),
 #md     ieee39bus_connections();
+#md     exclude = (:T8_9,),
 #md     options = IEEE39_BUILDER_OPTIONS,
 #md )
 #md ieee39_docs_diagram = plot_ieee39_network_diagram(ieee39_docs_network)
@@ -74,9 +64,7 @@ end;
 
 # ## Apply one resistivity value everywhere
 
-function element_at_soil_resistivity(element, soil_resistivity)
-    model = element.element_model
-
+function element_at_soil_resistivity(model, soil_resistivity)
     if model isa PowerImpedance.Overhead_line
         return overhead_line(
             length = model.length,
@@ -86,9 +74,7 @@ function element_at_soil_resistivity(element, soil_resistivity)
                 model.earth_parameters[1],
                 model.earth_parameters[2],
                 soil_resistivity
-            ),
-            transformation = element.transformation,
-            connection = element.connection
+            )
         )
     elseif model isa PowerImpedance.Cable
         conductors = NamedTuple{Tuple(keys(model.conductors))}(
@@ -108,14 +94,12 @@ function element_at_soil_resistivity(element, soil_resistivity)
             configuration = model.configuration,
             type = model.type,
             eliminate = model.eliminate,
-            transformation = element.transformation,
-            connection = element.connection,
             conductors...,
             insulators...
         )
     end
 
-    return deepcopy(element)
+    return deepcopy(model)
 end;
 
 function ieee39_elements_at_soil_resistivity(base_elements, soil_resistivity)
@@ -137,6 +121,7 @@ function ieee39_soil_builder_space(
         return define(
             ieee39_elements_at_soil_resistivity(base_elements, soil_resistivity),
             connections;
+            exclude = (:T8_9,),
             options = IEEE39_BUILDER_OPTIONS
         )
     end
@@ -148,9 +133,8 @@ function ieee39_soil_builder_space(
     )
 end;
 
-# Soil resistivity changes the passive frequency-domain models. Each case owns
-# its power flow and linearization, which keeps calculation state out of the
-# network definitions.
+# Soil resistivity changes the passive frequency-domain models. Each case
+# computes its own power flow and linearization.
 
 function ieee39_bus_nets(buses)
     return reduce(vcat, ([Symbol("Bus$(bus)d"), Symbol("Bus$(bus)q")] for bus in buses))
@@ -165,13 +149,13 @@ function run_ieee39_soil_study(;
     networks = ieee39_soil_builder_space(soil_resistivities; base_elements)
     problems = PowerImpedanceProblem(
         networks;
-        nodes=ieee39_bus_nets(buses),
-        eliminated_elements=IEEE39_ELIM_ELEMENTS,
-        frequency_range=freq_range,
+        nodes = ieee39_bus_nets(buses),
+        eliminated_elements = IEEE39_ELIM_ELEMENTS,
+        frequency_range = freq_range
     )
     result = compute(
         ParametricProblem(problems),
-        Combinatorial(NodalImpedance()),
+        Combinatorial(NodalImpedance())
     )
     return (;
         soil_resistivities = collect(soil_resistivities), buses = collect(buses), result)
@@ -183,8 +167,7 @@ end;
 # `maximum_spread_db` quantifies whether soil resistivity visibly separates the
 # curves and makes the sensitivity check reproducible. A reduced validation
 # scan gave maximum separations of about 0.97 dB at Bus 9, 0.82 dB at Bus 16,
-# and 1.08 dB at Bus 29, so soil resistivity remains a visible KPI and no
-# fallback parameter scan is needed.
+# and 1.08 dB at Bus 29.
 
 function ieee39_impedance_db(case, bus_index)
     net_index = 2bus_index - 1
@@ -204,13 +187,13 @@ function plot_ieee39_soil_study(study)
     handles = PowerImpedance.plot(
         study.result;
         entries,
-        grouping=:panels,
+        grouping = :panels,
         labels,
-        series_groups=groups,
-        title="IEEE39 harmonic impedance versus common soil resistivity",
-        figure_size=(1150, 1050),
-        display_plot=false,
-        controls=false,
+        series_groups = groups,
+        title = "IEEE39 harmonic impedance versus common soil resistivity",
+        figure_size = (1150, 1050),
+        display_plot = false,
+        controls = false
     )
     return only(handles)
 end;
@@ -225,6 +208,7 @@ if abspath(PROGRAM_FILE) == @__FILE__ #src
     network = define( #src
         ieee39bus_elements(), #src
         ieee39bus_connections(); #src
+        exclude = (:T8_9,), #src
         options = IEEE39_BUILDER_OPTIONS #src
     ) #src
     display(plot_ieee39_network_diagram(network).figure) #src
@@ -232,6 +216,7 @@ if abspath(PROGRAM_FILE) == @__FILE__ #src
     display(plot_ieee39_soil_study(study).figure) #src
     println( #src
         "Maximum soil-resistivity spreads [dB]: ", #src
-        Dict(bus => maximum_spread_db(study, index) for (index, bus) in pairs(study.buses)) #src
+        Dict(bus => maximum_spread_db(study, index) #src
+            for (index, bus) in pairs(study.buses)) #src
     ) #src
 end #src

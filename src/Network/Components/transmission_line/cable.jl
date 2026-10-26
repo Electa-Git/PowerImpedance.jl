@@ -1,6 +1,7 @@
-export cable #function row 81 -> possible up to 4 conducting and insultating layers. Cable group of n cables possible.
+export cable #function row 81 -> possible up to 4 conducting and insulating layers. Cable group of n cables possible.
 export Insulator, Conductor #mutable structures row 4, 13 and 23
-# first letter of the variable: Capital -> Mutable Structure (e.g. Cable, Insulator, Conductor), lowercase -> function (e.g. cable)
+# Mutable types begin with a capital letter (Cable, Insulator, Conductor).
+# Functions begin with a lowercase letter (cable).
 """
 $(TYPEDEF)
 
@@ -38,12 +39,13 @@ $(TYPEDFIELDS)
 	ϵᵣ::Union{Int, Float64} = 1               # relative permittivity
 	"Relative permeability `\\[dimensionless\\]`."
 	μᵣ::Union{Int, Float64} = 1               # relative permeability
-	# If a semiconductor is present, in an insulator, we have: rᵢ < semiconductor < a + a < insulator < b + b < semiconductor < rₒ
+	# Radial order with semiconducting screens:
+	# `rᵢ < semiconductor < a + a < insulator < b + b < semiconductor < rₒ`.
 	"Inner semiconducting-screen thickness `\\[m\\]`."
 	a::Union{Int, Float64} = 0                # inner semiconductor thickness
 	"Outer semiconducting-screen thickness `\\[m\\]`."
 	b::Union{Int, Float64} = 0                # outer semiconductor thickness
-	# From PSCAD manual:
+	# From the PSCAD manual.
 	# A = outer radius of inner conductor + thickness of inner semiconducting screen
 	# B = outer radius of inner conductor + thickness of inner semiconducting screen + thickness of insulator layer
 	# rₒ = outer radius of inner conductor + thickness of inner semiconducting screen + thickness of insulator layer + thickness of outer semiconducting screen
@@ -60,16 +62,19 @@ $(TYPEDFIELDS)
 """
 @with_kw mutable struct Cable <: Transmission_line #indicates that the mutable struct Cable is a subtype (<:) of abstract type Transmission_line
 	"Physical cable length `\\[m\\]`."
-	length::Union{Int, Float64} = 0                    # line length [m]. Union -> it could be both Int or Float64
+	length::Union{Int, Float64} = 0                    # Length [m] as Int or Float64.
 	"Ordered conducting layers."
-	conductors::OrderedDict{Symbol, Conductor} = OrderedDict{Symbol, Conductor}() #OrderedDict -> dictionary with a particular order. Key: Symbol-> C1, C2, C3 and C4. Value: Conductor-> Mutable Struct Conductor, defined above
+	conductors::OrderedDict{Symbol, Conductor} = OrderedDict{Symbol, Conductor}() # Ordered.
+	# Keys are Symbols C1, C2, C3 and C4. Values are mutable Conductor objects defined above.
 	"Ordered insulating layers."
-	insulators::OrderedDict{Symbol, Insulator} = OrderedDict{Symbol, Insulator}() #OrderedDict -> dictionary with a particular order. Key: Symbol-> I1, I2, I3 and I4. Value: Insulator-> Mutable Struct Insulator, defined above
+	insulators::OrderedDict{Symbol, Insulator} = OrderedDict{Symbol, Insulator}() # Ordered.
+	# Keys are Symbols I1, I2, I3 and I4. Values are mutable Insulator objects defined above.
 	"Cable-center coordinates `(x, depth)` for underground installations \\[m\\]."
-	positions::Vector{Tuple{Real, Real}} = [] #Real -> indicates all variables are real number, vector composed by tuple of real numbers. e.g. positions=[(0,0),(1,1)]. Cables positions 1st:x=0, y=0. 2nd: x=1, y=1.
+	positions::Vector{Tuple{Real, Real}} = [] # Vector of real coordinate pairs.
+	# For positions=[(0,0),(1,1)], cable 1 is at x=0, y=0 and cable 2 at x=1, y=1.
 	"Earth relative permeability \\[dimensionless\\], relative permittivity \\[dimensionless\\], and resistivity \\[Ω·m\\]."
 	earth_parameters::NTuple{N, Union{Int, Float64}} where N = (1, 1, 1) # (μᵣ, ϵᵣ, ρ) in units ([], [], [Ωm]) compact way of representing the type for a tuple of length N where all elements are of type Int or Float64.
-	"Stored geometry identifier; the native parameter assembly does not branch on this field."
+	"Geometry identifier stored independently of native parameter assembly."
 	configuration::Symbol = :coaxial #Configuration is a datatype symbol with value coaxial Symbol -> Type of data. Symbols can be entered using the quote operator ":"
 	"Installation identifier, such as `:underground` or `:aerial`."
 	type::Symbol = :underground   # or aerial. for the description, see above.
@@ -77,7 +82,7 @@ $(TYPEDFIELDS)
 
 
 	"Whether all conducting layers except the first core in each cable are Kron-reduced."
-	eliminate::Bool = true #eliminate-> variable with Bool datatype and value TRUE (Bool variable can be true or false)-> predifined with true value. If not specified elsewhere in the code, eliminate=true
+	eliminate::Bool = true # Bool elimination flag. Default: true.
 end
 
 """
@@ -89,28 +94,26 @@ Construct a frequency-dependent group of coaxial power cables.
 
 - `length`: Physical cable length `\\[m\\]`.
 - `positions`: Cable-center coordinates `(x, depth)` `\\[m\\]` for underground
-  installations; one pair per cable.
+  installations. One pair per cable.
 - `earth_parameters`: Earth relative permeability `\\[dimensionless\\]`,
   relative permittivity `\\[dimensionless\\]`, and resistivity `\\[Ω·m\\]`.
 - `configuration`: Cable geometry identifier. Default: `:coaxial`.
 - `type`: Installation identifier. Default: `:underground`.
 - `eliminate`: Whether all conducting layers except the first core in each cable are
   Kron-reduced. Default: `true`.
-- `transformation`: Whether to expose a supported transformed representation.
-- `connection`: Whether NetworkBuilder includes the element in the system.
-- `C1`, `C2`, ...: Named `Conductor` layers, in radial order. A metallic screen
+- `C1`, `C2`, …: named `Conductor` layers, in radial order. A metallic screen
   may be supplied as `SC` together with sheath `C2`.
-- `I1`, `I2`, ...: Named `Insulator` layers, in radial order.
+- `I1`, `I2`, …: named `Insulator` layers, in radial order.
 - `args...`: Remaining component-field keywords described above.
 
 # Returns
 
-- An `Element` with one input and output terminal per cable position.
+- A `Cable` with conductor count derived from its cable positions.
 
 # Notes
 
 `Conductor` radii and insulator radii are in metres. Conductor resistivity is
-in `\\[Ω·m\\]`; relative permeability and permittivity are dimensionless.
+in `\\[Ω·m\\]`. Relative permeability and permittivity are dimensionless.
 The complete phase-domain self and mutual parameter matrices are evaluated at
 the requested frequency before optional internal-layer elimination.
 
@@ -145,9 +148,10 @@ cable_element = cable(
 ```
 """
 function cable(; args...)
+	if any(key -> key in (:pins, :transformation, :connection, :setpoint), keys(args))
+		Base.kwerr((; args...), cable)
+	end
 	c = Cable()
-	transformation = false
-	connection = true
 	for (key, val) in pairs(args)
 		if key == :positions
 			for v in val
@@ -159,10 +163,6 @@ function cable(; args...)
 			c.conductors[key] = val
 		elseif isa(val, Insulator)
 			c.insulators[key] = val
-		elseif key == :transformation
-			transformation = val
-		elseif key == :connection
-			connection = val	
 		else
 			throw(ArgumentError("Unknown cable property name."))
 		end
@@ -214,15 +214,7 @@ function cable(; args...)
 		c.insulators[:I1].ϵᵣ *= x
 	end
 
-	n = length(c.positions)
-
-	elem = Element(
-		input_pins = n,
-		output_pins = n,
-		element_value = c,
-		transformation = transformation,
-		connection = connection,
-	)
+	return c
 end
 
 """
@@ -232,8 +224,8 @@ Evaluate the per-unit-length series impedance and shunt admittance matrices.
 
 # Arguments
 
-- `c`: Cable geometry, material parameters, and reduction options.
-- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+- `c`: Cable with its geometry, material parameters and reduction options.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses `s = 2π * im * f`
   for frequency `f` \\[Hz\\].
 
 # Returns
@@ -253,7 +245,7 @@ skin-effect and earth-return impedances, transforms layer currents, and optional
 Kron-reduces all but the first conducting layer of each cable before forming the
 shunt admittance. Without reduction, matrix order is the cable count times the number
 of conducting layers. The earth relative permittivity is stored but unused in this
-assembly; underground potential coefficients use vacuum permittivity.
+assembly. Underground potential coefficients use vacuum permittivity.
 
 # Examples
 
@@ -265,7 +257,7 @@ model = cable(length=1000.0, positions=[(0.0, 1.0)],
     I1=Insulator(rᵢ=0.02, rₒ=0.04, ϵᵣ=2.3),
     C2=Conductor(rᵢ=0.04, rₒ=0.042, ρ=2.2e-7),
     I2=Insulator(rᵢ=0.042, rₒ=0.045, ϵᵣ=2.3),
-    earth_parameters=(1.0, 1.0, 100.0)).element_model
+    earth_parameters=(1.0, 1.0, 100.0))
 result = P.eval_parameters(model, 2π*im*50)
 ```
 """
@@ -275,8 +267,8 @@ function eval_parameters(c::Cable, s::Complex)
 	μ₀ = 4π*1e-7
 	ϵ₀ = _VACUUM_PERMITTIVITY
 	μᵍ = μᵣᵍ * μ₀
-	# ϵᵍ = ϵᵣᵍ * ϵ₀   # not used in the original assembly
-	# σᵍ = 1/ρᵍ        # not used in the original assembly
+	# `ϵᵍ = ϵᵣᵍ * ϵ₀` is unused by the assembly.
+	# `σᵍ = 1/ρᵍ` is unused by the assembly.
 	γE = exp(Base.MathConstants.eulergamma)
 
 	nₗ = length(c.conductors)
@@ -285,11 +277,11 @@ function eval_parameters(c::Cable, s::Complex)
 	Z = zeros(ComplexF64, n*nₗ, n*nₗ)
 	P = zeros(ComplexF64, n*nₗ, n*nₗ)
 
-	# ---- Base (single-cable) layer matrices: fill only [1:nₗ, 1:nₗ] then replicate ----
+	# Base (single-cable) layer matrices: fill only [1:nₗ, 1:nₗ] then replicate
 	Zb = zeros(ComplexF64, nₗ, nₗ)
 	Pb = zeros(ComplexF64, nₗ, nₗ)
 
-	# series impedance of conductors (eq 39/40/44 logic, same as original)
+	# Series impedance of conductors (equations 39, 40 and 44).
 	max_r = max(
 		isempty(c.conductors) ? 0.0 : maximum(r.rₒ for r in values(c.conductors)),
 		isempty(c.insulators) ? 0.0 : maximum(r.rₒ for r in values(c.insulators)),
@@ -323,7 +315,7 @@ function eval_parameters(c::Cable, s::Complex)
 		i += 1
 	end
 
-	# shunt "P" build from insulators (same indexing logic as original)
+	# Build shunt P from insulators.
 	outer_insulation = nothing
 	i = 1
 	for key in keys(c.insulators)
@@ -335,7 +327,7 @@ function eval_parameters(c::Cable, s::Complex)
 		Zⁱ = s*μ/(2π) * log(rₒ/rᵢ)
 		Pⁱ = log(rₒ/rᵢ) / (2π*ϵ)
 
-		# The outer-diagonal addition order is metal, earth, insulation; this order preserves
+		# The outer-diagonal addition order is metal, earth, insulation. This order preserves
 		# floating-point rounding.
 		if i == nₗ
 			outer_insulation = Zⁱ
@@ -347,7 +339,7 @@ function eval_parameters(c::Cable, s::Complex)
 		i += 1
 	end
 
-	# replicate base blocks to all cables (same as original copy/translate)
+	# Replicate base blocks to all cables.
 	for k in 1:n
 		idx = ((k-1)*nₗ+1):(k*nₗ)
 		Z[idx, idx] .= Zb
@@ -366,7 +358,7 @@ function eval_parameters(c::Cable, s::Complex)
 		end
 	end
 
-	# mutual earth-return impedance between cables (only at outer layer index, same as original)
+	# Mutual earth-return impedance between cables at the outer layer index.
 	for i in 1:n
 		for j in (i+1):n
 			H = c.positions[i][2] + c.positions[j][2]
@@ -380,7 +372,7 @@ function eval_parameters(c::Cable, s::Complex)
 		end
 	end
 
-	# reduction for representation core, sheath and armor (same algebra, now with valid indexing)
+	# Reduction to the core, sheath and armor representation.
 	for k in 1:n, l in 1:n
 		rows_l = ((l-1)*nₗ+1):(l*nₗ)
 
@@ -398,7 +390,7 @@ function eval_parameters(c::Cable, s::Complex)
 		end
 	end
 
-	# underground potential coefficients (same as original)
+	# Underground potential coefficients
 	if c.type == :underground
 		for i in 1:n, j in 1:n
 			H  = c.positions[i][2] + c.positions[j][2]
@@ -421,7 +413,7 @@ function eval_parameters(c::Cable, s::Complex)
 		end
 	end
 
-	# Kron elimination (unchanged intent, same call)
+	# Kron elimination
 	if c.eliminate
 		cond_noElim = [(i-1)*nₗ + 1 for i in 1:n]
 		Z = PowerImpedance.kron(Z, cond_noElim)
@@ -440,8 +432,8 @@ Evaluate the component ABCD representation at complex frequency `s`.
 
 # Arguments
 
-- `c`: Cable geometry, material parameters, and reduction options.
-- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+- `c`: Cable with its geometry, material parameters and reduction options.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses `s = 2π * im * f`
   for frequency `f` \\[Hz\\].
 
 # Returns
@@ -474,15 +466,16 @@ model = cable(length=1000.0, positions=[(0.0, 1.0)],
     I1=Insulator(rᵢ=0.02, rₒ=0.04, ϵᵣ=2.3),
     C2=Conductor(rᵢ=0.04, rₒ=0.042, ρ=2.2e-7),
     I2=Insulator(rᵢ=0.042, rₒ=0.045, ϵᵣ=2.3),
-    earth_parameters=(1.0, 1.0, 100.0)).element_model
+    earth_parameters=(1.0, 1.0, 100.0))
 result = P.eval_abcd(model, 2π*im*50)
 ```
 """
 function eval_abcd(c::Cable, s::Complex)
 	(Z, Y) = eval_parameters(c, s) #function eval_parameters receives in input variables c and s and gives in output the series impedance matrix Z and the shunt admittance matrix Y
 	γ = sqrt(convert(Array{ComplexF64}, Z*Y)) # conversion of arrays product Z*Y and then Γ=sqrt(Z*Y) -> Simulator tutorial pag 19, bottom page (Calculations same as transmission line case)
-	# γ = sqrt(Z*Y) #TODO: This line is added to replace the one on the top, which was giving problems for single DC cables (no transformation). Need to see if this will cause any issue with other components, but so far so good.
-	Yc = Z \ γ #Always ottom page 19 simulator_tutorial
+	# `γ = sqrt(Z*Y)` replaced the preceding expression after failures for single
+	# DC cables without transformation. TODO verify its effect on other components.
+	Yc = Z \ γ #Always bottom page 19 simulator_tutorial
 	n = Int(size(Yc, 1)) #Saves in n the number of rows present in the vector Yc
 	abcd = zeros(Complex, 2n, 2n) #Creation of the ABCD matrix-> zeros matrix with dimension 2n*2n
 
@@ -492,3 +485,13 @@ function eval_abcd(c::Cable, s::Complex)
 	abcd[(n+1):end, (n+1):end] = Z \ (cosh(γ*c.length) * Z) # Matrix D[n*n]=Z^-1cosh(Γl)Z
 	return abcd
 end
+
+function electricalconnections(model::Cable)
+    n = length(model.positions)
+    n in (1, 2, 3) ||
+        throw(ArgumentError("Cable ports do not support $n conductors."))
+    domain = n == 3 ? ACABC : DC_CM
+    return (side1 = Port(domain), side2 = Port(domain))
+end
+
+bases(::Cable) = nothing

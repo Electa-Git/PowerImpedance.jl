@@ -129,7 +129,7 @@ end
 
 function reference_admittance(net)
     return cat(
-        (PowerImpedance.get_y(net.elements[:branch], ComplexF64(im * 2π * f))[1:2, 1:2]
+        (physical_y(net.elements[:branch], ComplexF64(im * 2π * f))[1:2, 1:2]
         for f in passive_settings().frequencies)...;
         dims = 3)
 end

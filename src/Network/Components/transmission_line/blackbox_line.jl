@@ -1,9 +1,5 @@
-# This is an PowerImpedance element in order to model a transmission line based on
-# line parameters (Z and Y) or ABCD matrix.
-# It is a blackbox model, meaning that the internal structure of the line is not modeled.
-# The line is represented by its imported frequency-dependent parameters, e.g. line costants (Z,Y)
-# or the ABCD two-port parameters. The parameters are in total length.
-# The respective parameters can be imported from PSCAD, Ztool or LCMjl.
+# Model a transmission line from imported frequency-dependent line constants (Z, Y)
+# or full-length ABCD two-port parameters. Import selectors are PSCAD, Ztool and LCMjl.
 
 export blackbox_line
 
@@ -11,7 +7,7 @@ export blackbox_line
 $(TYPEDEF)
 
 Store sampled line constants or ABCD matrices and their frequency grid. Line-constant
-evaluation uses per-unit-length Z and Y matrices; the ABCD representation includes the
+evaluation uses per-unit-length Z and Y matrices. The ABCD representation includes the
 configured physical length.
 
 $(TYPEDFIELDS)
@@ -30,7 +26,8 @@ $(TYPEDFIELDS)
     Y ::Vector{Matrix{ComplexF64}} = [] # Imported shunt admittance matrix [Ohms/m]
     "Sampled series impedance matrices per unit length \\[Ω/m\\]."
     Z :: Vector{Matrix{ComplexF64}} = [] # Imported series impedance matrix [Siemens/m]
-    "Sampled full-length ABCD matrices; A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
+    "Sampled full-length ABCD matrices. A/D are \\[dimensionless\\], B is \\[Ω\\], and C is
+    \\[S\\]."
     ABCD :: Vector{Matrix{ComplexF64}} = [] # Imported ABCD matrix
     "Sample frequencies \\[Hz\\]."
     f:: Vector{Float64} = [] # Imported frequency vector [Hz]
@@ -41,16 +38,22 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Import sampled transmission-line parameters and construct a line element.
+Import sampled transmission-line parameters and construct a `Blackbox_line` model.
 
 # Arguments
 
-- `args...`: Component-field and element-option keywords described in the corresponding
-  component type.
+- `n`: Number of conductors. Default: `3`.
+- `length`: Physical line length \\[m\\]. Default: `1.0`.
+- `data_type`: Import selector, `:PSCAD`, `:LCMjl` or `:Ztool`. Default: `:PSCAD`.
+- `path`: Input filename or filename prefix. Default: `""`.
+- `Y`, `Z`: Sampled shunt admittances \\[S/m\\] and series impedances \\[Ω/m\\].
+  Default: empty vectors. The importer replaces them.
+- `ABCD`: Sampled full-length ABCD matrices. Default: an empty vector.
+- `f`: Sample frequencies \\[Hz\\]. Default: an empty vector.
 
 # Returns
 
-- An `Element` containing the configured component model.
+- A `Blackbox_line` containing the imported parameters and conductor count.
 
 # Notes
 
@@ -58,13 +61,13 @@ Import sampled transmission-line parameters and construct a line element.
 `_yp.out` suffixes. `:LCMjl` reads a tab-delimited table with one header row,
 followed by rows containing frequency and `n²` complex Z entries and `n²` complex Y
 entries. Each block is reshaped and adjointed: row-major input entries are conjugated on import. Encode the imaginary
-parts accordingly. Z and Y use \\[Ω/m\\] and \\[S/m\\]. The `:Ztool` import branch is
+parts with the conjugated signs. Z and Y use \\[Ω/m\\] and \\[S/m\\]. The `:Ztool` import
+branch is
 currently unimplemented.
 
 # Errors
 
-- Propagates file-reading and parsing errors. Unknown component keywords raise
-  `ArgumentError`; incompatible scan dimensions raise an error.
+- Propagates file-reading and parsing errors. Incompatible scan dimensions raise an error.
 
 # Examples
 
@@ -84,17 +87,13 @@ end
 ```
 """
 function blackbox_line(;args...)
-    
+    if any(key -> key in (:pins, :transformation, :connection, :setpoint), keys(args))
+        Base.kwerr((; args...), blackbox_line)
+    end
     bbl = Blackbox_line()
-    transformation = false #variable transformation is defined false (park transformation not operated)
-    connection = true #variable connection is defined true (element is connected to the network)
     for (key, val) in pairs(args)
         if in(key, propertynames(bbl))
-            setfield!(bbl, key, val) 
-        elseif (key == :transformation)
-            transformation = val
-        elseif (key == :connection)
-            connection = val
+            setfield!(bbl, key, val)
         else
             throw(ArgumentError("Unknown power line property name.")) #If no one of the value specified above -> display an error
         end
@@ -111,7 +110,7 @@ function blackbox_line(;args...)
         yp = readdlm(bbl.path * "_yp.out",skipstart=1)
 
         num_rows = size(zm, 1)
-        num_cols = size(zm, 2) -2 # Substract for log(f) and f
+        num_cols = size(zm, 2) -2 # Subtract for log(f) and f
 
         if num_cols/2 != bbl.n
 
@@ -153,7 +152,7 @@ function blackbox_line(;args...)
 
     # Import two-port Y matrix from Ztool
     elseif bbl.data_type == :Ztool
-    # TODO: Do interface to Ztool, convert Y to ABCD matrix
+    # TODO implement the Ztool interface and convert Y to an ABCD matrix.
 
          #bbl.ABCD
 
@@ -197,8 +196,7 @@ function blackbox_line(;args...)
     end 
 
 
-    elem = Element(input_pins = bbl.n, output_pins = bbl.n, element_value = bbl,
-        transformation = transformation, connection = connection)
+    return bbl
     
 end
 
@@ -212,7 +210,7 @@ Evaluate the per-unit-length series impedance and shunt admittance matrices.
 # Arguments
 
 - `bbl`: Sampled line matrices and frequency grid.
-- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+- `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses `s = 2π * im * f`
   for frequency `f` \\[Hz\\].
 
 # Returns
@@ -227,7 +225,7 @@ f=\\operatorname{Re}\\left(\\frac{s}{2\\pi\\mathrm{j}}\\right),\\quad Z(f)=(1-t)
 ```
 
 The same interpolation applies to ``Y``. Frequencies use \\[Hz\\]. Exact samples are
-selected directly; other points use linear interpolation with linear extrapolation
+selected directly. Other points use linear interpolation with linear extrapolation
 outside the sampled interval. `:Ztool` has no Z/Y data and raises an error.
 
 # Errors
@@ -255,10 +253,11 @@ function eval_parameters(bbl :: Blackbox_line, s :: Complex) #function eval_para
     # Take the imported Y and Z values 
     if s/(2pi*1im) ∈ bbl.f
 
-        Z=bbl.Z[findfirst(==(s/(2pi*1im)), bbl.f)] #Find the index of the frequency point in the frequency vector f that is equal to s/(2pi*1im) and use this index to get the corresponding Z matrix from the list of Z matrices
+        # Select Z at the exact sample frequency s/(2pi*1im).
+        Z=bbl.Z[findfirst(==(s/(2pi*1im)), bbl.f)]
         Y=bbl.Y[findfirst(==(s/(2pi*1im)), bbl.f)] 
     else # Inter- or extrapolation needed
-        #TODO: Implement in a more efficient way, as this creates a new interpolation object every time the function is called.
+        # TODO reuse the interpolation object currently created on every call.
         Z_interp = linear_interpolation(bbl.f, bbl.Z,extrapolation_bc=Line())
         Y_interp = linear_interpolation(bbl.f, bbl.Y,extrapolation_bc=Line())
         Z=Z_interp(real(s/(2pi*1im))) #
@@ -271,8 +270,7 @@ function eval_parameters(bbl :: Blackbox_line, s :: Complex) #function eval_para
 end
 
 
-# Only function that is called externally, the interface with the rest of the code!
-# Two cases: Either the user provides Z and Y, or the user provides the ABCD matrix directly.
+# External ABCD evaluation accepts either Z and Y or sampled ABCD matrices.
 """
 $(TYPEDSIGNATURES)
 
@@ -281,7 +279,7 @@ Evaluate the component ABCD representation at complex frequency `s`.
 # Arguments
 
 - `bbl`: Sampled line matrices and frequency grid.
-- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+- `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses `s = 2π * im * f`
   for frequency `f` \\[Hz\\].
 
 # Returns
@@ -304,8 +302,8 @@ Here ``Z`` is series impedance \\[Ω/m\\], ``Y`` is shunt admittance \\[S/m\\], 
 physical length \\[m\\], and ``Γ`` is the matrix propagation constant \\[m⁻¹\\]. Matrix
 products retain their implemented order.
 
-For `:Ztool`, the alternative branch uses sampled ABCD data rather than line constants.
-That import path is incomplete; at an exact sample the current implementation assigns
+The `:Ztool` branch uses sampled ABCD data.
+That import path is incomplete. At an exact sample the current implementation assigns
 the sample to a local variable other than the returned `abcd`.
 
 # Examples
@@ -324,11 +322,12 @@ function eval_abcd(bbl :: Blackbox_line, s :: Complex)
     
     
     if bbl.data_type == :PSCAD || bbl.data_type == :LCMjl 
-    # Case 1: User provides Z and Y directly, calculation of the ABCD matrix as in a normal transmission line!
+    # Calculate ABCD from the supplied Z and Y matrices.
     (Z, Y) = eval_parameters(bbl, s) #function eval_parameters receives in input variables c and s and gives in output the series impedance matrix Z and the shunt admittance matrix Y
     γ = sqrt(convert(Array{ComplexF64}, Z*Y)) # conversion of arrays product Z*Y and then Γ=sqrt(Z*Y) -> Simulator tutorial pag 19, bottom page (Calculations same as transmission line case)
-    # γ = sqrt(Z*Y) #TODO: This line is added to replace the one on the top, which was giving problems for single DC cables (no transformation). Need to see if this will cause any issue with other components, but so far so good.
-    Yc = Z \ γ #Always ottom page 19 simulator_tutorial
+    # `γ = sqrt(Z*Y)` replaced the preceding expression after failures for single
+    # DC cables without transformation. TODO verify its effect on other components.
+    Yc = Z \ γ #Always bottom page 19 simulator_tutorial
     n = Int(size(Yc,1)) #Saves in n the number of rows present in the vector Yc
     abcd = zeros(Complex, 2n, 2n) #Creation of the ABCD matrix-> zeros matrix with dimension 2n*2n
 
@@ -337,17 +336,18 @@ function eval_abcd(bbl :: Blackbox_line, s :: Complex)
     abcd[n+1:end,1:n] = Yc * sinh(γ*bbl.length) #Eq 33 pag 19 simulator_tutorial. Matrix C[n*n]=Ycsinh(Γl)
     abcd[n+1:end, n+1:end] = Z \ (cosh(γ*bbl.length) * Z) # Matrix D[n*n]=Z^-1cosh(Γl)Z
 
-    # Case 2: User provides the ABCD matrix directly, no calculation needed!
+    # Use the supplied ABCD matrices directly.
 
     else
 
     # Take the imported ABCD matrix 
         if s/(2pi*1im) ∈ bbl.f
 
-            Z=bbl.ABCD[findfirst(==(s/(2pi*1im)), bbl.f)] #Find the index of the frequency point in the frequency vector f that is equal to s/(2pi*1im) and use this index to get the corresponding ABDC matrix from the list of ABCD matrices
+            # Select ABCD at the exact sample frequency s/(2pi*1im).
+            Z=bbl.ABCD[findfirst(==(s/(2pi*1im)), bbl.f)]
 
         else # Inter- or extrapolation needed
-            #TODO: Implement in a more efficient way, as this creates a new interpolation object every time the function is called.
+            # TODO reuse the interpolation object currently created on every call.
             ABCD_interp = linear_interpolation(bbl.f, bbl.ABCD,extrapolation_bc=Line())
             abcd=ABCD_interp(real(s/(2pi*1im))) #
 
@@ -360,3 +360,13 @@ function eval_abcd(bbl :: Blackbox_line, s :: Complex)
     return abcd
 
 end
+
+function electricalconnections(model::Blackbox_line)
+    n = model.n
+    n in (1, 2, 3) ||
+        throw(ArgumentError("Blackbox_line ports do not support $n conductors."))
+    domain = n == 3 ? ACABC : DC_CM
+    return (side1 = Port(domain), side2 = Port(domain))
+end
+
+bases(::Blackbox_line) = nothing

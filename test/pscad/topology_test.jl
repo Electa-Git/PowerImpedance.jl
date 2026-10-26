@@ -2,12 +2,12 @@ include("topology.jl")
 using .PSCADTopology, TOML
 
 @testset "PSCAD electrical topology reference fixtures" begin
-    directory = joinpath(@__DIR__, "fixtures/topology_8be21ee")
+    directory = joinpath(@__DIR__, "fixtures/topology_a1a7fb7")
     files = sort(filter(file -> endswith(file, ".toml"), readdir(directory; join = true)))
-    @test length(files) == 14
+    @test length(files) == 27
     for file in files
         reference = TOML.parsefile(file)
-        @test reference["commit"] == "8be21eecabb85d29d2896bc51562f61344338604"
+        @test reference["commit"] == "a1a7fb71d6ac189ddf06d58e2817dc4197dd4031"
         @test occursin(r"^[0-9a-f]{64}$", reference["source_sha256"])
         for (name, graph) in reference["canvases"]
             @test PSCADTopology.check_degrees(graph, name) === nothing
@@ -28,7 +28,7 @@ end
 
 @testset "PSCAD electrical topology detects changed branches" begin
     graph = TOML.parsefile(joinpath(@__DIR__,
-        "fixtures/topology_8be21ee/transformer_yy_classic.toml"))["canvases"]["Main"]
+        "fixtures/topology_a1a7fb7/transformer_yy.toml"))["canvases"]["Main"]
     components = graph["components"]
     index(name) = only(findall(c -> get(c["parameters"], "Name", "") == name, components))
     for name in ("line_primary_R", "line_primary_L", "line_secondary_R", "line_secondary_L",
@@ -107,15 +107,34 @@ end
 end
 
 @testset "PSCAD approved shunt meter returns" begin
-    policy = TOML.parsefile(joinpath(@__DIR__, "fixtures/shunt_meter_moves.toml"))
-    @test length(policy) == 14
+    policy = Dict(name => name == "sm" ? Vector{String}[] :
+        [[name in ("dc", "dc_cable") ? "I_ac_load_1" : "I_load_1",
+            name in ("dc", "dc_cable") ? "ac_load_R" : "load_R"]]
+        for name in ("small_ac", "passive_ohl", "transformer_yy", "transformer_dy",
+            "dc", "dc_cable", "sm"))
+    @test length(policy) == 7
     for (fixture, moves) in policy
-        reference = TOML.parsefile(joinpath(@__DIR__, "fixtures/topology_8be21ee",
+        reference = TOML.parsefile(joinpath(@__DIR__, "fixtures/topology_a1a7fb7",
             fixture * ".toml"))["canvases"]["Main"]
-        expected = PSCADTopology.shunt_meter_returns(reference, moves)
+        before = deepcopy(reference)
+        components, nets = before["components"], before["nets"]
+        index(name) = only(findall(c -> get(c["parameters"], "Name", "") == name,
+            components))
+        net(pin) = only(filter(n -> pin in n["ports"], nets))
+        for (meter, part) in moves
+            m, p = index(meter), index(part)
+            bus, inner, ground = net([p, 1]), net([p, 2]), net([m, 2])
+            for (n, old, new) in ((bus, [p, 1], [m, 1]),
+                (inner, [m, 1], [m, 2]), (inner, [p, 2], [p, 1]),
+                (ground, [m, 2], [p, 2]))
+                deleteat!(n["ports"], only(findall(==(old), n["ports"])))
+                push!(n["ports"], new)
+            end
+        end
+        expected = PSCADTopology.shunt_meter_returns(before, moves)
         @test expected["components"] == reference["components"]
         @test PSCADTopology.check_degrees(expected, fixture) === nothing
-        @test PSCADTopology.equivalent(reference, expected) == isempty(moves)
+        @test PSCADTopology.equivalent(before, expected) == isempty(moves)
         for (meter, part) in moves
             @test PSCADTopology.shunt_meter_direction(expected, meter, part) == 1
             reversed = deepcopy(expected)
@@ -130,7 +149,7 @@ end
         end
     end
     graph = TOML.parsefile(joinpath(@__DIR__,
-        "fixtures/topology_8be21ee/transformer_yy_classic.toml"))["canvases"]["Main"]
+        "fixtures/topology_a1a7fb7/transformer_yy.toml"))["canvases"]["Main"]
     @test_throws ErrorException PSCADTopology.shunt_meter_returns(graph, [[
         "I_line_1", "load_R"]])
     @test_throws ErrorException PSCADTopology.shunt_meter_returns(graph, [[
@@ -143,10 +162,10 @@ end
     reference = complex.(native["yy_ref"]["peak_real_kA"], native["yy_ref"]["peak_imag_kA"])
     measured = complex.(native["yy_named_load_return"]["peak_real_kA"],
         native["yy_named_load_return"]["peak_imag_kA"])
-    classic, _ = PSCADFixtures.transformer_network()
+    classic = PSCADFixtures.transformer_network()
     plan = P.build_plan(P.netlist(classic, nothing))
     graph = PSCADTopology.electrical_graph(plan.main, Dict())
-    direction = PSCADTopology.shunt_meter_direction(graph, "I_load_1", "load_R")
+    direction = PSCADTopology.shunt_meter_direction(graph, "I_load_side1", "load_R")
     @test direction == 1
     for (i, (value, expected)) in enumerate(zip(direction .* measured, reference))
         # Existing comparison defaults: 2% RMS current and 1 degree angle.
@@ -169,7 +188,7 @@ end
             P.AbstractLineWrapperPlan[], P.ModuleDefinitionPlan[], P.GridLayout(),
             P.ProbeChannel[], P._NameReservations())
         P.impedance_path!(state, parameters, topology, "bus", nothing, "shunt";
-            first_probe = "I_shunt_1")
+            first_probe = "I_shunt_side1")
         @test P.check_connectivity(state.main, "shunt") === nothing
         g = PSCADTopology.electrical_graph(state.main, Dict())
         components, nets = g["components"], g["nets"]
@@ -177,7 +196,7 @@ end
         @test only(filter(n -> [meter, 2] in n["ports"], nets))["ground"]
         @test !only(filter(n -> [meter, 1] in n["ports"], nets))["ground"]
         @test Dict(only(filter(c -> c.defn == "master:ammeter", state.main.components)).params)["Name"] ==
-              "I_shunt_1"
+              "I_shunt_side1"
         for c in filter(
             c -> c.defn in ("master:resistor", "master:inductor", "master:capacitor"),
             state.main.components)

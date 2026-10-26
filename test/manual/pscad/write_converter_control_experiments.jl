@@ -31,21 +31,21 @@ function write_reference(model)
         for element in filter(e -> e.model isa PowerImpedance.AbstractConverter, model.netlist.elements)
             eq = P.converter_equilibrium(element)
             x, y, m = eq.states, eq.outputs, element.model
-            for quantity in fieldnames(typeof(eq.setpoint_pu))
+            for quantity in fieldnames(typeof(eq.terminal_pu))
                 row(element.name, "reference_" * string(quantity),
-                    getproperty(eq.setpoint_pu, quantity),
+                    getproperty(eq.terminal_pu, quantity),
                     quantity == :θ_ac ? "rad" : "pu")
             end
             row(element.name, "reference_v_ac_measured_side",
-                eq.setpoint_pu.v_ac * PowerImpedance.voltage_filter_ratio(m), "pu")
+                eq.terminal_pu.v_ac * PowerImpedance.voltage_filter_ratio(m), "pu")
             for (quantity, value) in pairs(y.meas)
                 row(element.name, quantity, value, quantity == :θ_f ? "rad" : "pu")
             end
             row(element.name, "omega_c", y.sync.ω_c, "pu")
             if m isa PowerImpedance.MMC
                 row(element.name, "iS_z", x.iΣ_z, "pu")
-                row(element.name, "i_dc_internal", 3x.iΣ_z*m.elec.Sbase/m.elec.vDC_base, "kA")
-                caps = P.mmc_arm_capacitors(x, m.elec.vDC_base)
+                row(element.name, "i_dc_internal", 3x.iΣ_z*m.bases.S/m.bases.v_dc, "kA")
+                caps = P.mmc_arm_capacitors(x, m.bases.v_dc)
                 for (half, voltages) in (("u", caps.upper), ("l", caps.lower)),
                     (phase, voltage) in zip(("a", "b", "c"), voltages)
 
@@ -58,7 +58,7 @@ function write_reference(model)
             residual = zeros(length(x))
             PowerImpedance._state_space!(
                 residual, collect(values(x)), collect(values(eq.inputs)),
-                eq.setpoint_pu, m, PowerImpedance.Equil())
+                eq.terminal_pu, m, PowerImpedance.Equil())
             row(element.name, "equilibrium_residual_max", maximum(abs, residual), "model_rate")
         end
     end
@@ -87,13 +87,13 @@ for (stem, factory, reference) in ((
     ("mmc_qv", PSCADFixtures.mmc_qv_network, :none),
     ("mmc_vac", PSCADFixtures.mmc_vac_network, :none))
     fixture = factory()
-    for (suffix, network) in (("classic", fixture.classic), ("builder", fixture.state))
+    for (suffix, network) in (("builder", fixture),)
         write_case(stem * "_" * suffix, network, MMC_SETTINGS, reference)
     end
 end
 
 fixture = PSCADFixtures.tlc_vac_network()
-for (suffix, network) in (("classic", fixture.classic), ("builder", fixture.state))
+for (suffix, network) in (("builder", fixture),)
     write_case("tlc_vac_" * suffix, network, TLC_SETTINGS, :none)
 end
 
@@ -102,11 +102,11 @@ end
 fixture = PSCADFixtures.mmc_pq_network()
 default_ramp = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
     sample_step = 250e-6)
-write_case("mmc_pq_default_ramp", fixture.classic, default_ramp, :none)
+write_case("mmc_pq_default_ramp", fixture, default_ramp, :none)
 fixture = PSCADFixtures.tlc_case2_network()
 zero_ramp = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
     sample_step = 40e-6, source_ramp = 0.0)
-write_case("tlc_case2_zero_ramp", fixture.classic, zero_ramp, :none)
+write_case("tlc_case2_zero_ramp", fixture, zero_ramp, :none)
 
 write(joinpath(EXPERIMENTS, "README.md"),
     """

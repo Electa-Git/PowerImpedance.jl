@@ -107,6 +107,21 @@ function unresolved_globals(expression, namespace)
                 visit(first(signature.args), bound)
                 foreach(argument -> annotations(argument, inner), signature.args[2:end])
                 visit(body, inner)
+            elseif head == :let
+                bindings, body = arguments
+                inner = copy(bound)
+                declarations = bindings.head == :block ? bindings.args : [bindings]
+                for binding in declarations
+                    binding isa LineNumberNode && continue
+                    if binding isa Symbol
+                        visit(binding, inner)
+                        bind!(inner, binding)
+                    else
+                        visit(last(binding.args), inner)
+                        bind!(inner, first(binding.args))
+                    end
+                end
+                visit(body, definitions!(inner, body))
             elseif head == :->
                 parameters, body = arguments
                 inner = definitions!(bind!(copy(bound), parameters), body)
@@ -200,7 +215,7 @@ end
         @testset "$(basename(path))" begin
             @test isempty(unresolved_globals(expression, namespace))
             if basename(path) == "acceptance.jl"
-                for name in ("SimulationSettings", "steady_state")
+                for name in ("SimulationSettings",)
                     qualified = "PowerImpedance.PSCAD.$name"
                     @test occursin(qualified, source)
                     original = Meta.parseall(replace(source, qualified => name))
@@ -220,7 +235,8 @@ end
                         exports = mktempdir()
                         cases = [( (; project_name = name,
                             netlist = (; elements = [], buses = []),
-                            operating_point = (; bus_states = Dict())), nothing, 0.01)
+                            operating_point = (; bus_states = Dict(:fixture => nothing))),
+                            nothing, 0.01)
                             for name in ("run_error", "first_pass", "comparison_error", "last_pass")]
                         PSCADRun() = nothing
                         function compute(model, run; options)
@@ -376,6 +392,14 @@ end
                 "value = (; label = unknown); label"), namespace) == [:label, :unknown]
             @test unresolved_globals(Meta.parseall(
                 "callback = function (item); item; end; item"), namespace) == [:item]
+        end
+        @testset "Let bindings" begin
+            source = "value = let model = 1; b = model + 1; (; b); end"
+            @test isempty(unresolved_globals(Meta.parseall(source), namespace))
+            @test unresolved_globals(Meta.parseall(source * "; model; b"), namespace) ==
+                [:b, :model]
+            @test unresolved_globals(Meta.parseall(replace(source,
+                "model = 1" => "model = unknown")), namespace) == [:unknown]
         end
         for (source, names) in (
             ("@missing_macro abs(unknown)", [Symbol("@missing_macro"), :unknown]),

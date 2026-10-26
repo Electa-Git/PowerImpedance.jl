@@ -72,23 +72,24 @@ using LinearAlgebra
     @test pscad.identify_rlc(s -> Diagonal(fill(R + s * L, 3))).conductors == [1, 2, 3]
 
     transformed = impedance(z = s -> Diagonal([R + s * L, 1 / (s * C), R + s * L]),
-        pins = 3, transformation = true)
+        conductors = 3)
     @test pscad.identify_rlc(transformed)[1].conductors == [1, 3]
     @test pscad.identify_rlc(transformed)[2].form.C ≈ C
     coupled = impedance(z = s -> [R + s * L 0.1 0; 0.1 R + s * L 0; 0 0 R + s * L],
-        pins = 3, transformation = true)
-    @test_throws ArgumentError("coupled impedance matrix") pscad.identify_rlc(coupled)
+        conductors = 3)
+    @test_throws ArgumentError("coupled impedance matrix") pscad.identify_rlc(
+        coupled)
 
     constant = pscad.identify_rlc(2 + 3im)
     @test constant.constant
     @test constant.form.R == 2.0
     @test constant.form.L == 3 / (2π * 50)
     @test constant.form.C === nothing
-    @test pscad.identify_rlc(impedance(z = 2 + 3im, pins = 3, transformation = true)).conductors ==
+    @test pscad.identify_rlc(impedance(z = 2 + 3im, conductors = 3)).conductors ==
           [1, 2, 3]
     @test_throws ArgumentError pscad.identify_rlc(Inf)
 
-    # calc_RLC in test/NetworkBuilder_test.jl: preserve the fixture's original
+    # calc_RLC in test/fixtures/ieee39bus.jl: preserve the fixture's original
     # three-phase current convention and P/Q/V inputs without loading its suite.
     for (P, Q, V, capacitor) in ((107.3333, 0.8, 345.0, false),
         (166.6667, 61.3333, 345.0, false), (0.0, 100.0, 345.0, true),

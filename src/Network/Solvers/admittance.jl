@@ -1,0 +1,122 @@
+### Admittance-matrix calculations for NetworkModel.
+
+"""
+$(TYPEDSIGNATURES)
+
+Assemble active-element admittances, eliminate grounded nodes, and apply Kron reduction
+to the model's retained nodes.
+
+# Arguments
+
+- `lanw`: Linearized network model.
+- `s`: Complex frequencies \\[s⁻¹\\] at which to evaluate the admittances.
+
+# Returns
+
+- Complex admittance tensor \\[S\\] with dimensions `(n, n, length(s))`, where `n`
+  counts retained nongrounded nodes in model order.
+
+# Errors
+
+- Propagates singular-matrix errors from Kron reduction.
+"""
+make_y_node(lanw::NetworkModel, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.active_elements, s)
+
+"""
+$(TYPEDSIGNATURES)
+
+Assemble passive-element admittances, eliminate grounded nodes, and apply Kron reduction
+to the model's retained nodes.
+
+# Arguments
+
+- `lanw`: Linearized network model.
+- `s`: Complex frequencies \\[s⁻¹\\] at which to evaluate the admittances.
+
+# Returns
+
+- Complex admittance tensor \\[S\\] with dimensions `(n, n, length(s))`, where `n`
+  counts retained nongrounded nodes in model order.
+
+# Errors
+
+- Propagates singular-matrix errors from Kron reduction.
+"""
+make_y_edge(lanw::NetworkModel, s::AbstractVector{<:Complex}) = make_y(lanw, lanw.passive_elements, s)
+
+
+### Input nodes and output nodes as input arguments. Then can be used for determine impedance
+function make_y(lanw::NetworkModel, elemidvec::Vector{Int}, s::AbstractVector{<:Complex}, netidvec::AbstractVector{Int}=lanw.retained_nodes)
+
+    Y = initY(lanw,s) #Zeroes of size nets
+    
+
+    consideredadm = getindex(lanw.element_admittances, elemidvec)
+    # Add active device admittances
+    fill!(Y, consideredadm, s)
+
+    # Eliminate grounded nodes & update indices of active nets (will be shifted due to elimination)
+    Yred, newnetidvec = eliminategrounds(Y, lanw,netidvec)
+
+    # Kron reduction
+    
+    N = length(newnetidvec)
+    Yfinal = Array{ComplexF64,3}(undef, N,N,length(s))
+
+    for i in eachindex(s)
+        Yfinal[:,:,i] = P.kron(@view(Yred[:,:,i]), newnetidvec)
+    end
+
+    return Yfinal
+end
+
+
+function Base.fill!(Y::Array{ComplexF64, 3}, admcoll::AdmittanceLookup{ComplexF64}, s :: AbstractVector{<:Complex})
+    if isempty(admcoll)
+        fill!(Y, complex(0.0))
+        return Y
+    end
+
+    #Y array of size (N, N, length(s)) where N is the number of nodes in the network
+    # Allocate matrix to store temporary results (in-place operation)
+    maxsize = maximum(size.(admcoll.indices))
+    # Holds the largest admittance matrix in admvec.
+    Ytemp = zeros(ComplexF64, maxsize..., length(s))
+
+    any(iszero,Y) || (Y .= complex(0)) # Initialize Y to zero. (Checking = 100ns, assignment=30ms) -> only when necessary
+    Y!vec = admcoll.Y!
+    indicvec = admcoll.indices
+
+    for i in eachindex(Y!vec)
+        # Y! overwrites Ytemp with D for the next admittance.
+        Y! = Y!vec[i]
+        indici = indicvec[i]
+        # admsize = size(indici)
+        Ytempi = @view(Ytemp[axes(indici,1), axes(indici,2), :])
+        Y!(Ytempi, s) # Fill Ytemp with the admittance values for this element
+        # Now add Ytempi to the correct location in Y based on adm.indices
+        # TODO measure the effect of @simd on execution time.
+        for (I, place) in pairs(indicvec[i])
+            for j in eachindex(s) 
+                Y[place[1], place[2], j] += Ytempi[I,j]
+            end   
+        end
+    end
+   
+end
+
+function initY(lanw::NetworkModel, s::AbstractVector)
+    N = maximum(values(lanw.indices.nodes))
+    return Array{ComplexF64, 3}(zeros(N,N, length(s)))
+end
+
+function eliminategrounds(Y::Array{ComplexF64,3}, lanw::NetworkModel, netidvec::Vector{Int})
+    groundnets = lanw.grounded_nodes
+    keep = setdiff(axes(Y,1), groundnets)
+
+    newnetidvec = setdiff(netidvec, groundnets)
+    newnetidvec == netidvec || @info("Some input nets are grounded.")
+    newnetidvec = [findfirst(isequal(net), keep) for net in newnetidvec] # Find the index of each net in the new keep -> new index in matrix
+
+    return Y[keep, keep, :], newnetidvec #Only non-grounded nodes are kept
+end

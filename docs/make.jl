@@ -33,7 +33,8 @@ const GITLAB_REPOSITORY_URL = get(
 const GITLAB_PAGES_URL = get(
     ENV,
     "CI_PAGES_URL",
-    "https://$(GITLAB_REPOSITORY_NAMESPACE).pages.$(GITLAB_HOST)/$(GITLAB_REPOSITORY_PAGES_PATH)"
+    "https://$(GITLAB_REPOSITORY_NAMESPACE).pages.$(GITLAB_HOST)/" *
+    GITLAB_REPOSITORY_PAGES_PATH
 )
 
 const GITHUB_REPOSITORY_PATH = "Electa-Git/PowerImpedance.jl"
@@ -81,7 +82,7 @@ const LITERATE_EXAMPLE_FILES = (
 
 const PLAIN_LITERATE_EXAMPLE_FILES = ("PSCAD_tutorial.jl",)
 
-# Gridspace_uncertainty.jl and P2P_HVDC_Gridspace.jl are not part of the documentation build.
+# Gridspace_uncertainty.jl and P2P_HVDC_Gridspace.jl are omitted from this build.
 
 const LITERATE_EXAMPLE_PATHS = [joinpath(EXAMPLES_SRC, file)
                                 for file in LITERATE_EXAMPLE_FILES
@@ -242,7 +243,8 @@ function html_assets()
 end
 
 function sanitize_rendered_log_paths(content::AbstractString)
-    location = r"(?m)(└ @ [^\s<]+) (?:~|/)[^\r\n<]*/(src|ext|docs|examples|test)/([^\r\n<]+:\d+)"
+    location = Regex(raw"(?m)(└ @ [^\s<]+) (?:~|/)[^\r\n<]*/" *
+                     raw"(src|ext|docs|examples|test)/([^\r\n<]+:\d+)")
     return replace(content, location => s"\1 \2/\3")
 end
 
@@ -292,10 +294,8 @@ function build_pages()
     )
 
     if isfile(joinpath(DOCS_SRC_DIR, "reference.md"))
-        push!(pages, "API Reference" => "reference.md")
+        push!(pages, "API reference" => "reference.md")
     end
-
-    push!(pages, "Classic scalar interface" => "legacy.md")
 
     development_pages = Any[
         "Release and registration" => "developers/releasing.md",
@@ -303,8 +303,6 @@ function build_pages()
         "Docstrings" => "developers/docstrings.md",
         "Conventions" => "developers/conventions.md",
         "Calculation parity" => "developers/calculation_parity.md",
-        "Network-model performance" => "developers/network_model_performance.md",
-        "Legacy converter adapters" => "developers/legacy_converter_adapters.md",
         "PSCAD mapping and station notes" => "developers/pscad_mapping.md"
     ]
 
@@ -360,7 +358,9 @@ makedocs(;
         assets = html_assets(),
         mathengine = math_engine(),
         prettyurls = running_in_ci(),
-        footer = "[$(metadata.name).jl]($(REPOSITORY_URL)) v$(metadata.version) supported by the Etch Competence Hub of EnergyVille, financed by the Flemish Government.",
+        footer = "[$(metadata.name).jl]($(REPOSITORY_URL)) v$(metadata.version) " *
+                 "supported by the Etch Competence Hub of EnergyVille, " *
+                 "financed by the Flemish Government.",
         size_threshold = nothing
     ),
     pages = build_pages(),
@@ -382,7 +382,7 @@ end
 # Makie frees every root scene in a task started by the scene's finalizer. When
 # such a task first runs during process exit, Julia compiles its code while the
 # runtime shuts down, which crashed the CI documentation build with signal 11.
-# Collect the scenes now, so these tasks run while the session is fully active.
+# Collect the scenes now. These tasks then run while the session is fully active.
 GC.gc(true)
 sleep(1)
 GC.gc(true)

@@ -1,9 +1,11 @@
 function _terminal_bus(e, terminal, context)
     terminal.grounded && return nothing
     bus = context.buses[terminal.bus]
-    expected = bus.kind == :dc ? 1 : bus.kind == :ac3_dq ? 2 : 3
-    terminal.terminals == collect(1:expected) ||
-        throw(ArgumentError("element :$(e.name) side $(terminal.side) has incomplete $(bus.kind) terminals"))
+    expected = bus.kind == :dc ? (:dc,) :
+               bus.kind == :ac3_dq ? (:d, :q) : (:a, :b, :c)
+    terminal.terminals == collect(expected) ||
+        throw(ArgumentError("element :$(e.name) port :$(terminal.port) " *
+                            "has incomplete $(bus.kind) terminals"))
     return bus
 end
 
@@ -19,10 +21,10 @@ function current_probe!(state::PlanState, e, terminal, context; orientation)
     bus = _terminal_bus(e, terminal, context)
     bus === nothing &&
         throw(ArgumentError("element :$(e.name) has a grounded measurement terminal"))
-    name = pscad_name(current_probe_name(e.pscad, terminal.side); used = state.used)
+    name = pscad_name(current_probe_name(e.pscad, terminal.port); used = state.used)
     push!(state.channels,
         ProbeChannel(name, :current, bus.name, string(e.name),
-            string(terminal.side), bus.kind == :dc ? 1 : 3, "kA", orientation))
+            terminal.port, bus.kind == :dc ? 1 : 3, "kA", orientation))
     return name
 end
 
@@ -65,10 +67,10 @@ function voltage_probe!(state::PlanState, bus::Bus, labels = (bus.name,);
             component!(state.main, "voltmetergnd", (x + 90, row), ["Name" => name])
         end
         output_probe!(state.main, name, "bus", "kV", (x + 180, row))
-        side = bus.kind == :dc ? (index == 1 ? "P" : "N") : nothing
+        pole = bus.kind == :dc ? (index == 1 ? "P" : "N") : nothing
         push!(state.channels,
-            ProbeChannel(name, :voltage, bus.name, nothing, side,
-                bus.kind == :dc ? 1 : 3, "kV"))
+            ProbeChannel(name, :voltage, bus.name, nothing, nothing,
+                bus.kind == :dc ? 1 : 3, "kV"; pole))
     end
     return nothing
 end

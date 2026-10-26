@@ -3,8 +3,8 @@ $(TYPEDEF)
 
 Station connection and filesystem mapping for native PSCAD execution.
 `local_root` and `shared_root` name the same directory on the caller and station.
-`remote_root` is scratch space on the station. Construction from field values
-does not perform I/O. Construction from a TOML filename only reads that file.
+`remote_root` is scratch space on the station. Construction stores the supplied
+fields in memory or reads them from a selected TOML file.
 The execution limit `timeout` \\[s\\] defaults to 1800.
 
 $(TYPEDFIELDS)

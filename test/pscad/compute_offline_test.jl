@@ -52,12 +52,13 @@ function P.remote_command(::Val{:fixture}, config::RemoteConfig, command::Abstra
             files = String[]
             frequencies = get!(arguments, "freq", collect(1.0:8.0))
             $(MODE[] === :ztool_frequencies) && (frequencies = [1.0, 3.0])
-            for side in (1, 2)
-                name = stem * "#Y_AC#scan-" * string(side) * "#.txt"
+            for port_index in (1, 2)
+                name = stem * "#Y_AC#scan-" * string(port_index) * "#.txt"
                 push!(files, name)
                 open(joinpath(output, name), "w") do io
-                    println(io, "f\tscan-", side, "_d\tscan-", side, "_q")
-                    actual = $(MODE[] === :ztool_grid_mismatch) && side == 2 ? [1.0, 3.0] : frequencies
+                    println(io, "f\tscan-", port_index, "_d\tscan-", port_index, "_q")
+                    actual = $(MODE[] === :ztool_grid_mismatch) && port_index == 2 ?
+                        [1.0, 3.0] : frequencies
                     for frequency in actual
                         println(io, "(", frequency, "+0j) (1+2j) (3+4j) (5+6j) (7+8j)")
                     end

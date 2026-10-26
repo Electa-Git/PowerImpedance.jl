@@ -16,20 +16,20 @@ package UUID because registered Julia package identities are immutable.
 
 The package provides analytical models for:
 
-- AC and DC voltage sources;
-- lumped impedances and transformers;
-- overhead lines and underground cables;
-- modular multilevel and two-level converters;
-- synchronous and induction machines; and
-- black-box passive and converter frequency responses.
+- AC and DC voltage sources
+- lumped impedances and transformers
+- overhead lines and underground cables
+- modular multilevel and two-level converters
+- synchronous and induction machines
+- black-box passive and converter frequency responses
 
 Driving-point and transfer impedances describe the resulting systems. Nodal and
 edge admittances support generalized Nyquist, Bode, passivity, small-gain,
 stability-margin, unstable-frequency, and eigenvalue analyses.
 
 Gridspace extends the same physical constructors to deterministic parameter
-sweeps and uncertainty quantification. It preserves the ordinary scalar API,
-samples each uncertain network into ordinary numeric components, and performs
+sweeps and uncertainty quantification.
+Gridspace samples each uncertain network into ordinary numeric components and performs
 the required power flow and linearization for every materialized configuration.
 
 ## Installation
@@ -55,8 +55,8 @@ supported combinations and data structures.
 
 - [Introduction](introduction.md) explains the multiport ABCD representation
   and impedance-based stability workflow.
-- [Network construction](network.md) covers the scalar and declarative
-  NetworkBuilder interfaces.
+- [Network construction](network.md) covers direct models, inputs, and topology
+  declarations with ports.
 - [Power-flow initialization](initialization.md) explains when operating
   points are computed or reused.
 - [Impedance and stability analysis](results.md) introduces the downstream
@@ -73,4 +73,6 @@ is cited through the project [bibliography](bibliography.md).
 
 ![Top Julia package-server regions observed for PowerImpedance.jl](assets/user-statistics.svg)
 
-The map is generated in CI from Julia's public package-server request logs. It shows the top server regions by the sum of `request_addrs` for requests marked as user traffic. These regional aggregates are useful adoption indicators, but they are not a count of distinct people and must not be read as country-level telemetry.
+The map shows PowerImpedance users by region, from Julia's public package-server
+request logs. CI generates it by summing `request_addrs` for requests marked as
+user traffic and selecting the top server regions.

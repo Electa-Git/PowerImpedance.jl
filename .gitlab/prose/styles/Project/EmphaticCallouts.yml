@@ -1,0 +1,5 @@
+extends: ai-tells.Metacommentary
+# Retain the parent's bold callout checks after limiting it to parsed prose.
+scope: strong
+tokens:
+  - '^(?:Key insight|Key takeaway|Key point|Important|Note|Bottom line|The point):?$'

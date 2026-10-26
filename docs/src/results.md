@@ -4,8 +4,8 @@ CurrentModule = PowerImpedance
 
 # Impedance and stability analysis
 
-Power-flow, frequency-response, and stability calculations return completed result objects. They do not create,
-display, or store graphics.
+Power-flow, frequency-response, and stability calculations return numerical result objects.
+Plotting uses those completed results.
 
 ## Primitive calculations
 
@@ -38,8 +38,14 @@ linearized = compute(
 )
 ```
 
-The calculations do not mutate the input `NetworkState` or cache an operating
-point in it.
+`power_flow` is a `PowerFlowResult`. Its `operating_point` holds per-port values
+such as `point[:c1].ac.p` and `point[:c1].dc.v`. Port powers are positive into
+the component. `solve(state)` returns the same result type. Explicit power-flow
+requests always solve, including networks of only sources and passives.
+Linearization alone can skip power flow for an entirely linear network.
+
+The state retains converged power-flow starting values for repeated solves.
+Calculated operating points remain in the result objects.
 
 ## Stability calculations
 
@@ -70,7 +76,7 @@ gain = compute(
 
 Every call returns `StabilityResult(formulation, analysis, output,
 diagnostics)`. The `output` field contains the complete numerical payload used
-by its plot definition. There is no graphics field.
+by its plot definition.
 
 ## Plot completed results
 
@@ -92,5 +98,4 @@ calculation before invoking PlotBuilder. See the [PlotBuilder guide](developers/
 
 `ParametricResult`, `LinearErrorResult`, and `MonteCarloResult` retain aligned
 configuration data and execution metadata. Stability plotting consumes their
-completed values or retained `details.plot_data` trajectories. It never repeats
-power flow, linearization, or a stability calculation.
+completed values or retained `details.plot_data` trajectories.

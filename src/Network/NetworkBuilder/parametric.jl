@@ -1,26 +1,8 @@
-include("gs_components.jl")
-include("gs_passives.jl")
-include("gs_machines.jl")
-include("gs_controls.jl")
-include("gs_converters.jl")
-
-function NetworkModel(
-    admittances::AdmittanceLookup{T},
-    ::Vector{Union{}},
-    passive_elements::Vector{Int64},
-    grounded_nodes::Vector{Int},
-    retained_nodes::Vector{Int},
-    indices::NetworkLookup,
-) where {T<:Number}
-    return NetworkModel(
-        admittances,
-        Int64[],
-        passive_elements,
-        grounded_nodes,
-        retained_nodes,
-        indices,
-    )
-end
+include("components.jl")
+include("passives.jl")
+include("machines.jl")
+include("controls.jl")
+include("converters.jl")
 
 struct _NamedTupleMaterializer{Names} end
 function (::_NamedTupleMaterializer{Names})(values...)::NamedTuple{Names} where {Names}
@@ -28,7 +10,6 @@ function (::_NamedTupleMaterializer{Names})(values...)::NamedTuple{Names} where 
 end
 
 function _namedtuple_gridspace(values::NamedTuple{Names}) where {Names}
-    values = NamedTuple{Names}(map(_named_converter, Names, Tuple(values)))
     return _lift_gridspace(
         NamedTuple{Names},
         _NamedTupleMaterializer{Names}(),
@@ -39,10 +20,11 @@ end
 
 struct _BuilderMaterializer{Connections}
     connections::Connections
+    exclude::Tuple
 end
 
 function (target::_BuilderMaterializer)(elements, options)::NetworkState
-    return define(elements, target.connections; options)
+    return define(elements, target.connections; options, exclude = target.exclude)
 end
 
 """
@@ -56,12 +38,13 @@ function _define_network(
     elements::NamedTuple,
     connections::Union{Tuple,AbstractVector},
     options::NamedTuple,
+    exclude,
 )
     element_space = _namedtuple_gridspace(elements)
     option_space = _namedtuple_gridspace(options)
     return _lift_gridspace(
         NetworkState,
-        _BuilderMaterializer(connections),
+        _BuilderMaterializer(connections, Tuple(exclude)),
         (; elements=element_space, options=option_space),
         Val(:product),
     )

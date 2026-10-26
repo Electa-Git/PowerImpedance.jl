@@ -1,25 +1,26 @@
 module PSCADPlanTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures: small_ac_network, passive_ohl_network, transformer_network,
                        dc_network
 const P = PowerImpedance.PSCAD
 
 @testset "PSCAD overhead-line transposition" begin
-    classic, _ = passive_ohl_network()
-    model = classic.elements[:line].element_model
+    state = passive_ohl_network()
+    model = state.elements[:line]
     for (transposition, expected) in ((:none, "0"), (:ideal, "1"))
         model.transposition = transposition
-        plan = P.build_plan(P.netlist(classic, nothing))
+        plan = P.build_plan(P.netlist(state, nothing))
         @test Dict(only(plan.lines).tower)["Transp"] == expected
     end
 end
 
 @testset "PSCAD short overhead line warning" begin
-    classic, _ = passive_ohl_network()
-    classic.elements[:line].element_model.length = 100.0
+    state = passive_ohl_network()
+    state.elements[:line].length = 100.0
     settings = P.SimulationSettings(time_step = 10e-6)
     @test_logs (:warn, r"overhead line :line, length 100.0 m, time step 1.0e-5 s: PSCAD aborts if the travel time is below the step") begin
-        P.build_plan(P.netlist(classic, nothing); settings)
+        P.build_plan(P.netlist(state, nothing); settings)
     end
 end
 
@@ -34,7 +35,7 @@ function plan_shape(plan)
                  (l.name, l.kind, l.tower, l.conductors, l.ground_wires,
                      l.ground, l.frephase, l.outdisp) for l in plan.lines],
         wrappers = [(w.row, w.x, w.y, w.params) for w in plan.wrappers],
-        channels = [(c.name, c.kind, c.bus, c.element, c.side, c.dim, c.unit)
+        channels = [(c.name, c.kind, c.bus, c.element, c.port, c.dim, c.unit)
                     for c in plan.probes.channels],
         reference_bus = plan.probes.reference_bus)
 end
@@ -105,42 +106,41 @@ function check_layout(plan, number_of_cells; empty_cells = ())
 end
 
 @testset "PSCAD passive AC plan" begin
-    classic, state = small_ac_network()
-    pf = power_flow(classic)
-    classic_list = P.netlist(classic, pf)
-    builder_list = P.netlist(state, NetworkBuilder.solve(state).powerflow)
-    classic_plan = P.build_plan(classic_list; name = "small_ac")
-    builder_plan = P.build_plan(builder_list; name = "small_ac")
-    @test plan_shape(classic_plan) == plan_shape(builder_plan)
-    @test counts(classic_plan) == Dict("master:source_3" => 1,
+    state = small_ac_network()
+    pf = compute(PowerFlowProblem(state), ACDCPowerFlow())
+    list = P.netlist(state, pf)
+    builder_list = list
+    plan = P.build_plan(list; name = "small_ac")
+    @test counts(plan) == Dict("master:source_3" => 1,
         "master:resistor" => 2, "master:inductor" => 1, "master:ground" => 1,
         "master:ammeter" => 4, "master:voltmetergnd" => 2, "master:nodelabel" => 16,
         "master:datalabel" => 6, "master:pgb" => 6)
-    source = only(filter(c -> c.defn == "master:source_3", classic_plan.main.components))
+    source = only(filter(c -> c.defn == "master:source_3", plan.main.components))
     params = Dict(source.params)
-    bus = classic_list.buses[1]
+    bus = list.buses[1]
     @test params["Vm"] == P.pscad_value(bus.vm_pu * bus.base_kV * sqrt(3); unit = "kV")
     @test params["Ph"] == P.pscad_value(rad2deg(bus.va_rad) + 90; unit = "deg")
     @test params["Vm"] == "380.0 [kV]"
     @test params["Ph"] == "90.0 [deg]"
     @test params["Type"] == "6"
     @test params["Tc"] == "0.05 [s]"
-    @test classic_plan.probes.reference_bus == "B1"
-    probe_names = [p.name for p in classic_plan.probes.channels]
-    @test probe_names == ["I_source_1", "I_line_1", "I_line_2", "I_load_1", "V_B1", "V_B2"]
+    @test plan.probes.reference_bus == "B1"
+    probe_names = [p.name for p in plan.probes.channels]
+    @test probe_names ==
+          ["I_source_ac", "I_line_side1", "I_line_side2", "I_load_side1", "V_B1", "V_B2"]
     @test length(unique(probe_names)) == length(probe_names)
-    @test all(p -> p.dim == 3, classic_plan.probes.channels)
+    @test all(p -> p.dim == 3, plan.probes.channels)
     labels = [Dict(c.params)["Name"]
-              for c in classic_plan.main.components if c.defn == "master:nodelabel"]
+              for c in plan.main.components if c.defn == "master:nodelabel"]
     @test count(==("B1"), labels) == 3
     @test count(==("B2"), labels) == 3
-    check_layout(classic_plan, 5)
+    check_layout(plan, 5)
     # Source magnitude and sine-reference phase come from the supplied PF,
     # even when those differ from the element's declared setpoint.
     shifted = deepcopy(pf)
-    shifted[1]["solution"]["bus"]["1"]["vm"] = 1.02
-    shifted[1]["solution"]["bus"]["1"]["va"] = 0.31
-    shifted_plan = P.build_plan(P.netlist(classic, shifted))
+    shifted.result["solution"]["bus"]["1"]["vm"] = 1.02
+    shifted.result["solution"]["bus"]["1"]["va"] = 0.31
+    shifted_plan = P.build_plan(P.netlist(state, shifted))
     shifted_params = Dict(only(filter(c -> c.defn == "master:source_3", shifted_plan.main.components)).params)
     @test shifted_params["Vm"] == "387.6 [kV]"
     @test shifted_params["Ph"] == P.pscad_value(rad2deg(0.31) + 90; unit = "deg")
@@ -167,9 +167,9 @@ end
     R, L, C = 10.0, 0.012, 2e-6
     for (z, topology) in ((s -> R + s * L + inv(s * C), :series),
         (s -> inv(inv(R) + inv(s * L) + s * C), :parallel))
-        classic, _ = small_ac_network()
-        classic.elements[:line].element_model.value = z
-        plan = P.build_plan(P.netlist(classic, nothing))
+        state = small_ac_network()
+        state.elements[:line].value = z
+        plan = P.build_plan(P.netlist(state, nothing))
         check_layout(plan, 5)
         capacitor = only(filter(c -> c.defn == "master:capacitor", plan.main.components))
         @test Dict(capacitor.params)["C"] == "2.0 [uF]"
@@ -182,9 +182,9 @@ end
         @test P.identify_rlc(z).form.topology == topology
     end
     # A parallel shunt has one meter measuring the sum of all row currents.
-    classic, _ = small_ac_network()
-    classic.elements[:load].element_model.value = s -> inv(inv(R) + s * C)
-    plan = P.build_plan(P.netlist(classic, nothing))
+    state = small_ac_network()
+    state.elements[:load].value = s -> inv(inv(R) + s * C)
+    plan = P.build_plan(P.netlist(state, nothing))
     check_layout(plan, 5)
     @test counts(plan)["master:ground"] == 1
     @test counts(plan)["master:ammeter"] == 4
@@ -196,7 +196,7 @@ end
     grounds = Set((c.x, c.y) for c in plan.main.components if c.defn == "master:ground")
     meter = only(filter(
         c -> c.defn == "master:ammeter" &&
-             Dict(c.params)["Name"] == "I_load_1",
+             Dict(c.params)["Name"] == "I_load_side1",
         plan.main.components))
     labels = Dict((c.x, c.y) => Dict(c.params)["Name"]
     for c in plan.main.components if c.defn == "master:nodelabel")
@@ -208,21 +208,25 @@ end
     @test any(
         w -> (meter.x + 36, meter.y) in w.vertices &&
              any(p -> p in grounds, w.vertices), plan.main.wires)
-    _, builder = small_ac_network()
-    reversed_rows = [merge((; row.node, row.element, row.side, row.terminal),
-                         (; side = row.element == :load ? 3 - row.side : row.side))
-                     for row in builder.topology.connections]
-    reversed = NetworkBuilder.define(builder.elements, reversed_rows; options = builder.options)
+    builder = small_ac_network()
+    topology = deepcopy(builder.topology)
+    for i in eachindex(topology.connections.port)
+        topology.connections.component[i] == :load || continue
+        topology.connections.port[i] =
+            topology.connections.port[i] == :side1 ? :side2 : :side1
+    end
+    reversed = NetworkBuilder.NetworkState(builder.elements, topology, builder.options)
     reversed_plan = P.build_plan(P.netlist(reversed, nothing))
     check_layout(reversed_plan, 5)
-    @test only(filter(c -> c.element == "load", reversed_plan.probes.channels)).side == "2"
+    @test only(filter(c -> c.element == "load", reversed_plan.probes.channels)).port ==
+          :side2
     @test counts(reversed_plan)["master:ground"] == 1
-    classic, _ = small_ac_network()
-    classic.elements[:line].element_model.value = 0.19 + 2π * 50 * 0.0122im
-    @test_logs (:info, r"line.*50 Hz") P.build_plan(P.netlist(classic, nothing))
-    classic.elements[:line].element_model.value = Diagonal(ComplexF64[1, 2, 3])
+    state = small_ac_network()
+    state.elements[:line].value = 0.19 + 2π * 50 * 0.0122im
+    @test_logs (:info, r"line.*50 Hz") P.build_plan(P.netlist(state, nothing))
+    state.elements[:line].value = Diagonal(ComplexF64[1, 2, 3])
     caught = try
-        P.build_plan(P.netlist(classic, nothing))
+        P.build_plan(P.netlist(state, nothing))
     catch e
         e
     end
@@ -230,10 +234,9 @@ end
     @test occursin(":line", sprint(showerror, caught))
     @test occursin("distinct per-conductor", sprint(showerror, caught))
     # The fallback is exercised directly, independently of emitter methods.
-    e = PowerImpedance.Element(; element_model = PowerImpedance.Cable(), input_pins = 2, output_pins = 2)
-    e.symbol = :future_cable
-    unsupported = P.NetlistElement(:future_cable, "future_cable", e,
-        e.element_model, P.Terminal[], :transformer, e.setpoint)
+    model = PSCADFixtures.dc_cable_network().elements.line
+    unsupported = P.NetlistElement(:future_cable, "future_cable", model,
+        electricalconnections(model), P.Terminal[], :transformer, nothing)
     state = P.PlanState(
         P.CanvasPlan(), P.AbstractLineDefinitionPlan[], P.AbstractLineWrapperPlan[],
         P.ModuleDefinitionPlan[], P.GridLayout(), P.ProbeChannel[], P._NameReservations())
@@ -248,11 +251,10 @@ end
 end
 
 @testset "PSCAD overhead-line plan" begin
-    classic, builder = passive_ohl_network()
-    list = P.netlist(classic, nothing)
+    state = passive_ohl_network()
+    builder = state
+    list = P.netlist(state, nothing)
     plan = P.build_plan(list; name = "ohl")
-    @test plan_shape(plan) ==
-          plan_shape(P.build_plan(P.netlist(builder, nothing); name = "ohl"))
     @test length(plan.lines) == length(plan.wrappers) == 1
     row, wrapper = only(plan.lines), only(plan.wrappers)
     @test row.name == wrapper.row == "line_row"
@@ -284,17 +286,17 @@ end
     @test !haskey(counts(plan), "master:inductor")
     check_layout(plan, 5)
     @test [c.name for c in plan.probes.channels] ==
-          ["I_source_1", "I_line_1", "I_line_2", "I_load_1", "V_B1", "V_B2"]
+          ["I_source_ac", "I_line_side1", "I_line_side2", "I_load_side1", "V_B1", "V_B2"]
     # Wrapper and meter inner ports have distinct stubs to one internal node.
     # Outer meter ports have separate stubs to the bus labels.
     for (port, direction, bus, probe) in (
-        ((wrapper.x - 54, wrapper.y + 18), -1, "B1", "I_line_1"),
-        ((wrapper.x + 54, wrapper.y + 72), 1, "B2", "I_line_2"))
+        ((wrapper.x - 54, wrapper.y + 18), -1, "B1", "I_line_side1"),
+        ((wrapper.x + 54, wrapper.y + 72), 1, "B2", "I_line_side2"))
         meter = only(filter(
             c -> c.defn == "master:ammeter" &&
                  Dict(c.params)["Name"] == probe,
             plan.main.components))
-        @test (meter.x, meter.y) == (port[1] + (direction == -1 ? -36 : 0), port[2] - 36)
+        @test (meter.x, meter.y) == (port[1] + 36direction, port[2] - 36)
         outer = (port[1] + direction * 36, port[2] - 36)
         endpoint = (outer[1] + direction * 36, outer[2])
         @test any(w -> Set(w.vertices) == Set([outer, endpoint]), plan.main.wires)
@@ -323,7 +325,7 @@ end
     end
     # Mapping follows native physical coordinates and preserves material data
     # when the line is bundled, vertical or has no ground wires.
-    tl = classic.elements[:line].element_model
+    tl = state.elements[:line]
     tl.conductors.organization = :vertical
     tl.conductors.Δyᵇᶜ = 8
     tl.conductors.nˢᵇ = 4
@@ -331,7 +333,7 @@ end
     tl.conductors.μᵣᶜ = 1.5
     tl.groundwires.μᵣᵍ = 2.0
     tl.earth_parameters = (1.3, 8.0, 350.0)
-    vertical = only(P.build_plan(P.netlist(classic, nothing)).lines)
+    vertical = only(P.build_plan(P.netlist(state, nothing)).lines)
     @test vertical.conductors == [(5.0, 38.0), (5.0, 46.0), (5.0, 54.0)]
     @test Dict(vertical.tower)["NCondB"] == "4"
     @test Dict(vertical.tower)["BSP"] == "0.45 [m]"
@@ -341,15 +343,15 @@ end
     @test Dict(vertical.ground)["GRP"] == "8.0"
     @test Dict(vertical.ground)["GRRES"] == "350.0 [ohm*m]"
     tl.groundwires.nᵍ = 0
-    @test isempty(only(P.build_plan(P.netlist(classic, nothing)).lines).ground_wires)
+    @test isempty(only(P.build_plan(P.netlist(state, nothing)).lines).ground_wires)
     tl.conductors.organization = Symbol()
     tl.conductors.positions = ([-11, 1, 9], [28, 35, 31])
-    @test only(P.build_plan(P.netlist(classic, nothing)).lines).conductors ==
+    @test only(P.build_plan(P.netlist(state, nothing)).lines).conductors ==
           [(-11.0, 28.0), (1.0, 35.0), (9.0, 31.0)]
     # A two-conductor line remains invalid on AC buses.
     tl.conductors.nᵇ = 2
     caught = try
-        P.build_plan(P.netlist(classic, nothing))
+        P.build_plan(P.netlist(state, nothing))
     catch error
         error
     end
@@ -388,8 +390,9 @@ end
 
 @testset "PSCAD transformer plans" begin
     for organization in (:YY, :ΔY)
-        classic, state = transformer_network(; organization)
-        plan = P.build_plan(P.netlist(classic, nothing); name = "transformer")
+        state = transformer_network(; organization)
+        state = state
+        plan = P.build_plan(P.netlist(state, nothing); name = "transformer")
         @test plan_shape(plan) ==
               plan_shape(P.build_plan(P.netlist(state, nothing); name = "transformer"))
         @test counts(plan)["master:xfmr-3p2w"] == 1
@@ -415,7 +418,8 @@ end
             @test Dict(part.params)[field] == value
         end
         @test [c.name for c in plan.probes.channels] ==
-              ["I_source_1", "I_line_1", "I_line_2", "I_load_1", "V_B1", "V_B2"]
+              [
+            "I_source_ac", "I_line_side1", "I_line_side2", "I_load_side1", "V_B1", "V_B2"]
         circuit = electrical_nodes(plan)
         for parameter in ("R", "L")
             part = only(filter(
@@ -427,10 +431,10 @@ end
                   circuit.root(circuit.labels["ground"])
         end
         # Turn and stray capacitances lie behind the terminal current meters.
-        t = classic.elements[:line].element_model
+        t = state.elements[:line]
         t.Cₜ = 1e-8
         t.Cₛ = 2e-8
-        capacitive = P.build_plan(P.netlist(classic, nothing))
+        capacitive = P.build_plan(P.netlist(state, nothing))
         check_layout(capacitive, 14)
         circuit = electrical_nodes(capacitive)
         for (name, left, right, value) in (
@@ -445,20 +449,20 @@ end
         for field in (:Rₚ, :Lₚ, :Rₛ, :Lₛ, :Lₘ, :Rₘ, :Cₜ, :Cₛ)
             setproperty!(t, field, 0.0)
         end
-        empty = P.build_plan(P.netlist(classic, nothing))
+        empty = P.build_plan(P.netlist(state, nothing))
         check_layout(empty, 9; empty_cells = (2, 4))
         @test counts(empty)["master:resistor"] == 1 # load only
         @test !haskey(counts(empty), "master:inductor")
         t.Rₘ = t.Lₘ = Inf
-        @test plan_shape(empty) == plan_shape(P.build_plan(P.netlist(classic, nothing)))
+        @test plan_shape(empty) == plan_shape(P.build_plan(P.netlist(state, nothing)))
         t.hasRω = true
-        @test_throws ArgumentError P.build_plan(P.netlist(classic, nothing))
+        @test_throws ArgumentError P.build_plan(P.netlist(state, nothing))
         t.hasRω = false
         for (field, value) in ((:Rₚ, -1.0), (:Cₜ, NaN), (:n, Inf), (
             :organization, :unsupported))
             previous = getproperty(t, field)
             setproperty!(t, field, value)
-            @test_throws ArgumentError P.build_plan(P.netlist(classic, nothing))
+            @test_throws ArgumentError P.build_plan(P.netlist(state, nothing))
             setproperty!(t, field, previous)
         end
     end
@@ -466,10 +470,13 @@ end
 
 @testset "PSCAD transformer solved winding ratings" begin
     for organization in (:YY, :ΔY)
-        classic, _ = transformer_network(; organization, Rₘ = Inf, Lₘ = Inf)
-        classic.voltageBase[1] = 220 / sqrt(3)
-        classic.elements[:source].setpoint = Setpoint(Vac = 16.5 * sqrt(2 / 3), θac = 0.0)
-        t = classic.elements[:line].element_model
+        state = transformer_network(; organization, Rₘ = Inf, Lₘ = Inf)
+        state = NetworkBuilder.NetworkState(state.elements, state.topology,
+            merge(state.options, (; voltageBase = 220 / sqrt(3))))
+        source = withinputs(state.elements.source; v = 16.5 * sqrt(2 / 3), theta = 0.0)
+        state = NetworkBuilder.NetworkState(merge(state.elements, (; source)),
+            state.topology, state.options)
+        t = state.elements[:line]
         # IEEE9 t1 winding parameters, on a common base far above its primary.
         t.n = 16.5 / 230
         t.Rₚ = t.Rₛ = 0.0
@@ -477,11 +484,11 @@ end
         t.Lₛ = 0.097 / 2
         t.V₁ᵒ = 16.5e3 / sqrt(3)
         t.V₂ᵒ = 230e3 / sqrt(3)
-        pf = power_flow(classic)
-        @test string(pf[1]["termination_status"]) == "LOCALLY_SOLVED"
+        pf = compute(PowerFlowProblem(state), ACDCPowerFlow())
+        @test string(pf.result["termination_status"]) == "LOCALLY_SOLVED"
         # Open-circuit metadata must not supply the exported winding ratings.
         t.V₁ᵒ = t.V₂ᵒ = 0.0
-        plan = P.build_plan(P.netlist(classic, pf))
+        plan = P.build_plan(P.netlist(state, pf))
         winding = only(filter(c -> c.defn == "master:xfmr-3p2w", plan.main.components))
         params = Dict(winding.params)
         @test params["V1"] == "16.5 [kV]"
@@ -494,8 +501,8 @@ end
 end
 
 @testset "PSCAD DC sources, paths and references" begin
-    classic, state = dc_network()
-    plan = P.build_plan(P.netlist(classic, nothing); name = "dc")
+    state = dc_network()
+    plan = P.build_plan(P.netlist(state, nothing); name = "dc")
     @test plan_shape(plan) ==
           plan_shape(P.build_plan(P.netlist(state, nothing); name = "dc"))
     check_layout(plan, 9)
@@ -505,11 +512,12 @@ end
     @test counts(plan)["master:ground"] == 5
     @test counts(plan)["master:ammeter"] == 6
     @test [c.name for c in plan.probes.channels] ==
-          ["I_ac_1", "I_from_1", "I_to_1", "I_line_1", "I_line_2",
-        "I_ac_load_1", "V_BUS1", "V_D1_P", "V_D1_N", "V_D2_P", "V_D2_N"]
-    @test all(c -> c.dim == 1, filter(c -> c.bus != "BUS1", plan.probes.channels))
+          ["I_ac_2_ac", "I_from_dc", "I_to_dc", "I_line_side1", "I_line_side2",
+        "I_ac_load_side1", "V_AC", "V_D1_P", "V_D1_N", "V_D2_P", "V_D2_N"]
+    @test all(c -> c.dim == 1, filter(c -> c.bus != "AC", plan.probes.channels))
     @test plan_shape(plan) ==
-          plan_shape(P.build_plan(P.netlist(classic, nothing); name = "dc", dc_reference = :none))
+          plan_shape(P.build_plan(P.netlist(state, nothing); name = "dc",
+              dc_reference = :none))
     circuit = electrical_nodes(plan)
     for (name, bus, magnitude) in (("from", "D1", "320.0 [kV]"), ("to", "D2", "318.0 [kV]")),
         pole in ("P", "N")
@@ -524,7 +532,7 @@ end
         # positive NA is grounded, its negative NB faces the negative bus.
         if pole == "P"
             meter = only(filter(
-                c -> c.defn == "master:ammeter" && Dict(c.params)["Name"] == "I_$(name)_1",
+                c -> c.defn == "master:ammeter" && Dict(c.params)["Name"] == "I_$(name)_dc",
                 plan.main.components))
             @test circuit.root((source.x - 36, source.y)) ==
                   circuit.root((meter.x + 36, meter.y))
@@ -544,10 +552,10 @@ end
     @test all(c -> Dict(c.params)["L"] == "0.025 [H]",
         filter(c -> c.defn == "master:inductor", plan.main.components))
     # Solved voltages override source setpoints without changing the input.
-    solved = power_flow(deepcopy(classic))
+    solved = compute(PowerFlowProblem(deepcopy(state)), ACDCPowerFlow())
     shifted = deepcopy(solved)
-    shifted[1]["solution"]["busdc"]["1"]["vm"] = 1.02
-    shifted_plan = P.build_plan(P.netlist(classic, shifted))
+    shifted.result["solution"]["busdc"]["1"]["vm"] = 1.02
+    shifted_plan = P.build_plan(P.netlist(state, shifted))
     @test all(c -> Dict(c.params)["Vm"] == "326.4 [kV]",
         filter(
             c -> c.defn == "master:source_1" && startswith(Dict(c.params)["Name"], "from"),
@@ -555,9 +563,12 @@ end
     # Remove the receiving source: the receiving bus gets two local references.
     elements = (; ac = state.elements.ac, from = state.elements.from,
         line = state.elements.line, ac_load = state.elements.ac_load)
-    rows = [(; r.node, r.element, r.side, r.terminal)
-            for r in state.topology.connections if r.element != :to]
-    floating = NetworkBuilder.define(elements, rows; options = state.options)
+    NB = NetworkBuilder
+    rows = (NB.Bus(:AC; ports = ((:ac, :ac), (:ac_load, :side1)), domain = ACDQ),
+        NB.Bus(:gnd; ports = ((:ac_load, :side2),), domain = ACDQ),
+        NB.Bus(:D1; ports = ((:from, :dc), (:line, :side1))),
+        NB.Bus(:D2; ports = ((:line, :side2),)))
+    floating = NB.define(elements, rows; options = state.options)
     reference = P.build_plan(P.netlist(floating, nothing))
     no_reference = P.build_plan(P.netlist(floating, nothing); dc_reference = :none)
     check_layout(reference, 10)
@@ -571,11 +582,10 @@ end
     @test_throws ArgumentError P.build_plan(P.netlist(floating, nothing); dc_reference = :invalid)
     # Add a grounded parallel RC shunt. It suppresses local references and
     # doubles C / halves R in both poles without invoking unsupported PF.
-    load = impedance(; z = s -> inv(inv(400.0) + s * 1e-6), pins = 1)
+    load = impedance(; z = s -> inv(inv(400.0) + s * 1e-6), conductors = 1)
     shunt_elements = merge(elements, (; load))
-    shunt_rows = vcat(rows,
-        [(node = :D2, element = :load, side = 1, terminal = 1),
-            (node = :gnd_dc, element = :load, side = 2, terminal = 1)])
+    shunt_rows = (rows..., NB.Net(:D2; terminals = ((:load, :side1, :dc),)),
+        NB.Net(:gnd_dc; terminals = ((:load, :side2, :dc),)))
     shunt = NetworkBuilder.define(shunt_elements, shunt_rows; options = state.options)
     shunt_plan = P.build_plan(P.netlist(shunt, nothing))
     check_layout(shunt_plan, 10)
@@ -589,11 +599,11 @@ end
 
 @testset "PSCAD export requires extension before power flow" begin
     @test Base.get_extension(PowerImpedance, :PowerImpedancePSCADExt) === nothing
-    classic, state = small_ac_network()
-    initial = classic.elements[:source].setpoint
+    state = small_ac_network()
+    initial = inputvalues(state.elements.source)
     mktempdir() do root
         path = joinpath(root, "fixture.pscx")
-        for net in (classic, state)
+        for net in (state,)
             caught = try
                 export_pscad(net; path)
             catch e
@@ -603,17 +613,18 @@ end
             @test occursin("export_pscad requires PythonCall", sprint(showerror, caught))
             @test !isfile(path)
         end
-        @test classic.elements[:source].setpoint === initial
-        @test_throws ArgumentError export_pscad(classic; path, dc_reference = :other)
-        @test_throws ArgumentError export_pscad(classic; path, line_options = Dict())
-        @test_throws ArgumentError export_pscad(classic; path, line_options = (;
+        @test inputvalues(state.elements.source) === initial
+        @test_throws ArgumentError export_pscad(state; path, dc_reference = :other)
+        @test_throws ArgumentError export_pscad(state; path, line_options = Dict())
+        @test_throws ArgumentError export_pscad(state; path, line_options = (;
             UnknownField = 1))
-        @test_throws ArgumentError export_pscad(classic; path = joinpath(root, "fixture.xml"))
-        @test_throws ArgumentError export_pscad(classic; path = joinpath(root, "missing", "fixture.pscx"))
-        @test_throws ArgumentError export_pscad(classic; path, name = "different")
+        @test_throws ArgumentError export_pscad(state; path = joinpath(root, "fixture.xml"))
+        @test_throws ArgumentError export_pscad(state; path = joinpath(root, "missing",
+            "fixture.pscx"))
+        @test_throws ArgumentError export_pscad(state; path, name = "different")
         write(path, "existing project")
-        @test_throws ArgumentError export_pscad(classic; path)
-        @test classic.elements[:source].setpoint === initial
+        @test_throws ArgumentError export_pscad(state; path)
+        @test inputvalues(state.elements.source) === initial
         @test read(path, String) == "existing project"
     end
 end

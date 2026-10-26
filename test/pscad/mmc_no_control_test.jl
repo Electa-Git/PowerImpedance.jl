@@ -1,4 +1,5 @@
 module PSCADMMCNoControlTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures
 using ..PSCADTLCTests: evaluate
@@ -8,7 +9,7 @@ const PI = PowerImpedance
 
 @testset "MMC optional Sigma controls follow the owned equations" begin
     fixture = PSCADFixtures.mmc_pq_network()
-    list = P.netlist(fixture.classic, power_flow(fixture.classic))
+    list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
     original = only(filter(e -> e.model isa PI.MMC, list.elements))
     eq = P.converter_equilibrium(original)
     m = original.model
@@ -20,7 +21,7 @@ const PI = PowerImpedance
         ccsc in (m.sigma_control.ccsc, PI.NoCirculatingCurrentSuppressionControl())
         sigma = PI.ΣdqzControlTEC(; tec, zscc, ccsc)
         model = PI.MMC(; m.meas, m.sync, m.delta_control, sigma_control = sigma,
-            m.modulation, m.elec)
+            m.modulation, m.elec, m.bases)
         e = converter_element(original, model)
         definition = P.mmc_sigma("SIGMA", e, eq, transforms)
         modules = Dict(d.name => d for d in (abc, dq, definition))
@@ -34,10 +35,10 @@ const PI = PowerImpedance
             phases = (0.0, -2π / 3, 2π / 3)
             signals = Dict{String, Any}("theta_c" => 0.0, "P_ac_f" => 0.43,
                 "v_dc_f" => voltage, "v_dc_divisor" => eq.outputs.meas.v_dc_f,
-                "iS_abc" => m.elec.Sbase / m.elec.vDC_base .* (d .* cos.(phases) .+
+                "iS_abc" => m.bases.S / m.bases.v_dc .* (d .* cos.(phases) .+
                     q .* sin.(phases) .+ z))
             for half in ("u", "l"), phase in ("a", "b", "c")
-                signals["v_Ctot_" * half * "_" * phase] = energy * m.elec.vDC_base
+                signals["v_Ctot_" * half * "_" * phase] = energy * m.bases.v_dc
             end
             states = merge(eq.states, (; iΣ_d = d, iΣ_q = q, iΣ_z = z,
                 Δθ_pll = 0.0, vCΣ_z = energy, vCΣ_d = 0.0, vCΣ_q = 0.0,
@@ -46,7 +47,7 @@ const PI = PowerImpedance
                 v_dc_f = eq.outputs.meas.v_dc_f))
             expected = PI.state_space!(zeros(PI.n_states(sigma)), states,
                 (; meas, power = (; P_ac_f = 0.43), sync = eq.outputs.sync),
-                eq.setpoint_pu, sigma, model)
+                eq.terminal_pu, sigma, model)
             outputs = evaluate(definition, signals)
             @test outputs["vMS_d_ref"] ≈ expected.vMΣ_d_ref_c atol = 1e-6
             @test outputs["vMS_q_ref"] ≈ expected.vMΣ_q_ref_c atol = 1e-6

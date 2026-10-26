@@ -21,14 +21,18 @@ function run_system_screens(;directory=get(ENV,"SYSTEM_SCREEN_DATA",joinpath(V.R
         activity="construction"
         try
             net=V.fixture(id).factory()
-            static=V.PSCADNetworks.inventory(P.netlist(net,nothing))
+            static=V.PSCADNetworks.inventory(V.fixture_netlist(net,nothing))
             record["inventory"]=Dict(string(k)=>v for (k,v) in pairs(static))
             record["inventory"]["static_electrical_partitions"]=pop!(record["inventory"],"subsystems")
             activity="power flow"
-            point=power_flow(net);result=first(point)
-            converters=[Dict("name"=>string(name),"Pac_MW"=>e.setpoint.Pac,"Qac_MVAr"=>e.setpoint.Qac,
-                "Vdc_kV"=>e.setpoint.Vdc,"Vac_phase_peak_kV"=>e.setpoint.Vac)
-                for (name,e) in net.elements if e.element_model isa Union{PowerImpedance.MMC,PowerImpedance.TLC}]
+            point=compute(PowerFlowProblem(net), ACDCPowerFlow());result=point.result
+            converters=[Dict("name"=>string(name),
+                "Pac_MW"=>-point.operating_point[name].ac.p,
+                "Qac_MVAr"=>-point.operating_point[name].ac.q,
+                "Vdc_kV"=>point.operating_point[name].dc.v,
+                    "Vac_phase_peak_kV"=>point.operating_point[name].ac.v)
+                for (name,e) in pairs(net.elements) if e isa Union{PowerImpedance.MMC,
+                    PowerImpedance.TLC}]
             record["power_flow"]=Dict("termination_status"=>string(result["termination_status"]),
                 "converters"=>converters,
                 "ac_voltage_min_pu"=>minimum(b["vm"] for b in values(result["solution"]["bus"])),

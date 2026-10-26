@@ -25,22 +25,18 @@ struct _LineParametersCable{L <: LCM.LineParameters} <:
     extrapolation::Symbol
 end
 
-struct _LineParametersElementMaterializer{F}
+struct _LineParametersMaterializer{F}
     constructor::F
 end
 
-function (target::_LineParametersElementMaterializer)(
+function (target::_LineParametersMaterializer)(
         parameters,
         length,
-        transformation,
-        connection,
         extrapolation
 )
     return target.constructor(
         parameters;
         length,
-        transformation,
-        connection,
         extrapolation
     )
 end
@@ -79,7 +75,8 @@ function _validate_line_parameters(parameters::LCM.LineParameters)
         "LineParameters Z and Y matrices must be square",
     ))
     order in 1:3 || throw(ArgumentError(
-        "unsupported LineParameters order $order; PowerImpedance supports one, two, or three phase conductors",
+        "unsupported LineParameters order $order; PowerImpedance supports " *
+        "one, two, or three phase conductors",
     ))
     size(parameters.Z, 3) == length(parameters.f) || throw(DimensionMismatch(
         "the LineParameters frequency count must match the third Z/Y dimension",
@@ -89,7 +86,8 @@ function _validate_line_parameters(parameters::LCM.LineParameters)
         "LineParameters must contain at least two frequency samples",
     ))
     any(NB._has_measurement, parameters.f) && throw(ArgumentError(
-        "uncertain LineParameters frequencies are unsupported; use a deterministic, ordered frequency grid",
+        "uncertain LineParameters frequencies are unsupported; " *
+        "use a deterministic, ordered frequency grid",
     ))
     all(frequency -> isfinite(frequency) && frequency > 0, parameters.f) ||
         throw(ArgumentError(
@@ -106,25 +104,10 @@ function _validate_line_parameters(parameters::LCM.LineParameters)
     return order
 end
 
-function _validate_configuration(order::Integer, transformation)
-    transformation isa Bool || throw(ArgumentError("transformation must be true or false"))
-    if order == 1
-        transformation && throw(ArgumentError(
-            "one-conductor LineParameters require transformation=false",
-        ))
-    elseif order == 2
-        transformation || throw(ArgumentError(
-            "two-conductor LineParameters require transformation=true for the native DC differential representation",
-        ))
-    end
-    return nothing
-end
-
-function _validate_line_options(length, connection, extrapolation)
+function _validate_line_options(length, extrapolation)
     length isa Real || throw(ArgumentError("length must be a real value in metres"))
     isfinite(length) || throw(ArgumentError("length must be finite"))
     length > zero(length) || throw(ArgumentError("length must be positive"))
-    connection isa Bool || throw(ArgumentError("connection must be true or false"))
     extrapolation in (:error, :linear) || throw(ArgumentError(
         "unsupported extrapolation :$extrapolation; expected :error or :linear",
     ))
@@ -134,59 +117,47 @@ end
 function _uncertain_native_error(kind::Symbol)
     constructor = kind === :overhead_line ? "overhead_line" : "cable"
     return ArgumentError(
-        "uncertain LineParameters and line lengths must be sampled before line evaluation; " *
+        "uncertain LineParameters and line lengths must be sampled " *
+        "before line evaluation; " *
         "use `PowerImpedance.$constructor(Grid, parameters; ...)`",
     )
 end
 
-function _line_element(
+function _line_model(
         ::Type{Model},
         kind::Symbol,
         parameters::LCM.LineParameters;
         length,
-        transformation = false,
-        connection = true,
         extrapolation = :error
 ) where {Model <: _LineParametersTransmissionLine}
-    order = _validate_line_parameters(parameters)
-    _validate_configuration(order, transformation)
+    _validate_line_parameters(parameters)
     (NB._has_measurement(parameters) || NB._has_measurement(length)) &&
         throw(_uncertain_native_error(kind))
-    _validate_line_options(length, connection, extrapolation)
+    _validate_line_options(length, extrapolation)
 
-    model = Model(parameters, Float64(length), extrapolation)
-    return P.Element(
-        input_pins = order,
-        output_pins = order,
-        element_value = model,
-        transformation = transformation,
-        connection = connection
-    )
+    return Model(parameters, Float64(length), extrapolation)
 end
 
 """
 $(TYPEDSIGNATURES)
 
-Construct a native overhead-line `Element` from deterministic, phase-domain
-line parameters. `Z` [Ω/m] and `Y` [S/m] are scaled by the positive `length`
-[m] and interpolated entrywise over the tabulated frequencies [Hz]. Use
+Construct a native overhead-line model from deterministic, phase-domain
+line parameters. `Z` \\[Ω/m\\] and `Y` \\[S/m\\] are scaled by the positive `length`
+\\[m\\] and interpolated entrywise over the tabulated frequencies \\[Hz\\]. Use
 `overhead_line` with the positional `Grid` marker when the parameters or constructor
 arguments are uncertain or parametric.
+Ports `side1` and `side2` use `ACABC` for three conductors and `DC_CM` otherwise.
 """
 function P.overhead_line(
         parameters::LCM.LineParameters;
         length,
-        transformation = false,
-        connection = true,
         extrapolation = :error
 )
-    return _line_element(
+    return _line_model(
         _LineParametersOverheadLine,
         :overhead_line,
         parameters;
         length,
-        transformation,
-        connection,
         extrapolation
     )
 end
@@ -194,49 +165,42 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Construct a native cable `Element` from deterministic, phase-domain line
-parameters. `Z` [Ω/m] and `Y` [S/m] are scaled by the positive `length` [m]
-and interpolated entrywise over the tabulated frequencies [Hz]. Use
+Construct a native cable model from deterministic, phase-domain line
+parameters. `Z` \\[Ω/m\\] and `Y` \\[S/m\\] are scaled by the positive `length` \\[m\\]
+and interpolated entrywise over the tabulated frequencies \\[Hz\\]. Use
 `cable` with the positional `Grid` marker when the parameters or constructor arguments
 are uncertain or parametric.
+Ports `side1` and `side2` use `ACABC` for three conductors and `DC_CM` otherwise.
 """
 function P.cable(
         parameters::LCM.LineParameters;
         length,
-        transformation = false,
-        connection = true,
         extrapolation = :error
 )
-    return _line_element(
+    return _line_model(
         _LineParametersCable,
         :cable,
         parameters;
         length,
-        transformation,
-        connection,
         extrapolation
     )
 end
 
 function _line_parameters_gridspace(
+        ::Type{Model},
         constructor,
         parameters::LCM.LineParameters;
         length,
-        transformation = false,
-        connection = true,
         extrapolation = :error
-)
-    order = _validate_line_parameters(parameters)
-    transformation isa Bool && _validate_configuration(order, transformation)
-    target = _LineParametersElementMaterializer(constructor)
+) where {Model <: _LineParametersTransmissionLine}
+    _validate_line_parameters(parameters)
+    target = _LineParametersMaterializer(constructor)
     inputs = (
         line_parameters=parameters,
         length=length,
-        transformation=transformation,
-        connection=connection,
         extrapolation=extrapolation,
     )
-    return NB._lift_gridspace(P.Element, target, inputs, Val(:product))
+    return NB._lift_gridspace(Model, target, inputs, Val(:product))
 end
 
 """
@@ -249,12 +213,9 @@ parameters through the package's explicit positional `Grid` marker.
 
 - `Grid`: the `PowerImpedance.Grid` constructor, used here
   as a positional dispatch marker.
-- `parameters`: phase-domain `LineParameters` with `Z` in [Ω/m], `Y` in [S/m],
-  and deterministic frequencies in [Hz].
-- `length`: positive line length [m], or an explicit Gridspace axis.
-- `transformation`: `false` for one conductor, `true` for two conductors, and
-  either value for three conductors.
-- `connection`: whether the resulting element participates in the network.
+- `parameters`: phase-domain `LineParameters` with `Z` in \\[Ω/m\\], `Y` in \\[S/m\\],
+  and deterministic frequencies in \\[Hz\\].
+- `length`: positive line length \\[m\\], or an explicit Gridspace axis.
 - `extrapolation`: `:error` or `:linear` outside the tabulated frequencies.
 
 # Returns
@@ -271,16 +232,13 @@ function P.overhead_line(
         ::typeof(NB.Grid),
         parameters::LCM.LineParameters;
         length,
-        transformation = false,
-        connection = true,
         extrapolation = :error
 )
     return _line_parameters_gridspace(
+        _LineParametersOverheadLine,
         P.overhead_line,
         parameters;
         length,
-        transformation,
-        connection,
         extrapolation
     )
 end
@@ -289,8 +247,8 @@ end
 $(TYPEDSIGNATURES)
 
 Construct a lazy cable `Gridspace` from phase-domain line parameters. `Z` and
-`Y` are interpreted as per-metre matrices in [Ω/m] and [S/m], `length` is in
-[m], and frequencies are in [Hz]. The positional `Grid` marker selects the
+`Y` are interpreted as per-metre matrices in \\[Ω/m\\] and \\[S/m\\], `length` is in
+\\[m\\], and frequencies are in \\[Hz\\]. The positional `Grid` marker selects the
 lazy constructor. The scalar [`cable`](@ref) method remains the deterministic
 native overload.
 
@@ -301,19 +259,24 @@ function P.cable(
         ::typeof(NB.Grid),
         parameters::LCM.LineParameters;
         length,
-        transformation = false,
-        connection = true,
         extrapolation = :error
 )
     return _line_parameters_gridspace(
+        _LineParametersCable,
         P.cable,
         parameters;
         length,
-        transformation,
-        connection,
         extrapolation
     )
 end
+
+function P.electricalconnections(model::_LineParametersTransmissionLine)
+    order = size(model.parameters.Z, 1)
+    domain = order == 3 ? P.ACABC : P.DC_CM
+    return (side1 = P.Port(domain), side2 = P.Port(domain))
+end
+
+P.bases(::_LineParametersTransmissionLine) = nothing
 
 function _frequency_range_error(model, requested_frequency)
     first_frequency = first(model.parameters.f)

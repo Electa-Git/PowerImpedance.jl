@@ -47,24 +47,19 @@ using CairoMakie
 
 # ## 2. Build the circuit and solve power flow
 #
-# The source supplies 380 kV line-to-line RMS at 50 Hz. `Setpoint.Vac` uses
+# The source supplies 380 kV line-to-line RMS at 50 Hz. Its `v` input uses
 # peak phase-to-ground voltage in kV. The voltage base uses phase RMS kV.
 # The overhead line is 25 km long with three conductors and two ground wires.
 # The load has 400 Ω and 0.0122 H in series per phase.
 #
-# `transformation = true` gives d and q coordinates in Julia. PSCAD receives
+# An `ACDQ` bus gives d and q coordinates in Julia. PSCAD receives
 # the three physical phases. Geometry uses metres, line resistance uses Ω/km,
 # and the earth tuple gives relative permeability, relative permittivity,
 # and resistivity in Ω m.
 
 voltage_base = 380 / sqrt(3)
 elements = (;
-    source = ac_source(;
-        pins = 3,
-        transformation = true,
-        setpoint = Setpoint(;
-            Vac = voltage_base * sqrt(2),
-            θac = 0.0)),
+    source = ac_source(v = voltage_base * sqrt(2), theta = 0.0),
     line = overhead_line(;
         length = 25e3,
         conductors = Conductors(;
@@ -86,38 +81,30 @@ elements = (;
             Δxᵍ = 6.5,
             Δyᵍ = 7.5,
             dᵍˢᵃᵍ = 10),
-        earth_parameters = (1, 1, 100),
-        transformation = true),
+        earth_parameters = (1, 1, 100)
+    ),
     load = impedance(;
         z = s -> 400.0 + s * 0.0122,
-        pins = 3,
-        transformation = true))
+        conductors = 3
+    ))
 
-# Each row connects one element terminal to a named node. Terminals 1 and 2
-# are d and q. Side 1 of the line faces the source. Side 2 faces the load.
-# The load's second side connects to ground.
+# Each bus connects named component ports and creates d and q nets.
+# Port `side1` of the line faces the source. Port `side2` faces the load.
+# The load's `side2` port connects to ground.
 
 connections = (
-    (node = :B1d, element = :source, side = 1, terminal = 1),
-    (node = :B1q, element = :source, side = 1, terminal = 2),
-    (node = :B1d, element = :line, side = 1, terminal = 1),
-    (node = :B1q, element = :line, side = 1, terminal = 2),
-    (node = :B2d, element = :line, side = 2, terminal = 1),
-    (node = :B2q, element = :line, side = 2, terminal = 2),
-    (node = :B2d, element = :load, side = 1, terminal = 1),
-    (node = :B2q, element = :load, side = 1, terminal = 2),
-    (node = :gnd, element = :load, side = 2, terminal = 1),
-    (node = :gnd, element = :load, side = 2, terminal = 2))
+    NetworkBuilder.Bus(:B1; ports = ((:source, :ac), (:line, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:B2; ports = ((:line, :side2), (:load, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:gnd; ports = ((:load, :side2),), domain = ACDQ))
 
 state = NetworkBuilder.define(elements, connections;
     options = (; voltageBase = voltage_base))
-network = NetworkBuilder.solve(state).network
-powerflow = power_flow(network)
+powerflow = compute(PowerFlowProblem(state), ACDCPowerFlow())
 
-# `solve(state).network` gives the corresponding scalar `Network`.
-# Calling `power_flow` explicitly retains solved bus voltages for comparison
-# after the PSCAD run. Both exports below reuse this solution.
-# Change the element data and connection rows here to build your own case.
+# `solve(state)` also returns the power-flow result. The result retains solved
+# bus voltages for comparison after the PSCAD run. Both exports below use the
+# `NetworkState` and reuse this solution. Change the component data and buses
+# here to build your own case.
 
 # ## 3. Export and open the PSCAD project
 #
@@ -134,7 +121,7 @@ settings = PowerImpedance.PSCAD.SimulationSettings(;
     sample_step = 100e-6,
     frequency = 50.0,
     source_ramp = 0.05)
-model = export_pscad(network;
+model = export_pscad(state;
     path = joinpath(export_directory, "tutorial.pscx"),
     powerflow,
     settings)
@@ -175,9 +162,9 @@ model = export_pscad(network;
 # through an interactive scheduled task. The runner leaves an attached instance
 # open. An instance started for the run closes afterwards.
 #
-# `RemoteConfig` reads the file. `identify` starts a temporary PSCAD instance,
-# reads the installation and compiler information, and closes it without
-# loading a project. The dictionary includes `version` and `fortran_version`.
+# `RemoteConfig` reads the file. `identify` reads the installation and compiler
+# information from a temporary PSCAD instance. It starts and closes that instance
+# without loading a project. The dictionary includes `version` and `fortran_version`.
 
 remote = RemoteConfig("station.toml")
 station = PowerImpedance.PSCAD.identify(remote)
@@ -221,10 +208,10 @@ display(comparison)
 # Table with 7 columns and 7 rows:
 #      quantity       name        pscad     powerflow  error        settling     ⋯
 #    ┌────────────────────────────────────────────────────────────────────────────
-#  1 │ current_rms    I_source_1  0.54601   0.546013   5.19122e-6   7.56398e-14  ⋯
-#  2 │ current_rms    I_line_1    0.54601   0.546013   5.19122e-6   7.56398e-14  ⋯
-#  3 │ current_rms    I_line_2    0.5461    0.546103   6.07425e-6   8.76219e-14  ⋯
-#  4 │ current_rms    I_load_1    0.5461    0.546103   6.07425e-6   8.76219e-14  ⋯
+#  1 │ current_rms    I_source_ac   0.54601  0.546013  5.19122e-6  7.56398e-14  ⋯
+#  2 │ current_rms    I_line_side1  0.54601  0.546013  5.19122e-6  7.56398e-14  ⋯
+#  3 │ current_rms    I_line_side2  0.5461   0.546103  6.07425e-6  8.76219e-14  ⋯
+#  4 │ current_rms    I_load_side1  0.5461   0.546103  6.07425e-6  8.76219e-14  ⋯
 #  5 │ voltage_rms    V_B1        219.393   219.393    6.47735e-16  3.88641e-16  ⋯
 #  6 │ voltage_rms    V_B2        218.45    218.451    6.07418e-6   9.15943e-14  ⋯
 #  7 │ voltage_angle  V_B2        -1.56225  -1.5623    4.82668e-5   2.19038e-11  ⋯
@@ -255,21 +242,21 @@ reused = compute(model, PSCADRun(); options = (;
 
 # ## 6. Scan the load with Z-tool
 #
-# Export the same network with one AC probe in series at side 1 of the load.
+# Export the same network with one AC probe in series at port `side1` of the load.
 # The probe's side A1 faces bus B2. A2 faces the load. Z-tool's side-2 result
 # measures the load. The first export with a probe downloads the
 # Z-tool 0.1.52 library into the Julia depot. The export folder receives
 # `Z_tool.pslx`, `tutorial_scan.pscx`, `tutorial_scan.pswx`, and `Scan_options`
 # frequency tables. Open the workspace to view the project with its library.
 
-scan_model = export_pscad(network;
+scan_model = export_pscad(state;
     path = joinpath(export_directory, "tutorial_scan.pscx"),
     powerflow,
     settings,
     ztool_probes = [
         ZToolProbe(:ac, "load_scan";
-            element = :load,
-            side = 1)])
+        element = :load,
+        port = :side1)])
 
 # Z-tool 0.1.52 requires a multiple of eight frequencies for its input tables.
 # These eight frequencies use separate single-tone injections at 1 % voltage.
@@ -288,7 +275,8 @@ scan = ZToolScan(;
     sample_step = 100e-6)
 scan_result = compute(scan_model, scan; options = (; remote))
 
-# PSCAD runs a startup simulation and then repeats the case with voltage injections at each scan frequency.
+# PSCAD runs a startup simulation and then repeats the case with voltage injections at
+# each scan frequency.
 
 # `scan_result.results` contains one entry per admittance file. Select side 2
 # and its d axis using the file's labels. The admittance array is ordered as
@@ -303,7 +291,7 @@ frequencies = load_scan.frequencies
 # Evaluate the load's Julia admittance at those same frequencies.
 # Linearization returns a network model whose element responses are available
 # through `NetworkBuilder.get_y`. The load's first two coordinates are d and q
-# on side 1, so entry [1, 1, :] is its Ydd.
+# on port `side1`, so entry [1, 1, :] is its Ydd.
 
 linearized = compute(LinearizationProblem(state), AdmittanceLinearization())
 load_y = NetworkBuilder.get_y(

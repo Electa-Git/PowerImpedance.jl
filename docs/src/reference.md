@@ -12,6 +12,21 @@ Gridspace construction, study definitions, and result containers belong to
 
 ## `PowerImpedance`
 
+Component ports are declared by `Port`, `ACDQ`, `ACABC`, `DC_CM` and
+`electricalconnections`. Configurable inputs use `Input`, `inputs`, `inputvalues`,
+`withinputs` and `component`. Bases and limits are available through `BaseValues`,
+`bases` and `limits`. Control references and converter or machine power-flow setpoints use
+the model bases. Source and scan-based MMC inputs use physical units.
+
+Terminal operating points use `ACPortValues` and `DCPortValues`, keyed by port name
+in a NamedTuple. `OperatingPoint` stores these NamedTuples by element name:
+`op[:c1].ac.p` accesses AC active power into the component, and `op[:c1].dc.v` accesses DC voltage.
+`get(op, :missing, nothing)` returns `nothing` for an absent element.
+`linearize(model, values)` returns a `StateSpaceLinearization` with equilibrium
+`state` and continuous-time `system`. `steady_state(model, values)` computes the
+same equilibrium without forming the electrical system. Each call computes a new
+result and leaves the model unchanged.
+
 ```@autodocs
 Modules = [PowerImpedance]
 Public = true
@@ -28,13 +43,32 @@ Private = false
 
 ## `PowerImpedance.NetworkBuilder`
 
+`Bus(name; ports, domain = nothing)` connects named component ports and expands
+into one net per coordinate. AC names append `d`, `q` or `a`, `b`, `c`. A DC net
+retains the bus name. `Net(name; terminals, domain = nothing)` connects individual
+terminals using `(component, port, terminal)` triples. Both infer their domain from
+the attached ports. An AC bus uses dq coordinates when one attached port declares
+`ACDQ`, or when `domain = ACDQ` is supplied. Names starting with `gnd` denote ground.
+
+`define(elements, topology; options = (;), exclude = ())` stores models under their
+NamedTuple names. An included model without a topology reference raises `ArgumentError`.
+Excluded names are dropped with an informational message.
+
 ```@autodocs
 Modules = [PowerImpedance.NetworkBuilder]
 Public = true
 Private = false
 ```
 
-Component and configuration Gridspaces use positional dispatch as `constructor(Grid; kwargs...)`. The keyword-only `constructor(; kwargs...)` method remains the scalar API. `NetworkBuilder` does not define a second constructor family.
+`solve(state)` and `compute(PowerFlowProblem(state), ACDCPowerFlow())` return
+`PowerFlowResult` and always solve the requested network. A
+`LinearizationProblem(state, powerflow)` uses the supplied operating point.
+Without a supplied result, linearization of linear models uses an empty point.
+Nonlinear models require power flow.
+
+Component and configuration Gridspaces use positional dispatch as
+`constructor(Grid; kwargs...)`. The keyword-only `constructor(; kwargs...)`
+method is the scalar API.
 
 ## `PowerImpedance.PSCAD`
 

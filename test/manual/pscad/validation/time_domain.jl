@@ -220,11 +220,11 @@ function time_domain_channels(c,spec)
     vb=spec.voltage_base_kV
     for node in c.nodes;push!(labels,"V:"*string(node));push!(bases,vb);end
     for name in sort(c.devices)
-        b=device_bases(c.net.elements[name].element_model.elec)
+        b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
         for axis in ("d","q");push!(labels,"I:$name:$axis");push!(bases,b.ac_current);end
     end
-    for (name,e) in sort!(collect(c.net.elements);by=first)
-        e.element_model isa PowerImpedance.Impedance || continue
+    for (name,e) in sort!(collect(pairs(c.net.elements));by=first)
+        e isa PowerImpedance.Impedance || continue
         for axis in ("d","q");push!(labels,"I:$name:$axis");push!(bases,2*1000/(3vb));end
     end
     return (;labels,bases)
@@ -238,13 +238,15 @@ function time_domain_response(c,spec; discrete=false,forms=nothing)
         voltage=full\drive
         output=Matrix{ComplexF64}[voltage]
         for name in sort(c.devices)
-            b=device_bases(c.net.elements[name].element_model.elec);h=device_incidence(c,name)
+            b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases);
+                h=component_incidence(c, name)
             push!(output,(functions[name](s)*h'*voltage)[b.ac_indices,:])
         end
-        for (name,e) in sort!(collect(c.net.elements);by=first)
-            e.element_model isa PowerImpedance.Impedance || continue
-            h=passive_incidence(c,e)
-            y=forms===nothing ? PowerImpedance.get_y(e,ComplexF64(s)) : composed_passive_y(e,forms[name],s)
+        for (name,e) in sort!(collect(pairs(c.net.elements));by=first)
+            e isa PowerImpedance.Impedance || continue
+            h=component_incidence(c,name)
+            y=forms===nothing ? physical_y(e,ComplexF64(s)) : composed_passive_y(e,
+                forms[name],s)
             push!(output,(y*h'*voltage)[1:2,:])
         end
         # The frequency-response transport/readout convention applies: recorded injection
@@ -276,32 +278,33 @@ function time_domain_samples(result,model,c)
     columns=Vector{Float64}[]
     for node in c.nodes
         found=false
-        for (name,e) in c.net.elements
-            pin=findfirst(==(node),e.pins)
-            pin===nothing && continue
-            side,axis=parse.(Int,split(string(pin),'.'))
-            bus=port_probe(model.netlist,name,side).name
-            p=only(filter(p->p.kind==:voltage&&p.bus==bus,model.probes.channels))
-            push!(columns,fixed_dq(result.time,probe_samples(result,p))[:,axis])
+        for row in c.net.topology.connections
+            row.net == node || continue
+            bus=port_probe(model.netlist,row.component,row.port).name
+            probe=only(filter(p->p.kind==:voltage&&p.bus==bus,model.probes.channels))
+            axis = row.terminal == :d ? 1 : 2
+            push!(columns,fixed_dq(result.time,probe_samples(result,probe))[:,axis])
             found=true;break
         end
         found || error("missing time-domain nodal voltage $node")
     end
     for name in sort(c.devices)
-        b=device_bases(c.net.elements[name].element_model.elec)
-        p=only(filter(p->p.kind==:current&&p.element==string(name)&&p.side==string(b.ac_side),model.probes.channels))
-        data=composed_current(result,model,p)
-        append!(columns,[data[:,1],data[:,2]])
+        b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
+        p=only(filter(p->p.kind==:current&&p.element==string(name)&&p.port==:ac,
+            model.probes.channels))
+        data=composed_current(result, model, p)
+        append!(columns, [data[:, 1], data[:, 2]])
     end
-    for (name,e) in sort!(collect(c.net.elements);by=first)
-        e.element_model isa PowerImpedance.Impedance || continue
-        p=only(filter(p->p.kind==:current&&p.element==string(name)&&p.side=="1",model.probes.channels))
-        data=composed_current(result,model,p)
-        append!(columns,[data[:,1],data[:,2]])
+    for (name,e) in sort!(collect(pairs(c.net.elements));by=first)
+        e isa PowerImpedance.Impedance || continue
+        p=only(filter(p->p.kind==:current&&p.element==string(name)&&p.port==:side1,
+            model.probes.channels))
+        data=composed_current(result, model, p)
+        append!(columns, [data[:, 1], data[:, 2]])
     end
     ip=only(filter(p->p.kind==:injection_current,model.probes.channels))
-    ip.orientation==:out || error("time-domain injection orientation is missing")
-    return (;signals=reduce(hcat,columns),drive=fixed_dq(result.time,probe_samples(result,ip)))
+    return (;signals=reduce(hcat,columns),
+        drive=fixed_dq(result.time,injection_samples(result,ip)))
 end
 
 # Only stimulus instance gains may differ from the zero-stimulus baseline.
@@ -451,7 +454,8 @@ function prepare_time_domain(ids=TIME_DOMAIN_IDS;remote=nothing)
     end
     remote===nothing && (remote=RemoteConfig())
     for id in ids
-        net=coupled_network(id);point=power_flow(net);c=coupled_circuit(id,net);list=fixture_netlist(net,point)
+        net=coupled_network(id);point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+            c=coupled_circuit(id,net);list=fixture_netlist(net,point)
         gate=composed_stability(c)
         gate["status"]=="passed" || @warn "$id time-domain stability result: $(gate["status"])" stability=gate
         cchecks=time_domain_frequency_reference_check(c,list,joinpath(ROOT,"data",id))
@@ -514,7 +518,9 @@ end
 function run_time_domain(id;remote,directory=joinpath(ROOT,"data",id*"_time_domain"),deadline)
     require_committed_time_domain();read_frequency_response_record(id)
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")));verify_inputs(directory,record)
-    net=coupled_network(id);point=power_flow(net);c=coupled_circuit(id,net);list=fixture_netlist(net,point);spec=time_domain_spec(id,list)
+    net=coupled_network(id);point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+        c=coupled_circuit(id,net);list=fixture_netlist(net,point);
+        spec=time_domain_spec(id,list)
     time_domain_frequency_reference_check(c,list,joinpath(ROOT,"data",id))
     record["time_domain_protocol"]==time_domain_protocol(spec) || error("time-domain frozen protocol changed")
     record["channels"]==time_domain_channels(c,spec).labels&&record["channel_bases"]==time_domain_channels(c,spec).bases || error("time-domain signal inventory changed")

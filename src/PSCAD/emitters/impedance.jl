@@ -1,5 +1,5 @@
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Impedance}, context)
-    length(e.terminals) == 2 && [t.side for t in e.terminals] == [1, 2] ||
+    length(e.terminals) == 2 && [t.port for t in e.terminals] == [:side1, :side2] ||
         throw(ArgumentError("impedance :$(e.name) must have two fully connected sides"))
     left, right = e.terminals
     left.grounded && right.grounded &&
@@ -13,7 +13,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Impedance}, 
     right_bus = _terminal_bus(e, right, context)
     right_bus === nothing || right_bus.kind == left_bus.kind ||
         throw(ArgumentError("impedance :$(e.name) mixes AC and DC terminal representations"))
-    record = identify_rlc(e.element; name = e.name)
+    record = identify_rlc(e.model; name = e.name)
     record isa AbstractVector &&
         throw(ArgumentError("impedance :$(e.name) has distinct per-conductor diagonal groups; PSCAD export is not implemented yet"))
     record.constant &&
@@ -24,7 +24,8 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Impedance}, 
     # and C doubles in either topology.
     parts = impedance_parts(form; scale = dc ? 0.5 : 1.0)
     first_probe = current_probe!(state, e, left, context; orientation = :into)
-    second_probe = right.grounded ? nothing : current_probe!(state, e, right, context; orientation = :out)
+    second_probe = right.grounded ? nothing :
+                   current_probe!(state, e, right, context; orientation = :into)
     left_labels = _terminal_labels(e, left, context)
     right_labels = right.grounded ? ntuple(_ -> nothing, length(left_labels)) :
                    _terminal_labels(e, right, context)
@@ -65,8 +66,10 @@ function impedance_path!(state, parts, topology, left_name, right_name, stem;
                 for (i, probe) in enumerate(probes)
                     first = i == 1 ? left_name : middle
                     second = i == length(probes) ? right_name : middle
-                    component!(state.main, "ammeter", (x + 126, y + 54 + 72 * (i - 1)),
-                        ["Name" => probe])
+                    reverse = probe == second_probe
+                    component!(state.main, "ammeter",
+                        (x + 126 + 36reverse, y + 54 + 72 * (i - 1)),
+                        ["Name" => probe]; orient = reverse ? 4 : 0)
                     stub!(state.main, (x + 126, y + 54 + 72 * (i - 1)), first;
                         direction = -1)
                     stub!(state.main, (x + 162, y + 54 + 72 * (i - 1)), second)
@@ -90,14 +93,14 @@ function impedance_path!(state, parts, topology, left_name, right_name, stem;
         elseif second_probe === nothing
             stub!(state.main, finish, right_name)
         else
-            ammeter_stub!(state.main, finish, right_name, second_probe)
+            ammeter_stub!(state.main, finish, right_name, second_probe; reverse = true)
         end
         first_probe === nothing ||
             output_probe!(state.main, first_probe, "branch", "kA", (x + 144, y + 126))
         second_probe === nothing ||
             output_probe!(state.main, second_probe, "branch", "kA", (x + 144, y + 162))
     else
-        # A single meter per terminal measures total current through the parallel
+        # One meter per terminal measures total current through the parallel
         # branches. Internal labels connect those branches to the meter.
         inner_left = pscad_name(stem * "_parallel_1"; used = state.used)
         inner_right = pscad_name(stem * "_parallel_2"; used = state.used)
@@ -115,7 +118,8 @@ function impedance_path!(state, parts, topology, left_name, right_name, stem;
         elseif second_probe === nothing
             join_node_labels!(state.main, right_name, inner_right)
         else
-            component!(state.main, "ammeter", (x + 234, y + 36), ["Name" => second_probe])
+            component!(state.main, "ammeter", (x + 270, y + 36),
+                ["Name" => second_probe]; orient = 4)
             stub!(state.main, (x + 234, y + 36), inner_right; direction = -1)
             stub!(state.main, (x + 270, y + 36), right_name)
         end

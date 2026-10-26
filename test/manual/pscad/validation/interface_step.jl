@@ -17,52 +17,59 @@ one_step_modulation(::PowerImpedance.CompensatedModulation, dt) =
     PowerImpedance.CompensatedModulation(timeDelay = dt, padeOrderNum = 3, padeOrderDen = 3)
 function one_step_model(m::PowerImpedance.MMC, dt)
     return PowerImpedance.MMC(m.meas, m.sync, m.delta_control, m.sigma_control,
-        one_step_modulation(m.modulation, dt), m.elec)
+        one_step_modulation(m.modulation, dt), m.elec, m.limits, m.bases, m.powerflow)
 end
 function one_step_model(m::PowerImpedance.TLC, dt)
     return PowerImpedance.TLC(m.elec, m.meas, m.sync, m.outerActive, m.outerReactive,
         m.innerVoltage, m.innerCurrent,
-        PowerImpedance.DelayModulation(timeDelay = dt, padeOrderNum = 3, padeOrderDen = 3))
+        PowerImpedance.DelayModulation(timeDelay = dt, padeOrderNum = 3, padeOrderDen = 3),
+        m.limits, m.bases, m.powerflow)
 end
 modulation_states(m::PowerImpedance.MMC) = PowerImpedance.statenames(m.modulation)
 modulation_states(m::PowerImpedance.TLC) = PowerImpedance.statenames(m.mod)
 
 # Exact one-step modulation feedback uses the same carrier correction and delay-state
 # Schur replacement as interface_step_reference.
-function one_step_full_y(original,h)
-    interface_step_eligible(original.element_model) || return s->physical_y(original,s)
+function one_step_full_y(original, values, h)
+    if !interface_step_eligible(original)
+        lin = linearize(original, values)
+        return s -> physical_y(original, lin, s)
+    end
     isfinite(h) && h>0 || error("interface reference requires a positive finite step")
-    e=PowerImpedance.Element(element_model=one_step_model(original.element_model,h),input_pins=original.input_pins,output_pins=original.output_pins,
-        transformation=original.transformation,setpoint=original.setpoint,limits=original.limits)
-    e.symbol=original.symbol;PowerImpedance.update!(e,original.setpoint)
-    names=PowerImpedance.statenames(e.element_model);delayed=Set(modulation_states(e.element_model))
+    e=one_step_model(original,h)
+    system = linearize(e, values).system
+    names=PowerImpedance.statenames(e);delayed=Set(modulation_states(e))
     d=findall(in(delayed),collect(names));r=setdiff(1:length(names),d)
     pade=PowerImpedance.PadeDelay(timeDelay=h,padeOrderNum=3,padeOrderDen=3)
-    base=device_bases(e.element_model.elec);n=length(r)
+    base=device_bases(e.elec, e.bases);n=length(r)
     function response(s)
         gp=only(pade.C*((s*I-pade.A)\pade.B)+pade.D)
-        effect=vcat(e.A[r,d],e.C[:,d])*((s*I-e.A[d,d])\hcat(e.A[d,r],e.B[d,:]))
-        eff=[e.A[r,r] e.B[r,:];e.C[:,r] e.D]+effect*((exp(-s*h)+1)/(gp+1))
+        effect=vcat(system.A[r,d],system.C[:,d])*((s*I-system.A[d,
+            d])\hcat(system.A[d,r],system.B[d,:]))
+        eff=[system.A[r,r] system.B[r,:];system.C[:,
+            r] system.D]+effect*((exp(-s*h)+1)/(gp+1))
         y=eff[n+1:end,1:n]*((s*I-eff[1:n,1:n])\eff[1:n,n+1:end])+eff[n+1:end,n+1:end]
         return y.*base.current_outputs./base.voltage_inputs'
     end
     return response
 end
 
-function interface_step_reference(net, spec; dc_conductance = nothing)
+function interface_step_reference(net, spec; dc_conductance = nothing, values = nothing)
     original = net.elements[:DUT]
-    interface_step_eligible(original.element_model) || return nothing
+    interface_step_eligible(original) || return nothing
     dt = spec.time_step
     isfinite(dt) && dt > 0 || error("interface reference requires a positive finite step")
-    full_y = one_step_full_y(original, dt)
-    bases = device_bases(original.element_model.elec)
+    values === nothing &&
+        (values = compute(PowerFlowProblem(net), ACDCPowerFlow()).operating_point[:DUT])
+    full_y = one_step_full_y(original, values, dt)
+    bases = device_bases(original.elec, original.bases)
     matrices = Matrix{ComplexF64}[]
     for frequency in spec.frequencies
         s = ComplexF64(im * 2π * frequency)
         y = full_y(s)
         if haskey(net.elements, :DC_load)
             g = dc_conductance === nothing ?
-                PowerImpedance.get_y(net.elements[:DC_load], s)[1,1] : dc_conductance
+                physical_y(net.elements[:DC_load], s)[1,1] : dc_conductance
             y = y[2:3,2:3] - y[2:3,1:1] * ((y[1,1]+g) \ y[1:1,2:3])
         else
             y = y[bases.ac_indices, bases.ac_indices]

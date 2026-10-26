@@ -63,7 +63,7 @@ function _backend_package(backend::Symbol)
     throw(ArgumentError("Unknown backend :$(backend). Use :cairo, :gl, or :wgl."))
 end
 
-"Ensure that an explicitly loaded backend is active."
+"Activate an explicitly loaded backend."
 function ensure_backend!(backend::Union{Nothing, Symbol} = nothing)
     backend !== nothing && return set_backend!(backend)
     current = current_backend_symbol()
@@ -114,6 +114,15 @@ function renderfig(fig)
     return Base.invokelatest(ext.renderfig, fig)
 end
 
+"""
+    next_fignum()
+
+Reserve a figure number by atomically incrementing the module's figure counter.
+
+# Returns
+
+- Integer counter value before the increment. The initial counter value is `1`.
+"""
 next_fignum() = Base.Threads.atomic_add!(FIG_NO, 1)
 reset_fignum!(n::Int = 1) = (FIG_NO[] = n)
 

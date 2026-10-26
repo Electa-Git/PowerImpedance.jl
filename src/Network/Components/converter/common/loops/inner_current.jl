@@ -41,11 +41,12 @@ modulation blocks.
 $(TYPEDFIELDS)
 """
 struct InnerCurrentPIControl{F<:AbstractMeasurementFilter} <: AbstractInnerCurrentControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_ctrl::PIControl
     "Measurement filter with a scalar state-space realization."
     filter::F
-    "Whether inductive decoupling uses the synchronization frequency instead of nominal frequency."
+    "Whether inductive decoupling uses the synchronization or nominal frequency."
     activate_ω_c_multiplication::Bool
 end
 
@@ -56,12 +57,12 @@ Construct a `InnerCurrentPIControl` component from the supplied parameters.
 
 # Arguments
 
-- `pi_ctrl`: PI gains for normalized signals; proportional gain is \\[dimensionless\\] and
+- `pi_ctrl`: PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and
   integral gain is \\[s⁻¹\\]. Default: `PIControl()`.
 - `filter`: Measurement filter with a scalar state-space realization. Default:
   `NoFilter()`.
 - `activate_ω_c_multiplication`: Whether inductive decoupling uses the synchronization
-  frequency instead of nominal frequency. Default: `true`.
+  frequency (`true`) or nominal frequency (`false`). Default: `true`.
 
 # Returns
 
@@ -116,11 +117,11 @@ Evaluate modular-converter inner-current PI control in the synchronization frame
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `block`: The `InnerCurrentPIControl` parameters.
 - `conv`: Parent converter providing electrical bases and synchronization.
@@ -136,7 +137,7 @@ Evaluate modular-converter inner-current PI control in the synchronization frame
 \\dot{\\xi}_{d,q}=K_i(i_{d,q}^{ref}-i_{d,q}),\\quad v_d^{ref}=\\xi_d+K_p e_d+L\\omega i_q+v_d,\\quad v_q^{ref}=\\xi_q+K_p e_q-L\\omega i_d+v_q.
 ```
 
-All electrical quantities are normalized \\[dimensionless\\]. The optional frequency
+Electrical quantities are normalized \\[dimensionless\\]. The optional frequency
 factor uses synchronization frequency or unity. Local voltage filters supply the
 feedforward terms.
 
@@ -145,10 +146,10 @@ feedforward terms.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = InnerCurrentPIControl(pi_ctrl=PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -170,7 +171,7 @@ function state_space!(F, x, inputs, block::InnerCurrentPIControl, conv::Abstract
     v_d, i = filter_step!(F, 1, x, block.filter, filter_statenames(:vG_d_occ_f, block.filter), meas.vG_d_f)
     v_q, i = filter_step!(F, i, x, block.filter, filter_statenames(:vG_q_occ_f, block.filter), meas.vG_q_f)
 
-    Lᵣ = elec_inductance(conv.elec)
+    Lᵣ = elec_inductance(conv.elec, conv.bases)
 
     e_d = i_d_ref - i_d
     e_q = i_q_ref - i_q

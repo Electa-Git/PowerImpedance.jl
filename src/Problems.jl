@@ -17,22 +17,31 @@ _default_backend(formulation::Type) = get(_FORMULATION_BACKENDS, formulation, PI
 """
 $(TYPEDEF)
 
-Store the steady-state quantities required to linearize active elements.
+Store physical terminal values by element and port name.
+Power and current flowing into the component through each port are positive.
+A source or synchronous machine delivering 900 MW has `ac.p = -900`. An induction
+motor drawing 916 MW has `ac.p = 916`. A converter taking 603 MW from DC and
+delivering 600 MW to AC has `dc.p = 603` and `ac.p = -600`. Reactive power follows
+the same rule, including for the black-box MMC. Admittances use `Y = I_in / V`.
+
+Each entry is a NamedTuple of `ACPortValues` or `DCPortValues`. Access values with
+`point[:c1].ac.p`, `point[:c1].dc.v`, or `get(point, :c1, nothing)`. `keys` returns
+the element names, and `isempty` tests whether values are present.
 
 $(TYPEDFIELDS)
 """
 struct OperatingPoint
-    "Calculated steady-state values indexed by element name."
-    setpoints::Dict{Symbol, Setpoint}
+    "Calculated terminal values indexed by element and port name."
+    values::Dict{Symbol, NamedTuple}
 end
 
-OperatingPoint() = OperatingPoint(Dict{Symbol, Setpoint}())
-Base.getindex(point::OperatingPoint, element::Symbol) = point.setpoints[element]
+OperatingPoint() = OperatingPoint(Dict{Symbol, NamedTuple}())
+Base.getindex(point::OperatingPoint, element::Symbol) = point.values[element]
 function Base.get(point::OperatingPoint, element::Symbol, default)
-    get(point.setpoints, element, default)
+    get(point.values, element, default)
 end
-Base.keys(point::OperatingPoint) = keys(point.setpoints)
-Base.isempty(point::OperatingPoint) = isempty(point.setpoints)
+Base.keys(point::OperatingPoint) = keys(point.values)
+Base.isempty(point::OperatingPoint) = isempty(point.values)
 
 """
 $(TYPEDEF)
@@ -62,24 +71,6 @@ struct PowerFlowResult{F, R, D, N, E, G} <: AbstractProblemResult
 
     "Convergence status and solver diagnostics."
     diagnostics::G
-end
-
-function Base.getproperty(result::PowerFlowResult, field::Symbol)
-    field === :active_setpoint_values && return getfield(result, :operating_point).setpoints
-    return getfield(result, field)
-end
-
-function Base.propertynames(::PowerFlowResult, private::Bool = false)
-    return (
-        :formulation,
-        :result,
-        :data,
-        :nodes2bus,
-        :elem2comp,
-        :operating_point,
-        :diagnostics,
-        :active_setpoint_values
-    )
 end
 
 """
@@ -154,7 +145,25 @@ abstract type AbstractPowerImpedanceFormulation{B} <: AbstractFormulation end
 
 for Formulation in (:NodalImpedance, :NodeAdmittance, :EdgeAdmittance, :LoopGain)
     @eval begin
+        """
+        $($TYPEDEF)
+
+        $($(Formulation === :NodalImpedance ?
+          "Specify the nodal impedance response of a network at selected nodes." :
+          Formulation === :NodeAdmittance ?
+          "Specify the reduced nodal admittance response of the active network elements." :
+          Formulation === :EdgeAdmittance ?
+          "Specify the reduced nodal admittance response of the passive network elements." :
+          "Specify loop gain as inverse passive admittance times active admittance."))
+
+        Construct with `$($Formulation)(backend=PIACDC)` and pass the value with a
+        [`PowerImpedanceProblem`](@ref) to [`compute`](@ref). The result is a
+        [`FrequencyResponseResult`](@ref).
+
+        $($TYPEDFIELDS)
+        """
         struct $Formulation{B} <: AbstractPowerImpedanceFormulation{B}
+            "Calculation backend type."
             backend::Type{B}
         end
 
@@ -189,7 +198,26 @@ _register_backend!(GeneralizedNyquist, PIACDC)
 
 for Formulation in (:BodeAnalysis, :PassivityAnalysis, :SmallGainAnalysis)
     @eval begin
+        """
+        $($TYPEDEF)
+
+        $($(Formulation === :BodeAnalysis ?
+          "Specify entrywise magnitude in decibels and unwrapped phase in degrees." :
+          Formulation === :PassivityAnalysis ?
+          "Specify the minimum eigenvalue of a response matrix plus its adjoint." :
+          "Specify maximum singular values of two response matrices and their product."))
+
+        Construct with `$($Formulation)(backend=PIACDC)` and pass the value with a
+        [`StabilityProblem`](@ref) to [`compute`](@ref). The result is a
+        [`StabilityResult`](@ref).
+        $($(Formulation === :SmallGainAnalysis ?
+          "Supply a pair of completed frequency responses on identical frequency axes." :
+          "Supply one completed frequency response."))
+
+        $($TYPEDFIELDS)
+        """
         struct $Formulation{B} <: AbstractPowerImpedanceFormulation{B}
+            "Calculation backend type."
             backend::Type{B}
         end
 

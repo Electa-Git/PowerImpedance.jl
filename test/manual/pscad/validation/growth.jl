@@ -161,17 +161,20 @@ function system_polarized_burst_graph(spec)
     return graph,outputs[1],outputs[2],clock
 end
 
-function system_exact_modulation_y(e)
-    m=e.element_model;names=PowerImpedance.statenames(m)
+function system_exact_modulation_y(e, linearization)
+    system = linearization.system
+    m=e;names=PowerImpedance.statenames(m)
     delayed=Set(PowerImpedance.statenames(m.modulation))
     d=findall(in(delayed),collect(names));r=setdiff(1:length(names),d)
     tau=m.modulation.delay1.timeDelay
     scalar=PowerImpedance.PadeDelay(timeDelay=tau,padeOrderNum=5,padeOrderDen=5)
-    b=device_bases(m.elec);n=length(r)
+    b=device_bases(m.elec, m.bases);n=length(r)
     function response(s)
         g=only(scalar.C*((s*I-scalar.A)\scalar.B)+scalar.D)
-        feedback=vcat(e.A[r,d],e.C[:,d])*((s*I-e.A[d,d])\hcat(e.A[d,r],e.B[d,:]))
-        z=[e.A[r,r] e.B[r,:];e.C[:,r] e.D]+feedback*((exp(-s*tau)+1)/(g+1))
+        feedback=vcat(system.A[r,d],system.C[:,d])*((s*I-system.A[d,
+            d])\hcat(system.A[d,r],system.B[d,:]))
+        z=[system.A[r,r] system.B[r,:];system.C[:,
+            r] system.D]+feedback*((exp(-s*tau)+1)/(g+1))
         y=z[n+1:end,1:n]*((s*I-z[1:n,1:n])\z[1:n,n+1:end])+z[n+1:end,n+1:end]
         return y.*b.current_outputs./b.voltage_inputs'
     end
@@ -182,9 +185,9 @@ function system_growth_sensitivity(c,modes)
     functions=composed_device_functions(c)
     list=fixture_netlist(c.net,nothing)
     dc=Set(node for bus in list.buses if bus.kind==:dc for node in bus.nets)
-    early=CompleteSystem(c.net,c.devices,c.grids,filter(!in(dc),c.nodes),c.ports,Dict{Symbol,Float64}(),c.measurands)
-    exact=Dict(n=>system_exact_modulation_y(c.net.elements[n]) for n in c.devices)
-    discrete=any(interface_step_eligible(c.net.elements[n].element_model) for n in c.devices)
+    early=CompleteSystem(c.net,c.devices,c.grids,filter(!in(dc),c.nodes),c.ports,Dict{Symbol,Float64}(),c.measurands,c.point,c.linearizations)
+    exact=Dict(n=>system_exact_modulation_y(c.net.elements[n], c.linearizations[n]) for n in c.devices)
+    discrete=any(interface_step_eligible(c.net.elements[n]) for n in c.devices)
     main_functions=discrete ? composed_device_functions(c;time_step=GROWTH_STEPS.main) : functions
     half_functions=discrete ? composed_device_functions(c;time_step=GROWTH_STEPS.half) : functions
     return [begin
@@ -211,7 +214,9 @@ function system_growth_sensitivity(c,modes)
 end
 
 function system_growth_setup(id)
-    entry=fixture(id);net=entry.factory();point=power_flow(net);c=complete_system(id,net)
+    entry=fixture(id);net=entry.factory();point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());
+    NetworkBuilder.NetworkModel(net, point.operating_point);c=complete_system(id,net)
     modes=system_growth_reference(c)
     id=="p2p_original" && length(modes)!=2 && error("both original P2P circular modes must be located")
     sensitivity=system_growth_sensitivity(c,modes)
@@ -272,11 +277,13 @@ end
 function system_growth_channels(result,model,c)
     columns=Vector{ComplexF64}[];labels=String[];bases=Float64[];reference=ComplexF64[]
     for name in c.devices
-        b=device_bases(c.net.elements[name].element_model.elec)
-        bus=port_probe(model.netlist,name,b.ac_side).name
-        voltage=only(filter(p->p.kind==:voltage && p.bus==bus,model.probes.channels))
-        current=only(filter(p->p.kind==:current && p.element==string(name) && p.side==string(b.ac_side),model.probes.channels))
-        entry=only(filter(e->e.name==name,model.netlist.elements))
+        b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
+        bus=port_probe(model.netlist, name, b.ac_port).name
+        voltage=only(filter(p->p.kind==:voltage && p.bus==bus, model.probes.channels))
+        current=only(filter(
+            p->p.kind==:current && p.element==string(name) && p.port==:ac,
+                model.probes.channels))
+        entry=only(filter(e->e.name==name, model.netlist.elements))
         equilibrium=P.converter_equilibrium(entry)
         output=zeros(3)
         PowerImpedance.outputequations!(output,equilibrium.states,nothing,equilibrium.inputs,entry.model)
@@ -305,7 +312,8 @@ end
 function run_system_growth(id;directory,remote,deadline)
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")));verify_inputs(directory,record)
     record["fixture_id"]==id || error("system growth fixture differs")
-    net=fixture(id).factory();point=power_flow(net);c=complete_system(id,net)
+    net=fixture(id).factory();point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+    NetworkBuilder.NetworkModel(net, point.operating_point);c=complete_system(id,net)
     modes=system_growth_reference(c);list=fixture_netlist(net,point);spec=system_growth_spec(id,list,modes)
     native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))["passed"] || error("system growth operating point changed")
     reference=complex.(record["growth_reference_real_per_s"],2π.*record["growth_reference_signed_Hz"])
@@ -373,9 +381,11 @@ function system_growth_recorders!(plan,list)
     row=0
     for half in ("u","l"),phase in ("a","b","c"),quantity in ("m","i")
         signal=quantity=="m" ? "m_$(half)_$phase" : "i_$(half)_solved_$phase"
-        row+=1;unit=quantity=="m" ? "pu" : "kA"
-        P.output_probe!(definition.canvas,signal,"growth_c1",unit,(recorder_x,72row))
-        push!(plan.probes.channels,P.ProbeChannel(signal,:converter_diagnostic,nothing,"c1","2",1,unit))
+        row+=1;
+        unit=quantity=="m" ? "pu" : "kA"
+        P.output_probe!(definition.canvas, signal, "growth_c1", unit, (recorder_x, 72row))
+        push!(plan.probes.channels,
+            P.ProbeChannel(signal, :converter_diagnostic, nothing, "c1", :ac, 1, unit))
     end
     return nothing
 end

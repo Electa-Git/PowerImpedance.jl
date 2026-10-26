@@ -58,14 +58,14 @@ end
     parameters = deterministic_line_parameters(3)
     overhead = PowerImpedance.overhead_line(parameters; length=25e3)
     cable = PowerImpedance.cable(parameters; length=25e3)
-    @test overhead isa PowerImpedance.Element
-    @test cable isa PowerImpedance.Element
-    @test overhead.input_pins == overhead.output_pins == 3
-    @test cable.input_pins == cable.output_pins == 3
+    @test overhead isa PowerImpedance.AbstractElementModel
+    @test cable isa PowerImpedance.AbstractElementModel
+    @test length(first(values(electricalconnections(overhead))).terminals) == 3
+    @test length(first(values(electricalconnections(cable))).terminals) == 3
 
     frequency = 100.0
-    overhead_abcd = PowerImpedance.eval_abcd(overhead.element_model, 2pi * frequency * im)
-    cable_abcd = PowerImpedance.eval_abcd(cable.element_model, 2pi * frequency * im)
+    overhead_abcd = PowerImpedance.eval_abcd(overhead, 2pi * frequency * im)
+    cable_abcd = PowerImpedance.eval_abcd(cable, 2pi * frequency * im)
     @test size(overhead_abcd) == (6, 6)
     @test overhead_abcd ≈ cable_abcd
 
@@ -74,17 +74,17 @@ end
         parameters;
         length=PowerImpedance.Grid([10e3, 20e3]),
     )
-    @test [line.element_model.length for line in length_grid] == [10e3, 20e3]
+    @test [line.length for line in length_grid] == [10e3, 20e3]
 
     two_phase = deterministic_line_parameters(2; frequencies=[10.0, 100.0])
-    line = PowerImpedance.cable(two_phase; length=1e3, transformation=true)
-    midpoint_Z, midpoint_Y = LCM_EXT._line_parameters_at(line.element_model, 55.0)
+    line = PowerImpedance.cable(two_phase; length=1e3)
+    midpoint_Z, midpoint_Y = LCM_EXT._line_parameters_at(line, 55.0)
     @test midpoint_Z ≈ 0.5 .* two_phase.Z[:, :, 1] .+ 0.5 .* two_phase.Z[:, :, 2]
     @test midpoint_Y ≈ 0.5 .* two_phase.Y[:, :, 1] .+ 0.5 .* two_phase.Y[:, :, 2]
-    negative_Z, negative_Y = LCM_EXT._line_parameters_at(line.element_model, -55.0)
+    negative_Z, negative_Y = LCM_EXT._line_parameters_at(line, -55.0)
     @test negative_Z ≈ conj.(midpoint_Z)
     @test negative_Y ≈ conj.(midpoint_Y)
-    @test_throws DomainError LCM_EXT._line_parameters_at(line.element_model, 1.0)
+    @test_throws DomainError LCM_EXT._line_parameters_at(line, 1.0)
 
     projection = primitives(parameters, LineParametersInput())
     @test projection.series_impedance === parameters.Z

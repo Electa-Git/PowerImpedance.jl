@@ -1,4 +1,4 @@
-############################  common/kernels/delay.jl  ############################
+# Delay models
 
 """
 $(TYPEDEF)
@@ -22,8 +22,9 @@ end
 Generic Pade delay implementation for converter state-space models.
 
 The delay block is independent of TLC modulation and can be reused by other
-converter models. It owns the delay matrices, state names, and state equations;
-callers decide how to interpret the delayed output.
+converter models. It stores the delay matrices and defines the state names and state
+equations.
+Callers decide how to interpret the delayed output.
 =#
 
 export PadeDelay
@@ -53,11 +54,11 @@ struct PadeDelay <: AbstractStateSpace
     "Prefix for generated delay-state names."
     state_prefix::Symbol
 
-    "State matrix; its coefficients depend on the realization coordinates."
+    "State matrix. Its coefficients depend on the realization coordinates."
     A::Matrix{Float64}
-    "Input matrix; its coefficients depend on the realization coordinates."
+    "Input matrix. Its coefficients depend on the realization coordinates."
     B::Matrix{Float64}
-    "Output matrix; its coefficients depend on the realization coordinates."
+    "Output matrix. Its coefficients depend on the realization coordinates."
     C::Matrix{Float64}
     "Direct input-to-output gain matrix \\[dimensionless\\]."
     D::Matrix{Float64}
@@ -82,7 +83,7 @@ Construct a [`PadeDelay`](@ref) from Pade approximation settings.
 
 # Notes
 
-`state_prefix` controls the generated state names. For example, a two-channel
+`state_prefix` controls the generated state names. A two-channel
 third-order delay with `state_prefix = :m_delay` yields states
 `:m_delay_x1` through `:m_delay_x6`.
 
@@ -93,19 +94,19 @@ d=\\frac{n!(-1)^m\\tau^{m-n}}{m!},\\quad
 H(s)=\\frac{d s^n+\\sum_{i=0}^{n-1}b_i s^i}{s^n+\\sum_{i=0}^{n-1}a_i s^i}.
 ```
 
-The requested numerator and denominator orders are ``m,n``; delay ``τ`` uses
+The requested numerator and denominator orders are ``m,n``. Delay ``τ`` uses
 \\[s\\]. Equal positive orders give the conventional diagonal Padé approximation.
-Unequal orders are not validated: the constructed numerator still contains the
-``d s^n`` term, so its degree and feedthrough can differ from the requested
-approximation. Negative factorial arguments raise errors. Modal realization
-improves conditioning; independent channels use block-diagonal copies.
+For unequal orders, construction proceeds with the ``d s^n`` term in the numerator.
+Its degree and feedthrough can differ from the requested approximation. Negative factorial
+arguments raise errors. Modal realization
+improves conditioning. Independent channels use block-diagonal copies.
 
 A zero delay or zero denominator order bypasses coefficient construction and creates a
 zero-state unity-gain block.
 
 # Errors
 
-- Throws `ArgumentError` for a nonpositive channel count; unsupported Padé order
+- Throws `ArgumentError` for a nonpositive channel count. Unsupported Padé order
   combinations can propagate factorial or realization errors.
 
 # Examples
@@ -134,7 +135,8 @@ function PadeDelay(;
         A = Matrix{Float64}(A)
         B = Matrix{Float64}(B)
         C = Matrix{Float64}(C)
-        D = D isa Number ? fill(Float64(D), 1, 1) : Matrix{Float64}(D) # This might be necessary for the bipolar MMC. Test for: "D = Matrix{Float64}(D)"
+        # TODO test `D = Matrix{Float64}(D)` for bipolar MMC models.
+        D = D isa Number ? fill(Float64(D), 1, 1) : Matrix{Float64}(D)
     end
 
     return PadeDelay(
@@ -163,12 +165,12 @@ Evaluate the Pade delay state-space equations and output.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Channel values in delay-input order. Their physical units are preserved;
-  converter modulation inputs are \\[dimensionless\\].
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Channel values in delay-input order. Their physical units are preserved.
+  Converter modulation inputs are \\[dimensionless\\].
 - `block`: Realized delay matrices and channel count.
 - `conv`: Parent converter providing electrical bases and synchronization.
 
@@ -178,14 +180,14 @@ Evaluate the Pade delay state-space equations and output.
 
 # Notes
 
-`inputs` must contain `block.n_inputs` values. The returned vector is the
+`inputs` contains `block.n_inputs` values. The returned vector is the
 delayed output. The method writes delay-state derivatives into `F`.
 
 ```math
 \\dot{x}=Ax+Bu,\\qquad y=Cx+Du.
 ```
 
-Time uses \\[s\\]. Realization-state units depend on the matrices; input and output have
+Time uses \\[s\\]. Realization-state units depend on the matrices. Input and output have
 the same physical signal units. A realization without states returns its direct output.
 
 # Errors
@@ -197,10 +199,10 @@ the same physical signal units. A realization without states returns its direct 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = PadeDelay(timeDelay=200e-6, padeOrderNum=3, padeOrderDen=3, n_inputs=2)
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -245,12 +247,12 @@ Build state-space matrices for a Pade delay approximation.
 - `B`: Input matrix.
 - `C`: Output matrix.
 - `D`: Feedthrough gain \\[dimensionless\\]. State coordinates follow the returned
-  realization; time is in \\[s\\].
+  realization. Time is in \\[s\\].
 
 # Notes
 
 The realization is converted to modal form to reduce conditioning problems from
-the controllable canonical representation. `numberVars` creates independent,
+the controllable companion representation. `numberVars` creates independent,
 block-diagonal copies of the single-channel delay.
 
 ```math
@@ -260,12 +262,12 @@ d=\\frac{n!(-1)^m\\tau^{m-n}}{m!},\\quad
 H(s)=\\frac{d s^n+\\sum_{i=0}^{n-1}b_i s^i}{s^n+\\sum_{i=0}^{n-1}a_i s^i}.
 ```
 
-The requested numerator and denominator orders are ``m,n``; delay ``τ`` uses
+The requested numerator and denominator orders are ``m,n``. Delay ``τ`` uses
 \\[s\\]. Equal positive orders give the conventional diagonal Padé approximation.
-Unequal orders are not validated: the constructed numerator still contains the
-``d s^n`` term, so its degree and feedthrough can differ from the requested
-approximation. Negative factorial arguments raise errors. Modal realization
-improves conditioning; independent channels use block-diagonal copies.
+For unequal orders, construction proceeds with the ``d s^n`` term in the numerator.
+Its degree and feedthrough can differ from the requested approximation. Negative factorial
+arguments raise errors. Modal realization
+improves conditioning. Independent channels use block-diagonal copies.
 
 # Examples
 

@@ -1,21 +1,13 @@
-############################  common/kernels/controller.jl  ############################
+# Controller parameters
 
 #=
 Shared controller primitives used by converter models.
 
-This file contains controller data containers that are independent of a
-particular converter topology. TLC and MMC control blocks can use these types
-without depending on each other's implementation files.
+This file contains controller data containers shared by TLC and MMC control blocks
+and defined independently of either converter topology.
 =#
 
-export Controller, PIControl
-
-"""
-$(TYPEDEF)
-
-Abstract supertype for shared controller parameter containers.
-"""
-abstract type Controller end
+export PIControl
 
 """
 $(TYPEDEF)
@@ -26,11 +18,11 @@ $(TYPEDFIELDS)
 
 # Notes
 
-`PIControl` is intentionally a lightweight immutable parameter container.
+`PIControl` is an immutable parameter container.
 State variables for the integrator live in the state-space blocks that use the
 controller.
 """
-@with_kw struct PIControl <: Controller
+@with_kw struct PIControl
     "Proportional gain for the normalized input and output signals \\[dimensionless\\]."
     Kp :: Float64  = 0  # Proportional gain
     "Integral gain for normalized signals \\[s⁻¹\\]."

@@ -51,8 +51,10 @@ function _inf_entries(path::AbstractString)
 end
 
 """
-    _wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
-                  timeout::Real = 60, poll_interval::Real = 0.25)
+```text
+_wait_outputs(roots, stem::AbstractString, expected_rows::Integer;
+              timeout::Real = 60, poll_interval::Real = 0.25)
+```
 
 Wait for one INF file and all corresponding OUT files to stop changing size
 across two polls. Check row counts only after the sizes stabilize.

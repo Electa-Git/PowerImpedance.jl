@@ -1,93 +1,34 @@
 export ac_source
 
-#= function ac_source(; pins=1, args...)
-	source = Source()
-	transformation = false
-    connection = true
-	for (key, val) in pairs(args)
-		if in(key, propertynames(source))
-			setfield!(source, key, val)
-		elseif (key == :transformation)
-			transformation = val
-		else
-			throw(ArgumentError("Source does not have a property $(key)."))
-		end
-	end
-	A,B,C,D = make_abcd(source, pins)
-
-	return Element(;input_pins = pins, output_pins = pins,
-		element_model = source, A,B,C,D, 
-		transformation = transformation, connection = connection)
-end
- =#
 """
 $(TYPEDSIGNATURES)
 
-Construct an ideal AC voltage-source element and its power-flow data.
+Construct an ideal three-phase AC voltage-source model with physical operating targets.
 
 # Arguments
 
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\]. Default: `Setpoint(; Vac = 220 / sqrt(3))`.
-- `pins`: Number of terminals per side. Used directly without inference. Default: `1`.
-- `limits`: Accepted legacy limits keyword; currently not forwarded to the returned
-  element, which retains default `Limits()`. Default: `Limits()`.
-- `transformation`: Whether the element exposes transformed external coordinates.
-  Default: `false`.
-- `connection`: Whether the element participates in network construction. Default:
-  `true`.
-- `args...`: Additional `Source` field values, such as legacy voltage and power data.
+- `v`: Phase-peak voltage \\[kV\\]. Default: `220 / sqrt(3)`.
+- `theta`: Voltage angle \\[rad\\]. Default: `0.0`.
+- `p`: Active power \\[MW\\]. Default: `0.0`.
+- `q`: Reactive power \\[MVAr\\]. Default: `0.0`.
 
 # Returns
 
-- An `Element` whose model is a `Source` and whose ABCD representation is an
-  ideal voltage source.
+- An immutable `Source` with three conductors, an `ACABC` port and an ideal ABCD matrix.
 
-# Errors
+# Notes
 
-- Throws `ArgumentError` when an additional keyword is not a `Source` field.
+Set source limits with `component(source; limits = Limits(...))`.
 
 # Examples
 
 ```julia
-source = ac_source(
-    setpoint = Setpoint(Vac = 220 / sqrt(3), Pac = 100.0, Qac = 0.0),
-    pins = 3,
-    transformation = true,
-)
+source = ac_source(v = 220 / sqrt(3), p = 100.0, q = 0.0)
+limited = component(source; limits = PowerImpedance.Limits(P_max = 200.0))
 ```
 """
-function ac_source(; setpoint = Setpoint(;Vac=220/sqrt(3)), pins=1, limits=Limits(), transformation=false, connection=true, args...)
-    source = Source()
-
-    if haskey(args, :V)
-        @warn "The legacy `V` field of `ac_source` is not used for power flow and was defined as phase RMS voltage; `setpoint.Vac` is phase peak voltage. Pass the converted voltage through `setpoint=Setpoint(Vac=...)` instead."
-    end
-
-    for (key, val) in pairs(args)
-        if key in propertynames(source)
-            setfield!(source, key, val)
-        elseif key == :transformation
-            transformation = val
-        elseif key == :connection
-            connection = val
-        else
-            throw(ArgumentError("Source does not have a property $(key)."))
-        end
-    end
-
-    A, B, C, D = make_abcd(source, pins)
-
-    return Element(;
-        input_pins = pins,
-        output_pins = pins, # AC sources one-port, kept for legacy
-        element_model = source,
-        A = A,
-        B = B,
-        C = C,
-        D = D,
-        transformation = transformation,
-        setpoint,
-        connection = connection,
-    )
+function ac_source(; v = _AC_SOURCE_INPUTS.v.default,
+        theta = _AC_SOURCE_INPUTS.theta.default, p = _AC_SOURCE_INPUTS.p.default,
+        q = _AC_SOURCE_INPUTS.q.default)
+    return Source(; v, theta, p, q, conductors = 3, domain = ACABC)
 end

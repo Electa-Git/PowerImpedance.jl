@@ -2,9 +2,10 @@ using Logging
 
 @testset "portable log source paths" begin
     package_root = pkgdir(PowerImpedance)
-    package_file = joinpath(package_root, "src", "Network", "power_flow.jl")
+    package_file = joinpath(package_root, "src", "Network",
+        "NetworkBuilder", "powerflow.jl")
     @test PowerImpedance._display_log_path(package_file, package_root) ==
-          "src/Network/power_flow.jl"
+          "src/Network/NetworkBuilder/powerflow.jl"
     @test PowerImpedance._display_log_path(
         "/builds/electa/controlgroup/PowerImpedance.jl/src/Network/NetworkBuilder/powerflow.jl",
         package_root

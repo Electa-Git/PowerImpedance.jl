@@ -246,7 +246,8 @@ windows contain whole common periods. Selection is saved before execution and re
 ### Julia references and the interface step
 
 Balanced elements use native dq/differential-DC references. Two-port references call
-`eval_abcd(element.element_model,j2*pi*f)` and `abcd_to_y`. The phase-domain references for asymmetric lines/cables and IEEE9
+`eval_abcd(model,j2*pi*f)` and `abcd_to_y`. The phase-domain references for
+asymmetric lines/cables and IEEE9
 include zero sequence and the physical conductor order.
 IEEE9 preserves each component and terminal-to-bus incidence, clamps ideal-source buses and
 imposes floating YY-neutral KCL. The full 6x6 transfer comes from six independent drives; Bus1 and
@@ -681,7 +682,8 @@ of 5.06 s. At 2.5 us, the raw step change was 1.81 % (limit 1 %); the finer stor
 
 The circuit is `PSCADFixtures.im_network()`: a 1000 MVA/220 kV induction machine behind a
 0.01 ohm resistor and a 220 kV ideal source. The load torque is constant at 0.9 pu and the
-inertia constant is 4 s. Element names are `DUT`, `Grid` and `G3`. The models and connections match
+inertia constant is 4 s. Component names are `DUT`, `Grid` and `G3`. The models and
+connections match
 the reference circuit. Julia gives 916.166 MW, 881.241 MVAr and speed 0.987551129 pu.
 
 The measurement tests stator-current, rotor-flux and speed dynamics through the full 2x2 terminal

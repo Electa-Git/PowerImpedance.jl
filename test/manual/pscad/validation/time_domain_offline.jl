@@ -5,7 +5,9 @@ function verify_time_domain_offline(;directory=joinpath(ROOT,"data","time_domain
     report=Dict{String,Any}("julia_version"=>string(VERSION),"scope"=>"Julia linear self-consistency; no station qualification",
         "HEAD"=>readchomp(`git -C $REPOSITORY rev-parse HEAD`),"source_files"=>source_record())
     for id in TIME_DOMAIN_IDS
-        net=coupled_network(id);point=power_flow(net);list=fixture_netlist(net,point);c=coupled_circuit(id,net);spec=time_domain_spec(id,list)
+        net=coupled_network(id);point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+            list=fixture_netlist(net,point);c=coupled_circuit(id,net);
+            spec=time_domain_spec(id,list)
         descriptor=composed_descriptor(c)
         native=descriptor.poles[argmin(abs.(descriptor.poles.-spec.mode_seed))]
         channels=time_domain_channels(c,spec)

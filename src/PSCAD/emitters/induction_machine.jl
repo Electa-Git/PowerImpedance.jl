@@ -47,7 +47,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.InductionMac
     terminal = only(connected)
     bus = _ac_bus(e, terminal, context)
     machine, elec = e.model, e.model.elec
-    isapprox(elec.ωn, 2π * context.settings.frequency; rtol = 1e-12) ||
+    isapprox(machine.bases.omega, 2π * context.settings.frequency; rtol = 1e-12) ||
         throw(ArgumentError("induction machine :$(e.name) frequency differs from the network frame"))
     flow = get(context.netlist.operating_point.branch_flows, e.name, nothing)
     flow !== nothing && haskey(flow, :speed_pu) ||
@@ -59,10 +59,10 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.InductionMac
         pscad_name(e.pscad * suffix; used = state.used)
         for suffix in ("_speed0", "_load_torque", "_speed_control", "_time")])
     params = ["Name" => e.pscad,
-        "Pbase" => pscad_value(elec.S_base; unit = "MVA"),
-        "Vbase" => pscad_value(elec.Vac_base; unit = "kV"),
-        "OMEG" => pscad_value(elec.ωn; unit = "rad/s"),
-        # TRN is passed to INDUCMC2_CFG even with ERC=0; retain the tested ratio.
+        "Pbase" => pscad_value(machine.bases.S; unit = "MVA"),
+        "Vbase" => pscad_value(machine.Vac_base; unit = "kV"),
+        "OMEG" => pscad_value(machine.bases.omega; unit = "rad/s"),
+        # TRN is passed to INDUCMC2_CFG even with ERC=0. Retain the tested ratio.
         "TRN" => "1", "J" => pscad_value(2machine.mech.H; unit = "s"),
         "D" => "0.0 [pu]", "View" => "1", "ERC" => "0", "MM" => "0",
         "SNP" => "1", "Cage" => "0", "NCW" => "1", "Msat" => "0", "Lsat" => "0",
@@ -94,7 +94,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.InductionMac
     component!(state.main, "wound_rotor", point, params)
     inner = pscad_name(e.pscad * "_terminal"; used = state.used)
     stub!(state.main, (point[1] + 54, point[2]), inner)
-    # The three inputs are only 36 pixels apart; horizontal stubs keep them separate.
+    # Inputs are 36 pixels apart. Horizontal stubs keep them separate.
     for (dy, signal) in ((-36, initial), (0, transfer), (36, demand))
         port, label = (point[1] - 54, point[2] + dy), (point[1] - 90, point[2] + dy)
         wire!(state.main, port, label)

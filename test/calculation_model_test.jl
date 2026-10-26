@@ -5,21 +5,27 @@ const CALCULATION_NB = PowerImpedance.NetworkBuilder
 
 function passive_calculation_state(; impedance_value=2.0)
     elements = (
-        branch=impedance(z=impedance_value, pins=1),
-        shunt=impedance(z=4.0, pins=1),
+        branch=impedance(z=impedance_value, conductors=1),
+        shunt=impedance(z=4.0, conductors=1),
     )
     connections = (
-        (node=:bus, element=:branch, side=1, terminal=1),
-        (node=:bus, element=:shunt, side=1, terminal=1),
-        (node=:gnd, element=:branch, side=2, terminal=1),
-        (node=:gnd, element=:shunt, side=2, terminal=1),
+        CALCULATION_NB.Net(:bus; terminals = ((:branch, :side1, :dc),)),
+        CALCULATION_NB.Net(:bus; terminals = ((:shunt, :side1, :dc),)),
+        CALCULATION_NB.Net(:gnd; terminals = ((:branch, :side2, :dc),)),
+        CALCULATION_NB.Net(:gnd; terminals = ((:shunt, :side2, :dc),)),
     )
     return CALCULATION_NB.define(elements, connections)
 end
 
 @testset "Primitive result contracts" begin
     state = passive_calculation_state()
-    original_impedance = copy(state.elements.branch.element_model.value)
+    source = component(PowerImpedance.Source(; domain=DC_CM); v=10.0)
+    state = CALCULATION_NB.define(merge(state.elements, (; source)), (
+        CALCULATION_NB.Bus(:bus; ports=((:branch, :side1), (:shunt, :side1))),
+        CALCULATION_NB.Bus(:supply; ports=((:source, :dc), (:branch, :side2))),
+        CALCULATION_NB.Bus(:gnd; ports=((:shunt, :side2),)),
+    ))
+    original_impedance = copy(state.elements.branch.value)
     powerflow = compute(PowerFlowProblem(state), ACDCPowerFlow())
     @test powerflow isa PowerFlowResult
     @test fieldnames(typeof(powerflow)) == (
@@ -31,9 +37,9 @@ end
         :operating_point,
         :diagnostics,
     )
-    @test powerflow.result === nothing
+    @test powerflow.result["termination_status"] == PowerImpedance.MOI.LOCALLY_SOLVED
     @test convert(OperatingPoint, powerflow) === powerflow.operating_point
-    @test state.elements.branch.element_model.value == original_impedance
+    @test state.elements.branch.value == original_impedance
 
     linearization = compute(LinearizationProblem(state, powerflow),
         AdmittanceLinearization())
@@ -91,11 +97,11 @@ end
 
 function calculation_space(axis)
     connections = (
-        (node=:bus, element=:branch, side=1, terminal=1),
-        (node=:gnd, element=:branch, side=2, terminal=1),
+        CALCULATION_NB.Net(:bus; terminals = ((:branch, :side1, :dc),)),
+        CALCULATION_NB.Net(:gnd; terminals = ((:branch, :side2, :dc),)),
     )
     return CALCULATION_NB.define(
-        (branch=impedance(Grid; z=axis, pins=1),),
+        (branch=impedance(Grid; z=axis, conductors=1),),
         connections,
     )
 end
@@ -115,8 +121,25 @@ end
     @test length(response.values) == length(response.space) == 2
     @test all(value -> size(value.response) == (1, 1, 3), response.values)
 
+    powerflow_space = CALCULATION_NB.define((
+        source=component(PowerImpedance.Source(; domain=DC_CM); v=10.0),
+        branch=impedance(Grid; z=Grid([1.0, 2.0]), conductors=1),
+        shunt=impedance(z=4.0, conductors=1),
+    ), (
+        CALCULATION_NB.Bus(:bus; ports=((:branch, :side1), (:shunt, :side1))),
+        CALCULATION_NB.Bus(:supply; ports=((:source, :dc), (:branch, :side2))),
+        CALCULATION_NB.Bus(:gnd; ports=((:shunt, :side2),)),
+    ))
+    powerflow_response = compute(
+        ParametricProblem(PowerImpedanceProblem(
+            powerflow_space;
+            nodes=[:bus],
+            frequency_range=(1.0, 10.0, 3),
+        )),
+        Combinatorial(NodalImpedance()),
+    )
     power_flows = compute(
-        ParametricProblem(PowerFlowProblem(deterministic)),
+        ParametricProblem(PowerFlowProblem(powerflow_space)),
         Combinatorial(ACDCPowerFlow()),
     )
     linearization_problems = preprocess(power_flows, AdmittanceLinearization())
@@ -137,7 +160,7 @@ end
     )
     staged = compute(staged_problems, Combinatorial(NodalImpedance()))
     @test map(value -> value.response, staged.values) ≈
-          map(value -> value.response, response.values)
+          map(value -> value.response, powerflow_response.values)
 
     edge_response = compute(
         ParametricProblem(owned),

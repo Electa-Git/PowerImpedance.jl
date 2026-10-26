@@ -14,7 +14,10 @@ const screen=Dict{String,Any}("status"=>"failed","most_positive_located_real_per
 const sensitivity=[Dict("passed"=>false,"native_real_per_s"=>10.)]
 fixture(id)=(;id,category=parentmodule(@__MODULE__).V.fixture(id).category,factory=()->(;elements=Dict()),estimated_nodes=1,description="test circuit",
     parent="",topology="test",physics=String[],measurements=["frequency_response"],differences=String[])
-power_flow(net)=nothing
+PowerFlowProblem(net)=net
+ACDCPowerFlow()=nothing
+compute(net, formulation)=(;operating_point=nothing)
+const NetworkBuilder=(;NetworkModel=(net,point)->nothing)
 fixture_netlist(net,point)=(;buses=[])
 stability_gate(net,entry)=copy(screen)
 composed_stability(c)=copy(screen)
@@ -204,10 +207,13 @@ end
 end
 
 @testset "Machine preparation records growing and zero-real-part roots" begin
-    net=V.fixture("synchronous_machine").factory();point=power_flow(net);list=V.fixture_netlist(net,point)
+    net=V.fixture("synchronous_machine").factory();point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());list=V.fixture_netlist(net,point)
     for root in (0.,1.)
         MachineScreen.root[]=root
-        spec,reference=@test_logs (:warn,r"synchronous_machine machine stability result: failed") MachineScreen.device_scan_definition(net,list;id="synchronous_machine")
+        spec, reference = @test_logs (:warn, r"synchronous_machine machine stability result: failed") (:info, "Starting to solve for steady-state solution") (:info, "SynchronousMachine steady-state solution found!") begin
+            MachineScreen.device_scan_definition(net, list; id = "synchronous_machine")
+        end
         record=V.scan_record(spec)
         @test spec.machine_stability["status"]=="failed"
         @test spec.machine_stability["most_positive_located_real_per_s"]==root
@@ -221,7 +227,8 @@ end
 module EarlierTimeDomainResults
 using TOML
 using ..PSCADValidation: time_domain_variants, time_domain_metrics, time_domain_interpolate
-using ..RecordedScreens: fixture, coupled_network, power_flow, coupled_circuit, fixture_netlist,
+using ..RecordedScreens: fixture, coupled_network, compute, PowerFlowProblem, ACDCPowerFlow,
+    NetworkBuilder, coupled_circuit, fixture_netlist,
     composed_stability, check_prepared_run_paths, prepare_scan_projects, preparation_record,
     write_operating_point, write_manifest, manifest_lists!, digest, existing_model,
     native_operating_point_check, verify_inputs, exported_composed_passives, test_spec, NativePSCAD

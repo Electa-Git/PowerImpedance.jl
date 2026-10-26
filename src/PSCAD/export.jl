@@ -28,7 +28,7 @@ or a power-flow solve.
   Frequency \\[Hz\\] must equal the network frequency.
 - `name`: ASCII project identifier. Default: `"network"`.
 - `description`: Project description. Default: `name`.
-- `line_options`: PSCAD ground and frequency/phase parameter overrides.
+- `line_options`: PSCAD ground, frequency and phase parameter overrides.
   Default: an empty named tuple.
 - `dc_reference`: `:midpoint_resistors` (default) adds two grounding resistors
   per DC bus without a local source midpoint or grounded shunt.
@@ -64,12 +64,12 @@ function build_plan(netlist::Netlist; settings::SimulationSettings = SimulationS
         push!(used, scan.probe.name)
         push!(reserved, scan.probe.name)
     end
-    ztool_terminals = Dict{Tuple{Symbol, Int}, Tuple{Vararg{String}}}()
+    ztool_terminals = Dict{Tuple{Symbol, Symbol}, Tuple{Vararg{String}}}()
     for scan in scans
         (; probe, bus, terminal) = scan
         terminal === nothing && continue
         inner = pscad_name(probe.name * "_terminal"; used)
-        ztool_terminals[(probe.element, probe.side)] = probe.kind == :dc ?
+        ztool_terminals[(probe.element, probe.port)] = probe.kind == :dc ?
             (inner, last(dc_labels[bus.key])) : (inner,)
     end
     for scan_name in reserved
@@ -208,13 +208,12 @@ availability before the power-flow solve or project write.
 
 # Arguments
 
-- `net`: Classic network or a materialized `NetworkBuilder.NetworkState`.
+- `state`: Materialized `NetworkBuilder.NetworkState`.
 - `path`: New `.pscx` filename in an existing directory.
 - `name`: Project identifier, equal to the path stem. Default: the path stem.
-- `powerflow`: Classic four-tuple returned by `power_flow(net)`, or `nothing`
-  (default). Builder states accept only `nothing` and use `NetworkBuilder.solve`.
+- `powerflow`: `PowerFlowResult`, or `nothing` (default) to calculate it.
 - `settings`: Simulation settings. Default: `SimulationSettings()`.
-- `line_options`: Named tuple of PSCAD ground and frequency/phase overrides.
+- `line_options`: Named tuple of PSCAD ground, frequency and phase overrides.
   Default: empty. An example is `(; FS = 0.5, FE = 1e6, Numf = 200, CPASS = 0)`.
   Numbers use PSCAD field units. Strings retain explicit units.
 - `dc_reference`: `:midpoint_resistors` (default) adds two resistors of
@@ -233,14 +232,12 @@ availability before the power-flow solve or project write.
 
 # Notes
 
-For a classic network, `powerflow = nothing` calls `power_flow(net)`, retaining
-its changes to active-element setpoints and its solver logs. Supply a solved
-tuple to reuse that solution. For a builder state, `NetworkBuilder.solve` skips
-power flow for linear networks, which use source setpoints and have no solved
-comparison data. Export never contacts the station.
+With `powerflow = nothing`, calculate the operating point with
+`compute(PowerFlowProblem(state), ACDCPowerFlow())` for every network. Bus voltages
+and transformer ratings use that solution. Export never contacts the station.
 
-DC source and converter `Setpoint.Vdc` are pole-to-pole voltages \\[kV\\].
-Without a solved result, each pole source uses `Setpoint.Vdc / 2`.
+DC source inputs and converter port values use pole-to-pole voltages \\[kV\\].
+Without a solved result, each pole source uses half the declared voltage.
 With a solved result, each pole source uses `vm_pu * base_kV` \\[kV\\]
 relative to ground.
 
@@ -248,28 +245,17 @@ relative to ground.
 
 - Throws `ArgumentError` for unknown line fields before solving power flow.
 """
-function export_pscad(net::PowerImpedance.Network; path,
-        name = splitext(basename(path))[1], powerflow = nothing,
-        settings::SimulationSettings = SimulationSettings(), line_options = (;),
-        dc_reference = :midpoint_resistors, ztool_probes = ZToolProbe[], ztool_library = nothing)
-    _export_keywords(path, name, line_options, dc_reference)
-    _require_extension()
-    pf = powerflow === nothing ? PowerImpedance.power_flow(net) : powerflow
-    return _export_project(netlist(net, pf), path, name, settings,
-        powerflow === nothing, line_options, dc_reference, ztool_probes, ztool_library)
-end
-
 function export_pscad(state::PowerImpedance.NetworkBuilder.NetworkState; path,
-        name = splitext(basename(path))[1], powerflow = nothing,
+        name = splitext(basename(path))[1],
+        powerflow::Union{Nothing, PowerImpedance.PowerFlowResult} = nothing,
         settings::SimulationSettings = SimulationSettings(), line_options = (;),
         dc_reference = :midpoint_resistors, ztool_probes = ZToolProbe[], ztool_library = nothing)
     _export_keywords(path, name, line_options, dc_reference)
     _require_extension()
-    powerflow === nothing ||
-        throw(ArgumentError("builder export obtains power flow from NetworkBuilder.solve; powerflow must be nothing"))
-    solved = PowerImpedance.NetworkBuilder.solve(state)
-    elements = NamedTuple{keys(state.elements)}(
-        Tuple(solved.network.elements[name] for name in keys(state.elements)))
-    return _export_project(netlist(state, solved.powerflow, elements), path, name, settings,
-        solved.powerflow !== nothing, line_options, dc_reference, ztool_probes, ztool_library)
+    pf = powerflow === nothing ? PowerImpedance.compute(
+        PowerImpedance.NetworkBuilder.PowerFlowProblem(state),
+        PowerImpedance.NetworkBuilder.ACDCPowerFlow()) : powerflow
+    return _export_project(netlist(state, pf), path, name, settings,
+        powerflow === nothing && pf.result !== nothing, line_options, dc_reference,
+        ztool_probes, ztool_library)
 end

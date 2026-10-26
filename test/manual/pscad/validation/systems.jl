@@ -8,7 +8,7 @@ function system_spec(id,list)
     vll=380.;power=1000.
     vb=vll*sqrt(2/3);ib=2power/(3vb);h=1.25e-6
     converter=first(e for e in list.elements if e.model isa Union{PowerImpedance.MMC,PowerImpedance.TLC})
-    dcbase=device_bases(converter.model.elec).dc_voltage
+    dcbase=device_bases(converter.model.elec, converter.model.bases).dc_voltage
     # Native peak bounds are evaluated for the preselected amplitudes; the measured limit
     # is .01 pu.
     amplitude=id=="p2p_redesigned" ? .0002916349 : .0001
@@ -57,30 +57,36 @@ function system_sizing(c,spec)
         s=ComplexF64(im*2π*f);v=composed_nodal(c,s,functions)\drive
         voltage .+= abs.(v).*spec.current_bases'
         for name in c.devices
-            currents[name] .+= abs.(functions[name](s)*device_incidence(c,name)'*v).*spec.current_bases'
+            currents[name] .+= abs.(functions[name](s)*component_incidence(c,
+                name)'*v).*spec.current_bases'
         end
     end
     # Measurement bases use physical ratings, independently of the power-flow
     # solver's shared voltage base across transformer sides.
     list=fixture_netlist(c.net,nothing)
-    dcbase=device_bases(c.net.elements[first(c.devices)].element_model.elec).dc_voltage
+    dcbase=device_bases(c.net.elements[first(c.devices)].elec,
+        c.net.elements[first(c.devices)].bases).dc_voltage
     vb=[only(filter(b->node in b.nets,list.buses)).kind==:dc ? dcbase : spec.voltage_base_kV for node in c.nodes]
     for name in c.devices
-        e=c.net.elements[name];b=device_bases(e.element_model.elec)
+        e=c.net.elements[name];b=device_bases(e.elec, e.bases)
         for axis in 1:2
-            j=findfirst(==(e.pins[Symbol("$(b.ac_side).$axis")]),c.nodes)
+            j=findfirst(==(port_nets(c.net, name, :ac)[axis]),c.nodes)
             j===nothing || (vb[j]=b.ac_voltage)
         end
     end
     vpeak=maximum(voltage./vb)*spec.tone_peak_pu
-    ipeak=maximum(maximum(currents[n]./device_bases(c.net.elements[n].element_model.elec).current_outputs) for n in c.devices)*spec.tone_peak_pu
+    ipeak=maximum(maximum(currents[n]./
+        device_bases(c.net.elements[n].elec, c.net.elements[n].bases).current_outputs)
+        for n in c.devices)*spec.tone_peak_pu
     return Dict("voltage_peak_bound_pu"=>vpeak,"device_current_peak_bound_pu"=>ipeak,
         "method"=>"sum of per-tone magnitudes; native full-network response; no cancellation assumed",
         "passed"=>max(vpeak,ipeak)<=.01)
 end
 
 function system_setup(id)
-    entry=fixture(id);net=entry.factory();point=power_flow(net);c=complete_system(id,net)
+    entry=fixture(id);net=entry.factory();point=compute(PowerFlowProblem(net),
+        ACDCPowerFlow());
+    NetworkBuilder.NetworkModel(net, point.operating_point);c=complete_system(id,net)
     screen=system_stability(c)
     screen["status"]=="passed_finite_screen" || @warn "$id complete-network finite screen result: $(screen["status"])" screen
     list=fixture_netlist(net,point);spec=system_spec(id,list)
@@ -100,7 +106,9 @@ function prepare_system(setup;directory,remote)
     record["prepared_run_paths"]=paths;record["frequency_response"]=scan_record(spec)
     record["measurement_groups"]=Dict(spec.protocol=>scan_record(spec))
     record["measurands"]=composed_targets(c);record["drive_sizing"]=sizing
-    record["qualification_reference"]=any(interface_step_eligible(c.net.elements[n].element_model) for n in c.devices) ? "composed_discrete_realization" : "plain_model"
+    record["qualification_reference"]=
+        any(interface_step_eligible(c.net.elements[n]) for n in c.devices) ?
+            "composed_discrete_realization" : "plain_model"
     record["qualification_status"]="station_pending"
     record["distributed_model_scope"]=screen["root_scope"]
     write_operating_point(joinpath(directory,"operating_point.tsv"),first(models).second)
@@ -131,7 +139,8 @@ function run_system(id;directory,remote,deadline)
     time()<deadline || error("system runtime budget exhausted")
     record=manifest_lists!(TOML.parsefile(joinpath(directory,"manifest.toml")));verify_inputs(directory,record)
     record["fixture_id"]==id || error("system fixture differs")
-    net=fixture(id).factory();point=power_flow(net);c=complete_system(id,net)
+    net=fixture(id).factory();point=compute(PowerFlowProblem(net), ACDCPowerFlow());
+    NetworkBuilder.NetworkModel(net, point.operating_point);c=complete_system(id,net)
     list=fixture_netlist(net,point);spec=system_spec(id,list)
     native_operating_point_check(list,joinpath(directory,"operating_point.tsv"))["passed"] || error("system operating point changed")
     scan_record(spec)==record["measurement_groups"][spec.protocol] || error("system measurement definition changed")

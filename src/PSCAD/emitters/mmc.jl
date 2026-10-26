@@ -1,17 +1,18 @@
 # Individual MMC blocks provide diagnostic outputs for the probes, which
 # MMC.state_space! does not return.
-function mmc_equilibrium_outputs(m, states, inputs, setpoint_pu)
+function mmc_equilibrium_outputs(m, states, inputs, terminal_pu)
     sig_in = PowerImpedance.input_signals(m, states, inputs)
     F = zeros(PowerImpedance.n_states(m))
     meas, i = PowerImpedance.state_space_block!(
-        F, states, sig_in, setpoint_pu, m.meas, m, 1)
-    sync, i = PowerImpedance.state_space_block!(F, states, meas, setpoint_pu, m.sync, m, i)
+        F, states, sig_in, terminal_pu, m.meas, m, 1)
+    sync, i = PowerImpedance.state_space_block!(F, states, meas, terminal_pu, m.sync, m, i)
     delta, i = PowerImpedance.state_space_block!(
-        F, states, (; meas, sync), setpoint_pu, m.delta_control, m, i)
+        F, states, (; meas, sync), terminal_pu, m.delta_control, m, i)
     sigma, i = PowerImpedance.state_space_block!(F, states,
-        (; meas, power = (; P_ac_f = meas.P_ac_f), sync), setpoint_pu, m.sigma_control, m, i)
+        (; meas, power = (; P_ac_f = meas.P_ac_f), sync),
+        terminal_pu, m.sigma_control, m, i)
     mod, _ = PowerImpedance.state_space_block!(F, states,
-        (; meas, out_delta = delta, out_sigma = sigma), setpoint_pu, m.modulation, m, i)
+        (; meas, out_delta = delta, out_sigma = sigma), terminal_pu, m.modulation, m, i)
     return (; sig_in, meas, sync, delta, sigma, mod)
 end
 
@@ -25,8 +26,8 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
     append!(inputs, [("v_Ctot_" * arm * "_" * phase, 1)
                      for arm in ("u", "l") for phase in ("a", "b", "c")])
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
-    invcurrent = converter_parameter!(parameters, "invIbase", e.model.elec.vDC_base /
-                                                              e.model.elec.Sbase)
+    invcurrent = converter_parameter!(parameters, "invIbase", e.model.bases.v_dc /
+                                                              e.model.bases.S)
     append!(graph.nodes,
         ControlBlock[Gain(Signal("theta_c"), Signal("sigma_angle"), -2.0),
             AbcToDq(Signal("iS_abc"), Signal("sigma_angle"), Signal("iS_dq_si"), transforms.abc)])
@@ -37,8 +38,8 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
         push!(graph.nodes, ArraySplit(Signal("iS_abc"), s, i))
     end
     push!(graph.nodes, Sum(sum_currents, [1, 1, 1], Signal("iS_sum")))
-    invzero = converter_parameter!(parameters, "invIzero", e.model.elec.vDC_base /
-                                                           (3 * e.model.elec.Sbase))
+    invzero = converter_parameter!(parameters, "invIzero", e.model.bases.v_dc /
+                                                           (3 * e.model.bases.S))
     append!(graph.nodes,
         ControlBlock[Gain(Signal("iS_sum"), Signal("iS_z_measured"), invzero),
             Gain(Signal("iS_z_measured"), Signal("iS_z"), 1.0)])
@@ -68,7 +69,7 @@ function mmc_total_energy!(graph, parameters, e, equilibrium,
 end
 function mmc_total_energy!(graph, parameters, e, equilibrium,
         block::PowerImpedance.TotalEnergyControl)
-    invcap = converter_parameter!(parameters, "invVbase", 1 / e.model.elec.vDC_base)
+    invcap = converter_parameter!(parameters, "invVbase", 1 / e.model.bases.v_dc)
     squares = Signal[]
     for arm in ("u", "l"), phase in ("a", "b", "c")
 
@@ -124,7 +125,8 @@ function mmc_circulating_current!(graph, parameters, e, equilibrium,
 end
 function mmc_circulating_current!(graph, parameters, e, equilibrium,
         block::PowerImpedance.CirculatingCurrentSuppressionControl)
-    cross = converter_parameter!(parameters, "twiceLarm", 2 * e.model.elec.Lₐᵣₘ)
+    cross = converter_parameter!(parameters, "twiceLarm", 2 *
+        PowerImpedance.perunit(e.model.elec, e.model.bases).Lₐᵣₘ)
     for (axis, other, sign, initial) in (("d", "q", 1, equilibrium.states.ξ_iΣ_d),
         ("q", "d", -1, equilibrium.states.ξ_iΣ_q))
         error, pi, term, voltage = Signal.(["sigma_" * axis * suffix
@@ -163,7 +165,8 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
     append!(graph.nodes,
         ControlBlock[Const(Signal("two"), 2.0),
             Div(Signal("two"), Signal("v_dc_divisor"), Signal("sigma_factor")),
-            Gain(Signal("sigma_factor"), Signal("delta_factor"), -m.elec.baseConv1),
+            Gain(Signal("sigma_factor"), Signal("delta_factor"),
+                -PowerImpedance.perunit(m.elec, m.bases).baseConv1),
             Gain(Signal("theta_rel"), Signal("sigma_rel"), -2.0)])
     converter_rotation!(graph, Signal("vM_d_ref"), Signal("vM_q_ref"), Signal("theta_rel"),
         Signal("vMD_d_grid"), Signal("vMD_q_grid"), "delta_grid", true)
@@ -184,10 +187,10 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
             # frame, as in MMC/modulation.jl.
             compensated = frame == 1 ?
                           PowerImpedance.phase_compensated_dq(
-                [equilibrium.outputs.mod.mΔd, equilibrium.outputs.mod.mΔq], -m.elec.ωbase *
+                [equilibrium.outputs.mod.mΔd, equilibrium.outputs.mod.mΔq], -m.bases.omega *
                                                                             residual) :
                           PowerImpedance.phase_compensated_dq(
-                [equilibrium.outputs.mod.mΣd, equilibrium.outputs.mod.mΣq], 2m.elec.ωbase *
+                [equilibrium.outputs.mod.mΣd, equilibrium.outputs.mod.mΣq], 2m.bases.omega *
                                                                             residual)
             initial = compensated[axis == "d" ? 1 : 2]
             if iszero(residual)
@@ -200,7 +203,7 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
                         ceil(Int, residual / settings.time_step) + 1, y0))
             end
         end
-        theta = converter_parameter!(parameters, stem * "phase", frame * m.elec.ωbase *
+        theta = converter_parameter!(parameters, stem * "phase", frame * m.bases.omega *
                                                                  residual)
         push!(graph.nodes, Import(theta, Signal(theta)))
         converter_rotation!(
@@ -222,7 +225,7 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
     end
     append!(graph.nodes,
         ControlBlock[TimeStep(Signal("mmc_clock_s")),
-            Gain(Signal("mmc_clock_s"), Signal("nominal_angle"), m.elec.ωbase),
+            Gain(Signal("mmc_clock_s"), Signal("nominal_angle"), m.bases.omega),
             Gain(Signal("nominal_angle"), Signal("sigma_nominal"), -2.0),
             ArrayMerge(Signal.(["mD_d", "mD_q"]), Signal("mD_dq")),
             ArrayMerge(Signal.(["mS_d", "mS_q"]), Signal("mS_dq")),
@@ -419,8 +422,8 @@ function mmc_controls(state, e, equilibrium, context, delta::PowerImpedance.Δdq
         "QCTRL", "OCC", "SIGMA", "MOD")]
     definitions = [
         converter_measurements(names[1], e, equilibrium, transforms,
-            (; v = m.elec.vAC_base, i = 2m.elec.Sbase / (3m.elec.vAC_base),
-                dc = m.elec.vDC_base)),
+            (; v = m.bases.v_ac, i = 2m.bases.S / (3m.bases.v_ac),
+                dc = m.bases.v_dc)),
         converter_pll(names[2], e, equilibrium), converter_active(names[3], e, equilibrium, delta.outer_active),
         converter_reactive(names[4], e, equilibrium, delta.outer_reactive), converter_occ(
             names[5], e, equilibrium, delta.occ),
@@ -439,8 +442,8 @@ function mmc_controls(state, e, equilibrium, context, delta::PowerImpedance.Δdq
              for prefix in ("MEAS", "PLL", "VSM", "QCTRL", "CCVI", "OCC", "SIGMA", "MOD")]
     controls = [
         converter_measurements(names[1], e, equilibrium, transforms,
-            (; v = m.elec.vAC_base, i = 2m.elec.Sbase / (3m.elec.vAC_base),
-                dc = m.elec.vDC_base)) => (;),
+            (; v = m.bases.v_ac, i = 2m.bases.S / (3m.bases.v_ac),
+                dc = m.bases.v_dc)) => (;),
         converter_pll(names[2], e, equilibrium, m.sync.pll) =>
             (; omega_c = "omega_pll", theta_c = "theta_pll_next", theta_rel = "theta_pll_rel_next",
                 theta_vsm_rel = "theta_rel"),
@@ -457,11 +460,11 @@ end
 
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, context)
     connected = filter(t -> !t.grounded, e.terminals)
-    length(connected) == 2 && any(t -> t.side == 1 && t.bus.domain == 2, connected) &&
-    any(t -> t.side == 2 && t.bus.domain == 1, connected) ||
-        throw(ArgumentError("converter :$(e.name) requires DC side 1 and AC side 2"))
-    dc, ac = only(filter(t -> t.side == 1, connected)),
-    only(filter(t -> t.side == 2, connected))
+    length(connected) == 2 && any(t -> t.port == :dc && t.bus.domain == 2, connected) &&
+    any(t -> t.port == :ac && t.bus.domain == 1, connected) ||
+        throw(ArgumentError("converter :$(e.name) requires DC port :dc and AC port :ac"))
+    dc, ac = only(filter(t -> t.port == :dc, connected)),
+    only(filter(t -> t.port == :ac, connected))
     bus = _ac_bus(e, ac, context)
     _terminal_bus(e, dc, context)
     m = e.model
@@ -475,11 +478,11 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
         not_exportable(e, m.modulation)
     m.delta_control.occ isa PowerImpedance.InnerCurrentPIControl ||
         not_exportable(e, m.delta_control.occ)
-    isapprox(m.elec.ωbase, 2π * context.settings.frequency; rtol = 1e-12) ||
+    isapprox(m.bases.omega, 2π * context.settings.frequency; rtol = 1e-12) ||
         throw(ArgumentError("converter :$(e.name) frequency differs from the network frame"))
     haskey(context.netlist.operating_point.branch_flows, e.name) ||
         throw(ArgumentError("converter :$(e.name) requires solved operating-point data"))
-    si = mmc_si(m.elec)
+    si = mmc_si(m.elec, m.bases)
     all(x -> isfinite(x) && x >= 0, (si.L_r, si.R_r, si.R_arm)) && si.L_arm > 0 &&
     si.C_SM > 0 && si.N > 0 &&
     isfinite(si.turnsRatio) && si.turnsRatio > 0 ||
@@ -512,8 +515,9 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
     point = (x + 144, y + 108)
     push!(state.main.components,
         ModuleInstancePlan(context.name * ":" * name, Pair{String, String}[], point..., 0))
-    ac_current = current_probe!(state, e, ac, context; orientation = :out)
-    ammeter_stub!(state.main, (point[1] + 54, point[2]), only(_terminal_labels(e, ac, context)), ac_current)
+    ac_current = current_probe!(state, e, ac, context; orientation = :into)
+    ammeter_stub!(state.main, (point[1] + 54, point[2]),
+        only(_terminal_labels(e, ac, context)), ac_current; reverse = true)
     dc_current = current_probe!(state, e, dc, context; orientation = :into)
     positive, negative = _terminal_labels(e, dc, context)
     ammeter_stub!(
@@ -528,7 +532,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.MMC}, contex
                signal == "iS_z" ? :converter_sum_current : :converter_diagnostic
         unit = signal == "theta_c" ? "rad" : startswith(signal, "v_Ctot_") ? "kV" : "pu"
         push!(state.channels, ProbeChannel(
-            probe, kind, bus.name, string(e.name), "2", 1, unit))
+            probe, kind, bus.name, string(e.name), :ac, 1, unit))
         module_signal_stub!(state.main, (point[1] + 54, point[2] + 72 + 36 * (i - 1)), probe, 1)
         px, py = allocate_cell!(state.layout)
         output_probe!(state.main, probe, "converter", unit, (px + 126, py + 72))

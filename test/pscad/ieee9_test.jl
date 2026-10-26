@@ -1,26 +1,28 @@
 module PSCADIEEE9Tests
+import ..PSCADFixtures
 using Test, PowerImpedance
 using ..PSCADFixtures: ieee9_network
 const P = PowerImpedance.PSCAD
 
 @testset "IEEE9 physical fixture and power-flow dispatch" begin
-    net = ieee9_network()
+    state = ieee9_network()
+    net = state
     @test length(net.elements) == 15
-    @test net.voltageBase == [220 / sqrt(3)]
+    @test net.options.voltageBase == 220 / sqrt(3)
     for (name, voltage) in ((:g1, 16.5), (:g2, 18.0), (:g3, 13.8))
-        @test net.elements[name].setpoint.Vac ≈ voltage * sqrt(2 / 3)
-        @test ismissing(net.elements[name].setpoint.θac)
-        @test ismissing(net.elements[name].setpoint.Pac)
-        @test ismissing(net.elements[name].setpoint.Qac)
+        @test state.elements[name].v ≈ voltage * sqrt(2 / 3)
+        @test state.elements[name].theta == 0.0
+        @test state.elements[name].p == 0.0
+        @test state.elements[name].q == 0.0
     end
     for (name, distance) in ((:tl78, 76e3), (:tl89, 106e3), (:tl75, 170e3),
         (:tl96, 179e3), (:tl54, 89e3), (:tl64, 97e3))
-        @test net.elements[name].element_model.length == distance
+        @test net.elements[name].length == distance
     end
     for (name, ratio, primary, secondary) in ((:t1, 16.5 / 230, 4.9916e-4 / 2, 0.097 / 2),
         (:t2, 18 / 230, 6.4458e-4 / 2, 0.1052 / 2),
         (:t3, 13.8 / 230, 3.5523e-4 / 2, 0.0987 / 2))
-        t = net.elements[name].element_model
+        t = net.elements[name]
         @test (t.n, t.Lₚ, t.Lₛ, t.Rₚ, t.Rₛ, t.Cₜ, t.Cₛ) ==
             (ratio, primary, secondary, 0, 0, 7e-9, 12e-9)
     end
@@ -30,8 +32,8 @@ const P = PowerImpedance.PSCAD
         @test form.R ≈ resistance
         @test form.L ≈ inductance
     end
-    pf = power_flow(net)
-    @test count(bus -> bus["bus_type"] == 3, values(pf[2]["bus"])) == 3
+    pf = compute(PowerFlowProblem(net), ACDCPowerFlow())
+    @test count(bus -> bus["bus_type"] == 3, values(pf.data["bus"])) == 3
     list = P.netlist(net, pf)
     @test length(list.buses) == 9
     @test all(bus -> bus.kind != :dc, list.buses)
@@ -40,7 +42,7 @@ const P = PowerImpedance.PSCAD
         terminal = only(t for t in element.terminals if !t.grounded)
         @test list.operating_point.bus_states[terminal.bus].va_rad ≈ 0 atol = 1e-12
     end
-    plan = P.build_plan(list; name = "ieee9_classic",
+    plan = P.build_plan(list; name = "ieee9_state",
         settings = P.SimulationSettings(simulation_time = 3.0))
     @test P.check_connectivity(plan) === nothing
     @test length(plan.lines) == 6

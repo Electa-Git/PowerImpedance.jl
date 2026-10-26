@@ -321,7 +321,7 @@ the PlotBuilder UI.
 - `backend`: Makie backend selector accepted by PlotBuilder.
 - `display_plot`: display the built figure. Default: `true`.
 - `controls`: include reset, SVG export, and status UI. Default: `true`.
-- `figure_size`: `:auto` fits the window to the resolved layout; pass `(width,
+- `figure_size`: `:auto` fits the window to the resolved layout. Pass `(width,
   height)` to override it. Default: `:auto`.
 - Additional keywords are validated by `NetworkDiagramDefinition`.
 

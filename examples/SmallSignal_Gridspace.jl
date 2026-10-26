@@ -8,14 +8,12 @@ const NB = PowerImpedance.NetworkBuilder
 # ordinary numeric component separately for each Monte Carlo trial.
 
 elements = (
-    branch=impedance(Grid; z=Grid(2.0, 5.0; key=:branch_impedance), pins=1),
-    shunt=impedance(z=4.0, pins=1),
+    branch = impedance(Grid; z = Grid(2.0, 5.0; key = :branch_impedance), conductors = 1),
+    shunt = impedance(z = 4.0, conductors = 1)
 )
 connections = (
-    (node=:bus, element=:branch, side=1, terminal=1),
-    (node=:bus, element=:shunt, side=1, terminal=1),
-    (node=:gnd, element=:branch, side=2, terminal=1),
-    (node=:gnd, element=:shunt, side=2, terminal=1),
+    NetworkBuilder.Bus(:bus; ports = ((:branch, :side1), (:shunt, :side1))),
+    NetworkBuilder.Bus(:gnd; ports = ((:branch, :side2), (:shunt, :side2)))
 )
 network_space = NB.define(elements, connections)
 
@@ -23,12 +21,12 @@ network_space = NB.define(elements, connections)
 
 response_problems = PowerImpedanceProblem(
     network_space;
-    nodes=[:bus],
-    frequency_range=(1.0, 1e3, 80),
+    nodes = [:bus],
+    frequency_range = (1.0, 1e3, 80)
 )
 responses = compute(
     ParametricProblem(response_problems),
-    MonteCarlo(LoopGain(); trials=200, seed=2026),
+    MonteCarlo(LoopGain(); trials = 200, seed = 2026)
 )
 
 # `preprocess` is the explicit checkpoint between completed responses and the
@@ -37,23 +35,23 @@ responses = compute(
 stability_problem = preprocess(responses, GeneralizedNyquist())
 stability = compute(
     stability_problem,
-    MonteCarlo(GeneralizedNyquist(); seed=2026),
+    MonteCarlo(GeneralizedNyquist(); seed = 2026)
 )
 
 (;
-    trials=stability.stats.n,
-    failures=stability.details.failures.items,
-    analysis=stability.details.categorical.analysis,
+    trials = stability.stats.n,
+    failures = stability.details.failures.items,
+    analysis = stability.details.categorical.analysis
 )
 
-# Plot definitions consume the completed result without rerunning the analysis.
-# Building the render definition does not load Makie.
+# Plot definitions use the completed numerical result. A Makie backend renders
+# the definition.
 
 render = PlotBuilder.make_render(
     NyquistPlotDefinition,
     stability;
-    zoom=true,
-    title="Uncertain loop gain",
+    zoom = true,
+    title = "Uncertain loop gain"
 )
 
 length(render.figures)

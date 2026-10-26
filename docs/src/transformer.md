@@ -5,16 +5,18 @@ CurrentModule = PowerImpedance
 # Transformer
 
 `transformer` represents a single-phase or balanced three-phase transformer
-with a T-model containing primary winding impedance, excitation branch, ideal
+with named `side1` and `side2` ports. The constructor returns the transformer
+model. Its T-model contains primary winding impedance, excitation branch, ideal
 voltage ratio, secondary winding impedance, and optional capacitive paths.
+`conductors = 3` declares `ACABC` ports. `conductors = 1` declares `DC_CM` ports.
 
 The model can be specified directly from its equivalent-circuit parameters or
 derived from open-circuit and short-circuit test data. For three phases, `n` is
 always the primary-to-secondary **line-to-line voltage ratio**, for both `:YY`
 and `:ΔY`. All T-model parameters retain their per-phase, Y-equivalent `:YY`
 meaning: winding resistances `Rₚ`, `Rₛ` [Ω] and leakage inductances `Lₚ`, `Lₛ`
-[H] are referred to their own side; `Rₘ` [Ω] and `Lₘ` [H] form the primary
-excitation branch; `Cₜ` and `Cₛ` [F] retain the same per-phase capacitive paths.
+[H] are referred to their own side. `Rₘ` [Ω] and `Lₘ` [H] form the primary
+excitation branch. `Cₜ` and `Cₛ` [F] retain the same per-phase capacitive paths.
 Zero `Rₘ` or `Lₘ` means that excitation term is absent. `hasRω` and `k` use the
 same winding-resistance multiplier `(abs(s)/(2π*50))^k` in both organizations.
 
@@ -44,12 +46,11 @@ T = \begin{bmatrix}1&1&1\\1&a^2&a\\1&a&a^2\end{bmatrix},
 
 Delta-to-Y zero-sequence isolation has no phase-domain ABCD representation.
 The internal zero-sequence block is an identity placeholder exactly decoupled
-from positive and negative sequence; it does not model physical zero-sequence
-transfer. The supported three-phase use requires `transformation=true`, which
-discards zero sequence and produces the dq model. An untransformed three-phase
-`:ΔY` element throws `ArgumentError` at construction. In dq, Dyn11 rotates the
+from positive and negative sequence. Physical zero-sequence transfer is unsupported. Connect a three-phase `:ΔY` transformer to an `ACDQ` bus. The builder discards
+zero sequence and produces the dq model. An abc topology raises `ArgumentError`
+when the network is defined. In dq, Dyn11 rotates the
 secondary frame by +30° relative to the primary. The repository uses a lagging
-q axis, `[d,q] = [V cos θ, -V sin θ]`; with
+q axis, `[d,q] = [V cos θ, -V sin θ]`. With
 `R(θ) = [cos θ -sin θ; sin θ cos θ]`, the ideal voltage ABCD block is
 `n·R(+π/6)` and the ideal current block is `R(+π/6)/n`. For primary dq voltage
 `[n,0]`, the secondary is `[cos(π/6), -sin(π/6)]`.
@@ -57,7 +58,16 @@ q axis, `[d,q] = [V cos θ, -V sin θ]`; with
 For power flow, the detailed ABCD model is converted to a balanced branch tap,
 series admittance, and shunt admittance. These values are identical for `:YY`
 and `:ΔY` with the same parameters. PowerModels defines the complex tap as
-`tap·exp(j·shift)` and the unloaded voltage as `V_to = V_from/t`; Dyn11 uses `shift = -π/6` [rad]. Frequency-domain analysis retains the detailed
+`tap·exp(j·shift)` and the unloaded voltage as `V_to = V_from/t`. Dyn11 uses `shift = -π/6` [rad]. Frequency-domain analysis retains the detailed
 transformer model.
 
+```@example transformers
+using PowerImpedance
+
+model = transformer(; conductors = 3, organization = :ΔY,
+    n = 380/150, Rₚ = 0.1, Lₚ = 1e-3, Rₛ = 0.1, Lₛ = 1e-3)
+electricalconnections(model)
+```
+
+`V₁ᵒ` and `V₂ᵒ` test ratings use volts per phase (phase RMS).
 See [`transformer`](@ref) for fields, units, and constructor modes.

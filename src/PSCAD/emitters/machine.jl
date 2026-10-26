@@ -10,7 +10,7 @@ const SM_AVR_FIELD_VOLTAGE_SCALE = 1.0
 "Machine iron-loss resistance on its per-unit base \\[dimensionless\\]."
 const SM_IRON_LOSS_RESISTANCE_PU = 1.0e6
 
-function machine_avr(name, machine, voltage_pu, vref=machine.avr.vref_SG)
+function machine_avr(name, machine, voltage_pu, vref=machine.avr.v_ref)
     a = machine.avr
     parameters = ModuleParameterPlan[
         ModuleParameterPlan("vref", vref, ""),
@@ -84,7 +84,7 @@ end
 
 function machine_probe!(state, e, bus, kind, suffix, unit)
     name = pscad_name(e.pscad * "_" * suffix; used = state.used)
-    push!(state.channels, ProbeChannel(name, kind, bus.name, string(e.name), "1", 1, unit))
+    push!(state.channels, ProbeChannel(name, kind, bus.name, string(e.name), :ac, 1, unit))
     return Signal(name)
 end
 
@@ -96,13 +96,13 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     bus = _ac_bus(e, terminal, context)
     machine = e.model
     elec = machine.elec
-    isapprox(elec.ωn, 2π * context.settings.frequency; rtol = 1e-12) ||
+    isapprox(machine.bases.omega, 2π * context.settings.frequency; rtol = 1e-12) ||
         throw(ArgumentError("machine :$(e.name) frequency differs from the network frame"))
     flow = get(context.netlist.operating_point.branch_flows, e.name, nothing)
     flow !== nothing && haskey(flow, :terminal_voltage_kV) ||
         throw(ArgumentError("machine :$(e.name) requires solved terminal operating-point data"))
-    voltage_pu = flow.terminal_voltage_kV * sqrt(3) / elec.Vᵃᶜ_base
-    inputs, _ = PowerImpedance.pftoinputs(machine, e.setpoint)
+    voltage_pu = flow.terminal_voltage_kV * sqrt(3) / machine.Vᵃᶜ_base
+    inputs, _ = PowerImpedance.pftoinputs(machine, e.values)
     torque_pu = inputs.Tm0
     s2m, l2n, time = Signal.([pscad_name(e.pscad * suffix; used = state.used)
                               for suffix in ("_S2M", "_L2N", "_time")])
@@ -122,9 +122,9 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     params = ["Name" => e.pscad, "Cnfg" => "1", "Nqaxw" => "2",
         "View" => "1", "Neut" => "0", "MM" => "1", "MSat" => "0",
         "IorMVA" => "1", "VolTyp" => "1", "icTyp" => "1", "Ospd" => "1",
-        "MVA" => pscad_value(elec.S_base; unit = "MVA"),
-        "VbaseLL" => pscad_value(elec.Vᵃᶜ_base; unit = "kV"),
-        "OMO" => pscad_value(elec.ωn; unit = "rad/s"),
+        "MVA" => pscad_value(machine.bases.S; unit = "MVA"),
+        "VbaseLL" => pscad_value(machine.Vᵃᶜ_base; unit = "kV"),
+        "OMO" => pscad_value(machine.bases.omega; unit = "rad/s"),
         "H" => pscad_value(machine.mech.H; unit = "s"), "D" => "0.0 [pu]",
         "Ri" => pscad_value(SM_IRON_LOSS_RESISTANCE_PU; unit = "pu"),
         "VT" => pscad_value(voltage_pu; unit = "pu"),
@@ -151,22 +151,24 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     # The rt/lt branch uses the machine's Y-equivalent values at the same voltage.
     x, y = allocate_cell!(state.layout)
     start = (x + 90, y + 72)
-    zbase = elec.Vᵃᶜ_base^2 / elec.S_base
+    zbase = machine.Vᵃᶜ_base^2 / machine.bases.S
     parts = Tuple{String, String, Float64, String}[]
     for (defn, parameter, value, unit) in (("resistor", "R", elec.rt * zbase, "ohm"),
-        ("inductor", "L", elec.lt * zbase / elec.ωn, "H"))
+        ("inductor", "L", elec.lt * zbase / machine.bases.omega, "H"))
         value >= 0 || throw(ArgumentError("machine :$(e.name) has negative rt/lt"))
         iszero(value) || push!(parts, (defn, parameter, value, unit))
     end
     endpoint = component_chain!(state.main, parts, start, e.pscad * "_stepup", state.used)
-    current = current_probe!(state, e, terminal, context; orientation = :out)
+    current = current_probe!(state, e, terminal, context; orientation = :into)
     if isempty(parts)
-        component!(state.main, "ammeter", start, ["Name" => current])
+        component!(state.main, "ammeter", (start[1] + 36, start[2]),
+            ["Name" => current]; orient = 4)
         stub!(state.main, start, inner; direction = -1)
         stub!(state.main, (start[1] + 36, start[2]), only(_terminal_labels(e, terminal, context)))
     else
         stub!(state.main, start, inner; direction = -1)
-        ammeter_stub!(state.main, endpoint, only(_terminal_labels(e, terminal, context)), current)
+        ammeter_stub!(state.main, endpoint,
+            only(_terminal_labels(e, terminal, context)), current; reverse = true)
     end
     output_probe!(state.main, current, "branch", "kA", (x + 144, y + 144))
 
@@ -178,7 +180,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     x, y = allocate_cell!(state.layout)
     component!(state.main, "voltmetergnd", (x + 90, y + 72), ["Name" => vabc.name])
     stub!(state.main, (x + 90, y + 72), inner; direction = -1)
-    vpeak_base = elec.Vᵃᶜ_base * sqrt(2) / sqrt(3)
+    vpeak_base = machine.Vᵃᶜ_base * sqrt(2) / sqrt(3)
     for block in ControlBlock[
         ArraySplit(vabc, va, 1), ArraySplit(vabc, vb, 2), ArraySplit(vabc, vc, 3),
         Square(va, va2), Square(vb, vb2), Square(vc, vc2),
@@ -202,7 +204,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.SynchronousM
     x, y = allocate_cell!(state.layout)
     lower!(state.main,
         BlockGraph(ControlBlock[
-            Gain(p_pu, p, elec.S_base), Gain(q_pu, q, elec.S_base)]);
+            Gain(p_pu, p, machine.bases.S), Gain(q_pu, q, machine.bases.S)]);
         origin = (x + 126, y + 54))
     for signal in (p, q, vt, speed, ef0, ef, tm_init)
         x, y = allocate_cell!(state.layout)

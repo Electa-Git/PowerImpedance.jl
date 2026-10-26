@@ -1,4 +1,5 @@
 module PSCADMMCModeTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures, ..PSCADTopology
 using ..PSCADTLCTests: evaluate
@@ -20,9 +21,8 @@ end
         PSCADFixtures.mmc_qv_network, PSCADFixtures.mmc_vac_network, PSCADFixtures.tlc_vac_network)
         fixture = factory()
         pairs_of_parameters = []
-        for network in (fixture.classic, fixture.state)
-            pf = network isa Network ? power_flow(network) :
-                 NetworkBuilder.solve(network).powerflow
+        for network in (fixture,)
+            pf = NetworkBuilder.solve(network)
             list = P.netlist(network, pf)
             plan = P.build_plan(list; settings = SETTINGS)
             @test P.check_connectivity(plan) === nothing
@@ -41,9 +41,9 @@ end
             eq = P.converter_equilibrium(e)
             residual = zeros(length(eq.states))
             PI._state_space!(residual, collect(values(eq.states)),
-                collect(values(eq.inputs)), eq.setpoint_pu, m, PI.Equil())
+                collect(values(eq.inputs)), eq.terminal_pu, m, PI.Equil())
             @test maximum(abs, residual) <= 1e-6
-            @test eq.outputs.meas.Q_ac_f ≈ eq.setpoint_pu.q_ac atol=1e-6
+            @test eq.outputs.meas.Q_ac_f ≈ eq.terminal_pu.q_ac atol=1e-6
             active = m isa PI.MMC ? m.delta_control.outer_active : m.outerActive
             reactive = m isa PI.MMC ? m.delta_control.outer_reactive : m.outerReactive
             active_name = active isa PI.OuterActiveVdcControl ? "VDCCTRL_DUT" : "PCTRL_DUT"
@@ -54,11 +54,11 @@ end
             if reactive isa PI.OuterReactiveVacControl
                 @test parameters["vacI0"] == eq.states.ξ_v_ac
                 @test parameters["vac_reference"] ==
-                      eq.setpoint_pu.v_ac * PI.voltage_filter_ratio(m)
+                      eq.terminal_pu.v_ac * PI.voltage_filter_ratio(m)
                 @test abs(eq.states.ξ_v_ac) > 0
             elseif reactive.support isa PI.VoltageSupportLag
                 @test parameters["vac_reference"] ==
-                      eq.setpoint_pu.v_ac * PI.voltage_filter_ratio(m)
+                      eq.terminal_pu.v_ac * PI.voltage_filter_ratio(m)
                 @test parameters["support0"] == eq.states.ξ_vac_supp
             end
             if active isa PI.OuterActiveVdcControl
@@ -84,10 +84,11 @@ end
                 live_meas = NamedTuple{keys(eq.outputs.meas)}(ntuple(_ -> 0.0, length(eq.outputs.meas)))
                 @test evaluate(modules[active_name], merge(measured, Dict("omega_c" => 1.0)))["i_d_ref"] ≈
                       PI.state_space!(zeros(PI.n_states(active)), eq.states,
-                    (; meas = live_meas, sync = (; ω_c = 1.0)), eq.setpoint_pu, active, m).iΔ_d_ref atol=1e-6
+                    (; meas = live_meas, sync = (; ω_c = 1.0)), eq.terminal_pu, active,
+                        m).iΔ_d_ref atol=1e-6
                 @test evaluate(modules["QCTRL_DUT"], measured)["i_q_ref"] ≈
                       PI.state_space!(zeros(PI.n_states(reactive)), eq.states,
-                    (; meas = live_meas), eq.setpoint_pu, reactive, m).q_ctrl_ref atol=1e-6
+                    (; meas = live_meas), eq.terminal_pu, reactive, m).q_ctrl_ref atol=1e-6
             end
             # Every converter accepts the same source-ramp setting. Only Main
             # source Tc changes; control initial states and the hold are fixed.
@@ -121,7 +122,7 @@ end
                 signals = Dict{String, Any}(string(k) => v for (k, v) in pairs(meas))
                 signals["omega_c"] = factor
                 F = zeros(PI.n_states(active))
-                owned = PI.state_space!(F, eq.states, inputs, eq.setpoint_pu, active, m)
+                owned = PI.state_space!(F, eq.states, inputs, eq.terminal_pu, active, m)
                 rate = active isa PI.OuterActiveVdcControl ? "vdcrate" : "prate"
                 emitted = evaluate(diagnostic(modules[active_name], [rate]), signals)
                 @test emitted["i_d_ref"] ≈ owned.iΔ_d_ref atol=1e-6
@@ -134,7 +135,7 @@ end
                           pars["supportT"] ≈ F[1] atol=1e-6
                 end
                 F = zeros(PI.n_states(reactive))
-                owned = PI.state_space!(F, eq.states, inputs, eq.setpoint_pu, reactive, m)
+                owned = PI.state_space!(F, eq.states, inputs, eq.terminal_pu, reactive, m)
                 rate = reactive isa PI.OuterReactiveVacControl ? "vacrate" : "qrate"
                 names = reactive isa PI.OuterReactiveQControl &&
                         reactive.support isa PI.VoltageSupportLag ?
@@ -158,10 +159,10 @@ end
             times = collect(0.0:250e-6:0.3)
             channels = PI.OrderedDict{String, Vector{Float64}}()
             flow = list.operating_point.branch_flows[:DUT]
-            dc = only(filter(t -> t.side == 1 && !t.grounded, e.terminals))
+            dc = only(filter(t -> t.port == :dc && !t.grounded, e.terminals))
             dbus = only(filter(b -> b.key == dc.bus, list.buses))
             vdc = 2dbus.base_kV * list.operating_point.bus_states[dc.bus].vm_pu
-            ac = only(filter(t -> t.side == 2, e.terminals))
+            ac = only(filter(t -> t.port == :ac, e.terminals))
             abus = only(filter(b -> b.key == ac.bus, list.buses))
             apoint = list.operating_point.bus_states[ac.bus]
             voltage = sqrt(2) * abus.base_kV * apoint.vm_pu * cis(apoint.va_rad)
@@ -170,13 +171,14 @@ end
                     b = only(filter(b -> b.name == c.bus, list.buses))
                     point = list.operating_point.bus_states[b.key]
                     add_three_phase!(channels, c.name, times, sqrt(2)*b.base_kV*point.vm_pu*cis(point.va_rad))
-                elseif c.kind == :current && c.side == "2"
-                    add_three_phase!(channels, c.name, times, 2complex(flow.pt, -flow.qt)/(3conj(voltage)))
+                elseif c.kind == :current && c.port in (:side2, :ac)
+                    add_three_phase!(channels, c.name, times,
+                        2complex(flow.pgrid, -flow.qgrid)/(3conj(voltage)))
                 else
-                    value = c.kind == :converter_p ? flow.pt/m.elec.Sbase :
-                            c.kind == :converter_q ? flow.qt/m.elec.Sbase :
+                    value = c.kind == :converter_p ? flow.pt/m.bases.S :
+                            c.kind == :converter_q ? flow.qt/m.bases.S :
                             c.kind == :converter_arm_voltage ? vdc :
-                            c.kind == :converter_sum_current ? flow.pf/(3m.elec.Sbase) :
+                            c.kind == :converter_sum_current ? flow.pf/(3m.bases.S) :
                             flow.pf/vdc
                     channels[c.name] = fill(value, length(times))
                 end
@@ -186,10 +188,7 @@ end
             @test count(==(:converter_q), table.quantity) == 2
             @test count(==(:converter_p), table.quantity) == 2
         end
-        for (a, b) in zip(pairs_of_parameters...)
-            @test first(a) == first(b)
-            @test first.(last(a)) == first.(last(b))
-        end
+
     end
 end
 end

@@ -3,10 +3,10 @@ using PowerImpedance
 
 @testset "PSCAD SI parameters and names" begin
     pscad = PowerImpedance.PSCAD
-    mmc = ElectricalMMC(; Lₐᵣₘ = 0.037, Rₐᵣₘ = 0.82, Cₐᵣₘ = 0.006,
-        Lᵣ = 0.045, Rᵣ = 0.37, N = 260, turnsRatio = 0.8,
-        Sbase = 730, vACbase_LL_RMS = 275, vDC_base = 810, ωbase = 2π * 60)
-    recovered = pscad.mmc_si(mmc)
+    mmc = ElectricalMMC(; Lₐᵣₘ = 0.037, Rₐᵣₘ = 0.82, Cₐᵣₘ = 0.006, Lᵣ = 0.045, Rᵣ = 0.37,
+        N = 260, turnsRatio = 0.8)
+    recovered = pscad.mmc_si(mmc, BaseValues(S = 730.0, v_ac = 275.0 * sqrt(2/3),
+        v_dc = 810.0, omega = 2π * 60))
     @test recovered.L_arm ≈ 0.037
     @test recovered.R_arm ≈ 0.82
     @test recovered.C_SM ≈ 0.006
@@ -19,17 +19,19 @@ using PowerImpedance
     @test recovered.vDC_base == 810
     @test recovered.ωbase == 2π * 60
 
-    tlc = ElectricalTLC(; Lᵣ = 0.017, Rᵣ = 0.24,
-        Sbase = 340, vACbase_LL_RMS = 165, vDCbase = 470, ωbase = 2π * 60)
-    recovered_tlc = pscad.tlc_si(tlc)
+    tlc = ElectricalTLC(; Lᵣ = 0.017, Rᵣ = 0.24)
+    recovered_tlc = pscad.tlc_si(tlc, BaseValues(S = 340.0, v_ac = 165.0 * sqrt(2/3),
+        v_dc = 470.0, omega = 2π * 60))
     @test recovered_tlc.L_r ≈ 0.017
     @test recovered_tlc.R_r ≈ 0.24
     @test recovered_tlc.Sbase == 340
     @test recovered_tlc.vAC_base_LL_RMS ≈ 165
     @test recovered_tlc.vDC_base == 470
     @test recovered_tlc.ωbase == 2π * 60
-    @test recovered_tlc.l_f_pu == tlc.Lᵣ
-    @test recovered_tlc.r_f_pu == tlc.Rᵣ
+    @test recovered_tlc.l_f_pu == PowerImpedance.perunit(tlc,
+        BaseValues(S = 340, v_ac = 165sqrt(2/3), v_dc = 470, omega = 2π*60)).Lᵣ
+    @test recovered_tlc.r_f_pu == PowerImpedance.perunit(tlc,
+        BaseValues(S = 340, v_ac = 165sqrt(2/3), v_dc = 470, omega = 2π*60)).Rᵣ
 
     machine = ElectricalSM(; Ra = 0.007, Ll = 0.18, La_d = 1.7, Rf_d = 0.002,
         Lf_d = 0.23, R1_d = 0.031, L1_d = 0.19, L23_d = 0.011,
@@ -123,5 +125,5 @@ using PowerImpedance
     @test pscad.bus_name([:d, :q]) === nothing
     @test pscad.bus_name(Symbol[]) === nothing
     @test pscad.voltage_probe_name("B1") == "V_B1"
-    @test pscad.current_probe_name("line1", 2) == "I_line1_2"
+    @test pscad.current_probe_name("line1", :side2) == "I_line1_side2"
 end

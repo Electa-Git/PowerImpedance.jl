@@ -1,92 +1,56 @@
-#= 
-@with_kw mutable struct Source <: AbstractLinFreqDomain
-	V::Union{Float64, Int} = 0        # DC voltage or voltage magnitude [kV]
-
-	P::Union{Float64, Int}     = 0      # active power output [MW]
-	Q::Union{Float64, Int}     = 0      # reactive power output [MVAr]
-	P_min::Union{Float64, Int} = 0    # min active power output [MW]
-	P_max::Union{Float64, Int} = 0    # max active power output [MW]
-	Q_min::Union{Float64, Int} = 0    # min reactive power output [MVA]
-	Q_max::Union{Float64, Int} = 0    # max reactive power output [MVA]
-
-	# pins::Int = 1
-	# ABCD::Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
-end
-
-function make_abcd(source::Source, p)
-	# p = np(elem)
-	A = Matrix{ComplexF64}(I, p, p)
-	B = Diagonal(fill(0.0, p)) |> Matrix
-	C = zeros(ComplexF64, p, p)
-	D = Matrix{ComplexF64}(I, p, p)
-
-	# elem.ABCD = ABCD(A, B, C, D)
-	return A,B,C,D
-end
-
-function eval_abcd(source::Source, s::Complex)
-	# s unused by design; keep signature for dispatch consistency
-	return source.ABCD
-end
-
-function eval_y(source::Source, s::Complex)
-	abcd = source.ABCD
-	p = source.pins
-
-	abcd = copy(abcd)
-	abcd[1:p, (p+1):end] .= 1e-6 .* Matrix{ComplexF64}(I, p, p)
-
-	return abcd_to_y(abcd)
-end =#
-
+const _AC_SOURCE_INPUTS = (
+    v = Input(220 / sqrt(3); unit = "kV",
+        description = "source voltage magnitude, AC phase peak"),
+    theta = Input(0.0; unit = "rad", description = "source AC voltage angle"),
+    p = Input(0.0; unit = "MW", description = "source AC active power"),
+    q = Input(0.0; unit = "MVAr", description = "source reactive power"),
+)
+const _DC_SOURCE_INPUTS = (
+    v = Input(240.0; unit = "kV", description = "source DC pole-to-pole voltage"),
+    p = Input(0.0; unit = "MW", description = "source DC active power"),
+)
 
 """
 $(TYPEDEF)
 
-Store the legacy ideal-voltage-source model and its cached ABCD representation. Source
-constructors store the operating-point targets separately in `Element.setpoint`.
+Store an ideal voltage source with physical operating targets and its ideal ABCD matrix.
 
 $(TYPEDFIELDS)
 """
-@with_kw mutable struct Source <: AbstractLinFreqDomain
-    "Legacy voltage \\[kV\\]; for DC this initializes the pole-to-pole bus voltage. AC power flow uses `Element.setpoint`."
-    V::Union{Float64, Int} = 0
-
-    "Legacy active-power parameter \\[MW\\]; power flow uses `Element.setpoint`."
-    P::Union{Float64, Int}     = 0
-    "Legacy reactive-power parameter \\[MVAr\\]; power flow uses `Element.setpoint`."
-    Q::Union{Float64, Int}     = 0
-    "Legacy minimum active power \\[MW\\]; power flow uses `Element.limits`."
-    P_min::Union{Float64, Int} = 0
-    "Legacy maximum active power \\[MW\\]; power flow uses `Element.limits`."
-    P_max::Union{Float64, Int} = 0
-    "Legacy minimum reactive power \\[MVAr\\]; power flow uses `Element.limits`."
-    Q_min::Union{Float64, Int} = 0
-    "Legacy maximum reactive power \\[MVAr\\]; power flow uses `Element.limits`."
-    Q_max::Union{Float64, Int} = 0
-
-    "Cached number of phase-domain or conductor terminals."
-    pins::Int = 1
-    "Cached ideal-source ABCD matrix; A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
-    ABCD::Matrix{ComplexF64} = zeros(ComplexF64, 0, 0)
+@with_kw struct Source <: AbstractLinFreqDomain
+    "Number of physical conductors supplied to the source constructor."
+    conductors::Int = 3
+    "Electrical coordinate domain selected by the source constructor."
+    domain::AbstractDomain = ACABC
+    "Voltage magnitude \\[kV\\], AC phase peak or DC pole to pole."
+    v::Float64 = domain === ACABC ? _AC_SOURCE_INPUTS.v.default :
+        _DC_SOURCE_INPUTS.v.default
+    "AC voltage angle \\[rad\\]."
+    theta::Float64 = _AC_SOURCE_INPUTS.theta.default
+    "Active power \\[MW\\]."
+    p::Float64 = domain === ACABC ? _AC_SOURCE_INPUTS.p.default :
+        _DC_SOURCE_INPUTS.p.default
+    "Reactive power \\[MVAr\\]."
+    q::Float64 = _AC_SOURCE_INPUTS.q.default
+    "Operating limits in \\[MW\\] and \\[MVAr\\]."
+    limits::Limits = Limits()
+    "Ideal ABCD matrix. A/D are \\[dimensionless\\], B is \\[Ω\\], and C is \\[S\\]."
+    ABCD::Matrix{ComplexF64} = _source_abcd(conductors)
 end
 
 """
 $(TYPEDSIGNATURES)
 
-Initialize and cache the ideal-source ABCD matrix for the requested terminal count.
+Compute the ideal-source ABCD matrix for the requested conductor count.
 
 # Arguments
 
-- `source`: Ideal-source parameters and cached ABCD matrix.
-- `p`: Number of phase-domain or conductor terminals per side.
+- `p`: Number of physical conductors.
 
 # Returns
 
-- `A`: Identity voltage-transfer matrix \\[dimensionless\\].
-- `B`: Zero series impedance matrix \\[Ω\\].
-- `C`: Zero shunt admittance matrix \\[S\\].
-- `D`: Identity current-transfer matrix \\[dimensionless\\].
+- Block matrix `[A B; C D]`: A/D are identity \\[dimensionless\\], B is zero
+  series impedance \\[Ω\\], and C is zero shunt admittance \\[S\\].
 
 # Notes
 
@@ -94,30 +58,25 @@ Initialize and cache the ideal-source ABCD matrix for the requested terminal cou
 A=D=I_p,\\qquad B=C=0.
 ```
 
-The complete matrix is cached on the source. The returned blocks use the terminal count
-`p`.
+The source constructor stores the complete matrix.
 
 # Examples
 
 ```julia
 using PowerImpedance
-PowerImpedance.make_abcd(PowerImpedance.Source(), 3)
+PowerImpedance._source_abcd(3)
 ```
 """
-function make_abcd(source::Source, p)
-    source.pins = p
-
+function _source_abcd(p)
     A = Matrix{ComplexF64}(I, p, p)
     B = zeros(ComplexF64, p, p)
     C = zeros(ComplexF64, p, p)
     D = Matrix{ComplexF64}(I, p, p)
 
-    source.ABCD = [A B; C D]
-    return A, B, C, D
+    return [A B; C D]
 end
 
 function eval_abcd(source::Source, s::Complex)
-    isempty(source.ABCD) && make_abcd(source, source.pins)
     return source.ABCD
 end
 
@@ -129,7 +88,7 @@ Evaluate the component terminal admittance at complex frequency `s`.
 # Arguments
 
 - `source`: Ideal-source parameters and cached ABCD matrix.
-- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+- `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses `s = 2π * im * f`
   for frequency `f` \\[Hz\\].
 
 # Returns
@@ -139,20 +98,20 @@ Evaluate the component terminal admittance at complex frequency `s`.
 # Notes
 
 The source is regularized for admittance conversion by replacing its series B block with
-a diagonal \\[Ω\\] value of `1e-6`; the cached ideal ABCD matrix remains unchanged.
+a diagonal \\[Ω\\] value of `1e-6`. The cached ideal ABCD matrix remains unchanged.
 The frequency argument is unused by this ideal-source model.
 
 # Examples
 
 ```julia
 using PowerImpedance
-model = ac_source(pins=3).element_model
+model = ac_source()
 PowerImpedance.eval_y(model, 2π*im*50)
 ```
 """
 function eval_y(source::Source, s::Complex)
     abcd = eval_abcd(source, s)
-    p = source.pins
+    p = source.conductors
 
 	abcd = copy(abcd)
 	abcd[1:p, (p+1):end] .= 1e-6 .* Matrix{ComplexF64}(I, p, p)
@@ -161,211 +120,129 @@ function eval_y(source::Source, s::Complex)
 end
 
 
-pmtype(elem::Element{<:Source}) = is_three_phase(elem) ? "gen" : "gendc"
+electricalconnections(model::Source) = electricalconnections(model, model.domain)
+electricalconnections(::Source, ::ACABCDomain) = (ac = Port(ACABC),)
+electricalconnections(::Source, ::DCDomain) = (dc = Port(DC_CM),)
 
-function convert!(data,elem::Element{<:Source},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+is_source(::Source) = true
+is_passive(::Source) = false
 
-	if is_three_phase(elem)
-		ac_nodes = make_non_ground_node(elem, bus2nodes)
-		ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-		key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
-		return convert!(data, elem, PMACDC, key, (ac_bus,), global_dict)
-	end
+inputs(model::Source) = inputs(model, model.domain)
+inputs(::Source, ::ACABCDomain) = _AC_SOURCE_INPUTS
+inputs(::Source, ::DCDomain) = _DC_SOURCE_INPUTS
 
-	dc_nodes = make_non_ground_node(elem, bus2nodes)
-	dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_nodes, global_dict)
-	key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
-	return convert!(data, elem, PMACDC, key, (dc_bus,), global_dict)
+bases(::Source) = nothing
+
+limits(model::Source) = model.limits
+
+
+pmtype(model::Source, rows) = is_three_phase(model) ? "gen" : "gendc"
+
+function convert!(data, model::Source, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+    key = component_key.index
+    point = inputvalues(model)
+    lm = limits(model)
+    if component_key.pmtype == "gen"
+        ac_bus = ports.ac
+        key_str = string(key)
+        data["gen"][key_str] = Dict{String, Any}()
+        gen = data["gen"][key_str]
+        gen["mBase"] = global_dict["S"] / 1e6
+        gen["gen_bus"] = ac_bus
+        gen["pc1"] = 0
+        gen["pc2"] = 0
+        gen["qc1min"] = 0
+        gen["qc1max"] = 0
+        gen["qc2min"] = 0
+        gen["qc2max"] = 0
+        gen["ramp_agc"] = 0
+        gen["ramp_q"] = 0
+        gen["ramp_10"] = 0
+        gen["ramp_30"] = 0
+        gen["apf"] = 0
+        gen["startup"] = 0
+        gen["shutdown"] = 0
+        gen["gen_status"] = 1
+        gen["source_id"] = Any["gen", key]
+        gen["index"] = key
+
+        s_base = global_dict["S"] / 1e6
+        v_base = global_dict["V"] / 1e3
+        gen["pg"] = point.p / s_base
+        gen["qg"] = point.q / s_base
+        gen["pmin"] = lm.P_min / s_base
+        gen["pmax"] = lm.P_max / s_base
+        gen["qmin"] = lm.Q_min / s_base
+        gen["qmax"] = lm.Q_max / s_base
+        gen["vg"] = point.v / v_base/sqrt(2)
+        gen["model"] = 1
+        gen["cost"] = 0
+        gen["ncost"] = 0
+        set_bus = data["bus"][string(ac_bus)]
+        gen = data["gen"][string(key)]
+        set_bus["vmin"] = 0.9 * gen["vg"]
+        set_bus["vmax"] = 1.1 * gen["vg"]
+        set_bus["vm"] = gen["vg"]
+        data["bus"][string(ac_bus)] = set_bus_type(set_bus, 3)
+        return nothing
+    end
+    dc_bus = ports.dc
+    key_str = string(key)
+    data["gendc"][key_str] = Dict{String, Any}()
+    gendc = data["gendc"][key_str]
+    gendc["mBase"] = global_dict["S"] / 1e6
+    gendc["gen_bus"] = dc_bus
+    gendc["quadratic_cost"] = 0
+    gendc["linear_cost"] = 0
+    gendc["idle_cost"] = 0
+    gendc["control_type"] = 2
+    gendc["droop_const"] = 0
+    gendc["gen_status"] = 1
+    gendc["source_id"] = Any["gen", key]
+    gendc["index"] = key
+
+    s_base = global_dict["S"] / 1e6
+    v_base = global_dict["V"] / 1e3
+    gendc["pgdcset"] = point.p / s_base
+    gendc["pmin"] = lm.P_min / s_base
+    gendc["pmax"] = lm.P_max / s_base
+    gendc["vgdc"] = point.v / (data["dcpol"] * v_base)
+    gendc["model"] = 1
+    gendc["cost"] = 0
+    gendc["ncost"] = 0
+    busdc = data["busdc"][string(dc_bus)]
+    busdc["Vdc"] = 0.0
+    busdc["Vdcmax"] = 1.1 * busdc["Vdc"]
+    busdc["Vdcmin"] = 0.9 * busdc["Vdc"]
+    data["busdc"][string(dc_bus)] = set_bus_type_dc(busdc, 2)
+    return nothing
 end
 
-function convert!(data, elem::Element{<:Source}, ::Type{PMACDC}, key, buses, global_dict)
-	if pmtype(elem) == "gen"
-		ac_bus = first(buses)
-		_initialize_gen_entry!(data, key, ac_bus, elem, global_dict)
-		set_bus = data["bus"][string(ac_bus)]
-		gen = data["gen"][string(key)]
-		set_bus["vmin"] = 0.9 * gen["vg"]
-		set_bus["vmax"] = 1.1 * gen["vg"]
-		set_bus["vm"] = gen["vg"]
-		data["bus"][string(ac_bus)] = set_bus_type(set_bus, 3)
-		return nothing
-	end
 
-	dc_bus = first(buses)
-	_initialize_gendc_entry!(data, key, dc_bus, elem, global_dict)
-	busdc = data["busdc"][string(dc_bus)]
-	busdc["Vdc"] = elem.element_model.V * 1e3 / (data["dcpol"] * global_dict["V"])
-	busdc["Vdcmax"] = 1.1 * busdc["Vdc"]
-	busdc["Vdcmin"] = 0.9 * busdc["Vdc"]
-	data["busdc"][string(dc_bus)] = set_bus_type_dc(busdc, 2)
-	return nothing
+"""
+$(TYPEDSIGNATURES)
+
+Return source port powers positive into the source. Delivering 900 MW gives `p = -900`.
+Reactive power follows the same rule.
+"""
+function transform(elemresult, busresult::NamedTuple, global_dict,
+        model::Source, ::Type{PMACDC}, ::Type{PIACDC})
+    return transform(elemresult, busresult, global_dict, model.domain, PMACDC, PIACDC)
 end
 
-function _initialize_gen_entry!(data, key, ac_bus, elem, global_dict)
-	key_str = string(key)
-	data["gen"][key_str] = Dict{String, Any}()
-	gen = data["gen"][key_str]
-	gen["mBase"] = global_dict["S"] / 1e6
-	gen["gen_bus"] = ac_bus
-	gen["pc1"] = 0
-	gen["pc2"] = 0
-	gen["qc1min"] = 0
-	gen["qc1max"] = 0
-	gen["qc2min"] = 0
-	gen["qc2max"] = 0
-	gen["ramp_agc"] = 0
-	gen["ramp_q"] = 0
-	gen["ramp_10"] = 0
-	gen["ramp_30"] = 0
-	gen["apf"] = 0
-	gen["startup"] = 0
-	gen["shutdown"] = 0
-	gen["gen_status"] = 1
-	gen["source_id"] = Any["gen", key]
-	gen["index"] = key
-
-	injecter = elem.element_model
-	sp = elem.setpoint
-	lm = elem.limits
-	s_base = global_dict["S"] / 1e6
-	v_base = global_dict["V"] / 1e3
-	gen["pg"] = sp.Pac / s_base
-	gen["qg"] = sp.Qac / s_base
-	gen["pmin"] = lm.P_min / s_base
-	gen["pmax"] = lm.P_max / s_base
-	gen["qmin"] = lm.Q_min / s_base
-	gen["qmax"] = lm.Q_max / s_base
-	gen["vg"] = sp.Vac / v_base/sqrt(2)
-	gen["model"] = 1
-	gen["cost"] = 0
-	gen["ncost"] = 0
-	return key
+function transform(elemresult, busresult, global_dict,
+        ::ACABCDomain, ::Type{PMACDC}, ::Type{PIACDC})
+    bus = busresult.ac
+    p = elemresult["pg"] * global_dict["S"] / 1e6
+    q = elemresult["qg"] * global_dict["S"] / 1e6
+    v = (bus["vm"] * global_dict["V"] / 1e3) * sqrt(2)
+    return (ac = ACPortValues(v, bus["va"], -p, -q),)
 end
 
-function _initialize_gendc_entry!(data, key, dc_bus, elem, global_dict)
-	key_str = string(key)
-	data["gendc"][key_str] = Dict{String, Any}()
-	gendc = data["gendc"][key_str]
-	gendc["mBase"] = global_dict["S"] / 1e6
-	gendc["gen_bus"] = dc_bus
-	gendc["quadratic_cost"] = 0
-	gendc["linear_cost"] = 0
-	gendc["idle_cost"] = 0
-	gendc["control_type"] = 2
-	gendc["droop_const"] = 0
-	gendc["gen_status"] = 1
-	gendc["source_id"] = Any["gen", key]
-	gendc["index"] = key
-
-	sp = elem.setpoint
-	lm = elem.limits
-	s_base = global_dict["S"] / 1e6
-	v_base = global_dict["V"] / 1e3
-	gendc["pgdcset"] = sp.Pdc / s_base
-	gendc["pmin"] = lm.P_min / s_base
-	gendc["pmax"] = lm.P_max / s_base
-	gendc["vgdc"] = sp.Vdc / (data["dcpol"] * v_base)
-	gendc["model"] = 1
-	gendc["cost"] = 0
-	gendc["ncost"] = 0
-	return key
-end
-
-# function topowerblocks(elem::Element{Source})
-	
-# 	# Check if AC or DC source (second one not implemented)
-# 	nbports=1
-# 	elecdomain = elecdomainpb(elem)
-# 	if is_three_phase(elem)
-# 		pb = PB.ACSourceData()
-
-# 	else
-# 		pb = PB.DCSourceData()
-# 	end
-
-# 	return pb, nbports, elecdomain
-# end
-
-
-# function addecs!(ecsdata, elem::Element{Source}, blockid, pblut)
-	
-# 	nongroundnets = filtergrounds(values(elem.pins))
-# 	busid = pblut.bus[first(nongroundnets)] # All nets map to the same busid in the LUT
-
-# 	value = elem.element_model.V 
-	
-# 	if is_three_phase(elem)
-# 		componenttype = PB.Vac
-# 		PB.add!(ecsdata, PB.θ, busid, 0)
-# 	else
-# 		componenttype =  PB.Vdc
-# 	end
-
-# 	PB.add!(ecsdata, componenttype, busid, value)
-# end
-		
-
-
-
-
-function ac_source_power_flow!(
-	data,
-	nodes2bus,
-	bus2nodes,
-	elem2comp,
-	comp2elem,
-	elem,
-	global_dict,
-)
-	### MAKE BUSES OUT OF THE NODES
-	# Find the nodes not connected to the ground
-	ac_nodes = make_non_ground_node(elem, bus2nodes)
-
-	# Make busses for the non-ground nodes 
-	ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-
-	# Make the generator component for injection
-	key = injection_initialization!(data, elem2comp, comp2elem, ac_bus, elem, global_dict)
-	key = string(key) # Of form "gen", 1 so convert 2nd element to string
-
-	# Change bus information
-	((data["bus"])[string(ac_bus)])["vmin"] = 0.9*((data["gen"])[key])["vg"]
-	((data["bus"])[string(ac_bus)])["vmax"] = 1.1*((data["gen"])[key])["vg"]
-	((data["bus"])[string(ac_bus)])["vm"] = ((data["gen"])[key])["vg"]
-
-	((data["bus"])[string(ac_bus)]) = set_bus_type((data["bus"])[string(ac_bus)], 3)
-end
-
-function dc_source_power_flow!(
-	data,
-	nodes2bus,
-	bus2nodes,
-	elem2comp,
-	comp2elem,
-	elem,
-	global_dict,
-)
-	### MAKE BUSES OUT OF THE NODES
-	# Find the nodes not connected to the ground
-	dc_nodes = make_non_ground_node(elem, bus2nodes)
-
-	# Make busses for the non-ground nodes 
-	dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_nodes, global_dict)
-
-	# Make the generator component for injection
-	key =
-		injection_initialization_dc!(data, elem2comp, comp2elem, dc_bus, elem, global_dict)
-	key = string(key) # Of form "gen", 1 so convert 2nd element to string
-
-
-
-
-	((data["busdc"])[string(dc_bus)])["Vdc"] = elem.element_model.V * 1e3 /
-	                                           (data["dcpol"] * global_dict["V"])
-	((data["busdc"])[string(dc_bus)])["Vdcmax"] =
-		1.1 * ((data["busdc"])[string(dc_bus)])["Vdc"]
-	((data["busdc"])[string(dc_bus)])["Vdcmin"] =
-		0.9 * ((data["busdc"])[string(dc_bus)])["Vdc"]
-
-	((data["busdc"])[string(dc_bus)]) = set_bus_type_dc((data["busdc"])[string(dc_bus)], 2)
+function transform(elemresult, busresult, global_dict,
+        ::DCDomain, ::Type{PMACDC}, ::Type{PIACDC})
+    p = elemresult["pgdc"] * global_dict["S"] / 1e6
+    v = busresult.dc["vm"] * (dcpol * global_dict["V"] / 1e3)
+    return (dc = DCPortValues(v, -p),)
 end

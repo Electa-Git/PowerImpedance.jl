@@ -1,5 +1,35 @@
 export make_loopgain, unwrap!
 
+"""
+$(TYPEDSIGNATURES)
+
+Form loop-gain matrices from aligned passive and active admittance matrices.
+
+# Arguments
+
+- `edge`: Vector of passive admittance matrices \\[S\\], ordered by frequency.
+- `node`: Vector of active admittance matrices \\[S\\], ordered by frequency.
+- `pairing`: Frequency pairing mode, `:auto` or `:aligned`. Default: `:auto`.
+  Both modes pair entries at the same index.
+
+# Returns
+
+- Vector of loop-gain matrices \\[dimensionless\\] in the input frequency order.
+
+# Notes
+
+At each frequency index ``k``, the calculation is
+
+```math
+L_k = Y_{\\mathrm{edge},k}^{-1} Y_{\\mathrm{node},k}.
+```
+
+# Errors
+
+- Throws `ArgumentError` for an unsupported pairing mode or entries that are not matrices.
+- Throws `DimensionMismatch` for unequal vector lengths or incompatible matrix dimensions.
+- Propagates singular-matrix errors when a passive admittance cannot be inverted.
+"""
 function make_loopgain(
     edge::AbstractVector,
     node::AbstractVector;

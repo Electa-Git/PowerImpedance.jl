@@ -18,38 +18,44 @@ Source snapshots (SHA256; source files were read only):
 | `Grids/IEEE14bus/IEEE14bus.jl` | `9025f1ea15d4e0b5dfbdb993a8fb4fe041d24594ebf4777dc9f3a6456b8af6a1` |
 | `Grids/P2P_HVDC/P2P_HVDC_AC_grid.jl` | `ea0fe4137b57cf1bb55dac52d765bf2414a75a6f0b0df8a379ddd60515f1ba69` |
 
-## Translation table
+## Model and topology declarations
 
-| Old call or field | Current call or field | Physical meaning |
-|---|---|---|
-| `@network`, `a[side.pin] ⟷ b[...]`, `==` | `Network`, `add!`, `connect!` | Same connectivity; explicit final `connect!(net)` materializes pins. All source grounds remain ground nodes. |
-| `voltageBase = Vm` | `net.voltageBase[1] = Vm` | AC phase RMS kV, unchanged. |
-| `ac_source(V=V,...)` | `ac_source(setpoint=Setpoint(Vac=sqrt(2)*V),...)` | Old RMS voltage becomes phase peak kV. |
-| `dc_source(V=320,pins=2,transformation=true)` | `dc_source(setpoint=Setpoint(Vdc=640),...)` | Old single-pole voltage becomes the current pole-to-pole voltage. |
-| symbolic `s`, `impedance(z=expression)` | `impedance(z=s->expression)` | Same scalar physical impedance, Ω; no symbolic dependency. |
-| `overhead_line`, `Conductors`, `Groundwires`, `cable`, `Conductor`, `Insulator` | Same public constructors | Geometry, lengths, positions, material units, transformation and earth data retained, except the authorized IEEE14 radius correction. |
-| `mmc`/`tlc` physical keywords | `ElectricalMMC`/`ElectricalTLC` | SI electrical parameters; bases remain MVA and kV. Old MMC `vDCbase` becomes `vDC_base`. |
-| `P,Q,Vₘ,Vᵈᶜ,θ,P_dc` | `Setpoint(Pac,Qac,Vac,Vdc,θac,Pdc)` | Injection signs retained; `Vₘ` RMS becomes peak. Power flow owns final solved values, including reactive sign conversion and DC loss. |
-| `P_min,P_max,Q_min,Q_max` | `Limits(...)` | Source values retained. Unspecified historical limits are explicitly ±100 MW / ±50 MVAr, not widened to fit an operating point. |
-| `PI_control(Kₚ,Kᵢ)` | `PIControl(Kp,Ki)` inside the corresponding block | Same gains. Unspecified gains are zero. |
-| controller `n_f,ω_f` | `Butterworth(order,ωc)` or `NoFilter()` | Cutoffs remain rad/s; no implicit filter where the source supplied none. |
-| `pll` | `PLLSynchronization(pi_ctrl,filter)` | Same PLL and filter; only IEEE14 WF1 receives the authorized standard tuning. |
-| `p=PI_control(...)` | `OuterActivePowerControl` in `ΔdqControlGFL` (MMC) or `outerActive` (TLC) | Frequency support stays disabled. Its filter goes into `Measurement.P_ac`. |
-| `dc=PI_control(...)` | `OuterActiveVdcControl` | Same DC-voltage control; no simultaneous P regulator added. |
-| `q=PI_control(...)` | `OuterReactiveQControl` | No voltage support added. Its filter goes into `Measurement.Q_ac`. |
-| `occ` | `InnerCurrentPIControl(pi_ctrl,filter,activate_ω_c_multiplication=...)` | Legacy MMC cross coupling uses fixed base frequency: false. Legacy TLC uses `(1+Δω)`: true. Both are explicit. |
-| `v_meas_filt,i_meas_filt` | `Measurement(v_ac,i_ac)` | Independent voltage/current filters, same order and cutoff. |
-| `p=VSE(...),gfm=true` | `VSEWithDamping` plus `ΔdqControlGFM` | H, damping, droop, reference and embedded PLL retained; VSE power filter goes into `Measurement.P_ac`. |
-| `VI=CCQSEM(...)` | `CCVI(R_v,L_v,V_d_ref,V_q_ref,filter)` | Same current-controlled virtual impedance and voltage filtering. |
-| `energy` | `ΣdqzControlTEC(tec=TotalEnergyControl(...,power_filter=q_filter))` | Legacy energy feedforward independently uses q's power filter. For GFM cases this adds its own identical filter states. Unfiltered cases have no measurement filters, so raw and measured power coincide. |
-| `zcc,ccc` | `ZeroSequenceCurrentControl`, `CirculatingCurrentSuppressionControl` | Same gains and zero references. Absent energy/zcc stays disabled, particularly both P2P MMCs. |
-| `timeDelay,padeOrderNum,padeOrderDen` | `UncompensatedModulation` (MMC); `NoModulation` (source TLCs) | Same delay and Padé orders; no delay invented for P2P or wind farms. Native export uses exact delay with its existing interface treatment. |
+Each factory returns `NetworkBuilder.define(elements, topology; options)` with
+component models in a named tuple. `Bus(...; ports, domain = ACDQ)` declares AC
+connections. The builder transforms passive ACABC ports to the bus coordinates.
+A DC bus contains one differential net; two-conductor cables and overhead lines
+attach through `side1` and `side2`. Sources and machines expose `ac` or `dc`;
+converters expose `ac` and `dc`.
+
+| Declaration | Physical meaning |
+|---|---|
+| `options = (; voltageBase = Vm)` | AC phase RMS kV. |
+| `ac_source(v = sqrt(2)*V)` | Physical phase-peak kV from phase RMS. |
+| `dc_source(v = 640)` | Pole-to-pole kV; PSCAD emits two 320 kV pole sources. |
+| `impedance(z = s -> expression, conductors = 3)` | Physical impedance in ohms. |
+| `ElectricalMMC` / `ElectricalTLC` | Original SI parameters and MVA/kV bases. |
+| `component(model; inputs...)` | Per-unit loop references and power-flow seeds. |
+| `compute(PowerFlowProblem(state), ACDCPowerFlow())` | Physical inward port values. |
+| `NetworkBuilder.NetworkModel(state, point.operating_point)` | Native admittances. |
+| `Limits(...)` | Original operating limits. |
+
+Unspecified historical limits remain ±100 MW / ±50 MVAr.
+
+GFL MMC references live in `delta_control.outer_active` and
+`delta_control.outer_reactive`; GFM active power lives in `sync.p_ref`. TLC
+references live in `outerActive` and `outerReactive`. P/Q references use MVA bases,
+DC voltage uses the pole-to-pole base, and AC voltage uses the model's phase-peak
+base. Power-flow seeds retain their original values and converter signs.
+
+All controller gains, optional filters, disabled energy/zero-sequence loops,
+modulation delays, geometry and earth parameters remain as specified below.
+The IEEE14 wind-farm DC supplies each declare 640 kV on one DC bus. Exported
+positive and negative pole sources each retain 320 kV.
 
 Unspecified historical MMC electrical values are made explicit: arm R=1.07 Ω,
 L=50 mH, C=10 mF, N=400, transformer R=0.535 Ω and L=60 mH, 380 kV LL / 1000 MVA,
-ratio 1. The retained archived definitions in
-`src/Network/Components/converter/MMC_legacy.jl` and `controller_old.jl` document
-these defaults. Initial unspecified Pac=-10 MW and Pdc=100 MW are historical
+ratio 1. These values are the defaults of the former legacy MMC model.
+Initial unspecified Pac=-10 MW and Pdc=100 MW are historical
 initial guesses, overwritten by the package power flow; they are not new
 specified operating points. TLC DC base is 640 kV. Source source-voltage and
 current package naming conventions require the voltage conversions above.
@@ -132,7 +138,7 @@ both connected/disconnected outcomes were PSCAD validated, including this
 
 **Owner decision (2026-10-16):** both P2P MMC calls omit `Vₘ`; use the
 current legacy adapter's default **220 kV phase RMS**, mapped to
-`Setpoint.Vac=220sqrt(2)` kV phase peak. This is the adapter's rounded nominal
+`terminal values.Vac=220sqrt(2)` kV phase peak. This is the adapter's rounded nominal
 phase voltage for the 380 kV grids (`380/sqrt(3)` is approximately 219.393 kV).
 The archived constructor's 333 kV default would request approximately 1.52 pu
 on the 1.0 / 0.9 pu grids, inconsistent with the documented PSCAD-validated

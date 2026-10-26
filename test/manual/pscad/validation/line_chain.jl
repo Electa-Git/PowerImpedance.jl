@@ -71,7 +71,7 @@ function reanalyse_line_chain(ids = LINE_CHAIN_IDS; data_root,
         mkpath(output)
         write(joinpath(output, "source_manifest.toml"), manifest_text)
         net = fixture(id).factory()
-        list = fixture_netlist(net, power_flow(net))
+        list = fixture_netlist(net, compute(PowerFlowProblem(net), ACDCPowerFlow()))
         targets = Dict{String, Any}()
         if id == "two_mmc_dc_cable"
             c = coupled_circuit(id, net)

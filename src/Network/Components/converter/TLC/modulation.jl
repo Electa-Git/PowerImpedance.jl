@@ -1,11 +1,11 @@
-############################  modulation.jl  ############################
+# modulation.jl
 
 #=
 TLC modulation blocks.
 
 Modulation blocks convert inner-current-loop modulation references into the
 commands seen by the electrical plant. The generic delay dynamics are provided
-by `PadeDelay` in `common/kernels/delay.jl`; this file only adds TLC-specific
+by `PadeDelay` in `common/kernels/delay.jl`. This file adds TLC-specific
 phase compensation and modulation outputs.
 =#
 
@@ -14,7 +14,7 @@ export AbstractModulationTLC,
        DelayModulation,
        PadeModulation
 
-############################  Abstract modulation slot  ############################
+# Abstract modulation slot
 
 """
 $(TYPEDEF)
@@ -23,7 +23,7 @@ Abstract supertype for TLC modulation blocks.
 """
 abstract type AbstractModulationTLC <: AbstractStateSpace end
 
-############################  No modulation / no delay  ############################
+# No modulation / no delay
 
 """
 $(TYPEDEF)
@@ -44,11 +44,11 @@ Convert inner-current voltage references to undelayed TLC modulation commands.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `block`: The `NoModulation` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -65,18 +65,17 @@ Convert inner-current voltage references to undelayed TLC modulation commands.
 ```
 
 Commands are rotated from the synchronization frame to the nominal grid dq frame
-and scaled using measured DC voltage. This block has no states or delay and does
-not write to `F`.
+and scaled using measured DC voltage. This stateless, undelayed block leaves `F` unchanged.
 
 # Examples
 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = NoModulation()
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -99,7 +98,7 @@ function state_space!(F, x, inputs, block::NoModulation, conv::AbstractTLC)
     return (; m_d, m_q)
 end
 
-############################  Time-delay modulation  ############################
+# Time-delay modulation
 
 """
 $(TYPEDEF)
@@ -166,7 +165,7 @@ Compatibility constructor for the previous TLC delay-modulation name.
 
 # Returns
 
-- A `DelayModulation` instance; `PadeModulation` is a function alias, not a type.
+- A `DelayModulation` instance returned through the `PadeModulation` function alias.
 
 # Examples
 
@@ -187,11 +186,11 @@ Evaluate delayed TLC modulation commands.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `block`: The `DelayModulation` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -221,10 +220,10 @@ uses \\[rad/s\\]. Commands are normalized \\[dimensionless\\].
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = DelayModulation(timeDelay=200e-6, padeOrderNum=3, padeOrderDen=3)
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -245,7 +244,7 @@ function state_space!(F, x, inputs, block::DelayModulation, conv::AbstractTLC)
     m_d, m_q = inverse_frame_transform(md_c, mq_c, syncangle(conv.sync, x))
 
     y = state_space!(F, x, (m_d, m_q), block.delay, conv)
-    m_dq_ref = phase_compensated_dq(y, conv.elec.ωbase * block.delay.timeDelay)
+    m_dq_ref = phase_compensated_dq(y, conv.bases.omega * block.delay.timeDelay)
 
     return (
         m_d = m_dq_ref.d,

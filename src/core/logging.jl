@@ -17,7 +17,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Wrap a logger so displayed source locations do not expose build-host paths.
+Wrap a logger to display repository-relative source locations.
 
 # Arguments
 

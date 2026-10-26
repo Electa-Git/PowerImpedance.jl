@@ -116,31 +116,39 @@ registration. See [Package extensions](docs/src/package_extensions.md).
 
 ### Explicit network topology and calculations
 
-`NetworkBuilder.define` accepts one row per connected element terminal:
+`NetworkBuilder.define` connects named model ports with `Bus` or `Net`:
 
 ```julia
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: define
+using PowerImpedance.NetworkBuilder: Bus, define
 
-elements = (branch = impedance(z = 2.0, pins = 1),)
-connections = (
-    (node = :bus, element = :branch, side = 1, terminal = 1),
-    (node = :gnd, element = :branch, side = 2, terminal = 1),
+elements = (
+    grid = ac_source(v = 380sqrt(2/3)),
+    branch = impedance(z = 2.0, conductors = 3),
+    load = impedance(z = 400.0, conductors = 3),
 )
-network = define(elements, connections)
+topology = (
+    Bus(:B1; ports = ((:grid, :ac), (:branch, :side1)), domain = ACDQ),
+    Bus(:B2; ports = ((:branch, :side2), (:load, :side1)), domain = ACDQ),
+    Bus(:gnd; ports = ((:load, :side2),), domain = ACDQ),
+)
+network = define(elements, topology; options = (; voltageBase = 380/sqrt(3)))
+powerflow = compute(PowerFlowProblem(network), ACDCPowerFlow())
+op = powerflow.operating_point
+op[:grid].ac.p
 ```
 
-`NetworkTopology` derives AC/DC domains and bus indices from component port
-definitions while preserving input-row and first-occurrence node order. The
-public problem/formulation interface evaluates nodal impedance, node and edge
-admittance, loop gain, and downstream stability analyses from either a
-`NetworkState` or an already linearized `NetworkModel`. See
+`NetworkTopology` expands the declarations into named nets, electrical domains,
+bus indices, ports and terminal labels. AC buses select abc or dq coordinates
+from their attached ports or an explicit `domain`. Models expose configurable
+inputs through `inputs`, `inputvalues`, `withinputs` and `component`.
+
+`PowerFlowResult` retains the solution and its `OperatingPoint`, with physical
+values by component and port name. Powers are positive into each component, so
+the supplying grid has negative `ac.p`. Frequency-response and stability calculations
+accept a `NetworkState` or an already linearized `NetworkModel`. See
 [Network construction](docs/src/network.md) and the executable
 [Connection DSL tutorial](examples/Connection_DSL.jl).
-
-The Classic network DSL remains available with
-`import PowerImpedance: @network`; the macro is no longer imported by
-`using PowerImpedance`.
 
 ## Example
 
@@ -256,7 +264,7 @@ For local Conventional Commit warnings, enable the tracked advisory hook with:
 git config core.hooksPath .githooks
 ```
 
-The hook never blocks a commit.
+The hook reports advisory warnings.
 
 ## Acknowledgements
 

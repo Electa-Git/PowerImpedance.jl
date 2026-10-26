@@ -1,4 +1,5 @@
 module PSCADTLCTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures
 const P = PowerImpedance.PSCAD
@@ -187,14 +188,14 @@ end
 @testset "TLC solved-state modules and controller equations" begin
     for factory in (PSCADFixtures.tlc_case1_network, PSCADFixtures.tlc_case2_network)
         fixture = factory()
-        pf = power_flow(fixture.classic)
-        netlist = P.netlist(fixture.classic, pf)
+        pf = compute(PowerFlowProblem(fixture), ACDCPowerFlow())
+        netlist = P.netlist(fixture, pf)
         e = only(filter(e -> e.model isa PI.TLC, netlist.elements))
         equilibrium = P.converter_equilibrium(e)
         residual = zeros(length(equilibrium.states))
         PI._state_space!(residual, collect(values(equilibrium.states)),
             collect(values(equilibrium.inputs)),
-            equilibrium.setpoint_pu, e.model, PI.Equil())
+            equilibrium.terminal_pu, e.model, PI.Equil())
         @test maximum(abs, residual) <= 1e-6
         settings = P.SimulationSettings(simulation_time = 10.0, time_step = 10e-6,
             sample_step = 40e-6, source_ramp = 0.05)
@@ -237,7 +238,7 @@ end
             filter(w -> all(p -> p in guard_points, w.vertices), parent.canvas.wires))
         guard = only(filter(c -> c.defn == "master:compare", guard_canvas.components))
         @test Dict(guard.params) ==
-              Dict("X" => "0.2", "OL" => P.block_value(e.model.elec.vDCbase),
+              Dict("X" => "0.2", "OL" => P.block_value(e.model.bases.v_dc),
             "OH" => "v_dc_m", "INTR" => "0", "Dim" => "1", "conv" => "0")
         @test count(c -> c.defn == "master:time-sig", guard_canvas.components) == 1
         guard_export = P.lower!(P.CanvasPlan(),
@@ -247,11 +248,11 @@ end
         append!(guard_canvas.wires, guard_export.wires)
         startup = P.ModuleDefinitionPlan("DC_STARTUP", P.ModuleParameterPlan[],
             P.ModulePortPlan[], guard_canvas)
-        for measured in (-20.0, 0.0, 0.8 * e.model.elec.vDCbase,
-            equilibrium.inputs.v_dc * e.model.elec.vDCbase)
+        for measured in (-20.0, 0.0, 0.8 * e.model.bases.v_dc,
+            equilibrium.inputs.v_dc * e.model.bases.v_dc)
             for sample_time in (0.0, 0.05, 0.2 - settings.time_step)
                 @test evaluate(startup, Dict("v_dc_m" => measured), sample_time)["v_dc"] ==
-                      e.model.elec.vDCbase
+                      e.model.bases.v_dc
             end
             # The saved handover is timed, not a persistent voltage limiter.
             for sample_time in (0.2 + settings.time_step, 9.8)
@@ -286,12 +287,12 @@ end
         phases = (0.0, -2π / 3, 2π / 3)
         signals = Dict{String, Any}(
             "v_abc" =>
-                e.model.elec.vACbase .*
+                e.model.bases.v_ac .*
                 collect(inputs.vG_d .* cos.(phases) .+ inputs.vG_q .* sin.(phases)),
             "i_abc" =>
-                e.model.elec.iACbase .*
+                PowerImpedance.perunit(e.model.elec, e.model.bases).iACbase .*
                 collect(states.i_d .* cos.(phases) .+ states.i_q .* sin.(phases)),
-            "v_dc" => inputs.v_dc * e.model.elec.vDCbase,
+            "v_dc" => inputs.v_dc * e.model.bases.v_dc,
             "theta_c" => states.Δθ_pll, "theta_rel" => states.Δθ_pll)
         @test evaluate(startup, Dict("v_dc_m" => signals["v_dc"]),
             0.2 + settings.time_step)["v_dc"] == signals["v_dc"]
@@ -318,7 +319,7 @@ end
         @test signals["vM_q_ref"] ≈ y.iloop.vMΔ_q_ref_c
         mod = only(filter(d -> startswith(d.name, "MOD_"), plan.modules))
         merge!(signals, evaluate(mod, signals))
-        expected = 0.5inputs.v_dc * e.model.elec.vACbase .*
+        expected = 0.5inputs.v_dc * e.model.bases.v_ac .*
                    collect(y.mod.m_d .* cos.(phases) .+ y.mod.m_q .* sin.(phases))
         @test signals["vM_abc"] ≈ expected
         # A plant starting from rest still has finite control inputs/outputs:
@@ -356,14 +357,16 @@ end
             "vM_abc" => rest["vM_abc"], "i_abc" => zeros(3)))["dc_command"] == 0.0
         for direction in (1.0, -1.0)
             current_dq = (; i_d = direction * 0.4, i_q = direction * 0.1)
-            physical_current = e.model.elec.iACbase .* collect(
+            physical_current = PowerImpedance.perunit(e.model.elec,
+                e.model.bases).iACbase .* collect(
                 current_dq.i_d .* cos.(phases) .+ current_dq.i_q .* sin.(phases))
             command = evaluate(dc_definition,
                 Dict("vM_abc" => signals["vM_abc"],
                     "i_abc" => physical_current, "v_dc" => signals["v_dc"]))["dc_command"]
             core = PI.state_space!(zeros(2), current_dq,
                 (; inputs, mod = y.mod), e.model.elec, e.model)
-            absorption = core.i_dc * e.model.elec.iDCbase
+            absorption = core.i_dc * PowerImpedance.perunit(e.model.elec,
+                e.model.bases).iDCbase
             @test command ≈ -absorption
             @test -signals["v_dc"] * command ≈
                   sum(signals["vM_abc"] .* physical_current)
@@ -380,8 +383,8 @@ end
             PI.Chebyshev(), (), states, 0.0, e)
         @test_throws ArgumentError P.converter_active("unsupported", e, equilibrium, PI.NoOuterActiveControl())
         # Both representations retain the same converter rating and flow signs.
-        solved = NetworkBuilder.solve(fixture.state)
-        builder = P.netlist(fixture.state, solved.powerflow)
+        solved = NetworkBuilder.solve(fixture)
+        builder = P.netlist(fixture, solved)
         # Independent power-flow solves agree at the existing equilibrium
         # solver's absolute tolerance, including the near-zero case-1 P.
         @test abs(builder.operating_point.branch_flows[:DUT].pt -

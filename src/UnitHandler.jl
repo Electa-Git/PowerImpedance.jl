@@ -92,7 +92,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Construct a simple unit with an optional denominator. For example,
+Construct a simple unit with an optional denominator.
 `units(:base, :ohm; per=(:kilo, :meter))` represents Ω/km.
 """
 function units(

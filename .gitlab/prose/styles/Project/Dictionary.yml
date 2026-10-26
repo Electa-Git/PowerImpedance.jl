@@ -1,0 +1,8 @@
+extends: STE.Dictionary
+swap-:
+  - component
+  - equivalent
+  - identical
+  - objective
+  - optimum
+  - remainder

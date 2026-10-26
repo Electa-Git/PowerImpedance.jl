@@ -10,7 +10,7 @@ function electrical_graph(canvas, modules)
     root(p) = get!(parent, p, p) == p ? p : (parent[p] = root(parent[p]))
     join(a, b) = (parent[root(a)] = root(b))
     records = Dict{String, Any}[]
-    pins = Tuple{Tuple{Int, Int}, Tuple{Int, Int}}[]
+    pin_pairs = Tuple{Tuple{Int, Int}, Tuple{Int, Int}}[]
     labels = Tuple{Tuple{Int, Int}, String}[]
     grounds = Tuple{Int, Int}[]
     probes = Set{Int}()
@@ -28,11 +28,11 @@ function electrical_graph(canvas, modules)
             i = length(records)
             c.defn in ("master:voltmetergnd", "master:voltmeter") && push!(probes, i)
             for (j, point) in enumerate(electrical)
-                push!(pins, (point, (i, j)))
+                push!(pin_pairs, (point, (i, j)))
             end
         end
     end
-    points = union(Set(first.(pins)), Set(first.(labels)), Set(grounds))
+    points = union(Set(first.(pin_pairs)), Set(first.(labels)), Set(grounds))
     segments = Tuple{Tuple{Int, Int}, Tuple{Int, Int}}[]
     for w in canvas.wires
         union!(points, w.vertices)
@@ -58,7 +58,7 @@ function electrical_graph(canvas, modules)
         join(first(grounds), point)
     end
     groups = Dict{Tuple{Int, Int}, Vector{Vector{Int}}}()
-    for (point, pin) in pins
+    for (point, pin) in pin_pairs
         push!(get!(groups, root(point), Vector{Int}[]), collect(pin))
     end
     # Unattached electrical labels remain degree-zero nets; removing them would hide an

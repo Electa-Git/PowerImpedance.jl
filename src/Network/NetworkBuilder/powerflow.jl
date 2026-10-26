@@ -1,84 +1,224 @@
-
-function Base.convert(bs::NetworkState, ::Type{P.PMACDC})
-    _validate_powerflow_domains(bs)
-
-    #PMACDC data + interface
-    data = Dict{String, Any}()
-    global_dict = P.PowerModelsACDC._get_pu_bases(1000, option_value(bs.options, :voltageBase, DEFAULT_VOLTAGE_BASE)) # 3-PH MVA, LL-RMS, Original setting was 100,320
-    P.data_init!(data, global_dict)
-
-    global_dict["omega"] = 2*π*50
-
-    ## Adding buses 
-
-    convert!(data, bs.topology, P.PMACDC, global_dict)
-
-    # 2. Fill up the data dictionary with corresponding PM index and bus connections 
-
-    elempitopm = Dict{Symbol, @NamedTuple{pmtype::String, compkey::Int}}() #Maps PM component to element symbol for later use in transformation of results
-
-    elements_and_buses = map(collect(pairs(bs.elements))) do (elemid, stored_element)
-        element = _element_for_powerflow(stored_element, elemid, bs.topology)
-        # Get sorted connectoins (first AC, then DC)
-        connections = sortedcomponentconnections(bs.topology, elemid)
-        busidtable = Table(domain = connections.domain, bus = connections.bus)
-        sortedbusses = Table(unique(busidtable)).bus #unique(connections.bus) #Take unique busidss (elecdomain+bus integer) and then only provide it with bus information
-        return (element, sortedbusses)
-    end
-    P._infer_transformer_voltage_levels!(global_dict, elements_and_buses)
-
-    for (element, sortedbusses) in elements_and_buses
-        elemid = element.symbol
-        # Get the PM component key and update LUT
-        pmtype = P.pmtype(element)
-        compkey = length(data[pmtype]) + 1
-        elempitopm[elemid] = (; pmtype, compkey)
-
-        P.convert!(data, element, P.PMACDC, compkey, sortedbusses, global_dict)
-    end
-
-    ensure_slack_bus!(data)
-    P.PowerModelsACDC.process_additional_data!(data)
-
-    return data, global_dict, elempitopm
+# A converged primal point belongs to one network and one mapped topology.
+mutable struct _PowerFlowStart
+    topology::Any
+    primal::Dict{String, Float64}
 end
 
-function _validate_powerflow_domains(network::NetworkState)
-    for (name, element) in pairs(network.elements)
-        ports = _port_descriptions(element)
-        all(iszero(port.domain) for port in ports) || continue
-        rows = filter(row -> row.element == name, network.topology.connections)
-        any(row -> row.domain == 1, rows) || continue
-        throw(
-            ArgumentError(
-            "one-conductor passive element :$name was inferred as AC from its " *
-            "topology. This representation is supported by frequency-domain " *
-            "calculations but has no AC PowerModels conversion; use a " *
-            "transformed three-phase element for power flow",
-        ),
-        )
+_PowerFlowStart() = _PowerFlowStart(nothing, Dict{String, Float64}())
+
+"""
+$(TYPEDEF)
+
+Store one materialized NetworkBuilder system with numeric component models,
+topology, and numerical options.
+
+Construct systems with [`define`](@ref).
+
+$(TYPEDFIELDS)
+"""
+mutable struct NetworkState
+    "Materialized component models indexed by name."
+    elements::NamedTuple
+    "Net-component incidence relation."
+    topology::NetworkTopology
+    "Numerical and power-flow options."
+    options::NamedTuple
+    "Converged primal point for repeated solves of this mapped topology."
+    powerflow_start::_PowerFlowStart
+end
+
+NetworkState(elements::NamedTuple, topology::NetworkTopology, options::NamedTuple) =
+    NetworkState(elements, topology, options, _PowerFlowStart())
+
+function data_init!(data, global_dict)
+    data["source_type"] = "matpower"
+    data["name"] = "network"
+    data["source_version"] = "0.0.0"
+    data["per_unit"] = true
+    # Monopolar (1) or bipolar and symmetrically grounded monopolar (2)
+    data["dcpol"] = P.dcpol
+    data["baseMVA"] = global_dict["S"] / 1e6
+    data["bus"] = Dict{String, Any}()
+    data["im"] = Dict{String, Any}()
+    data["busdc"] = Dict{String, Any}()
+    data["shunt"] = Dict{String, Any}()     # empty
+    data["dcline"] = Dict{String, Any}()    # empty
+    data["storage"] = Dict{String, Any}()   # empty
+    data["switch"] = Dict{String, Any}()    # empty
+    data["load"] = Dict{String, Any}()      # empty
+    data["branch"] = Dict{String, Any}()
+    data["branchdc"] = Dict{String, Any}()
+    data["gen"] = Dict{String, Any}()
+	data["im"] = Dict{String, Any}()
+    data["sssc"] = Dict{String, Any}()  # empty (avoid warning from PMACDC)
+    data["convdc"] = Dict{String, Any}()
+    data["pst"] = Dict{String, Any}() ## Empty (Phase shifting transformer)
+    data["gendc"] = Dict{String, Any}()
+    return data
+end
+
+function canonicalize_converter_voltages!(result)
+    for converter in values(get(result["solution"], "convdc", Dict()))
+        if get(converter, "vmconv", 0.0) < 0
+            converter["vmconv"] = -converter["vmconv"]
+            angle = rem2pi(converter["vaconv"] + π, RoundNearest)
+            converter["vaconv"] = angle == -Float64(π) ? Float64(π) : angle
+        end
+    end
+    return result
+end
+
+function accept_feasible_power_flow!(result, model)
+    result["termination_status"] == P.MOI.LOCALLY_SOLVED && return true
+    P.JuMP.has_values(model) || return false
+    residual = maximum(values(P.primal_feasibility_report(model; atol = 0.0)); init = 0.0)
+    tolerance = P.JuMP.get_optimizer_attribute(model, "constr_viol_tol")
+    if isfinite(residual) && residual <= tolerance
+        result["primal_feasible"] = true
+        @warn ("Accepting power-flow point with termination status " *
+            "$(result["termination_status"]) and maximum primal constraint violation " *
+            "$residual (constr_viol_tol = $tolerance).")
+        return true
+    end
+    return false
+end
+
+function _prepare_power_flow_start!(start::_PowerFlowStart, data, mapping)
+    # Component identities and endpoints identify the topology used for a warm start.
+    # Numerical targets may change. The converged point supplies initial values for the
+    # rebuilt constraints.
+    fields = ("index", "status", "gen_bus", "load_bus", "shunt_bus",
+        "storage_bus", "f_bus", "t_bus", "busac_i", "busdc_i", "fbusdc", "tbusdc")
+    topology = (mapping, Dict(group => Dict(id => Dict(key => component[key]
+        for key in fields if haskey(component, key)) for (id, component) in data[group])
+        for group in ("bus", "busdc", "gen", "gendc", "branch", "branchdc", "convdc",
+            "load", "shunt", "storage") if haskey(data, group)))
+    if !isequal(start.topology, topology)
+        empty!(start.primal)
+        start.topology = deepcopy(topology)
+    end
+    return start
+end
+
+function _initialize_power_flow!(model, start::_PowerFlowStart)
+    variables = P.JuMP.all_variables(model)
+    if length(variables) == length(start.primal) &&
+       all(variable -> haskey(start.primal, P.JuMP.name(variable)), variables)
+        for variable in variables
+            P.JuMP.set_start_value(variable, start.primal[P.JuMP.name(variable)])
+        end
+    else
+        empty!(start.primal)
     end
     return nothing
 end
 
-function _element_for_powerflow(
-        element::P.Element,
-        name::Symbol,
-        topology::NetworkTopology
-)
-    result = deepcopy(element)
-    result.symbol = name
-    for row in filter(connection -> connection.element == name, topology.connections)
-        result.pins[pin_name(row.side, row.terminal)] = row.node
+function _store_power_flow_start!(start::_PowerFlowStart, model)
+    # Store converged primal points. Residual-acceptance and penalty-relaxation results
+    # leave the saved point unchanged.
+    if P.JuMP.termination_status(model) == P.MOI.LOCALLY_SOLVED
+        empty!(start.primal)
+        for variable in P.JuMP.all_variables(model)
+            start.primal[P.JuMP.name(variable)] = P.JuMP.value(variable)
+        end
     end
-    return result
+    return nothing
+end
+
+# Function to slightly shift the setpoints of the active elements to nudge the solver
+# towards a solution. "delta" = percentage change
+function update_actives_setpoints!(data, delta)
+
+	# Slightly shift the reactive power setpoints for the converters, if any
+	if haskey(data, "convdc")
+		# TODO handle Vac control after its implementation.
+		for conv_index in keys(data["convdc"])
+
+			data["convdc"][conv_index]["Q_g"] != 0.0 ?
+			data["convdc"][conv_index]["Q_g"] *= (1+delta) :
+			data["convdc"][conv_index]["Q_g"] += delta# This will impact Q, QV-droop control
+		end
+	end
+	# Slightly shift the Vm setpoints for the synchronous machines, if any
+	for gen_index in keys(data["gen"])
+		bus_gen = data["gen"][gen_index]["gen_bus"]
+		if data["bus"][string(bus_gen)]["bus_type"] == 2 # PV-bus
+			# This will slightly shift the Voltage reference for the SG
+			data["gen"][gen_index]["vg"] *= (1+delta)
+		end
+	end
+
+
+end
+
+function Base.convert(bs::NetworkState, ::Type{P.PMACDC})
+    _validate_powerflow_domains(bs)
+    data = Dict{String, Any}()
+    global_dict = P.PowerModelsACDC._get_pu_bases(1000,
+        option_value(bs.options, :voltageBase, DEFAULT_VOLTAGE_BASE))
+    data_init!(data, global_dict)
+    global_dict["omega"] = 2*π*50
+    convert!(data, bs.topology, P.PMACDC, global_dict)
+    elempitopm = Dict{Symbol, @NamedTuple{pmtype::String, compkey::Int}}()
+
+    records = map(collect(pairs(bs.elements))) do (name, model)
+        _element_call(name) do
+            rows = filter(row -> row.component == name, bs.topology.connections)
+            ports = _powerflow_ports(model, rows)
+            pmtype = P.pmtype(model, rows)
+            (; name, model, ports, pmtype)
+        end
+    end
+    _infer_transformer_voltage_levels!(global_dict, records)
+    for record in records
+        (; name, model, ports, pmtype) = record
+        compkey = length(data[pmtype]) + 1
+        elempitopm[name] = (; pmtype, compkey)
+        key = (; name, index = compkey, pmtype)
+        _element_call(name) do
+            P.convert!(data, model, P.PMACDC, key, ports, global_dict)
+        end
+    end
+    ensure_slack_bus!(data)
+    P.PowerModelsACDC.process_additional_data!(data)
+    return data, global_dict, elempitopm
+end
+
+function _powerflow_ports(model, rows)
+    names = keys(P.electricalconnections(model))
+    buses = map(names) do port
+        ids = unique(row.bus for row in rows if row.port == port)
+        length(ids) == 1 ||
+            throw(ArgumentError("port :$port must connect to one power-flow bus"))
+        only(ids)
+    end
+    return NamedTuple{names}(buses)
+end
+
+function _validate_powerflow_domains(network::NetworkState)
+    for (name, model) in pairs(network.elements)
+        _element_call(name) do
+            ports = P.electricalconnections(model)
+            for row in network.topology.connections
+                row.component == name || continue
+                _domain_number(ports[row.port].domain) == row.domain && continue
+                throw(ArgumentError(
+                    "one-conductor passive element was inferred as AC from its " *
+                    "topology. This representation is supported by frequency-domain " *
+                    "calculations but has no AC PowerModels conversion; use a " *
+                    "transformed three-phase element for power flow"))
+            end
+        end
+    end
+    return nothing
 end
 
 findvalue(componentdata, id) = componentdata[id]
 
 function convert!(data, connections::NetworkTopology, ::Type{P.PMACDC}, global_dict)
 
-    # pm2pi = Dict{Tuple{String, Int}, Int}() # Maps PM bus index to PI bus index for later use in transformation of results
+    # pm2pi = Dict{Tuple{String, Int}, Int}() # Maps PM bus index to PI bus index for later
+    # use in transformation of results
     # pi2pm = Dict{Int, Tuple{String, Int}}()
 
     # Split up for improved speed inside for loop (same function)
@@ -102,75 +242,13 @@ function convert!(data, connections::NetworkTopology, ::Type{P.PMACDC}, global_d
     # return pm2pi
 end
 
-function solve_powerflow(network::P.Network, options::NamedTuple)
-    if P.is_linear(network)
-        @info "Network only consists of linear elements. Skipping power flow."
-        return nothing
-    end
-
-    global_dict = P.PowerModelsACDC._get_pu_bases(1000, network.voltageBase[1])
-    global_dict["omega"] = 2π * 50
-
-    data = P.data_init!(Dict{String, Any}(), global_dict)
-    nodes2bus = Dict()
-    bus2nodes = Dict()
-    elem2comp = Dict()
-    comp2elem = Dict()
-
-    ground_nodes = [k for k in keys(network.nets) if startswith(string(k), "gnd")]
-    push!(nodes2bus, ground_nodes => "gnd")
-    push!(bus2nodes, "gnd" => ground_nodes)
-
-    elements_and_buses = [
-        (element, element.element_model isa P.Source ?
-            (P.make_non_ground_node(element, bus2nodes),) :
-            Tuple(node for node in (P.make_node(element, 1), P.make_node(element, 2))
-                if !isempty(node) && isdisjoint(node, ground_nodes)))
-        for element in values(network.elements)
-        if P.pmtype(element) in ("gen", "branch")
-    ]
-    P._infer_transformer_voltage_levels!(global_dict, elements_and_buses)
-
-    for element in values(network.elements)
-        P.convert!(
-            data,
-            element,
-            P.PMACDC,
-            nodes2bus,
-            bus2nodes,
-            elem2comp,
-            comp2elem,
-            global_dict
-        )
-    end
-
-    ensure_slack_bus!(data)
-    P.PowerModelsACDC.process_additional_data!(data)
-
-    P._prepare_power_flow_start!(network.powerflow_start, data, (nodes2bus, elem2comp, network.nets))
-    result = solve_acdcpf(
-        data,
-        P._PM.ACPPowerModel,
-        powerflow_optimizer(options),
-        is_bounded_options(options),
-        network.powerflow_start;
-        setting = powerflow_setting(options)
-    )
-
-    powerflow = (result = result, data = data, nodes2bus = nodes2bus, elem2comp = elem2comp)
-    # set_parent_global!(:result, result)
-    # set_parent_global!(:data, data)
-    # set_parent_global!(:nodes2bus, nodes2bus)
-    # set_parent_global!(:elem2comp, elem2comp)
-    return powerflow
-end
-
 function ensure_slack_bus!(data)
     if 3 in [data["bus"][index]["bus_type"] for index in keys(data["bus"])]
         return data
     end
 
-    @warn "WARNING: No slack bus present. The first PV bus with generator will be set as reference"
+    @warn ("WARNING: No slack bus present. The first PV bus with generator " *
+        "will be set as reference")
     for gen_index in keys(data["gen"])
         bus_gen = data["gen"][gen_index]["gen_bus"]
         if data["bus"][string(bus_gen)]["bus_type"] == 2
@@ -188,7 +266,7 @@ function solve_acdcpf(
         model_type::Type,
         optimizer,
         variables::NamedTuple,
-        start::P._PowerFlowStart = P._PowerFlowStart();
+        start::_PowerFlowStart = _PowerFlowStart();
         kwargs...
 )
     ref_ext = [
@@ -209,20 +287,21 @@ function solve_acdcpf(
     )
 
     P.JuMP.set_optimizer(pm.model, optimizer)
-    P._initialize_power_flow!(pm.model, start)
+    _initialize_power_flow!(pm.model, start)
     P.JuMP.optimize!(pm.model)
-    P._store_power_flow_start!(start, pm.model)
+    _store_power_flow_start!(start, pm.model)
     result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
     @info result["termination_status"]
-    if P.accept_feasible_power_flow!(result, pm.model)
-        @info "Power flow converged succesfully."
+    if accept_feasible_power_flow!(result, pm.model)
+        @info "Power flow converged successfully."
     else
         converged_feasible = false
         has_violations = !isempty(P.JuMP.primal_feasibility_report(pm.model; atol = 1e-4))
         if has_violations
-            @warn "Violations reported. Entering power flow with increments of setpoints to find a solution."
+            @warn ("Violations reported. Entering power flow with increments of " *
+                "setpoints to find a solution.")
             for r in 1:5
-                P.update_actives_setpoints!(data, -0.0001)
+                update_actives_setpoints!(data, -0.0001)
                 pm = P._PM.instantiate_model(
                     data,
                     model_type,
@@ -232,29 +311,31 @@ function solve_acdcpf(
                 )
                 P.JuMP.set_optimizer(pm.model, optimizer)
                 P.JuMP.optimize!(pm.model)
-                P._store_power_flow_start!(start, pm.model)
+                _store_power_flow_start!(start, pm.model)
                 result = P._IM.build_result(pm, P.JuMP.solve_time(pm.model))
-                if P.accept_feasible_power_flow!(result, pm.model)
-                    @info "Power flow converged succesfully after $r increment change."
+                if accept_feasible_power_flow!(result, pm.model)
+                    @info "Power flow converged successfully after $r increment change."
                     converged_feasible = true
                     break
                 elseif isempty(P.JuMP.primal_feasibility_report(pm.model; atol = 1e-4))
-                    @info "Power flow converged succesfully after $r increment change. Point is feasible."
+                    @info ("Power flow converged successfully after $r increment " *
+                        "change. Point is feasible.")
                     converged_feasible = true
                     break
                 end
             end
             if !converged_feasible
-                @warn "Last resort: Relaxing constraints to find a solution and see which constraints are violated."
+                @warn ("Last resort: Relaxing constraints to find a solution and " *
+                    "see which constraints are violated.")
                 result = solve_acdcpf_relax(
                     data, model_type, optimizer, variables; kwargs...)
             end
         else
-            @info "Power flow converged succesfully. Point is feasible"
+            @info "Power flow converged successfully. Point is feasible"
         end
     end
 
-    return P.canonicalize_converter_voltages!(result)
+    return canonicalize_converter_voltages!(result)
 end
 
 function build_acdcpf(pm::P._PM.AbstractPowerModel, variables::NamedTuple)
@@ -445,7 +526,7 @@ function solve_acdcpf_relax(
         end
     end
 
-    return P.canonicalize_converter_voltages!(result)
+    return canonicalize_converter_voltages!(result)
 end
 
 function addbus!(data, bus, global_dict, ::Val{:AC})
@@ -481,5 +562,99 @@ function addbus!(data, bus, global_dict, ::Val{:DC})
     ((data["busdc"])[busstr])["Vdcmin"] = 0.9
     ((data["busdc"])[busstr])["Pdc"] = 0
     ((data["busdc"])[busstr])["basekVdc"] = global_dict["V"] / 1e3
-    ((data["busdc"])[busstr])["bus_type"] = 1 # bus type - depends on components 1 is default P
+    # bus type - depends on components 1 is default P
+    ((data["busdc"])[busstr])["bus_type"] = 1
+end
+
+
+function _voltage_links!(edges, sources, transformers, model::P.AbstractElementModel,
+        name, ports, pmtype)
+    return nothing
+end
+
+function _voltage_links!(edges, sources, transformers, model::P.Source,
+        name, ports, pmtype)
+    haskey(ports, :ac) && push!(sources, ports.ac => P.inputvalues(model).v)
+    return nothing
+end
+
+function _voltage_links!(edges, sources, transformers,
+        model::Union{P.Impedance, P.Transmission_line}, name, ports, pmtype)
+    pmtype == "branch" && ports.side1 != ports.side2 || return nothing
+    push!(get!(edges, ports.side1, Tuple{Any, Float64, Bool}[]),
+        (ports.side2, 1.0, true))
+    push!(get!(edges, ports.side2, Tuple{Any, Float64, Bool}[]),
+        (ports.side1, 1.0, false))
+    return nothing
+end
+
+function _voltage_links!(edges, sources, transformers, model::P.Transformer,
+        name, ports, pmtype)
+    primary, secondary = ports.side1, ports.side2
+    push!(transformers, (name, primary, secondary))
+    primary != secondary || return nothing
+    ratio = model.V₁ᵒ == model.V₂ᵒ == 0 ? model.n : model.V₁ᵒ / model.V₂ᵒ
+    push!(get!(edges, primary, Tuple{Any, Float64, Bool}[]), (secondary, ratio, true))
+    push!(get!(edges, secondary, Tuple{Any, Float64, Bool}[]), (primary, ratio, false))
+    return nothing
+end
+
+function _infer_transformer_voltage_levels!(global_dict, records)
+    sources = Pair{Int, Float64}[]
+    transformers = Tuple{Symbol, Int, Int}[]
+    edges = Dict{Any, Vector{Tuple{Any, Float64, Bool}}}()
+    for record in records
+        _element_call(record.name) do
+            _voltage_links!(edges, sources, transformers, record.model,
+                record.name, record.ports, record.pmtype)
+        end
+    end
+    isempty(transformers) && return nothing
+    voltage_base = global_dict["V"] / 1e3
+    levels = Dict{Any, Float64}()
+    queue = Any[]
+
+    function assign_level!(bus, level)
+        if !haskey(levels, bus)
+            levels[bus] = level
+            push!(queue, bus)
+        elseif abs(level - levels[bus]) > 0.01 * levels[bus]
+            @warn "Conflicting transformer voltage levels at bus $bus: " *
+                "$(levels[bus]) kV and $level kV; retaining the first level."
+        end
+    end
+
+    for (bus, voltage_peak) in sources
+        if !ismissing(voltage_peak) && isfinite(voltage_peak) && voltage_peak > 0
+            voltage = voltage_peak / sqrt(2)
+            if !(0.9 * voltage_base <= voltage <= 1.1 * voltage_base)
+                assign_level!(bus, voltage)
+            end
+        end
+    end
+
+    index = 1
+    function propagate!()
+        while index <= length(queue)
+            bus = queue[index]
+            for (other, ratio, forward) in get(edges, bus, Tuple{Any, Float64, Bool}[])
+                level = forward ? levels[bus] / ratio : levels[bus] * ratio
+                assign_level!(other, level)
+            end
+            index += 1
+        end
+    end
+    propagate!()
+    for (_, primary, _) in transformers
+        if !haskey(levels, primary)
+            assign_level!(primary, voltage_base)
+            propagate!()
+        end
+    end
+
+    global_dict["transformer_voltage_levels"] = Dict(
+        name => (get(levels, primary, voltage_base), get(levels, secondary, voltage_base))
+        for (name, primary, secondary) in transformers)
+    global_dict["transformer_voltage_bounded_buses"] = Set{Int}()
+    return nothing
 end

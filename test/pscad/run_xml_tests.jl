@@ -37,9 +37,12 @@ else
     mhixml = pyimport("mhi.xml.pscad")
     include("fixtures.jl")
     include("topology.jl")
+    include("probe_names.jl")
+    include("../parity/names.jl")
     include("networks.jl")
     using TOML
     P = PowerImpedance.PSCAD
+    include("../parity/pscad_test.jl")
     include("ztool_xml_test.jl")
     runner = Module(:GeometryRunner)
     Core.eval(runner, :(include(path) = Base.include($runner, path)))
@@ -53,9 +56,9 @@ else
         os.getlogin = no_login
         try
             mktempdir() do directory
-                classic, _ = PSCADFixtures.small_ac_network()
+                state = PSCADFixtures.small_ac_network()
                 path = joinpath(directory, "no_login.pscx")
-                export_pscad(classic; path, settings = P.SimulationSettings(
+                export_pscad(state; path, settings = P.SimulationSettings(
                     simulation_time = 0.1, time_step = 50e-6, sample_step = 250e-6))
                 @test isfile(path)
                 @test pyconvert(String, etree.parse(path).getroot().get("name")) == "no_login"
@@ -164,25 +167,24 @@ else
         end
         return Set(values(groups))
     end
-    shunt_moves = TOML.parsefile(joinpath(@__DIR__, "fixtures/shunt_meter_moves.toml"))
     native_phasors = TOML.parsefile(joinpath(@__DIR__, "fixtures/yy_load_return_phasors.toml"))
     probe_names = Dict{String, Set{String}}()
-    for line in readlines(joinpath(@__DIR__, "fixtures/export_probe_names.tsv"))
+    for line in readlines(joinpath(@__DIR__, "fixtures/export_probe_names_a1a7fb7.tsv"))
         startswith(line, "#") && continue
         line == "fixture\tprobe" && continue
         fixture, probe = split(line, '\t')
         push!(get!(Set{String}, probe_names, fixture), probe)
     end
-    classic, state = PSCADFixtures.small_ac_network()
-    ohl_classic, ohl_state = PSCADFixtures.passive_ohl_network()
-    yy_classic, yy_state = PSCADFixtures.transformer_network()
-    dy_classic, dy_state = PSCADFixtures.transformer_network(; organization = :ΔY)
-    dc_classic, dc_state = PSCADFixtures.dc_network()
-    cable_classic, cable_state = PSCADFixtures.dc_cable_network()
-    sm_classic, sm_state = PSCADFixtures.sm_network()
-    tlc1_classic, tlc1_state = PSCADFixtures.tlc_case1_network()
-    tlc2_classic, tlc2_state = PSCADFixtures.tlc_case2_network()
-    mmc_classic, mmc_state = PSCADFixtures.mmc_pq_network()
+    state = PSCADFixtures.small_ac_network()
+    ohl_state = PSCADFixtures.passive_ohl_network()
+    yy_state = PSCADFixtures.transformer_network()
+    dy_state = PSCADFixtures.transformer_network(; organization = :ΔY)
+    dc_state = PSCADFixtures.dc_network()
+    cable_state = PSCADFixtures.dc_cable_network()
+    sm_state = PSCADFixtures.sm_network()
+    tlc1_state = PSCADFixtures.tlc_case1_network()
+    tlc2_state = PSCADFixtures.tlc_case2_network()
+    mmc_state = PSCADFixtures.mmc_pq_network()
     modes = []
     for (stem, factory) in (("mmc_vdc", PSCADFixtures.mmc_vdc_network),
         ("mmc_pf", PSCADFixtures.mmc_pf_network), ("mmc_qv", PSCADFixtures.mmc_qv_network),
@@ -190,15 +192,14 @@ else
         "tlc_vac", PSCADFixtures.tlc_vac_network))
         fixture = factory()
         append!(modes, [
-            (stem * "_classic", fixture.classic), (stem * "_builder", fixture.state)])
+            (stem * "_builder", fixture)])
     end
-    append!(modes, [("mmc_pq_default_ramp", mmc_classic),
-        ("tlc_case2_zero_ramp", tlc2_classic)])
+    append!(modes, [("mmc_pq_default_ramp", mmc_state),
+        ("tlc_case2_zero_ramp", tlc2_state)])
     gfm = PSCADFixtures.mmc_gfm_network()
-    append!(modes, [("mmc_gfm_classic", gfm.classic), ("mmc_gfm_builder", gfm.state)])
+    append!(modes, [("mmc_gfm_builder", gfm)])
     compensated = PSCADFixtures.mmc_compensated_network()
-    append!(modes, [("mmc_compensated_classic", compensated.classic),
-        ("mmc_compensated_builder", compensated.state)])
+    append!(modes, [("mmc_compensated_builder", compensated)])
     energy_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_energy_saved_fragments.xml")).getroot()
     gfm_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_gfm_saved_fragments.xml")).getroot()
     modes_reference = etree.parse(joinpath(@__DIR__, "fixtures/mmc_modes_saved_fragments.xml")).getroot()
@@ -249,16 +250,16 @@ else
     end
     @testset "PSCAD mhi-xml export round trip" begin
         models = PSCADModel[]
-        for (name, input) in (("small_ac_classic", classic), ("small_ac_builder", state),
-            ("passive_ohl_classic", ohl_classic), ("passive_ohl_builder", ohl_state),
-            ("transformer_yy_classic", yy_classic), ("transformer_yy_builder", yy_state),
-            ("transformer_dy_classic", dy_classic), ("transformer_dy_builder", dy_state),
-            ("dc_classic", dc_classic), ("dc_builder", dc_state),
-            ("dc_cable_classic", cable_classic), ("dc_cable_builder", cable_state),
-            ("sm_classic", sm_classic), ("sm_builder", sm_state),
-            ("tlc_case1_classic", tlc1_classic), ("tlc_case1_builder", tlc1_state),
-            ("tlc_case2_classic", tlc2_classic), ("tlc_case2_builder", tlc2_state),
-            ("mmc_pq_classic", mmc_classic), ("mmc_pq_builder", mmc_state), modes...)
+        for (name, input) in (("small_ac_builder", state),
+            ("passive_ohl_builder", ohl_state),
+            ("transformer_yy_builder", yy_state),
+            ("transformer_dy_builder", dy_state),
+            ("dc_builder", dc_state),
+            ("dc_cable_builder", cable_state),
+            ("sm_builder", sm_state),
+            ("tlc_case1_builder", tlc1_state),
+            ("tlc_case2_builder", tlc2_state),
+            ("mmc_pq_builder", mmc_state), modes...)
             path = joinpath(only(ARGS), name * ".pscx")
             case_settings = startswith(name, "sm_") ?
                             P.SimulationSettings(simulation_time = 5.0) :
@@ -292,7 +293,7 @@ else
                 export_pscad(input; path, settings = case_settings, dc_reference)
             end
             @test !any(log -> occursin("CompensatedModulation", string(log.message)), logger.logs)
-            if name == "passive_ohl_classic"
+            if name == "passive_ohl_builder"
                 @test P.check_connectivity(path) === nothing
                 tree = etree.parse(path)
                 vertex = tree.xpath("//Wire[@classid='TLine']/vertex")[0]
@@ -337,8 +338,28 @@ else
                 @test summary.nodelabels["B1"] == summary.nodelabels["B2"] == 3
             end
             @test Set(summary.pgbs) == Set(c.name for c in plan.probes.channels)
-            @test Set(summary.pgbs) == probe_names[name]
-            @test Set(c.name for c in model.probes.channels) == probe_names[name]
+            stem = endswith(name, "_builder") ? chopsuffix(name, "_builder") :
+                name == "mmc_pq_default_ramp" ? "mmc_pq" : "tlc_case2"
+            mapping = PSCADProbeNames.name_map(model.netlist, model.probes;
+                ParityNames.pscad_names(stem, model.netlist)...)
+            expected_probes = Set(get(mapping.names, probe, probe)
+                for probe in probe_names[stem])
+            signal_suffixes = (
+                (PowerImpedance.SynchronousMachine,
+                    ("Ef", "Ef0", "P", "Q", "Tm_init", "Vt", "speed")),
+                (PowerImpedance.TLC,
+                    ("P_ac_f", "Q_ac_f", "omega_c", "theta_c", "v_dc_f")),
+                (PowerImpedance.MMC,
+                    ("P_ac_f", "Q_ac_f", "iS_z", "omega_c", "theta_c", "v_dc_f",
+                        "v_Ctot_l_a", "v_Ctot_l_b", "v_Ctot_l_c", "v_Ctot_u_a",
+                        "v_Ctot_u_b", "v_Ctot_u_c")))
+            for (kind, suffixes) in signal_suffixes, element in model.netlist.elements
+                element.model isa kind || continue
+                union!(expected_probes, (element.pscad * "_" * suffix
+                    for suffix in suffixes))
+            end
+            @test Set(summary.pgbs) == expected_probes
+            @test Set(c.name for c in model.probes.channels) == expected_probes
             @test all(summary.settings[k] == v for (k, v) in plan.settings.params)
             @test model.project_path == path
             @test model.project_name == name
@@ -347,9 +368,7 @@ else
                   string(Base.pkgversion(PowerImpedance))
             @test model.provenance.mhi_xml_version == "1.3.0"
             @test model.provenance.resolved_powerflow ==
-                  ((input isa Network && !startswith(name, "transformer_dy")) ||
-                   (name == "sm_builder" || startswith(name, "tlc_") ||
-                    startswith(name, "mmc_")))
+                  !startswith(name, "transformer_dy")
             root = etree.parse(path).getroot()
             @testset "Electrical topology: $name" begin
                 graphs = PSCADTopology.xml_graphs(root, x -> pyconvert(String, x); check_named = true)
@@ -401,49 +420,48 @@ else
                     end
                 elseif !startswith(name, "tlc_")
                     fixture = TOML.parsefile(joinpath(@__DIR__,
-                        "fixtures/topology_8be21ee", name * ".toml"))
+                        "fixtures/topology_a1a7fb7", stem * ".toml"))
                     reference = fixture["canvases"]
                     @test Set(keys(graphs)) == Set(keys(reference))
                     for (canvas, graph) in graphs
-                        expected = canvas == "Main" ?
-                                   PSCADTopology.shunt_meter_returns(reference[canvas], shunt_moves[name]) :
-                                   deepcopy(reference[canvas])
-                        # The independent reference graph retains all values except the
-                        # specified fitting-target changes.
+                        expected = deepcopy(reference[canvas])
+                        PSCADProbeNames.map_graph!(expected, mapping.names;
+                            components = mapping.components)
+                        PSCADProbeNames.turn_meters!(expected, mapping.polarities)
+                        row_names = Dict(stem * ":" * line.name =>
+                            name * ":" * line.name for line in plan.lines)
                         for component in expected["components"]
-                            component["definition"] == "master:Line_FrePhase_Options" || continue
+                            component["definition"] = get(row_names,
+                                component["definition"], component["definition"])
+                            component["definition"] ==
+                                "master:Line_FrePhase_Options" || continue
                             for target in ("YMaxE", "AMaxE")
-                                @test component["parameters"][target] == "0.2 [%]"
-                                component["parameters"][target] = "0.02 [%]"
+                                @test component["parameters"][target] == "0.02 [%]"
                             end
+                        end
+                        if canvas == "Main" && stem != "sm"
+                            load = stem in ("dc", "dc_cable") ? "ac_load" : "load"
+                            @test PSCADTopology.shunt_meter_direction(expected,
+                                "I_$(load)_side1", "$(load)_R") == 1
                         end
                         @test PSCADTopology.equivalent(expected, graph)
                         if canvas == "Main" && startswith(name, "sm_")
-                            measurement = fixture["avr_terminal_measurement"]
-                            added = measurement["added_blocks"]
+                            added = Dict("master:datatap" => 3, "master:square" => 3,
+                                "master:sumjct" => 1, "master:gain" => 2,
+                                "master:sqrt" => 1)
                             @test sum(values(added)) == 10
                             for (defn, count) in added
                                 # Main already has two P/Q scaling gains.
                                 @test counts[defn] == count + (defn == "master:gain" ? 2 : 0)
                             end
                             @test counts["master:voltmetergnd"] == 2
-                            @test summary.nodelabels[measurement["terminal"]] == 3
-                            @test measurement["signal"] ∉ summary.pgbs
-                            @test measurement["meter"] ∉ summary.pgbs
-                            println("Approved topology difference: ", name,
-                                " +1 voltmetergnd at ", measurement["terminal"],
-                                "; +3 datatap, +3 square, +1 sumjct, +2 gain, +1 sqrt on Main; AVR <- ",
-                                measurement["signal"], "; diagnostic probes unchanged")
-                        end
-                        if canvas == "Main" && !isempty(shunt_moves[name])
-                            println("Approved topology difference: ",
-                                name, " ", shunt_moves[name],
-                                " bus -> element -> meter -> ground; ordered current pins preserved")
-                            @test !PSCADTopology.equivalent(reference[canvas], graph)
+                            @test summary.nodelabels["sg1_terminal"] == 3
+                            @test "sg1_Vt_meas" ∉ summary.pgbs
+                            @test "sg1_Vt_abc" ∉ summary.pgbs
                         end
                     end
                 end
-                if name == "transformer_yy_classic"
+                if name == "transformer_yy_builder"
                     # The broken station connection is rejected by the production check
                     # even though its raw graph matches the abutted export.
                     saved_broken = etree.parse(joinpath(@__DIR__, "fixtures/yy_named_broken.pscx")).getroot()
@@ -458,7 +476,8 @@ else
                     @test occursin("I_load_1", sprint(showerror, failure))
                     @test occursin("I_line_2", sprint(showerror, failure))
                     println("Rejected saved tlc-bz1oQX YY: ", sprint(showerror, failure))
-                    direction = PSCADTopology.shunt_meter_direction(graphs["Main"], "I_load_1", "load_R")
+                    direction = PSCADTopology.shunt_meter_direction(graphs["Main"],
+                        "I_load_side1", "load_R")
                     @test direction == 1
                     measured = direction .* complex.(
                         native_phasors["yy_named_load_return"]["peak_real_kA"],
@@ -569,7 +588,7 @@ else
                 converter = only(filter(e -> e.model isa PowerImpedance.TLC, model.netlist.elements))
                 @test parse(Float64,
                     pyconvert(String, guarded.xpath("string(./paramlist/param[@name='OL']/@value)"))) ==
-                      converter.model.elec.vDCbase
+                      converter.model.bases.v_dc
                 @test pylen(root.xpath("./definitions/Definition[@name='$(parent.name)']/schematic/User[@defn='master:voltmeter'][paramlist/param[@name='Name'][@value='v_dc_m']]")) ==
                       1
                 for label in root.xpath(".//User[@defn='master:datalabel']/paramlist/param[@name='Name']")
@@ -658,7 +677,7 @@ else
                     @test all(endswith(value, " [$unit]") for value in values)
                     reference_value = if startswith(name, "mmc_gfm") || startswith(name, "mmc_compensated")
                         element = only(filter(e -> e.name == :DUT, model.netlist.elements))
-                        si = P.mmc_si(element.model.elec)
+                        si = P.mmc_si(element.model.elec, element.model.bases)
                         field == "L" ? si.L_arm : si.R_arm
                     else
                         P._pscad_number(replace(values[1], " [$unit]" => ""))
@@ -803,7 +822,7 @@ else
                 equilibrium = P.converter_equilibrium(converter)
                 @test params["vacI0"] == equilibrium.states.ξ_v_ac
                 @test params["vac_reference"] ==
-                      equilibrium.setpoint_pu.v_ac *
+                      equilibrium.terminal_pu.v_ac *
                       PowerImpedance.voltage_filter_ratio(converter.model)
                 integrator = only(root.xpath("./definitions/Definition[@name='QCTRL_DUT']/schematic/User[@defn='master:integral']"))
                 witness = only(modes_reference.xpath("./Mode[@name='VAC_Control']/User[@id='1112328997']"))
@@ -1021,20 +1040,14 @@ else
             println("Exported ", path)
         end
         @test !isempty(models[1].operating_point.bus_states)
-        @test isempty(models[2].operating_point.bus_states)
+        @test !isempty(models[2].operating_point.bus_states)
         @test !isempty(models[3].operating_point.bus_states)
         @test isempty(models[4].operating_point.bus_states)
         @test !isempty(models[5].operating_point.bus_states)
-        @test isempty(models[6].operating_point.bus_states)
-        @test isempty(models[7].operating_point.bus_states)
-        @test isempty(models[8].operating_point.bus_states)
-        @test !isempty(models[9].operating_point.bus_states)
-        @test isempty(models[10].operating_point.bus_states)
-        @test !isempty(models[11].operating_point.bus_states)
-        @test isempty(models[12].operating_point.bus_states)
-        @test !isempty(models[13].operating_point.bus_states)
-        @test !isempty(models[14].operating_point.bus_states)
-        @test all(m -> !isempty(m.operating_point.bus_states), models[15:18])
+        @test !isempty(models[6].operating_point.bus_states)
+        @test !isempty(models[7].operating_point.bus_states)
+        @test all(m -> !isempty(m.operating_point.bus_states), models[8:9])
+        @test all(m -> !isempty(m.operating_point.bus_states), models[10:end])
         # The module writer preserves integer/text parameters and electrical ports,
         # independently of the all-real controller forms.
         mktempdir() do temporary
@@ -1102,18 +1115,17 @@ else
                   "5"
         end
         # Exercise dc_reference through the public exporter, including no extra
-        # references at the source bus and no power flow for the linear builder.
+        # references at the source bus.
         elements = (; ac = dc_state.elements.ac, from = dc_state.elements.from,
             line = dc_state.elements.line, ac_load = dc_state.elements.ac_load)
-        rows = [(; r.node, r.element, r.side, r.terminal)
-                for r in dc_state.topology.connections if r.element != :to]
-        # A second branch gives the receiving bus two element terminals, as required by
-        # NetworkBuilder's classic-network materialization.
-        elements = merge(elements, (; parallel = impedance(; z = s -> 400.0, pins = 1)))
-        append!(rows,
-            [(node = :D1, element = :parallel, side = 1, terminal = 1),
-                (node = :D2, element = :parallel, side = 2, terminal = 1)])
-        floating = NetworkBuilder.define(elements, rows; options = dc_state.options)
+        elements = merge(elements,
+            (; parallel = impedance(; z = s -> 400.0, conductors = 1)))
+        NB = NetworkBuilder
+        rows = (NB.Bus(:AC; ports = ((:ac, :ac), (:ac_load, :side1)), domain = ACDQ),
+            NB.Bus(:gnd; ports = ((:ac_load, :side2),), domain = ACDQ),
+            NB.Bus(:D1; ports = ((:from, :dc), (:line, :side1), (:parallel, :side1))),
+            NB.Bus(:D2; ports = ((:line, :side2), (:parallel, :side2))))
+        floating = NB.define(elements, rows; options = dc_state.options)
         mktempdir() do temporary
             for reference in (:midpoint_resistors, :none)
                 path = joinpath(temporary, string(reference) * ".pscx")
@@ -1122,22 +1134,23 @@ else
                 @test pyconvert(Int,
                     root.xpath("count(.//User[@defn='master:resistor']/paramlist/param[@name='R'][@value='1.0E7 [ohm]'])")) ==
                       (reference == :midpoint_resistors ? 2 : 0)
-                @test !model.provenance.resolved_powerflow
+                @test model.provenance.resolved_powerflow
             end
         end
-        # Supplied classic evidence avoids setpoint mutation and records R17.
-        supplied = power_flow(classic)
-        original = classic.elements[:source].setpoint
+        # A supplied solution leaves declared source inputs unchanged.
+        supplied = compute(PowerFlowProblem(state), ACDCPowerFlow())
+        original = inputvalues(state.elements.source)
         mktempdir() do temporary
-            model = export_pscad(classic; path = joinpath(temporary, "supplied.pscx"), powerflow = supplied)
+            model = export_pscad(state; path = joinpath(temporary, "supplied.pscx"),
+                powerflow = supplied)
             @test !model.provenance.resolved_powerflow
-            @test classic.elements[:source].setpoint === original
+            @test inputvalues(state.elements.source) === original
         end
         # Typed choice decoding and option units are exercised through the actual writer
         # as well as the intermediate representation.
         mktempdir() do temporary
             path = joinpath(temporary, "ohl_options.pscx")
-            export_pscad(ohl_classic; path,
+            export_pscad(ohl_state; path,
                 line_options = (; Numf = 200, CPASS = 1, EarthForm2 = 2,
                     FS = 2.0, FE = "2.0E5 [Hz]", GRRES = 250.0, GPERM = 1.2, W2 = 1000.0))
             root = etree.parse(path).getroot()
@@ -1157,7 +1170,8 @@ else
     end
     @testset "network IEEE9 XML" begin
         path = joinpath(only(ARGS), "network_ieee9.pscx")
-        model = export_pscad(PSCADFixtures.ieee9_network(); path,
+        state = PSCADFixtures.ieee9_network()
+        model = export_pscad(state; path,
             settings = P.SimulationSettings(simulation_time = 3.0))
         root = etree.parse(path).getroot()
         summary = P.read_project_summary(path)
@@ -1230,4 +1244,8 @@ else
         end
     end
     include("induction_machine_xml_test.jl")
+    @testset "PSCAD power-flow idempotence" begin
+        include("../power_flow_idempotence_test.jl")
+        include("power_flow_idempotence_test.jl")
+    end
 end

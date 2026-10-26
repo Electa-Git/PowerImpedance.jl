@@ -1,0 +1,168 @@
+commit = "a1a7fb71d6ac189ddf06d58e2817dc4197dd4031"
+source_sha256 = "f70767cc2de817bc39ce9c3d6c195e821ae2ea6cd33db2f5f74979573f11c71f"
+
+[canvases.LOAD_im1]
+components = []
+nets = []
+
+[[canvases.Main.components]]
+definition = "master:source_3"
+
+    [canvases.Main.components.parameters]
+    FCtrl = "0"
+    Grnd = "1"
+    Name = "g1"
+    Ph = "90.0 [deg]"
+    Spec = "0"
+    Tc = "0.05 [s]"
+    Type = "6"
+    VCtrl = "0"
+    View = "1"
+    Vm = "220.0 [kV]"
+    f = "50.0 [Hz]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_g1_1"
+[[canvases.Main.components]]
+definition = "master:wound_rotor"
+
+    [canvases.Main.components.parameters]
+    Cage = "0"
+    D = "0.0 [pu]"
+    ERC = "0"
+    I1 = "0.0 [pu]"
+    I10 = "-1.0 [pu]"
+    I10M = "4.2 [pu]"
+    I1M = "0.0 [pu]"
+    I2 = "1.196 [pu]"
+    I2M = "0.5 [pu]"
+    I3 = "1.82 [pu]"
+    I3M = "0.8 [pu]"
+    I4 = "2.861 [pu]"
+    I4M = "1.0 [pu]"
+    I5 = "5.882 [pu]"
+    I5M = "1.2 [pu]"
+    I6 = "-1.0 [pu]"
+    I6M = "1.5 [pu]"
+    I7 = "-1.0 [pu]"
+    I7M = "1.8 [pu]"
+    I8 = "-1.0 [pu]"
+    I8M = "2.2 [pu]"
+    I9 = "-1.0 [pu]"
+    I9M = "3.2 [pu]"
+    J = "8.0 [s]"
+    LSF = ""
+    Lsat = "0"
+    MM = "0"
+    MSF = ""
+    Msat = "0"
+    NCW = "1"
+    Name = "im1"
+    NpntsL = "10"
+    NpntsM = "10"
+    OMEG = "314.159265 [rad/s]"
+    Pbase = "1000.0 [MVA]"
+    R1 = "0.01 [pu]"
+    R2 = "0.01 [pu]"
+    R3 = "0.298 [pu]"
+    R4 = "0.018 [pu]"
+    R5 = "0.018 [pu]"
+    SNP = "1"
+    Spd = "im1_speed"
+    TRN = "1"
+    Tel = "im1_Te"
+    ThetaR = ""
+    TmOp = "im1_Tm"
+    V1 = "0.0 [pu]"
+    V10 = "-1.0 [pu]"
+    V10M = "1.5 [pu]"
+    V1M = "0.0 [pu]"
+    V2 = "0.286 [pu]"
+    V2M = "0.5 [pu]"
+    V3 = "0.4 [pu]"
+    V3M = "0.79 [pu]"
+    V4 = "0.564 [pu]"
+    V4M = "0.947 [pu]"
+    V5 = "0.981 [pu]"
+    V5M = "1.076 [pu]"
+    V6 = "-1.0 [pu]"
+    V6M = "1.2 [pu]"
+    V7 = "-1.0 [pu]"
+    V7M = "1.26 [pu]"
+    V8 = "-1.0 [pu]"
+    V8M = "1.32 [pu]"
+    V9 = "-1.0 [pu]"
+    V9M = "1.42 [pu]"
+    Vbase = "220.0 [kV]"
+    View = "1"
+    Vwdg = "0.3983 [kV]"
+    Xa = "0.15 [pu]"
+    Xkd1 = "0.165 [pu]"
+    Xkd12 = "0.02 [pu]"
+    Xkd13 = "0.02 [pu]"
+    Xkd14 = "0.02 [pu]"
+    Xkd2 = "0.05 [pu]"
+    Xkd23 = "0.02 [pu]"
+    Xkd24 = "0.02 [pu]"
+    Xkd3 = "0.05 [pu]"
+    Xkd34 = "0.02 [pu]"
+    Xkd4 = "0.05 [pu]"
+    Xmd = "1.66 [pu]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_im1_1"
+[[canvases.Main.components]]
+definition = "master:resistor"
+
+    [canvases.Main.components.parameters]
+    Name = "imp_R"
+    R = "0.01 [ohm]"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_imp_1"
+[[canvases.Main.components]]
+definition = "master:ammeter"
+
+    [canvases.Main.components.parameters]
+    Name = "I_imp_2"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_machine_"
+[[canvases.Main.components]]
+definition = "master:voltmetergnd"
+
+    [canvases.Main.components.parameters]
+    Name = "V_grid_"
+
+[[canvases.Main.nets]]
+ground = false
+ports = [[1, 1], [2, 1]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[2, 2], [7, 2], [9, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[3, 1], [4, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[4, 1], [6, 1], [8, 1]]
+probe = true
+[[canvases.Main.nets]]
+ground = false
+ports = [[5, 1], [6, 2]]
+probe = false
+[[canvases.Main.nets]]
+ground = false
+ports = [[5, 2], [7, 1]]
+probe = false

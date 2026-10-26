@@ -10,7 +10,7 @@ dispatch_on(::Type{S}) where {S <: AbstractPlotDefinition} = Any
 """
     input_kwargs(::Type{S})
 
-Return semantic keyword names accepted by plot definition `S`.
+Return domain keyword names accepted by plot definition `S`.
 """
 input_kwargs(::Type{S}) where {S <: AbstractPlotDefinition} = ()
 
@@ -70,7 +70,7 @@ end
 """
     parse_kwargs(::Type{S}, object, kwargs)
 
-Validate and split caller input into the semantic and renderer options declared
+Validate and split caller input into the domain and renderer options declared
 by a recipe. Unsupported keywords are errors.
 """
 function parse_kwargs(
@@ -154,7 +154,7 @@ end
 """
     page_facets(::Type{S}, mode, recipe)
 
-Return semantic page facets for recipes using `:faceted_pages`.
+Return domain page facets for recipes using `:faceted_pages`.
 """
 function page_facets(
         ::Type{S},
@@ -167,7 +167,7 @@ end
 """
     group_facets(::Type{S}, mode, recipe, page_key)
 
-Return semantic series facets for the selected recipe page.
+Return domain series facets for the selected recipe page.
 """
 function group_facets(
         ::Type{S},
@@ -282,7 +282,7 @@ end
 """
     axis_quantity(::Type{S}, dim, recipe)
 
-Return the semantic quantity tag for one axis.
+Return the domain quantity tag for one axis.
 """
 function axis_quantity(::Type{S}, dim::Val, recipe::PlotRecipe) where {S <:
                                                                        AbstractPlotDefinition}
@@ -441,7 +441,7 @@ end
 """
     plot_kind(::Type{S}, recipe, series_key)
 
-Return the primitive symbol used by one semantic series facet.
+Return the primitive symbol used by one domain series facet.
 """
 plot_kind(::Type{S}, recipe::PlotRecipe, series_key) where {
     S <: AbstractPlotDefinition,
@@ -456,7 +456,7 @@ end
 """
     series_data(::Type{S}, dim, recipe, series_key)
 
-Return data for axis `dim` and one semantic series facet.
+Return data for axis `dim` and one domain series facet.
 """
 function series_data(::Type{S}, dim::Val, recipe::PlotRecipe, series_key) where {
         S <: AbstractPlotDefinition,
@@ -473,7 +473,7 @@ end
 """
     legend_label(::Type{S}, recipe, series_key)
 
-Return the legend label for one semantic series facet.
+Return the legend label for one domain series facet.
 """
 function legend_label(::Type{S}, recipe::PlotRecipe, series_key) where {S <:
                                                                         AbstractPlotDefinition}
@@ -489,7 +489,7 @@ end
 """
     series_group(::Type{S}, recipe, series_key)
 
-Return the visibility-group symbol for one semantic series facet.
+Return the visibility-group symbol for one domain series facet.
 """
 function series_group(::Type{S}, recipe::PlotRecipe, series_key) where {S <:
                                                                         AbstractPlotDefinition}
@@ -505,7 +505,7 @@ end
 """
     series_visible(::Type{S}, recipe, series_key)
 
-Return the initial visibility of one semantic series facet.
+Return the initial visibility of one domain series facet.
 """
 function series_visible(::Type{S}, recipe::PlotRecipe, series_key) where {S <:
                                                                           AbstractPlotDefinition}
@@ -591,7 +591,7 @@ end
 """
     default_title(::Type{S}, recipe)
 
-Return the title for a semantic page or view facet.
+Return the title for a domain page or view facet.
 """
 default_title(::Type{S}, recipe::PlotRecipe) where {S <: AbstractPlotDefinition} = ""
 function default_title(
@@ -603,7 +603,7 @@ end
 """
     view_key(::Type{S}, recipe)
 
-Return the semantic identity for one view.
+Return the domain identity for one view.
 """
 view_key(::Type{S}, recipe::PlotRecipe) where {S <: AbstractPlotDefinition} = (;)
 function view_key(
@@ -665,7 +665,7 @@ end
 """
     make_views(::Type{S}, mode, grouping, recipe, page_key)
 
-Construct backend-neutral views for one semantic page facet.
+Construct backend-neutral views for one domain page facet.
 """
 function make_views(
         ::Type{S}, mode::Val, grouping::Val, recipe::PlotRecipe,
@@ -803,7 +803,7 @@ end
 """
     page_identity(::Type{S}, recipe, page_key)
 
-Return the semantic `NamedTuple` identity for one page.
+Return the domain `NamedTuple` identity for one page.
 """
 function page_identity(
         ::Type{S}, recipe::PlotRecipe, page_key

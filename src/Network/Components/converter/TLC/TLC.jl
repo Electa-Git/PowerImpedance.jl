@@ -3,7 +3,7 @@ Top-level modular two-level converter (TLC) assembly.
 
 This file wires the TLC electrical plant, measurement, synchronization, outer
 loops, inner loops, modulation, equilibrium handling, and power-flow adapter.
-Reusable control loops and primitives live in `converter/common`; TLC-specific
+Reusable control loops and primitives live in `converter/common`. TLC-specific
 plant and modulation behavior remains in this folder.
 =#
 
@@ -34,7 +34,7 @@ State order follows measurement, synchronization, outer active and reactive
 controls, inner voltage and current controls, modulation, and the electrical
 plant. `state_space!` evaluates the blocks in this dependency order.
 """
-struct TLC{
+@with_kw struct TLC{
     E<:ElectricalTLC,
     Meas<:Measurement,
     Sync<:AbstractSynchronization,
@@ -44,7 +44,7 @@ struct TLC{
     IC<:AbstractInnerCurrentControl,
     Mod<:AbstractModulationTLC} <: AbstractTLC
 
-    "Electrical reactor model and physical bases."
+    "Electrical reactor model."
     elec::E
     "Signal measurement and filtering assembly."
     meas::Meas
@@ -60,6 +60,12 @@ struct TLC{
     innerCurrent::IC
     "Modulation and delay block."
     mod::Mod
+    "Active-power limits \\[MW\\] and reactive-power limits \\[MVAr\\]."
+    limits::Limits
+    "Power, voltage and angular-frequency bases of the model equations."
+    bases::BaseValues
+    "Power-flow setpoints on converter bases \\[dimensionless\\]."
+    powerflow::NamedTuple
 end
 
 statenames(c::TLC) = (
@@ -73,8 +79,8 @@ statenames(c::TLC) = (
     statenames(c.elec)...
 )
 
-function initialvalues(c::TLC; inputs, setpoint_pu=SetpointPU())
-    elec_init = initialvalues(c.elec; inputs, setpoint_pu)
+function initialvalues(c::TLC; inputs, terminal_pu=TerminalValuesPU())
+    elec_init = initialvalues(c.elec; inputs, terminal_pu)
 
     meas_inputs = (
         vG_d = inputs.vG_d,
@@ -83,17 +89,17 @@ function initialvalues(c::TLC; inputs, setpoint_pu=SetpointPU())
         i_d = elec_init.i_d,
         i_q = elec_init.i_q,
         i_dc = 0.0,             #TODO improve this initialization?
-        θ   = setpoint_pu.θ_ac
+        θ   = terminal_pu.θ_ac
     )
     return (;
         elec_init...,
         initialvalues(c.meas, inputs=meas_inputs)..., 
-        initialvalues(c.sync; setpoint_pu)...,
-        initialvalues(c.outerActive; setpoint_pu)...,
-        initialvalues(c.outerReactive; setpoint_pu)...,
+        initialvalues(c.sync; terminal_pu)...,
+        initialvalues(c.outerActive; terminal_pu)...,
+        initialvalues(c.outerReactive; terminal_pu)...,
         initialvalues(c.innerVoltage; inputs, conv=c)...,
         initialvalues(c.innerCurrent; inputs, conv=c)...,
-        initialvalues(c.mod; inputs, setpoint_pu)...
+        initialvalues(c.mod; inputs, terminal_pu)...
     )
 end
 
@@ -120,7 +126,7 @@ models specialize this interface for their external terminals.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 names = P.inputnames(model)
 ```
 """
@@ -149,7 +155,7 @@ models specialize this interface for their external terminals.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 names = P.outputnames(model)
 ```
 """
@@ -160,19 +166,21 @@ equilibriumnames(::TLC) = ()
 """
 $(TYPEDSIGNATURES)
 
-Convert a power-flow setpoint into normalized TLC inputs.
+Convert physical terminal values into normalized TLC inputs.
+Port powers are positive into the converter. Taking 603 MW from DC and delivering
+600 MW to AC gives `dc.p = 603` and `ac.p = -600`.
 
 # Arguments
 
 - `c`: TLC assembly and electrical bases.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\].
+- `values`: NamedTuple with `ac` and `dc` port values in
+  \\[kV\\], \\[rad\\], \\[MW\\] and \\[MVAr\\].
 
 # Returns
 
 - `inputs`: Named tuple of DC voltage `v_dc` and grid-frame AC voltages `vG_d`, `vG_q`,
   on converter bases \\[dimensionless\\].
-- `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point. Powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\].
 
 # Notes
@@ -183,32 +191,35 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
-power base. DC voltage is divided by the pole-to-pole DC base.
+power base, with AC powers negated to get the powers delivered to the AC bus.
+DC voltage is divided by the pole-to-pole DC base.
 
 # Examples
 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0, Pdc=100.0, Vdc=640.0)
-inputs, point_pu = P.pftoinputs(model, point)
+model = tlc()
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),
+    dc = DCPortValues(640.0, 100.0))
+inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
-function pftoinputs(c::TLC, setpoint::Setpoint)
-    vACbase = c.elec.vACbase
-    v_ac = setpoint.Vac / vACbase
-    v_bus_d = v_ac * cos(setpoint.θac)
-    v_bus_q = -v_ac * sin(setpoint.θac)
-    v_dc = setpoint.Vdc / c.elec.vDCbase
+function pftoinputs(c::TLC, values::NamedTuple)
+    vACbase = c.bases.v_ac
+    v_ac = values.ac.v / vACbase
+    v_bus_d = v_ac * cos(values.ac.theta)
+    v_bus_q = -v_ac * sin(values.ac.theta)
+    v_dc = values.dc.v / c.bases.v_dc
 
-    p_ac = setpoint.Pac / c.elec.Sbase
-    q_ac = setpoint.Qac / c.elec.Sbase
-    p_dc = setpoint.Pdc / c.elec.Sbase
+    p_ac = -values.ac.p / c.bases.S
+    q_ac = -values.ac.q / c.bases.S
+    p_dc = values.dc.p / c.bases.S
     
     return (; v_dc, vG_d = v_bus_d, vG_q = v_bus_q),
-        SetpointPU(p_ac, q_ac, setpoint.θac, v_ac, p_dc, v_dc)
+        TerminalValuesPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
 end
+
 
 """
 $(TYPEDSIGNATURES)
@@ -219,8 +230,8 @@ Build the raw internal signals seen by the measurement block.
 
 - `c`: TLC assembly and electrical bases.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 
 # Returns
@@ -232,7 +243,7 @@ Build the raw internal signals seen by the measurement block.
 - `v_dc`: DC input voltage \\[dimensionless\\].
 - `i_d`: AC current d component in the synchronization frame \\[dimensionless\\].
 - `i_q`: AC current q component in the synchronization frame \\[dimensionless\\].
-- `i_dc`: DC measurement signal; zero in this TLC input adapter \\[dimensionless\\].
+- `i_dc`: DC measurement signal. Zero in this TLC input adapter \\[dimensionless\\].
 - `θ`: Synchronization angle \\[rad\\].
 
 # Notes
@@ -244,10 +255,10 @@ The AC quantities are rotated into the synchronization frame before filtering.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 signals = P.input_signals(model, x, inputs)
 ```
 """
@@ -276,16 +287,17 @@ function outputequations!(F, x, inputs, y, ::TLC)
     return nothing
 end
 
-function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC)
-    result = equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerActive)
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.outerReactive)
+function equilibriumequations!(F, x, inputs, terminal_pu::TerminalValuesPU, y, c::TLC)
+    result = equilibriumequations!(F, x, inputs, terminal_pu, y, c, c.outerActive)
+    equilibriumequations!(F, x, inputs, terminal_pu, y, c, c.outerReactive)
     return result
 end
 
-function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::TLC, block::OuterActiveVdcControl)
+function equilibriumequations!(F, x, inputs, terminal_pu::TerminalValuesPU, y, c::TLC,
+        block::OuterActiveVdcControl)
     idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
     @assert !isnothing(idx_ξvdc)
-    i_dc_ref = setpoint_pu.p_dc / inputs.v_dc
+    i_dc_ref = terminal_pu.p_dc / inputs.v_dc
     F[idx_ξvdc] = i_dc_ref - y.elec.i_dc
     return y
 end
@@ -298,13 +310,13 @@ Evaluate the full TLC state-space model.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `c`: TLC assembly and electrical bases.
 
@@ -319,7 +331,7 @@ Evaluate the full TLC state-space model.
 - `iloop`: Inner-current-loop outputs.
 - `mod`: Modulation commands.
 - `elec`: Electrical terminal currents. Electrical quantities use converter bases
-  \\[dimensionless\\]; angles use \\[rad\\].
+  \\[dimensionless\\]. Angles use \\[rad\\].
 
 # Notes
 
@@ -331,32 +343,35 @@ written into the electrical block state slice after modulation commands are avai
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 F = zeros(P.n_states(model))
 outputs = P.state_space!(F, x, inputs, point, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, c::TLC)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, c::TLC)
     sig_in = input_signals(c, x, inputs)
 
-    meas, i = state_space_block!(F, x, sig_in, setpoint_pu, c.meas, c, 1)
-    sync, i = state_space_block!(F, x, meas, setpoint_pu, c.sync, c, i)
-    pact, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, c.outerActive, c, i)
-    qact, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, c.outerReactive, c, i)
-    vloop, i = state_space_block!(F, x, (; meas, sync, pact, qact), setpoint_pu, c.innerVoltage, c, i)
-    iloop, i = state_space_block!(F, x, (; meas, sync, vloop), setpoint_pu, c.innerCurrent, c, i)
-    mod, i = state_space_block!(F, x, (; meas, iloop), setpoint_pu, c.mod, c, i)
+    meas, i = state_space_block!(F, x, sig_in, terminal_pu, c.meas, c, 1)
+    sync, i = state_space_block!(F, x, meas, terminal_pu, c.sync, c, i)
+    pact, i = state_space_block!(F, x, (; meas, sync), terminal_pu, c.outerActive, c, i)
+    qact, i = state_space_block!(F, x, (; meas, sync), terminal_pu, c.outerReactive, c, i)
+    vloop, i = state_space_block!(F, x, (; meas, sync, pact, qact), terminal_pu,
+        c.innerVoltage, c, i)
+    iloop, i = state_space_block!(F, x, (; meas, sync, vloop), terminal_pu, c.innerCurrent,
+        c, i)
+    mod, i = state_space_block!(F, x, (; meas, iloop), terminal_pu, c.mod, c, i)
 
     elec_in = (
         v_dc = sig_in.v_dc,
         vG_d = inputs.vG_d,
         vG_q = inputs.vG_q,
     )
-    elec, _ = state_space_block!(F, x, (inputs = elec_in, mod = mod), setpoint_pu, c.elec, c, i)
+    elec, _ = state_space_block!(F, x, (inputs = elec_in, mod = mod), terminal_pu, c.elec,
+        c, i)
 
     return (;
         sig_in,
@@ -379,7 +394,7 @@ control, and modulation blocks.
 
 # Arguments
 
-- `elec`: Electrical subsystem and its physical base quantities. Default:
+- `elec`: Electrical subsystem. Default:
   `ElectricalTLC()`.
 - `meas`: Measurement and signal-filtering block. Default: `Measurement()`.
 - `sync`: Synchronization block supplying the converter control frame. Default:
@@ -393,23 +408,31 @@ control, and modulation blocks.
 - `innerCurrent`: Inner-current controller producing voltage references. Default:
   `NoInnerCurrentControl()`.
 - `mod`: TLC modulation and delay block. Default: `NoModulation()`.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\]. Default: `Setpoint()`.
 - `limits`: Active-power limits \\[MW\\] and reactive-power limits \\[MVAr\\],
   passed directly to the TLC power-flow adapter. Default: `Limits()`.
-- `connection`: Whether the element participates in network construction. Default:
-  `true`.
+- `powerflow`: Partial power-flow setpoints on converter bases \\[dimensionless\\].
+  Default: `(;)`.
+
+# Keywords
+
+- `Sbase`: Three-phase apparent-power base \\[MVA\\]. Default: `500.0`.
+- `vACbase_LL_RMS`: Line-to-line RMS voltage base \\[kV\\]. Default: `220.0`.
+- `vDCbase`: Pole-to-pole DC voltage base \\[kV\\]. Default: `640.0`.
+- `ωbase`: Electrical angular-frequency base \\[rad/s\\]. Default: `100 * π`.
 
 # Returns
 
-- An `Element` with one DC terminal group and one transformed AC terminal group.
+- An immutable `TLC` with `ac` and `dc` ports.
 
 # Notes
 
+Set control references and power-flow setpoints with `component` or `withinputs`.
+References and setpoints use the converter bases.
+
 The selected synchronization and outer-control blocks determine the converter's
-AC and DC power-flow modes. Construction does not solve an equilibrium or populate linearization matrices.
-`update!` solves and linearizes the numeric model at a supplied operating point;
-frequency-domain evaluation then uses those stored matrices.
+AC and DC power-flow modes. `linearize` returns the equilibrium and electrical
+system at a supplied operating point. Frequency-domain evaluation uses the system's
+matrices.
 
 # Examples
 
@@ -419,11 +442,20 @@ converter = tlc(
     outerActive = OuterActivePowerControl(),
     outerReactive = OuterReactiveQControl(),
     innerCurrent = InnerCurrentPIControl(),
-    setpoint = Setpoint(Pac = 100.0, Qac = 0.0, Vac = 220.0, Vdc = 640.0),
 )
+
+b = bases(converter)
+converter = component(converter;
+    outerActive = (p_ref = 100.0 / b.S,),
+    outerReactive = (q_ref = 0.0 / b.S,),
+    powerflow = (v_ac = 220.0 / b.v_ac, v_dc = 640.0 / b.v_dc))
 ```
 """
 function tlc(;
+    Sbase = 500.0,
+    vACbase_LL_RMS = 220.0,
+    vDCbase = 640.0,
+    ωbase = 100 * π,
     elec::ElectricalTLC = ElectricalTLC(),
     meas::Measurement = Measurement(),
     sync::AbstractSynchronization = NoSynchronization(),
@@ -432,24 +464,19 @@ function tlc(;
     innerVoltage::AbstractInnerVoltage = NoInnerVoltageControl(),
     innerCurrent::AbstractInnerCurrentControl = NoInnerCurrentControl(),
     mod::AbstractModulationTLC = NoModulation(),
-    setpoint::Setpoint = Setpoint(),
     limits::Limits = Limits(),
-    connection::Bool = true
+    powerflow::NamedTuple = (;)
 )
-    conv = TLC(elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent, mod)
-
-    return Element(
-        input_pins = 1,
-        output_pins = 2,
-        element_model = conv,
-        transformation = false;
-        connection,
-        setpoint,
-        limits,
-    )
+    b = BaseValues(S = Sbase, v_ac = vACbase_LL_RMS * sqrt(2 / 3),
+        v_dc = vDCbase, omega = ωbase)
+    defaults = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
+    seeds = _withinputs(defaults, _CONVERTER_POWERFLOW_INPUTS,
+        powerflow, "powerflow")
+    return TLC(; elec, meas, sync, outerActive, outerReactive, innerVoltage, innerCurrent,
+        mod, limits, bases = b, powerflow = seeds)
 end
 
-##################### SI Scaling ######################################
+# SI scaling
 """
 $(TYPEDSIGNATURES)
 
@@ -458,7 +485,7 @@ admittance.
 
 # Arguments
 
-- `elem`: Network element containing the component model and operating point.
+- `model`: Component model with electrical base quantities.
 
 # Returns
 
@@ -478,16 +505,16 @@ Rows follow `(:i_dc, :i_d, :i_q)` and columns follow `(:v_dc, :vG_d, :vG_q)`.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-element = inductionmachine()
-scale = P.SI_scale(element)
+model = tlc()
+scale = P.SI_scale(model)
 ```
 """
-function SI_scale(elem::Element{<:TLC})
-    elec = elem.element_model.elec
+function SI_scale(model::TLC)
+    b = model.bases
 
-    vACbase = elec.vACbase
-    iACbase = 2 * elec.Sbase / (3 * vACbase)
-    iDCbase = elec.Sbase / elec.vDCbase
+    vACbase = b.v_ac
+    iACbase = 2 * b.S / (3 * vACbase)
+    iDCbase = b.S / b.v_dc
 
     scale = ones(3,3)
 
@@ -496,12 +523,13 @@ function SI_scale(elem::Element{<:TLC})
     scale[2:3, :] .*= iACbase
 
     # column scaling = input voltage bases
-    scale[:, 1]   ./= elec.vDCbase
+    scale[:, 1]   ./= b.v_dc
     scale[:, 2:3] ./= vACbase
 
     return scale
 end
-############################  Power-flow integration TLC ############################
+
+# Power-flow integration TLC
 
 
 pf_type_ac(::NoOuterReactiveControl) = 1
@@ -521,33 +549,46 @@ pf_acq_droop(block::OuterReactiveQControl) =
         kq = block.support.K,
     ) : (enabled = 0, kq = 0.0)
 
-function pf_vdcset_pu(conv::TLC, elem::Element, global_dict, data)
-    return elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
-end
+electricalconnections(::TLC) = (ac = Port(ACDQ), dc = Port(DC_CM))
 
-function pf_pacset_mw(conv::TLC, elem::Element)
-    return elem.setpoint.Pac
-end
+is_passive(::TLC) = false
+admittance_order(::TLC) = ((:dc, :dc), (:ac, :d), (:ac, :q))
 
-function pf_pdcset_mw(conv::TLC, elem::Element)
-    return !iszero(elem.setpoint.Pdc) ? elem.setpoint.Pdc : -elem.setpoint.Pac
-end
+inputs(model::TLC) = (
+    sync = inputs(model.sync),
+    outerActive = inputs(model.outerActive),
+    outerReactive = inputs(model.outerReactive),
+    innerVoltage = inputs(model.innerVoltage),
+    innerCurrent = inputs(model.innerCurrent),
+    powerflow = _CONVERTER_POWERFLOW_INPUTS,
+)
 
-function convert!(data,elem::Element{<:TLC},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+_powerflow_references(model::TLC) = merge(_powerflow_references(model.sync),
+    _powerflow_references(model.outerActive), _powerflow_references(model.outerReactive))
+powerflow_targets(model::TLC) = merge(model.powerflow, _powerflow_references(model))
 
-    dc_node = make_node(elem, 1)
-    ac_nodes = make_node(elem, 2)
-    dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_node, global_dict)
-    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
+bases(model::TLC) = model.bases
 
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
-    return convert!(data, elem, PMACDC, key, (ac_bus, dc_bus), global_dict)
-end
+limits(model::TLC) = model.limits
 
-function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global_dict)
-    conv = elem.element_model
-    ac_bus = buses[1]
-    dc_bus = buses[2]
+
+
+
+pmtype(::TLC, rows) = "convdc"
+
+function convert!(data, conv::TLC, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+    key = component_key.index
+    target = powerflow_targets(conv)
+    b = bases(conv)
+    p_ac = target.p_ac * b.S
+    q_ac = target.q_ac * b.S
+    v_ac = target.v_ac * b.v_ac
+    p_dc = target.p_dc * b.S
+    v_dc = target.v_dc * b.v_dc
+    lm = limits(conv)
+    ac_bus = ports.ac
+    dc_bus = ports.dc
     key_str = string(key)
 
     data["convdc"][key_str] = Dict{String, Any}()
@@ -561,7 +602,9 @@ function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global
     convdc["basekVac"] = global_dict["V"] / 1e3
 
     convdc["type_ac"] = pf_type_ac(conv.outerReactive)
-    convdc["Vtar"] = (elem.setpoint.Vac/sqrt(2)) / ( global_dict["V"] / 1e3) # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages, PowerImpedance uses amplitude
+    # Divide by sqrt(2). PowerModelsACDC uses RMS base voltages,
+    # PowerImpedance uses amplitude
+    convdc["Vtar"] = (v_ac/sqrt(2)) / ( global_dict["V"] / 1e3)
     if convdc["type_ac"] == 2
         data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
@@ -571,12 +614,13 @@ function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global
 
     droop = pf_acq_droop(conv.outerReactive)
     convdc["acq_droop"] = droop.enabled
-    convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
+    convdc["kq_droop"] = droop.kq * (conv.bases.S / (global_dict["S"] * 1e-6))
 
-    convdc["droop"] = pf_dc_droop(conv.outerActive, conv.elec.vDCbase, conv.elec.Sbase, global_dict, data)
-    convdc["Vdcset"] = pf_vdcset_pu(conv, elem, global_dict, data)
-    convdc["Pacset"] = -pf_pacset_mw(conv, elem)
-    convdc["Pdcset"] = pf_pdcset_mw(conv, elem)
+    convdc["droop"] = pf_dc_droop(conv.outerActive,
+        conv.bases.v_dc, conv.bases.S, global_dict, data)
+    convdc["Vdcset"] = v_dc / (data["dcpol"] * global_dict["V"] / 1e3)
+    convdc["Pacset"] = -p_ac
+    convdc["Pdcset"] = !iszero(p_dc) ? p_dc : -p_ac
     convdc["dVdcSet"] = 0.0
 
     convdc["islcc"] = 0
@@ -589,25 +633,27 @@ function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global
     convdc["reactor"] = 1
 
     zbase = global_dict["Z"]
-    convdc["rc"] = (conv.elec.Rᵣ*conv.elec.zACbase) / zbase
-    convdc["xc"] = (conv.elec.Lᵣ*conv.elec.lACbase) * global_dict["omega"] / zbase
+    pu = perunit(conv.elec, conv.bases)
+    convdc["rc"] = (pu.Rᵣ*pu.zACbase) / zbase
+    convdc["xc"] = (pu.Lᵣ*pu.lACbase) * global_dict["omega"] / zbase
 
     convdc["Vmmax"] = 1.1 * convdc["Vtar"]
     convdc["Vmmin"] = 0.9 * convdc["Vtar"]
-    convdc["Imax"] = 1.1 * max(abs(elem.limits.P_min), abs(elem.limits.P_max), abs(elem.setpoint.Pac)) / max(elem.setpoint.Vac / sqrt(2), eps())
+    convdc["Imax"] = 1.1 * max(abs(lm.P_min), abs(lm.P_max), abs(p_ac)) /
+        max(v_ac / sqrt(2), eps())
 
-    convdc["P_g"] = elem.setpoint.Pac
-    convdc["Q_g"] = elem.setpoint.Qac
+    convdc["P_g"] = p_ac
+    convdc["Q_g"] = q_ac
 
     convdc["LossA"] = 0.0
     convdc["LossB"] = 0.0
     convdc["LossCrec"] = 0.0
     convdc["LossCinv"] = 0.0
 
-    convdc["Qacmax"] = elem.limits.Q_max
-    convdc["Qacmin"] = elem.limits.Q_min
-    convdc["Pacmax"] = elem.limits.P_max
-    convdc["Pacmin"] = elem.limits.P_min
+    convdc["Qacmax"] = lm.Q_max
+    convdc["Qacmin"] = lm.Q_min
+    convdc["Pacmax"] = lm.P_max
+    convdc["Pacmin"] = lm.P_min
 
     if data["bus"][string(ac_bus)]["bus_type"] == 1
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
@@ -615,10 +661,11 @@ function convert!(data, elem::Element{<:TLC}, ::Type{PMACDC}, key, buses, global
         data["bus"][string(ac_bus)]["vmax"] = 1.1 * data["bus"][string(ac_bus)]["vm"]
     end
 
-    data["busdc"][string(dc_bus)]["Vdc"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
+    data["busdc"][string(dc_bus)]["Vdc"] = v_dc / (data["dcpol"] * global_dict["V"] / 1e3)
     data["busdc"][string(dc_bus)]["Vdcmax"] = 1.1 * data["busdc"][string(dc_bus)]["Vdc"]
     data["busdc"][string(dc_bus)]["Vdcmin"] = 0.9 * data["busdc"][string(dc_bus)]["Vdc"]
-    data["busdc"][string(dc_bus)] = set_bus_type_dc(data["busdc"][string(dc_bus)], convdc["type_dc"])
+    data["busdc"][string(dc_bus)] = set_bus_type_dc(
+        data["busdc"][string(dc_bus)], convdc["type_dc"])
 
     return nothing
 end

@@ -1,8 +1,8 @@
-# ==============================================================================
-# THE AST JANITOR
-# Drills through blocks, escapes, and un-evaluated macrocalls to find and replace 
-# the struct definition, ensuring multiple macros stack flawlessly.
-# ==============================================================================
+
+# Struct expressions
+# Traverse blocks, escapes and unevaluated macrocalls to replace the struct
+# definition when macros are stacked.
+
 
 # Recursively strips out :escape nodes.
 function _strip_escapes(ex)
@@ -15,7 +15,7 @@ function _strip_escapes(ex)
 	end
 end
 
-# Drills into blocks and macrocalls to find the actual :struct node.
+# Find the :struct node in blocks and macrocalls.
 function _get_struct_node(ex)
 	ex isa Expr || return nothing
 	ex.head === :struct && return ex
@@ -37,7 +37,7 @@ function _replace_struct(ex, new_struct)
 	end
 end
 
-# Universal field parser. Handles `field::T = default` for BOTH macros.
+# Parse `field::T = default` for both macros.
 function _parse_fields(struct_body)
 	fields = Any[]
 	clean_body_args = Any[]
@@ -68,7 +68,7 @@ function _parse_fields(struct_body)
 			field_name = clean_field
 			push!(clean_body_args, clean_field)
 		else
-			# Inner constructors / garbage passthrough
+			# Pass through inner constructors and other expressions.
 			push!(clean_body_args, arg)
 			continue
 		end
@@ -110,9 +110,9 @@ function _extract_struct_name(struct_node)
 end
 
 
-# ==============================================================================
-# MACRO 1: @gridspace (The Combinatorics Hook)
-# ==============================================================================
+
+# @gridspace constructor macro
+
 """Add a keyword constructor that returns a lazy `Gridspace`."""
 macro gridspace(expr)
 	raw_ast = _strip_escapes(expr)
@@ -122,8 +122,8 @@ macro gridspace(expr)
 	struct_name = _extract_struct_name(struct_node)
 	fields, clean_body_args = _parse_fields(struct_node.args[3])
 
-	# We strictly enforce the removal of `= default` from the struct definition,
-	# otherwise Julia will crash when it tries to compile the dumb struct.
+	# Remove `= default` from the struct definition for Julia to compile it.
+
 	is_mutable = struct_node.args[1]
 	struct_sig = struct_node.args[2]
 	clean_struct = Expr(:struct, is_mutable, struct_sig, Expr(:block, clean_body_args...))
@@ -159,9 +159,9 @@ macro gridspace(expr)
 end
 
 
-# ==============================================================================
-# MACRO 2: @relax (The Type Promoter & Converter)
-# ==============================================================================
+
+# @relax promotion and conversion macro
+
 """Add promoted numeric constructors and numeric `convert` support to a struct."""
 macro relax(expr)
 	raw_ast = _strip_escapes(expr)
@@ -231,7 +231,7 @@ macro relax(expr)
 			# The eltype Hook
 			@inline Base.eltype(::Type{<:$struct_name{T}}) where {T} = T
 
-			# THE NEW RECAST HOOK FOR THIS CONCRETE STRUCT
+			# Recast method for this concrete struct
 			@inline recast(::Type{T_target}, s::$struct_name) where {T_target <: Real} =
 				$struct_name($(target_recasts...))
 

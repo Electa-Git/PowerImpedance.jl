@@ -10,38 +10,42 @@ objects.
 
 ## Construct a space
 
-Only an explicit `Grid` introduces alternatives. Arrays passed as ordinary
+An explicit `Grid` introduces alternatives. Arrays passed as ordinary
 component arguments stay atomic.
 
-```julia
+```@example gridspace
 using PowerImpedance
-using PowerImpedance.NetworkBuilder: define
+using PowerImpedance.NetworkBuilder: Bus, define
 
 elements = (
     branch = impedance(
         Grid;
         z = Grid([1.0, 2.0]),
-        pins = 1,
+        conductors = 1,
     ),
 )
 connections = (
-    (node = :bus, element = :branch, side = 1, terminal = 1),
-    (node = :gnd, element = :branch, side = 2, terminal = 1),
+    Bus(:bus; ports = ((:branch, :side1),)),
+    Bus(:gnd; ports = ((:branch, :side2),)),
 )
 networks = define(elements, connections)
 ```
 
 Gridspaces support `combine=:product` and `combine=:zip`. Zip composition
-broadcasts singleton axes. Reusing one Grid object couples its selections;
+broadcasts singleton axes. Reusing one Grid object couples its selections.
 `key=:name` couples distinct Grid objects by name. Nested spaces retain their
-structure and `configuration_manifest` preserves parameter order.
+structure and `configuration_manifest` preserves parameter order. Component
+spaces materialize direct models. Place reference grids in the selected control
+block constructors. Reference units remain per unit on each materialized model
+base. Sources keep physical input units. State-space linearization computes a
+separate equilibrium and system for each realization.
 
 ## Deterministic evaluation
 
-Lift the network space to a space of owned problems, then select the scalar
+Lift the network space to a space of calculation problems, then select the scalar
 formulation with `Combinatorial`:
 
-```julia
+```@example gridspace
 problems = PowerImpedanceProblem(
     networks;
     nodes = [:bus],
@@ -104,18 +108,17 @@ values used by `EmpiricalSamples`.
 Power flow uses the same local Monte Carlo sequence. Every PowerModels solve
 receives a plain numeric network realization. When Measurements is loaded, the
 aggregate reconstructs Measurements only for solved AC and DC bus fields under
-`stats.groups[*].bus_measurements`. It never passes a nominal surrogate of the
-network to the solver.
+`stats.groups[*].bus_measurements`.
 
 ## Completed checkpoints
 
-Use `preprocess` to create the next owned problem from a completed response:
+Use `preprocess` to create the next calculation problem from a completed response:
 
 ```julia
 bode_problems = preprocess(result, BodeAnalysis())
 bode = compute(bode_problems, MonteCarlo(BodeAnalysis(); seed = 2026))
 ```
 
-No implicit averaging, flattening, or passthrough conversion is provided.
+Averaging, flattening, and passthrough conversion require explicit operations.
 `primitives` exposes explicit projections such as `EmpiricalSamples` and
 `MeasurementsSurrogate`.

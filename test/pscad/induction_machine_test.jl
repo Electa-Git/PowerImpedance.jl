@@ -1,4 +1,5 @@
 module PSCADInductionMachineTests
+import ..PSCADFixtures
 using Test, PowerImpedance, LinearAlgebra
 using ..PSCADFixtures: im_network
 using ..PSCADMachineTests: components, parameters, pin_signal, parameter_import
@@ -57,26 +58,24 @@ end
 end
 
 @testset "PSCAD induction-machine plan and equilibrium" begin
-    classic, state = im_network()
-    classic_nl = P.netlist(classic, power_flow(classic))
+    state = im_network()
     solved = NetworkBuilder.solve(state)
-    elements = NamedTuple{keys(state.elements)}(
-        Tuple(solved.network.elements[name] for name in keys(state.elements)))
-    state_nl = P.netlist(state, solved.powerflow, elements)
+    state_nl = P.netlist(state, solved)
+    list = state_nl
     xml = read(joinpath(@__DIR__, "fixtures/im_saved_fragments.xml"), String)
     reference = Dict(m.captures[1] => m.captures[2]
         for m in eachmatch(r"<param name=\"([^\"]+)\" value=\"([^\"]*)\"", xml))
     @test length(reference) == 81
-    for nl in (classic_nl, state_nl)
+    for nl in (state_nl,)
         plan = P.build_plan(nl)
         e = only(filter(e -> e.name == :im1, nl.elements))
         flow = nl.operating_point.branch_flows[:im1]
         states = NamedTuple{PowerImpedance.statenames(e.model)}(
-            Tuple(PowerImpedance._steady_state(e.element)))
-        @test flow.pf ≈ e.setpoint.Pac
-        @test flow.qf ≈ e.setpoint.Qac
-        @test abs(flow.pf - 915.754) / e.model.elec.S_base < 0.01
-        @test abs(flow.qf - 881.512) / e.model.elec.S_base < 0.01
+            Tuple(steady_state(e.model, e.values)))
+        @test flow.pf ≈ e.values.ac.p
+        @test flow.qf ≈ e.values.ac.q
+        @test abs(flow.pf - 915.754) / e.model.bases.S < 0.01
+        @test abs(flow.qf - 881.512) / e.model.bases.S < 0.01
         @test 0.97 < flow.speed_pu == states.ω_r < 1.0
         machine = parameters(plan.main, "wound_rotor")
         @test Set(keys(machine)) == Set(keys(reference))
@@ -113,7 +112,7 @@ end
         @test pin_signal(plan.main, (component.x - 54, component.y - 36)) == "im1_speed0"
         @test pin_signal(plan.main, (component.x - 54, component.y)) == "im1_speed_control"
         @test pin_signal(plan.main, (component.x - 54, component.y + 36)) == "im1_load_torque"
-        current = only(filter(c -> c.name == "I_im1_1", plan.probes.channels))
+        current = only(filter(c -> c.name == "I_im1_ac", plan.probes.channels))
         @test current.orientation == :into
         load = only(plan.modules)
         @test torque_from_blocks(load, states.ω_r) == 0.9
@@ -124,23 +123,22 @@ end
     end
     @test_throws r"requires solved operating-point data" P.build_plan(P.netlist(state, nothing))
     # Series transformer terms enter the same stator coefficients in Julia's equations.
-    e = only(filter(e -> e.name == :im1, classic_nl.elements))
-    modified = deepcopy(e.element)
-    modified.element_model = InductionMachine(ElectricalIM(r_s = 0.023, rt = 0.017,
-        l_sl = 0.21, lt = 0.04, r_r = 0.031, l_rl = 0.19, l_m = 1.72), MechanicalIM(H = 5.0))
-    changed = copy(classic_nl.elements)
+    e = only(filter(e -> e.name == :im1, list.elements))
+    modified = inductionmachine(; elec = ElectricalIM(r_s = 0.023, rt = 0.017, l_sl = 0.21,
+            lt = 0.04, r_r = 0.031, l_rl = 0.19, l_m = 1.72), mech = MechanicalIM(H = 5.0))
+    changed = copy(list.elements)
     changed[findfirst(x -> x.name == :im1, changed)] = P.NetlistElement(e.name, e.pscad,
-        modified, modified.element_model, e.terminals, e.role, e.setpoint)
-    nl = P.Netlist(classic_nl.buses, changed, classic_nl.operating_point,
-        classic_nl.voltageBase, classic_nl.frequency)
+        modified, electricalconnections(modified), e.terminals, e.role, e.values)
+    nl = P.Netlist(list.buses, changed, list.operating_point,
+        list.voltageBase, list.frequency)
     fields = parameters(P.build_plan(nl).main, "wound_rotor")
     @test (fields["R1"], fields["Xa"], fields["R2"], fields["Xkd1"], fields["Xmd"], fields["J"]) ==
           ("0.04 [pu]", "0.25 [pu]", "0.031 [pu]", "0.19 [pu]", "1.72 [pu]", "10.0 [s]")
 end
 
 @testset "PSCAD induction-machine terminal comparison" begin
-    classic, _ = im_network()
-    nl = P.netlist(classic, power_flow(classic))
+    classic = im_network()
+    nl = P.netlist(classic, compute(PowerFlowProblem(classic), ACDCPowerFlow()))
     plan = P.build_plan(nl)
     model = PSCADModel("im.pscx", "im", nl, plan.probes,
         P.SimulationSettings(), nl.operating_point, (;))
@@ -155,7 +153,8 @@ end
         elseif c.kind == :current
             f = nl.operating_point.branch_flows[Symbol(c.element)]
             power = c.element == "g1" ? complex(f.pg, f.qg) :
-                    c.side == "1" ? complex(f.pf, f.qf) : -complex(f.pt, f.qt)
+                    c.port in (:side1, :ac, :dc) ? complex(f.pf, f.qf) :
+                    -complex(f.pt, f.qt)
             add_three_phase!(channels, c.name, times, sqrt(2) * conj(power / (3voltage)))
         else
             channels[c.name] = fill(c.kind == :machine_speed ? flow.speed_pu : -123.0,
@@ -171,7 +170,7 @@ end
         :machine_p, :machine_q, :machine_speed])
     for (quantity, expected) in ((:machine_p, flow.pf), (:machine_q, flow.qf))
         row = only(filter(r -> r.quantity == quantity, table))
-        @test row.name == "I_im1_1"
+        @test row.name == "I_im1_ac"
         @test row.pscad ≈ expected
         @test row.powerflow == expected
         @test row.error < 1e-10
@@ -187,7 +186,7 @@ end
     for offset in (9.0, -9.0, 11.0, -11.0)
         measured = deepcopy(channels)
         power = complex(flow.pf + offset, flow.qf + offset)
-        add_three_phase!(measured, "I_im1_1", times, sqrt(2) * conj(power / (3voltage)))
+        add_three_phase!(measured, "I_im1_ac", times, sqrt(2) * conj(power / (3voltage)))
         changed = compare_operating_point(synthetic_result(times, measured), model)
         for quantity in (:machine_p, :machine_q)
             row = only(filter(r -> r.quantity == quantity, changed))
@@ -213,7 +212,7 @@ end
             power = complex(flow.pf + offset, flow.qf + offset)
             current = sqrt(2) * conj(power / (3voltage))
             for index in 1:3
-                measured["I_im1_1:$index"][half] =
+                measured["I_im1_ac:$index"][half] =
                     real.(current .* cis.(2π * 50 .* times[half] .- 2π * (index - 1) / 3))
             end
         end
@@ -242,7 +241,7 @@ end
         @test only(filter(r -> r.quantity == :machine_speed,
             compare_operating_point(result, model; settling_fraction = 0.2))).within_tolerance
     end
-    for name in ("im1_speed", "I_im1_1:3", "V_machine_:2")
+    for name in ("im1_speed", "I_im1_ac:3", "V_machine_:2")
         incomplete = copy(channels)
         delete!(incomplete, name)
         @test_throws ArgumentError compare_operating_point(synthetic_result(times, incomplete), model)

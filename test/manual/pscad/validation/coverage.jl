@@ -1,29 +1,64 @@
-# Frozen measurement definitions use the native element/network physics.
-function port_probe(list, element, side)
+function port_probe(list, element, port)
     entry = only(filter(e -> e.name == element, list.elements))
-    terminal = only(filter(t -> t.side == side, entry.terminals))
+    terminal = only(filter(t -> t.port == Symbol(port) && !t.grounded, entry.terminals))
     return only(filter(b -> b.key == terminal.bus, list.buses))
 end
 
+function nodal_admittance(state, nodes, s; elements = keys(state.elements))
+    point = any(m -> m isa PowerImpedance.AbstractStateSpace, values(state.elements)) ?
+        compute(PowerFlowProblem(state), ACDCPowerFlow()).operating_point : OperatingPoint()
+    model = NetworkBuilder.NetworkModel(state, point)
+    indices = [model.indices.elements[name] for name in elements
+        if !PowerImpedance.is_source(state.elements[name])]
+    matrix = NetworkBuilder.initY(model, [s])
+    fill!(matrix, model.element_admittances[indices], [s])
+    retained = [model.indices.nodes[node] for node in nodes]
+    return matrix[retained, retained, 1]
+end
+
+function clamped_nodes(state)
+    rows = state.topology.connections
+    sources = keys(filter(PowerImpedance.is_source, state.elements))
+    return unique([row.net for row in rows if row.bus == 0 || row.component in sources])
+end
+
+function driven_impedance(state, inputs, s)
+    nodes = setdiff(unique(state.topology.connections.net), clamped_nodes(state))
+    matrix = nodal_admittance(state, nodes, s)
+    drive = zeros(ComplexF64, length(nodes), length(inputs))
+    for (column, node) in enumerate(inputs)
+        row = findfirst(==(node), nodes)
+        row === nothing || (drive[row, column] = 1)
+    end
+    voltage = matrix \ drive
+    response = zeros(ComplexF64, length(inputs), length(inputs))
+    for (row, node) in enumerate(inputs)
+        index = findfirst(==(node), nodes)
+        index === nothing || (response[row, :] = voltage[index, :])
+    end
+    return response
+end
+
+# Frozen measurement definitions use the native element/network physics.
 function scan_definition(id, net, list)
     fixture(id).category == :device && return device_scan_definition(net,list; id)
     old = passive_settings()
     if id == "passive_ac_rlc"
-        buses = [port_probe(list, :branch, 1)]
-        currents = [("branch", "1")]
+        buses = [port_probe(list, :branch, :side1)]
+        currents = [("branch", "side1")]
         quantity, dimension = "Y", 2
     elseif id in ("passive_dc_rlc", "dc_cable_ohl")
         last_element = id == "passive_dc_rlc" ? :rc : :ohl
-        buses = [port_probe(list, :line, 1), port_probe(list, last_element, 2)]
-        currents = [("line", "1"), (string(last_element), "2")]
+        buses = [port_probe(list, :line, :side1), port_probe(list, last_element, :side2)]
+        currents = [("line", "side1"), (string(last_element), "side2")]
         quantity, dimension = "Y", 1
     elseif id == "ieee9_bus_impedance"
-        buses = [port_probe(list, :g1, 1), port_probe(list, :l5, 1)]
+        buses = [port_probe(list, :g1, :ac), port_probe(list, :l5, :side1)]
         currents = [("injection_1", "1"), ("injection_2", "1")]
         quantity, dimension = "Z", 2
     else
-        buses = [port_probe(list, :line, 1), port_probe(list, :line, 2)]
-        currents = [("line", "1"), ("line", "2")]
+        buses = [port_probe(list, :line, :side1), port_probe(list, :line, :side2)]
+        currents = [("line", "side1"), ("line", "side2")]
         quantity, dimension = "Y", 2
     end
     frequencies = id == "passive_ac_rlc" || dimension == 1 ? old.frequencies :
@@ -39,9 +74,9 @@ function scan_definition(id, net, list)
     currents_base = [dimension == 1 ? 1000 / v : 2000 / (3v) for v in voltages]
     vbase = repeat(voltages; inner = dimension)
     ibase = repeat(currents_base; inner = dimension)
-    lengths = [Float64(e.element_model.length)
+    lengths = [Float64(e.length)
                for e in values(net.elements)
-               if e.element_model isa
+               if e isa
                   Union{PowerImpedance.Cable, PowerImpedance.Overhead_line}]
     travel = isempty(lengths) ? 0.0 : minimum(lengths) / 299792458
     spec = merge(old,
@@ -62,53 +97,49 @@ function scan_reference(net, list, spec)
     if spec.id == "induction_machine"
         return induction_machine_reference(net, list, spec.frequencies)
     elseif fixture(spec.id).category == :device
-        return cat((device_port_y(net, ComplexF64(im*2π*f))
+        dut = net.elements[:DUT]
+        point = list.operating_point.values[:DUT]
+        lin = linearize(dut, point)
+        return cat((device_port_y(net, ComplexF64(im*2π*f); linearization = lin)
             for f in spec.frequencies)...; dims=3)
     elseif spec.id == "passive_ac_rlc"
         return cat(
-            (PowerImpedance.get_y(net.elements[:branch], ComplexF64(im * 2π * f))[1:2, 1:2]
+            (physical_y(net.elements[:branch], ComplexF64(im * 2π * f))[1:2, 1:2]
             for f in spec.frequencies)...;
             dims = 3)
     elseif spec.id in ("ac_ohl_untransposed", "ac_cable_coaxial", "transformer_yy", "transformer_dyn11")
         return cat(
-            (PowerImpedance.get_y(net.elements[:line], ComplexF64(im * 2π * f))
+            (physical_y(net.elements[:line], ComplexF64(im * 2π * f))
             for f in spec.frequencies)...;
             dims = 3)
     elseif spec.id == "ieee9_bus_impedance"
         inputs = reduce(vcat, [b.nets for b in spec.buses])
-        nodes = unique([n for e in values(net.elements) for n in values(e.pins)])
-        grounds = filter(n -> occursin("gnd", string(n)), nodes)
-        order = [inputs; setdiff(nodes, [inputs; grounds])]
-        topology = Dict{Symbol, Array{Union{Symbol, Int}}}(:node_list => order,
-            :element_list => collect(keys(net.elements)), :output_list => grounds)
-        return cat(
-            (PowerImpedance.make_z(net, topology, copy(inputs), copy(grounds),
-                 ComplexF64(im * 2π * f)) for f in spec.frequencies)...;
-            dims = 3)
+        return cat((driven_impedance(net, inputs, ComplexF64(im * 2π * f))
+            for f in spec.frequencies)...; dims = 3)
     end
     elements = spec.id == "passive_dc_rlc" ? [:line, :rc] : [:line, :ohl]
     # Match the exporter's two pole-to-ground references at ungrounded internal
     # DC buses. Their differential equivalent is 2*DC_REFERENCE_RESISTANCE.
-    frequency_net = deepcopy(net)
+    models = net.elements
+    topology = fixture_topology(net)
     for bus in list.buses
         bus.kind == :dc && !(bus in spec.buses) || continue
         reference_name = Symbol("validation_reference_", bus.name)
-        add!(frequency_net, reference_name, impedance(z = s -> 2P.DC_REFERENCE_RESISTANCE, pins = 1))
-        connect!(frequency_net, (reference_name, Symbol("1.1")), only(bus.nets))
-        connect!(frequency_net, (reference_name, Symbol("2.1")), :gnd_validation_dc)
+        models = merge(models, (; reference_name => impedance(
+            z = s -> 2P.DC_REFERENCE_RESISTANCE, conductors = 1)))
+        append!(topology, [
+            NetworkBuilder.Bus(only(bus.nets); ports = ((reference_name, :side1),)),
+            NetworkBuilder.Bus(:gnd_validation_dc; ports = ((reference_name, :side2),))])
         push!(elements, reference_name)
     end
-    connect!(frequency_net)
+    frequency_net = NetworkBuilder.define(models, topology; options = net.options)
     inputs = reduce(vcat, [b.nets for b in spec.buses])
-    nodes = unique([n for name in elements
-                    for n in values(frequency_net.elements[name].pins)
-                    if !occursin("gnd", string(n))])
+    nodes = unique([row.net for row in frequency_net.topology.connections
+        if row.component in elements && row.bus != 0])
     order = [inputs; setdiff(nodes, inputs)]
-    topology = Dict{Symbol, Array{Union{Symbol, Int}}}(:node_list => order,
-        :element_list => elements, :output_list => Symbol[])
     matrices = Matrix{ComplexF64}[]
     for f in spec.frequencies
-        y = PowerImpedance.make_y(frequency_net, topology, ComplexF64(im * 2π * f))
+        y = nodal_admittance(frequency_net, order, ComplexF64(im * 2π * f); elements)
         n = length(inputs)
         push!(matrices, y[1:n, 1:n] -
                         y[1:n, (n + 1):end] *
@@ -239,43 +270,48 @@ end
 
 # Native state-space voltage inputs and inward-current outputs retain each
 # converter's normalization. Measurement bases refer to the external terminal.
-function device_bases(e::PowerImpedance.ElectricalTLC)
-    return (voltage_inputs=[e.vDCbase,e.vACbase,e.vACbase],
-        current_outputs=[e.iDCbase,e.iACbase,e.iACbase],
-        ac_voltage=e.vACbase, ac_current=e.iACbase, dc_voltage=e.vDCbase, power=e.Sbase, ac_side=2, ac_indices=2:3)
+function device_bases(e::PowerImpedance.ElectricalTLC, b::PowerImpedance.BaseValues)
+    pu = PowerImpedance.perunit(e, b)
+    return (voltage_inputs=[b.v_dc, b.v_ac, b.v_ac],
+        current_outputs=[pu.iDCbase, pu.iACbase, pu.iACbase],
+        ac_voltage=b.v_ac, ac_current=pu.iACbase, dc_voltage=b.v_dc, power=b.S,
+            ac_port=:ac, ac_indices=2:3)
 end
 
-function device_bases(e::PowerImpedance.ElectricalMMC)
-    current = 2e.Sbase / (3e.vAC_base) * e.turnsRatio
-    return (voltage_inputs=[e.vDC_base,e.vAC_base,e.vAC_base],
-        current_outputs=[e.Sbase/e.vDC_base,current,current],
-        ac_voltage=e.vAC_base/e.turnsRatio, ac_current=current,
-        dc_voltage=e.vDC_base, power=e.Sbase, ac_side=2, ac_indices=2:3)
+function device_bases(e::PowerImpedance.ElectricalMMC, b::PowerImpedance.BaseValues)
+    current = 2b.S / (3b.v_ac) * e.turnsRatio
+    return (voltage_inputs=[b.v_dc, b.v_ac, b.v_ac],
+        current_outputs=[b.S/b.v_dc, current, current],
+        ac_voltage=b.v_ac/e.turnsRatio, ac_current=current,
+        dc_voltage=b.v_dc, power=b.S, ac_port=:ac, ac_indices=2:3)
 end
 
-function device_bases(e::PowerImpedance.ElectricalSM)
-    voltage=e.Vᵃᶜ_base*sqrt(2/3)
-    current=2e.S_base/(3voltage)
+function device_bases(e::PowerImpedance.ElectricalSM, b::PowerImpedance.BaseValues)
+    voltage=b.v_ac
+    current=2b.S/(3voltage)
     return (voltage_inputs=fill(voltage,2), current_outputs=fill(current,2),
-        ac_voltage=voltage, ac_current=current, dc_voltage=nothing, power=e.S_base,
-        ac_side=1, ac_indices=1:2)
+        ac_voltage=voltage, ac_current=current, dc_voltage=nothing, power=b.S,
+        ac_port=:ac, ac_indices=1:2)
 end
 
-# The machine's native get_y is per-unit; converters already return SI S.
-physical_y(dut::PowerImpedance.Element, s)=PowerImpedance.get_y(dut,s)
-function physical_y(dut::PowerImpedance.Element{<:PowerImpedance.SynchronousMachine}, s)
-    e=dut.element_model.elec
-    return PowerImpedance.get_y(dut,s)*(e.S_base/e.Vᵃᶜ_base^2)
+function physical_y(model::PowerImpedance.AbstractStateSpace, lin::StateSpaceLinearization, s)
+    c = lin.system
+    return (c.C * ((s*I-c.A) \ c.B) + c.D) .* PowerImpedance.SI_scale(model)
+end
+
+function physical_y(model::PowerImpedance.AbstractLinFreqDomain, s)
+    domain = first(electricalconnections(model)).domain
+    return NetworkBuilder.admittance(model, s, PowerImpedance.isac(domain) ? :dq : :dc)
 end
 
 function device_scan_definition(net,list; id="tlc_pq_freq_support")
     old=passive_settings()
-    elec=net.elements[:DUT].element_model.elec
-    bases=device_bases(elec)
-    bus=port_probe(list,:DUT,bases.ac_side)
+    elec=net.elements[:DUT].elec
+    bases=device_bases(elec, net.elements[:DUT].bases)
+    bus=port_probe(list,:DUT,bases.ac_port)
     frequencies=filter(!=(50.0),old.frequencies)
     spec=merge(old,(; id,quantity="Y",dimension=2,buses=[bus],
-        currents=[("DUT",string(bases.ac_side))],axes=["p1_d","p1_q"], frequencies,
+        currents=[("DUT",string(bases.ac_port))],axes=["p1_d","p1_q"], frequencies,
         phases=[-π*k*(k-1)/length(frequencies) for k in eachindex(frequencies)],
         voltage_bases=fill(bases.ac_voltage,2),current_bases=fill(bases.ac_current,2),
         dc_voltage_base_kV=bases.dc_voltage, power_base_MVA=bases.power,
@@ -308,10 +344,11 @@ end
 # Exact native nodal Schur reduction of the converter plus passive DC load.
 # The zero-voltage remote reference is ground; the AC Thevenin is excluded
 # because the meter measures DUT current alone (the load has no AC terminal).
-function device_port_y(net, s)
-    y = physical_y(net.elements[:DUT],s)
-    indices=device_bases(net.elements[:DUT].element_model.elec).ac_indices
+function device_port_y(net, s; linearization = linearize(net.elements[:DUT],
+        compute(PowerFlowProblem(net), ACDCPowerFlow()).operating_point[:DUT]))
+    y = physical_y(net.elements[:DUT], linearization, s)
+    indices=device_bases(net.elements[:DUT].elec, net.elements[:DUT].bases).ac_indices
     haskey(net.elements,:DC_load) || return y[indices,indices]
-    g = PowerImpedance.get_y(net.elements[:DC_load],s)[1,1]
+    g = physical_y(net.elements[:DC_load],s)[1,1]
     return y[2:3,2:3] - y[2:3,1:1]*((y[1,1]+g)\y[1:1,2:3])
 end

@@ -1,0 +1,5 @@
+extends: ai-tells.OverusedVocabulary
+exceptions:
+  # Numerical precision and method dispatch terminology.
+  - '(?i)significant\s+digits'
+  - '(?i)dynamically\s+typed'

@@ -423,6 +423,24 @@ Base.size(definition::AbstractDefinition) = (length(definition),)
 Base.getindex(definition::AbstractDefinition, index::Integer) =
     first(Iterators.drop(definition, index - 1))
 
+"""
+    has_uncertainty(value)
+
+Test whether a value contains an uncertainty descriptor or uncertainty recognized by an
+extension.
+Inspect the contained value of a resolved grid choice, the values of a configuration,
+and every configuration of a construction definition.
+
+# Arguments
+
+- `value`: Parameter value, resolved grid choice, `Configuration`, or construction
+  definition.
+
+# Returns
+
+- `true` when an uncertainty descriptor or supported uncertain value is found, including
+  descriptors with zero standard uncertainty. Other values return `false`.
+"""
 has_uncertainty(value::UncertainValue) = true
 has_uncertainty(value::ResolvedGridValue) = has_uncertainty(value.value)
 has_uncertainty(configuration::Configuration) = any(has_uncertainty, configuration.values)

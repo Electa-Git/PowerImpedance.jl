@@ -1,4 +1,6 @@
 using Random
+
+const NB = PowerImpedance.NetworkBuilder
 using PowerImpedance.NetworkBuilder: @gridspace, @relax
 
 struct GridspacePoint
@@ -82,19 +84,17 @@ end
     @test collect(nested) == [(1, 3, 4), (2, 3, 4), (1, 3, 5), (2, 3, 5)]
 
     matrix = [1.0 2.0; 3.0 4.0]
-    atomic = @inferred impedance(Grid; z = matrix, pins = 2)
+    atomic = @inferred impedance(Grid; z = matrix, conductors = 2)
     @test length(atomic) == 1
-    @test only(atomic).element_model.value == matrix
-    @test eltype(atomic) === PowerImpedance.Element
+    @test only(atomic).value == matrix
+    @test eltype(atomic) === PowerImpedance.Impedance
     @test !isdefined(NB, :impedance)
 
-    varying = @inferred impedance(Grid; z = Grid((1.0, 2.0)), pins = 1)
-    fixed = impedance(z = 3.0, pins = 1)
+    varying = @inferred impedance(Grid; z = Grid((1.0, 2.0)), conductors = 1)
+    fixed = impedance(z = 3.0, conductors = 1)
     mixed_connections = (
-        (node = :bus, element = :varying, side = 1, terminal = 1),
-        (node = :gnd, element = :varying, side = 2, terminal = 1),
-        (node = :bus, element = :fixed, side = 1, terminal = 1),
-        (node = :gnd, element = :fixed, side = 2, terminal = 1),
+        NB.Bus(:bus; ports = ((:varying, :side1), (:fixed, :side1))),
+        NB.Bus(:gnd; ports = ((:varying, :side2), (:fixed, :side2)))
     )
     networks = @inferred NB.define((; varying, fixed), mixed_connections)
     @test networks isa Gridspace{NB.NetworkState}
@@ -102,6 +102,21 @@ end
     @test all(network -> network.elements.fixed === fixed, networks)
     @test @inferred(PowerFlowProblem(networks)) isa
           Gridspace{PowerFlowProblem{NB.NetworkState}}
+
+    converters = @inferred mmc(Grid; Sbase = Grid([500.0, 1000.0]),
+        sync = PLLSynchronization(),
+        delta_control = ΔdqControlGFL(outer_active = OuterActivePowerControl(),
+            outer_reactive = OuterReactiveQControl(), occ = InnerCurrentPIControl()),
+        sigma_control = ΣdqzControlTEC())
+    @test converters isa Gridspace{MMC}
+    @test all(model -> model isa MMC, converters)
+    @test [bases(model).S for model in converters] == [500.0, 1000.0]
+
+    for (constructor, keyword) in ((tlc, :Sbase),
+        (synchronousmachine, :S_base), (inductionmachine, :S_base))
+        models = constructor(Grid; NamedTuple{(keyword,)}((Grid([500.0, 1000.0]),))...)
+        @test [bases(model).S for model in models] == [500.0, 1000.0]
+    end
 
     macro_grid = GridspaceMacroExample(x = Grid([1, 2]))
     @test [(case.x, case.y) for case in macro_grid] == [(1, 2), (2, 2)]

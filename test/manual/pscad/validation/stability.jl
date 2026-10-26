@@ -59,21 +59,23 @@ function stability_gate(net, entry)
     entry.category == :passive && return passive_gate(net,entry)
     entry.category == :device || error("no complete-network gate for $(entry.id)")
     dut=net.elements[:DUT]
-    bases=device_bases(dut.element_model.elec)
+    bases=device_bases(dut.elec, dut.bases)
     form=P.identify_rlc(net.elements[:Grid]; name=:Grid).form
-    grid_y(s)=PowerImpedance.get_y(net.elements[:Grid],s)[1:2,1:2]
+    grid_y(s)=physical_y(net.elements[:Grid],s)[1:2,1:2]
     inductance = something(form.L, 0.0)
     rotation = iszero(inductance) ? zeros(2, 2) :
         real.((inv(grid_y(0.0im))-form.R*I)/inductance)
-    A=dut.A
-    B=dut.B ./ bases.voltage_inputs'
-    C=dut.C .* bases.current_outputs
-    D=dut.D .* bases.current_outputs ./ bases.voltage_inputs'
+    point = compute(PowerFlowProblem(net), ACDCPowerFlow()).operating_point
+    system = linearize(dut, point[:DUT]).system
+    A=system.A
+    B=system.B ./ bases.voltage_inputs'
+    C=system.C .* bases.current_outputs
+    D=system.D .* bases.current_outputs ./ bases.voltage_inputs'
     if haskey(net.elements,:DC_load)
         # Only the algebraic DC node is eliminated, with converter states retained. KCL:
         # (Ddc + 1/R)*vdc = -Cdc*x - Ddc,ac*vac. Aeff retains all coupled DC-control
         # modes. The native get_y resistor supplies its physical conductance.
-        g=real(PowerImpedance.get_y(net.elements[:DC_load],0.0im)[1,1])
+        g=real(physical_y(net.elements[:DC_load],0.0im)[1,1])
         denom=D[1,1]+g
         A=A-B[:,1:1]*(C[1:1,:]/denom)
         Bac=B[:,2:3]-B[:,1:1]*(D[1:1,2:3]/denom)

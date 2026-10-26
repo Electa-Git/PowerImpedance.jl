@@ -204,7 +204,7 @@ end
 $(TYPEDEF)
 
 Store one cable row with a coaxial component per physical position and
-shared earth-return and frequency/phase parameters.
+shared earth-return, frequency and phase parameters.
 
 $(TYPEDFIELDS)
 """
@@ -264,7 +264,7 @@ end
 """
 $(TYPEDEF)
 
-Describe a passive, single-subsystem PSCAD project without Python resources.
+Describe a passive, single-subsystem PSCAD project using Julia data fields.
 
 $(TYPEDFIELDS)
 """
@@ -356,11 +356,12 @@ struct PlanState
     used::_NameReservations
 end
 
-function component!(canvas::CanvasPlan, defn, point, params = Pair{String, String}[])
+function component!(canvas::CanvasPlan, defn, point, params = Pair{String, String}[];
+        orient = 0)
     for (key, value) in params
         key == "Name" && !isempty(value) && push!(canvas.used, value)
     end
-    push!(canvas.components, ComponentPlan("master:" * defn, params, point..., 0))
+    push!(canvas.components, ComponentPlan("master:" * defn, params, point..., orient))
     return nothing
 end
 wire!(canvas::CanvasPlan, a, b) = push!(canvas.wires, WirePlan([a, b]))
@@ -401,11 +402,13 @@ function stub!(canvas::CanvasPlan, port, name; direction = 1)
     return endpoint
 end
 
-function ammeter_stub!(canvas::CanvasPlan, port, bus, name; direction = 1)
+function ammeter_stub!(canvas::CanvasPlan, port, bus, name;
+        direction = 1, reverse = false)
     junction = pscad_name(name * "_node"; used = canvas.used)
     stub!(canvas, port, junction; direction)
     location = (port[1] + (direction == 1 ? 0 : -36), port[2] - 36)
-    component!(canvas, "ammeter", location, ["Name" => name])
+    meter = reverse ? (location[1] + 36, location[2]) : location
+    component!(canvas, "ammeter", meter, ["Name" => name]; orient = reverse ? 4 : 0)
     inner = (port[1], location[2])
     endpoint = (inner[1], inner[2] - 36)
     wire!(canvas, inner, endpoint)

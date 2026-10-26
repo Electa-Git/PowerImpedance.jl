@@ -3,7 +3,7 @@ export mmc, MMC, AbstractMMC,       # MMC
     ΣdqzControlTEC, ΣdqzControlLEC
 
 
-### Abstract types ###
+# Abstract types
 """
 $(TYPEDEF)
 
@@ -24,16 +24,16 @@ Define the sum-current and internal-energy control assembly of an MMC.
 abstract type AbstractΣdqzControl               <: AbstractStateSpace end
 voltage_filter_ratio(conv::AbstractMMC) = conv.elec.turnsRatio
 
-### Include files ###
+# Include files
 include("electrical.jl")
 include("energy.jl")
 include("inner_current.jl")
 include("modulation.jl")
 
 
-################## Structs #####################
+# Structs
 
-### MMC ###
+# MMC
 """
 $(TYPEDEF)
 
@@ -55,16 +55,27 @@ $(TYPEDFIELDS)
     sigma_control::Σ
     "Modulation and delay block."
     modulation::Mod                      
-    "MMC electrical plant and physical bases."
+    "MMC electrical plant."
     elec::ElectricalMMC
+    "Active- and reactive-power limits on converter bases \\[dimensionless\\]."
+    limits::Limits = Limits()
+    "Power, voltage and angular-frequency bases of the model equations."
+    bases::BaseValues
+    "Power-flow setpoints on converter bases \\[dimensionless\\]."
+    powerflow::NamedTuple = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
 end
 
 statenames(c::MMC) = (statenames(c.meas)..., statenames(c.sync)..., statenames(c.delta_control)..., statenames(c.sigma_control)..., statenames(c.modulation)..., statenames(c.elec)...) 
-initialvalues(c::MMC; inputs, setpoint_pu)  = (; initialvalues(c.meas; inputs)..., initialvalues(c.sync; setpoint_pu)..., initialvalues(c.delta_control; inputs, setpoint_pu, conv=c)..., initialvalues(c.sigma_control; setpoint_pu)..., initialvalues(c.elec; inputs, setpoint_pu)...,)
+initialvalues(c::MMC; inputs, terminal_pu)  = (;
+    initialvalues(c.meas; inputs)...,
+    initialvalues(c.sync; terminal_pu)...,
+    initialvalues(c.delta_control; inputs, terminal_pu, conv=c)...,
+    initialvalues(c.sigma_control; terminal_pu)...,
+    initialvalues(c.elec; inputs, terminal_pu)...,)
 inputnames(::MMC)                           = (:v_dc, :vG_d, :vG_q)
 outputnames(::MMC)                          = (:i_dc, :iΔ_d, :iΔ_q) 
 
-### High level structures ###
+# High level structures
 """
 $(TYPEDEF)
 
@@ -81,9 +92,10 @@ $(TYPEDFIELDS)
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFL) = (statenames(c.outer_active)..., statenames(c.outer_reactive)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFL; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_active; setpoint_pu)...,
-                                                                initialvalues(c.outer_reactive; setpoint_pu, conv)...,
-                                                                initialvalues(c.occ; inputs, conv)...) 
+initialvalues(c::ΔdqControlGFL; inputs, terminal_pu, conv) = (;
+    initialvalues(c.outer_active; terminal_pu)...,
+    initialvalues(c.outer_reactive; terminal_pu, conv)...,
+    initialvalues(c.occ; inputs, conv)...)
 
 """
 $(TYPEDEF)
@@ -101,9 +113,10 @@ $(TYPEDFIELDS)
     occ::I              # Output Current Control
 end
 statenames(c::ΔdqControlGFM) = (statenames(c.outer_reactive)..., statenames(c.vi)..., statenames(c.occ)...)
-initialvalues(c::ΔdqControlGFM; inputs, setpoint_pu, conv) = (; initialvalues(c.outer_reactive; setpoint_pu, conv)...,
-                                                                initialvalues(c.vi; inputs, conv)...,
-                                                                initialvalues(c.occ; inputs, conv)...) 
+initialvalues(c::ΔdqControlGFM; inputs, terminal_pu, conv) = (;
+    initialvalues(c.outer_reactive; terminal_pu, conv)...,
+    initialvalues(c.vi; inputs, conv)...,
+    initialvalues(c.occ; inputs, conv)...)
 
 """
 $(TYPEDEF)
@@ -122,7 +135,10 @@ $(TYPEDFIELDS)
     ccsc::I2 = NoCirculatingCurrentSuppressionControl() # Circulating Current Suppression Control
 end
 statenames(c::ΣdqzControlTEC) = (statenames(c.tec)..., statenames(c.zscc)..., statenames(c.ccsc)...)
-initialvalues(c::ΣdqzControlTEC; setpoint_pu=SetpointPU()) = (; initialvalues(c.tec; setpoint_pu)..., initialvalues(c.zscc)..., initialvalues(c.ccsc)...)
+initialvalues(c::ΣdqzControlTEC; terminal_pu=TerminalValuesPU()) = (;
+    initialvalues(c.tec; terminal_pu)...,
+    initialvalues(c.zscc)...,
+    initialvalues(c.ccsc)...)
 
 """
 $(TYPEDEF)
@@ -140,12 +156,15 @@ $(TYPEDFIELDS)
     ccc::I          # Circulating Current Control
 end
 statenames(c::ΣdqzControlLEC) = (statenames(c.wsigma)..., statenames(c.wdelta)..., statenames(c.ccc)...)
-initialvalues(c::ΣdqzControlLEC; setpoint_pu=SetpointPU()) = (; initialvalues(c.wsigma)..., initialvalues(c.wdelta)..., initialvalues(c.ccc)...)
+initialvalues(c::ΣdqzControlLEC; terminal_pu=TerminalValuesPU()) = (;
+    initialvalues(c.wsigma)...,
+    initialvalues(c.wdelta)...,
+    initialvalues(c.ccc)...)
 
 
-################## State-space equations #####################
+# State-space equations
 
-### MMC ###
+# MMC
 """
 $(TYPEDSIGNATURES)
 
@@ -155,13 +174,13 @@ writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `c`: MMC assembly and electrical bases.
 
@@ -178,37 +197,41 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 F = zeros(P.n_states(model))
 outputs = P.state_space!(F, x, inputs, point, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, c::MMC)
-    # -- Signal Processing ------------------------------------------------------------------------    
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, c::MMC)
+    # Signal processing
     sig_in = input_signals(c, x, inputs)
 
-    meas, i = state_space_block!(F, x, sig_in, setpoint_pu, c.meas, c, 1)
-    sync_out, i = state_space_block!(F, x, meas, setpoint_pu, c.sync, c, i)
+    meas, i = state_space_block!(F, x, sig_in, terminal_pu, c.meas, c, 1)
+    sync_out, i = state_space_block!(F, x, meas, terminal_pu, c.sync, c, i)
 
-    # -- Delta and Sigma control ------------------------------------------------------------------
-    out_delta, i = state_space_block!(F, x, (; meas, sync = sync_out), setpoint_pu, c.delta_control, c, i)
-    out_sigma, i = state_space_block!(F, x, (meas = meas, power = (P_ac_f = meas.P_ac_f,), sync = sync_out), setpoint_pu, c.sigma_control, c, i)
+    # Delta and Sigma control
+    out_delta, i = state_space_block!(F, x, (; meas, sync = sync_out), terminal_pu,
+        c.delta_control, c, i)
+    out_sigma, i = state_space_block!(F, x,
+        (meas = meas, power = (P_ac_f = meas.P_ac_f,), sync = sync_out), terminal_pu,
+        c.sigma_control, c, i)
 
-    # -- Modulation -------------------------------------------------------------------------------
-    out_modulation, i = state_space_block!(F, x, (; meas, out_delta, out_sigma), setpoint_pu, c.modulation, c, i)
+    # Modulation
+    out_modulation, i = state_space_block!(F, x, (; meas, out_delta, out_sigma),
+        terminal_pu, c.modulation, c, i)
 
-    # -- Electrical model -------------------------------------------------------------------------
-    state_space_block!(F, x, (; out_modulation, sig_in, inputs), setpoint_pu, c.elec, c, i)
+    # Electrical model
+    state_space_block!(F, x, (; out_modulation, sig_in, inputs), terminal_pu, c.elec, c, i)
 
     return (; meas)
 end
 
 
-### Higher level structures ###
+# Higher level structures
 
 """
 $(TYPEDSIGNATURES)
@@ -219,13 +242,13 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `b`: The `ΣdqzControlTEC` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -244,10 +267,10 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = model.sigma_control
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -259,14 +282,15 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, setpoint_pu::SetpointPU, b::ΣdqzControlTEC, c::MMC) 
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)},
+        terminal_pu::TerminalValuesPU, b::ΣdqzControlTEC, c::MMC)
     (; meas) = inputs
-    # -- Outer Loop -------------------------------------------------------------------------------
-    out_Wtot, i = state_space_block!(F, x, meas, setpoint_pu, b.tec, c, 1)
+    # Outer loop
+    out_Wtot, i = state_space_block!(F, x, meas, terminal_pu, b.tec, c, 1)
 
-    # -- Inner Loop -------------------------------------------------------------------------------
-    out_zscc, i = state_space_block!(F, x, (; meas, out_Wtot), setpoint_pu, b.zscc, c, i)
-    out_ccsc, i = state_space_block!(F, x, meas, setpoint_pu, b.ccsc, c, i)
+    # Inner loop
+    out_zscc, i = state_space_block!(F, x, (; meas, out_Wtot), terminal_pu, b.zscc, c, i)
+    out_ccsc, i = state_space_block!(F, x, meas, terminal_pu, b.ccsc, c, i)
 
     return merge(out_ccsc, out_zscc)
 end
@@ -280,13 +304,13 @@ Evaluate MMC summed- and differential-energy control, writing state derivatives 
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `b`: The `ΣdqzControlLEC` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -305,10 +329,10 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = ΣdqzControlLEC(wsigma=ΣEnergyControl(pi_control=PIControl(Kp=0.1, Ki=1.0)), wdelta=ΔEnergyControl(pi_control=PIControl(Kp=0.1, Ki=1.0)), ccc=CirculatingCurrentControl(PIControl(Kp=0.1, Ki=1.0)))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -320,14 +344,18 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)}, setpoint_pu::SetpointPU, b::ΣdqzControlLEC, c::MMC) 
+function state_space!(F, x, inputs::NamedTuple{(:meas, :power, :sync)},
+        terminal_pu::TerminalValuesPU, b::ΣdqzControlLEC, c::MMC)
     (; meas, power, sync) = inputs
-    # -- Outer Loop -------------------------------------------------------------------------------
-    out_wsigma, i = state_space_block!(F, x, (; meas, power, sync), setpoint_pu, b.wsigma, c, 1)
-    out_wdelta, i = state_space_block!(F, x, (; meas, power, sync), setpoint_pu, b.wdelta, c, i)
+    # Outer loop
+    out_wsigma, i = state_space_block!(F, x, (; meas, power, sync), terminal_pu, b.wsigma,
+        c, 1)
+    out_wdelta, i = state_space_block!(F, x, (; meas, power, sync), terminal_pu, b.wdelta,
+        c, i)
 
-    # -- Inner Loop -------------------------------------------------------------------------------
-    out_ccc, _ = state_space_block!(F, x, (; meas, sync, out_wΣ = out_wsigma, out_wΔ = out_wdelta), setpoint_pu, b.ccc, c, i)
+    # Inner loop
+    out_ccc, _ = state_space_block!(F, x,
+        (; meas, sync, out_wΣ = out_wsigma, out_wΔ = out_wdelta), terminal_pu, b.ccc, c, i)
 
     return out_ccc
 end
@@ -341,13 +369,13 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `b`: The `ΔdqControlGFL` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -368,10 +396,10 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = model.delta_control
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -383,15 +411,19 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, b::ΔdqControlGFL, c::MMC)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, b::ΔdqControlGFL, c::MMC)
     (; meas, sync) = inputs
-    # -- Outer Loop -------------------------------------------------------------------------------
-    out_active, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, b.outer_active, c, 1)
-    out_reactive, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, b.outer_reactive, c, i)
+    # Outer loop
+    out_active, i = state_space_block!(F, x, (; meas, sync), terminal_pu, b.outer_active, c,
+        1)
+    out_reactive, i = state_space_block!(F, x, (; meas, sync), terminal_pu,
+        b.outer_reactive, c, i)
 
-    # -- Inner Loop -------------------------------------------------------------------------------
+    # Inner loop
     
-    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = (; out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref)), setpoint_pu, b.occ, c, i)
+    out_occ, _= state_space_block!(F, x,
+        (; meas, sync, vloop = (; out_active..., iΔ_q_ref = out_reactive.q_ctrl_ref)),
+        terminal_pu, b.occ, c, i)
 
     return merge(out_active, out_occ)
 end
@@ -405,13 +437,13 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
-- `setpoint_pu`: Operating point on the component bases \\[dimensionless\\]; its voltage
+- `terminal_pu`: Operating point on the component bases \\[dimensionless\\]. Its voltage
   angle uses \\[rad\\].
 - `b`: The `ΔdqControlGFM` parameters.
 - `c`: MMC assembly and electrical bases.
@@ -431,10 +463,10 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = ΔdqControlGFM(outer_reactive=OuterReactiveVacControl(), vi=CCVI(), occ=InnerCurrentPIControl())
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -446,39 +478,44 @@ outputs = P.state_space!(F, x, signals, point, block, model)
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, inputs, setpoint_pu::SetpointPU, b::ΔdqControlGFM, c::MMC)
+function state_space!(F, x, inputs, terminal_pu::TerminalValuesPU, b::ΔdqControlGFM, c::MMC)
     (; meas, sync) = inputs
-    # -- Outer Loop -------------------------------------------------------------------------------
-    out_reactive, i = state_space_block!(F, x, (; meas, sync), setpoint_pu, b.outer_reactive, c, 1)
+    # Outer loop
+    out_reactive, i = state_space_block!(F, x, (; meas, sync), terminal_pu,
+        b.outer_reactive, c, 1)
 
-    # -- Inner Loop -------------------------------------------------------------------------------
-    out_vi, i = state_space_block!(F, x, (; meas, sync, out_reactive), setpoint_pu, b.vi, c, i)
+    # Inner loop
+    out_vi, i = state_space_block!(F, x, (; meas, sync, out_reactive), terminal_pu, b.vi, c,
+        i)
 
-    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = out_vi), setpoint_pu, b.occ, c, i)
+    out_occ, _= state_space_block!(F, x, (; meas, sync, vloop = out_vi), terminal_pu, b.occ,
+        c, i)
 
     return out_occ
 end
 
 
-################## Handling of inputs and outputs ############
+# Handling of inputs and outputs
 
 """
 $(TYPEDSIGNATURES)
 
-Convert a physical power-flow operating point to normalized external inputs and internal
-setpoint data.
+Convert physical terminal values to normalized external inputs and internal
+terminal data.
+Port powers are positive into the converter. Taking 603 MW from DC and delivering
+600 MW to AC gives `dc.p = 603` and `ac.p = -600`.
 
 # Arguments
 
 - `c`: MMC assembly and electrical bases.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\].
+- `values`: NamedTuple with `ac` and `dc` port values in
+  \\[kV\\], \\[rad\\], \\[MW\\] and \\[MVAr\\].
 
 # Returns
 
 - `inputs`: Named tuple of DC voltage `v_dc` and grid-frame AC voltages `vG_d`, `vG_q`,
   on converter bases \\[dimensionless\\].
-- `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
+- `terminal_pu`: Normalized operating point. Powers and voltages use \\[dimensionless\\]
   and the angle uses \\[rad\\].
 
 # Notes
@@ -489,7 +526,8 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
-power base. DC voltage is divided by the pole-to-pole DC base.
+power base, with AC powers negated to get the powers delivered to the AC bus.
+DC voltage is divided by the pole-to-pole DC base.
 
 # Examples
 
@@ -499,24 +537,28 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=380sqrt(2/3), θac=0.0, Pdc=100.0, Vdc=640.0)
-inputs, point_pu = P.pftoinputs(model, point)
+    sigma_control=ΣdqzControlTEC())
+values = (ac = ACPortValues(380sqrt(2/3), 0.0, -100.0, 0.0),
+    dc = DCPortValues(640.0, 100.0))
+inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
-function pftoinputs(c::MMC, setpoint::Setpoint) 
-    v_ac  = setpoint.Vac / c.elec.vAC_base       # Grid side voltage (peak,phase) perunitized by converter-side base voltage (peak,phase) #TODO check why this choice and how it impacts the rest
-    v_dc = setpoint.Vdc / c.elec.vDC_base
-    p_ac = setpoint.Pac / c.elec.Sbase
-    q_ac = setpoint.Qac / c.elec.Sbase
-    p_dc = setpoint.Pdc / c.elec.Sbase
+function pftoinputs(c::MMC, values::NamedTuple)
+    # Scale grid-side phase-peak voltage with the parent converter phase-peak base.
+    # TODO check why this base is used and how it affects the other calculations.
+    v_ac = values.ac.v / c.bases.v_ac
+    v_dc = values.dc.v / c.bases.v_dc
+    p_ac = -values.ac.p / c.bases.S
+    q_ac = -values.ac.q / c.bases.S
+    p_dc = values.dc.p / c.bases.S
     
-    vG_d = v_ac * cos(setpoint.θac)   # d component of the grid voltage in the grid frame  
-    vG_q = -v_ac * sin(setpoint.θac)  # q component of the grid voltage in the grid frame
+    vG_d = v_ac * cos(values.ac.theta)   # d component of the grid voltage in the grid frame
+    vG_q = -v_ac * sin(values.ac.theta)  # q component of the grid voltage in the grid frame
 
     return (v_dc = v_dc, vG_d = vG_d, vG_q = vG_q), 
-        SetpointPU(p_ac, q_ac, setpoint.θac, v_ac, p_dc, v_dc)
+        TerminalValuesPU(p_ac, q_ac, values.ac.theta, v_ac, p_dc, v_dc)
 end
+
 
 """
 $(TYPEDSIGNATURES)
@@ -527,8 +569,8 @@ Build the electrical signals passed to converter measurement and plant blocks.
 
 - `c`: MMC assembly and electrical bases.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 
 # Returns
@@ -557,10 +599,10 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 signals = P.input_signals(model, x, inputs)
 ```
 """
@@ -569,7 +611,7 @@ function input_signals(c::MMC, x, inputs)
     v = frame_transform(inputs.vG_d, inputs.vG_q, θ)
     i = frame_transform(x.iΔ_d, x.iΔ_q, θ)
 
-    return ( # If not speficied otherwise, all fields are in converter reference frame 
+    return ( # Fields use the converter reference frame unless specified otherwise.
         vG_d = v.d * c.elec.turnsRatio,
         vG_q = v.q * c.elec.turnsRatio,
         vG_d_g = inputs.vG_d * c.elec.turnsRatio, # grid reference frame
@@ -583,14 +625,15 @@ function input_signals(c::MMC, x, inputs)
 end
 
 
-## Conventions: should all be ingoing as to have proper admittance formulation wrt to nodal voltages
+# Convention: every current enters its terminal, as the nodal admittance
+# formulation requires.
 function outputequations!(F, x, y, inputs, c::MMC)
-    # NB: All electrical state variables are in grid dq frame (and not converter frame)
+    # Electrical state variables are in the grid dq frame.
     F[1:3] = [3*x.iΣ_z, -x.iΔ_d, -x.iΔ_q]
 end
 
 
-################## Contructor ################################
+# Constructor
 
 """
 $(TYPEDSIGNATURES)
@@ -600,7 +643,7 @@ control, and modulation blocks.
 
 # Arguments
 
-- `elec`: Electrical subsystem and its physical base quantities. Default:
+- `elec`: Electrical subsystem. Default:
   `ElectricalMMC()`.
 - `meas`: Measurement and signal-filtering block. Default: `Measurement()`.
 - `sync`: Synchronization block supplying the converter control frame.
@@ -608,25 +651,32 @@ control, and modulation blocks.
 - `sigma_control`: MMC sum-current and energy-control assembly.
 - `modulation`: MMC insertion-index calculation and delay block. Default:
   `UncompensatedModulation()`.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\]. Default: `Setpoint()`.
 - `limits`: Operating limits on the component power base \\[dimensionless\\]. Default:
   `Limits()`.
-- `connection`: Whether the element participates in network construction. Default:
-  `true`.
+- `powerflow`: Partial power-flow setpoints on converter bases \\[dimensionless\\].
+  Default: `(;)`.
+
+# Keywords
+
+- `Sbase`: Three-phase apparent-power base \\[MVA\\]. Default: `1000`.
+- `vACbase_LL_RMS`: Line-to-line RMS voltage base \\[kV\\]. Default: `380`.
+- `vDC_base`: Pole-to-pole DC voltage base \\[kV\\]. Default: `640`.
+- `ωbase`: Electrical angular-frequency base \\[rad/s\\]. Default: `100π`.
 
 # Returns
 
-- An `Element` with one DC terminal group and one transformed AC terminal group.
+- An immutable `MMC` with `ac` and `dc` ports.
 
 # Notes
 
+Set control references and power-flow setpoints with `component` or `withinputs`.
+References and setpoints use the converter bases.
+
 The selected synchronization and outer-control blocks determine the AC and DC
-power-flow control modes. The power bounds multiply `limits` by `Sbase`; the
-current-limit estimate instead compares their unscaled values with physical `Pac`.
-Construction does not solve an equilibrium or populate linearization matrices.
-`update!` solves and linearizes the converter at a supplied operating point;
-frequency-domain evaluation then uses those stored matrices.
+power-flow control modes. The power bounds multiply `limits` by `Sbase`. The
+current-limit estimate compares their unscaled values with physical `Pac`.
+`linearize` returns the equilibrium and electrical system at a supplied operating
+point. Frequency-domain evaluation uses the system's matrices.
 
 # Examples
 
@@ -639,47 +689,54 @@ converter = mmc(
         occ = InnerCurrentPIControl(),
     ),
     sigma_control = ΣdqzControlTEC(),
-    setpoint = Setpoint(Pac = 100.0, Qac = 0.0, Vac = 220.0, Vdc = 640.0),
 )
+
+b = bases(converter)
+converter = component(converter;
+    delta_control = (outer_active = (p_ref = 100.0 / b.S,),
+        outer_reactive = (q_ref = 0.0 / b.S,)),
+    powerflow = (v_ac = 220.0 / b.v_ac, v_dc = 640.0 / b.v_dc))
 ```
 """
 function mmc(;
+    Sbase = 1000,
+    vACbase_LL_RMS = 380,
+    vDC_base = 640,
+    ωbase = 100π,
     elec::ElectricalMMC = ElectricalMMC(),
     meas::Measurement = Measurement(),
     sync::AbstractSynchronization,
     delta_control::AbstractΔdqControl,
     sigma_control::AbstractΣdqzControl,
     modulation::AbstractModulationMMC = UncompensatedModulation(),
-    setpoint::Setpoint=Setpoint(),
     limits::Limits = Limits(),
-    connection::Bool = true)
+    powerflow::NamedTuple = (;))
 
-    return Element(
-        input_pins = 1, 
-        output_pins = 2, 
-        element_model = MMC(meas, sync, delta_control, sigma_control, modulation, elec), 
-        transformation = false; 
-        connection,
-        setpoint,
-        limits)
+    b = BaseValues(S = Sbase, v_ac = vACbase_LL_RMS*sqrt(2/3),
+        v_dc = vDC_base, omega = ωbase)
+    defaults = map(input -> input.default, _CONVERTER_POWERFLOW_INPUTS)
+    seeds = _withinputs(defaults, _CONVERTER_POWERFLOW_INPUTS,
+        powerflow, "powerflow")
+    return MMC(; meas, sync, delta_control, sigma_control, modulation, elec, limits,
+        bases = b, powerflow = seeds)
 end
 
-##################### SI Scaling ######################################
-function _mmc_si_scale!(Y, elec::ElectricalMMC)
-    iACbase = 2 * elec.Sbase / (3 * elec.vAC_base)
-    iDCbase = elec.Sbase / elec.vDC_base
+# SI scaling
+function _mmc_si_scale!(Y, elec::ElectricalMMC, b::BaseValues)
+    iACbase = 2 * b.S / (3 * b.v_ac)
+    iDCbase = b.S / b.v_dc
 
     Y[1:1, 1:1] .*= iDCbase
-    Y[1:1, 1:1] ./= elec.vDC_base
+    Y[1:1, 1:1] ./= b.v_dc
     Y[1:1, 2:3] .*= iDCbase
-    Y[1:1, 2:3] ./= elec.vAC_base
+    Y[1:1, 2:3] ./= b.v_ac
     Y[2:3, 1:1] .*= iACbase * elec.turnsRatio
-    Y[2:3, 1:1] ./= elec.vDC_base
+    Y[2:3, 1:1] ./= b.v_dc
 
     # Equivalent AC-current/AC-voltage scaling preserves the rounding of the AC-AC block.
     # The physical cross terms use the winding current base.
     Y[2:3, 2:3] .*= iACbase
-    Y[2:3, 2:3] ./= elec.vAC_base / elec.turnsRatio
+    Y[2:3, 2:3] ./= b.v_ac / elec.turnsRatio
     return Y
 end
 
@@ -691,7 +748,7 @@ admittance.
 
 # Arguments
 
-- `elem`: Network element containing the component model and operating point.
+- `model`: Component model with electrical base quantities.
 
 # Returns
 
@@ -703,48 +760,53 @@ admittance.
 Y_{ij}^{SI}=Y_{ij}^{pu}\\frac{I_{b,i}}{V_{b,j}}.
 ```
 
-Rows use current bases `(I_dc, n*I_ac, n*I_ac)` and columns use voltage bases
+The row current bases are `(I_dc, n*I_ac, n*I_ac)` and the column voltage bases are
 `(V_dc, V_ac, V_ac)`, where `n=turnsRatio`, `I_ac=2Sbase/(3vAC_base)`,
 `I_dc=Sbase/vDC_base`, `V_ac=vAC_base`, and `V_dc=vDC_base`. Currents use
-\\[kA\\] and voltages \\[kV\\], so their ratios use \\[S\\].
+\\[kA\\] and voltages \\[kV\\]. Their ratios use \\[S\\].
 
 # Examples
 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-element = inductionmachine()
-scale = P.SI_scale(element)
+model = mmc(sync = PLLSynchronization(),
+    delta_control = ΔdqControlGFL(outer_active = OuterActivePowerControl(),
+        outer_reactive = OuterReactiveQControl(), occ = InnerCurrentPIControl()),
+    sigma_control = ΣdqzControlTEC())
+scale = P.SI_scale(model)
 ```
 """
-function SI_scale(elem::Element{<:MMC})
-    return _mmc_si_scale!(ones(3, 3), elem.element_model.elec)
+function SI_scale(model::MMC)
+    return _mmc_si_scale!(ones(3, 3), model.elec, model.bases)
 end
 
 
-############################  Power-flow integration MMC ############################
+
+# Power-flow integration MMC
 
 
 
-equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC) =
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, c.delta_control)
+equilibriumequations!(F, x, inputs, terminal_pu::TerminalValuesPU, y, c::MMC) =
+    equilibriumequations!(F, x, inputs, terminal_pu, y, c, c.delta_control)
 
 function equilibriumequations!(
-        F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFL)
-    result = equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_active)
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_reactive)
+        F, x, inputs, terminal_pu::TerminalValuesPU, y, c::MMC, b::ΔdqControlGFL)
+    result = equilibriumequations!(F, x, inputs, terminal_pu, y, c, b.outer_active)
+    equilibriumequations!(F, x, inputs, terminal_pu, y, c, b.outer_reactive)
     return result
 end
 
 function equilibriumequations!(
-        F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, b::ΔdqControlGFM)
-    equilibriumequations!(F, x, inputs, setpoint_pu, y, c, b.outer_reactive)
+        F, x, inputs, terminal_pu::TerminalValuesPU, y, c::MMC, b::ΔdqControlGFM)
+    equilibriumequations!(F, x, inputs, terminal_pu, y, c, b.outer_reactive)
 end
 
-function equilibriumequations!(F, x, inputs, setpoint_pu::SetpointPU, y, c::MMC, ::OuterActiveVdcControl)
+function equilibriumequations!(F, x, inputs, terminal_pu::TerminalValuesPU, y, c::MMC,
+        ::OuterActiveVdcControl)
     idx_ξvdc = findfirst(==(:ξ_v_dc), statenames(c))
     @assert !isnothing(idx_ξvdc)
-    i_dc_ref = setpoint_pu.p_dc / inputs.v_dc
+    i_dc_ref = terminal_pu.p_dc / inputs.v_dc
     F[idx_ξvdc] = i_dc_ref - 3*x.iΣ_z
     return y
 end
@@ -763,25 +825,67 @@ pf_dc_droop(block::ΔdqControlGFL, dcbase, powerbase, global_dict, data) =
 pf_dc_droop(::ΔdqControlGFM, dcbase, powerbase, global_dict, data) = 0.0
 
 
-function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
-    dc_node = make_node(elem, 1)
-    ac_nodes = make_node(elem, 2)
-    dc_bus = add_bus_dc!(data, nodes2bus, bus2nodes, dc_node, global_dict)
-    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, "convdc")
-    return convert!(data,elem,PMACDC, key, (ac_bus, dc_bus),  global_dict)
-end
+electricalconnections(::MMC) = (ac = Port(ACDQ), dc = Port(DC_CM))
 
-pmtype(::Element{<:MMC}) = "convdc"
+is_passive(::MMC) = false
+admittance_order(::MMC) = ((:dc, :dc), (:ac, :d), (:ac, :q))
 
-function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_dict)
-    
-    conv = elem.element_model
-    ac_bus = buses[1]
-    dc_bus = buses[2]
-    
+inputs(model::MMC) = (
+    delta_control = inputs(model.delta_control),
+    sigma_control = inputs(model.sigma_control),
+    sync = inputs(model.sync),
+    powerflow = _CONVERTER_POWERFLOW_INPUTS,
+)
+inputs(block::ΔdqControlGFL) = (
+    outer_active = inputs(block.outer_active),
+    outer_reactive = inputs(block.outer_reactive),
+    occ = inputs(block.occ),
+)
+inputs(block::ΔdqControlGFM) = (
+    outer_reactive = inputs(block.outer_reactive),
+    vi = inputs(block.vi),
+    occ = inputs(block.occ),
+)
+inputs(block::ΣdqzControlTEC) = (
+    tec = inputs(block.tec), zscc = inputs(block.zscc), ccsc = inputs(block.ccsc),
+)
+inputs(block::ΣdqzControlLEC) = (
+    wsigma = inputs(block.wsigma), wdelta = inputs(block.wdelta), ccc = inputs(block.ccc),
+)
+
+_powerflow_references(block::ΔdqControlGFL) = merge(
+    _powerflow_references(block.outer_active), _powerflow_references(block.outer_reactive))
+_powerflow_references(block::ΔdqControlGFM) = _powerflow_references(block.outer_reactive)
+_powerflow_references(model::MMC) = merge(
+    _powerflow_references(model.sync), _powerflow_references(model.delta_control))
+powerflow_targets(model::MMC) = merge(model.powerflow, _powerflow_references(model))
+
+bases(model::MMC) = model.bases
+
+limits(model::MMC) = model.limits
+
+
+
+
+pmtype(::MMC, rows) = "convdc"
+
+function convert!(data, conv::MMC, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+
+    key = component_key.index
+    target = powerflow_targets(conv)
+    b = bases(conv)
+    p_ac = target.p_ac * b.S
+    q_ac = target.q_ac * b.S
+    v_ac = target.v_ac * b.v_ac
+    p_dc = target.p_dc * b.S
+    v_dc = target.v_dc * b.v_dc
+    lm = limits(conv)
+    ac_bus = ports.ac
+    dc_bus = ports.dc
+
     key_str = string(key)
-    
+
 
     data["convdc"][key_str] = Dict{String, Any}()
     convdc = data["convdc"][key_str]
@@ -794,7 +898,9 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
     convdc["basekVac"] = global_dict["V"] / 1e3
 
     convdc["type_ac"] = pf_type_ac(conv.delta_control)
-    convdc["Vtar"] = (elem.setpoint.Vac/sqrt(2)) / (global_dict["V"] / 1e3) # division by sqrt(2) --> for base voltages, PowerModelsACDC uses RMS voltages, PowerImpedance uses amplitude
+    # Divide by sqrt(2). PowerModelsACDC uses RMS base voltages,
+    # PowerImpedance uses amplitude
+    convdc["Vtar"] = (v_ac/sqrt(2)) / (global_dict["V"] / 1e3)
     if convdc["type_ac"] == 2
         data["bus"][string(ac_bus)] = set_bus_type(data["bus"][string(ac_bus)], 2)
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
@@ -802,11 +908,12 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
     convdc["type_dc"] = pf_type_dc(conv.delta_control, conv.sync)
     droop = pf_acq_droop(conv.delta_control.outer_reactive)
     convdc["acq_droop"] = droop.enabled
-    convdc["kq_droop"] = droop.kq * (conv.elec.Sbase / (global_dict["S"] * 1e-6))
-    convdc["droop"] = pf_dc_droop(conv.delta_control, conv.elec.vDC_base, conv.elec.Sbase, global_dict, data)
-    convdc["Vdcset"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
-    convdc["Pacset"] = -elem.setpoint.Pac
-    convdc["Pdcset"] = (!ismissing(elem.setpoint.Pdc) && !iszero(elem.setpoint.Pdc)) ? elem.setpoint.Pdc : elem.setpoint.Pac
+    convdc["kq_droop"] = droop.kq * (conv.bases.S / (global_dict["S"] * 1e-6))
+    convdc["droop"] = pf_dc_droop(conv.delta_control,
+        conv.bases.v_dc, conv.bases.S, global_dict, data)
+    convdc["Vdcset"] = v_dc / (data["dcpol"] * global_dict["V"] / 1e3)
+    convdc["Pacset"] = -p_ac
+    convdc["Pdcset"] = (!ismissing(p_dc) && !iszero(p_dc)) ? p_dc : p_ac
     convdc["dVdcSet"] = 0.0
 
     convdc["islcc"] = 0
@@ -818,23 +925,27 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
     convdc["bf"] = 0.0
     convdc["reactor"] = 1
 
-    convdc["rc"] = conv.elec.turnsRatio^(-2) * (conv.elec.Rₑ * conv.elec.zAC_base) / global_dict["Z"]
-    convdc["xc"] = conv.elec.turnsRatio^(-2) * (conv.elec.Lₑ * conv.elec.lAC_base) * global_dict["omega"] / global_dict["Z"]
+    pu = perunit(conv.elec, conv.bases)
+    convdc["rc"] = conv.elec.turnsRatio^(-2) *
+        (pu.Rₑ * pu.zAC_base) / global_dict["Z"]
+    convdc["xc"] = conv.elec.turnsRatio^(-2) *
+        (pu.Lₑ * pu.lAC_base) * global_dict["omega"] / global_dict["Z"]
 
     convdc["Vmmax"] = 1.1 * convdc["Vtar"]
     convdc["Vmmin"] = 0.9 * convdc["Vtar"]
-    convdc["Imax"] = 1.1 * max(abs(elem.limits.P_min), abs(elem.limits.P_max), abs(elem.setpoint.Pac)) / max(elem.setpoint.Vac / sqrt(2), eps())
+    convdc["Imax"] = 1.1 * max(abs(lm.P_min), abs(lm.P_max), abs(p_ac)) /
+        max(v_ac / sqrt(2), eps())
 
-    convdc["P_g"] = elem.setpoint.Pac
-    convdc["Q_g"] = elem.setpoint.Qac
+    convdc["P_g"] = p_ac
+    convdc["Q_g"] = q_ac
     convdc["LossA"] = 0.0
     convdc["LossB"] = 0.0
     convdc["LossCrec"] = 0.0
     convdc["LossCinv"] = 0.0
-    convdc["Qacmax"] = elem.limits.Q_max*elem.element_model.elec.Sbase
-    convdc["Qacmin"] = elem.limits.Q_min*elem.element_model.elec.Sbase
-    convdc["Pacmax"] = elem.limits.P_max*elem.element_model.elec.Sbase
-    convdc["Pacmin"] = elem.limits.P_min*elem.element_model.elec.Sbase
+    convdc["Qacmax"] = lm.Q_max*conv.bases.S
+    convdc["Qacmin"] = lm.Q_min*conv.bases.S
+    convdc["Pacmax"] = lm.P_max*conv.bases.S
+    convdc["Pacmin"] = lm.P_min*conv.bases.S
 
     if data["bus"][string(ac_bus)]["bus_type"] == 1
         data["bus"][string(ac_bus)]["vm"] = convdc["Vtar"]
@@ -842,10 +953,11 @@ function convert!(data,elem::Element{<:MMC},::Type{PMACDC}, key, buses, global_d
         data["bus"][string(ac_bus)]["vmax"] = 1.1 * data["bus"][string(ac_bus)]["vm"]
     end
 
-    data["busdc"][string(dc_bus)]["Vdc"] = elem.setpoint.Vdc / (data["dcpol"] * global_dict["V"] / 1e3)
+    data["busdc"][string(dc_bus)]["Vdc"] = v_dc / (data["dcpol"] * global_dict["V"] / 1e3)
     data["busdc"][string(dc_bus)]["Vdcmax"] = 1.1 * data["busdc"][string(dc_bus)]["Vdc"]
     data["busdc"][string(dc_bus)]["Vdcmin"] = 0.9 * data["busdc"][string(dc_bus)]["Vdc"]
-    data["busdc"][string(dc_bus)] = set_bus_type_dc(data["busdc"][string(dc_bus)], convdc["type_dc"])
+    data["busdc"][string(dc_bus)] = set_bus_type_dc(
+        data["busdc"][string(dc_bus)], convdc["type_dc"])
 
     return nothing
 end

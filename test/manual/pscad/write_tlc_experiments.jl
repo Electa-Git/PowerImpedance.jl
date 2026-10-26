@@ -9,8 +9,7 @@ const SETTINGS = P.SimulationSettings(simulation_time = 10.0,
 for (case, factory) in (("tlc_case1", PSCADFixtures.tlc_case1_network),
     ("tlc_case2", PSCADFixtures.tlc_case2_network))
     fixture = factory()
-    for (representation, network) in (("classic", fixture.classic), (
-        "builder", fixture.state))
+    for (representation, network) in (("builder", fixture),)
         name = case * "_" * representation
         model = export_pscad(network; path = joinpath(EXPERIMENTS, name * ".pscx"),
             settings = SETTINGS, dc_reference = :none)
@@ -21,8 +20,8 @@ for (case, factory) in (("tlc_case1", PSCADFixtures.tlc_case1_network),
             println(io, "quantity\tvalue\tunit")
             println(io, "P_network\t", flow.pt, "\tMW")
             println(io, "Q_network\t", flow.qt, "\tMVAr")
-            println(io, "P_ac_f\t", flow.pt / converter.model.elec.Sbase, "\tpu")
-            println(io, "Q_ac_f\t", flow.qt / converter.model.elec.Sbase, "\tpu")
+            println(io, "P_ac_f\t", flow.pt / converter.model.bases.S, "\tpu")
+            println(io, "Q_ac_f\t", flow.qt / converter.model.bases.S, "\tpu")
             println(io, "v_dc_f\t", equilibrium.outputs.meas.v_dc_f, "\tpu")
             println(io, "omega_c\t", equilibrium.outputs.sync.ω_c, "\tpu")
             for (state, value) in pairs(equilibrium.states)

@@ -1,7 +1,7 @@
 module PSCADValidation
 
 using PowerImpedance, LinearAlgebra, Statistics, Dates, SHA, TOML, Printf
-using PowerImpedance: TYPEDSIGNATURES
+using PowerImpedance: TYPEDSIGNATURES, eval_abcd
 
 const P = PowerImpedance.PSCAD
 const ROOT = @__DIR__

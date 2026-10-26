@@ -1,0 +1,6 @@
+extends: existence
+message: "Split the statements at '%s' into separate sentences."
+level: error
+nonword: true
+tokens:
+  - ';'

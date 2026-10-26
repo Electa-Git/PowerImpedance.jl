@@ -52,10 +52,11 @@ function _cable_ac_connection!(state, bus_label, labels, probe, side)
     x, y = allocate_cell!(state.layout)
     point = (x + 144, y + 90)
     component!(state.main, "breakout", point)
-    outer = ammeter_stub!(state.main, point, bus_label, probe; direction = -1)
+    outer = ammeter_stub!(state.main, point, bus_label, probe;
+        direction = -1, reverse = side == 2)
     if side == 2
-        # Exchange the meter node labels to reverse its sign and preserve the
-        # breakout wires. Side 2 measures current from element to bus.
+        # Exchange the meter node labels and reverse the meter to preserve the
+        # breakout wires. Both sides measure current into the cable.
         bus_index = findlast(c -> c.defn == "master:nodelabel" &&
                                  (c.x, c.y) == outer, state.main.components)
         inner_index = findlast(c -> c.defn == "master:nodelabel" &&
@@ -90,7 +91,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Cable}, cont
         throw(ArgumentError("cable :$(e.name) requires 1 to 4 ordered C1/I1 through C4/I4 layer pairs"))
     all(p -> isfinite(p[1]) && isfinite(p[2]) && p[2] > 0, cable.positions) ||
         throw(ArgumentError("cable :$(e.name) requires finite positions with positive depth or height"))
-    length(e.terminals) == 2 && [t.side for t in e.terminals] == [1, 2] &&
+    length(e.terminals) == 2 && [t.port for t in e.terminals] == [:side1, :side2] &&
     all(t -> !t.grounded, e.terminals) ||
         throw(ArgumentError("cable :$(e.name) requires two fully connected nongrounded sides"))
     buses = [_terminal_bus(e, t, context) for t in e.terminals]
@@ -129,14 +130,15 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Cable}, cont
             ComponentPlan("master:cable_interface",
                 _cable_interface_parameters(e.pscad, positions), interface..., side == 1 ?
                                                                                0 : 4))
-        probe = current_probe!(state, e, terminal, context; orientation = side == 1 ? :into : :out)
+        probe = current_probe!(state, e, terminal, context; orientation = :into)
         labels = dc ? _terminal_labels(e, terminal, context) :
                  [pscad_name(e.pscad * "_$(side)_" * phase; used = state.used)
                   for phase in ("A", "B", "C")]
         for (i, label) in enumerate(labels)
             port = (interface[1] + 18direction, interface[2] + 54 * (i - 1))
             if dc && i == 1
-                ammeter_stub!(state.main, port, label, probe; direction)
+                ammeter_stub!(state.main, port, label, probe;
+                    direction, reverse = side == 2)
             else
                 stub!(state.main, port, label; direction)
             end

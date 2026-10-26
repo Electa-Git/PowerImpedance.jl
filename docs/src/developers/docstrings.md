@@ -1,14 +1,12 @@
 # Docstrings
 
-The following docstring standards are adopted across the codebase.
-
 ## General principles
 
-1. **Placement:** Place a docstring immediately before the struct, constructor, function, module, or constant that it describes.
-2. **Delimiter:** Use triple double quotes (`"""`) for docstrings except for individual struct fields and constants, which use single-line string docstrings.
-3. **Implementation first:** Describe the behavior implemented by the code. Do not infer behavior, units, or mathematics from a name alone.
-4. **Conciseness:** Avoid redundancy. Present each fact once, in the appropriate section.
-5. **Tone:** Use formal, precise scientific language. Avoid contractions, colloquialisms, and ambiguous wording.
+1. **Placement.** Place a docstring immediately before the struct, constructor, function, module, or constant that it describes.
+2. **Delimiter.** Use triple double quotes (`"""`) for docstrings except for individual struct fields and constants, which use single-line string docstrings.
+3. **Implementation first.** Describe the behavior, units, and mathematics implemented by the code.
+4. **Conciseness.** Avoid redundancy. Present each fact once, in the appropriate section.
+5. **Tone.** Use formal, precise scientific language. Avoid contractions, colloquialisms, and ambiguous wording.
 
 ## Physical unit formatting
 
@@ -18,13 +16,15 @@ All arguments, return values, struct fields, and constants that represent physic
 2. Mark physical quantities without dimensions as `\\[dimensionless\\]`.
 3. Do not add unit annotations to non-physical values such as counters, flags, indices, and collection sizes.
 4. Use standard SI symbols. Use the Unicode middle dot for multiplication when appropriate: `\\[Ω·m\\]`.
-5. Inside comments in `julia` example blocks, use ordinary square brackets: `# [m]`, because the comment is Julia source rather than docstring prose.
+5. Inside comments in `julia` example blocks, use ordinary square brackets: `# [m]`.
 
 ## Mathematical formulation formatting
 
-Use LaTeX whenever a function directly implements a mathematical expression, reduction, approximation, or physical law that is important for understanding its behavior. Put the expression in a `math` block within `# Notes`, followed by definitions of its symbols when they are not already unambiguous from `# Arguments`.
+Use LaTeX whenever a function directly implements a mathematical expression, reduction, approximation, or physical law that is important for understanding its behavior. Put the expression in a `math` block within `# Notes`, followed by definitions of its symbols when `# Arguments` leaves their meaning ambiguous.
 
-Whether mathematics is required is determined from the implementation, not from a function-name convention. A `calc_` prefix neither requires nor excuses a formula by itself. Simple accessors, wrappers, dispatch helpers, and bookkeeping functions generally do not need a mathematical section.
+The implementation determines whether a docstring needs mathematics. A `calc_`
+prefix alone does not decide this. A mathematical section is generally unnecessary
+for simple accessors, wrappers, dispatch helpers, and bookkeeping functions.
 
 Within Julia docstrings, escape LaTeX commands with a second backslash:
 
@@ -69,7 +69,7 @@ function transfer_impedance(resistance, inductance, frequency)
 
 - `$(SIGNATURES)` inserts the documented method signatures without argument type annotations.
 - `$(TYPEDSIGNATURES)` inserts the documented method signatures with argument types. Use this at the start of function and constructor docstrings.
-- `$(FUNCTIONNAME)` inserts the documented function name. It is useful in examples that should remain valid after a rename.
+- `$(FUNCTIONNAME)` inserts the documented function name. It supplies the function name in examples after a rename.
 - `$(TYPEDEF)` inserts the documented type declaration, including type parameters and supertypes.
 - `$(TYPEDFIELDS)` inserts the fields, their declared types, and their field docstrings.
 - `$(IMPORTS)` inserts the modules imported by a documented module.
@@ -131,9 +131,8 @@ instance = $(FUNCTIONNAME)(1.0, 0.5)
 function StructName(first_property, model_parameter)
 ````
 
-An inner constructor is a method written inside the `struct` body. Julia does
-not attach a bare string there as the constructor's documentation, so an inner
-constructor requires `@doc`:
+An inner constructor is a method written inside the `struct` body.
+Use `@doc` to attach a string as the inner constructor's documentation:
 
 ````julia
 """
@@ -183,12 +182,12 @@ use an ordinary immediately preceding docstring for methods outside it.
 
 Start with `$(TYPEDSIGNATURES)` and use the following section order:
 
-1. Description, without a heading.
-2. `# Arguments`.
-3. `# Returns`.
-4. `# Notes`, only when useful. Include LaTeX here when the implementation requires mathematical explanation.
-5. `# Errors`, only when the function deliberately throws or propagates errors that callers should anticipate.
-6. `# Examples`.
+1. Description, without a heading
+2. `# Arguments`
+3. `# Returns`
+4. Use `# Notes` only when useful. Include LaTeX here when the implementation requires mathematical explanation.
+5. Use `# Errors` only when the function throws or propagates errors that callers can encounter.
+6. `# Examples`
 
 Separate the description and each section with exactly one blank line. List arguments in declaration order and state defaults where applicable. Document every member of a returned tuple individually.
 
@@ -224,7 +223,7 @@ result = $(FUNCTIONNAME)(1.0, 0.5) # [unit]
 function function_name(arg1, arg2)
 ````
 
-Examples must use physically valid, dimensionally consistent input values. For nonphysical inputs, use representative values that exercise the documented behavior. Include an expected result or behavior only when it can be stated accurately. Dedicated cross-reference lists are not maintained in docstrings.
+Examples must use physically valid, dimensionally consistent input values. For nonphysical inputs, use representative values that exercise the documented behavior. Include an expected result or behavior only when it can be stated accurately. Place cross-references in the relevant prose.
 
 ### Modules
 

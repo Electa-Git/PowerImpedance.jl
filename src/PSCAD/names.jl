@@ -62,7 +62,7 @@ $(TYPEDSIGNATURES)
 
 Convert a name to an ASCII PSCAD identifier of at most 30 characters.
 Transliterate Greek letters, subscripts and superscripts. Remove other non-ASCII
-characters and replace ASCII punctuation with underscores. Prefix `X` if the
+characters and replace ASCII punctuation with `_`. Prefix `X` if the
 first character is not a letter.
 
 # Arguments
@@ -73,7 +73,7 @@ first character is not a letter.
 # Returns
 
 - The converted name, preserving letter case. With `used`, reserve the name
-  and resolve case-insensitive collisions by adding `_2`, `_3`, etc.,
+  and resolve case-insensitive collisions by adding numeric suffixes `_2`, `_3`, …,
   shortening the stem to keep the length limit.
 """
 function pscad_name(sym; used::Union{Nothing, _NameReservations} = nothing)
@@ -129,6 +129,6 @@ voltage_probe_name(bus) = "V_$bus"
 """
 $(TYPEDSIGNATURES)
 
-Return the current-probe name `I_<element>_<side>` for `element` and `side`.
+Return the current-probe name `I_<element>_<port>` for `element` and `port`.
 """
-current_probe_name(element, side) = "I_$(element)_$side"
+current_probe_name(element, port::Symbol) = "I_$(element)_$port"

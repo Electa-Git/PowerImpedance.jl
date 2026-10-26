@@ -1,4 +1,4 @@
-############################  common/loops/measurement.jl  ############################
+# Measurement blocks
 
 #=
 Shared converter measurement blocks.
@@ -12,7 +12,7 @@ applied.
 export MeasurementSignal,
        Measurement
 
-############################  Single-signal measurement block  ############################
+# Single-signal measurement block
 
 """
 $(TYPEDEF)
@@ -22,7 +22,7 @@ Single measured signal with an optional measurement filter.
 $(TYPEDFIELDS)
 """
 @with_kw struct MeasurementSignal{F<:AbstractMeasurementFilter} <: AbstractStateSpace
-    "Name of the raw input signal; output names append `_f`."
+    "Name of the raw input signal. Output names append `_f`."
     signal::Symbol
     "Measurement filter with a scalar state-space realization."
     filter::F = NoFilter()
@@ -35,7 +35,7 @@ Construct a filtered measurement signal.
 
 # Arguments
 
-- `signal`: Name of the raw input signal; output names append `_f`.
+- `signal`: Name of the raw input signal. Output names append `_f`.
 - `filter`: Filter specification realized before storage.
 
 # Returns
@@ -59,7 +59,7 @@ function MeasurementSignal(signal::Symbol, filter::F) where {F<:AbstractMeasurem
     return MeasurementSignal{F}(signal=signal, filter=filter)
 end
 
-############################  Interface for one signal  ############################
+# Interface for one signal
 
 function statenames(m::MeasurementSignal)
     nx = size(m.filter.A, 1)
@@ -107,7 +107,7 @@ under the filtered output name.
 \\dot{x}=Ax+Bu,\\qquad y=Cx+Du.
 ```
 
-Time uses \\[s\\]. Realization-state units depend on the matrices; input and output have
+Time uses \\[s\\]. Realization-state units depend on the matrices. Input and output have
 the same physical signal units. A realization without states returns its direct output.
 
 # Examples
@@ -115,10 +115,10 @@ the same physical signal units. A realization without states returns its direct 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = MeasurementSignal(:v_dc, P.Butterworth(order=2, ωc=2π*100))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -152,7 +152,7 @@ function outputequations!(F, x, inputs, y, m::MeasurementSignal)
     return nothing
 end
 
-############################  Composite measurement block  ############################
+# Composite measurement block
 
 """
 $(TYPEDEF)
@@ -206,8 +206,8 @@ Construct the converter measurement block from filter specifications.
 
 # Notes
 
-The `v_ac` filter is applied to `vG_d` and `vG_q`; the `i_ac` filter is applied to
-`i_d` and `i_q`; scalar filters are used for `v_dc`, `i_dc`, `θ`, `P_ac`, `Q_ac`,
+The `v_ac` filter is applied to `vG_d` and `vG_q`. The `i_ac` filter is applied to
+`i_d` and `i_q`. Scalar filters are used for `v_dc`, `i_dc`, `θ`, `P_ac`, `Q_ac`,
 and `P_dc`.
 
 # Examples
@@ -241,7 +241,7 @@ function Measurement(;
     )
 end
 
-############################  Interface for composite block  ############################
+# Interface for composite block
 
 statenames(m::Measurement) = (
     statenames(m.vG_d)...,
@@ -291,11 +291,11 @@ Evaluate all measurement filters and return their filtered outputs.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `m`: Voltage, current, angle, and power measurement filters.
 - `c`: Parent converter providing electrical bases and synchronization.
@@ -332,10 +332,10 @@ converter bases \\[dimensionless\\].
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = tlc().element_model
+model = tlc()
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = Measurement()
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))

@@ -66,6 +66,7 @@ end
 $(TYPEDEF)
 
 Describe a measured PSCAD channel and its bus or element.
+Exported terminal current probes measure current into the component.
 
 $(TYPEDFIELDS)
 """
@@ -76,17 +77,20 @@ struct ProbeChannel
     kind::Symbol
     "Bus name, when applicable."
     bus::Union{Nothing, String}
-    "Element name, when applicable."
+    "Component name, when applicable."
     element::Union{Nothing, String}
-    "Element side for current, or P/N pole for DC voltage, when applicable."
-    side::Union{Nothing, String}
+    "Electrical port name for element channels, when applicable."
+    port::Union{Nothing, Symbol}
+    "P/N pole for DC voltage channels, when applicable."
+    pole::Union{Nothing, String}
     "Number of measured components."
     dim::Int
     "Physical unit recorded for the channel."
     unit::String
     "Positive current direction (`:into` or `:out`), or `nothing` for other quantities."
     orientation::Union{Nothing, Symbol}
-    function ProbeChannel(name, kind, bus, element, side, dim, unit, orientation = nothing)
+    function ProbeChannel(name, kind, bus, element, port, dim, unit,
+            orientation = nothing; pole = nothing)
         if kind in (:current, :injection_current)
             orientation in (:into, :out) ||
                 throw(ArgumentError("terminal current probe requires :into or :out orientation"))
@@ -94,7 +98,7 @@ struct ProbeChannel
             orientation === nothing ||
                 throw(ArgumentError("only terminal current probes have orientation"))
         end
-        return new(name, kind, bus, element, side, dim, unit, orientation)
+        return new(name, kind, bus, element, port, pole, dim, unit, orientation)
     end
 end
 
@@ -118,7 +122,7 @@ ProbeManifest() = ProbeManifest(ProbeChannel[], nothing)
 $(TYPEDEF)
 
 Store a PSCAD project, measurement manifest, simulation settings, and optional
-network and operating-point records. Construction does not contact the station.
+network and operating-point records. Construction stores these records locally.
 
 $(TYPEDFIELDS)
 """

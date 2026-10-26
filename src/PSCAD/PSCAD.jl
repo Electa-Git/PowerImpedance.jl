@@ -2,7 +2,7 @@
     PSCAD
 
 Export PSCAD projects and execute simulations on a configured station.
-Module loading does not contact the station or access files.
+Module loading defines the export and execution methods in memory.
 """
 module PSCAD
 
@@ -17,7 +17,7 @@ using TypedTables: Table
 using ..PowerImpedance: PowerImpedance, TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 using ..PowerImpedance: AbstractFormulation, AbstractProblemResult, OrderedDict
 using ..PowerImpedance: _register_backend!, _require_backend
-import ..PowerImpedance: compute
+import ..PowerImpedance: compute, steady_state
 
 """
 $(TYPEDEF)

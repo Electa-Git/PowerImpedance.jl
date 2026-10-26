@@ -19,7 +19,7 @@ $(TYPEDFIELDS)
 	Δyᵇᶜ::Union{Int, Float64} = 0     # vertical offset between the bundles   [m]
 	"Horizontal bundle offset `\\[m\\]`."
 	Δxᵇᶜ::Union{Int, Float64} = 0     # horizontal offset between the lowest bundles  [m]
-	"Secondary horizontal offset used by offset/concentric layouts `\\[m\\]`."
+	"Secondary horizontal offset used by offset and concentric layouts `\\[m\\]`."
 	Δ̃xᵇᶜ::Union{Int, Float64} = 0     # horizontal offset in group of bundles    [m]
 	"Maximum conductor sag `\\[m\\]`."
 	dˢᵃᵍ::Union{Int, Float64} = 0     # sag offset    [m]
@@ -99,7 +99,7 @@ $(TYPEDFIELDS)
 	end
 end
 
-# @with_kw cannot expand @doc on an inner constructor; attach to its existing method.
+# Attach @doc to the existing inner-constructor method after @with_kw expansion.
 @doc """
 $(TYPEDSIGNATURES)
 
@@ -139,7 +139,7 @@ Overhead_line(::Any, ::Any, ::Any, ::Any, ::Any)
 """
 $(TYPEDSIGNATURES)
 
-Construct a frequency-dependent overhead transmission-line element.
+Construct a frequency-dependent overhead transmission-line model.
 
 # Arguments
 
@@ -150,13 +150,11 @@ Construct a frequency-dependent overhead transmission-line element.
   relative permittivity `\\[dimensionless\\]`, and resistivity `\\[Ω·m\\]`.
 - `transposition`: Phase transposition, `:none` (default) or `:ideal` for
   exactly three phase bundles.
-- `transformation`: Whether to expose a supported transformed representation.
-- `connection`: Whether NetworkBuilder includes the element in the system.
 - `args...`: Remaining component-field keywords described above.
 
 # Returns
 
-- An `Element` with one input and output terminal per conductor bundle.
+- An `Overhead_line` with conductor count derived from its bundle geometry.
 
 # Notes
 
@@ -170,8 +168,8 @@ sections short relative to the wavelength.
 
 # Errors
 
-- Throws `ArgumentError` for an unknown keyword or an unsupported conductor
-  organization/order during parameter evaluation.
+- Unsupported conductor organizations or orders raise `ArgumentError` during
+  parameter evaluation.
 - Throws `ArgumentError` for an unsupported transposition or ideal
   transposition with a phase-bundle count other than three.
 
@@ -195,19 +193,16 @@ line = overhead_line(
 ```
 """
 function overhead_line(; args...)
+	if any(key -> key in (:pins, :transformation, :connection, :setpoint), keys(args))
+		Base.kwerr((; args...), overhead_line)
+	end
 	tl = Overhead_line()
 	transposition = :none
-	transformation = false
-	connection = true
 	for (key, val) in pairs(args)
 		if key == :transposition
 			transposition = val
 		elseif in(key, propertynames(tl))
 			setfield!(tl, key, val)
-		elseif key == :transformation
-			transformation = val
-		elseif key == :connection
-			connection = val
 		else
 			throw(ArgumentError("Unknown property $(key) of the overhead line."))
 		end
@@ -215,16 +210,10 @@ function overhead_line(; args...)
 	_ohl_transposition(transposition, tl.conductors.nᵇ)
 	tl.transposition = transposition
 
-	# No P/Z assembly here anymore (no symbolics).
-	# P and Z fields remain in the struct (architecture unchanged), but are unused.
+	# P and Z are assembled numerically during evaluation.
+	# The stored P and Z fields are unused.
 
-	return Element(
-		input_pins = tl.conductors.nᵇ,
-		output_pins = tl.conductors.nᵇ,
-		element_value = tl,
-		transformation = transformation,
-		connection = connection,
-	)
+	return tl
 end
 
 function _ohl_flat(c::Conductors)
@@ -327,7 +316,7 @@ function _ohl_concentric(c::Conductors)
 end
 
 function _ohl_bundle_position(nsub::Int, dsub::Real)
-    # Make it always return vectors so indexing never explodes.
+    # Return vectors for consistent indexing.
     if nsub == 1
         return (Float64[0.0], Float64[0.0])
     end
@@ -351,7 +340,7 @@ end
 const _OHL_ORGANIZATIONS = (; flat = _ohl_flat, vertical = _ohl_vertical,
     delta = _ohl_delta, concentric = _ohl_concentric, offset = _ohl_concentric)
 
-# Tower bundle-centre coordinates; sag is applied only during parameter evaluation.
+# Tower bundle-center coordinates. Sag is applied during parameter evaluation.
 function _ohl_conductor_coordinates(c::Conductors)
     if hasproperty(_OHL_ORGANIZATIONS, c.organization)
         return getproperty(_OHL_ORGANIZATIONS, c.organization)(c)
@@ -376,8 +365,8 @@ Evaluate the per-unit-length series impedance and shunt admittance matrices.
 
 # Arguments
 
-- `tl`: Line geometry, conductor materials, earth properties, and transposition.
-- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+- `tl`: Line geometry and transposition, with conductor materials and earth properties.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses `s = 2π * im * f`
   for frequency `f` \\[Hz\\].
 
 # Returns
@@ -391,7 +380,7 @@ Evaluate the per-unit-length series impedance and shunt admittance matrices.
 d_e=[s\\mu_e(\\sigma_e+s\\epsilon_e)]^{-1/2},\\quad P_{ij}=\\frac{\\log(D_{ij}/d_{ij})}{2\\pi\\epsilon_0},\\quad Y=sP^{\\dagger}+\\operatorname{diag}(g).
 ```
 
-The complex earth penetration depth ``d_e`` and conductor/image distances
+The complex earth penetration depth ``d_e`` and conductor and image distances
 ``d_{ij},D_{ij}`` use \\[m\\]. Self terms replace ``d_{ii}`` with conductor radius. ``P``
 is the potential-coefficient matrix \\[m/F\\] and ``g`` is shunt conductance \\[S/m\\].
 Bundle constraints, ground-wire elimination, and optional cyclic ideal transposition
@@ -406,13 +395,13 @@ P = PowerImpedance
 model = overhead_line(length=1000.0,
     conductors=Conductors(nᵇ=3, nˢᵇ=1, organization=:flat,
         yᵇᶜ=20.0, Δxᵇᶜ=5.0, rᶜ=0.015, Rᵈᶜ=0.1),
-    earth_parameters=(1.0, 1.0, 100.0)).element_model
+    earth_parameters=(1.0, 1.0, 100.0))
 result = P.eval_parameters(model, 2π*im*50)
 ```
 """
 function eval_parameters(tl::Overhead_line, s::Complex)
 	_ohl_transposition(tl.transposition, tl.conductors.nᵇ)
-	# ---------- constants ----------
+	# constants
 	(μᵣ_earth, ϵᵣ_earth, ρ_earth) = tl.earth_parameters
 	μ₀ = 4π * 1e-7
 	ϵ₀ = _VACUUM_PERMITTIVITY
@@ -420,14 +409,14 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 	ϵ_earth = ϵᵣ_earth * ϵ₀
 	σ_earth = 1 / ρ_earth
 
-	# ---------- assemble conductor + groundwire primitives ----------
+	# assemble conductor + groundwire primitives
 	x_array = Float64[]
 	y_array = Float64[]
 	r_array = Float64[]
-	ρ_array = Float64[]   # stored as (Rdc per length) [Ω/m] in your original code (via *1e-3)
+	ρ_array = Float64[]   # Rdc per unit length [Ω/m], converted with *1e-3.
 	μ_array = Float64[]
 
-	# conductors (named organization or explicit positions; validated by the helper)
+	# Conductors with helper-validated named organization or explicit positions.
 	(x, y) = _ohl_conductor_coordinates(tl.conductors)
 	(xˢᵇ, yˢᵇ) = _ohl_bundle_position(tl.conductors.nˢᵇ, tl.conductors.dˢᵇ)
 
@@ -454,7 +443,7 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 
 	Num = tl.conductors.nᵇ * tl.conductors.nˢᵇ + tl.groundwires.nᵍ
 
-	# ---------- numeric P(s), Z(s) ----------
+	# numeric P(s), Z(s)
 	P = zeros(ComplexF64, Num, Num)
 	Z = zeros(ComplexF64, Num, Num)
 
@@ -468,7 +457,8 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 		ρ_line = ρ_array[iPhase]
 		μ_cond = μ_array[iPhase]
 
-		ρ = ρ_line * (π * rᵢ^2)       # matches your original algebra
+		# Resistivity from resistance per unit length and conductor area.
+		ρ = ρ_line * (π * rᵢ^2)
 		m = sqrt(s * μ_cond / ρ)
 
 		for jPhase in 1:Num
@@ -493,8 +483,8 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 		end
 	end
 
-	# ---------- bundled subconductor constraint (same block as your current overhead_line) ----------
-	# This is lifted verbatim in spirit from the section before `tl.P = P; tl.Z = Z`. :contentReference[oaicite:5]{index=5}
+	# bundled subconductor constraint
+
 	if tl.conductors.nˢᵇ != 0
 		cond_noElim = [(i-1)*tl.conductors.nˢᵇ + 1 for i in 1:tl.conductors.nᵇ]
 		for iPhase in 1:tl.conductors.nᵇ
@@ -509,7 +499,7 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 		end
 	end
 
-	# ---------- Kron elimination ----------
+	# Kron elimination
 	if (tl.groundwires.nᵍ + tl.conductors.nˢᵇ > 1)
 		cond_noElim = [(i-1)*tl.conductors.nˢᵇ + 1 for i in 1:tl.conductors.nᵇ]
 		Z = PowerImpedance.kron(Z, cond_noElim)
@@ -521,7 +511,7 @@ function eval_parameters(tl::Overhead_line, s::Complex)
 		P = (P + P[[2, 3, 1], [2, 3, 1]] + P[[3, 1, 2], [3, 1, 2]]) / 3
 	end
 
-	# ---------- invert P to get Y ----------
+	# invert P to get Y
 	Y = s * pinv(P) + Diagonal([tl.conductors.gᶜ for _ in 1:size(P, 1)])
 
 	return (Z, Y)
@@ -535,8 +525,8 @@ Evaluate the receiving-to-sending ABCD matrix of the distributed overhead-line m
 
 # Arguments
 
-- `tl`: Line geometry, conductor materials, earth properties, and transposition.
-- `s`: Complex Laplace frequency \\[s⁻¹\\]; sinusoidal evaluation uses `s = 2π * im * f`
+- `tl`: Line geometry and transposition, with conductor materials and earth properties.
+- `s`: Complex Laplace frequency \\[s⁻¹\\]. Sinusoidal evaluation uses `s = 2π * im * f`
   for frequency `f` \\[Hz\\].
 
 # Returns
@@ -567,7 +557,7 @@ P = PowerImpedance
 model = overhead_line(length=1000.0,
     conductors=Conductors(nᵇ=3, nˢᵇ=1, organization=:flat,
         yᵇᶜ=20.0, Δxᵇᶜ=5.0, rᶜ=0.015, Rᵈᶜ=0.1),
-    earth_parameters=(1.0, 1.0, 100.0)).element_model
+    earth_parameters=(1.0, 1.0, 100.0))
 result = P.eval_abcd(model, 2π*im*50)
 ```
 """
@@ -586,3 +576,13 @@ function eval_abcd(tl::Overhead_line, s::Complex)
 
 	return abcd
 end
+
+function electricalconnections(model::Overhead_line)
+    n = model.conductors.nᵇ
+    n in (1, 2, 3) ||
+        throw(ArgumentError("Overhead_line ports do not support $n conductors."))
+    domain = n == 3 ? ACABC : DC_CM
+    return (side1 = Port(domain), side2 = Port(domain))
+end
+
+bases(::Overhead_line) = nothing

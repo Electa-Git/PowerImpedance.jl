@@ -1,73 +1,60 @@
 # Composed circuits retain native device Jacobians and native passive models.
 # Port coordinates lead the nodal matrix; ideal-source nodes are clamped.
-function composed_circuit(net, devices, grids, ports)
-    clamped = Set{Symbol}([:gnd])
-    for e in values(net.elements)
-        e.element_model isa PowerImpedance.Source && union!(clamped, values(e.pins))
-    end
-    nodes = Symbol[]
-    for (name, side) in ports, t in 1:2
-        push!(nodes, net.elements[name].pins[Symbol("$side.$t")])
-    end
+function composed_circuit(net, devices, grids, ports;
+        point = compute(PowerFlowProblem(net), ACDCPowerFlow()).operating_point,
+        linearizations = Dict(name => linearize(net.elements[name], point[name])
+            for name in devices))
+    clamped = Set(clamped_nodes(net))
+    nodes = reduce(vcat, [port_nets(net, name, port) for (name, port) in ports])
     length(unique(nodes)) == length(nodes) || error("duplicate composed port")
     any(in(clamped), nodes) && error("a measured port is voltage clamped")
-    for name in sort!(collect(keys(net.elements))), node in values(net.elements[name].pins)
+    for name in sort!(collect(keys(net.elements))), node in component_nets(net, name)
         node in clamped || node in nodes || push!(nodes, node)
     end
     # Each un-clamped DC bus has the exporter's two 10 Mohm pole references.
     dc_references=Dict{Symbol,Float64}()
     for name in devices
-        e=net.elements[name];b=device_bases(e.element_model.elec)
+        b=device_bases(net.elements[name].elec, net.elements[name].bases)
         b.dc_voltage===nothing && continue
-        node=e.pins[Symbol("1.1")]
+        node=only(port_nets(net, name, :dc))
         node in nodes && (dc_references[node]=2P.DC_REFERENCE_RESISTANCE)
     end
-    return (; net, devices=collect(devices), grids=collect(grids), nodes, ports=collect(ports),dc_references)
+    return (; net, devices=collect(devices), grids=collect(grids), nodes,
+        ports=collect(ports),dc_references,point,linearizations)
 end
 
-function composed_incidence(c, e, pins)
-    h = zeros(length(c.nodes), length(pins))
-    for (j, pin) in enumerate(pins)
-        k = findfirst(==(e.pins[pin]), c.nodes)
+function composed_incidence(c, nodes)
+    h = zeros(length(c.nodes), length(nodes))
+    for (j, node) in enumerate(nodes)
+        k = findfirst(==(node), c.nodes)
         k === nothing || (h[k,j] = 1)
     end
     return h
 end
 
-function device_incidence(c, name)
-    e = c.net.elements[name]
-    b = device_bases(e.element_model.elec)
-    pins = b.dc_voltage === nothing ? Symbol[] : [Symbol("1.1")]
-    append!(pins, [Symbol("$(b.ac_side).$t") for t in 1:2])
-    return composed_incidence(c, e, pins)
-end
-
-function passive_incidence(c, e)
-    pins = [Symbol("$side.$t") for side in 1:2 for t in 1:e.input_pins]
-    return composed_incidence(c, e, pins)
-end
+component_incidence(c, name) = composed_incidence(c, component_nets(c.net, name))
 
 # The exact delay is inserted inside each eligible device before assembling KCL.
 # Positive-delay devices retain their native model, including carrier corrections.
 function composed_device_functions(c; time_step = nothing)
     return Dict(name => time_step === nothing ?
-        (s -> physical_y(c.net.elements[name], ComplexF64(s))) :
-        one_step_full_y(c.net.elements[name], time_step) for name in c.devices)
+        (s -> physical_y(c.net.elements[name], c.linearizations[name], ComplexF64(s))) :
+        one_step_full_y(c.net.elements[name], c.point[name], time_step) for name in c.devices)
 end
 
 function composed_nodal(c, s, functions; which = :full, forms = nothing)
     y = zeros(ComplexF64, length(c.nodes), length(c.nodes))
-    for (name, e) in c.net.elements
-        e.element_model isa PowerImpedance.Source && continue
+    for (name, e) in pairs(c.net.elements)
+        e isa PowerImpedance.Source && continue
         device = name in c.devices
         which == :passive && device && continue
         which == :active && !device && continue
         if device
-            h = device_incidence(c, name)
+            h = component_incidence(c, name)
             y += h * functions[name](s) * h'
         else
-            h = passive_incidence(c, e)
-            yy = forms === nothing || !haskey(forms,name) ? PowerImpedance.get_y(e, ComplexF64(s)) :
+            h = component_incidence(c, name)
+            yy = forms === nothing || !haskey(forms,name) ? physical_y(e, ComplexF64(s)) :
                 composed_passive_y(e, forms[name], s)
             y += h * yy * h'
         end
@@ -81,7 +68,7 @@ function composed_nodal(c, s, functions; which = :full, forms = nothing)
 end
 
 function composed_passive_y(e, form, s)
-    n = e.input_pins
+    n = passive_dimension(e)
     rotation = n == 2 ? [0. 2π*50; -2π*50 0.] : zeros(n,n)
     q = s*I(n) + rotation
     r, l, cap = form.R, form.L, form.C
@@ -118,21 +105,23 @@ function composed_reference(c, spec; time_step = nothing, forms = nothing)
         passive = composed_nodal(c,s,functions; which=:passive, forms)
         grid = zeros(ComplexF64,size(full))
         for name in c.grids
-            e = c.net.elements[name]; h = passive_incidence(c,e)
-            yy = forms === nothing ? PowerImpedance.get_y(e,ComplexF64(s)) : composed_passive_y(e,forms[name],s)
+            e = c.net.elements[name]; h = component_incidence(c,name)
+            yy = forms === nothing ? physical_y(e,ComplexF64(s)) : composed_passive_y(e,
+                forms[name],s)
             grid += h*yy*h'
         end
         push!(targets["aggregate_Y"], ((full-grid)*lift)[1:np,:])
         z=inv(composed_reduce(c,full))
         push!(targets["direct_Z"],z)
         if haskey(c.net.elements,:CableDC)
-            e=c.net.elements[:CableDC];h=passive_incidence(c,e)
+            e=c.net.elements[:CableDC];h=component_incidence(c,:CableDC)
             dc=h'*lift*z
             push!(targets["DC_voltage_Z"],dc)
-            push!(targets["DC_current_T"],PowerImpedance.get_y(e,ComplexF64(s))*dc)
+            push!(targets["DC_current_T"],physical_y(e,ComplexF64(s))*dc)
         end
         for name in c.devices
-            h = device_incidence(c,name); b = device_bases(c.net.elements[name].element_model.elec)
+            h = component_incidence(c, name); b = device_bases(c.net.elements[name].elec,
+                c.net.elements[name].bases)
             yy=functions[name](s)
             if b.dc_voltage===nothing || all(iszero,h[:,1])
                 # Local device Y uses its own measured terminal voltage, even
@@ -156,28 +145,31 @@ end
 function composed_descriptor(c)
     nv = length(c.nodes)
     blocks = Any[]
-    for (name,e) in c.net.elements
-        e.element_model isa PowerImpedance.Source && continue
+    for (name,e) in pairs(c.net.elements)
+        e isa PowerImpedance.Source && continue
         name in c.devices && continue
-        e.element_model isa PowerImpedance.Impedance || error("descriptor requires a lumped RLC branch: $name")
+        e isa PowerImpedance.Impedance ||
+            error("descriptor requires a lumped RLC branch: $name")
         form = P.identify_rlc(e; name).form
-        m = e.input_pins
-        h = passive_incidence(c,e)*[I(m); -I(m)]
+        m = passive_dimension(e)
+        h = component_incidence(c,name)*[I(m); -I(m)]
         rot = m == 2 ? [0. 2π*50; -2π*50 0.] : zeros(m,m)
         push!(blocks,(;name,form,m,h,rot))
     end
-    nx = sum(size(c.net.elements[n].A,1) for n in c.devices)
+    nx = sum(size(c.linearizations[n].system.A,1) for n in c.devices)
     ns = sum(b.m*((b.form.L!==nothing)+(b.form.C!==nothing)) for b in blocks;init=0)
     n = nx+ns+nv; vi = (n-nv+1):n
     K = zeros(ComplexF64,n,n); E = similar(K); fill!(E,0)
     offset = 0
     for name in c.devices
-        e=c.net.elements[name];b=device_bases(e.element_model.elec);h=device_incidence(c,name)
-        ix=(offset+1):(offset+size(e.A,1));offset=last(ix)
-        E[ix,ix]=I(length(ix));K[ix,ix]=e.A
-        K[ix,vi]=(e.B./b.voltage_inputs')*h'
-        K[vi,ix]=-h*(e.C.*b.current_outputs)
-        K[vi,vi]-=h*(e.D.*b.current_outputs./b.voltage_inputs')*h'
+        e=c.net.elements[name];b=device_bases(e.elec, e.bases);h=component_incidence(c,
+            name)
+        system = c.linearizations[name].system
+        ix=(offset+1):(offset+size(system.A,1));offset=last(ix)
+        E[ix,ix]=I(length(ix));K[ix,ix]=system.A
+        K[ix,vi]=(system.B./b.voltage_inputs')*h'
+        K[vi,ix]=-h*(system.C.*b.current_outputs)
+        K[vi,vi]-=h*(system.D.*b.current_outputs./b.voltage_inputs')*h'
     end
     for b in blocks
         f=b.form;m=b.m;h=b.h;rot=b.rot
@@ -237,7 +229,8 @@ function composed_stability(c; frequencies=exp10.(range(-2,5;length=6001)))
     contour=[conj.(reverse(characteristic[2:end]));characteristic]
     increments=[angle(contour[mod1(j+1,length(contour))]/contour[j]) for j in eachindex(contour)]
     turns=sum(increments)/(2π);net=-round(Int,turns)
-    open_rhp=sum(count(z->real(z)>1e-6,eigvals(c.net.elements[n].A)) for n in c.devices)
+    open_rhp=sum(count(z->real(z)>1e-6,
+        eigvals(c.linearizations[n].system.A)) for n in c.devices)
     stable=!isempty(pen.poles) && maximum(real,pen.poles)<-1e-7 && net+open_rhp==0 && abs(turns+net)<1e-6 && residual<=1e-6
     return Dict("method"=>"complete lumped KCL descriptor + native finite contour",
         "status"=>stable ? "passed" : "failed","frequency_count"=>length(frequencies),
@@ -252,10 +245,10 @@ end
 
 function exported_composed_passives(c, project, list)
     text=read(project,String);forms=Dict{Symbol,P.RLCForm}()
-    for (name,e) in c.net.elements
-        e.element_model isa PowerImpedance.Source && continue
+    for (name,e) in pairs(c.net.elements)
+        e isa PowerImpedance.Source && continue
         name in c.devices && continue
-        if e.element_model isa PowerImpedance.Cable
+        if e isa PowerImpedance.Cable
             verify_composed_cable(project,list)
             continue
         end
@@ -273,8 +266,8 @@ function exported_composed_passives(c, project, list)
         forms[name]=P.RLCForm(original.topology,fields...)
     end
     for (node,resistance) in c.dc_references
-        e=first(filter(n->c.net.elements[n].pins[Symbol("1.1")]==node,c.devices))
-        bus=port_probe(list,e,1)
+        e=first(filter(n->only(port_nets(c.net, n, :dc))==node,c.devices))
+        bus=port_probe(list,e,:dc)
         poles=[exported_passive(text,bus.name*"_reference_"*pole*"_R","resistor","R","ohm") for pole in ("P","N")]
         sum(poles)==resistance || error("exported DC reference changed at $node")
     end
@@ -320,18 +313,23 @@ end
 # Only the low-frequency pi descriptor supplies seeds. Every final root and
 # both finite contours evaluate the native distributed cable, never this seed.
 function composed_cable_seed(c)
-    net=deepcopy(c.net);cable=pop!(net.elements,:CableDC)
-    z,y=PowerImpedance.eval_parameters(cable.element_model,ComplexF64(im*2π))
-    q=[1.,-1.];zz=only(q'*z*q)*cable.element_model.length
-    yy=only(q'*y*q)/4*cable.element_model.length
+    cable=c.net.elements.CableDC
+    z,y=PowerImpedance.eval_parameters(cable,ComplexF64(im*2π))
+    q=[1.,-1.];zz=only(q'*z*q)*cable.length
+    yy=only(q'*y*q)/4*cable.length
     r=real(zz);l=imag(zz)/(2π);cap=imag(yy)/(4π)
-    a=cable.pins[Symbol("1.1")];b=cable.pins[Symbol("2.1")]
-    add!(net,:CableSeed,impedance(z=s->r+l*s,pins=1))
-    connect!(net,(:CableSeed,Symbol("1.1")),a);connect!(net,(:CableSeed,Symbol("2.1")),b)
-    for (name,node) in ((:SeedCap1,a),(:SeedCap2,b))
-        add!(net,name,impedance(z=s->inv(s*cap),pins=1))
-        connect!(net,(name,Symbol("1.1")),node);connect!(net,(name,Symbol("2.1")),:gnd)
-    end
+    a=only(port_nets(c.net, :CableDC, :side1))
+    b=only(port_nets(c.net, :CableDC, :side2))
+    elements = merge(Base.structdiff(c.net.elements, (; CableDC = nothing)),
+        (; CableSeed = impedance(z = s -> r+l*s, conductors = 1),
+            SeedCap1 = impedance(z = s -> inv(s*cap), conductors = 1),
+            SeedCap2 = impedance(z = s -> inv(s*cap), conductors = 1)))
+    topology = fixture_topology(c.net; exclude = (:CableDC,))
+    append!(topology, [
+        NetworkBuilder.Bus(a; ports = ((:CableSeed, :side1), (:SeedCap1, :side1))),
+        NetworkBuilder.Bus(b; ports = ((:CableSeed, :side2), (:SeedCap2, :side1))),
+        NetworkBuilder.Bus(:gnd; ports = ((:SeedCap1, :side2), (:SeedCap2, :side2)))])
+    net = NetworkBuilder.define(elements, topology; options = c.net.options)
     return composed_descriptor(merge(c,(;net))).poles
 end
 
@@ -362,7 +360,8 @@ function composed_distributed_stability(c)
     located=[composed_refine_root(c,functions,z) for z in seeds if real(z)>-1500]
     unresolved=count(x->!(x[2]<1e-6),located)
     filter!(x->x[2]<1e-6,located);sort!(located;by=x->real(x[1]),rev=true)
-    open_rhp=sum(count(z->real(z)>1e-6,eigvals(c.net.elements[n].A)) for n in c.devices)
+    open_rhp=sum(count(z->real(z)>1e-6,
+        eigvals(c.linearizations[n].system.A)) for n in c.devices)
     contours=Dict{String,Any}[]
     for fs in (exp10.(range(-2,5;length=6001)),exp10.(range(-6,6;length=12001)))
         values=ComplexF64[];margin=Inf

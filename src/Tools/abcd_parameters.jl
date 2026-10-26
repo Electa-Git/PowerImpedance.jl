@@ -1,4 +1,4 @@
-# Anything numeric matrix-like; we internally compute in ComplexF64.
+# Accept numeric matrix-like inputs and compute in ComplexF64.
 const Parameters_types = AbstractMatrix{<:Number}
 
 function connect_series!(A::Parameters_types, B::Parameters_types)
@@ -33,9 +33,8 @@ function connect_parallel!(ABCD₁::Parameters_types, ABCD₂::Parameters_types)
 	end
 
 	# Multiport case
-	# Old code checked "all(b₁[i] == 0 for i in 1:n)" which is nonsense for matrices.
-	# Interpret it as "B block is (numerically) zero matrix".
-	iszeroB(B) = all(iszero, B)  # exact; if you want tolerance, use a norm-based check.
+	# Check every entry of the B block for exact zero.
+	iszeroB(B) = all(iszero, B)  # Exact zero check. A norm-based check supports a tolerance.
 
 	if iszeroB(b₁)
 		a = copy(a₂)
@@ -48,7 +47,7 @@ function connect_parallel!(ABCD₁::Parameters_types, ABCD₂::Parameters_types)
 		c = c₁ + c₂ + (d₂ - d₁) * (b₁ \ (a₁ - a₂))
 		d = copy(d₁)
 	else
-		# Algebra-identical but without explicit inv(inv(.)).
+		# Algebraically equivalent linear solves.
 		# b = inv(inv(b₁)+inv(b₂))  =>  b = (b₁ \ I + b₂ \ I) \ I
 		id = Matrix{ComplexF64}(I, n, n)
 

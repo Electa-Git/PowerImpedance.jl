@@ -17,6 +17,7 @@ include("diagram_fixture.jl")
     network = diagram_hybrid_network()
     view = diagram(network, diagram_powerflow_fixture(network))
     @test view.figure isa Makie.Figure
+    @test view.plots.legend isa Makie.Legend
     @test view.selected isa Makie.Observable
     @test view.details isa Makie.Observable
     @test haskey(view.axis.interactions, :powerimpedance_diagram_select)
@@ -39,6 +40,11 @@ include("diagram_fixture.jl")
     )
     Makie.resize!(ui.figure, 880, 520)
     Makie.update_state_before_display!(ui.figure)
-    @test only(ui.panels).axis.layoutobservables.computedbbox[].widths[1] > 800
+    diagram_view = ui.artifacts[:network_diagram]
+    @test diagram_legend_labels(diagram_view) == diagram_legend_labels(view)
+    axis_box = diagram_view.axis.layoutobservables.computedbbox[]
+    legend_box = diagram_view.plots.legend.layoutobservables.computedbbox[]
+    @test axis_box.widths[1] + legend_box.widths[1] > 800
+    @test axis_box.origin[1] + axis_box.widths[1] < legend_box.origin[1]
     close(ui)
 end

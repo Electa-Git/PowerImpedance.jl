@@ -14,7 +14,7 @@ using Parameters
 using DataStructures
 using DocStringExtensions
 
-## Overloading of Base functions (TODO: In future from PowerBlocks overloading)
+## Base method extensions. TODO move to PowerBlocks.
 import Base: convert
 
 using ControlSystemsBase: ControlSystemsBase, tf, ss
@@ -60,13 +60,18 @@ include("core/util.jl")
 include("core/logging.jl")
 
 # Including all components    
-include("Network/Components/AbstractElement.jl")
+include("Network/Components/operating_values.jl")
+include("Network/Components/types.jl")
 include("Network/Components/AbstractStateSpace.jl")
+include("Network/Components/ports.jl")
+include("Network/Components/inputs.jl")
+include("Network/Components/bases.jl")
+include("Network/Components/predicates.jl")
 
 # Impedance
 include("Network/Components/impedance/impedance.jl")
 
-# Transfromer
+# Transformer
 include("Network/Components/transformer/transformer.jl")
 
 # Cables and transmission lines
@@ -82,7 +87,6 @@ include("Network/Components/source/ac_source.jl")
 
 # Converter
 include("Network/Components/converter/common/conv_power_flow.jl")
-include("Network/Components/converter/controller_old.jl") # TODO: To be removed, now necessary for black-box MMC
 include("Network/Components/converter/converter.jl")
 
 include("Network/Components/converter/common/kernels/filter.jl")
@@ -106,17 +110,9 @@ include("Network/Components/machine/machine.jl")
 include("Network/Components/machine/SynchronousMachine.jl")
 include("Network/Components/machine/InductionMachine.jl")
 
-# Including network
-include("Network/Network.jl")
+include("Network/powermodels_data.jl")
 
-# Refactoring attempt
-# include("core/base.jl")
-# include("core/convert.jl")
-
-# New power flow
-include("Network/power_flow.jl")
-
-# Common semantic layer (proto-PowerBlocks grammar)
+# Shared calculation grammar
 include("Grammar.jl")
 
 # Backend-independent unit and plotting descriptions
@@ -126,7 +122,7 @@ using .PlotBuilder: UIPlot, export_svg
 using .PlotBuilder.BackendHandler: set_backend!
 export PlotBuilder, UIPlot, export_svg, set_backend!
 
-# Optional Makie plotting entry point. The Makie extension owns its methods.
+# Optional plotting entry point with methods defined by the Makie extension.
 function plot end
 
 """
@@ -148,8 +144,8 @@ Render a single-line network diagram through the optional GraphMakie extension.
 
 # Notes
 
-This function never calculates power flow. Load `GraphMakie` and one Makie
-backend before calling it.
+Rendering uses the supplied topology and any completed power-flow result. Load `GraphMakie`
+and one Makie backend before calling this function.
 """
 function diagram end
 export diagram
@@ -164,17 +160,7 @@ import .NetworkBuilder: determine_impedance, make_loopgain
 import .NetworkBuilder: PowerFlowProblem, ACDCPowerFlow
 import .NetworkBuilder: LinearizationProblem, AdmittanceLinearization
 export PowerFlowProblem, ACDCPowerFlow, LinearizationProblem, AdmittanceLinearization
-
-# Including network solvers
-include("Network/Solvers/make_abcd.jl")
-include("Network/Solvers/make_y.jl")
-include("Network/Solvers/make_z.jl")
-include("Network/Solvers/determine_impedance.jl")
-include("Network/Solvers/make_y_matrix.jl")
-include("Network/Solvers/make_y_edge.jl")
-include("Network/Solvers/make_y_edge_old.jl")
-include("Network/Solvers/make_y_node.jl")
-include("Network/Solvers/stability.jl")
+export determine_impedance, check_stability
 
 # Including tools
 include("Tools/abcd_parameters.jl")

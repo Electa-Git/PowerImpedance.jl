@@ -6,7 +6,8 @@ Subtract half the arm impedance from the AC equivalent to recover the reactor.
 
 # Arguments
 
-- `e`: MMC electrical parameters and bases.
+- `e`: MMC electrical parameters.
+- `b`: Power, voltage and angular-frequency bases of the model.
 
 # Returns
 
@@ -33,17 +34,18 @@ C_{DC} = \\frac{1}{\\omega_b Z_{DC}},
 where ``V_{DC}`` is `vDC_base`, ``S_b`` is `Sbase` and ``\\omega_b`` is `ωbase`.
 The resulting bases use \\[Ω\\], \\[H\\] and \\[F\\], respectively.
 """
-function mmc_si(e::PowerImpedance.ElectricalMMC)
-    zDC = e.vDC_base^2 / e.Sbase
-    lDC = zDC / e.ωbase
-    cDC = 1 / (e.ωbase * zDC)
-    L_arm = e.Lₐᵣₘ * lDC
-    R_arm = e.Rₐᵣₘ * zDC
-    return (; L_arm, R_arm, C_SM = e.Cₐᵣₘ * cDC,
-        L_r = e.Lₑ * e.lAC_base - L_arm / 2,
-        R_r = e.Rₑ * e.zAC_base - R_arm / 2,
-        e.N, e.turnsRatio, e.Sbase, vAC_base_LL_RMS = e.vAC_base * sqrt(3 / 2),
-        e.vDC_base, e.ωbase)
+function mmc_si(e::PowerImpedance.ElectricalMMC, b::PowerImpedance.BaseValues)
+    pu = PowerImpedance.perunit(e, b)
+    zDC = b.v_dc^2 / b.S
+    lDC = zDC / b.omega
+    cDC = 1 / (b.omega * zDC)
+    L_arm = pu.Lₐᵣₘ * lDC
+    R_arm = pu.Rₐᵣₘ * zDC
+    return (; L_arm, R_arm, C_SM = pu.Cₐᵣₘ * cDC,
+        L_r = pu.Lₑ * pu.lAC_base - L_arm / 2,
+        R_r = pu.Rₑ * pu.zAC_base - R_arm / 2,
+        e.N, e.turnsRatio, Sbase = b.S, vAC_base_LL_RMS = b.v_ac * sqrt(3 / 2),
+        vDC_base = b.v_dc, ωbase = b.omega)
 end
 
 """
@@ -53,22 +55,24 @@ Recover TLC reactor values from the constructor's AC per-unit bases.
 
 # Arguments
 
-- `e`: TLC electrical parameters and bases.
+- `e`: TLC electrical parameters.
+- `b`: Power, voltage and angular-frequency bases of the model.
 
 # Returns
 
-- `L_r`: Reactor inductance, `e.Lᵣ * e.lACbase` \\[H\\].
-- `R_r`: Reactor resistance, `e.Rᵣ * e.zACbase` \\[Ω\\].
+- `L_r`: Reactor inductance, `perunit(e, b).Lᵣ * perunit(e, b).lACbase` \\[H\\].
+- `R_r`: Reactor resistance, `perunit(e, b).Rᵣ * perunit(e, b).zACbase` \\[Ω\\].
 - `Sbase`: Three-phase apparent-power base \\[MVA\\].
 - `vAC_base_LL_RMS`: AC line-to-line RMS voltage base \\[kV\\].
 - `vDC_base`: Pole-to-pole DC voltage base \\[kV\\].
 - `ωbase`: Angular frequency base \\[rad/s\\].
 - `l_f_pu`, `r_f_pu`: Unchanged reactor parameters \\[dimensionless\\].
 """
-function tlc_si(e::PowerImpedance.ElectricalTLC)
-    return (L_r = e.Lᵣ * e.lACbase, R_r = e.Rᵣ * e.zACbase,
-        Sbase = e.Sbase, vAC_base_LL_RMS = e.vACbase * sqrt(3 / 2),
-        vDC_base = e.vDCbase, ωbase = e.ωbase, l_f_pu = e.Lᵣ, r_f_pu = e.Rᵣ)
+function tlc_si(e::PowerImpedance.ElectricalTLC, b::PowerImpedance.BaseValues)
+    pu = PowerImpedance.perunit(e, b)
+    return (L_r = pu.Lᵣ * pu.lACbase, R_r = pu.Rᵣ * pu.zACbase,
+        Sbase = b.S, vAC_base_LL_RMS = b.v_ac * sqrt(3 / 2),
+        vDC_base = b.v_dc, ωbase = b.omega, l_f_pu = pu.Lᵣ, r_f_pu = pu.Rᵣ)
 end
 
 """

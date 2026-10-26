@@ -12,7 +12,7 @@ end
 struct SystemBranchCurrent
     name::String
     element::Symbol
-    side::Int
+    port::Symbol
 end
 struct SystemACVoltage
     name::String
@@ -21,31 +21,38 @@ end
 struct SystemDCVoltage
     name::String
     element::Symbol
-    side::Int
+    port::Symbol
 end
 const SystemMeasurand=Union{SystemPortVoltage,SystemDeviceCurrent,SystemBranchCurrent,SystemACVoltage,SystemDCVoltage}
 
 # The measured AC ports can differ from individual converter terminals.
 struct CompleteSystem
-    net::Network
+    net::NetworkBuilder.NetworkState
     devices::Vector{Symbol}
     grids::Vector{Symbol}
     nodes::Vector{Symbol}
-    ports::Vector{Tuple{Symbol,Int}}
+    ports::Vector{Tuple{Symbol,Symbol}}
     dc_references::Dict{Symbol,Float64}
     measurands::Vector{SystemMeasurand}
+    point::OperatingPoint
+    linearizations::Dict{Symbol,StateSpaceLinearization}
 end
 
-system_ports(id)=id=="ieee14" ? [(:MMC1,2),(:MMC4,2)] : [(:c1,2),(:c2,2)]
+system_ports(id)=id=="ieee14" ? [(:MMC1,:ac),(:MMC4,:ac)] : [(:c1,:ac),(:c2,:ac)]
 
-function system_extra_currents(id,list)
-    return [(e.name,t.side) for e in list.elements if e.model isa PowerImpedance.Transformer ||
-        id in ("p2p_redesigned","p2p_original") && (e.model isa PowerImpedance.Overhead_line && e.element.input_pins==2 ||
-            startswith(string(e.name),"Z_g")) for t in e.terminals]
+function system_extra_currents(id, list)
+    return [(e.name, t.port)
+            for e in list.elements
+            if e.model isa PowerImpedance.Transformer ||
+               id in ("p2p_redesigned", "p2p_original") &&
+               (e.model isa PowerImpedance.Overhead_line &&
+                PowerImpedance.isac(e.ports.side1.domain) ||
+                startswith(string(e.name), "Z_g")) for t in e.terminals]
 end
 
 function complete_system(id,net)
-    devices=sort!([name for (name,e) in net.elements if e.element_model isa Union{PowerImpedance.MMC,PowerImpedance.TLC}])
+    devices=sort!([name for (name,
+        e) in pairs(net.elements) if e isa Union{PowerImpedance.MMC,PowerImpedance.TLC}])
     ports=system_ports(id)
     extra=Set(system_extra_currents(id,fixture_netlist(net,nothing)))
     grids=sort!([name for name in keys(net.elements) if startswith(string(name),"Zg") || startswith(string(name),"Z_g")])
@@ -60,34 +67,39 @@ function complete_system(id,net)
         push!(outputs,SystemDeviceCurrent("DC_I_"*string(name),name,true))
     end
     dc_nodes=Set{Symbol}()
-    for (name,e) in sort!(collect(net.elements);by=first)
-        e.element_model isa PowerImpedance.Source && continue
-        if e.input_pins==1 && !(name in devices)
-            for side in 1:2
-                node=e.pins[Symbol("$side.1")]
+    for (name,e) in sort!(collect(pairs(net.elements));by=first)
+        e isa PowerImpedance.Source && continue
+        if passive_dimension(e)==1 && !(name in devices)
+            for port in (:side1, :side2)
+                node=first(port_nets(net, name, port))
                 if node != :gnd && !(node in dc_nodes)
-                    push!(outputs,SystemDCVoltage("DC_V_"*string(name)*"_"*string(side),name,side))
+                    push!(outputs,SystemDCVoltage("DC_V_"*string(name)*"_"*string(port),
+                        name,port))
                     push!(dc_nodes,node)
                 end
-                push!(outputs,SystemBranchCurrent("DC_I_"*string(name)*"_"*string(side),name,side))
+                push!(outputs,SystemBranchCurrent("DC_I_"*string(name)*"_"*string(port),
+                    name,port))
                 node in c.nodes && (c.dc_references[node]=2P.DC_REFERENCE_RESISTANCE)
             end
-        elseif e.input_pins==2 && !(name in devices)
-            for side in 1:2
-                (name,side) in extra ||
-                    any(net.elements[n].pins[Symbol("$p.1")]==e.pins[Symbol("$side.1")] for (n,p) in ports) || continue
-                push!(outputs,SystemBranchCurrent("AC_I_"*string(name)*"_"*string(side),name,side))
+        elseif passive_dimension(e)==2 && !(name in devices)
+            for port in (:side1, :side2)
+                (name,port) in extra ||
+                    any(first(port_nets(net, n, p))==first(port_nets(net, name,
+                        port)) for (n,p) in ports) || continue
+                push!(outputs,SystemBranchCurrent("AC_I_"*string(name)*"_"*string(port),
+                    name,port))
             end
         end
     end
     # Separate source-clamped DC supplies still have measured V/I outputs.
     for name in devices
-        node=net.elements[name].pins[Symbol("1.1")]
+        node=only(port_nets(net, name, :dc))
         if !(node in dc_nodes)
-            push!(outputs,SystemDCVoltage("DC_V_"*string(name),name,1));push!(dc_nodes,node)
+            push!(outputs,SystemDCVoltage("DC_V_"*string(name),name,:dc));push!(dc_nodes,
+                node)
         end
     end
-    return CompleteSystem(net,devices,grids,c.nodes,ports,c.dc_references,outputs)
+    return CompleteSystem(net,devices,grids,c.nodes,ports,c.dc_references,outputs,c.point,c.linearizations)
 end
 
 composed_targets(c::CompleteSystem)=[m.name for m in c.measurands]
@@ -97,35 +109,43 @@ system_input_columns(m,spec)=collect(eachindex(spec.axes))
 system_input_columns(m::SystemPortVoltage,spec)=m.columns
 
 function system_output_bases(m::SystemDeviceCurrent,c)
-    b=device_bases(c.net.elements[m.element].element_model.elec)
+    b=device_bases(c.net.elements[m.element].elec, c.net.elements[m.element].bases)
     return m.dc ? [b.current_outputs[1]] : fill(b.ac_current,2)
 end
-system_output_bases(m::SystemACVoltage,c)=fill(device_bases(c.net.elements[m.element].element_model.elec).ac_voltage,2)
-system_output_bases(m::SystemDCVoltage,c)=[device_bases(c.net.elements[first(c.devices)].element_model.elec).dc_voltage]
-system_output_bases(m::SystemBranchCurrent,c)=fill(system_current_base(c,m),c.net.elements[m.element].input_pins)
+system_output_bases(m::SystemACVoltage,
+    c)=fill(device_bases(c.net.elements[m.element].elec,
+        c.net.elements[m.element].bases).ac_voltage, 2)
+system_output_bases(m::SystemDCVoltage,
+    c)=[device_bases(c.net.elements[first(c.devices)].elec,
+        c.net.elements[first(c.devices)].bases).dc_voltage]
+system_output_bases(m::SystemBranchCurrent,c)=fill(system_current_base(c,m),
+    passive_dimension(c.net.elements[m.element]))
 function system_current_base(c,m)
-    if c.net.elements[m.element].element_model isa PowerImpedance.Transformer
-        transformer=c.net.elements[m.element].element_model
-        phase_rms_V=m.side==1 ? transformer.V₁ᵒ : transformer.V₂ᵒ
-        power=device_bases(c.net.elements[first(c.devices)].element_model.elec).power
+    if c.net.elements[m.element] isa PowerImpedance.Transformer
+        transformer=c.net.elements[m.element]
+        phase_rms_V=m.port==:side1 ? transformer.V₁ᵒ : transformer.V₂ᵒ
+        power=device_bases(c.net.elements[first(c.devices)].elec,
+            c.net.elements[first(c.devices)].bases).power
         return 2power/(3phase_rms_V/1000*sqrt(2))
     end
     for name in c.devices
-        e=c.net.elements[name];b=device_bases(e.element_model.elec)
-        node=c.net.elements[m.element].pins[Symbol("$(m.side).1")]
-        node==e.pins[Symbol("1.1")] && return b.current_outputs[1]
-        node==e.pins[Symbol("$(b.ac_side).1")] && return b.ac_current
+        e=c.net.elements[name];b=device_bases(e.elec, e.bases)
+        node=first(port_nets(c.net, m.element, m.port))
+        node==only(port_nets(c.net, name, :dc)) && return b.current_outputs[1]
+        node==first(port_nets(c.net, name, :ac)) && return b.ac_current
     end
-    b=device_bases(c.net.elements[first(c.devices)].element_model.elec)
-    return c.net.elements[m.element].input_pins==1 ? b.current_outputs[1] : b.ac_current
+    b=device_bases(c.net.elements[first(c.devices)].elec,
+        c.net.elements[first(c.devices)].bases)
+    return passive_dimension(c.net.elements[m.element])==1 ?
+        b.current_outputs[1] : b.ac_current
 end
 
 function composed_target_spec(spec,c::CompleteSystem,target)
     m=system_measurand(c,target)
     bases=m isa SystemPortVoltage ? spec.voltage_bases[m.rows] : system_output_bases(m,c)
-    if m isa SystemBranchCurrent && c.net.elements[m.element].input_pins==2
-        node=c.net.elements[m.element].pins[Symbol("$(m.side).1")]
-        port=findfirst(p->c.net.elements[p[1]].pins[Symbol("$(p[2]).1")]==node,c.ports)
+    if m isa SystemBranchCurrent && passive_dimension(c.net.elements[m.element])==2
+        node=first(port_nets(c.net, m.element, m.port))
+        port=findfirst(p->first(port_nets(c.net, p...))==node,c.ports)
         port===nothing || (bases=spec.current_bases[(2port-1):2port])
     end
     return merge(spec,(;quantity=m isa Union{SystemPortVoltage,SystemACVoltage,SystemDCVoltage} ? "Z" : "T",
@@ -140,21 +160,22 @@ function system_response(m::SystemPortVoltage,c,s,functions,forms,v)
     return v[m.rows,:]
 end
 function system_response(m::SystemDeviceCurrent,c,s,functions,forms,v)
-    b=device_bases(c.net.elements[m.element].element_model.elec)
+    b=device_bases(c.net.elements[m.element].elec, c.net.elements[m.element].bases)
     rows=m.dc ? [1] : collect(b.ac_indices)
-    return (functions[m.element](s)*device_incidence(c,m.element)'*v)[rows,:]
+    return (functions[m.element](s)*component_incidence(c,m.element)'*v)[rows,:]
 end
 function system_response(m::SystemBranchCurrent,c,s,functions,forms,v)
-    e=c.net.elements[m.element];n=e.input_pins
-    yy=forms!==nothing && haskey(forms,m.element) ? composed_passive_y(e,forms[m.element],s) : PowerImpedance.get_y(e,ComplexF64(s))
-    return (yy*passive_incidence(c,e)'*v)[(n*(m.side-1)+1):(n*m.side),:]
+    e=c.net.elements[m.element];n=passive_dimension(e)
+    yy=forms!==nothing && haskey(forms,m.element) ? composed_passive_y(e,
+        forms[m.element],s) : physical_y(e,ComplexF64(s))
+    return (yy*component_incidence(c,m.element)'*v)[m.port == :side1 ? (1:n) : (n+1:2n),:]
 end
 function system_response(m::SystemACVoltage,c,s,functions,forms,v)
-    b=device_bases(c.net.elements[m.element].element_model.elec)
-    return (device_incidence(c,m.element)'*v)[b.ac_indices,:]
+    b=device_bases(c.net.elements[m.element].elec, c.net.elements[m.element].bases)
+    return (component_incidence(c,m.element)'*v)[b.ac_indices,:]
 end
 function system_response(m::SystemDCVoltage,c,s,functions,forms,v)
-    h=composed_incidence(c,c.net.elements[m.element],[Symbol("$(m.side).1")])
+    h=composed_incidence(c, port_nets(c.net, m.element, m.port))
     return h'*v
 end
 
@@ -171,28 +192,33 @@ function composed_reference(c::CompleteSystem,spec;time_step=nothing,forms=nothi
     return Dict(name=>cat(rows...;dims=3) for (name,rows) in values)
 end
 
-function system_current_samples(result,model,element,side)
-    probe=only(filter(p->p.kind==:current && p.element==string(element) && p.side==string(side),model.probes.channels))
-    probe.orientation in (:into,:out) || error("missing system current orientation")
+function system_current_samples(result, model, element, port)
+    probe=only(filter(
+        p->p.kind==:current && p.element==string(element) &&
+           p.port==port,
+        model.probes.channels))
+    probe.orientation in (:into, :out) || error("missing system current orientation")
     sign=probe.orientation==:into ? 1 : -1
     return probe.dim==1 ? reshape(sign.*result.channels[probe.name],:,1) : sign.*fixed_dq(result.time,probe_samples(result,probe))
 end
 system_samples(m::SystemPortVoltage,result,model,c,voltage)=voltage[:,m.rows]
 function system_samples(m::SystemDeviceCurrent,result,model,c,voltage)
-    b=device_bases(c.net.elements[m.element].element_model.elec)
-    return system_current_samples(result,model,m.element,m.dc ? 1 : b.ac_side)
+    b=device_bases(c.net.elements[m.element].elec, c.net.elements[m.element].bases)
+    return system_current_samples(result,model,m.element,m.dc ? :dc : :ac)
 end
-system_samples(m::SystemBranchCurrent,result,model,c,voltage)=system_current_samples(result,model,m.element,m.side)
+system_samples(m::SystemBranchCurrent,result,model,c,
+    voltage)=system_current_samples(result,model,m.element,m.port)
 function system_samples(m::SystemACVoltage,result,model,c,voltage)
-    side=device_bases(c.net.elements[m.element].element_model.elec).ac_side
-    bus=port_probe(model.netlist,m.element,side).name
+    bus=port_probe(model.netlist,m.element,:ac).name
     probe=only(filter(p->p.kind==:voltage && p.bus==bus,model.probes.channels))
     return fixed_dq(result.time,probe_samples(result,probe))
 end
-function system_samples(m::SystemDCVoltage,result,model,c,voltage)
-    bus=port_probe(model.netlist,m.element,m.side).name
-    poles=[only(filter(p->p.kind==:voltage && p.bus==bus && p.side==pole,model.probes.channels)) for pole in ("P","N")]
-    return reshape(result.channels[poles[1].name]-result.channels[poles[2].name],:,1)
+function system_samples(m::SystemDCVoltage, result, model, c, voltage)
+    bus=port_probe(model.netlist, m.element, m.port).name
+    poles=[only(filter(p->p.kind==:voltage && p.bus==bus && p.pole==pole,
+        model.probes.channels))
+           for pole in ("P", "N")]
+    return reshape(result.channels[poles[1].name]-result.channels[poles[2].name], :, 1)
 end
 
 function composed_samples(result,model,spec,c::CompleteSystem)
@@ -201,21 +227,25 @@ function composed_samples(result,model,spec,c::CompleteSystem)
         vp=only(filter(p->p.kind==:voltage && p.bus==bus.name,model.probes.channels))
         push!(voltages,fixed_dq(result.time,probe_samples(result,vp)))
         ip=only(filter(p->p.kind==:injection_current && p.bus==bus.name,model.probes.channels))
-        ip.orientation==:out || error("system injection must point out of its source")
-        push!(drives,fixed_dq(result.time,probe_samples(result,ip)))
-        for p in filter(p->p.kind==:current && p.bus==bus.name,model.probes.channels)
-            branches["$port:$(p.element):$(p.side)"]=system_current_samples(result,model,Symbol(p.element),parse(Int,p.side))
+        push!(drives, fixed_dq(result.time, injection_samples(result, ip)))
+        for p in filter(p->p.kind==:current && p.bus==bus.name, model.probes.channels)
+            port = p.port
+            key = "$port:$(p.element):$port"
+            branches[key] = system_current_samples(result, model, Symbol(p.element), port)
         end
     end
     voltage=reduce(hcat,voltages);drive=reduce(hcat,drives)
     outputs=Dict(m.name=>system_samples(m,result,model,c,voltage) for m in c.measurands)
-    clamps=Dict(string(n)=>vec(system_samples(SystemDCVoltage("",n,1),result,model,c,voltage)) for n in c.devices)
+    clamps=Dict(string(n)=>vec(system_samples(SystemDCVoltage("",n,:dc),result,model,c,
+        voltage)) for n in c.devices)
     source_clamps=Dict{String,Matrix{Float64}}()
     for e in model.netlist.elements
-        e.model isa PowerImpedance.Source && e.element.input_pins==2 || continue
-        bus=port_probe(model.netlist,e.name,1)
-        probe=only(filter(p->p.kind==:voltage && p.bus==bus.name,model.probes.channels))
-        source_clamps[string(e.name)]=fixed_dq(result.time,probe_samples(result,probe))./e.setpoint.Vac
+        e.model isa PowerImpedance.Source && PowerImpedance.isac(first(e.ports).domain) ||
+            continue
+        bus=port_probe(model.netlist, e.name, :ac)
+        probe=only(filter(p->p.kind==:voltage && p.bus==bus.name, model.probes.channels))
+        source_clamps[string(e.name)]=fixed_dq(result.time, probe_samples(result, probe)) ./
+                                      inputvalues(e.model).v
     end
     return (;voltage,current=zeros(size(voltage)),drive,drive_base=spec.current_bases,outputs,branches,clamps,source_clamps,
         device_voltages=Dict{String,Matrix{Float64}}())
@@ -230,8 +260,8 @@ end
 
 function exported_composed_passives(c::CompleteSystem,project,list)
     text=read(project,String);forms=Dict{Symbol,P.RLCForm}()
-    for (name,e) in c.net.elements
-        e.element_model isa PowerImpedance.Impedance || continue
+    for (name,e) in pairs(c.net.elements)
+        e isa PowerImpedance.Impedance || continue
         original=P.identify_rlc(e;name).form
         item=only(filter(x->x.name==name,list.elements))
         fields=map(((:R,"resistor","R","ohm"),(:L,"inductor","L","H"),(:C,"capacitor","C","uF"))) do (field,kind,key,unit)

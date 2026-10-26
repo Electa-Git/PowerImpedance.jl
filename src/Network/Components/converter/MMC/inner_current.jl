@@ -36,7 +36,8 @@ feedforward.
 $(TYPEDFIELDS)
 """
 struct ZeroSequenceCurrentControl <: AbstractInnerCurrentControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_control::PIControl
 end
 statenames(::ZeroSequenceCurrentControl) = (:ξ_iΣ_z,)
@@ -68,7 +69,7 @@ parameters.
 
 # Arguments
 
-- `pi_control`: PI gains for normalized signals; `Kp` is \\[dimensionless\\] and `Ki` is
+- `pi_control`: PI gains for normalized signals. `Kp` is \\[dimensionless\\] and `Ki` is
   \\[s⁻¹\\].
 - `ref`: Tuple of constant d/q circulating-current references in the converter frame
   \\[dimensionless\\]. Default: `(0.0, 0.0)`.
@@ -92,8 +93,8 @@ CirculatingCurrentSuppressionControl(; pi_control::PIControl, ref = (0.0, 0.0)) 
     CirculatingCurrentSuppressionControl(pi_control; ref)
 statenames(::CirculatingCurrentSuppressionControl) = (:ξ_iΣ_d, :ξ_iΣ_q)
 
-### Lower level structures ###
-#TODO: update the equations in comments to match the new version (including taking into account that modulation is now done in a specific function)
+# Lower level structures
+# TODO update the commented equations for the separate modulation function.
 """
 $(TYPEDSIGNATURES)
 
@@ -102,11 +103,11 @@ Evaluate MMC circulating-current suppression, writing state derivatives into `F`
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]; angle
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `meas`: Filtered measurement signals on converter bases \\[dimensionless\\]. Angle
   signals use \\[rad\\].
 - `b`: The `CirculatingCurrentSuppressionControl` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -133,10 +134,10 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = CirculatingCurrentSuppressionControl(pi_control=PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -161,8 +162,10 @@ function state_space!(F, x, meas, b::CirculatingCurrentSuppressionControl, conv:
     # vMΣ_d_ref = 2/Vdc*(- Ki_Σ * xiΣ_d - Kp_Σ * (iΣ_d_ref -  iΣ_d) + 2*Larm*iΣ_q)
     # vMΣ_q_ref = 2/Vdc*(- Ki_Σ * xiΣ_q - Kp_Σ * (iΣ_q_ref -  iΣ_q) - 2*Larm*iΣ_d)
     # Assuming constant w
-    vMΣ_d_ref_c = (- ξ_iΣ_d - b.pi_control.Kp * (iΣ_d_ref - iΣ_d_c) + 2 * conv.elec.Lₐᵣₘ * iΣ_q_c)
-    vMΣ_q_ref_c = (- ξ_iΣ_q - b.pi_control.Kp * (iΣ_q_ref - iΣ_q_c) - 2 * conv.elec.Lₐᵣₘ * iΣ_d_c)
+    vMΣ_d_ref_c = (- ξ_iΣ_d - b.pi_control.Kp * (iΣ_d_ref - iΣ_d_c) + 2 *
+        perunit(conv.elec, conv.bases).Lₐᵣₘ * iΣ_q_c)
+    vMΣ_q_ref_c = (- ξ_iΣ_q - b.pi_control.Kp * (iΣ_q_ref - iΣ_q_c) - 2 *
+        perunit(conv.elec, conv.bases).Lₐᵣₘ * iΣ_d_c)
 
     # Output are in converter reference frame!
     return (vMΣ_d_ref_c=vMΣ_d_ref_c, vMΣ_q_ref_c=vMΣ_q_ref_c)
@@ -176,11 +179,11 @@ Evaluate MMC zero-sequence current control, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `b`: The `ZeroSequenceCurrentControl` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -195,7 +198,7 @@ Evaluate MMC zero-sequence current control, writing state derivatives into `F`.
 e=i_{\\Sigma z}^{ref}-i_{\\Sigma z},\\quad \\dot{\\xi}=K_i e,\\quad v_{\\Sigma z}^{ref}=v_{dc,f}/2-K_p e-\\xi.
 ```
 
-Current and voltage use converter bases \\[dimensionless\\].
+Current and voltage are on converter bases \\[dimensionless\\].
 
 # Examples
 
@@ -205,10 +208,10 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = ZeroSequenceCurrentControl(PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -240,7 +243,8 @@ circulating-current PI controller.
 $(TYPEDFIELDS)
 """
 struct CirculatingCurrentControl <: AbstractInnerCurrentControl
-    "PI gains for normalized signals; proportional gain is \\[dimensionless\\] and integral gain is \\[s⁻¹\\]."
+    "PI gains for normalized signals. Proportional gain is \\[dimensionless\\] and integral
+    gain is \\[s⁻¹\\]."
     pi_control::PIControl
 end
 statenames(::CirculatingCurrentControl) = (:ξ_iΣ_d, :ξ_iΣ_q, :ξ_iΣ_z)
@@ -253,11 +257,11 @@ Evaluate MMC circulating-current PI control, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `b`: The `CirculatingCurrentControl` parameters.
 - `conv`: Parent converter, providing electrical bases and synchronization.
@@ -275,7 +279,7 @@ Evaluate MMC circulating-current PI control, writing state derivatives into `F`.
 ```
 
 Sum- and difference-energy outputs are added to form the three-component current
-reference. ``J_{-2ω}`` is the implemented double-frequency rotation matrix; all
+reference. ``J_{-2ω}`` is the implemented double-frequency rotation matrix. All
 electrical quantities use converter bases \\[dimensionless\\].
 
 # Examples
@@ -286,10 +290,10 @@ P = PowerImpedance
 model = mmc(sync=PLLSynchronization(pi_ctrl=PIControl(Kp=0.1, Ki=1.0)),
     delta_control=ΔdqControlGFL(outer_active=OuterActivePowerControl(),
         outer_reactive=OuterReactiveQControl(), occ=InnerCurrentPIControl()),
-    sigma_control=ΣdqzControlTEC()).element_model
+    sigma_control=ΣdqzControlTEC())
 inputs = (v_dc=1.0, vG_d=1.0, vG_q=0.0)
-point = P.SetpointPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point)
+point = P.TerminalValuesPU(p_ac=0.1, q_ac=0.0, p_dc=0.1, v_ac=1.0, v_dc=1.0)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point)
 block = CirculatingCurrentControl(PIControl(Kp=0.1, Ki=1.0))
 x = merge(NamedTuple{P.statenames(block)}(zeros(P.n_states(block))), x)
 F = zeros(P.n_states(block))
@@ -314,7 +318,7 @@ function state_space!(F, x, inputs, b::CirculatingCurrentControl, conv::Abstract
     J = [ 0 1 0
          -1 0 0
           0 0 0]
-    J_min2ω = -2 * conv.elec.ωbase * J
+    J_min2ω = -2 * conv.bases.omega * J
 
     F[1:3] = Ki_iΣ * (iΣ_ref - iΣ) - J_min2ω * ξ_iΣ
 

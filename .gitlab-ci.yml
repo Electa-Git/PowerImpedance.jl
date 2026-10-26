@@ -92,9 +92,11 @@ variables:
 
 
 .julia_heavy_resources:
+  # The runner limits build containers to 6 GiB.
+  # A memory request above this limit makes the pod invalid.
   variables:
     KUBERNETES_CPU_REQUEST: "4"
-    KUBERNETES_MEMORY_REQUEST: "8Gi"
+    KUBERNETES_MEMORY_REQUEST: "6Gi"
 
 
 .julia_plotting_precompile:
@@ -365,10 +367,66 @@ docs_check:
     expire_in: 1 day
     paths:
       - docs/build/
+      - docs/src/examples/
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
     # Validate the public documentation before publishing the candidate.
+    - if: '$POWERIMPEDANCE_PUBLISH == "true"'
+      variables:
+        POWERIMPEDANCE_DOCS_TARGET: "github"
+
+
+prose_check:
+  image: node:24-bookworm-slim
+  stage: docs
+  needs:
+    - job: docs_check
+      artifacts: true
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends curl ca-certificates git
+    - rm -rf /var/lib/apt/lists/*
+  script:
+    - |
+      set -euo pipefail
+      tools=$(mktemp -d)
+      mkdir -p prose-reports
+      release=https://github.com/vale-cli/vale/releases/download/v3.23.0
+      curl --fail --location --retry 3 "$release/vale_3.23.0_Linux_64-bit.tar.gz" -o "$tools/vale.tar.gz"
+      curl --fail --location --retry 3 "$release/vale_3.23.0_checksums.txt" -o "$tools/checksums.txt"
+      expected=$(awk '$2 == "vale_3.23.0_Linux_64-bit.tar.gz" {print $1}' "$tools/checksums.txt")
+      test -n "$expected"
+      echo "$expected  $tools/vale.tar.gz" | sha256sum --check
+      tar -xzf "$tools/vale.tar.gz" -C "$tools"
+      cp .gitlab/prose/package{,-lock}.json "$tools/"
+      npm ci --prefix "$tools"
+      export PATH="$tools:$tools/node_modules/.bin:$PATH"
+      vale --version
+      cspell --version
+      vale sync --no-global --config=.gitlab/prose/vale.ini
+      bash .gitlab/prose/files.sh
+      lint_status=0
+      vale test --no-global --config=.gitlab/prose/vale.ini --coverage \
+        .gitlab/prose/styles/PI .gitlab/prose/styles/Project .gitlab/prose/fixtures \
+        | tee prose-reports/rules.log || lint_status=$?
+      bash .gitlab/prose/fixtures/check.sh | tee prose-reports/checks.log || lint_status=$?
+      mapfile -t files < prose-reports/vale-files.txt
+      vale --no-global --config=.gitlab/prose/vale.ini --no-color --output=JSON \
+        "${files[@]}" > prose-reports/vale.json || lint_status=$?
+      vale --no-global --config=.gitlab/prose/vale.ini --no-color --output=line \
+        "${files[@]}" | tee prose-reports/vale.log || lint_status=$?
+      mapfile -t files < prose-reports/cspell-files.txt
+      cspell lint --config=.gitlab/prose/cspell.json --no-progress --no-cache \
+        "${files[@]}" 2>&1 | tee prose-reports/cspell.log || lint_status=$?
+      exit "$lint_status"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - prose-reports/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$POWERIMPEDANCE_PUBLISH == "true"'
       variables:
         POWERIMPEDANCE_DOCS_TARGET: "github"

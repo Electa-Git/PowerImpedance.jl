@@ -1,0 +1,245 @@
+- name: Ambiguity abbreviations and alternatives
+  input: Use bolts, etc. Select input/output.
+  contains: Project.Ambiguity
+  rule: ../styles/Project/Ambiguity.yml
+- name: Ambiguity institution and protocol names
+  input: Etch Competence Hub uses HTTP/TLS.
+  want: ''
+  rule: ../styles/Project/Ambiguity.yml
+- name: BannedTerms forbidden words and plurals
+  input: Provenance PROVENANCES contract Contracts
+  contains: Project.BannedTerms
+  rule: ../styles/Project/BannedTerms.yml
+- name: BannedTerms scientific word with a different meaning
+  input: The contraction maps the interval into itself.
+  want: ''
+  rule: ../styles/Project/BannedTerms.yml
+- name: BannedTerms uppercase
+  input: PROVENANCE
+  contains: Project.BannedTerms
+  rule: ../styles/Project/BannedTerms.yml
+- name: BannedTerms plural
+  input: provenances
+  contains: Project.BannedTerms
+  rule: ../styles/Project/BannedTerms.yml
+- name: BannedTerms other forbidden word
+  input: contract
+  contains: Project.BannedTerms
+  rule: ../styles/Project/BannedTerms.yml
+- name: BannedTerms uppercase plural
+  input: CONTRACTS
+  contains: Project.BannedTerms
+  rule: ../styles/Project/BannedTerms.yml
+- name: Boundary software use fails
+  input: The API boundary validates the request.
+  contains: Project.Boundary
+  rule: ../styles/Project/Boundary.yml
+- name: Boundary geometry
+  input: Apply the boundary conditions at the outer boundary.
+  want: ''
+  rule: ../styles/Project/Boundary.yml
+- name: Boundary adjacent software use still fails
+  input: The boundary conditions are fixed. The API boundary validates input.
+  contains: Project.Boundary
+  rule: ../styles/Project/Boundary.yml
+- name: Boundary uppercase plural
+  input: BOUNDARIES
+  contains: Project.Boundary
+  rule: ../styles/Project/Boundary.yml
+- name: Boundary software plural
+  input: The API boundaries are fixed.
+  contains: Project.Boundary
+  rule: ../styles/Project/Boundary.yml
+- name: Canonical software use fails
+  input: Read the canonical configuration.
+  contains: Project.Canonical
+  rule: ../styles/Project/Canonical.yml
+- name: Canonical linear algebra
+  input: Express the vector in the canonical basis.
+  want: ''
+  rule: ../styles/Project/Canonical.yml
+- name: Canonical uppercase
+  input: CANONICAL
+  contains: Project.Canonical
+  rule: ../styles/Project/Canonical.yml
+- name: Canonical adverb
+  input: Describe it canonically.
+  contains: Project.Canonical
+  rule: ../styles/Project/Canonical.yml
+- name: Canonical noun plural
+  input: CANONICALS
+  contains: Project.Canonical
+  rule: ../styles/Project/Canonical.yml
+- name: Canonical nearby software use
+  input: Compare the canonical bases. Read the canonical configuration.
+  contains: Project.Canonical
+  rule: ../styles/Project/Canonical.yml
+- name: Canonical uppercase scientific phrase
+  input: Use the CANONICAL BASIS.
+  want: ''
+  rule: ../styles/Project/Canonical.yml
+- name: Closure generic use fails
+  input: The review provides closure.
+  contains: Project.Closure
+  rule: ../styles/Project/Closure.yml
+- name: Closure closing a window
+  input: Window closure stops the event loop.
+  want: ''
+  rule: ../styles/Project/Closure.yml
+- name: Closure uppercase plural
+  input: CLOSURES
+  contains: Project.Closure
+  rule: ../styles/Project/Closure.yml
+- name: Closure generic plural
+  input: Review closures are recorded.
+  contains: Project.Closure
+  rule: ../styles/Project/Closure.yml
+- name: Closure nearby generic use
+  input: Window closure stops the event loop. Review closure remains pending.
+  contains: Project.Closure
+  rule: ../styles/Project/Closure.yml
+- name: ColonUsage proper name
+  input: 'Reference: G. Ciuprina.'
+  want: ''
+  rule: ../styles/Project/ColonUsage.yml
+- name: ColonUsage ordinary capitalization
+  input: 'Use this format: Ordinary text.'
+  contains: Project.ColonUsage
+  rule: ../styles/Project/ColonUsage.yml
+- name: ColonUsage code label
+  input: '`x::Float64`: Physical length.'
+  want: ''
+  rule: ../styles/Project/ColonUsage.yml
+- name: ColonUsage prose after a code label
+  input: '`x::Float64`: Physical length. Read this: Ordinary text.'
+  contains: Project.ColonUsage
+  rule: ../styles/Project/ColonUsage.yml
+- name: Contractions contraction before whitespace
+  input: They would've checked it.
+  contains: Project.Contractions
+  rule: ../styles/Project/Contractions.yml
+- name: Contractions possessives
+  input: "This choice is the caller's. Read the conductor\u2019s dimensions."
+  want: ''
+  rule: ../styles/Project/Contractions.yml
+- name: Contractions contraction before punctuation
+  input: They can't.
+  contains: Project.Contractions
+  rule: ../styles/Project/Contractions.yml
+- name: Dictionary ordinary wording
+  input: Commence the calculation.
+  contains: Project.Dictionary
+  rule: ../styles/Project/Dictionary.yml
+- name: Dictionary mathematical terms
+  input: The component is equivalent. The identical objective has an optimum and a remainder.
+  want: ''
+  rule: ../styles/Project/Dictionary.yml
+- name: EmDashUsage numerical range
+  input: "Read pages 12\u201315."
+  want: ''
+  rule: ../styles/Project/EmDashUsage.yml
+- name: EmDashUsage prose aside
+  input: "Read the file \u2014 then check it."
+  contains: Project.EmDashUsage
+  rule: ../styles/Project/EmDashUsage.yml
+- name: EmphaticCallouts bold callout
+  input: '**Key insight:** Use this value.'
+  contains: Project.EmphaticCallouts
+  rule: ../styles/Project/EmphaticCallouts.yml
+- name: EmphaticCallouts ordinary text
+  input: Note the units.
+  want: ''
+  rule: ../styles/Project/EmphaticCallouts.yml
+- name: EmphaticCopula emphasized word
+  input: The value *is* finite.
+  contains: Project.EmphaticCopula
+  rule: ../styles/Project/EmphaticCopula.yml
+- name: EmphaticCopula code identifier
+  input: Call `_is_uq_product(request)`.
+  want: ''
+  rule: ../styles/Project/EmphaticCopula.yml
+- name: FigurativeNouns physical interface
+  input: Compute the surface impedance.
+  want: ''
+  rule: ../styles/Project/FigurativeNouns.yml
+- name: FigurativeNouns figurative interface
+  input: This changes the prose surface.
+  contains: Project.FigurativeNouns
+  rule: ../styles/Project/FigurativeNouns.yml
+- name: FigurativeShape geometric outline
+  input: Use sector-shaped conductors.
+  want: ''
+  rule: ../styles/Project/FigurativeShape.yml
+- name: FigurativeShape metaphor
+  input: Change the review shape.
+  contains: Project.FigurativeShape
+  rule: ../styles/Project/FigurativeShape.yml
+- name: FigurativeShape physical aggregate outline
+  input: The geometric boundary constrains the aggregate shape.
+  want: ''
+  rule: ../styles/Project/FigurativeShape.yml
+- name: FillerIntensifier singular matrix
+  input: A singular iteration fails.
+  want: ''
+  rule: ../styles/Project/FillerIntensifier.yml
+- name: FillerIntensifier filler
+  input: A single call works.
+  contains: Project.FillerIntensifier
+  rule: ../styles/Project/FillerIntensifier.yml
+- name: FormalRegister numerical operation
+  input: Minimize the objective.
+  want: ''
+  rule: ../styles/Project/FormalRegister.yml
+- name: FormalRegister inflated wording
+  input: Utilize the result.
+  contains: Project.FormalRegister
+  rule: ../styles/Project/FormalRegister.yml
+- name: Metacommentary filler explanation
+  input: This matters because the file exists.
+  contains: Project.Metacommentary
+  rule: ../styles/Project/Metacommentary.yml
+- name: Metacommentary literal code
+  input: '`println("This matters because the file exists.")`'
+  want: ''
+  rule: ../styles/Project/Metacommentary.yml
+- name: MotionMetaphors physical wires
+  input: Use stranded conductors.
+  want: ''
+  rule: ../styles/Project/MotionMetaphors.yml
+- name: MotionMetaphors metaphor
+  input: The default is baked into the code.
+  contains: Project.MotionMetaphors
+  rule: ../styles/Project/MotionMetaphors.yml
+- name: NounString published title
+  input: "C. Gary, \u201CApproche compl\xE8te de la propagation multifilaire en haute fr\xE9quence par\
+    \ utilisation des matrices complexes.\u201D"
+  want: ''
+  rule: ../styles/Project/NounString.yml
+- name: NounString noun stack
+  input: The customer feedback analysis pipeline stalled.
+  contains: Project.NounString
+  rule: ../styles/Project/NounString.yml
+- name: OverusedVocabulary numerical precision
+  input: Print three significant digits.
+  want: ''
+  rule: ../styles/Project/OverusedVocabulary.yml
+- name: OverusedVocabulary vague emphasis
+  input: This is a significant improvement.
+  contains: Project.OverusedVocabulary
+  rule: ../styles/Project/OverusedVocabulary.yml
+- name: RhetoricalSelfAnswer rhetorical question
+  input: The result? A failure.
+  contains: Project.RhetoricalSelfAnswer
+  rule: ../styles/Project/RhetoricalSelfAnswer.yml
+- name: RhetoricalSelfAnswer literal code
+  input: '`println("The result? A failure.")`'
+  want: ''
+  rule: ../styles/Project/RhetoricalSelfAnswer.yml
+- name: Semicolons prose punctuation
+  input: Read the file; check its contents.
+  contains: Project.Semicolons
+  rule: ../styles/Project/Semicolons.yml
+- name: Semicolons code punctuation
+  input: Call `f(x; y = 1)`.
+  want: ''
+  rule: ../styles/Project/Semicolons.yml

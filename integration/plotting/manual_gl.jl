@@ -17,18 +17,17 @@ mkpath(ARTIFACT_DIRECTORY)
 set_backend!(:gl)
 
 elements = (
-    branch = impedance(z = s -> 0.35 + s * 3.0e-3, pins = 1),
-    source_shunt = impedance(z = s -> 1 / (s * 30.0e-6), pins = 1),
-    remote_shunt = impedance(z = s -> 1 / (s * 45.0e-6), pins = 1)
+    branch = impedance(z = s -> 0.35 + s * 3.0e-3, conductors = 1),
+    source_shunt = impedance(z = s -> 1 / (s * 30.0e-6), conductors = 1),
+    remote_shunt = impedance(z = s -> 1 / (s * 45.0e-6), conductors = 1)
 )
 
 connections = (
-    (node = :source, element = :branch, side = 1, terminal = 1),
-    (node = :remote, element = :branch, side = 2, terminal = 1),
-    (node = :source, element = :source_shunt, side = 1, terminal = 1),
-    (node = :gnd, element = :source_shunt, side = 2, terminal = 1),
-    (node = :remote, element = :remote_shunt, side = 1, terminal = 1),
-    (node = :gnd, element = :remote_shunt, side = 2, terminal = 1)
+    NB.Bus(:source; ports = ((:branch, :side1), (:source_shunt, :side1))),
+    NB.Bus(:remote; ports = ((:branch, :side2), (:remote_shunt, :side1))),
+    NB.Bus(:gnd; ports = (
+        (:source_shunt, :side2), (:remote_shunt, :side2)
+    ))
 )
 
 network = NB.define(elements, connections)

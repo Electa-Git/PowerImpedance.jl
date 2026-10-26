@@ -1,6 +1,6 @@
 export synchronousmachine, ElectricalSM, MechanicalSM, AVRSM, GovernorSM, SynchronousMachine
 #  using SciMLLogging #Debug
-### Abstract synchronous machine type (allow for other structures in future, subtype of Machine is this necessary)
+# Abstract synchronous-machine type derived from Machine.
 """
 $(TYPEDEF)
 
@@ -11,7 +11,7 @@ abstract type AbstractSynchronousMachine <: Machine end
 
 
 
-################# ELECTRICAL #################################
+# Electrical
 
 """
 $(TYPEDEF)
@@ -26,14 +26,7 @@ $(TYPEDFIELDS)
 
     # eq::EquationInfo = electricalsmeq()
 
-    "Base electrical angular frequency \\[rad/s\\]."
-    ωn :: Float64 = 100*π
     
-    # Base values
-    "Line-to-line RMS voltage base \\[kV\\]."
-    Vᵃᶜ_base :: Float64 = 220 # Converter AC voltage base, LL, RMS [kV]
-    "Three-phase apparent-power base \\[MVA\\]."
-    S_base :: Float64 = 1000 # Converter AC voltage base, LL, RMS [kV]
 
     
    
@@ -84,7 +77,7 @@ initialvalues(::ElectricalSM) =  (;) # No non-zero states
 
 
 
-############################# MECHANICAL #######################################
+# Mechanical
 
 """
 $(TYPEDEF)
@@ -108,11 +101,11 @@ $(TYPEDFIELDS)
     "Crossover time constant \\[s\\]."
     T_CO :: Float64 = 1 # Cross-over time constant [s]
     "High-pressure turbine torque fraction \\[dimensionless\\]."
-    F_HP :: Float64 = 0.3 # High presure turbine fraction [pu]
+    F_HP :: Float64 = 0.3 # High pressure turbine fraction [pu]
     "Intermediate-pressure turbine torque fraction \\[dimensionless\\]."
-    F_IP :: Float64 = 0.4 # Intermediate presure turbine fraction [pu]
+    F_IP :: Float64 = 0.4 # Intermediate pressure turbine fraction [pu]
     "Low-pressure turbine torque fraction \\[dimensionless\\]."
-    F_LP :: Float64 = 0.3 # Low presure turbine fraction [pu]
+    F_LP :: Float64 = 0.3 # Low pressure turbine fraction [pu]
 
 end
 statenames(::MechanicalSM) = (:ω_pu,:θ_sg)
@@ -120,7 +113,7 @@ initialvalues(::MechanicalSM) =  (ω_pu=1.0,)
 
 
 
-################# GOVERNOR ######################
+# Governor
 
 
 """
@@ -140,11 +133,14 @@ $(TYPEDFIELDS)
 end
 
 statenames(::GovernorSM) = (:δω_filt, :flow, :TchHP, :TreIP, :TcrLP)
-initialvalues(::GovernorSM;inputs) =  NamedTuple{(:flow, :TchHP, :TreIP, :TcrLP)}(ntuple(i -> inputs.Tm0, 4)) #Initalize those to same value
+initialvalues(::GovernorSM;inputs) =  NamedTuple{(:flow, :TchHP, :TreIP, :TcrLP)}(ntuple(i -> inputs.Tm0, 4)) #Initialize those to same value
 
 
 
-########################### AVR #############################
+# AVR
+
+const _AVR_VOLTAGE_INPUT =
+    Input(1.01; unit = "pu", description = "AVR voltage reference")
 
 """
 $(TYPEDEF)
@@ -166,13 +162,13 @@ where ``E_f`` denotes field voltage, ``V_t`` terminal voltage and ``v_{ref}``
 its reference in \\[dimensionless\\]. The regulator gain is ``K_A``.
 A complete machine power-flow point sets the fixed effective reference to
 ``v_{ref} = |V_{t,pf}| + E_{f,pf}/K_A`` and requires nonzero `K_A`.
-The configured `vref_SG` field remains unchanged. Without a complete operating
-point, the standalone AVR and machine use `vref_SG` without reference conversion
+The configured `v_ref` field remains unchanged. Without a complete operating
+point, the standalone AVR and machine use `v_ref` without reference conversion
 or phasor initialization.
 """
 @with_kw struct AVRSM <: AbstractStateSpace
     "Configured terminal-voltage reference \\[dimensionless\\], superseded by the effective reference at a power-flow operating point."
-    vref_SG :: Float64   = 1.01 # Terminal voltage magnitude reference [pu]
+    v_ref :: Float64 = _AVR_VOLTAGE_INPUT.default
     "Terminal-voltage measurement-filter time constant \\[s\\]."
     T_R :: Float64       = 0.05     # Terminal voltage filter time constant [s]
     "Lead-lag denominator time constant \\[s\\]."
@@ -190,7 +186,7 @@ initialvalues(::AVRSM) =  (;)
 
 
 
-################### SYNCHRONOUS MACHINE ######################
+# Synchronous machine
 """
 $(TYPEDEF)
 
@@ -217,15 +213,15 @@ Here ``p_{pf}`` denotes terminal active power, ``R_a`` armature resistance
 and ``I_{pf}`` terminal current, on machine pu bases. Terminal voltage
 ``V_{t,pf}`` and field voltage ``E_{f,pf}`` also use machine pu bases.
 The AVR gain is ``K_A``.
-The effective reference replaces `avr.vref_SG` in the equations while the
+The effective reference replaces `avr.v_ref` in the equations while the
 configured field remains unchanged. Initial states use the power-flow phasors
 and the high-voltage solution of the external branch. Turbine fractions must
 sum to one for `Tm0` to equal total turbine torque. References remain fixed
 during linearization.
 
-Without a complete operating point, the AVR uses `avr.vref_SG` and turbine
+Without a complete operating point, the AVR uses `avr.v_ref` and turbine
 torque is `Tm0 = Pac/S_base`. Initial states use synchronous-speed and governor
-seeds without phasor initialization. A complete setpoint supplied to `pftoinputs`
+initial values without phasor initialization. A complete setpoint supplied to `pftoinputs`
 gives the same reference conversion as a solver-provided point. Construction
 alone leaves references
 unchanged and requires a separate power-flow solve.
@@ -233,7 +229,7 @@ unchanged and requires a separate power-flow solve.
 The PSCAD admittance comparison has aggregate error below 1%, with the
 largest differences at low frequencies.
 """
-struct SynchronousMachine <: AbstractStateSpace
+@with_kw struct SynchronousMachine <: AbstractStateSpace
     "Machine electrical subsystem."
     elec::ElectricalSM
     "Machine mechanical subsystem."
@@ -242,13 +238,21 @@ struct SynchronousMachine <: AbstractStateSpace
     avr::AVRSM
     "Governor and steam-turbine dynamics."
     gov::GovernorSM
+    "Operating limits in \\[MW\\] and \\[MVAr\\]."
+    limits::Limits
+    "Line-to-line RMS voltage base \\[kV\\]."
+    Vᵃᶜ_base::Float64
+    "Power, voltage and angular-frequency bases of the model equations."
+    bases::BaseValues
+    "Power-flow setpoints on machine bases \\[dimensionless\\]."
+    powerflow::NamedTuple
 end
 
 statenames(m::SynchronousMachine) = (statenames(m.elec)..., statenames(m.mech)...,statenames(m.gov)...,statenames(m.avr)...)
-function initialvalues(m::SynchronousMachine; inputs, setpoint_pu=nothing, kwargs...)
-    setpoint_pu === nothing && return merge(initialvalues(m.elec),
+function initialvalues(m::SynchronousMachine; inputs, terminal_pu=nothing, kwargs...)
+    terminal_pu === nothing && return merge(initialvalues(m.elec),
         initialvalues(m.mech), initialvalues(m.gov; inputs), initialvalues(m.avr))
-    return _machine_powerflow_state(m, setpoint_pu).state
+    return _machine_powerflow_state(m, terminal_pu).state
 end
 inputnames(m::SynchronousMachine) = (:vd, :vq, :Tm0, :vref_SG)
 outputnames(m::SynchronousMachine) = (:id, :iq)
@@ -256,7 +260,7 @@ elecinputnames(m::SynchronousMachine) = (:vd, :vq)
 
 # Reconstruct the terminal operating point from receiving-bus voltage and
 # terminal power. The larger |Vt|² root is the normal high-voltage branch.
-function _machine_powerflow_state(m::SynchronousMachine, sp::SetpointPU)
+function _machine_powerflow_state(m::SynchronousMachine, sp::TerminalValuesPU)
     e = m.elec
     Vbus = sp.v_ac * cis(sp.θ_ac)
     Sterminal = complex(sp.p_ac, sp.q_ac)
@@ -289,21 +293,22 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Convert a physical power-flow operating point to normalized external inputs and internal
-setpoint data.
+Convert physical terminal values to normalized external inputs and internal
+terminal data.
+Port powers are positive into the machine. Delivering 900 MW gives `ac.p = -900`.
 
 # Arguments
 
 - `m`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\].
+- `values`: NamedTuple with an `ac` port value in
+  \\[kV\\], \\[rad\\], \\[MW\\] and \\[MVAr\\].
 
 # Returns
 
 - `inputs`: Named tuple of bus voltages `vd`, `vq`, fixed turbine torque `Tm0`, and
   effective AVR reference `vref_SG`, on machine bases \\[dimensionless\\].
-- `setpoint_pu`: Normalized operating point; powers and voltages use \\[dimensionless\\]
-  and the angle uses \\[rad\\]. Returns `nothing` when `Qac` is missing.
+- `terminal_pu`: Normalized operating point. Powers and voltages use \\[dimensionless\\]
+  and the angle uses \\[rad\\]. Returns `nothing` when `values.ac.q` is `NaN`.
 
 # Notes
 
@@ -313,47 +318,46 @@ v_d=(V/V_b)\\cos\\theta,\\qquad v_q=-(V/V_b)\\sin\\theta.
 
 Here ``V`` is the physical AC phase-peak voltage \\[kV\\], ``V_b`` is its base \\[kV\\], and
 ``\\theta`` is the operating-point angle \\[rad\\]. Powers are divided by the component
-power base. A complete operating point determines fixed turbine and AVR references from
-the terminal power-flow solution; otherwise `Tm0=Pac/S_base` and the configured AVR
-reference is retained.
+power base after negation. A complete operating point determines fixed turbine and AVR
+references from the terminal power-flow solution. Otherwise `Tm0=-values.ac.p/S_base`
+and the configured AVR reference is retained.
 
 # Examples
 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-model = synchronousmachine().element_model
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0, Pdc=100.0, Vdc=640.0)
-inputs, point_pu = P.pftoinputs(model, point)
+model = synchronousmachine()
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
+inputs, point_pu = P.pftoinputs(model, values)
 ```
 """
-function pftoinputs(m::SynchronousMachine, setpoint::Setpoint)
-    v_bus_d = setpoint.Vac * cos(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
-    v_bus_q = -setpoint.Vac * sin(setpoint.θac) / (m.elec.Vᵃᶜ_base * sqrt(2/3))
-    p_ac = setpoint.Pac / m.elec.S_base
-    if ismissing(setpoint.Qac)
+function pftoinputs(m::SynchronousMachine, values::NamedTuple)
+    v_bus_d = values.ac.v * cos(values.ac.theta) / m.bases.v_ac
+    v_bus_q = -values.ac.v * sin(values.ac.theta) / m.bases.v_ac
+    p_ac = -values.ac.p / m.bases.S
+    if isnan(values.ac.q)
         return (; vd=v_bus_d, vq=v_bus_q, Tm0=p_ac,
-            vref_SG=m.avr.vref_SG), nothing
+            vref_SG=m.avr.v_ref), nothing
     end
-    sp = SetpointPU(p_ac=p_ac, q_ac=setpoint.Qac / m.elec.S_base,
-        θ_ac=setpoint.θac, v_ac=setpoint.Vac / (m.elec.Vᵃᶜ_base * sqrt(2/3)))
+    sp = TerminalValuesPU(p_ac=p_ac, q_ac=-values.ac.q / m.bases.S,
+        θ_ac=values.ac.theta, v_ac=values.ac.v / m.bases.v_ac)
     point = _machine_powerflow_state(m, sp)
     return (; vd=v_bus_d, vq=v_bus_q, Tm0=point.Tm0,
         vref_SG=point.vref_SG), sp
 end
 
-
 function outputequations!(F, x, inputs, y, gen::SynchronousMachine)
     
-    theta_grid = 0; # The angle of the global dq reference frame TODO: Check if this is correct
+    theta_grid = 0; # Global dq reference-frame angle. TODO verify this value.
     d = get_state(:θ_sg, x) - theta_grid; # New reference frame angle - old RF angle
     T_inv = [cos(d) sin(d);
         -sin(d)  cos(d)]; # Rotation to stator's RF
-    F[1:2] = -T_inv* [x.i_d;x.i_q] #Grid ref frame currentst
+    F[1:2] = -T_inv* [x.i_d;x.i_q] #Grid ref frame currents
 end
 
 
-#################### STATE SPACE EQUATIONS ###############################
+# State-space equations
 
 """
 $(TYPEDSIGNATURES)
@@ -364,10 +368,10 @@ derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `v_dq`: d/q bus-voltage pair in internal machine coordinates \\[dimensionless\\].
 - `block`: Synchronous-machine winding parameters.
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
@@ -385,7 +389,7 @@ L_D\\dot{\\mathbf i}_D=\\mathbf r_D,\\quad L_Q\\dot{\\mathbf i}_Q=\\mathbf r_Q,\
 
 The assembled d/q inductance matrices contain stator, field, and damper couplings.
 Right-hand sides include winding resistive drops and speed-induced flux voltages, scaled
-by the electrical base angular frequency \\[rad/s\\]. Currents, fluxes, and torque use
+by the electrical base angular frequency \\[rad/s\\]. Currents, fluxes, and torque are on
 machine bases \\[dimensionless\\].
 
 # Examples
@@ -393,10 +397,10 @@ machine bases \\[dimensionless\\].
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
-inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
+model = synchronousmachine()
+inputs, point_pu = P.pftoinputs(model, values)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.elec
 F = zeros(P.n_states(block))
 P.state_space!(F, x, (inputs.vd, inputs.vq), block; gen=model)
@@ -437,19 +441,19 @@ function state_space!(F, x, v_dq, block::ElectricalSM; gen::SynchronousMachine)
     Ψ_q = - Lq*i_q + block.La_q*(i_q1 + i_q2); # q-axis flux
 
     Te = -(Ψ_d*i_q - Ψ_q*i_d); # Generator operation electrical torque n_ppoles*w_m = w_e
-    # z = merge(z, (;Te))
+    # `z = merge(z, (;Te))`
     
     w_pu = get_state(:ω_pu, x)
 
-    RHS_D = block.ωn*[(v_d  +	(block.Ra+block.rt)*i_d	- w_pu*Ψ_q);
+    RHS_D = gen.bases.omega*[(v_d  +	(block.Ra+block.rt)*i_d	- w_pu*Ψ_q);
                     (v_df -	block.Rf_d*i_df)
                     (0    - block.R1_d*i_d1)]
 
-    RHS_Q = block.ωn*[(v_q  +  (block.Ra+block.rt)*i_q + w_pu*Ψ_d)
+    RHS_Q = gen.bases.omega*[(v_q  +  (block.Ra+block.rt)*i_q + w_pu*Ψ_d)
                 (0    -  block.R1_q*i_q1)
                 (0    -  block.R2_q*i_q2)]
 
-    F[1:3] = L_D \ RHS_D # Tests show that this is faster than precomputing inverse lol
+    F[1:3] = L_D \ RHS_D # Tests showed faster execution than precomputing the inverse.
     F[4:6] = L_Q \ RHS_Q
 
     didq_dt = (F[1], F[4])
@@ -468,10 +472,10 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `Te`: Electromagnetic torque on the machine torque base \\[dimensionless\\].
 - `block`: Rotor inertia and turbine torque fractions.
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
@@ -486,7 +490,7 @@ into `F`.
 T_t=F_{HP}T_{HP}+F_{IP}T_{IP}+F_{LP}T_{LP},\\quad \\dot\\omega=(T_t-T_e)/(2H),\\quad \\dot\\theta=\\omega_n(\\omega-1).
 ```
 
-Torques and speed use machine bases \\[dimensionless\\]; inertia uses \\[s\\] and rotor
+Torques and speed are on machine bases \\[dimensionless\\]. Inertia uses \\[s\\] and rotor
 angle \\[rad\\].
 
 # Examples
@@ -494,10 +498,10 @@ angle \\[rad\\].
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
-inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
+model = synchronousmachine()
+inputs, point_pu = P.pftoinputs(model, values)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.mech
 F = zeros(P.n_states(block))
 P.state_space!(F, x, inputs.Tm0, block; gen=model)
@@ -516,7 +520,7 @@ function state_space!(F, x, Te, block::MechanicalSM; gen::SynchronousMachine)
     T_turb = block.F_HP*TchHP + block.F_IP*TreIP + block.F_LP*TcrLP
     
     F[1] = (T_turb - Te)/(2*block.H)   # Newton's II Law
-    F[2] = gen.elec.ωn*(w_pu - 1)
+    F[2] = gen.bases.omega*(w_pu - 1)
 
     # return z
 end
@@ -530,10 +534,10 @@ into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `Tm`: Fixed turbine torque reference on the machine torque base \\[dimensionless\\].
 - `block`: Governor lag and droop parameters.
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
@@ -557,10 +561,10 @@ normalized \\[dimensionless\\].
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
-inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
+model = synchronousmachine()
+inputs, point_pu = P.pftoinputs(model, values)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.gov
 F = zeros(P.n_states(block))
 P.state_space!(F, x, inputs.Tm0, block; gen=model)
@@ -595,16 +599,16 @@ derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
 - `v_dq`: d/q bus-voltage pair in internal machine coordinates \\[dimensionless\\].
 - `didq_dt`: Tuple of d/q current time derivatives on the machine current base \\[s⁻¹\\].
 - `block`: Voltage-regulator and exciter parameters.
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
 - `vref`: Fixed effective terminal-voltage reference on the machine base
-  \\[dimensionless\\]. Default: `block.vref_SG`.
+  \\[dimensionless\\]. Default: `block.v_ref`.
 
 # Returns
 
@@ -617,17 +621,17 @@ derivatives into `F`.
 ```
 
 Terminal voltage is reconstructed from bus voltage, external branch drop, and current
-derivatives. Voltages use machine bases \\[dimensionless\\]; time constants use \\[s\\].
+derivatives. Voltages use machine bases \\[dimensionless\\]. Time constants use \\[s\\].
 
 # Examples
 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
-inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
+model = synchronousmachine()
+inputs, point_pu = P.pftoinputs(model, values)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 block = model.avr
 F = zeros(P.n_states(block))
 electrical = zeros(P.n_states(model.elec))
@@ -636,7 +640,8 @@ P.state_space!(F, x, (inputs.vd, inputs.vq), didq_dt, block; gen=model, vref=inp
 @assert all(isfinite, F)
 ```
 """
-function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;gen::SynchronousMachine, vref=block.vref_SG)
+function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;
+        gen::SynchronousMachine, vref=block.v_ref)
     
     v_d = v_dq[1]
     v_q = v_dq[2]
@@ -650,8 +655,10 @@ function state_space!(F, x, v_dq, didq_dt::Tuple, block::AVRSM;gen::SynchronousM
     x_AVR = get_state(:ξ_AVR, x)
     
     # AVR and exciter (split up for speed gains)
-    v_td = v_d +gen.elec.rt*i_d + w_pu*gen.elec.lt*i_q + gen.elec.lt/gen.elec.ωn*did_dt # Machine terminal voltage
-    v_tq = v_q +gen.elec.rt*i_q - w_pu*gen.elec.lt*i_d + gen.elec.lt/gen.elec.ωn*diq_dt # Machine terminal voltage
+    # Machine terminal voltage
+    v_td = v_d +gen.elec.rt*i_d + w_pu*gen.elec.lt*i_q + gen.elec.lt/gen.bases.omega*did_dt
+    # Machine terminal voltage
+    v_tq = v_q +gen.elec.rt*i_q - w_pu*gen.elec.lt*i_d + gen.elec.lt/gen.bases.omega*diq_dt
 
     F[1] = 1/block.T_R*(sqrt(v_td^2+v_tq^2)- v_f)        # Voltage magnitude measurement (LPF)
     dv = vref - v_f                                     # Fixed effective reference
@@ -672,11 +679,11 @@ dynamics, writing state derivatives into `F`.
 # Arguments
 
 - `F`: Writable derivative buffer in block state order. Normalized electrical-state
-  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]; filter-state rates follow the
+  rates use \\[s⁻¹\\] and angle rates use \\[rad/s\\]. Filter-state rates follow the
   realization.
 - `x`: Named state values. Electrical states use their component bases
-  \\[dimensionless\\]; angles use \\[rad\\]. Filter-state units follow the realization.
-- `inputs`: Named input signals on the component bases \\[dimensionless\\]; angles, when
+  \\[dimensionless\\]. Angles use \\[rad\\]. Filter-state units follow the realization.
+- `inputs`: Named input signals on the component bases \\[dimensionless\\]. Angles, when
   present, use \\[rad\\].
 - `gen`: Synchronous-machine electrical, mechanical, governor, and AVR blocks.
 
@@ -689,10 +696,10 @@ dynamics, writing state derivatives into `F`.
 ```julia
 using PowerImpedance
 P = PowerImpedance
-point = Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0)
-model = synchronousmachine(setpoint=point).element_model
-inputs, point_pu = P.pftoinputs(model, point)
-x = P.orderedinitialvalues(model; inputs, setpoint_pu=point_pu)
+values = (ac = ACPortValues(220sqrt(2/3), 0.0, -100.0, 0.0),)
+model = synchronousmachine()
+inputs, point_pu = P.pftoinputs(model, values)
+x = P.orderedinitialvalues(model; inputs, terminal_pu=point_pu)
 F = zeros(P.n_states(model))
 P.state_space!(F, x, inputs, model)
 @assert all(isfinite, F)
@@ -708,75 +715,91 @@ function state_space!(F, x, inputs, gen::SynchronousMachine)
     v_bus_q = inputs.vq
     Tm = inputs.Tm0
 
-    theta_grid = 0; # The angle of the global dq reference frame TODO: Check if this is correct
+    theta_grid = 0; # Global dq reference-frame angle. TODO verify this value.
     d = get_state(:θ_sg, x) - theta_grid; # New reference frame angle - old RF angle
     T = [cos(d) -sin(d);
         sin(d)  cos(d)]; # Rotation to rotor's RF
     v_dq = T*[v_bus_d; v_bus_q];
-    # vd = v_dq[1];
-    # vq = v_dq[2];
-    # z = merge(z,(;vd,vq, Tm0))
+    # `vd = v_dq[1];`
+    # `vq = v_dq[2];`
+    # `z = merge(z,(;vd,vq, Tm0))`
 
     ### ElectricalSM
-    index_end = index + n_states(gen.elec) -1  #Nb of equatinos
+    index_end = index + n_states(gen.elec) -1  #Nb of equations
     Te, didq_dt = state_space!(@view(F[index:index_end]), x, v_dq, gen.elec ;gen)
     index = index_end+1
 
     ### MechanicalSM
-    index_end = index + n_states(gen.mech)-1 #Nb of equatinos
+    index_end = index + n_states(gen.mech)-1 #Nb of equations
     state_space!(@view(F[index:index_end]), x, Te, gen.mech;gen)
     index = index_end+1
     
     ### Governor
-    index_end = index + n_states(gen.gov)-1 #Nb of equatinos
+    index_end = index + n_states(gen.gov)-1 #Nb of equations
     state_space!(@view(F[index:index_end]), x, Tm, gen.gov;gen)
     index = index_end+1
 
     ### AVR
-    index_end = index + n_states(gen.avr)-1 #Nb of equatinos
-    state_space!(@view(F[index:index_end]), x, v_dq, didq_dt, gen.avr;gen, vref=get(inputs, :vref_SG, gen.avr.vref_SG))
+    index_end = index + n_states(gen.avr)-1 #Nb of equations
+    state_space!(@view(F[index:index_end]), x, v_dq, didq_dt, gen.avr;
+        gen, vref=get(inputs, :vref_SG, gen.avr.v_ref))
     index = index_end+1
 
     
 end
 
 
-###### HElper functions ########################
+# Helper functions
 
 """
 $(TYPEDSIGNATURES)
 
-Construct a network element containing the requested component model.
+Construct a synchronous-machine model from electrical and mechanical subsystems.
 
 # Arguments
 
-- `elec`: Electrical subsystem and its physical base quantities. Default:
+- `elec`: Electrical subsystem. Default:
   `ElectricalSM()`.
 - `mech`: Mechanical subsystem. Default: `MechanicalSM()`.
 - `avr`: Automatic voltage regulator. Default: `AVRSM()`.
 - `gov`: Governor subsystem. Default: `GovernorSM()`.
-- `setpoint`: Physical operating point; powers use \\[MW\\] or \\[MVAr\\], voltages \\[kV\\],
-  and angles \\[rad\\]. Default: `Setpoint()`.
-- `connection`: Whether the element participates in network construction. Default:
-  `true`.
+- `powerflow`: Partial power-flow setpoints on machine bases \\[dimensionless\\].
+  Default: `(;)`.
+
+# Keywords
+
+- `S_base`: Three-phase apparent-power base \\[MVA\\]. Default: `1000`.
+- `Vᵃᶜ_base`: Line-to-line RMS voltage base \\[kV\\]. Default: `220`.
+- `ωn`: Electrical angular-frequency base \\[rad/s\\]. Default: `100*π`.
 
 # Returns
 
-- An `Element` containing the configured component model.
+- An immutable `SynchronousMachine` with an `ACDQ` port.
 
 # Examples
 
 ```julia
 using PowerImpedance
-component = synchronousmachine(setpoint=Setpoint(Pac=100.0, Qac=0.0, Vac=220sqrt(2/3), θac=0.0))
+machine = component(synchronousmachine();
+    powerflow = (p = 0.1, q = 0.0, v = 1.0))
 ```
 """
-function synchronousmachine(;elec=ElectricalSM(),mech=MechanicalSM(),avr=AVRSM(),gov=GovernorSM(), setpoint=Setpoint(), connection=true)
-    
-    gen = SynchronousMachine(elec, mech,avr, gov)
-    # Transformation property set to false, as model is natively defined in dq-frame. TODO: Fix this; outpins 0 bcs oneport, kept for legacy
-    elem = Element(input_pins = 2, output_pins = 2, element_model = gen, transformation = false; connection, setpoint)
-    return elem
+function synchronousmachine(;
+    S_base = 1000,
+    Vᵃᶜ_base = 220,
+    ωn = 100*π,
+    elec = ElectricalSM(),
+    mech = MechanicalSM(),
+    avr = AVRSM(),
+    gov = GovernorSM(),
+    powerflow::NamedTuple = (;))
+    Vᵃᶜ_base = Float64(Vᵃᶜ_base)
+    b = BaseValues(S = S_base, v_ac = Vᵃᶜ_base * sqrt(2/3), omega = ωn)
+    defaults = map(input -> input.default, _MACHINE_POWERFLOW_INPUTS)
+    seeds = _withinputs(defaults, _MACHINE_POWERFLOW_INPUTS,
+        powerflow, "powerflow")
+    return SynchronousMachine(; elec, mech, avr, gov, limits = Limits(), Vᵃᶜ_base,
+        bases = b, powerflow = seeds)
 end
 
 
@@ -787,16 +810,8 @@ end
 
 
 
-function eval_parameters(elem :: Element, s :: Complex)
-    # numerical
-    I = Matrix{Complex}(Diagonal([1 for dummy in 1:size(elem.A,1)]))
-    Y = (elem.C*inv(s*I-elem.A))*elem.B + elem.D
-
-    return Y
-end
-
-# This did not work!
-# function eval_abcd(gen :: SynchronousMachine, s :: Complex)
+# Previous ABCD conversion attempt. It did not give a valid result.
+# `function eval_abcd(gen :: SynchronousMachine, s :: Complex)`
 #     Y = eval_parameters(gen,s)
 #     abcd = y_to_abcd(Y)
 # end
@@ -819,7 +834,7 @@ Return the factors that convert per-unit machine admittance to siemens.
 
 # Arguments
 
-- `elem`: Network element containing the component model and operating point.
+- `model`: Component model with electrical base quantities.
 
 # Returns
 
@@ -831,47 +846,94 @@ Return the factors that convert per-unit machine admittance to siemens.
 Y_{ij}^{SI}=Y_{ij}^{pu}\\frac{I_{b,i}}{V_{b,j}}.
 ```
 
-The common entry is `S_base/Vac_base²` \\[S\\], using the three-phase power base
-in \\[MVA\\] and line-to-line RMS voltage base in \\[kV\\]. These factors are returned
-for explicit use; core `eval_y` does not automatically apply them to induction machines.
+The common entry is `bases(model).S/model.Vᵃᶜ_base²` \\[S\\]. It uses three-phase
+power \\[MVA\\] and line-to-line RMS voltage \\[kV\\] bases. These factors are returned
+for explicit use by the network admittance calculation.
 
 # Examples
 
 ```julia
 using PowerImpedance
 P = PowerImpedance
-element = synchronousmachine()
-scale = P.SI_scale(element)
+model = synchronousmachine()
+scale = P.SI_scale(model)
 ```
 """
-function SI_scale(elem::Element{<:SynchronousMachine})
-    elec = elem.element_model.elec
-    return fill(elec.S_base / elec.Vᵃᶜ_base^2, 2, 2)
+function SI_scale(model::SynchronousMachine)
+    elec = model.elec
+    return fill(model.bases.S / model.Vᵃᶜ_base^2, 2, 2)
 end
 
 
-pmtype(::Element{<:SynchronousMachine}) = "gen"
 
-function convert!(data,elem::Element{<:SynchronousMachine},::Type{PMACDC}, nodes2bus, bus2nodes, elem2comp, comp2elem, global_dict)
+electricalconnections(::SynchronousMachine) = (ac = Port(ACDQ),)
 
-    # Find the nodes not connected to the ground
-    ac_nodes = make_non_ground_node(elem, bus2nodes)
-    ac_bus = add_bus_ac!(data, nodes2bus, bus2nodes, ac_nodes, global_dict)
-    
+is_generator(::SynchronousMachine) = true
+is_passive(::SynchronousMachine) = false
+admittance_order(::SynchronousMachine) = ((:ac, :d), (:ac, :q))
 
-    key = comp_elem_interface!(data, elem2comp, comp2elem, elem, pmtype(elem))
-    return convert!(data, elem, PMACDC, key, (ac_bus,), global_dict)
-end
+inputs(::AVRSM) = (v_ref = _AVR_VOLTAGE_INPUT,)
+inputs(model::SynchronousMachine) = (
+    avr = inputs(model.avr),
+    powerflow = _MACHINE_POWERFLOW_INPUTS,
+)
 
-function convert!(data, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, key_branch, (ac_bus,), global_dict)
-    machine = elem.element_model
+bases(model::SynchronousMachine) = model.bases
+
+limits(model::SynchronousMachine) = model.limits
+
+
+
+
+pmtype(::SynchronousMachine, rows) = "gen"
+
+function convert!(data, machine::SynchronousMachine, ::Type{PMACDC}, component_key,
+        ports::NamedTuple, global_dict)
+    key_branch = component_key.index
+    ac_bus = ports.ac
+    target = inputvalues(machine).powerflow
+    b = bases(machine)
+    point = (p = target.p * b.S, q = target.q * b.S, v = target.v * b.v_ac)
+    lm = limits(machine)
     interm_bus = add_interm_bus_ac!(data, global_dict)
-    
-    
 
-    _initialize_gen_entry!(data, key_branch, interm_bus, elem, global_dict)
 
-    # key_branch = length(data["branch"]) + 1
+
+    key_branch_str = string(key_branch)
+    data["gen"][key_branch_str] = Dict{String, Any}()
+    gen = data["gen"][key_branch_str]
+    gen["mBase"] = global_dict["S"] / 1e6
+    gen["gen_bus"] = interm_bus
+    gen["pc1"] = 0
+    gen["pc2"] = 0
+    gen["qc1min"] = 0
+    gen["qc1max"] = 0
+    gen["qc2min"] = 0
+    gen["qc2max"] = 0
+    gen["ramp_agc"] = 0
+    gen["ramp_q"] = 0
+    gen["ramp_10"] = 0
+    gen["ramp_30"] = 0
+    gen["apf"] = 0
+    gen["startup"] = 0
+    gen["shutdown"] = 0
+    gen["gen_status"] = 1
+    gen["source_id"] = Any["gen", key_branch]
+    gen["index"] = key_branch
+
+    s_base = global_dict["S"] / 1e6
+    v_base = global_dict["V"] / 1e3
+    gen["pg"] = point.p / s_base
+    gen["qg"] = point.q / s_base
+    gen["pmin"] = lm.P_min / s_base
+    gen["pmax"] = lm.P_max / s_base
+    gen["qmin"] = lm.Q_min / s_base
+    gen["qmax"] = lm.Q_max / s_base
+    gen["vg"] = point.v / v_base/sqrt(2)
+    gen["model"] = 1
+    gen["cost"] = 0
+    gen["ncost"] = 0
+
     key_branch_str = string(key_branch)
 
     data["branch"][key_branch_str] = Dict{String, Any}()
@@ -890,15 +952,17 @@ function convert!(data, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, key
     branch["tap"] = 1
     branch["shift"] = 0
     branch["c_rating_a"] = 1
-    branch["br_r"] = machine.elec.rt * (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
-    branch["br_x"] = machine.elec.lt * (machine.elec.Vᵃᶜ_base^2 / machine.elec.S_base) / global_dict["Z"]
+    branch["br_r"] = machine.elec.rt *
+        (machine.Vᵃᶜ_base^2 / machine.bases.S) / global_dict["Z"]
+    branch["br_x"] = machine.elec.lt *
+        (machine.Vᵃᶜ_base^2 / machine.bases.S) / global_dict["Z"]
     branch["g_fr"] = 0
     branch["b_fr"] = 0
     branch["g_to"] = 0
     branch["b_to"] = 0
 
     bus = data["bus"][string(interm_bus)]
-    if isapprox(elem.limits.P_max, elem.setpoint.Pac)
+    if isapprox(lm.P_max, point.p)
         data["bus"][string(interm_bus)] = set_bus_type(bus, 1)
     else
         data["bus"][string(interm_bus)] = set_bus_type(bus, 2)
@@ -911,16 +975,23 @@ function convert!(data, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, key
     return nothing
 end
 
-function transform(elemresult, busresult, global_dict, elem::Element{<:SynchronousMachine}, ::Type{PMACDC}, ::Type{PIACDC})
-			
-    acbusresult = busresult[1]
+
+"""
+$(TYPEDSIGNATURES)
+
+Return AC port powers positive into the machine. Delivering 900 MW gives `ac.p = -900`.
+"""
+function transform(elemresult, busresult::NamedTuple, global_dict,
+        model::SynchronousMachine, ::Type{PMACDC}, ::Type{PIACDC})
+
+    acbusresult = busresult.ac
     Pgen = elemresult["pg"] * global_dict["S"] / 1e6 #MW
     Qgen = elemresult["qg"] * global_dict["S"] / 1e6 #MVAr
     Vm =
         (acbusresult["vm"] *
-            global_dict["V"] / 1e3) * sqrt(2) # Convert the LN-RMS voltage coming from the PF to LN-PK
+            # Convert the LN-RMS voltage coming from the PF to LN-PK
+            global_dict["V"] / 1e3) * sqrt(2)
     θ = acbusresult["va"]
 
-    setpoint = Setpoint(Pac=Pgen, Qac=Qgen, θac=θ, Vac=Vm)
-    return setpoint
+    return (ac = ACPortValues(Vm, θ, -Pgen, -Qgen),)
 end

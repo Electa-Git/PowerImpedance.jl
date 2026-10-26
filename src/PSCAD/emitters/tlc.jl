@@ -30,7 +30,7 @@ function tlc_modulation(name, e, equilibrium, transforms, settings)
         # the acquired electrical signal already includes one step of delay.
         initial = PowerImpedance.phase_compensated_dq(
             [equilibrium.outputs.mod.m_d, equilibrium.outputs.mod.m_q],
-            -m.elec.ωbase * residual)
+            -m.bases.omega * residual)
         if !iszero(residual)
             t = converter_parameter!(parameters, "Td", residual, "s")
         end
@@ -44,7 +44,7 @@ function tlc_modulation(name, e, equilibrium, transforms, settings)
                     ceil(Int, residual / settings.time_step) + 1, x0))
             end
         end
-        converter_parameter!(parameters, "compensation", m.elec.ωbase * residual)
+        converter_parameter!(parameters, "compensation", m.bases.omega * residual)
         push!(graph.nodes, Import("compensation", Signal("compensation")))
         converter_rotation!(
             graph, Signal("md_delay"), Signal("mq_delay"), Signal("compensation"),
@@ -56,11 +56,11 @@ function tlc_modulation(name, e, equilibrium, transforms, settings)
     else
         not_exportable(e, m.mod)
     end
-    w = converter_parameter!(parameters, "wbase", m.elec.ωbase)
+    w = converter_parameter!(parameters, "wbase", m.bases.omega)
     # The controlled source requires physical phase voltage in kV, whereas
     # modulation uses the AC peak-voltage base.
-    scale = converter_parameter!(parameters, "voltage_scale", m.elec.vACbase /
-                                                              (2m.elec.vDCbase))
+    scale = converter_parameter!(parameters, "voltage_scale", m.bases.v_ac /
+                                                              (2m.bases.v_dc))
     append!(graph.nodes,
         ControlBlock[
             TimeStep(Signal("mod_clock_s")), Gain(Signal("mod_clock_s"), Signal("theta_nom"), w),
@@ -100,7 +100,7 @@ end
 
 function tlc_electrical_canvas(e)
     canvas = CanvasPlan()
-    si = tlc_si(e.model.elec)
+    si = tlc_si(e.model.elec, e.model.bases)
     si.R_r >= 0 && si.L_r > 0 ||
         throw(ArgumentError("converter :$(e.name) requires R_r >= 0 and L_r > 0"))
     # Ground the negative terminal of each controlled phase-voltage source
@@ -179,15 +179,15 @@ end
 
 function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.TLC}, context)
     connected = filter(t -> !t.grounded, e.terminals)
-    length(connected) == 2 && any(t -> t.side == 1 && t.bus.domain == 2, connected) &&
-    any(t -> t.side == 2 && t.bus.domain == 1, connected) ||
-        throw(ArgumentError("converter :$(e.name) requires DC side 1 and AC side 2"))
-    dc, ac = only(filter(t -> t.side == 1, connected)),
-    only(filter(t -> t.side == 2, connected))
+    length(connected) == 2 && any(t -> t.port == :dc && t.bus.domain == 2, connected) &&
+    any(t -> t.port == :ac && t.bus.domain == 1, connected) ||
+        throw(ArgumentError("converter :$(e.name) requires DC port :dc and AC port :ac"))
+    dc, ac = only(filter(t -> t.port == :dc, connected)),
+    only(filter(t -> t.port == :ac, connected))
     bus = _ac_bus(e, ac, context)
     _terminal_bus(e, dc, context)
     m = e.model
-    isapprox(m.elec.ωbase, 2π * context.settings.frequency; rtol = 1e-12) ||
+    isapprox(m.bases.omega, 2π * context.settings.frequency; rtol = 1e-12) ||
         throw(ArgumentError("converter :$(e.name) frequency differs from the network frame"))
     haskey(context.netlist.operating_point.branch_flows, e.name) ||
         throw(ArgumentError("converter :$(e.name) requires solved operating-point data"))
@@ -229,8 +229,9 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.TLC}, contex
     point = (x + 144, y + 108)
     push!(state.main.components,
         ModuleInstancePlan(context.name * ":" * name, Pair{String, String}[], point..., 0))
-    ac_current = current_probe!(state, e, ac, context; orientation = :out)
-    ammeter_stub!(state.main, (point[1] + 54, point[2]), only(_terminal_labels(e, ac, context)), ac_current)
+    ac_current = current_probe!(state, e, ac, context; orientation = :into)
+    ammeter_stub!(state.main, (point[1] + 54, point[2]),
+        only(_terminal_labels(e, ac, context)), ac_current; reverse = true)
     dc_current = current_probe!(state, e, dc, context; orientation = :into)
     positive, negative = _terminal_labels(e, dc, context)
     ammeter_stub!(
@@ -242,7 +243,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.TLC}, contex
                signal == "Q_ac_f" ? :converter_q : :converter_diagnostic
         unit = signal == "theta_c" ? "rad" : "pu"
         push!(state.channels, ProbeChannel(
-            probe, kind, bus.name, string(e.name), "2", 1, unit))
+            probe, kind, bus.name, string(e.name), :ac, 1, unit))
         module_signal_stub!(state.main, (point[1] + 54, point[2] + 72 + 36 * (i - 1)), probe, 1)
         px, py = allocate_cell!(state.layout)
         output_probe!(state.main, probe, "converter", unit, (px + 126, py + 72))

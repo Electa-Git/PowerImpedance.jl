@@ -17,7 +17,7 @@ function composed_samples(result, model, spec, c)
         agg=zeros(length(result.time),2)
         for p in ips
             cur=composed_current(result,model,p)
-            key="$(port):$(p.element):$(p.side)";branches[key]=cur
+            key="$(port):$(p.element):$(p.port)";branches[key]=cur
             if !(Symbol(p.element) in c.grids)
                 agg+=cur
             end
@@ -28,8 +28,7 @@ function composed_samples(result, model, spec, c)
         end
         push!(aggregates,agg)
         ip=only(filter(p->p.kind==:injection_current && p.bus==bus.name,model.probes.channels))
-        ip.orientation==:out || error("injection must point into composed bus")
-        push!(drives,fixed_dq(result.time,probe_samples(result,ip)))
+        push!(drives,fixed_dq(result.time,injection_samples(result,ip)))
     end
     voltage=reduce(hcat,voltages);current=reduce(hcat,aggregates);drive=reduce(hcat,drives)
     outputs=Dict("aggregate_Y"=>current,"direct_Z"=>voltage)
@@ -37,26 +36,35 @@ function composed_samples(result, model, spec, c)
     clamps=Dict{String,Vector{Float64}}()
     device_voltages=Dict{String,Matrix{Float64}}()
     for name in c.devices
-        b=device_bases(c.net.elements[name].element_model.elec)
-        bus=port_probe(model.netlist,name,b.ac_side).name
+        b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
+        bus=port_probe(model.netlist,name,b.ac_port).name
         vp=only(filter(p->p.kind==:voltage && p.bus==bus,model.probes.channels))
         device_voltages[string(name)*"_Y"]=fixed_dq(result.time,probe_samples(result,vp))
         if length(spec.axes)==2
-            ip=only(filter(p->p.kind==:current && p.element==string(name) && p.side==string(b.ac_side),model.probes.channels))
-            outputs[string(name)*"_Y"]=composed_current(result,model,ip)
+            ip=only(filter(
+                p->p.kind==:current && p.element==string(name) && p.port==:ac,
+                    model.probes.channels))
+            outputs[string(name) * "_Y"]=composed_current(result, model, ip)
         end
         b.dc_voltage===nothing && continue
-        bus=port_probe(model.netlist,name,1).name
-        poles=[only(filter(p->p.kind==:voltage && p.bus==bus && p.side==pole,model.probes.channels)) for pole in ("P","N")]
+        bus=port_probe(model.netlist, name, :dc).name
+        poles=[only(filter(p->p.kind==:voltage && p.bus==bus && p.pole==pole,
+            model.probes.channels))
+               for pole in ("P", "N")]
         clamps[string(name)]=result.channels[poles[1].name]-result.channels[poles[2].name]
     end
     if haskey(c.net.elements,:CableDC)
         outputs["DC_voltage_Z"]=hcat([clamps[string(n)] for n in c.devices]...)
         currents=Matrix{Float64}[]
-        for side in ("1","2")
-            p=only(filter(p->p.kind==:current && p.element=="CableDC" && p.side==side,model.probes.channels))
-            p.orientation in (:into,:out) || error("missing DC cable current orientation")
-            push!(currents,reshape((p.orientation==:into ? 1 : -1).*result.channels[p.name],:,1))
+        for port in (:side1, :side2)
+            p=only(filter(
+                p->p.kind==:current && p.element=="CableDC" &&
+                   p.port==port,
+                model.probes.channels))
+            p.orientation in (:into, :out) || error("missing DC cable current orientation")
+            push!(currents, reshape(
+                (p.orientation==:into ? 1 : -1) .*
+                result.channels[p.name], :, 1))
         end
         outputs["DC_current_T"]=reduce(hcat,currents)
     end
@@ -68,7 +76,8 @@ function composed_target_spec(spec,c,target)
     target=="DC_current_T" && return merge(spec,(;quantity="T",response_output_bases=fill(1.25,2),dc_clamped=false))
     target=="direct_Z" && return merge(spec,(;quantity="Z",dc_clamped=false))
     target=="aggregate_Y" && return merge(spec,(;dc_clamped=false))
-    name=Symbol(chop(target;tail=2));b=device_bases(c.net.elements[name].element_model.elec)
+    name=Symbol(chop(target;tail=2));b=device_bases(c.net.elements[name].elec,
+        c.net.elements[name].bases)
     return merge(spec,(;quantity="Y",voltage_bases=fill(b.ac_voltage,length(spec.axes)),
         current_bases=fill(b.ac_current,length(spec.axes)),dc_clamped=false))
 end
@@ -89,10 +98,11 @@ function composed_quality(time, baseline, runs, spec, c, target; columns=eachind
     quality=scan_quality(time,bs,rs,ts;columns)
     clamp=0.
     for (name,held) in baseline.clamps
-        b=device_bases(c.net.elements[Symbol(name)].element_model.elec)
+        b=device_bases(c.net.elements[Symbol(name)].elec,
+            c.net.elements[Symbol(name)].bases)
         # Only source-clamped DC terminals have this clamp limit. Internal DC nodes in a
         # coupled circuit are measured responses, rather than ideal voltage clamps.
-        node=c.net.elements[Symbol(name)].pins[Symbol("1.1")]
+        node=only(port_nets(c.net, Symbol(name), :dc))
         node in c.nodes && continue
         clamp=max(clamp,maximum(maximum(abs,run.clamps[name]-held)/b.dc_voltage for run in runs))
     end
@@ -222,8 +232,8 @@ function composed_predicted_columns(c,spec,column,forms)
             elseif target=="aggregate_Y"
                 physical=[voltage;refs[target][:,:,k]*voltage]
             else
-                name=Symbol(chop(target;tail=2));h=device_incidence(c,name)
-                b=device_bases(c.net.elements[name].element_model.elec)
+                name=Symbol(chop(target;tail=2));h=component_incidence(c,name)
+                b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
                 local_current=(functions[name](s)*h'*all_voltage)[b.ac_indices]
                 if np==2
                     local_voltage=(h'*all_voltage)[b.ac_indices]
@@ -243,8 +253,8 @@ end
 
 function composed_score_indices(c,target)
     target in ("aggregate_Y","direct_Z") && return collect(1:2length(c.ports))
-    name=Symbol(chop(target;tail=2));h=device_incidence(c,name)
-    b=device_bases(c.net.elements[name].element_model.elec)
+    name=Symbol(chop(target;tail=2));h=component_incidence(c,name)
+    b=device_bases(c.net.elements[name].elec, c.net.elements[name].bases)
     rows=findall(x->!iszero(x),vec(sum(abs.(h[1:2length(c.ports),b.ac_indices]);dims=2)))
     # A sole device behind a passive line is scored at its local terminal.
     return isempty(rows) ? [1,2] : rows

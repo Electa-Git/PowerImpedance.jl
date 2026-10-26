@@ -1,14 +1,13 @@
 # # P2P HVDC parametric OHL/UGC transition
 #
-# This example demonstrates the `NetworkBuilder` workflow for reusing a cached
-# power-flow solution while sweeping the relative share of overhead line and
-# underground cable in a point-to-point HVDC system.
+# This `NetworkBuilder` study reuses a cached power-flow solution across
+# overhead-line and underground-cable shares in a point-to-point HVDC system.
 
 using PowerImpedance
 using CairoMakie
 using PowerImpedance.NetworkBuilder: Grid, Gridspace, NetworkState
 
-# The P and Q defined here are what is injected into the network.
+# P and Q are active and reactive power injected into the network.
 transmissionVoltage = 380 / sqrt(3)
 pHVDC1 = 100
 qC1 = 100
@@ -18,28 +17,13 @@ rho = 100.0
 L = 100e3
 
 connections = (
-    (node = :B3d, element = :tl1, side = 2, terminal = 1),
-    (node = :B3d, element = :c1, side = 2, terminal = 1),
-    (node = :B3q, element = :tl1, side = 2, terminal = 2),
-    (node = :B3q, element = :c1, side = 2, terminal = 2),
-    (node = :B2d, element = :g4, side = 1, terminal = 1),
-    (node = :B2d, element = :tl1, side = 1, terminal = 1),
-    (node = :B2q, element = :g4, side = 1, terminal = 2),
-    (node = :B2q, element = :tl1, side = 1, terminal = 2),
-    (node = :B4, element = :ugc, side = 1, terminal = 1),
-    (node = :B4, element = :c1, side = 1, terminal = 1),
-    (node = :BX, element = :ugc, side = 2, terminal = 1),
-    (node = :BX, element = :ohl, side = 1, terminal = 1),
-    (node = :B5, element = :ohl, side = 2, terminal = 1),
-    (node = :B5, element = :c2, side = 1, terminal = 1),
-    (node = :B6d, element = :tl78, side = 1, terminal = 1),
-    (node = :B6d, element = :c2, side = 2, terminal = 1),
-    (node = :B6q, element = :tl78, side = 1, terminal = 2),
-    (node = :B6q, element = :c2, side = 2, terminal = 2),
-    (node = :B7d, element = :g1, side = 1, terminal = 1),
-    (node = :B7d, element = :tl78, side = 2, terminal = 1),
-    (node = :B7q, element = :g1, side = 1, terminal = 2),
-    (node = :B7q, element = :tl78, side = 2, terminal = 2)
+    NetworkBuilder.Bus(:B3; ports = ((:tl1, :side2), (:c1, :ac)), domain = ACDQ),
+    NetworkBuilder.Bus(:B2; ports = ((:g4, :ac), (:tl1, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:B4; ports = ((:ugc, :side1), (:c1, :dc))),
+    NetworkBuilder.Bus(:BX; ports = ((:ugc, :side2), (:ohl, :side1))),
+    NetworkBuilder.Bus(:B5; ports = ((:ohl, :side2), (:c2, :dc))),
+    NetworkBuilder.Bus(:B6; ports = ((:tl78, :side1), (:c2, :ac)), domain = ACDQ),
+    NetworkBuilder.Bus(:B7; ports = ((:g1, :ac), (:tl78, :side2)), domain = ACDQ)
 )
 
 # Bus-voltage bounds belong in the builder options used for every case.
@@ -56,7 +40,7 @@ builder_options = (;
 # regularization at either endpoint avoids singular zero-length line models.
 function ohl_to_ugc(x)
     share = clamp(x, 1e-3, 1 - 1e-3)
-    ohl_model = overhead_line(
+    ohl_model = overhead_line(;
         length = L * (1 - share),
         conductors = Conductors(
             organization = :flat,
@@ -71,11 +55,8 @@ function ohl_to_ugc(x)
             nᵍ = 2,
             Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
             Δxᵍ = 7.3, Δyᵍ = 7.0, dᵍˢᵃᵍ = 6.0
-        ), earth_parameters = (1, 1, rho),
-        transformation = true
-    )
-
-    ugc_model = cable(
+        ), earth_parameters = (1, 1, rho))
+    ugc_model = cable(;
         length = L * share,
         positions = [(-0.5, 1), (0.5, 1)],
         C1 = Conductor(rₒ = 0.02622, ρ = 2.354e-8, μᵣ = 1.035),
@@ -84,61 +65,71 @@ function ohl_to_ugc(x)
         I2 = Insulator(rᵢ = 0.06336, rₒ = 0.06636, ϵᵣ = 2.3, μᵣ = 1.0),
         C3 = Conductor(rᵢ = 0.06636, rₒ = 0.06651, ρ = 2.826e-8, μᵣ = 1.0),
         I3 = Insulator(rᵢ = 0.06651, rₒ = 0.07256, ϵᵣ = 2.3, μᵣ = 1.0),
-        earth_parameters = (1, 1, rho),
-        transformation = true
-    )
+        earth_parameters = (1, 1, rho))
 
     return (;
-        g1 = ac_source(
-            setpoint = Setpoint(Vac = transmissionVoltage*sqrt(2),
-            Pac = pHVDC1),
-            P_min = -2000,
-            P_max = 2000,
-            Q_max = 1000,
-            Q_min = -1000,
-            pins = 3,
-            transformation = true
-        ),
-
-        c1 = only(mmc(Grid; Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
-            P_max = 1500, P_min = -1500, P = -pHVDC1, Q = qC1, Q_max = 500,
-            Q_min = -500,
-            occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-            ccc = PI_control(Kₚ = 0.1048, Kᵢ = 48.1914),
-            pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-            q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159),
-            dc = PI_control(Kₚ = 6, Kᵢ = 15), timeDelay = 200e-6, padeOrderNum = 5,
-            padeOrderDen = 5
-        )),
-
-        c2 = only(mmc(Grid; Vᵈᶜ = 640, vDCbase = 640, Vₘ = transmissionVoltage,
-            P_max = 1000, P_min = -1000, P = pHVDC1, Q = qC2, Q_max = 1000,
-            Q_min = -1000,
-            vACbase_LL_RMS = 333, turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
-            Lₐᵣₘ = 30e-3,
-            occ = PI_control(Kₚ = 0.7691, Kᵢ = 522.7654),
-            ccc = PI_control(Kₚ = 1 * 0.1048, Kᵢ = 1 * 48.1914),
-            pll = PI_control(Kₚ = 0.28, Kᵢ = 12.5664),
-            p = PI_control(Kₚ = 1 * 0.1, Kᵢ = 31.4159),
-            q = PI_control(Kₚ = 0.1, Kᵢ = 31.4159), timeDelay = 200e-6,
-            padeOrderNum = 5, padeOrderDen = 5
-        )),
+        g1 = ac_source(v = transmissionVoltage*sqrt(2), p = pHVDC1),
+        c1 = let model = only(mmc(Grid;
+                Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 380.0,
+                elec = ElectricalMMC(turnsRatio = 1.0),
+                limits = PowerImpedance.Limits(P_min = -1500.0, P_max = 1500.0,
+                    Q_min = -500.0, Q_max = 500.0),
+                sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+                delta_control = ΔdqControlGFL(
+                    outer_active = OuterActiveVdcControl(
+                        pi_ctrl = PIControl(Kp = 6.0, Ki = 15.0)),
+                    outer_reactive = OuterReactiveQControl(
+                        pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                    occ = InnerCurrentPIControl(
+                        pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                        activate_ω_c_multiplication = false)),
+                sigma_control = ΣdqzControlTEC(
+                    ccsc = CirculatingCurrentSuppressionControl(
+                        PIControl(Kp = 0.1048, Ki = 48.1914))),
+                modulation = UncompensatedModulation(timeDelay = 200e-6,
+                    padeOrderNum = 5, padeOrderDen = 5)))
+            b = bases(model)
+            component(model;
+                delta_control = (outer_active = (v_dc_ref = 640.0 / b.v_dc,),
+                    outer_reactive = (q_ref = qC1 / b.S,)),
+                powerflow = (; p_ac = -pHVDC1 / b.S,
+                    v_ac = (transmissionVoltage * sqrt(2)) / b.v_ac,
+                    p_dc = 0.0 / b.S))
+        end,
+        c2 = let model = only(mmc(Grid;
+                Sbase = 1000.0, vDC_base = 640.0, vACbase_LL_RMS = 333.0,
+                elec = ElectricalMMC(turnsRatio = 333 / 380, Lᵣ = 0.0461, Rᵣ = 0.4103,
+                    Lₐᵣₘ = 30e-3),
+                limits = PowerImpedance.Limits(P_min = -1000.0, P_max = 1000.0,
+                    Q_min = -1000.0, Q_max = 1000.0),
+                sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664)),
+                delta_control = ΔdqControlGFL(
+                    outer_active = OuterActivePowerControl(
+                        pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                    outer_reactive = OuterReactiveQControl(
+                        pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159)),
+                    occ = InnerCurrentPIControl(
+                        pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654),
+                        activate_ω_c_multiplication = false)),
+                sigma_control = ΣdqzControlTEC(
+                    ccsc = CirculatingCurrentSuppressionControl(
+                        PIControl(Kp = 0.1048, Ki = 48.1914))),
+                modulation = UncompensatedModulation(timeDelay = 200e-6,
+                    padeOrderNum = 5, padeOrderDen = 5)))
+            b = bases(model)
+            component(model;
+                delta_control = (outer_active = (p_ref = pHVDC1 / b.S,),
+                    outer_reactive = (q_ref = qC2 / b.S,)),
+                powerflow = (; v_dc = 640.0 / b.v_dc,
+                    v_ac = (transmissionVoltage * sqrt(2)) / b.v_ac,
+                    p_dc = 0.0 / b.S))
+        end,
 
         ugc = ugc_model,
         ohl = ohl_model,
 
-        g4 = ac_source(
-            setpoint = Setpoint(Vac = transmissionVoltage*sqrt(2),
-            Pac = pHVDC1),
-            P_min = -2000,
-            P_max = 2000,
-            Q_max = 1000,
-            Q_min = -1000,
-            pins = 3,
-            transformation = true
-        ),
-
-        tl1 = overhead_line(length = 25e3,
+        g4 = ac_source(v = transmissionVoltage*sqrt(2), p = pHVDC1),
+        tl1 = overhead_line(; length = 25e3,
             conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1,
                 Rᵈᶜ = 0.063,
                 rᶜ = 0.015, yᵇᶜ = 30,
@@ -151,9 +142,8 @@ function ohl_to_ugc(x)
                 Δyᵍ = 7.5,
                 dᵍˢᵃᵍ = 10
             ),
-            earth_parameters = (1, 1, 100), transformation = true),
-
-        tl78 = overhead_line(length = 90e3,
+            earth_parameters = (1, 1, 100)),
+        tl78 = overhead_line(; length = 90e3,
             conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1,
                 Rᵈᶜ = 0.063,
                 rᶜ = 0.015, yᵇᶜ = 30,
@@ -166,23 +156,21 @@ function ohl_to_ugc(x)
                 Δyᵍ = 7.5,
                 dᵍˢᵃᵍ = 10
             ),
-            earth_parameters = (1, 1, 100), transformation = true)
+            earth_parameters = (1, 1, 100))
     )
 end
 
-# The transition is one deterministic Gridspace axis. The axis keeps the OHL
-# and UGC lengths paired, so the study never evaluates an impossible Cartesian
-# product of independent corridor lengths.
+# One deterministic Gridspace axis pairs OHL and UGC lengths at each corridor share.
 function transition_network_space(x_values)
     shares = Grid(collect(x_values))
     return Gridspace{NetworkState}(
         share -> NetworkBuilder.define(
             ohl_to_ugc(share),
             connections;
-            options=builder_options,
+            options = builder_options
         ),
         (shares,),
-        (:ugc_share,),
+        (:ugc_share,)
     )
 end
 
@@ -191,16 +179,18 @@ function transition_peak(response, share)
     frequencies_hz = real.(response.frequencies) ./ (2π)
     peak_index = argmax(magnitude_db)
     return (;
-        ugc_share=share,
-        peak_magnitude_db=magnitude_db[peak_index],
-        peak_frequency_hz=frequencies_hz[peak_index],
+        ugc_share = share,
+        peak_magnitude_db = magnitude_db[peak_index],
+        peak_frequency_hz = frequencies_hz[peak_index]
     )
 end
 
-function save_transition_animation(study; filename="transition_harmonic_peaks.mp4", fps=8)
+function save_transition_animation(study; filename = "transition_harmonic_peaks.mp4",
+    fps = 8)
     panel = only(study.plot.panels)
     groups = panel.group_order
-    CairoMakie.record(study.plot.figure, filename, eachindex(groups); framerate=fps) do frame
+    CairoMakie.record(study.plot.figure, filename,
+        eachindex(groups); framerate = fps) do frame
         for (index, group) in pairs(groups)
             foreach(plot -> plot.visible[] = index == frame, panel.groups[group])
         end
@@ -219,47 +209,49 @@ function run_transition_study(;
     shares = collect(x_values)
     problems = PowerImpedanceProblem(
         transition_network_space(shares);
-        nodes=[:B5],
-        eliminated_elements=[:c2],
-        frequency_range,
+        nodes = [:B5],
+        eliminated_elements = [:c2],
+        frequency_range
     )
     result = compute(
         ParametricProblem(problems),
-        Combinatorial(NodalImpedance()),
+        Combinatorial(NodalImpedance())
     )
     labels = ["UGC = $(round(100share; digits=1))%" for share in shares]
-    groups = [Symbol("ugc_", replace(string(round(100share; digits=1)), "." => "_"))
+    groups = [Symbol("ugc_", replace(string(round(100share; digits = 1)), "." => "_"))
               for share in shares]
     plot = only(PowerImpedance.plot(
         result;
-        entries=(:B5, :B5),
+        entries = (:B5, :B5),
         labels,
-        series_groups=groups,
-        title="Impedance at B5 during the OHL/UGC transition",
-        figure_size=(950, 700),
+        series_groups = groups,
+        title = "Impedance at B5 during the OHL/UGC transition",
+        figure_size = (950, 700),
         display_plot,
-        controls=false,
+        controls = false
     ))
     peaks = [transition_peak(response, share)
              for (response, share) in zip(result.values, shares)]
     study = (; result, plot, peaks)
     animation_filename === nothing || save_transition_animation(
         study;
-        filename=animation_filename,
-        fps=animation_fps,
+        filename = animation_filename,
+        fps = animation_fps
     )
     return study
 end
 
 # The documentation uses five corridor shares and a reduced frequency grid.
-#md transition_docs = run_transition_study(; x_values=0.0:0.25:1.0, frequency_range=(100.0, 5e3, 160))
+#md transition_docs = run_transition_study(; x_values=0.0:0.25:1.0, frequency_range=(100.0,
+#md     5e3, 160))
 #md transition_docs.plot.figure
 #
 # The peak table records the resonance movement seen in the plotted curves.
 #md transition_docs.peaks
 
 if abspath(PROGRAM_FILE) == @__FILE__ #src
-    study = run_transition_study(; animation_filename="transition_harmonic_peaks.mp4") #src
+    study = run_transition_study(; #src
+        animation_filename = "transition_harmonic_peaks.mp4") #src
     display(study.plot.figure) #src
     println(study.peaks) #src
 end #src

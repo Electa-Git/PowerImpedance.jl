@@ -1,0 +1,10 @@
+extends: existence
+message: "Use '%s' only for the literal act of closing something."
+level: error
+ignorecase: true
+tokens:
+  - closures?
+exceptions:
+  # Closing a GUI window terminates its event loop.
+  - '(?i)(?:window|GUI|viewer|dialog)\s+closures?'
+  - '(?i)closures?\s+of\s+(?:the\s+)?(?:window|GUI|viewer|dialog)'

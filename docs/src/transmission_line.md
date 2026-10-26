@@ -17,20 +17,20 @@ then forms the distributed-parameter transmission-line ABCD model
 =
 \begin{bmatrix}
 \cosh(\mathbf{\Gamma}l) &
-\mathbf{Y}_c^{-1}\sinh(\mathbf{\Gamma}l) \\
+\mathbf{\Gamma}^{-1}\sinh(\mathbf{\Gamma}l)\mathbf{Z} \\
 \mathbf{Y}_c\sinh(\mathbf{\Gamma}l) &
-\cosh(\mathbf{\Gamma}l)
+\mathbf{Z}^{-1}\cosh(\mathbf{\Gamma}l)\mathbf{Z}
 \end{bmatrix},
 ```
 
 where ``\mathbf{\Gamma}=\sqrt{\mathbf{Z}\mathbf{Y}}``,
 ``\mathbf{Y}_c=\mathbf{Z}^{-1}\mathbf{\Gamma}``, and ``l`` is the line
-length.
+length. Matrix products retain the displayed order for untransposed geometries.
 
 ## Overhead lines
 
-An overhead-line model combines phase conductors, optional ground wires, and
-an earth-return model. Conductors may be arranged in flat, vertical, delta,
+An overhead line comprises phase conductors, optional ground wires, and
+an earth-return model. Conductors can be arranged in flat, vertical, delta,
 offset, or concentric organizations, or supplied through explicit positions.
 Bundle geometry, sag correction, conductor resistance and radius, ground-wire
 data, and earth properties determine the full self and mutual parameter
@@ -40,17 +40,23 @@ matrices [MartinezVelasco2017](@cite).
 
 ![Tower coordinates, sag-adjusted conductor positions, and subconductor bundle geometry.](pictures/transmission_line/transmission_line.png)
 
-The complete matrices are retained through the line evaluation; valid mutual
-coupling is not discarded. Three-phase transformed models apply the requested
-coordinate transformation only at the component terminals.
+The complete matrices, including mutual terms, are retained through line
+evaluation. Line constructors return models with `side1` and `side2` ports.
+Three-conductor lines declare `ACABC`. Connecting them to an `ACDQ` bus selects
+the dq transform. Two-conductor lines declare one `DC_CM` differential port
+per end.
 
 ## Underground cables
 
 A cable group contains coaxial conducting and insulating layers at specified
 burial positions. The implemented native geometry supports core, sheath, and
-armor/screen arrangements, layer material properties, and earth-return mutual
+armor and screen arrangements, layer material properties, and earth-return mutual
 coupling. Internal grounded layers can be eliminated by Kron reduction to
 obtain a compact terminal model [Ametani1980, RivasMarti2002](@cite).
+
+Cable models also use `side1` and `side2`. A cable with three retained conductors uses
+`ACABC`. A cable with two uses one differential `DC_CM` port per end. The same port
+names apply to `blackbox_line` models imported from Z/Y data.
 
 ![Coaxial cable layers and geometric parameters.](pictures/transmission_line/cable_example.png)
 
@@ -58,7 +64,7 @@ obtain a compact terminal model [Ametani1980, RivasMarti2002](@cite).
 
 LineCableModels interoperability is temporarily dormant while
 LineCableModels.jl awaits registration. Native line constructors remain
-available; the compatibility extension and its tests will be restored once
+available. The compatibility extension and its tests will be restored once
 LineCableModels can be declared as a registered weak dependency.
 
 See [`overhead_line`](@ref), [`cable`](@ref), [`Conductors`](@ref),

@@ -1,0 +1,32 @@
+extends: existence
+message: "Describe what is checked, compared or required instead of '%s'."
+level: error
+ignorecase: true
+tokens:
+  - witness(?:es|ed)?
+  - ledgers?
+  - admission
+  - admit(?:s|ted|ting)?
+  - authorit(?:y|ies|ative)
+  - qualif(?:y|ies|ied|ying|ication|ications)
+  - fairness
+  - honest(?:ly|y)?
+  - robust(?:ly|ness)?
+  - seamless(?:ly)?
+  - leverag(?:e|es|ed|ing)
+  - ensur(?:e|es|ed|ing)
+  - guardrails?
+  - hygiene
+  - first-class
+  - end-to-end
+  - load-bearing
+  - posture
+  - semantics
+  - invariants?
+  - surfac(?:e|es|ed|ing) (?:the|a|an|this|that|these|those|it|them|any|every)
+  - gat(?:e|es|ed|ing)
+  - envelopes?
+exceptions:
+  - '(?i)gate (?:signals?|pulses?|drives?|drivers?|terminals?|voltages?|resistors?|units?|commands?)'
+  - '(?i)(?:logic|IGBT|thyristor|transistor) gates?'
+  - '(?i)(?:amplitude|Hann|signal|signed|modal|decay|spectral) envelopes?'

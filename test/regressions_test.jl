@@ -1,47 +1,46 @@
-@testset "Three-phase classification of untransformed six-pin elements" begin
-    abc_branch = impedance(z = s -> 1.0 + 0.01s, pins = 3)
-    @test PI.is_three_phase(abc_branch)
-    @test PI.pmtype(abc_branch) == "branch"
-    @test all(port -> port.domain == 1, NB._port_descriptions(abc_branch))
-
-    abc_source = ac_source(pins = 3)
-    @test PI.is_three_phase(abc_source)
-    @test PI.pmtype(abc_source) == "gen"
-
-    dq_branch = impedance(z = s -> 1.0, pins = 3, transformation = true)
-    @test PI.is_three_phase(dq_branch)
-
-    dc_branch = impedance(z = s -> 1.0, pins = 1)
-    @test !PI.is_three_phase(dc_branch)
-    @test PI.pmtype(dc_branch) == "branchdc"
+using Test, PowerImpedance
+if !isdefined(@__MODULE__, :PI)
+    const PI = PowerImpedance
+end
+if !isdefined(@__MODULE__, :NB)
+    const NB = PI.NetworkBuilder
 end
 
-@testset "NetworkBuilder power flow and network share the default voltage base" begin
+@testset "Three-phase classification of untransformed six-pin elements" begin
+    abc_branch = impedance(z = s -> 1.0 + 0.01s, conductors = 3)
+    @test PI.is_three_phase(abc_branch)
+    @test PI.pmtype(abc_branch, ((bus = 1,), (bus = 2,))) == "branch"
+    @test all(port -> port.domain == ACABC, electricalconnections(abc_branch))
+
+    abc_source = ac_source()
+    @test PI.is_three_phase(abc_source)
+    @test PI.pmtype(abc_source, ()) == "gen"
+
+    dq_branch = impedance(z = s -> 1.0, conductors = 3)
+    @test PI.is_three_phase(dq_branch)
+
+    dc_branch = impedance(z = s -> 1.0, conductors = 1)
+    @test !PI.is_three_phase(dc_branch)
+    @test PI.pmtype(dc_branch, ((bus = 1,), (bus = 2,))) == "branchdc"
+end
+
+@testset "NetworkBuilder power flow uses the default voltage base" begin
     elements = (
-        source = ac_source(pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = 320 * sqrt(2))),
-        load = impedance(z = s -> 100.0, pins = 3, transformation = true),
+        source = ac_source(v = 320 * sqrt(2)),
+        load = impedance(z = s -> 100.0, conductors = 3),
     )
     connections = (
-        (node = :b_d, element = :source, side = 1, terminal = 1),
-        (node = :b_q, element = :source, side = 1, terminal = 2),
-        (node = :b_d, element = :load, side = 1, terminal = 1),
-        (node = :b_q, element = :load, side = 1, terminal = 2),
-        (node = :gnd_d, element = :load, side = 2, terminal = 1),
-        (node = :gnd_q, element = :load, side = 2, terminal = 2),
+        NB.Bus(:b_; ports = ((:source, :ac), (:load, :side1)), domain = ACDQ),
+        NB.Bus(:gnd_; ports = ((:load, :side2),), domain = ACDQ),
     )
     state = NB.define(elements, connections)
     @test !hasproperty(state.options, :voltageBase)
     data, global_dict, _ = convert(state, PI.PMACDC)
-    network = NB.build_network(state.elements, state.topology, state.options)
     @test global_dict["V"] / 1e3 == NB.DEFAULT_VOLTAGE_BASE
-    @test network.voltageBase[1] == NB.DEFAULT_VOLTAGE_BASE
-    @test all(bus -> bus["base_kv"] == network.voltageBase[1], values(data["bus"]))
+    @test all(bus -> bus["base_kv"] == NB.DEFAULT_VOLTAGE_BASE, values(data["bus"]))
 
     explicit = NB.define(elements, connections; options = (voltageBase = 220 / sqrt(3),))
     explicit_data, _, _ = convert(explicit, PI.PMACDC)
-    explicit_network = NB.build_network(explicit.elements, explicit.topology, explicit.options)
-    @test explicit_network.voltageBase[1] == 220 / sqrt(3)
     @test all(bus -> bus["base_kv"] ≈ 220 / sqrt(3), values(explicit_data["bus"]))
 end
 
@@ -67,27 +66,21 @@ end
 end
 
 @testset "DC impedance power flow matches its per-pole circuit" begin
-    net = Network()
-    net.voltageBase[1] = 320.0
-    for (name, element) in (
-        :ac => ac_source(pins = 3, transformation = true,
-            setpoint = Setpoint(Vac = 320sqrt(2), θac = 0.0)),
-        :from => dc_source(setpoint = Setpoint(Vdc = 640.0)),
-        :to => dc_source(setpoint = Setpoint(Vdc = 636.0)),
-        :line => impedance(z = s -> 2.0 + s * 0.05, pins = 1))
-        add!(net, name, element)
-    end
-    for k in 1:2
-        connect!(net, (:ac, Symbol("1.$k")), Symbol("AC$k"))
-        connect!(net, (:ac, Symbol("2.$k")), :gnd)
-    end
-    for (element, side, node) in ((:from, 1, :D1), (:from, 2, :gnd), (:to, 1, :D2),
-        (:to, 2, :gnd), (:line, 1, :D1), (:line, 2, :D2))
-        connect!(net, (element, Symbol("$side.1")), node)
-    end
-    connect!(net)
-    result, data, _, elem2comp = power_flow(net)
-    _, index = elem2comp[:line]
+    elements = (
+        ac = ac_source(v = 320sqrt(2), theta = 0.0),
+        from = dc_source(v = 640.0),
+        to = dc_source(v = 636.0),
+        line = impedance(z = s -> 2.0 + s * 0.05, conductors = 1),
+    )
+    topology = (
+        NB.Bus(:AC; ports = ((:ac, :ac),), domain = ACDQ),
+        NB.Bus(:D1; ports = ((:from, :dc), (:line, :side1))),
+        NB.Bus(:D2; ports = ((:to, :dc), (:line, :side2))),
+    )
+    net = NB.define(elements, topology; options = (; voltageBase = 320.0))
+    solved = compute(PowerFlowProblem(net), ACDCPowerFlow())
+    result, data = solved.result, solved.data
+    index = solved.elem2comp[:line].compkey
     branch = data["branchdc"][string(index)]
     flow = result["solution"]["branchdc"][string(index)]
     v_from = result["solution"]["busdc"][string(branch["fbusdc"])]["vm"] * 320

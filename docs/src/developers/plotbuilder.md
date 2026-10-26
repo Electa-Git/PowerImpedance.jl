@@ -1,8 +1,8 @@
 # PlotBuilder guide
 
 PlotBuilder converts completed calculation results into backend-neutral render
-definitions. `PlotBuilder.make_render` does not load Makie or repeat a numerical
-calculation.
+definitions. `PlotBuilder.make_render` uses those completed values.
+Makie extensions render the definitions.
 
 ## Definitions
 
@@ -49,11 +49,11 @@ render = PlotBuilder.make_render(
 )
 ```
 
-The built page has a single full-width canvas, no legend, and only linear axes,
-so its toolbar contains reset and SVG export without logarithmic-scale toggles.
+The built page has one full-width canvas with linear axes and a glyph legend
+beside the axis. Network diagrams have no logarithmic axis control.
+Its toolbar contains reset and SVG export.
 Its default `figure_size = :auto` is resolved from the network-layout bounds so
-the initial window follows the diagram aspect instead of leaving a large empty
-canvas. Explicit pixel dimensions remain supported.
+the initial window follows the diagram aspect. Explicit pixel dimensions remain supported.
 The resulting `UIPlot` retains the exact diagram handle at
 `artifacts[:network_diagram]`.
 
@@ -233,8 +233,7 @@ CairoMakie produces static output. GLMakie and WGLMakie provide interactive
 controls for reset, scale switching, legend visibility, and export. The layout
 responds to figure resizing.
 
-Controls are recipe-dependent: network diagrams keep reset and export while
-omitting scale switches and legends.
+Controls depend on the recipe.
 
 `PowerImpedance.plot` and `Makie.plot` select a definition from the result kind
 or analysis. Bode plotting can add completed series to an existing `UIPlot` or
@@ -251,7 +250,7 @@ export_svg(
 )
 ```
 
-Existing paths are not overwritten. Omitting `path` creates a timestamped
+Export requires a new path. Omitting `path` creates a timestamped
 name. Export uses CairoMakie while retaining current scales, limits, and series
 visibility.
 

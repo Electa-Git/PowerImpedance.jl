@@ -42,7 +42,7 @@ function experiment_instance!(canvas, definition, project, point, prefix)
 end
 
 fixture = PSCADFixtures.mmc_pq_network()
-for (representation, network) in (("classic", fixture.classic), ("builder", fixture.state))
+for (representation, network) in (("builder", fixture),)
     name = "mmc_pq_" * representation
     model = export_pscad(network; path = joinpath(EXPERIMENTS, name * ".pscx"),
         settings = SETTINGS, dc_reference = :none)
@@ -84,13 +84,13 @@ for (representation, network) in (("classic", fixture.classic), ("builder", fixt
         residual = zeros(length(x))
         PowerImpedance._state_space!(
             residual, collect(values(x)), collect(values(equilibrium.inputs)),
-            equilibrium.setpoint_pu, converter.model, PowerImpedance.Equil())
+            equilibrium.terminal_pu, converter.model, PowerImpedance.Equil())
         println(io, "equilibrium_residual_max\t", maximum(abs, residual), "\tmodel_rate\t0")
     end
 end
 
 # Reuse the solved current-API fixture for the isolated module parameters.
-list = P.netlist(fixture.classic, power_flow(fixture.classic))
+list = P.netlist(fixture, compute(PowerFlowProblem(fixture), ACDCPowerFlow()))
 element = only(filter(e -> e.model isa PowerImpedance.MMC, list.elements))
 equilibrium = P.converter_equilibrium(element)
 short_settings = P.SimulationSettings(simulation_time = 0.1,
@@ -104,17 +104,14 @@ for delayed in (false, true)
     m = element.model
     model = PowerImpedance.MMC(; m.meas, m.sync, m.delta_control, m.sigma_control,
         modulation = PowerImpedance.UncompensatedModulation(
-            timeDelay = delay, padeOrderNum = 3, padeOrderDen = 3), m.elec)
-    component = PowerImpedance.Element(
-        element_model = model, input_pins = 1, output_pins = 2,
-        transformation = false, setpoint = element.setpoint)
-    e = P.NetlistElement(element.name, element.pscad, component, model,
-        element.terminals, element.role, element.setpoint)
+            timeDelay = delay, padeOrderNum = 3, padeOrderDen = 3), m.elec, m.bases)
+    e = P.NetlistElement(element.name, element.pscad, model,
+        electricalconnections(model), element.terminals, element.role, element.values)
     # Known constant global references initialize exact-delay histories. In the
     # delayed case Δ steps from zero at 0.02 s; Σ remains constant in global dq.
-    delta = PowerImpedance.phase_compensated_dq([delayed ? 0.0 : -0.2, 0.0], m.elec.ωbase *
+    delta = PowerImpedance.phase_compensated_dq([delayed ? 0.0 : -0.2, 0.0], m.bases.omega *
                                                                              delay)
-    sigma = PowerImpedance.phase_compensated_dq([0.04, 0.0], -2m.elec.ωbase * delay)
+    sigma = PowerImpedance.phase_compensated_dq([0.04, 0.0], -2m.bases.omega * delay)
     eq = merge(equilibrium,
         (;
             outputs = merge(equilibrium.outputs,
@@ -131,9 +128,9 @@ for delayed in (false, true)
             P.ControlBlock[P.TimeStep(P.Signal("experiment_clock_s")),
                 P.Compare(P.Signal("experiment_clock_s"), P.Signal("delta_step"), 0.02),
                 P.Gain(P.Signal("delta_step"), P.Signal("vM_d_ref"), 80.0 /
-                                                                     m.elec.vAC_base)])
+                                                                     m.bases.v_ac)])
     else
-        push!(graph.nodes, P.Const(P.Signal("vM_d_ref"), 80.0 / m.elec.vAC_base))
+        push!(graph.nodes, P.Const(P.Signal("vM_d_ref"), 80.0 / m.bases.v_ac))
     end
     canvas = P.lower!(P.CanvasPlan(), graph; origin = (72, 108))
     experiment_instance!(canvas, definition, name, (1080, 108), "R12")
@@ -162,7 +159,7 @@ x = merge(equilibrium.states,
         vCΣ_d = 0.0, vCΣ_q = 0.0, vCΣ_z = 808.0 / 800.0))
 definition = P.mmc_sigma("SIGMA", element, (; states = x), transforms)
 phases = (0.0, -2π / 3, 2π / 3)
-current_base = element.model.elec.Sbase / element.model.elec.vDC_base
+current_base = element.model.bases.S / element.model.bases.v_dc
 graph = P.BlockGraph(P.ControlBlock[P.Const(P.Signal("theta_c"), 0.0),
     P.Const(P.Signal("P_ac_f"), 0.6), P.Const(P.Signal("v_dc_f"), 1.0)])
 for (i, phase) in enumerate(("a", "b", "c"))
@@ -182,7 +179,7 @@ write_experiment(name, canvas, [abc, definition], signals, short_settings)
 open(joinpath(EXPERIMENTS, name * "_reference.tsv"), "w") do io
     println(io, "quantity\tvalue\tunit")
     b = element.model.sigma_control.ccsc.pi_control
-    l = element.model.elec.Lₐᵣₘ
+    l = PowerImpedance.perunit(element.model.elec, element.model.bases).Lₐᵣₘ
     w = element.model.sigma_control.tec.pi_control
     z = element.model.sigma_control.zscc.pi_control
     error = 1 - (808.0 / 800.0)^2
@@ -204,7 +201,7 @@ open(joinpath(EXPERIMENTS, name * "_reference.tsv"), "w") do io
 end
 
 name = "mmc_arm"
-arm = P.mmc_arm("ARM", P.mmc_si(element.model.elec), 800.0)
+arm = P.mmc_arm("ARM", P.mmc_si(element.model.elec, element.model.bases), 800.0)
 canvas = P.CanvasPlan()
 # src_ccin_1 positive command injects into its first electrical terminal; the arm meter
 # measures POS -> NEG.

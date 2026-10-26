@@ -3,43 +3,34 @@ const DiagramExtension = Base.get_extension(
     :PowerImpedanceGraphMakieExt
 )
 
-diagram_row(node, element, side, terminal) = (; node, element, side, terminal)
-
 function diagram_hybrid_network()
     elements = (
-        ac_grid = ac_source(pins = 3, transformation = true),
-        ac_line = impedance(z = 0.2 + 0.8im, pins = 3, transformation = true),
-        ac_parallel = impedance(z = 0.3 + 0.9im, pins = 3, transformation = true),
+        ac_grid = ac_source(),
+        ac_line = impedance(z = 0.2 + 0.8im, conductors = 3),
+        ac_parallel = impedance(z = 0.3 + 0.9im, conductors = 3),
         converter = tlc(),
-        dc_line = impedance(z = 1.0, pins = 1),
-        dc_load = impedance(z = 10.0, pins = 1),
-        ac_shunt = impedance(z = 20.0, pins = 3, transformation = true),
+        dc_line = impedance(z = 1.0, conductors = 1),
+        dc_load = impedance(z = 10.0, conductors = 1),
+        ac_shunt = impedance(z = 20.0, conductors = 3),
         machine = synchronousmachine()
     )
     connections = (
-        diagram_row(:ac_1_d, :ac_grid, 1, 1),
-        diagram_row(:ac_1_q, :ac_grid, 1, 2),
-        diagram_row(:ac_1_d, :ac_line, 1, 1),
-        diagram_row(:ac_1_q, :ac_line, 1, 2),
-        diagram_row(:ac_2_d, :ac_line, 2, 1),
-        diagram_row(:ac_2_q, :ac_line, 2, 2),
-        diagram_row(:ac_1_d, :ac_parallel, 1, 1),
-        diagram_row(:ac_1_q, :ac_parallel, 1, 2),
-        diagram_row(:ac_2_d, :ac_parallel, 2, 1),
-        diagram_row(:ac_2_q, :ac_parallel, 2, 2),
-        diagram_row(:dc_1, :converter, 1, 1),
-        diagram_row(:ac_2_d, :converter, 2, 1),
-        diagram_row(:ac_2_q, :converter, 2, 2),
-        diagram_row(:dc_1, :dc_line, 1, 1),
-        diagram_row(:dc_2, :dc_line, 2, 1),
-        diagram_row(:dc_2, :dc_load, 1, 1),
-        diagram_row(:gnd_dc, :dc_load, 2, 1),
-        diagram_row(:ac_2_d, :ac_shunt, 1, 1),
-        diagram_row(:ac_2_q, :ac_shunt, 1, 2),
-        diagram_row(:gnd_ac_d, :ac_shunt, 2, 1),
-        diagram_row(:gnd_ac_q, :ac_shunt, 2, 2),
-        diagram_row(:ac_2_d, :machine, 1, 1),
-        diagram_row(:ac_2_q, :machine, 1, 2)
+        PowerImpedance.NetworkBuilder.Bus(:ac_1_; ports = (
+            (:ac_grid, :ac), (:ac_line, :side1), (:ac_parallel, :side1)
+        ), domain = ACDQ),
+        PowerImpedance.NetworkBuilder.Bus(:ac_2_; ports = (
+            (:ac_line, :side2), (:ac_parallel, :side2), (:converter, :ac),
+            (:ac_shunt, :side1), (:machine, :ac)
+        ), domain = ACDQ),
+        PowerImpedance.NetworkBuilder.Bus(:dc_1; ports = (
+            (:converter, :dc), (:dc_line, :side1)
+        )),
+        PowerImpedance.NetworkBuilder.Bus(:dc_2; ports = (
+            (:dc_line, :side2), (:dc_load, :side1)
+        )),
+        PowerImpedance.NetworkBuilder.Bus(:gnd_dc; ports = ((:dc_load, :side2),)),
+        PowerImpedance.NetworkBuilder.Bus(:gnd_ac_; ports = ((:ac_shunt, :side2),),
+            domain = ACDQ)
     )
     return PowerImpedance.NetworkBuilder.define(elements, connections)
 end
@@ -48,7 +39,7 @@ function diagram_nodes2bus(network)
     mapping = Dict{Symbol, Tuple{Symbol, Int}}()
     for row in network.topology.connections
         bus_type = row.bus == 0 ? :ground : row.domain == 1 ? :ac : :dc
-        mapping[row.node] = (bus_type, row.bus)
+        mapping[row.net] = (bus_type, row.bus)
     end
     return mapping
 end
@@ -146,7 +137,14 @@ function diagram_powerflow_fixture(network)
         data,
         diagram_nodes2bus(network),
         elem2comp,
-        OperatingPoint(),
+        OperatingPoint(Dict{Symbol, NamedTuple}(
+            :converter => (ac = ACPortValues(1.0, 0.0, 0.0, 0.0),
+                dc = DCPortValues(1.0, 0.0))
+        )),
         (termination_status = :fixture,)
     )
+end
+
+function diagram_legend_labels(view)
+    return [entry.label[] for entry in last(only(view.plots.legend.entrygroups[]))]
 end

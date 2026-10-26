@@ -40,11 +40,27 @@
         @test handle isa UIPlot
         @test Set(keys(handle.controls)) == Set((:reset, :export_svg))
         @test Set(keys(handle.artifacts)) == Set((:network_diagram,))
-        @test !any(content -> content isa Makie.Legend, handle.figure.content)
+        @test count(content -> content isa Makie.Legend, handle.figure.content) == 1
 
         diagram_view = handle.artifacts[:network_diagram]
         @test diagram_view isa DiagramExtension.NetworkDiagram
         @test diagram_view.figure === handle.figure
+        @test diagram_legend_labels(diagram_view) == [
+            "AC bus", "DC bus", "AC branch", "DC branch", "Converter", "Source",
+            "Machine", "Shunt"
+        ]
+        legend = diagram_view.plots.legend
+        axis_cell = diagram_view.axis.layoutobservables.gridcontent[]
+        legend_cell = legend.layoutobservables.gridcontent[]
+        @test legend_cell.parent === axis_cell.parent
+        @test legend_cell.span.rows == axis_cell.span.rows
+        legend_column = last(axis_cell.span.cols) + 1
+        @test legend_cell.span.cols == legend_column:legend_column
+        @test legend.scene in only(handle.panels).plots
+        @test size(handle.figure.scene, 1) > page.size[1]
+        @test size(handle.figure.scene, 2) >= page.size[2]
+        Makie.update_state_before_display!(handle.figure)
+        @test diagram_view.axis.layoutobservables.suggestedbbox[].widths ≈ [880, 436]
         @test diagram_view.axis === only(handle.panels).axis
         @test diagram_view.positions == only(view_definition.series).zdata.positions
         @test haskey(
@@ -77,13 +93,17 @@
         Makie.resize!(handle.figure, 760, 430)
         Makie.update_state_before_display!(handle.figure)
         compact_box = axis.layoutobservables.computedbbox[]
-        @test compact_box.origin[1] + compact_box.widths[1] > 0.95 * 760
+        compact_legend = legend.layoutobservables.computedbbox[]
+        @test compact_box.origin[1] + compact_box.widths[1] < compact_legend.origin[1]
+        @test compact_legend.origin[1] + compact_legend.widths[1] > 0.95 * 760
 
         Makie.resize!(handle.figure, 1200, 600)
         Makie.update_state_before_display!(handle.figure)
         wide_box = axis.layoutobservables.computedbbox[]
         @test wide_box.widths[1] > compact_box.widths[1] + 400
-        @test wide_box.origin[1] + wide_box.widths[1] > 0.95 * 1200
+        wide_legend = legend.layoutobservables.computedbbox[]
+        @test wide_box.origin[1] + wide_box.widths[1] < wide_legend.origin[1]
+        @test wide_legend.origin[1] + wide_legend.widths[1] > 0.95 * 1200
 
         output = joinpath(mktempdir(), "network-plotbuilder.svg")
         @test export_svg(handle; path = output, open_file = false) == output
@@ -126,6 +146,10 @@
         if item.key.element == :ac_line)
         @test component.input === powerflow.data["branch"]["1"]
         @test component.solution === powerflow.result["solution"]["branch"]["1"]
+        @test diagram_legend_labels(enriched) == [
+            "AC bus", "DC bus", "AC branch", "DC branch", "Converter", "Source",
+            "Machine", "Load", "Out of service"
+        ]
         @test powerflow.data == data_before
         @test powerflow.result == result_before
     finally

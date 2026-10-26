@@ -1,0 +1,7 @@
+{
+  "name": "powerimpedance-prose-tools",
+  "private": true,
+  "dependencies": {
+    "cspell": "10.3.6"
+  }
+}

@@ -49,7 +49,7 @@ end
 # Extending the DC fit down to 0.001 Hz reduces the measured cable current
 # deviation from power flow: -25% at 3 s with FS=0.5 Hz versus +0.67% at 5 s
 # with FS=0.001 Hz. AC lines use FS=0.5 Hz.
-"DC line frequency/phase fit start frequency \\[Hz\\]."
+"DC line frequency and phase fit start frequency \\[Hz\\]."
 const DC_LINE_FIT_START_FREQUENCY = 0.001
 
 function _line_frephase_parameters(overrides, buses)
@@ -71,7 +71,7 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
         @warn "PSCAD overhead line :$(e.name), length $(tl.length) m, time step $(context.settings.time_step) s: PSCAD aborts if the travel time is below the step; a smaller step or a longer section is needed."
     end
     c, g = tl.conductors, tl.groundwires
-    length(e.terminals) == 2 && [t.side for t in e.terminals] == [1, 2] ||
+    length(e.terminals) == 2 && [t.port for t in e.terminals] == [:side1, :side2] ||
         throw(ArgumentError("overhead line :$(e.name) must have two fully connected sides"))
     left, right = e.terminals
     !left.grounded && !right.grounded ||
@@ -134,10 +134,10 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
                 ComponentPlan("master:tline_interface",
                     ["Name" => e.pscad, "NC" => "2", "View" => "0", "send_recv" => "0",
                         "dim_s" => "0", "dim_r" => "0"], interface..., side == 1 ? 0 : 4))
-            probe = current_probe!(state, e, terminal, context; orientation = side == 1 ? :into : :out)
+            probe = current_probe!(state, e, terminal, context; orientation = :into)
             positive, negative = _terminal_labels(e, terminal, context)
             ammeter_stub!(state.main, (interface[1] + 18direction, interface[2] - 18),
-                positive, probe; direction)
+                positive, probe; direction, reverse = side == 2)
             stub!(state.main, (interface[1] + 18direction, interface[2] + 18),
                 negative; direction)
             output_probe!(state.main, probe, "branch", "kA", (ix + 144, iy + 180))
@@ -145,10 +145,11 @@ function emit!(state::PlanState, e::NetlistElement{<:PowerImpedance.Overhead_lin
         return nothing
     end
     first_probe = current_probe!(state, e, left, context; orientation = :into)
-    second_probe = current_probe!(state, e, right, context; orientation = :out)
+    second_probe = current_probe!(state, e, right, context; orientation = :into)
     ammeter_stub!(state.main, (wx - 54, wy + 18), only(_terminal_labels(e, left, context)), first_probe;
         direction = -1)
-    ammeter_stub!(state.main, (wx + 54, wy + 72), only(_terminal_labels(e, right, context)), second_probe)
+    ammeter_stub!(state.main, (wx + 54, wy + 72),
+        only(_terminal_labels(e, right, context)), second_probe; reverse = true)
     output_probe!(state.main, first_probe, "branch", "kA", (xcell + 144, ycell + 144))
     output_probe!(state.main, second_probe, "branch", "kA", (xcell + 144, ycell + 180))
     return nothing

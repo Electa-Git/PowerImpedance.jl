@@ -68,14 +68,14 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
                      for arm in ("u", "l") for phase in ("a", "b", "c")])
     graph = BlockGraph(ControlBlock[Import(n, Signal(n)) for (n, _) in inputs])
     clock = Signal("lec_clock_s")
-    nominal_omega = converter_parameter!(parameters, "nominalOmega", m.elec.ωbase)
+    nominal_omega = converter_parameter!(parameters, "nominalOmega", m.bases.omega)
     append!(graph.nodes,
         ControlBlock[TimeStep(clock),
             Gain(clock, Signal("lec_angle"), nominal_omega),
             Gain(Signal("lec_angle"), Signal("lec_sigma_angle"), -2.0),
             Gain(Signal("lec_angle"), Signal("lec_triplen_angle"), 3.0)])
-    invcurrent = converter_parameter!(parameters, "invIbase", m.elec.vDC_base /
-                                                              m.elec.Sbase)
+    invcurrent = converter_parameter!(parameters, "invIbase", m.bases.v_dc /
+                                                              m.bases.S)
     append!(graph.nodes,
         ControlBlock[
             AbcToDq(Signal("iS_abc"), Signal("lec_sigma_angle"), Signal("lec_i_dq"), transforms.abc)])
@@ -89,7 +89,7 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
                 Gain(Signal("lec_i_" * axis * "_measured"), Signal("iS_" * axis), 1.0)])
     end
     currents, sum_energy, delta_energy = (Signal[] for _ in 1:3)
-    invcap = converter_parameter!(parameters, "invVbase", 1 / m.elec.vDC_base)
+    invcap = converter_parameter!(parameters, "invVbase", 1 / m.bases.v_dc)
     for (i, phase) in enumerate(("a", "b", "c"))
         current = Signal("lec_i_" * phase)
         push!(graph.nodes, ArraySplit(Signal("iS_abc"), current, i))
@@ -102,7 +102,7 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
                     Square(Signal("lec_cap_" * stem), Signal("lec_energy_" * stem))])
         end
         sigma, delta = Signal.(["lec_sum_" * phase, "lec_delta_" * phase])
-        # 2*wΣ = (vu²+vl²)/Vbase²; -2*wΔ = (vl²-vu²)/Vbase².
+        # `2*wΣ = (vu²+vl²)/Vbase²` and `-2*wΔ = (vl²-vu²)/Vbase²`.
         push!(graph.nodes, Sum(
             Signal.(["lec_energy_u_" * phase, "lec_energy_l_" * phase]), [
                 1, 1], sigma))
@@ -114,8 +114,8 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
     end
     append!(graph.nodes,
         ControlBlock[Sum(currents, [1, 1, 1], Signal("lec_i_sum")),
-            Gain(Signal("lec_i_sum"), Signal("lec_i_z_measured"), m.elec.vDC_base /
-                                                                  (3m.elec.Sbase)),
+            Gain(Signal("lec_i_sum"), Signal("lec_i_z_measured"), m.bases.v_dc /
+                                                                  (3m.bases.S)),
             Gain(Signal("lec_i_z_measured"), Signal("iS_z"), 1.0),
             ArrayMerge(sum_energy, Signal("lec_sum_abc")),
             ArrayMerge(delta_energy, Signal("lec_delta_abc")),
@@ -151,7 +151,7 @@ function mmc_sigma(name, e, equilibrium, transforms, block::PowerImpedance.Σdqz
                     Signal("lec_" * stem * "_" * axis), 1.0))
         end
     end
-    omega = m.elec.ωbase
+    omega = m.bases.omega
     sigma_outputs = Signal[]
     for (axes, frame, refs, prefix) in ((("d", "q"), -2omega, [0.0, 0.0], "wsdq"),
         (("z",), 0.0, [2block.wsigma.ref], "wsz"))
@@ -234,7 +234,7 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
     # CompensatedModulation uses the grid frame for Σ, the AC voltage base
     # for Δ references and the DC voltage base for Σ references.
     sigma_angle = Signal("comp_sigma_angle")
-    sigma_omega = converter_parameter!(parameters, "sigmaOmega", -2m.elec.ωbase)
+    sigma_omega = converter_parameter!(parameters, "sigmaOmega", -2m.bases.omega)
     append!(graph.nodes,
         ControlBlock[TimeStep(Signal("comp_clock_s")),
             Gain(Signal("comp_clock_s"), sigma_angle, sigma_omega),
@@ -242,12 +242,12 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
             ArrayMerge(Signal.(["vMS_d_ref", "vMS_q_ref"]), Signal("comp_sigma_dq")),
             DqToAbc(Signal("comp_delta_dq"), Signal("theta_c"), Signal("comp_delta_abc"), transforms.dq),
             DqToAbc(Signal("comp_sigma_dq"), sigma_angle, Signal("comp_sigma_abc"), transforms.dq)])
-    dcbase = converter_parameter!(parameters, "DCbase", m.elec.vDC_base)
-    acbase = converter_parameter!(parameters, "ACbase", m.elec.vAC_base)
+    dcbase = converter_parameter!(parameters, "DCbase", m.bases.v_dc)
+    acbase = converter_parameter!(parameters, "ACbase", m.bases.v_ac)
     push!(graph.nodes, Gain(Signal("vMS_z_ref"), Signal("comp_zero_kV"), dcbase))
     delay = block.delay1
     residual = _converter_export_delay(delay.timeDelay, settings.time_step; converter = e.name)
-    caps = mmc_arm_capacitors(equilibrium.states, m.elec.vDC_base)
+    caps = mmc_arm_capacitors(equilibrium.states, m.bases.v_dc)
     theta0 = PowerImpedance.syncangle(m.sync, equilibrium.states)
     phases = (0.0, -2π/3, 2π/3)
     delta0 = equilibrium.outputs.delta
@@ -262,9 +262,9 @@ function mmc_modulation(name, e, equilibrium, transforms, settings,
                 Gain(Signal("comp_sigma_" * phase), Signal("comp_sigma_" * phase * "_kV"), dcbase),
                 Sum(Signal.(["comp_sigma_" * phase * "_kV", "comp_zero_kV"]),
                     [1, 1], Signal("comp_total_" * phase))])
-        vd0 = m.elec.vAC_base * (delta0.vMΔ_d_ref_c*cos(phases[i] + theta0) +
+        vd0 = m.bases.v_ac * (delta0.vMΔ_d_ref_c*cos(phases[i] + theta0) +
                delta0.vMΔ_q_ref_c*sin(phases[i] + theta0))
-        vs0 = m.elec.vDC_base * (sigma0.vMΣ_z_ref + sigma0.vMΣ_d_ref_c*cos(-2phases[i]) +
+        vs0 = m.bases.v_dc * (sigma0.vMΣ_z_ref + sigma0.vMΣ_d_ref_c*cos(-2phases[i]) +
                sigma0.vMΣ_q_ref_c*sin(-2phases[i]))
         for (arm, sign, cap) in (("u", -1, caps.upper[i]), ("l", 1, caps.lower[i]))
             stem = arm * "_" * phase

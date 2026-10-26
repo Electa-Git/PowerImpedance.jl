@@ -1,0 +1,5 @@
+extends: ai-tells.EmphaticCopula
+# Semantic inline scopes restrict the check to parsed prose.
+scope: emphasis
+tokens:
+  - '^(?:is|are|was|were|the|and|not|or|actually|really|never|always|truly|literally)$'

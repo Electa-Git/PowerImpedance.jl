@@ -30,14 +30,14 @@ function retained_point(list, name)
         flows[element] = NamedTuple{fields}(values)
     end
     point = P.OperatingPointRecord(
-        buses, flows, original.setpoints, original.slack_bus, original.bases)
+        buses, flows, original.values, original.slack_bus, original.bases)
     return point
 end
 
 function compare_case(name, network)
     println("Reading ", name)
     flush(stdout)
-    pf = network isa Network ? power_flow(network) : NetworkBuilder.solve(network).powerflow
+    pf = compute(PowerFlowProblem(network), ACDCPowerFlow())
     list = P.netlist(network, pf)
     mmc = startswith(name, "mmc_")
     ramp = name == "mmc_pq_default_ramp" || startswith(name, "tlc_vac") ?
@@ -90,12 +90,12 @@ for (stem, factory) in (("mmc_vdc", PSCADFixtures.mmc_vdc_network),
     ("mmc_pf", PSCADFixtures.mmc_pf_network), ("mmc_qv", PSCADFixtures.mmc_qv_network),
     ("mmc_vac", PSCADFixtures.mmc_vac_network), ("tlc_vac", PSCADFixtures.tlc_vac_network))
     fixture = factory()
-    for (suffix, network) in (("classic", fixture.classic), ("builder", fixture.state))
+    for (suffix, network) in (("builder", fixture),)
         push!(summary, compare_case(stem * "_" * suffix, network))
     end
 end
-push!(summary, compare_case("mmc_pq_default_ramp", PSCADFixtures.mmc_pq_network().classic))
-push!(summary, compare_case("tlc_case2_zero_ramp", PSCADFixtures.tlc_case2_network().classic))
+push!(summary, compare_case("mmc_pq_default_ramp", PSCADFixtures.mmc_pq_network()))
+push!(summary, compare_case("tlc_case2_zero_ramp", PSCADFixtures.tlc_case2_network()))
 open(joinpath(REPORT, "summary.tsv"), "w") do io
     println(io, join(keys(first(summary)), '\t'))
     for row in summary
