@@ -26,7 +26,7 @@ interpretation.
 
 A component exposes electrical ports. At a port, voltage and current vectors
 are related by a frequency-dependent model. An admittance representation writes
-current as a function of voltage, \\(\mathbf I = \mathbf Y\mathbf V\\). An
+current as a function of voltage, \\(\mathbf I = \mathbf Y\mathbf V\\), and an
 impedance representation writes voltage as a function of current,
 \\(\mathbf V = \mathbf Z\mathbf I\\). These forms are useful when the relevant
 matrix is finite and well-conditioned. A finite matrix in either form is
@@ -49,8 +49,7 @@ connection order. Other interconnections impose shared-voltage and
 current-balance conditions. They cannot in general be represented by simple
 matrix multiplication. PowerImpedance assembles the declared network and
 component models for its calculations. Users connect named ports with
-[`Bus` and `Net`](../network.md), rather than building internal connection
-tables.
+[`Bus` and `Net`](../network.md).
 
 When an ABCD representation and the required inverses exist, a load with
 admittance \\(\mathbf Y_t\\) at the output gives the input admittance
