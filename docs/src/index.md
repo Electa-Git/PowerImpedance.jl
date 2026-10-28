@@ -4,70 +4,55 @@ CurrentModule = PowerImpedance
 
 # PowerImpedance.jl
 
-PowerImpedance is a frequency-domain modelling and small-signal analysis
-package for AC, DC, and hybrid power systems. It combines detailed passive and
-active component models with multiport network assembly, AC/DC power-flow
-initialization, impedance extraction, and stability-analysis tools.
+PowerImpedance models AC, DC, and hybrid power systems for frequency-domain
+analysis. Build a network from component models, calculate its operating point
+when needed, and inspect impedance or small-signal stability results.
 
-PowerImpedance is the renamed successor to `PowerImpedanceACDC`. It has a new
-package UUID because registered Julia package identities are immutable.
+## Install
 
-## Capabilities
-
-The package provides analytical models for:
-
-- AC and DC voltage sources
-- lumped impedances and transformers
-- overhead lines and underground cables
-- modular multilevel and two-level converters
-- synchronous and induction machines
-- black-box passive and converter frequency responses
-
-Driving-point and transfer impedances describe the resulting systems. Nodal and
-edge admittances support generalized Nyquist, Bode, passivity, small-gain,
-stability-margin, unstable-frequency, and eigenvalue analyses.
-
-Gridspace extends the same physical constructors to deterministic parameter
-sweeps and uncertainty quantification.
-Gridspace samples each uncertain network into ordinary numeric components and performs
-the required power flow and linearization for every materialized configuration.
-
-## Installation
-
-Install the package from the Julia package manager:
+Add the package with Julia's package manager:
 
 ```julia
 pkg> add PowerImpedance
 ```
 
-Then load it with:
+Load it in Julia with:
 
 ```julia
 using PowerImpedance
 ```
 
-Optional interoperability is activated by loading `Measurements` in the same
-environment. LineCableModels interoperability is temporarily dormant pending
-its registration. See [Package extensions](package_extensions.md) for the
-supported combinations and data structures.
+## Your first analysis
 
-## Where to start
+Follow the [Getting started tutorial](examples/Getting_started_SMIB.md) to
+calculate an operating point for a single-machine infinite-bus system. The
+example also displays the network and plots impedance and Nyquist results.
 
-- [Introduction](introduction.md) explains the multiport ABCD representation
-  and impedance-based stability workflow.
-- [Network construction](network.md) covers direct models, inputs, and topology
-  declarations with ports.
-- [Power-flow initialization](initialization.md) explains when operating
-  points are computed or reused.
-- [Impedance and stability analysis](results.md) introduces the downstream
-  analysis tools and result forms.
-- [Parametric and uncertainty studies](gridspace.md) documents deterministic
-  grids, Monte Carlo studies, retained samples, and statistics.
-- [Examples](examples/index.md) contains executable Literate tutorials.
-- [API reference](reference.md) lists the public interfaces by module.
+## Find a guide
 
-The theoretical background retained from the original package documentation
-is cited through the project [bibliography](bibliography.md).
+- [Component definitions and inputs](components.md) explains how to choose models and set their values.
+- Component guides: [voltage sources](source.md), [lumped impedances](impedance.md),
+  [transformers](transformer.md), [lines and cables](transmission_line.md),
+  [machines](machines.md), [MMC](MMC.md), [two-level converter](TLC.md), and
+  [black-box models](blackbox.md).
+- [Network construction](network.md) explains buses, individual nets, and diagrams.
+- [Power-flow initialization](initialization.md) explains when an operating point is needed.
+- [Impedance and stability analysis](results.md) covers calculations, result objects, and plots.
+- [Parametric and uncertainty studies](gridspace.md) covers deterministic and Monte Carlo studies.
+- [Examples](examples/index.md) contains larger executable workflows.
+- [API reference](reference.md) lists public functions and types.
+
+Optional integrations and plotting backends are described in [Package extensions](package_extensions.md).
+
+## Capabilities
+
+Models include voltage sources, impedances, transformers, lines and cables,
+converters, synchronous and induction machines, and black-box responses.
+Analyses include impedance, admittance, Nyquist, Bode, passivity, small-gain,
+stability-margin, unstable-frequency, and eigenvalue calculations.
+
+The theoretical background retained from the original package documentation is
+cited in the project [bibliography](bibliography.md).
 
 ## User statistics
 

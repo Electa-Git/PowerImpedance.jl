@@ -1,6 +1,6 @@
 name = "PowerImpedance"
 uuid = "2b9e73d6-9f99-4895-a28a-fad5d1cd90f9"
-version = "0.3.1"
+version = "0.4.0"
 
 [deps]
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"

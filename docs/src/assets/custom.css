@@ -23,6 +23,38 @@ article#documenter-page img {
     margin: auto !important;
 }
 
+/* Keep narrow layouts inside the viewport when code blocks and tables have
+   intrinsic widths. Their own horizontal scrolling remains available. */
+@media screen and (max-width: 1055px) {
+    html,
+    body,
+    #documenter {
+        width: 100vw;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    #documenter .docs-main,
+    #documenter .docs-main > article,
+    #documenter .docs-main > article#documenter-page,
+    #documenter .docs-main > article#documenter-page .content {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #documenter .docs-main > article#documenter-page {
+        display: block;
+        width: calc(100vw - 2rem);
+        max-width: calc(100vw - 2rem);
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: 0;
+        padding-right: 0;
+        overflow-wrap: anywhere;
+    }
+}
+
 /* Improved scrollbar styling for code blocks rendered in Chrome */
 pre {
     padding-bottom: 15px !important;

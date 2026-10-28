@@ -37,11 +37,17 @@ dynamic = impedance(z = s -> 0.1 + s * 2e-3, conductors = 1)
 electricalconnections(diagonal)
 ```
 
+Connect one end to a grounded bus to use the impedance as a shunt. There is no
+separate shunt constructor in PowerImpedance. See [Network construction](network.md)
+for grounded buses and [Getting started](examples/Getting_started_SMIB.md) for
+component assembly.
+
 A model with three conductors declares `ACABC` ports. A model with one or two
 conductors declares one `DC_CM` differential port per end. The bus selects the coordinates.
 `ACABC` ports on an `ACDQ` bus are transformed to dq. The DC two-conductor
 model eliminates common-mode voltage.
 
 The complete network admittance is assembled using modified nodal analysis
-[HoRuehliBrennan1975](@cite). See [`impedance`](@ref) for shape checks and
-constructor details.
+[HoRuehliBrennan1975](@cite). See [Component definitions and inputs](components.md),
+[`impedance`](@ref), and [Network construction](network.md) for component and
+connection details.

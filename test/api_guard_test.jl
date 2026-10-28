@@ -21,7 +21,9 @@ const EXCLUDED_DIRECTORIES = (
 const EXCLUDED_FILES = (
     "test/api_guard_test.jl", "test/parity/topology_08f3d2e.tsv",
 )
-const MIGRATION_HEADING = "## Migrating from Element and Setpoint"
+# The migration page names removed APIs in prose and text listings; Julia blocks must
+# use the current API.
+const MIGRATION_PAGE = "docs/src/developers/migrations.md"
 
 function excluded(path)
     path in EXCLUDED_FILES && return true
@@ -49,27 +51,22 @@ function tracked_files(root)
     return split(files, '\0'; keepempty = false)
 end
 
-function migration_text_lines(lines)
-    skipped = falses(length(lines))
-    migration = false
-    text = false
+function julia_code_lines(lines)
+    checked = falses(length(lines))
+    fenced = false
+    julia = false
     for (number, line) in enumerate(lines)
-        if startswith(line, "## ")
-            migration = line == MIGRATION_HEADING
-            # The requested migration title contains the removed type names.
-            skipped[number] = migration
-            text = false
-        end
-        migration || continue
-        if !text && occursin(r"^```text\s*$", line)
-            text = true
-            skipped[number] = true
-        elseif text
-            skipped[number] = true
-            occursin(r"^```\s*$", line) && (text = false)
+        if !fenced && startswith(line, "```")
+            fenced = true
+            julia = startswith(line, "```julia") || startswith(line, "```@")
+        elseif fenced && occursin(r"^```\s*$", line)
+            fenced = false
+            julia = false
+        else
+            checked[number] = julia
         end
     end
-    return skipped
+    return checked
 end
 
 @testset "Removed API names" begin
@@ -82,12 +79,12 @@ end
         # As in a text search, omit binary images and serialized numeric data.
         (isvalid(content) && !occursin('\0', content)) || continue
         lines = split(content, '\n')
-        skipped = name == "docs/src/network.md" ?
-            migration_text_lines(lines) : falses(length(lines))
+        checked_lines = name == MIGRATION_PAGE ?
+            julia_code_lines(lines) : trues(length(lines))
         allowed = get(ALLOWED, name, ())
         failures = String[]
         for (number, line) in enumerate(lines)
-            skipped[number] && continue
+            checked_lines[number] || continue
             checked = line
             for pattern in allowed
                 checked = replace(checked, pattern => "")

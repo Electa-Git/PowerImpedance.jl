@@ -4,6 +4,16 @@ CurrentModule = PowerImpedance
 
 # Transmission lines and cables
 
+Choose `overhead_line` for geometry-based overhead lines, `cable` for layered
+buried cables, or `blackbox_line` for imported frequency-response data. These
+models use `side1` and `side2` ports. The executable
+[line and cable example](examples/Line_and_cable_models.md) shows native AC and
+DC line construction, cable layers, and impedance plots.
+
+Use `Conductors` and `Groundwires` to describe an overhead line's phase bundles
+and earth return. A cable uses ordered `Conductor` and `Insulator` layers plus
+its burial positions. See [Black-box models](blackbox.md) for imported data.
+
 PowerImpedance evaluates overhead-line and cable series impedance
 ``\mathbf{Z}(f)`` and shunt admittance ``\mathbf{Y}(f)`` in phase coordinates,
 then forms the distributed-parameter transmission-line ABCD model

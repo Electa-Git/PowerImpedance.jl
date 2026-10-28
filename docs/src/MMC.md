@@ -61,4 +61,5 @@ the model unchanged.
 Electrical and control uncertainty is sampled before power flow, equilibrium,
 and linearization. Each numeric sample repeats those calculations.
 
-See [`mmc`](@ref), [`MMC`](@ref), and the [API reference](reference.md).
+See [Component definitions and inputs](components.md), [`mmc`](@ref),
+[`MMC`](@ref), and the [API reference](reference.md).

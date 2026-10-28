@@ -70,4 +70,5 @@ electricalconnections(model)
 ```
 
 `V₁ᵒ` and `V₂ᵒ` test ratings use volts per phase (phase RMS).
-See [`transformer`](@ref) for fields, units, and constructor modes.
+See [Component definitions and inputs](components.md), [`transformer`](@ref), and
+[Network construction](network.md) for constructor, unit, and connection details.
