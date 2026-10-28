@@ -15,7 +15,7 @@ with `Bus` or `Net`.
 
 An old source-and-branch setup:
 
-```julia
+```text
 source = ac_source(setpoint = Setpoint(Vac = 310.0, Pac = 100.0),
     pins = 3, transformation = true)
 branch = impedance(z = 400.0, pins = 3, transformation = true)

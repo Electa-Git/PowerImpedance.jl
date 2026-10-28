@@ -47,9 +47,9 @@ the solve does not converge before calculating an impedance response.
 
 ## Choose setpoints and references
 
-Setpoints use the units of the component model:
+Power-flow setpoints use the units of the component model:
 
-| Component | Setpoint units | Where to configure |
+| Component | Units | Where to configure |
 |:--|:--|:--|
 | AC or DC source | kV, rad, MW, MVAr | Constructor keywords `v`, `theta`, `p`, and `q` |
 | Synchronous machine | Per unit on machine bases | Constructor `powerflow = (p, q, v)` |

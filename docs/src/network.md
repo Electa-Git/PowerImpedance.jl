@@ -84,5 +84,5 @@ For a complete task that includes initialization and frequency analysis, follow
 for solved operating points and [impedance and stability analysis](results.md)
 for the calculation workflow.
 
-Users upgrading from the former `Element` and `Setpoint` interface can follow
-the [migration guide](developers/migrations.md).
+Users upgrading from the former interface can follow the
+[migration guide](developers/migrations.md).
