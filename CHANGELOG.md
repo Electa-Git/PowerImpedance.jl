@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.4.0] - 2026-10-28
+
 ### Added
 
 - Add a legend for the glyphs in standalone and PlotBuilder network diagrams.
@@ -34,6 +36,9 @@
   500 MVA rating and 1.05 pu reference, the target is 672 kV and the slope is
   3.90625 MW/kV. The former mapping used 705.6 kV and 3.720238095 MW/kV away from
   nominal voltage. PSCAD export is not yet supported.
+- Add a getting-started example for a synchronous machine connected to an infinite bus.
+  It calculates the operating point, the machine-bus impedance and the generalized
+  Nyquist response.
 
 ### Changed
 

@@ -2,10 +2,10 @@ cff-version: 1.2.0
 message: "If you use this software, please cite both the software and the conference paper below."
 type: software
 title: "PowerImpedance: Impedance-Based Stability Analysis"
-version: "0.3.1"
+version: "0.4.0"
 authors:
   - name: "Etch"
-date-released: "2026-09-22"
+date-released: "2026-10-28"
 repository-code: "https://github.com/Electa-Git/PowerImpedance.jl"
 
 preferred-citation:
