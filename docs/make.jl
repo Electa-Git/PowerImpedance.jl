@@ -65,6 +65,7 @@ const HAS_TODO = isfile(TODO_SRC)
 const HAS_BIBLIOGRAPHY = isfile(BIBLIOGRAPHY_FILE)
 
 const LITERATE_EXAMPLE_FILES = (
+    "Getting_started_SMIB.jl",
     "Connection_DSL.jl",
     "Line_and_cable_models.jl",
     "IEEE9_bus_impedance.jl",
@@ -205,6 +206,7 @@ function build_example_pages()
         file -> endswith(file, ".md") && file != "index.md",
         readdir(EXAMPLES_DOC)
     ),
+        by = file -> file == "Getting_started_SMIB.md" ? (0, file) : (1, file),
     )
 
     isempty(tutorial_files) && return nothing
@@ -217,6 +219,7 @@ function build_example_pages()
     example_pages = Any["Overview" => "examples/index.md"]
 
     for (title, relative_path) in examples
+        relative_path == "Getting_started_SMIB.md" && continue
         push!(example_pages, title => "examples/$relative_path")
     end
 
@@ -263,8 +266,7 @@ end
 
 function build_pages()
     pages = Any[
-        "Home" => "index.md",
-        "Introduction" => "introduction.md"
+        "Home" => "index.md"
     ]
 
     manual_pages = Any[
@@ -278,18 +280,24 @@ function build_pages()
     ]
 
     tutorials_page = build_example_pages()
-    isnothing(tutorials_page) || push!(manual_pages, tutorials_page)
+    if !isnothing(tutorials_page)
+        push!(pages, "Getting started" => "examples/Getting_started_SMIB.md")
+        push!(manual_pages, tutorials_page)
+    end
     push!(pages, "Manual" => manual_pages)
 
     push!(
         pages,
         "Components" => Any[
+            "Choose and configure components" => "components.md",
             "Voltage sources" => "source.md",
             "Lumped impedance" => "impedance.md",
             "Transformer" => "transformer.md",
             "Transmission lines and cables" => "transmission_line.md",
+            "Synchronous and induction machines" => "machines.md",
             "Modular multilevel converter" => "MMC.md",
-            "Two-level converter" => "TLC.md"
+            "Two-level converter" => "TLC.md",
+            "Black-box models" => "blackbox.md"
         ]
     )
 
@@ -299,6 +307,7 @@ function build_pages()
 
     development_pages = Any[
         "Release and registration" => "developers/releasing.md",
+        "Migration from Element and Setpoint" => "developers/migrations.md",
         "PlotBuilder guide" => "developers/plotbuilder.md",
         "Docstrings" => "developers/docstrings.md",
         "Conventions" => "developers/conventions.md",
@@ -330,6 +339,7 @@ function math_engine()
         :loader => Dict("load" => ["[tex]/physics"]),
         :tex => Dict(
             "inlineMath" => [["\$", "\$"], ["\\(", "\\)"]],
+            "displayMath" => [["\\[", "\\]"], ["\$\$", "\$\$"]],
             "tags" => "ams",
             "packages" => ["base", "ams", "autoload", "physics"]
         ),

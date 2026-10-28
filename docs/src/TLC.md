@@ -47,5 +47,6 @@ from the solved terminal values and leaves the model unchanged.
 
 Gridspace accepts deterministic and uncertain values in the constructor tree.
 A numeric sample is solved and linearized before its response contributes
-to the statistics. See [`tlc`](@ref), [`TLC`](@ref), and
+to the statistics. See [Component definitions and inputs](components.md),
+[`tlc`](@ref), [`TLC`](@ref), and
 [Power-flow initialization](initialization.md).

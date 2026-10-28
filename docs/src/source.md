@@ -35,4 +35,5 @@ frequency-domain network model. Source uncertainty changes the operating point.
 Gridspace repeats the required calculations for each sampled source.
 
 See [`ac_source`](@ref), [`dc_source`](@ref), and
+[Component definitions and inputs](components.md), and
 [Network construction](network.md).

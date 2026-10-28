@@ -4,114 +4,75 @@ CurrentModule = PowerImpedance
 
 # Power-flow initialization
 
-Frequency-domain converter and machine models are linearized around a
-steady-state operating point. PowerImpedance obtains that operating point
-from the combined AC/DC power-flow model and passes physical per-port values
-to the detailed active-device models.
+Power-flow initialization provides the steady-state terminal values used to
+linearize nonlinear converter and machine models. Use it before calculating a
+frequency response that includes those models. A network made only from linear
+sources and passive components can be linearized without a solved operating
+point.
 
-The package maps the constructed network to PowerModels and PowerModelsACDC
-data structures. Those formulations build on the MATPOWER and MatACDC network
-models [Ergun2019, Beerten2012, ZimmermanMurillo2020](@cite).
+## Solve and reuse an operating point
 
-## Branch equivalents
+An explicit power-flow request always solves the network, including a network
+of sources and passive components. Reuse the result when linearizing so the
+frequency-domain model uses the same operating point:
 
-Balanced AC branches use the standard ``\pi`` equivalent. With series
-admittance ``y_s``, shunt conductance ``g_c``, shunt susceptance ``b_c``, tap
-ratio ``\tau``, and phase shift ``\theta_{\mathrm{shift}}``, the branch
-admittance is
-
-```math
-\mathbf{Y}_{ac} =
-\begin{bmatrix}
-\left(y_s+\frac{g_c}{2}+\mathrm{j}\frac{b_c}{2}\right)\tau^{-2} &
--\dfrac{y_s}{\tau\exp(-\mathrm{j}\theta_{\mathrm{shift}})} \\
--\dfrac{y_s}{\tau\exp(-\mathrm{j}\theta_{\mathrm{shift}})} &
-y_s+\dfrac{g_c}{2}+\mathrm{j}\dfrac{b_c}{2}
-\end{bmatrix}.
+```julia
+power_flow = compute(PowerFlowProblem(network), ACDCPowerFlow())
+linearized = compute(
+    LinearizationProblem(network, power_flow),
+    AdmittanceLinearization(),
+)
 ```
 
-![Balanced AC branch equivalent used by the power-flow model.](pictures/power_flow/branch_ac.png)
+If nonlinear models need an operating point and you omit it, the network is
+solved before linearization. `NetworkBuilder.solve(network)` is a shorthand
+for an explicit solve.
+The [Getting started tutorial](examples/Getting_started_SMIB.md) shows this
+sequence in a complete network.
 
-Detailed impedance, transformer, overhead-line, and cable objects are reduced
-to the equivalent branch quantities required at the fundamental frequency.
-Their full frequency-dependent models remain available to the later impedance
-and small-signal calculations.
+## Inspect solved values
 
-## Converter equivalents
+`PowerFlowResult.operating_point` stores values by component and port. Read
+`power_flow.operating_point[:machine].ac.p` or
+`power_flow.operating_point[:converter].dc.v`. AC voltage is phase-peak kV,
+DC voltage is pole-to-pole kV. Angles are rad, and powers are MW or MVAr.
 
-A power-flow converter contains its AC and DC terminals, series reactor, loss
-model, and control mode. Depending on its configured references, it regulates DC voltage or
-active power together with its selected AC-side quantity.
+Port powers are positive into a component. A source or generator delivering
+900 MW has `ac.p = -900`. A motor absorbing 916 MW has `ac.p = 916`. A converter
+receiving 603 MW from DC and delivering 600 MW to AC has `dc.p = 603` and
+`ac.p = -600`.
 
-![Power-flow equivalent of an AC/DC converter.](pictures/power_flow/converter_pf.png)
+The result also contains solver status and diagnostics. Check these values when
+the solve does not converge before calculating an impedance response.
 
-Once power flow is solved, the operating point is used for the nonlinear
-equilibrium and active-device linearization. Power-flow warnings identify the sampled physical converter and its constraints.
+## Choose setpoints and references
 
-## Calculated operating point
+Setpoints use the units of the component model:
 
-`compute(PowerFlowProblem(state), ACDCPowerFlow())` always solves the requested
-network, including networks with only sources and passive components.
-`NetworkBuilder.solve(state)` returns the resulting `PowerFlowResult`.
-Its `result`, `data`, `nodes2bus`, and `elem2comp` fields retain the solution,
-converted data and mappings. Repeated solves use the state's converged primal
-starting values.
+| Component | Setpoint units | Where to configure |
+|:--|:--|:--|
+| AC or DC source | kV, rad, MW, MVAr | Constructor keywords `v`, `theta`, `p`, and `q` |
+| Synchronous machine | Per unit on machine bases | Constructor `powerflow = (p, q, v)` |
+| MMC or TLC | Per unit on converter bases | `powerflow` input tree and selected control-loop references |
+| Induction machine | Electrical loading from its mechanical model | `MechanicalIM` constructor values |
 
-The `operating_point` field is an `OperatingPoint` indexed by component and port
-name. Each non-passive component has a NamedTuple of `ACPortValues` or
-`DCPortValues`. For a converter named `c1`, read `point[:c1].ac.p` and
-`point[:c1].dc.v`. AC voltage is phase peak in kV. DC voltage is pole to pole in kV. Angles are in rad, active power in MW, and reactive power in MVAr.
+For MMC and TLC models, the selected control loop supplies the quantity it
+controls. `OuterActivePowerControl.p_ref` sets AC active power,
+while `OuterActiveVdcControl.v_dc_ref` sets DC voltage. A stored setpoint for a
+quantity controlled by a loop does not replace its reference. The component
+guides describe their selected inputs and bases: [sources](source.md),
+[machines](machines.md), [MMC](MMC.md), and [TLC](TLC.md).
 
-All port powers are positive into the component. A source delivering 900 MW has
-`ac.p = -900`. A motor drawing 916 MW has `ac.p = 916`. A converter taking
-603 MW from DC and delivering 600 MW to AC has `dc.p = 603` and `ac.p = -600`.
+Use `inputs(model)` to inspect declared input names and units, and
+`inputvalues(model)` to inspect configured values. See
+[Component definitions and inputs](components.md) for copy-based updates.
 
-`compute(LinearizationProblem(state, powerflow), AdmittanceLinearization())`
-uses that exact result and returns a `LinearizationResult`. Its `network_model`
-contains the frequency-domain `NetworkModel`. Its `operating_point` records
-the values used for active admittances. Without a supplied result, power flow
-is calculated before the nonlinear models are linearized. A network of linear
-models uses an empty operating point for linearization alone.
+## Repeated and parametric calculations
 
-For one state-space model, `linearize(model, values)` takes a NamedTuple keyed
-by port and returns a `StateSpaceLinearization` with equilibrium `state` and
-continuous-time `system`. Access the matrices as `lin.system.A`, `.B`, `.C` and `.D`.
-`steady_state(model, values)` computes the same equilibrium without forming
-the electrical system. Each call computes a new result and leaves the model unchanged.
+Each materialized Gridspace configuration performs its required power-flow
+solve before linearization. Changed passive parameters can change the solved
+voltages and powers. See [Parametric and uncertainty studies](gridspace.md)
+for deterministic and Monte Carlo workflows.
 
-## References and power-flow setpoints
-
-Control-loop references and converter or machine power-flow setpoints use per-unit
-values on `bases(model)`. Source inputs and scan-based MMC inputs use physical
-units. `inputs(model)` lists defaults, units, declared types and descriptions.
-`inputvalues(model)` lists configured values.
-
-For a converter, the selected loops supply their controlled quantities:
-
-| Quantity | Input supplying the reference |
-|:--|:--|
-| AC active power | `OuterActivePowerControl.p_ref` or `VSEWithDamping.p_ref` |
-| DC voltage | `OuterActiveVdcControl.v_dc_ref` or `DCVoltageSupportLag.v_dc_ref` |
-| AC reactive power | `OuterReactiveQControl.q_ref` |
-| AC voltage | `OuterReactiveVacControl.v_ac_ref` or `VoltageSupportLag.v_ac_ref` |
-| DC power | `powerflow.p_dc` |
-
-Uncontrolled quantities use the `powerflow` group. Setting a setpoint for a quantity
-already controlled by a loop warns. The loop reference is used. Converter
-`powerflow.p_dc` is positive into the DC port. Detailed control equations are
-initialized from the solved port values.
-
-Synchronous-machine inputs include `avr.v_ref` and the `powerflow` group
-`(p, q, v)`. An induction machine has no declared inputs. Its mechanical torque
-sets its power-flow loading. `NaN` reactive power in manually supplied AC port
-values selects the configured AVR reference for synchronous-machine initialization.
-
-## Reuse in parametric studies
-
-Every materialized configuration performs its own required power flow before
-linearization. Passive parameters can change solved voltages and powers.
-
-An explicit `preprocess` call can pair completed parametric `PowerFlowResult`
-values with their originating configurations. Each Monte Carlo trial samples a complete numeric network before
-calling the power-flow solver. Supported bus-level `Measurement` values are
-reconstructed after the numeric solves.
+For detailed branch and converter equivalents, and the equations used to
+initialize component states, see [Fundamental concepts](manual/fundamental_concepts.md).
