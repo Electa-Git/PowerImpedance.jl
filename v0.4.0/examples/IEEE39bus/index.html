@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>IEEE 39-bus system with a STATCOM · PowerImpedance.jl</title><meta name="title" content="IEEE 39-bus system with a STATCOM · PowerImpedance.jl"/><meta property="og:title" content="IEEE 39-bus system with a STATCOM · PowerImpedance.jl"/><meta property="twitter:title" content="IEEE 39-bus system with a STATCOM · PowerImpedance.jl"/><meta name="description" content="Documentation for PowerImpedance.jl."/><meta property="og:description" content="Documentation for PowerImpedance.jl."/><meta property="twitter:description" content="Documentation for PowerImpedance.jl."/><meta property="og:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/IEEE39bus/"/><meta property="twitter:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/IEEE39bus/"/><link rel="canonical" href="https://electa-git.github.io/PowerImpedance.jl/stable/examples/IEEE39bus/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/documentercitations/citations-hover.css" rel="stylesheet" type="text/css"/><link href="../../assets/documentercitations/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../../assets/custom.js"></script><script src="../../assets/documentercitations/citations-data.js"></script><script src="../../assets/documentercitations/citations-hover.js"></script><script src="../../assets/documentercitations/citations-backlinks.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="PowerImpedance.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="PowerImpedance.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">PowerImpedance.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../Getting_started_SMIB/">Getting started</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../network/">Network construction</a></li><li><a class="tocitem" href="../../initialization/">Power-flow initialization</a></li><li><a class="tocitem" href="../../results/">Impedance and stability analysis</a></li><li><a class="tocitem" href="../../gridspace/">Parametric and uncertainty studies</a></li><li><a class="tocitem" href="../../pscad/">PSCAD export and simulation</a></li><li><a class="tocitem" href="../../package_extensions/">Package extensions</a></li><li><a class="tocitem" href="../../manual/fundamental_concepts/">Fundamental concepts</a></li><li><input class="collapse-toggle" id="menuitem-3-8" type="checkbox" checked/><label class="tocitem" for="menuitem-3-8"><span class="docs-label">Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../">Overview</a></li><li><a class="tocitem" href="../Connection_DSL/">Connection DSL</a></li><li><a class="tocitem" href="../Converter_machine_interaction/">Converter and synchronous-machine interaction</a></li><li><a class="tocitem" href="../Energy_hub_MTDC/">Three-terminal DC energy hub</a></li><li><a class="tocitem" href="../GFM_weak_grid/">A grid-forming MMC in a weak grid</a></li><li class="is-active"><a class="tocitem" href>IEEE 39-bus system with a STATCOM</a><ul class="internal"><li><a class="tocitem" href="#Bases-and-shared-line-geometry"><span>Bases and shared line geometry</span></a></li><li><a class="tocitem" href="#Generators,-lines,-transformers-and-loads"><span>Generators, lines, transformers and loads</span></a></li><li><a class="tocitem" href="#The-STATCOM"><span>The STATCOM</span></a></li><li><a class="tocitem" href="#Topology"><span>Topology</span></a></li><li><a class="tocitem" href="#Power-flow"><span>Power flow</span></a></li><li><a class="tocitem" href="#Linearization"><span>Linearization</span></a></li><li><a class="tocitem" href="#Grid-impedance-at-Bus-9"><span>Grid impedance at Bus 9</span></a></li><li><a class="tocitem" href="#STATCOM-impedance-at-Bus-9"><span>STATCOM impedance at Bus 9</span></a></li><li><a class="tocitem" href="#Loop-gain-and-generalized-Nyquist"><span>Loop gain and generalized Nyquist</span></a></li><li><a class="tocitem" href="#Figures"><span>Figures</span></a></li><li><a class="tocitem" href="#Adapting-the-tutorial"><span>Adapting the tutorial</span></a></li></ul></li><li><a class="tocitem" href="../IEEE39bus_Gridspace/">IEEE39 Gridspace soil-resistivity study</a></li><li><a class="tocitem" href="../IEEE9_bus_impedance/">IEEE9 bus impedance</a></li><li><a class="tocitem" href="../Line_and_cable_models/">Line and cable models</a></li><li><a class="tocitem" href="../MMC_harmonic_stability/">MMC harmonic stability</a></li><li><a class="tocitem" href="../Network_Diagram/">Hybrid AC/DC network diagram</a></li><li><a class="tocitem" href="../P2P_HVDC_ALT/">P2P HVDC parametric OHL/UGC transition</a></li><li><a class="tocitem" href="../P2P_HVDC_stability/">Point-to-point HVDC admittance and stability</a></li><li><a class="tocitem" href="../PSCAD_tutorial/">From Julia to PSCAD and Z-tool</a></li><li><a class="tocitem" href="../SmallSignal_Gridspace/">Gridspace small-signal stability analysis</a></li></ul></li></ul></li><li><span class="tocitem">Components</span><ul><li><a class="tocitem" href="../../components/">Choose and configure components</a></li><li><a class="tocitem" href="../../source/">Voltage sources</a></li><li><a class="tocitem" href="../../impedance/">Lumped impedance</a></li><li><a class="tocitem" href="../../transformer/">Transformer</a></li><li><a class="tocitem" href="../../transmission_line/">Transmission lines and cables</a></li><li><a class="tocitem" href="../../machines/">Synchronous and induction machines</a></li><li><a class="tocitem" href="../../MMC/">Modular multilevel converter</a></li><li><a class="tocitem" href="../../TLC/">Two-level converter</a></li><li><a class="tocitem" href="../../blackbox/">Black-box models</a></li></ul></li><li><a class="tocitem" href="../../reference/">API reference</a></li><li><span class="tocitem">Developers</span><ul><li><a class="tocitem" href="../../developers/releasing/">Release and registration</a></li><li><a class="tocitem" href="../../developers/migrations/">Migration from Element and Setpoint</a></li><li><a class="tocitem" href="../../developers/plotbuilder/">PlotBuilder guide</a></li><li><a class="tocitem" href="../../developers/docstrings/">Docstrings</a></li><li><a class="tocitem" href="../../developers/conventions/">Conventions</a></li><li><a class="tocitem" href="../../developers/calculation_parity/">Calculation parity</a></li><li><a class="tocitem" href="../../developers/pscad_mapping/">PSCAD mapping and station notes</a></li></ul></li><li><a class="tocitem" href="../../bibliography/">Bibliography</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>IEEE 39-bus system with a STATCOM</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>IEEE 39-bus system with a STATCOM</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl/blob/ca16d36dc5bc7aa4be0fded81faa372a11013c64/examples/IEEE39bus.jl" title="View source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="IEEE-39-bus-system-with-a-STATCOM"><a class="docs-heading-anchor" href="#IEEE-39-bus-system-with-a-STATCOM">IEEE 39-bus system with a STATCOM</a><a id="IEEE-39-bus-system-with-a-STATCOM-1"></a><a class="docs-heading-anchor-permalink" href="#IEEE-39-bus-system-with-a-STATCOM" title="Permalink"></a></h1><p>This tutorial models the 39-bus New England system with all network quantities referred to 345 kV and a STATCOM at Bus 9. It computes the grid impedance seen by the STATCOM, the STATCOM impedance and the stability of their interaction. Define the elements and topology first. Solve power flow, then linearize at that operating point. Finally, evaluate the frequency responses.</p><pre><code class="language-julia hljs">using PowerImpedance
+using CairoMakie</code></pre><h2 id="Bases-and-shared-line-geometry"><a class="docs-heading-anchor" href="#Bases-and-shared-line-geometry">Bases and shared line geometry</a><a id="Bases-and-shared-line-geometry-1"></a><a class="docs-heading-anchor-permalink" href="#Bases-and-shared-line-geometry" title="Permalink"></a></h2><p>The network voltage base is the phase RMS voltage. Transformer resistance and inductance bases use 1000 MVA, 345 kV line-to-line RMS and 50 Hz. The STATCOM has its own power and voltage bases, used below for its controls.</p><pre><code class="language-julia hljs">Vm1 = 345 / sqrt(3);
+Rb_345 = (345e3)^2 / 1000e6;
+Lb_345 = (345e3)^2 / (2 * pi * 50 * 1000e6);</code></pre><p>All overhead lines share this flat conductor arrangement and these ground wires. Geometrical dimensions are in metres and DC resistances are in ohms per kilometre. The earth parameters are relative permeability, relative permittivity and resistivity in ohm metres. Each line&#39;s length is in metres.</p><pre><code class="language-julia hljs">conductors = Conductors(
+    organization = :flat, nᵇ = 3, nˢᵇ = 1, Rᵈᶜ = 0.063, rᶜ = 0.015,
+    yᵇᶜ = 30, Δyᵇᶜ = 0, Δxᵇᶜ = 10, Δ̃xᵇᶜ = 0, dˢᵇ = 0, dˢᵃᵍ = 10,
+);
+groundwires = Groundwires(
+    nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062,
+    Δxᵍ = 6.5, Δyᵍ = 7.5, dᵍˢᵃᵍ = 10,
+);
+earth_parameters = (1, 1, 100);</code></pre><h2 id="Generators,-lines,-transformers-and-loads"><a class="docs-heading-anchor" href="#Generators,-lines,-transformers-and-loads">Generators, lines, transformers and loads</a><a id="Generators,-lines,-transformers-and-loads-1"></a><a class="docs-heading-anchor-permalink" href="#Generators,-lines,-transformers-and-loads" title="Permalink"></a></h2><p>Each ideal AC source has a series impedance between it and its generator bus. The source input <code>v</code> is phase-voltage amplitude in kilovolts. Multiply the RMS voltage by <code>sqrt(2)</code> to get this amplitude. The impedance function takes complex frequency <code>s</code> in inverse seconds and returns ohms. Its inductance is in henries.</p><p><code>conductors = 3</code> specifies a three-phase passive. The <code>ACDQ</code> buses below represent its port voltages and currents in synchronous d/q coordinates.</p><pre><code class="language-julia hljs">generator_buses = 30:39;</code></pre><p>The line table gives the buses at each end and the physical length.</p><pre><code class="language-julia hljs">line_data = (
+    (name = :T1_2, from = 1, to = 2, length = 72.4730e3),
+    (name = :T1_39, from = 1, to = 39, length = 44.0833e3),
+    (name = :T2_3, from = 2, to = 3, length = 26.6263e3),
+    (name = :T2_25, from = 2, to = 25, length = 15.1647e3),
+    (name = :T3_4, from = 3, to = 4, length = 37.5590e3),
+    (name = :T3_18, from = 3, to = 18, length = 23.4523e3),
+    (name = :T4_5, from = 4, to = 5, length = 22.5707e3),
+    (name = :T4_14, from = 4, to = 14, length = 22.7470e3),
+    (name = :T5_6, from = 5, to = 6, length = 4.5847e3),
+    (name = :T5_8, from = 5, to = 8, length = 19.7493e3),
+    (name = :T6_7, from = 6, to = 7, length = 16.2227e3),
+    (name = :T6_11, from = 6, to = 11, length = 14.4593e3),
+    (name = :T7_8, from = 7, to = 8, length = 8.1113e3),
+    (name = :T8_9, from = 8, to = 9, length = 64.009e3),
+    (name = :T9_39, from = 9, to = 39, length = 44.0833e3),
+    (name = :T10_11, from = 10, to = 11, length = 7.5823e3),
+    (name = :T10_13, from = 10, to = 13, length = 7.5823e3),
+    (name = :T13_14, from = 13, to = 14, length = 17.8097e3),
+    (name = :T14_15, from = 14, to = 15, length = 38.2643e3),
+    (name = :T15_16, from = 15, to = 16, length = 16.5753e3),
+    (name = :T16_17, from = 16, to = 17, length = 15.6937e3),
+    (name = :T16_19, from = 16, to = 19, length = 34.3850e3),
+    (name = :T16_21, from = 16, to = 21, length = 23.8050e3),
+    (name = :T16_24, from = 16, to = 24, length = 10.4037e3),
+    (name = :T17_18, from = 17, to = 18, length = 14.4593e3),
+    (name = :T17_27, from = 17, to = 27, length = 30.5057e3),
+    (name = :T21_22, from = 21, to = 22, length = 24.6867e3),
+    (name = :T22_23, from = 22, to = 23, length = 16.9280e3),
+    (name = :T23_24, from = 23, to = 24, length = 61.7167e3),
+    (name = :T25_26, from = 25, to = 26, length = 56.95573e3),
+    (name = :T26_27, from = 26, to = 27, length = 25.9210e3),
+    (name = :T26_28, from = 26, to = 28, length = 83.5820e3),
+    (name = :T26_29, from = 26, to = 29, length = 110.2083e3),
+    (name = :T28_29, from = 28, to = 29, length = 26.6263e3),
+);</code></pre><p>Transformer <code>r</code> and <code>x</code> are per-unit series resistance and reactance on the transformer bases above. Each winding receives half of each series quantity. All turns ratios are 345/345. A zero <code>r</code> keeps the winding resistance zero.</p><pre><code class="language-julia hljs">transformer_data = (
+    (name = :TR2_30, from = 2, to = 30, r = 0, x = 0.0181),
+    (name = :TR6_31, from = 6, to = 31, r = 0, x = 0.025),
+    (name = :TR10_32, from = 10, to = 32, r = 0, x = 0.02),
+    (name = :TR11_12, from = 11, to = 12, r = 0.0016, x = 0.0435),
+    (name = :TR12_13, from = 12, to = 13, r = 0.0016, x = 0.0435),
+    (name = :TR19_20, from = 19, to = 20, r = 0.0007, x = 0.0138),
+    (name = :TR19_33, from = 19, to = 33, r = 0.0007, x = 0.0142),
+    (name = :TR20_34, from = 20, to = 34, r = 0.0009, x = 0.0180),
+    (name = :TR22_35, from = 22, to = 35, r = 0, x = 0.0143),
+    (name = :TR23_36, from = 23, to = 36, r = 0.0005, x = 0.0272),
+    (name = :TR25_37, from = 25, to = 37, r = 0.0006, x = 0.0232),
+    (name = :TR29_38, from = 29, to = 38, r = 0.0008, x = 0.0156),
+);</code></pre><p>Load <code>P</code> and <code>Q</code> are per-phase powers in MW and Mvar. The conversion uses the 345 kV line-to-line RMS voltage. The current magnitude follows from the three-phase apparent power. The ratio of per-phase power to squared current gives the series equivalent, with resistance in ohms, inductance in henries and capacitance in farads.</p><p><code>kind</code> selects an R-L or R-C load. Use a positive magnitude for capacitor <code>Q</code>.</p><pre><code class="language-julia hljs">function series_load(P, Q, kind)
+    P = P * 1e6
+    Q = Q * 1e6
+    V = 345e3
+    S = sqrt(P^2 + Q^2)
+    S = S * 3
+    I = S / (sqrt(3) * V)
+    R = P / I^2
+    L_or_C = kind === :L ? Q / (I^2 * 2 * pi * 50) : I^2 / (Q * 2 * pi * 50)
+    return (; R, L_or_C)
+end;
+
+load_data = (
+    (name = :LoadB3, bus = 3, P = 107.3333, Q = 0.8, kind = :L),
+    (name = :LoadB4a, bus = 4, P = 166.6667, Q = 61.3333, kind = :L),
+    (name = :LoadB4b, bus = 4, P = 0, Q = 100, kind = :C),
+    (name = :LoadB5, bus = 5, P = 0, Q = 200, kind = :C),
+    (name = :LoadB7, bus = 7, P = 77.93333, Q = 28.0, kind = :L),
+    (name = :LoadB8, bus = 8, P = 174.0, Q = 58.6667, kind = :L),
+    (name = :LoadB12, bus = 12, P = 2.5, Q = 29.3333, kind = :L),
+    (name = :LoadB15, bus = 15, P = 106.6667, Q = 51.0, kind = :L),
+    (name = :LoadB16, bus = 16, P = 109.8, Q = 10.7667, kind = :L),
+    (name = :LoadB18, bus = 18, P = 52.6667, Q = 10.0, kind = :L),
+    (name = :LoadB20, bus = 20, P = 226.6667, Q = 34.3333, kind = :L),
+    (name = :LoadB21, bus = 21, P = 91.3333, Q = 38.3333, kind = :L),
+    (name = :LoadB23, bus = 23, P = 82.5, Q = 28.2, kind = :L),
+    (name = :LoadB24, bus = 24, P = 102.8667, Q = 30.73333, kind = :C),
+    (name = :LoadB25, bus = 25, P = 74.6667, Q = 15.7333, kind = :L),
+    (name = :LoadB26, bus = 26, P = 46.3333, Q = 5.6667, kind = :L),
+    (name = :LoadB27, bus = 27, P = 93.6667, Q = 25.1667, kind = :L),
+    (name = :LoadB28, bus = 28, P = 68.6667, Q = 9.2, kind = :L),
+    (name = :LoadB29, bus = 29, P = 94.5, Q = 8.9667, kind = :L),
+    (name = :LoadB32, bus = 32, P = 3.0667, Q = 1.5333, kind = :L),
+    (name = :LoadB39, bus = 39, P = 368, Q = 83.3333, kind = :L),
+);
+load_parameters = [
+    (; row..., series_load(row.P, row.Q, row.kind)...)
+    for row in load_data
+];</code></pre><p><code>elements</code> is a named tuple. Each entry calls a public component constructor. The comprehensions repeat that constructor over its data table. Names such as <code>T8_9</code> identify the elements in the connection rows and impedance calculations. <code>T8_9</code> and <code>T9_39</code> are the only lines at Bus 9, where the STATCOM connects. <code>exclude</code> in <code>define</code> takes a component out of service.</p><pre><code class="language-julia hljs">elements = (;
+    (Symbol(&quot;G&quot;, bus) =&gt; ac_source(v = sqrt(2) * Vm1) for bus in generator_buses)...,
+    (Symbol(&quot;Zg&quot;, bus) =&gt; impedance(
+        z = s -&gt; 0.191736 + s * 0.0122063, conductors = 3,
+    ) for bus in generator_buses)...,
+    (row.name =&gt; transformer(
+        n = 345 / 345,
+        Lₚ = (row.x / 2) * Lb_345, Lₛ = (row.x / 2) * Lb_345,
+        Rₚ = (row.r / 2) * Rb_345, Rₛ = (row.r / 2) * Rb_345,
+        conductors = 3,
+    ) for row in transformer_data)...,
+    (row.name =&gt; overhead_line(
+        length = row.length, conductors = conductors, groundwires = groundwires,
+        earth_parameters = earth_parameters,
+    ) for row in line_data)...,
+    (load.name =&gt; impedance(
+        z = s -&gt; load.R + (load.kind === :L ? s * load.L_or_C : 1 / (s * load.L_or_C)),
+        conductors = 3,
+    ) for load in load_parameters)...,
+);</code></pre><h2 id="The-STATCOM"><a class="docs-heading-anchor" href="#The-STATCOM">The STATCOM</a><a id="The-STATCOM-1"></a><a class="docs-heading-anchor-permalink" href="#The-STATCOM" title="Permalink"></a></h2><p><code>ElectricalTLC</code> stores reactor inductance in henries and resistance in ohms. The <code>tlc</code> constructor supplies apparent power in MVA, AC line-to-line RMS voltage in kilovolts and pole-to-pole DC voltage in kilovolts. The equations normalize reactor values with these parent-model bases. <code>Z_ST_base</code> is the AC impedance base in ohms. The reactor inductance is 0.08 pu on the STATCOM base of 269 MVA and 345 kV. Its resistance is 1 % of that reactance.</p><pre><code class="language-julia hljs">Vdc_ST = 110;
+S_ST = 269;
+Z_ST_base = 345^2 / S_ST;
+Lf_ST = 0.08 * Z_ST_base / 2 / pi / 50;
+Rf_ST = 0.01 * 0.08 * Z_ST_base;
+electrical = ElectricalTLC(Lᵣ = Lf_ST, Rᵣ = Rf_ST);</code></pre><p><code>Measurement</code> filters AC voltage and current before synchronization and control. The Butterworth <code>order</code> is dimensionless and <code>ωc</code> is a cutoff in radians per second. The measured signals use the parent model&#39;s per-unit bases.</p><pre><code class="language-julia hljs">measurements = Measurement(
+    v_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
+    i_ac = PowerImpedance.Butterworth(order = 2, ωc = 0.5e4),
+);</code></pre><p><code>PLLSynchronization</code> obtains the control angle from the measured q-axis voltage. Its filter acts before the PI controller. The PI gains act on per-unit voltage and frequency deviation. Integral gains are per second and <code>ωc</code> is in radians per second.</p><pre><code class="language-julia hljs">synchronization = PLLSynchronization(
+    pi_ctrl = PIControl(Kp = 0.397887357729738, Ki = 7.957747154594767),
+    filter = PowerImpedance.Butterworth(order = 2, ωc = 2pi * 80),
+);</code></pre><p><code>OuterActiveVdcControl</code> regulates DC voltage through the d-axis current reference. <code>OuterReactiveQControl</code> regulates reactive power and adds AC-voltage support through <code>VoltageSupportLag</code>. The PI gains use converter per-unit voltage, power and current. Integral gains are per second. Support gain <code>K</code> relates per-unit voltage error to per-unit reactive power, with lag rate <code>ωc</code> in inverse seconds.</p><pre><code class="language-julia hljs">outer_active = OuterActiveVdcControl(pi_ctrl = PIControl(Kp = 5.0, Ki = 5.0));
+outer_reactive = OuterReactiveQControl(
+    pi_ctrl = PIControl(Kp = 0.04, Ki = 40.0),
+    support = VoltageSupportLag(K = 5.0, ωc = 1 / 0.5),
+);</code></pre><p><code>NoInnerVoltageControl</code> passes the outer current references to the current loop. <code>InnerCurrentPIControl</code> produces voltage commands from current errors in the converter per-unit system. Its proportional gain relates per-unit voltage to per-unit current. Its integral gain relates these quantities per second.</p><pre><code class="language-julia hljs">inner_voltage = NoInnerVoltageControl();
+inner_current = InnerCurrentPIControl(
+    pi_ctrl = PIControl(Kp = 0.254647908947033, Ki = 0.8),
+);</code></pre><p><code>PadeModulation</code> models modulation delay. <code>timeDelay</code> is in seconds. The numerator and denominator orders specify the rational Padé approximation.</p><pre><code class="language-julia hljs">modulation = PadeModulation(timeDelay = 200e-6, padeOrderNum = 3, padeOrderDen = 3);</code></pre><p>Control references and power-flow setpoints use per unit on the model&#39;s bases. The outer controls select which quantities power flow solves. The voltage support reference is 0.9 of the nominal phase-voltage amplitude. Its reactive power reference is -0.5 pu on the 269 MVA base.</p><pre><code class="language-julia hljs">Q_ST = -0.5;
+Vac_ref_ST = 0.9;</code></pre><p><code>PowerImpedance.Limits</code> specifies active- and reactive-power limits in the converter&#39;s per-unit power base. The limits of ±1000 pu leave the converter powers unconstrained in this power flow.</p><pre><code class="language-julia hljs">statcom_limits = PowerImpedance.Limits(
+    P_min = -1000.0, P_max = 1000.0, Q_min = -1000.0, Q_max = 1000.0,
+);</code></pre><p>Add the assembled <code>tlc</code> and its DC circuit to the element named tuple. Power flow needs a DC voltage source. The STATCOM controls DC voltage itself, so it cannot connect directly to an ideal DC source. The 10 kilohm series impedance connects the source and lets the STATCOM regulate its terminal voltage.</p><pre><code class="language-julia hljs">elements = (;
+    elements...,
+    G_DC = dc_source(v = 110),
+    STATCOM = let model = tlc(Sbase = S_ST, vACbase_LL_RMS = 345, vDCbase = Vdc_ST,
+            elec = electrical, meas = measurements, sync = synchronization,
+            outerActive = outer_active, outerReactive = outer_reactive,
+            innerVoltage = inner_voltage, innerCurrent = inner_current, mod = modulation,
+            limits = statcom_limits)
+        b = bases(model)
+        component(model; outerActive = (v_dc_ref = Vdc_ST / b.v_dc,),
+            outerReactive = (q_ref = (Q_ST * S_ST) / b.S,
+                support = (v_ac_ref = (Vm1 * sqrt(2) * Vac_ref_ST) / b.v_ac,)),
+            powerflow = (p_ac = 0.0 / b.S, p_dc = 0.0 / b.S))
+    end,
+    dummy_impedance = impedance(z = 1e4, conductors = 1),
+);</code></pre><h2 id="Topology"><a class="docs-heading-anchor" href="#Topology">Topology</a><a id="Topology-1"></a><a class="docs-heading-anchor-permalink" href="#Topology" title="Permalink"></a></h2><p>Each bus attaches complete component ports and creates d and q nets. Repeated bus names join the listed ports. The TLC exposes <code>ac</code> and <code>dc</code>. Ideal sources expose one port. Each load&#39;s <code>side2</code> port connects to ground.</p><pre><code class="language-julia hljs">statcom_connections = (
+    NetworkBuilder.Bus(:Bus9; ports = ((:STATCOM, :ac),), domain = ACDQ),
+    NetworkBuilder.Bus(:STATCOM_DC;
+        ports = ((:STATCOM, :dc), (:dummy_impedance, :side1))),
+    NetworkBuilder.Bus(:DC_source;
+        ports = ((:dummy_impedance, :side2), (:G_DC, :dc))),
+);</code></pre><p>Generator buses join each source to its impedance and the impedance to its bus.</p><pre><code class="language-julia hljs">generator_rows = (
+    (NetworkBuilder.Bus(Symbol(&quot;link_G&quot;, bus, &quot;_Zg&quot;, bus, &quot;_&quot;);
+        ports = ((Symbol(&quot;G&quot;, bus), :ac), (Symbol(&quot;Zg&quot;, bus), :side1)),
+        domain = ACDQ) for bus in generator_buses)...,
+    (NetworkBuilder.Bus(Symbol(&quot;Bus&quot;, bus);
+        ports = ((Symbol(&quot;Zg&quot;, bus), :side2),), domain = ACDQ)
+        for bus in generator_buses)...,
+);</code></pre><p>Branch buses join each line or transformer to its <code>from</code> and <code>to</code> buses.</p><pre><code class="language-julia hljs">branch_rows = (
+    NetworkBuilder.Bus(Symbol(&quot;Bus&quot;, bus); ports = ((row.name, port),), domain = ACDQ)
+    for row in (line_data..., transformer_data...)
+    for (port, bus) in ((:side1, row.from), (:side2, row.to))
+);</code></pre><p>Loads connect <code>side1</code> to their bus and <code>side2</code> to the d/q ground nets.</p><pre><code class="language-julia hljs">load_rows = (
+    NetworkBuilder.Bus(bus; ports = ((load.name, port),), domain = ACDQ)
+    for load in load_data
+    for (port, bus) in ((:side1, Symbol(&quot;Bus&quot;, load.bus)), (:side2, :gnd))
+);
+connections = (statcom_connections..., generator_rows..., branch_rows..., load_rows...);</code></pre><p><code>NetworkBuilder.define</code> combines the scalar elements, rows and numerical options. <code>voltageBase</code> is phase RMS voltage in kilovolts. <code>bus_voltage = true</code> applies the power-flow bus-voltage bounds.</p><pre><code class="language-julia hljs">network = NetworkBuilder.define(elements, connections; options = (;
+    voltageBase = 345 / sqrt(3),
+    power_flow = (; is_bounded = (; bus_voltage = true)),
+));</code></pre><h2 id="Power-flow"><a class="docs-heading-anchor" href="#Power-flow">Power flow</a><a id="Power-flow-1"></a><a class="docs-heading-anchor-permalink" href="#Power-flow" title="Permalink"></a></h2><p><code>PowerFlowProblem</code> with <code>ACDCPowerFlow</code> solves the AC/DC operating point. The result retains solver output, input data, node-to-bus and element-to-component mappings, diagnostics and the active components&#39; per-port operating values. <code>result</code> is the PowerModelsACDC result dictionary. <code>nodes2bus</code> maps a node name to its domain and bus index. <code>vm</code> gives the magnitude of bus voltage in per unit. <code>operating_point[:STATCOM].ac</code> gives AC-port values in kV, rad, MW and Mvar. Port powers are positive into the component.</p><pre><code class="language-julia hljs">power_flow = compute(PowerFlowProblem(network), ACDCPowerFlow());
+_, bus9_index = power_flow.nodes2bus[:Bus9d];
+bus9_solution = power_flow.result[&quot;solution&quot;][&quot;bus&quot;][string(bus9_index)];
+bus9_voltage = (pu = bus9_solution[&quot;vm&quot;], kV_LL_RMS = 345 * bus9_solution[&quot;vm&quot;]);
+statcom_point = power_flow.operating_point[:STATCOM];
+statcom_power = (MW = statcom_point.ac.p, Mvar = statcom_point.ac.q);
+(voltage = bus9_voltage, power = statcom_power)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(voltage = (pu = 0.9674230253662112, kV_LL_RMS = 333.76094375134284), power = (MW = 0.1611313439868583, Mvar = 225.18396911755397))</code></pre><p>Bus 9 solves to 0.9674 pu, or 333.76 kV line-to-line RMS. The STATCOM&#39;s AC-port powers are 0.161 MW and 225.18 Mvar, positive into the STATCOM. The control references describe power injected into the AC grid. The reactive-power reference <code>Q_ST = -0.5</code> pu gives -134.5 Mvar on the 269 MVA base. Voltage support adds <code>K * (0.9 - v)</code>, where <code>v</code> is the solved Bus 9 voltage: 5 × (0.9 - 0.9674) ≈ -0.337 pu. The total is about -0.837 pu, or -225.18 Mvar on the same power base.</p><h2 id="Linearization"><a class="docs-heading-anchor" href="#Linearization">Linearization</a><a id="Linearization-1"></a><a class="docs-heading-anchor-permalink" href="#Linearization" title="Permalink"></a></h2><p><code>LinearizationProblem</code> uses this power-flow result to find the detailed converter equilibrium and linearize its electrical and control equations. The returned <code>network_model</code> combines the converter&#39;s small-signal admittance with the passive network models. Both impedance scans use this same solved operating point.</p><pre><code class="language-julia hljs">linearized = compute(LinearizationProblem(network, power_flow), AdmittanceLinearization());</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">[ Info: Starting to solve for steady-state solution
+[ Info: TLC steady-state solution found!</code></pre><h2 id="Grid-impedance-at-Bus-9"><a class="docs-heading-anchor" href="#Grid-impedance-at-Bus-9">Grid impedance at Bus 9</a><a id="Grid-impedance-at-Bus-9-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-impedance-at-Bus-9" title="Permalink"></a></h2><p><code>nodes</code> orders the retained d/q coordinates. The scan excludes <code>STATCOM</code> to give the grid impedance seen by its AC terminal. <code>frequency_range</code> gives minimum and maximum frequency in Hz and the number of logarithmically spaced points: 1 Hz to 5 kHz with 800 points. <code>response</code> is a 2 × 2 × N tensor in ohms. <code>frequencies</code> stores angular frequencies in radians per second.</p><pre><code class="language-julia hljs">frequency_range = (1.0, 5e3, 800);
+grid_impedance = compute(PowerImpedanceProblem(linearized.network_model;
+    nodes = [:Bus9d, :Bus9q], eliminated_elements = [:STATCOM],
+    frequency_range = frequency_range,
+), NodalImpedance());</code></pre><h2 id="STATCOM-impedance-at-Bus-9"><a class="docs-heading-anchor" href="#STATCOM-impedance-at-Bus-9">STATCOM impedance at Bus 9</a><a id="STATCOM-impedance-at-Bus-9-1"></a><a class="docs-heading-anchor-permalink" href="#STATCOM-impedance-at-Bus-9" title="Permalink"></a></h2><p>The scan excludes <code>T8_9</code> and <code>T9_39</code> to disconnect the AC grid from Bus 9. This impedance includes the STATCOM and its DC circuit. Linearization keeps the solved operating point of the complete network.</p><pre><code class="language-julia hljs">statcom_impedance = compute(PowerImpedanceProblem(linearized.network_model;
+    nodes = [:Bus9d, :Bus9q], eliminated_elements = [:T8_9, :T9_39],
+    frequency_range = frequency_range,
+), NodalImpedance());</code></pre><h2 id="Loop-gain-and-generalized-Nyquist"><a class="docs-heading-anchor" href="#Loop-gain-and-generalized-Nyquist">Loop gain and generalized Nyquist</a><a id="Loop-gain-and-generalized-Nyquist-1"></a><a class="docs-heading-anchor-permalink" href="#Loop-gain-and-generalized-Nyquist" title="Permalink"></a></h2><p>Form the matrix loop gain by right division of the grid impedance by the STATCOM impedance at each frequency. <code>FrequencyResponseResult</code> stores that dimensionless response with its frequencies and nodes. <code>GeneralizedNyquist</code> follows its eigenloci around the critical point at -1. The returned <code>output</code> contains encirclement counts, the assessment, margins and detected unstable frequencies.</p><pre><code class="language-julia hljs">terminal_ratio = similar(grid_impedance.response);
+for index in axes(terminal_ratio, 3)
+    terminal_ratio[:, :, index] =
+        grid_impedance.response[:, :, index] / statcom_impedance.response[:, :, index];
+end
+loop_gain = FrequencyResponseResult(LoopGain(), :loopgain, terminal_ratio,
+    grid_impedance.frequencies, grid_impedance.nodes, linearized.network_model, (;));
+stability = compute(StabilityProblem(loop_gain), GeneralizedNyquist());
+nyquist_outcome = (counts = stability.output.encirclements,
+    assessment = stability.output.assessment)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(counts = (clockwise = [0, 1], counterclockwise = [0, 0], net = 1), assessment = :unstable_system)</code></pre><p>The Nyquist calculation reports an unstable interaction, with one clockwise encirclement and no counterclockwise encirclements of -1. The eigenlocus for that encirclement crosses the real axis to the left of -3 near 1.30 kHz. The grid resonance reaches about 3.5 kilohms near 1.17 kHz on both axes.</p><h2 id="Figures"><a class="docs-heading-anchor" href="#Figures">Figures</a><a id="Figures-1"></a><a class="docs-heading-anchor-permalink" href="#Figures" title="Permalink"></a></h2><p>The diagonal entries show the voltage response to current on the same axis. Both axes use impedance magnitude in ohms against frequency in Hz. The q-axis magnitudes cross six times between 0.95 and 1.34 kHz around the grid resonance, while the d-axis curves do not cross. At each intersection, the ratio of the diagonal entries has unit magnitude. Their phase difference then indicates the interaction margin on that axis. The generalized Nyquist calculation uses the full 2 × 2 matrices.</p><pre><code class="language-julia hljs">comparison = Figure(size = (850, 600));
+for (index, label) in ((1, &quot;d&quot;), (2, &quot;q&quot;))
+    axis = Axis(comparison[index, 1]; xlabel = &quot;Frequency (Hz)&quot;,
+        ylabel = &quot;$label-axis impedance magnitude (Ω)&quot;, xscale = log10, yscale = log10);
+    lines!(axis, real.(grid_impedance.frequencies) ./ (2pi),
+        abs.(grid_impedance.response[index, index, :]); label = &quot;Grid&quot;);
+    lines!(axis, real.(statcom_impedance.frequencies) ./ (2pi),
+        abs.(statcom_impedance.response[index, index, :]); label = &quot;STATCOM&quot;);
+    axislegend(axis; position = :lt);
+end
+comparison</code></pre><img src="d69abb1f.png" alt="Example block output"/><p>The solid curves follow positive frequencies. Dashed curves show the conjugate trajectories. The cross marks the critical point.</p><pre><code class="language-julia hljs">nyquist = Figure(size = (700, 550));
+axis = Axis(nyquist[1, 1]; xlabel = &quot;Real axis&quot;, ylabel = &quot;Imaginary axis&quot;,
+    aspect = DataAspect());
+for (index, locus) in enumerate(eachcol(stability.output.eigenloci))
+    lines!(axis, real.(locus), imag.(locus); color = Cycled(index));
+    lines!(axis, real.(locus), -imag.(locus); color = Cycled(index), linestyle = :dash);
+end
+scatter!(axis, [-1.0], [0.0]; color = :red, marker = :xcross, markersize = 15);
+xlims!(axis, -5.0, 1.0);
+ylims!(axis, -1.5, 1.5);
+nyquist</code></pre><img src="abdc8059.png" alt="Example block output"/><h2 id="Adapting-the-tutorial"><a class="docs-heading-anchor" href="#Adapting-the-tutorial">Adapting the tutorial</a><a id="Adapting-the-tutorial-1"></a><a class="docs-heading-anchor-permalink" href="#Adapting-the-tutorial" title="Permalink"></a></h2><p>To study another bus, change <code>nodes</code> in both impedance problems to its d/q names. Select <code>eliminated_elements</code> so one scan retains the grid and the other retains the converter and its DC circuit. Change the converter inputs and control blocks to describe the device, then repeat power flow and linearization. Set <code>frequency_range</code> to the frequency interval and resolution of interest.</p><p>Back to <a href="../">Examples</a></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../GFM_weak_grid/">« A grid-forming MMC in a weak grid</a><a class="docs-footer-nextpage" href="../IEEE39bus_Gridspace/">IEEE39 Gridspace soil-resistivity study »</a><div class="flexbox-break"></div><p class="footer-message"><a href="https://github.com/Electa-Git/PowerImpedance.jl">PowerImpedance.jl</a> v0.4.0 supported by the Etch Competence Hub of EnergyVille, financed by the Flemish Government.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 28 October 2026 23:04">Wednesday 28 October 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

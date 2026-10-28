@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Connection DSL · PowerImpedance.jl</title><meta name="title" content="Connection DSL · PowerImpedance.jl"/><meta property="og:title" content="Connection DSL · PowerImpedance.jl"/><meta property="twitter:title" content="Connection DSL · PowerImpedance.jl"/><meta name="description" content="Documentation for PowerImpedance.jl."/><meta property="og:description" content="Documentation for PowerImpedance.jl."/><meta property="twitter:description" content="Documentation for PowerImpedance.jl."/><meta property="og:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/Connection_DSL/"/><meta property="twitter:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/Connection_DSL/"/><link rel="canonical" href="https://electa-git.github.io/PowerImpedance.jl/stable/examples/Connection_DSL/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/documentercitations/citations-hover.css" rel="stylesheet" type="text/css"/><link href="../../assets/documentercitations/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../../assets/custom.js"></script><script src="../../assets/documentercitations/citations-data.js"></script><script src="../../assets/documentercitations/citations-hover.js"></script><script src="../../assets/documentercitations/citations-backlinks.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="PowerImpedance.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="PowerImpedance.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">PowerImpedance.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../Getting_started_SMIB/">Getting started</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../network/">Network construction</a></li><li><a class="tocitem" href="../../initialization/">Power-flow initialization</a></li><li><a class="tocitem" href="../../results/">Impedance and stability analysis</a></li><li><a class="tocitem" href="../../gridspace/">Parametric and uncertainty studies</a></li><li><a class="tocitem" href="../../pscad/">PSCAD export and simulation</a></li><li><a class="tocitem" href="../../package_extensions/">Package extensions</a></li><li><a class="tocitem" href="../../manual/fundamental_concepts/">Fundamental concepts</a></li><li><input class="collapse-toggle" id="menuitem-3-8" type="checkbox" checked/><label class="tocitem" for="menuitem-3-8"><span class="docs-label">Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../">Overview</a></li><li class="is-active"><a class="tocitem" href>Connection DSL</a><ul class="internal"><li><a class="tocitem" href="#Scalar-DC-network"><span>Scalar DC network</span></a></li><li><a class="tocitem" href="#Transformed-AC-coordinates-and-multiway-nodes"><span>Transformed AC coordinates and multiway nodes</span></a></li><li><a class="tocitem" href="#Multiconductor-lines"><span>Multiconductor lines</span></a></li><li><a class="tocitem" href="#Passive-component-families"><span>Passive component families</span></a></li><li><a class="tocitem" href="#Converter-ports"><span>Converter ports</span></a></li><li><a class="tocitem" href="#Synchronous-and-induction-machines"><span>Synchronous and induction machines</span></a></li><li><a class="tocitem" href="#Disconnected-elements-and-validation"><span>Disconnected elements and validation</span></a></li><li><a class="tocitem" href="#Deterministic-parameter-grids"><span>Deterministic parameter grids</span></a></li><li><a class="tocitem" href="#Lines-constructed-from-LineParameters"><span>Lines constructed from <code>LineParameters</code></span></a></li></ul></li><li><a class="tocitem" href="../Converter_machine_interaction/">Converter and synchronous-machine interaction</a></li><li><a class="tocitem" href="../Energy_hub_MTDC/">Three-terminal DC energy hub</a></li><li><a class="tocitem" href="../GFM_weak_grid/">A grid-forming MMC in a weak grid</a></li><li><a class="tocitem" href="../IEEE39bus/">IEEE 39-bus system with a STATCOM</a></li><li><a class="tocitem" href="../IEEE39bus_Gridspace/">IEEE39 Gridspace soil-resistivity study</a></li><li><a class="tocitem" href="../IEEE9_bus_impedance/">IEEE9 bus impedance</a></li><li><a class="tocitem" href="../Line_and_cable_models/">Line and cable models</a></li><li><a class="tocitem" href="../MMC_harmonic_stability/">MMC harmonic stability</a></li><li><a class="tocitem" href="../Network_Diagram/">Hybrid AC/DC network diagram</a></li><li><a class="tocitem" href="../P2P_HVDC_ALT/">P2P HVDC parametric OHL/UGC transition</a></li><li><a class="tocitem" href="../P2P_HVDC_stability/">Point-to-point HVDC admittance and stability</a></li><li><a class="tocitem" href="../PSCAD_tutorial/">From Julia to PSCAD and Z-tool</a></li><li><a class="tocitem" href="../SmallSignal_Gridspace/">Gridspace small-signal stability analysis</a></li></ul></li></ul></li><li><span class="tocitem">Components</span><ul><li><a class="tocitem" href="../../components/">Choose and configure components</a></li><li><a class="tocitem" href="../../source/">Voltage sources</a></li><li><a class="tocitem" href="../../impedance/">Lumped impedance</a></li><li><a class="tocitem" href="../../transformer/">Transformer</a></li><li><a class="tocitem" href="../../transmission_line/">Transmission lines and cables</a></li><li><a class="tocitem" href="../../machines/">Synchronous and induction machines</a></li><li><a class="tocitem" href="../../MMC/">Modular multilevel converter</a></li><li><a class="tocitem" href="../../TLC/">Two-level converter</a></li><li><a class="tocitem" href="../../blackbox/">Black-box models</a></li></ul></li><li><a class="tocitem" href="../../reference/">API reference</a></li><li><span class="tocitem">Developers</span><ul><li><a class="tocitem" href="../../developers/releasing/">Release and registration</a></li><li><a class="tocitem" href="../../developers/migrations/">Migration from Element and Setpoint</a></li><li><a class="tocitem" href="../../developers/plotbuilder/">PlotBuilder guide</a></li><li><a class="tocitem" href="../../developers/docstrings/">Docstrings</a></li><li><a class="tocitem" href="../../developers/conventions/">Conventions</a></li><li><a class="tocitem" href="../../developers/calculation_parity/">Calculation parity</a></li><li><a class="tocitem" href="../../developers/pscad_mapping/">PSCAD mapping and station notes</a></li></ul></li><li><a class="tocitem" href="../../bibliography/">Bibliography</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Connection DSL</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Connection DSL</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl/blob/ca16d36dc5bc7aa4be0fded81faa372a11013c64/examples/Connection_DSL.jl" title="View source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Connection-DSL"><a class="docs-heading-anchor" href="#Connection-DSL">Connection DSL</a><a id="Connection-DSL-1"></a><a class="docs-heading-anchor-permalink" href="#Connection-DSL" title="Permalink"></a></h1><p><code>NetworkBuilder</code> connects named component ports with <code>Bus</code> and <code>Net</code>. A <code>Bus</code> joins complete ports and creates one net per electrical coordinate. A <code>Net</code> joins individual terminals with explicit names. Both declarations retain the order of their ports or terminals in the constructed topology.</p><ul><li><code>Bus(name; ports, domain)</code> takes ordered <code>(component, port)</code> pairs.</li><li><code>Net(name; terminals, domain)</code> takes ordered <code>(component, port, terminal)</code> triples.</li></ul><p>The component name is its key in the element named tuple. Port names are <code>side1</code> and <code>side2</code> for two-port passives, <code>ac</code> for AC sources and machines, <code>dc</code> for DC sources, and <code>ac</code> and <code>dc</code> for converters.</p><p>An AC bus uses d/q coordinates when a connected port uses <code>ACDQ</code>, or when <code>domain = ACDQ</code> is declared. Otherwise it uses a/b/c coordinates. A scalar passive inherits its connected domain and otherwise uses DC. Scalar d/q terminations can be used in frequency calculations. Use three-phase passives for power flow.</p><pre><code class="language-julia hljs">using PowerImpedance
+using PowerImpedance.NetworkBuilder: Bus, Net, Grid, NetworkTopology, define, solve;</code></pre><h2 id="Scalar-DC-network"><a class="docs-heading-anchor" href="#Scalar-DC-network">Scalar DC network</a><a id="Scalar-DC-network-1"></a><a class="docs-heading-anchor-permalink" href="#Scalar-DC-network" title="Permalink"></a></h2><p>A one-conductor impedance has one terminal on each of its two ports. The explicit <code>:gnd</code> bus identifies the reference port.</p><pre><code class="language-julia hljs">dc_elements = (
+    source = dc_source(v = 480.0),
+    branch = impedance(z = 2.0, conductors = 1),
+    load = impedance(z = 10.0, conductors = 1)
+);
+
+dc_connections = (
+    Bus(:source_bus; ports = ((:source, :dc), (:branch, :side1))),
+    Bus(:load_bus; ports = ((:branch, :side2), (:load, :side1))),
+    Bus(:gnd; ports = ((:load, :side2),))
+);
+
+dc_network = define(dc_elements, dc_connections);
+dc_network.topology.connections</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Table with 7 columns and 5 rows:
+     net         bus  component  port   terminal  domain  frame
+   ┌───────────────────────────────────────────────────────────
+ 1 │ source_bus  1    source     dc     dc        2       dc
+ 2 │ source_bus  1    branch     side1  dc        2       dc
+ 3 │ load_bus    2    branch     side2  dc        2       dc
+ 4 │ load_bus    2    load       side1  dc        2       dc
+ 5 │ gnd         0    load       side2  dc        2       dc</code></pre><p>The ideal source has one external port and receives one connection in <code>NetworkTopology</code>. During small-signal construction the ideal source terminal is placed in the grounded-node selection because an ideal voltage source is a short circuit for perturbations.</p><pre><code class="language-julia hljs">dc_solution = solve(dc_network);
+dc_solution.operating_point</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">OperatingPoint(Dict{Symbol, NamedTuple}(:source =&gt; (dc = DCPortValues(480.0, 0.000335643436643121),)))</code></pre><h2 id="Transformed-AC-coordinates-and-multiway-nodes"><a class="docs-heading-anchor" href="#Transformed-AC-coordinates-and-multiway-nodes">Transformed AC coordinates and multiway nodes</a><a id="Transformed-AC-coordinates-and-multiway-nodes-1"></a><a class="docs-heading-anchor-permalink" href="#Transformed-AC-coordinates-and-multiway-nodes" title="Permalink"></a></h2><p>Three-phase passives declare <code>ACABC</code> ports. An <code>ACDQ</code> bus converts them to d and q coordinates. Each pair belongs to one AC power-flow bus, while the generated net names preserve the two small-signal coordinates.</p><pre><code class="language-julia hljs">ac_elements = (
+    grid = ac_source(v = 220 * sqrt(2/3)),
+    branch_1 = impedance(z = 0.2 + 0.8im, conductors = 3),
+    branch_2 = impedance(z = 0.4 + 1.2im, conductors = 3)
+);
+
+ac_connections = (
+    Bus(:bus_; ports = ((:grid, :ac), (:branch_1, :side1), (:branch_2, :side1)),
+        domain = ACDQ),
+    Bus(:remote_1_; ports = ((:branch_1, :side2),), domain = ACDQ),
+    Bus(:remote_2_; ports = ((:branch_2, :side2),), domain = ACDQ)
+);
+
+ac_topology = NetworkTopology(ac_elements, ac_connections);
+ac_topology.connections</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Table with 7 columns and 10 rows:
+      net         bus  component  port   terminal  domain  frame
+    ┌───────────────────────────────────────────────────────────
+ 1  │ bus_d       1    grid       ac     d         1       dq
+ 2  │ bus_d       1    branch_1   side1  d         1       dq
+ 3  │ bus_d       1    branch_2   side1  d         1       dq
+ 4  │ bus_q       1    grid       ac     q         1       dq
+ 5  │ bus_q       1    branch_1   side1  q         1       dq
+ 6  │ bus_q       1    branch_2   side1  q         1       dq
+ 7  │ remote_1_d  2    branch_1   side2  d         1       dq
+ 8  │ remote_1_q  2    branch_1   side2  q         1       dq
+ 9  │ remote_2_d  3    branch_2   side2  d         1       dq
+ 10 │ remote_2_q  3    branch_2   side2  q         1       dq</code></pre><p>The first bus creates nets <code>:bus_d</code> and <code>:bus_q</code> shared by its three ports. <code>NetworkTopology</code> assigns bus indices independently in the AC and DC domains.</p><h2 id="Multiconductor-lines"><a class="docs-heading-anchor" href="#Multiconductor-lines">Multiconductor lines</a><a id="Multiconductor-lines-1"></a><a class="docs-heading-anchor-permalink" href="#Multiconductor-lines" title="Permalink"></a></h2><p>A three-conductor line exposes terminals <code>a</code>, <code>b</code> and <code>c</code> on both ports. <code>Net</code> gives each terminal its own name. Mutual terms remain in the dense component matrices.</p><pre><code class="language-julia hljs">multiconductor_elements = (
+    line = overhead_line(
+        length = 1e3,
+        conductors = Conductors(organization = :flat, nᵇ = 3)
+    ),
+);
+
+multiconductor_connections = (
+    Net(:sending_a; terminals = ((:line, :side1, :a),)),
+    Net(:sending_b; terminals = ((:line, :side1, :b),)),
+    Net(:sending_c; terminals = ((:line, :side1, :c),)),
+    Net(:receiving_a; terminals = ((:line, :side2, :a),)),
+    Net(:receiving_b; terminals = ((:line, :side2, :b),)),
+    Net(:receiving_c; terminals = ((:line, :side2, :c),))
+);
+
+multiconductor_topology = NetworkTopology(
+    multiconductor_elements,
+    multiconductor_connections
+);
+multiconductor_topology.connections</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Table with 7 columns and 6 rows:
+     net          bus  component  port   terminal  domain  frame
+   ┌────────────────────────────────────────────────────────────
+ 1 │ sending_a    1    line       side1  a         1       abc
+ 2 │ sending_b    1    line       side1  b         1       abc
+ 3 │ sending_c    1    line       side1  c         1       abc
+ 4 │ receiving_a  2    line       side2  a         1       abc
+ 5 │ receiving_b  2    line       side2  b         1       abc
+ 6 │ receiving_c  2    line       side2  c         1       abc</code></pre><h2 id="Passive-component-families"><a class="docs-heading-anchor" href="#Passive-component-families">Passive component families</a><a id="Passive-component-families-1"></a><a class="docs-heading-anchor-permalink" href="#Passive-component-families" title="Permalink"></a></h2><p>The following AC chain uses the same engineering parameters as the topology tests. It covers transformers, analytical overhead lines and cables, and imported black-box line data. Each bus uses d and q coordinates on the connected ports <code>side1</code> and <code>side2</code>.</p><pre><code class="language-julia hljs">passive_elements = (
+    transformer = transformer(
+        conductors = 3,
+        n = 1.0,
+        Rₚ = 0.1,
+        Lₚ = 1e-3,
+        Rₛ = 0.1,
+        Lₛ = 1e-3
+    ),
+    overhead = overhead_line(
+        length = 1e3,
+        conductors = Conductors(organization = :flat, nᵇ = 3)
+    ),
+    cable = cable(
+        length = 1e3,
+        positions = [(-1.0, 1.0), (0.0, 1.0), (1.0, 1.0)],
+        C1 = Conductor(rₒ = 0.01)
+    ),
+    blackbox_line = blackbox_line(data_type = :Ztool, n = 3)
+);
+
+passive_connections = (
+    Bus(:p1_; ports = ((:transformer, :side1),), domain = ACDQ),
+    Bus(:p2_; ports = ((:transformer, :side2), (:overhead, :side1)), domain = ACDQ),
+    Bus(:p3_; ports = ((:overhead, :side2), (:cable, :side1)), domain = ACDQ),
+    Bus(:p4_; ports = ((:cable, :side2), (:blackbox_line, :side1)), domain = ACDQ),
+    Bus(:p5_; ports = ((:blackbox_line, :side2),), domain = ACDQ)
+);
+
+passive_topology = NetworkTopology(passive_elements, passive_connections);
+passive_topology.connections</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Table with 7 columns and 16 rows:
+      net   bus  component      port   terminal  domain  frame
+    ┌─────────────────────────────────────────────────────────
+ 1  │ p1_d  1    transformer    side1  d         1       dq
+ 2  │ p1_q  1    transformer    side1  q         1       dq
+ 3  │ p2_d  2    transformer    side2  d         1       dq
+ 4  │ p2_d  2    overhead       side1  d         1       dq
+ 5  │ p2_q  2    transformer    side2  q         1       dq
+ 6  │ p2_q  2    overhead       side1  q         1       dq
+ 7  │ p3_d  3    overhead       side2  d         1       dq
+ 8  │ p3_d  3    cable          side1  d         1       dq
+ 9  │ p3_q  3    overhead       side2  q         1       dq
+ 10 │ p3_q  3    cable          side1  q         1       dq
+ 11 │ p4_d  4    cable          side2  d         1       dq
+ 12 │ p4_d  4    blackbox_line  side1  d         1       dq
+ 13 │ p4_q  4    cable          side2  q         1       dq
+ 14 │ p4_q  4    blackbox_line  side1  q         1       dq
+ 15 │ p5_d  5    blackbox_line  side2  d         1       dq
+ 16 │ p5_q  5    blackbox_line  side2  q         1       dq</code></pre><h2 id="Converter-ports"><a class="docs-heading-anchor" href="#Converter-ports">Converter ports</a><a id="Converter-ports-1"></a><a class="docs-heading-anchor-permalink" href="#Converter-ports" title="Permalink"></a></h2><p>MMC, two-level, and black-box converter models have named <code>ac</code> and <code>dc</code> ports. The DC port has one differential terminal, labelled <code>dc</code>. The AC port uses d and q terminals in the synchronous frame.</p><pre><code class="language-julia hljs">delta_control = ΔdqControlGFL(
+    outer_active = NoOuterActiveControl(),
+    outer_reactive = NoOuterReactiveControl(),
+    occ = NoInnerCurrentControl()
+);
+
+converter_elements = (
+    dc_grid = dc_source(v = 480.0),
+    ac_grid = ac_source(),
+    mmc = mmc(
+        sync = NoSynchronization(),
+        delta_control = delta_control,
+        sigma_control = ΣdqzControlTEC()
+    ),
+    tlc = tlc(),
+    blackbox_converter = PowerImpedance.Blackbox_MMC()
+);
+
+converter_connections = (
+    Bus(:dc_bus;
+        ports = ((:dc_grid, :dc), (:mmc, :dc), (:tlc, :dc), (:blackbox_converter, :dc))),
+    Bus(:ac_bus_;
+        ports = ((:ac_grid, :ac), (:mmc, :ac), (:tlc, :ac), (:blackbox_converter, :ac)),
+        domain = ACDQ)
+);
+
+converter_topology = NetworkTopology(converter_elements, converter_connections);
+converter_topology.connections</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Table with 7 columns and 12 rows:
+      net       bus  component           port  terminal  domain  frame
+    ┌─────────────────────────────────────────────────────────────────
+ 1  │ dc_bus    1    dc_grid             dc    dc        2       dc
+ 2  │ dc_bus    1    mmc                 dc    dc        2       dc
+ 3  │ dc_bus    1    tlc                 dc    dc        2       dc
+ 4  │ dc_bus    1    blackbox_converter  dc    dc        2       dc
+ 5  │ ac_bus_d  1    ac_grid             ac    d         1       dq
+ 6  │ ac_bus_d  1    mmc                 ac    d         1       dq
+ 7  │ ac_bus_d  1    tlc                 ac    d         1       dq
+ 8  │ ac_bus_d  1    blackbox_converter  ac    d         1       dq
+ 9  │ ac_bus_q  1    ac_grid             ac    q         1       dq
+ 10 │ ac_bus_q  1    mmc                 ac    q         1       dq
+ 11 │ ac_bus_q  1    tlc                 ac    q         1       dq
+ 12 │ ac_bus_q  1    blackbox_converter  ac    q         1       dq</code></pre><h2 id="Synchronous-and-induction-machines"><a class="docs-heading-anchor" href="#Synchronous-and-induction-machines">Synchronous and induction machines</a><a id="Synchronous-and-induction-machines-1"></a><a class="docs-heading-anchor-permalink" href="#Synchronous-and-induction-machines" title="Permalink"></a></h2><p>Machine models expose one AC port. Its d and q terminals share one bus.</p><pre><code class="language-julia hljs">machine_elements = (
+    synchronous = synchronousmachine(),
+    induction = inductionmachine()
+);
+
+machine_connections = (
+    Bus(:machine_bus_; ports = ((:synchronous, :ac), (:induction, :ac)), domain = ACDQ),
+);
+
+machine_topology = NetworkTopology(machine_elements, machine_connections);
+machine_topology.connections</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Table with 7 columns and 4 rows:
+     net            bus  component    port  terminal  domain  frame
+   ┌───────────────────────────────────────────────────────────────
+ 1 │ machine_bus_d  1    synchronous  ac    d         1       dq
+ 2 │ machine_bus_d  1    induction    ac    d         1       dq
+ 3 │ machine_bus_q  1    synchronous  ac    q         1       dq
+ 4 │ machine_bus_q  1    induction    ac    q         1       dq</code></pre><h2 id="Disconnected-elements-and-validation"><a class="docs-heading-anchor" href="#Disconnected-elements-and-validation">Disconnected elements and validation</a><a id="Disconnected-elements-and-validation-1"></a><a class="docs-heading-anchor-permalink" href="#Disconnected-elements-and-validation" title="Permalink"></a></h2><p><code>exclude</code> omits selected components even when the topology mentions them. Other malformed declarations are rejected while the topology is constructed, before power flow or frequency evaluation begins.</p><pre><code class="language-julia hljs">disconnected = impedance(z = 5.0, conductors = 1);
+disconnected_network = define(
+    (; disconnected),
+    (Bus(:ignored; ports = ((:disconnected, :side1),)),);
+    exclude = (:disconnected,)
+);
+isempty(disconnected_network.topology.connections)
+
+duplicate_terminal_error = try
+    NetworkTopology(
+        (branch = impedance(z = 2.0, conductors = 1),),
+        (
+            Bus(:first; ports = ((:branch, :side1),)),
+            Bus(:second; ports = ((:branch, :side1),))
+        )
+    )
+catch error
+    error
+end;
+duplicate_terminal_error</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ArgumentError(&quot;element :branch port :side1 terminal :dc is assigned more than once&quot;)</code></pre><p>Validation also rejects unknown components, invalid port or terminal labels, and a net name shared between AC and DC terminals. Net names come from the declarations above.</p><h2 id="Deterministic-parameter-grids"><a class="docs-heading-anchor" href="#Deterministic-parameter-grids">Deterministic parameter grids</a><a id="Deterministic-parameter-grids-1"></a><a class="docs-heading-anchor-permalink" href="#Deterministic-parameter-grids" title="Permalink"></a></h2><p>Parameters receiving <code>Grid</code> values vary. The topology is fixed for each stochastic study case.</p><pre><code class="language-julia hljs">grid_elements = (
+    branch = impedance(
+        Grid;
+        z = Grid([1.0, 2.0, 5.0]),
+        conductors = 1
+    ),
+    load = impedance(Grid; z = 10.0, conductors = 1)
+);
+
+grid_connections = (
+    Bus(:bus; ports = ((:branch, :side1), (:load, :side1))),
+    Bus(:gnd; ports = ((:branch, :side2), (:load, :side2)))
+);
+
+network_space = define(grid_elements, grid_connections);
+length(network_space)
+
+grid_problems = PowerImpedanceProblem(
+    network_space;
+    nodes = [:bus],
+    frequency_range = (1.0, 1e3, 40)
+);
+grid_impedance = compute(
+    ParametricProblem(grid_problems),
+    Combinatorial(NodalImpedance())
+);
+grid_impedance</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ParametricResult{FrequencyResponseResult{NodalImpedance{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{ComplexF64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}}}, Combinatorial{NodalImpedance{PowerImpedance.PIACDC}, PowerImpedance.PIACDC, :error}, Vector{FrequencyResponseResult{NodalImpedance{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{ComplexF64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}}}}, Vector{@NamedTuple{network::@NamedTuple{elements::@NamedTuple{branch::@NamedTuple{z::Float64, conductors::Int64}, load::@NamedTuple{z::Float64, conductors::Int64}}, options::@NamedTuple{}}}}, @NamedTuple{manifest::@NamedTuple{version::Int64, package::Symbol, formulation::DataType, backend::DataType, options::@NamedTuple{}, configurations::Vector{@NamedTuple{network::@NamedTuple{elements::@NamedTuple{branch::@NamedTuple{z::Float64, conductors::Int64}, load::@NamedTuple{z::Float64, conductors::Int64}}, options::@NamedTuple{}}}}}, failures::@NamedTuple{items::Vector{Any}}, source_space::Gridspace{PowerImpedanceProblem{PowerImpedance.NetworkBuilder.NetworkState, Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}, PowerImpedance._PowerImpedanceProblemMaterializer{Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}, Tuple{Gridspace{PowerImpedance.NetworkBuilder.NetworkState, PowerImpedance.NetworkBuilder._BuilderMaterializer{Tuple{PowerImpedance.NetworkBuilder.Bus, PowerImpedance.NetworkBuilder.Bus}}, Tuple{Gridspace{NamedTuple{(:branch, :load)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :load)}, Tuple{Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{DeterministicGrid{Tuple{Float64, Float64, Float64}, PowerImpedance.Grammar.AutomaticGridKey}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{PowerImpedance.Grammar.ConstantAxis{Float64}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}}, Tuple{Symbol}, Val{:product}}}}(Combinatorial{NodalImpedance{PowerImpedance.PIACDC}, PowerImpedance.PIACDC, :error}(NodalImpedance{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), PowerImpedance.PIACDC, :error), FrequencyResponseResult{NodalImpedance{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{ComplexF64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}}}[FrequencyResponseResult{NodalImpedance{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{ComplexF64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}}}(NodalImpedance{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :nodal_impedance, ComplexF64[0.9090909090909091 - 0.0im;;; 0.9090909090909091 - 0.0im;;; 0.9090909090909091 - 0.0im;;; … ;;; 0.9090909090909091 - 0.0im;;; 0.9090909090909091 - 0.0im;;; 0.9090909090909091 - 0.0im], ComplexF64[6.283185307179586 + 0.0im, 7.500719855274336 + 0.0im, 8.954184159270191 + 0.0im, 10.689295894946175 + 0.0im, 12.760631755760757 + 0.0im, 15.23334412354667 + 0.0im, 18.185210389887892 + 0.0im, 21.70907938811084 + 0.0im, 25.91579188665106 + 0.0im, 30.93766700581654 + 0.0im  …  1276.063175576075 + 0.0im, 1523.3344123546667 + 0.0im, 1818.5210389887895 + 0.0im, 2170.9079388110836 + 0.0im, 2591.579188665106 + 0.0im, 3093.766700581655 + 0.0im, 3693.266422068319 + 0.0im, 4408.935186293412 + 0.0im, 5263.283840229959 + 0.0im, 6283.185307179586 + 0.0im], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, NamedTuple}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)),)), FrequencyResponseResult{NodalImpedance{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{ComplexF64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}}}(NodalImpedance{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :nodal_impedance, ComplexF64[1.6666666666666667 - 0.0im;;; 1.6666666666666667 - 0.0im;;; 1.6666666666666667 - 0.0im;;; … ;;; 1.6666666666666667 - 0.0im;;; 1.6666666666666667 - 0.0im;;; 1.6666666666666667 - 0.0im], ComplexF64[6.283185307179586 + 0.0im, 7.500719855274336 + 0.0im, 8.954184159270191 + 0.0im, 10.689295894946175 + 0.0im, 12.760631755760757 + 0.0im, 15.23334412354667 + 0.0im, 18.185210389887892 + 0.0im, 21.70907938811084 + 0.0im, 25.91579188665106 + 0.0im, 30.93766700581654 + 0.0im  …  1276.063175576075 + 0.0im, 1523.3344123546667 + 0.0im, 1818.5210389887895 + 0.0im, 2170.9079388110836 + 0.0im, 2591.579188665106 + 0.0im, 3093.766700581655 + 0.0im, 3693.266422068319 + 0.0im, 4408.935186293412 + 0.0im, 5263.283840229959 + 0.0im, 6283.185307179586 + 0.0im], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, NamedTuple}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)),)), FrequencyResponseResult{NodalImpedance{PowerImpedance.PIACDC}, Array{ComplexF64, 3}, Vector{ComplexF64}, Vector{Symbol}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{linearization::LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}}}(NodalImpedance{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), :nodal_impedance, ComplexF64[3.333333333333333 - 0.0im;;; 3.333333333333333 - 0.0im;;; 3.333333333333333 - 0.0im;;; … ;;; 3.333333333333333 - 0.0im;;; 3.333333333333333 - 0.0im;;; 3.333333333333333 - 0.0im], ComplexF64[6.283185307179586 + 0.0im, 7.500719855274336 + 0.0im, 8.954184159270191 + 0.0im, 10.689295894946175 + 0.0im, 12.760631755760757 + 0.0im, 15.23334412354667 + 0.0im, 18.185210389887892 + 0.0im, 21.70907938811084 + 0.0im, 25.91579188665106 + 0.0im, 30.93766700581654 + 0.0im  …  1276.063175576075 + 0.0im, 1523.3344123546667 + 0.0im, 1818.5210389887895 + 0.0im, 2170.9079388110836 + 0.0im, 2591.579188665106 + 0.0im, 3093.766700581655 + 0.0im, 3693.266422068319 + 0.0im, 4408.935186293412 + 0.0im, 5263.283840229959 + 0.0im, 6283.185307179586 + 0.0im], [:bus], NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, (linearization = LinearizationResult{AdmittanceLinearization{PowerImpedance.PIACDC}, PowerImpedance.NetworkBuilder.NetworkModel{ComplexF64}, @NamedTuple{powerflow_required::Bool, active_elements::Int64, passive_elements::Int64}}(AdmittanceLinearization{PowerImpedance.PIACDC}(PowerImpedance.PIACDC), NetworkModel
+------------
+Passive elements: 2
+Active elements: 0
+Grounded nodes: [:gnd]
+Retained nodes: Symbol[]
+, OperatingPoint(Dict{Symbol, NamedTuple}()), (powerflow_required = false, active_elements = 0, passive_elements = 2)),))], [(network = (elements = (branch = (z = 1.0, conductors = 1), load = (z = 10.0, conductors = 1)), options = NamedTuple()),), (network = (elements = (branch = (z = 2.0, conductors = 1), load = (z = 10.0, conductors = 1)), options = NamedTuple()),), (network = (elements = (branch = (z = 5.0, conductors = 1), load = (z = 10.0, conductors = 1)), options = NamedTuple()),)], (manifest = (version = 1, package = :PowerImpedance, formulation = NodalImpedance{PowerImpedance.PIACDC}, backend = PowerImpedance.PIACDC, options = NamedTuple(), configurations = [(network = (elements = (branch = (z = 1.0, conductors = 1), load = (z = 10.0, conductors = 1)), options = NamedTuple()),), (network = (elements = (branch = (z = 2.0, conductors = 1), load = (z = 10.0, conductors = 1)), options = NamedTuple()),), (network = (elements = (branch = (z = 5.0, conductors = 1), load = (z = 10.0, conductors = 1)), options = NamedTuple()),)]), failures = (items = Any[],), source_space = Gridspace{PowerImpedanceProblem{PowerImpedance.NetworkBuilder.NetworkState, Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}, PowerImpedance._PowerImpedanceProblemMaterializer{Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}, Tuple{Gridspace{PowerImpedance.NetworkBuilder.NetworkState, PowerImpedance.NetworkBuilder._BuilderMaterializer{Tuple{PowerImpedance.NetworkBuilder.Bus, PowerImpedance.NetworkBuilder.Bus}}, Tuple{Gridspace{NamedTuple{(:branch, :load)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :load)}, Tuple{Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{DeterministicGrid{Tuple{Float64, Float64, Float64}, PowerImpedance.Grammar.AutomaticGridKey}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{PowerImpedance.Grammar.ConstantAxis{Float64}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}}, Tuple{Symbol}, Val{:product}}(PowerImpedance._PowerImpedanceProblemMaterializer{Vector{Symbol}, Vector{Symbol}, Tuple{Float64, Float64, Int64}}([:bus], Symbol[], (1.0, 1000.0, 40)), (Gridspace{PowerImpedance.NetworkBuilder.NetworkState, PowerImpedance.NetworkBuilder._BuilderMaterializer{Tuple{PowerImpedance.NetworkBuilder.Bus, PowerImpedance.NetworkBuilder.Bus}}, Tuple{Gridspace{NamedTuple{(:branch, :load)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :load)}, Tuple{Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{DeterministicGrid{Tuple{Float64, Float64, Float64}, PowerImpedance.Grammar.AutomaticGridKey}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{PowerImpedance.Grammar.ConstantAxis{Float64}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._BuilderMaterializer{Tuple{PowerImpedance.NetworkBuilder.Bus, PowerImpedance.NetworkBuilder.Bus}}((PowerImpedance.NetworkBuilder.Bus(:bus, [(:branch, :side1), (:load, :side1)], nothing), PowerImpedance.NetworkBuilder.Bus(:gnd, [(:branch, :side2), (:load, :side2)], nothing)), ()), (Gridspace{NamedTuple{(:branch, :load)}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :load)}, Tuple{Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{DeterministicGrid{Tuple{Float64, Float64, Float64}, PowerImpedance.Grammar.AutomaticGridKey}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}, Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{PowerImpedance.Grammar.ConstantAxis{Float64}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._NamedTupleMaterializer{(:branch, :load)}(), (Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{DeterministicGrid{Tuple{Float64, Float64, Float64}, PowerImpedance.Grammar.AutomaticGridKey}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}(PowerImpedance.impedance), (DeterministicGrid{Tuple{Float64, Float64, Float64}, PowerImpedance.Grammar.AutomaticGridKey}((1.0, 2.0, 5.0), PowerImpedance.Grammar.AutomaticGridKey(Base.RefValue{Nothing}(nothing))), PowerImpedance.Grammar.ConstantAxis{Int64}(1)), (:z, :conductors), Val{:product}()), Gridspace{PowerImpedance.Impedance, PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}, Tuple{PowerImpedance.Grammar.ConstantAxis{Float64}, PowerImpedance.Grammar.ConstantAxis{Int64}}, Tuple{Symbol, Symbol}, Val{:product}}(PowerImpedance.NetworkBuilder._KeywordMaterializer{typeof(impedance), (:z, :conductors)}(PowerImpedance.impedance), (PowerImpedance.Grammar.ConstantAxis{Float64}(10.0), PowerImpedance.Grammar.ConstantAxis{Int64}(1)), (:z, :conductors), Val{:product}())), (:branch, :load), Val{:product}()), Gridspace{NamedTuple{()}, PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}, Tuple{}, Tuple{}, Val{:product}}(PowerImpedance.NetworkBuilder._NamedTupleMaterializer{()}(), (), (), Val{:product}())), (:elements, :options), Val{:product}()),), (:network,), Val{:product}())))</code></pre><h2 id="Lines-constructed-from-LineParameters"><a class="docs-heading-anchor" href="#Lines-constructed-from-LineParameters">Lines constructed from <code>LineParameters</code></a><a id="Lines-constructed-from-LineParameters-1"></a><a class="docs-heading-anchor-permalink" href="#Lines-constructed-from-LineParameters" title="Permalink"></a></h2><p>LineCableModels interoperability is dormant until LineCableModels.jl is registered and restored as a PowerImpedance weak dependency. A phase-domain, per-metre <code>LineParameters</code> result then replaces only the line model definition and keeps the topology unchanged. After interoperability is restored, install LineCableModels to run this pattern:</p><pre><code class="language-julia hljs">using LineCableModels
+using Measurements
+
+workspace, line_parameters = LineCableModels.compute!(problem, formulation)
+
+line_elements = (
+    line = cable(
+        Grid,
+        line_parameters;
+        length = Grid([50e3, 75e3, 100e3]),
+    ),
+)
+
+line_connections = (
+    Bus(:sending_; ports = ((:line, :side1),), domain = ACDQ),
+    Bus(:receiving_; ports = ((:line, :side2),), domain = ACDQ),
+)
+
+line_space = define(line_elements, line_connections)</code></pre><p>Back to <a href="../">Examples</a></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Overview</a><a class="docs-footer-nextpage" href="../Converter_machine_interaction/">Converter and synchronous-machine interaction »</a><div class="flexbox-break"></div><p class="footer-message"><a href="https://github.com/Electa-Git/PowerImpedance.jl">PowerImpedance.jl</a> v0.4.0 supported by the Etch Competence Hub of EnergyVille, financed by the Flemish Government.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 28 October 2026 23:04">Wednesday 28 October 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

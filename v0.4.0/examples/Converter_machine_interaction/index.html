@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Converter and synchronous-machine interaction · PowerImpedance.jl</title><meta name="title" content="Converter and synchronous-machine interaction · PowerImpedance.jl"/><meta property="og:title" content="Converter and synchronous-machine interaction · PowerImpedance.jl"/><meta property="twitter:title" content="Converter and synchronous-machine interaction · PowerImpedance.jl"/><meta name="description" content="Documentation for PowerImpedance.jl."/><meta property="og:description" content="Documentation for PowerImpedance.jl."/><meta property="twitter:description" content="Documentation for PowerImpedance.jl."/><meta property="og:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/Converter_machine_interaction/"/><meta property="twitter:url" content="https://electa-git.github.io/PowerImpedance.jl/stable/examples/Converter_machine_interaction/"/><link rel="canonical" href="https://electa-git.github.io/PowerImpedance.jl/stable/examples/Converter_machine_interaction/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/documentercitations/citations-hover.css" rel="stylesheet" type="text/css"/><link href="../../assets/documentercitations/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/citations.css" rel="stylesheet" type="text/css"/><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../../assets/custom.js"></script><script src="../../assets/documentercitations/citations-data.js"></script><script src="../../assets/documentercitations/citations-hover.js"></script><script src="../../assets/documentercitations/citations-backlinks.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="PowerImpedance.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="PowerImpedance.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">PowerImpedance.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../Getting_started_SMIB/">Getting started</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../network/">Network construction</a></li><li><a class="tocitem" href="../../initialization/">Power-flow initialization</a></li><li><a class="tocitem" href="../../results/">Impedance and stability analysis</a></li><li><a class="tocitem" href="../../gridspace/">Parametric and uncertainty studies</a></li><li><a class="tocitem" href="../../pscad/">PSCAD export and simulation</a></li><li><a class="tocitem" href="../../package_extensions/">Package extensions</a></li><li><a class="tocitem" href="../../manual/fundamental_concepts/">Fundamental concepts</a></li><li><input class="collapse-toggle" id="menuitem-3-8" type="checkbox" checked/><label class="tocitem" for="menuitem-3-8"><span class="docs-label">Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../">Overview</a></li><li><a class="tocitem" href="../Connection_DSL/">Connection DSL</a></li><li class="is-active"><a class="tocitem" href>Converter and synchronous-machine interaction</a><ul class="internal"><li><a class="tocitem" href="#Synchronous-machine"><span>Synchronous machine</span></a></li><li><a class="tocitem" href="#MMC-controls"><span>MMC controls</span></a></li><li><a class="tocitem" href="#Transmission-network"><span>Transmission network</span></a></li><li><a class="tocitem" href="#Impedance-and-modal-response"><span>Impedance and modal response</span></a></li></ul></li><li><a class="tocitem" href="../Energy_hub_MTDC/">Three-terminal DC energy hub</a></li><li><a class="tocitem" href="../GFM_weak_grid/">A grid-forming MMC in a weak grid</a></li><li><a class="tocitem" href="../IEEE39bus/">IEEE 39-bus system with a STATCOM</a></li><li><a class="tocitem" href="../IEEE39bus_Gridspace/">IEEE39 Gridspace soil-resistivity study</a></li><li><a class="tocitem" href="../IEEE9_bus_impedance/">IEEE9 bus impedance</a></li><li><a class="tocitem" href="../Line_and_cable_models/">Line and cable models</a></li><li><a class="tocitem" href="../MMC_harmonic_stability/">MMC harmonic stability</a></li><li><a class="tocitem" href="../Network_Diagram/">Hybrid AC/DC network diagram</a></li><li><a class="tocitem" href="../P2P_HVDC_ALT/">P2P HVDC parametric OHL/UGC transition</a></li><li><a class="tocitem" href="../P2P_HVDC_stability/">Point-to-point HVDC admittance and stability</a></li><li><a class="tocitem" href="../PSCAD_tutorial/">From Julia to PSCAD and Z-tool</a></li><li><a class="tocitem" href="../SmallSignal_Gridspace/">Gridspace small-signal stability analysis</a></li></ul></li></ul></li><li><span class="tocitem">Components</span><ul><li><a class="tocitem" href="../../components/">Choose and configure components</a></li><li><a class="tocitem" href="../../source/">Voltage sources</a></li><li><a class="tocitem" href="../../impedance/">Lumped impedance</a></li><li><a class="tocitem" href="../../transformer/">Transformer</a></li><li><a class="tocitem" href="../../transmission_line/">Transmission lines and cables</a></li><li><a class="tocitem" href="../../machines/">Synchronous and induction machines</a></li><li><a class="tocitem" href="../../MMC/">Modular multilevel converter</a></li><li><a class="tocitem" href="../../TLC/">Two-level converter</a></li><li><a class="tocitem" href="../../blackbox/">Black-box models</a></li></ul></li><li><a class="tocitem" href="../../reference/">API reference</a></li><li><span class="tocitem">Developers</span><ul><li><a class="tocitem" href="../../developers/releasing/">Release and registration</a></li><li><a class="tocitem" href="../../developers/migrations/">Migration from Element and Setpoint</a></li><li><a class="tocitem" href="../../developers/plotbuilder/">PlotBuilder guide</a></li><li><a class="tocitem" href="../../developers/docstrings/">Docstrings</a></li><li><a class="tocitem" href="../../developers/conventions/">Conventions</a></li><li><a class="tocitem" href="../../developers/calculation_parity/">Calculation parity</a></li><li><a class="tocitem" href="../../developers/pscad_mapping/">PSCAD mapping and station notes</a></li></ul></li><li><a class="tocitem" href="../../bibliography/">Bibliography</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Converter and synchronous-machine interaction</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Converter and synchronous-machine interaction</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/Electa-Git/PowerImpedance.jl/blob/ca16d36dc5bc7aa4be0fded81faa372a11013c64/examples/Converter_machine_interaction.jl" title="View source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Converter-and-synchronous-machine-interaction"><a class="docs-heading-anchor" href="#Converter-and-synchronous-machine-interaction">Converter and synchronous-machine interaction</a><a id="Converter-and-synchronous-machine-interaction-1"></a><a class="docs-heading-anchor-permalink" href="#Converter-and-synchronous-machine-interaction" title="Permalink"></a></h1><p>A 900 MW synchronous machine and two 600 MW HVDC links feed a 380 kV grid. The machine&#39;s rotor, excitation and governor dynamics enter the impedance seen by each MMC. Modal impedance and Nyquist plots describe their interaction between 1 and 100 Hz.</p><pre><code class="language-julia hljs">using PowerImpedance
+using CairoMakie
+voltage = 380 / sqrt(3);</code></pre><h2 id="Synchronous-machine"><a class="docs-heading-anchor" href="#Synchronous-machine">Synchronous machine</a><a id="Synchronous-machine-1"></a><a class="docs-heading-anchor-permalink" href="#Synchronous-machine" title="Permalink"></a></h2><p>The electrical model includes d/q magnetizing inductances, rotor windings and transformer leakage. The synchronousmachine constructor below sets the 1000 MVA, 380 kV base.</p><pre><code class="language-julia hljs">machine_electrical = ElectricalSM(lt = 0.065, rt = 0.0026, La_d = 1.66, La_q = 1.61,
+    Ll = 0.15, Ra = 0.0015);</code></pre><p>The rotor has an inertia constant of 4 s, with steam-chest, reheater and crossover time constants of 2, 5 and 1 s.</p><pre><code class="language-julia hljs">machine_mechanical = MechanicalSM(
+    H = 4, T_CH = 2, T_RH = 5, T_CO = 1, F_HP = 0.3, F_IP = 0.4, F_LP = 0.3);</code></pre><p>The governor adjusts mechanical power with 5 percent droop and 0.1 s and 0.2 s lags.</p><pre><code class="language-julia hljs">machine_governor = GovernorSM(R = 0.05, T_w = 0.1, T_G = 0.2);</code></pre><p>The regulator controls field excitation with a 0.05 s voltage filter, lead-lag compensation and gain 200.</p><pre><code class="language-julia hljs">machine_avr = AVRSM(v_ref = 1.01, T_R = 0.05, T_B = 1, T_C = 0.1, T_A = 0.02, K_A = 200);</code></pre><p>The machine supplies 900 MW at Bus 4.</p><pre><code class="language-julia hljs">sg1 = let model = synchronousmachine(; Vᵃᶜ_base = 380, S_base = 1000, ωn = 100π,
+        elec = machine_electrical, mech = machine_mechanical, gov = machine_governor,
+        avr = machine_avr)
+    b = bases(model)
+    component(model; powerflow = (p = 900 / b.S,
+        q = -100 / b.S, v = voltage * sqrt(2) / b.v_ac))
+end;
+sg1 = component(sg1; limits = PowerImpedance.Limits(P_min = -2000,
+    P_max = 2000, Q_min = -2000, Q_max = 2000));</code></pre><h2 id="MMC-controls"><a class="docs-heading-anchor" href="#MMC-controls">MMC controls</a><a id="MMC-controls-1"></a><a class="docs-heading-anchor-permalink" href="#MMC-controls" title="Permalink"></a></h2><p>Each MMC has 50 mH arms, 10 mF submodules and a 60 mH reactor. The mmc constructors below set the 1000 MVA base.</p><pre><code class="language-julia hljs">electrical = ElectricalMMC(Lₐᵣₘ = 0.05, Rₐᵣₘ = 1.07, Cₐᵣₘ = 0.01, N = 400, Lᵣ = 0.06,
+    Rᵣ = 0.535);</code></pre><p>The measurements pass terminal voltages and currents directly to the controllers.</p><pre><code class="language-julia hljs">measurement = Measurement();</code></pre><p>The PLL sets the angle of each grid-following MMC from its terminal voltage.</p><pre><code class="language-julia hljs">sync = PLLSynchronization(pi_ctrl = PIControl(Kp = 0.28, Ki = 12.5664));</code></pre><p>The remote converters regulate DC voltage by adjusting their d-axis current references.</p><pre><code class="language-julia hljs">dc_control = OuterActiveVdcControl(pi_ctrl = PIControl(Kp = 5, Ki = 15));</code></pre><p>The receiving converters regulate active power through their d-axis current references.</p><pre><code class="language-julia hljs">power_control = OuterActivePowerControl(pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159));</code></pre><p>Reactive-power control sets the q-axis current reference of each remote converter.</p><pre><code class="language-julia hljs">reactive_control = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159));</code></pre><p>The converter at Bus 7 regulates AC voltage with an integral gain of 100.</p><pre><code class="language-julia hljs">voltage_control = OuterReactiveVacControl(pi_ctrl = PIControl(Kp = 0, Ki = 100));</code></pre><p>AC voltage support at Bus 5 uses gain 20 and a 100 rad/s measurement filter.</p><pre><code class="language-julia hljs">voltage_support = VoltageSupportLag(K = 20, ωc = 100);</code></pre><p>Reactive-power control at Bus 5 includes the voltage-support contribution in its reference.</p><pre><code class="language-julia hljs">support_control = OuterReactiveQControl(pi_ctrl = PIControl(Kp = 0.1, Ki = 31.4159),
+    support = voltage_support);</code></pre><p>The inner AC current loop follows the d/q references through the arm and reactor inductances.</p><pre><code class="language-julia hljs">current_control = InnerCurrentPIControl(
+    pi_ctrl = PIControl(Kp = 0.7691, Ki = 522.7654), activate_ω_c_multiplication = false);</code></pre><p>Circulating current suppression controls the second-harmonic current between the arms.</p><pre><code class="language-julia hljs">internal_control = ΣdqzControlTEC(ccsc = CirculatingCurrentSuppressionControl(PIControl(
+    Kp = 0.067, Ki = 30.8425)));</code></pre><p>Modulation converts the commanded arm voltages to submodule insertion indices.</p><pre><code class="language-julia hljs">modulation = UncompensatedModulation();
+remote_control = ΔdqControlGFL(
+    outer_active = dc_control, outer_reactive = reactive_control, occ = current_control);
+bus7_control = ΔdqControlGFL(
+    outer_active = power_control, outer_reactive = voltage_control, occ = current_control);
+bus5_control = ΔdqControlGFL(
+    outer_active = power_control, outer_reactive = support_control, occ = current_control);
+remote_limits = PowerImpedance.Limits(P_min = -1.5, P_max = 1.5, Q_min = -0.5, Q_max = 0.5);
+receiving_limits = PowerImpedance.Limits(P_min = -1, P_max = 1, Q_min = -1, Q_max = 1);</code></pre><p>Converter <code>c1</code> regulates the first link&#39;s DC voltage at its remote AC grid.</p><pre><code class="language-julia hljs">c1 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = remote_control,
+        sigma_control = internal_control, modulation = modulation, limits = remote_limits)
+    b = bases(model)
+    component(model;
+        delta_control = (outer_active = (v_dc_ref = 800 / b.v_dc,),
+            outer_reactive = (q_ref = 0.0,)),
+        powerflow = (; p_ac = -600 / b.S,
+            v_ac = (voltage * sqrt(2)) / b.v_ac))
+end;</code></pre><p>Converter <code>c2</code> injects 600 MW at Bus 7 while regulating AC voltage.</p><pre><code class="language-julia hljs">c2 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = bus7_control,
+        sigma_control = internal_control, modulation = modulation,
+        limits = receiving_limits)
+    b = bases(model)
+    component(model;
+        delta_control = (outer_active = (p_ref = 600 / b.S,),
+            outer_reactive = (v_ac_ref = (voltage * sqrt(2)) / b.v_ac,)),
+        powerflow = (; v_dc = 800 / b.v_dc,
+            q_ac = 100 / b.S))
+end;</code></pre><p>Converter <code>c3</code> regulates the second link&#39;s DC voltage at its remote AC grid.</p><pre><code class="language-julia hljs">c3 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = remote_control,
+        sigma_control = internal_control, modulation = modulation, limits = remote_limits)
+    b = bases(model)
+    component(model;
+        delta_control = (outer_active = (v_dc_ref = 800 / b.v_dc,),
+            outer_reactive = (q_ref = 0.0,)),
+        powerflow = (; p_ac = -600 / b.S,
+            v_ac = (voltage * sqrt(2)) / b.v_ac))
+end;</code></pre><p>Converter <code>c4</code> injects 600 MW and supports the AC voltage at Bus 5.</p><pre><code class="language-julia hljs">c4 = let model = mmc(; vDC_base = 800, vACbase_LL_RMS = 380, Sbase = 1000,
+        elec = electrical, meas = measurement, sync = sync, delta_control = bus5_control,
+        sigma_control = internal_control, modulation = modulation,
+        limits = receiving_limits)
+    b = bases(model)
+    component(model;
+        delta_control = (outer_active = (p_ref = 600 / b.S,),
+            outer_reactive = (q_ref = 100 / b.S,
+                support = (v_ac_ref = (voltage * sqrt(2)) / b.v_ac,))),
+        powerflow = (; v_dc = 800 / b.v_dc))
+end;</code></pre><h2 id="Transmission-network"><a class="docs-heading-anchor" href="#Transmission-network">Transmission network</a><a id="Transmission-network-1"></a><a class="docs-heading-anchor-permalink" href="#Transmission-network" title="Permalink"></a></h2><p>The overhead conductors have 10 m phase spacing and 30 m height over 100 ohm metre earth.</p><pre><code class="language-julia hljs">conductors = Conductors(organization = :flat, nᵇ = 3, nˢᵇ = 1, Rᵈᶜ = 0.063, rᶜ = 0.015,
+    yᵇᶜ = 30, Δyᵇᶜ = 0, Δxᵇᶜ = 10, Δ̃xᵇᶜ = 0, dˢᵇ = 0, dˢᵃᵍ = 10);
+groundwires = Groundwires(
+    nᵍ = 2, Rᵍᵈᶜ = 0.92, rᵍ = 0.0062, Δxᵍ = 6.5, Δyᵍ = 7.5, dᵍˢᵃᵍ = 10);</code></pre><p>Line <code>tl89</code> connects buses 9 and 8 over 50 km.</p><pre><code class="language-julia hljs">tl89 = overhead_line(length = 50e3, conductors = conductors,
+    groundwires = groundwires, earth_parameters = (1, 1, 100));</code></pre><p>Line <code>tl75</code> connects buses 5 and 7 over 50 km.</p><pre><code class="language-julia hljs">tl75 = overhead_line(length = 50e3, conductors = conductors,
+    groundwires = groundwires, earth_parameters = (1, 1, 100));</code></pre><p>Line <code>tl96</code> connects buses 6 and 9 over 90 km.</p><pre><code class="language-julia hljs">tl96 = overhead_line(length = 90e3, conductors = conductors,
+    groundwires = groundwires, earth_parameters = (1, 1, 100));</code></pre><p>Line <code>tl54</code> connects buses 4 and 5 over 120 km.</p><pre><code class="language-julia hljs">tl54 = overhead_line(length = 120e3, conductors = conductors,
+    groundwires = groundwires, earth_parameters = (1, 1, 100));</code></pre><p>Line <code>tl64</code> connects buses 4 and 6 over 70 km.</p><pre><code class="language-julia hljs">tl64 = overhead_line(length = 70e3, conductors = conductors,
+    groundwires = groundwires, earth_parameters = (1, 1, 100));</code></pre><p>Lines <code>tl1</code> and <code>tl2</code> connect the remote MMCs to their AC sources over 50 km each.</p><pre><code class="language-julia hljs">tl1 = overhead_line(length = 50e3, conductors = conductors,
+    groundwires = groundwires, earth_parameters = (1, 1, 100));
+tl2 = overhead_line(length = 50e3, conductors = conductors,
+    groundwires = groundwires, earth_parameters = (1, 1, 100));</code></pre><p>The 30 km cable between buses 7 and 8 has copper cores, metallic screens and magnetic armour.</p><pre><code class="language-julia hljs">tl78 = cable(length = 30e3, positions = [(-0.5, 1.9), (0, 1.9), (0.5, 1.9)],
+    C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8), I1 = Insulator(rᵢ = 24.25e-3,
+        rₒ = 41.75e-3, ϵᵣ = 2.3),
+    C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8), I2 = Insulator(
+        rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
+    C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10), I3 = Insulator(
+        rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3),
+    earth_parameters = (1, 1, 100));</code></pre><p>The first DC link uses 100 km of cable with two cores buried 1 m deep.</p><pre><code class="language-julia hljs">dc_line = cable(length = 100e3, positions = [(-0.5, 1), (0.5, 1)],
+    C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8), I1 = Insulator(rᵢ = 24.25e-3,
+        rₒ = 41.75e-3, ϵᵣ = 2.3),
+    C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8), I2 = Insulator(
+        rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
+    C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10), I3 = Insulator(
+        rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3));</code></pre><p>The second DC link uses 50 km of the same cable construction.</p><pre><code class="language-julia hljs">dc_line_2 = cable(length = 50e3, positions = [(-0.5, 1), (0.5, 1)],
+    C1 = Conductor(rₒ = 24.25e-3, ρ = 1.72e-8), I1 = Insulator(rᵢ = 24.25e-3,
+        rₒ = 41.75e-3, ϵᵣ = 2.3),
+    C2 = Conductor(rᵢ = 41.75e-3, rₒ = 46.25e-3, ρ = 22e-8), I2 = Insulator(
+        rᵢ = 46.25e-3, rₒ = 49.75e-3, ϵᵣ = 2.3),
+    C3 = Conductor(rᵢ = 49.75e-3, rₒ = 60.55e-3, ρ = 18e-8, μᵣ = 10), I3 = Insulator(
+        rᵢ = 60.55e-3, rₒ = 65.75e-3, ϵᵣ = 2.3));</code></pre><p>The transformer connects the external grid to Bus 9 through 26.9 mH total leakage inductance. Its 7 nF turn-to-turn and 12 nF stray capacitances contribute at higher frequencies.</p><pre><code class="language-julia hljs">t3 = transformer(n = 1, Lₚ = 0.0269/2, Lₛ = 0.0269/2, Rₚ = 0,
+    Rₛ = 0, Cₜ = 7e-9, Cₛ = 12e-9, conductors = 3);</code></pre><p>Ideal AC sources supply the transformer and the remote ends of both HVDC links.</p><pre><code class="language-julia hljs">grid_limits = PowerImpedance.Limits(P_min = -2000, P_max = 2000, Q_min = -1000,
+    Q_max = 1000);
+g3 = ac_source(v = voltage * sqrt(2));
+g4 = ac_source(v = voltage * sqrt(2), p = 600);
+g5 = ac_source(v = voltage * sqrt(2), p = 600);</code></pre><p>Loads at buses 5, 6 and 8 each place 192.5 ohm in parallel with 4.6 H.</p><pre><code class="language-julia hljs">l5 = impedance(z = s -&gt; 192.5 * 4.6s / (192.5 + 4.6s), conductors = 3);
+l6 = impedance(z = s -&gt; 192.5 * 4.6s / (192.5 + 4.6s), conductors = 3);
+l8 = impedance(z = s -&gt; 192.5 * 4.6s / (192.5 + 4.6s), conductors = 3);
+elements = (; sg1, c1, c2, c3, c4, tl78, tl89, tl75, tl96, tl54, tl64, tl1, tl2,
+    dc_line, dc_line_2, t3, g3, g4, g5, l5, l6, l8);</code></pre><p>The machine at Bus 4 feeds the two AC paths to the MMCs at buses 5 and 7. The DC cables join each receiving MMC to its remote converter independently.</p><pre><code class="language-julia hljs">connections = (
+    NetworkBuilder.Bus(:Bus4;
+        ports = ((:sg1, :ac), (:tl64, :side1), (:tl54, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:Bus6;
+        ports = ((:tl64, :side2), (:l6, :side1), (:tl96, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:Bus5;
+        ports = ((:tl54, :side2), (:l5, :side1), (:tl75, :side1), (:c4, :ac)),
+        domain = ACDQ),
+    NetworkBuilder.Bus(:Bus9;
+        ports = ((:tl96, :side2), (:tl89, :side1), (:t3, :side2)), domain = ACDQ),
+    NetworkBuilder.Bus(:Bus7;
+        ports = ((:tl75, :side2), (:tl78, :side1), (:c2, :ac)), domain = ACDQ),
+    NetworkBuilder.Bus(:Bus8;
+        ports = ((:tl78, :side2), (:tl89, :side2), (:l8, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:gnd;
+        ports = ((:l5, :side2), (:l6, :side2), (:l8, :side2)), domain = ACDQ),
+    NetworkBuilder.Bus(:Bus3; ports = ((:g3, :ac), (:t3, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:Remote1; ports = ((:c1, :ac), (:tl1, :side2)), domain = ACDQ),
+    NetworkBuilder.Bus(:Source1; ports = ((:g4, :ac), (:tl1, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:Remote2; ports = ((:c3, :ac), (:tl2, :side2)), domain = ACDQ),
+    NetworkBuilder.Bus(:Source2; ports = ((:g5, :ac), (:tl2, :side1)), domain = ACDQ),
+    NetworkBuilder.Bus(:DC1; ports = ((:c1, :dc), (:dc_line, :side1))),
+    NetworkBuilder.Bus(:DC2; ports = ((:c2, :dc), (:dc_line, :side2))),
+    NetworkBuilder.Bus(:DC3; ports = ((:c3, :dc), (:dc_line_2, :side1))),
+    NetworkBuilder.Bus(:DC4; ports = ((:c4, :dc), (:dc_line_2, :side2)))
+);</code></pre><h2 id="Impedance-and-modal-response"><a class="docs-heading-anchor" href="#Impedance-and-modal-response">Impedance and modal response</a><a id="Impedance-and-modal-response-1"></a><a class="docs-heading-anchor-permalink" href="#Impedance-and-modal-response" title="Permalink"></a></h2><p>Power flow supplies the machine and converter operating points for linearization.</p><pre><code class="language-julia hljs">network = NetworkBuilder.define(elements, connections;
+    options = (; voltageBase = voltage,
+        power_flow = (; is_bounded = (; bus_voltage = true),
+            optimizer = (; hessian_approximation = &quot;limited-memory&quot;))));
+power_flow = compute(PowerFlowProblem(network), ACDCPowerFlow());
+linearized = compute(LinearizationProblem(network, power_flow), AdmittanceLinearization());
+converter_impedance = compute(
+    PowerImpedanceProblem(linearized.network_model;
+        nodes = [:Bus7d, :Bus7q], eliminated_elements = [:tl78, :tl75], frequency_range = (
+            1, 100, 400)),
+    NodalImpedance());
+grid_impedance = compute(
+    PowerImpedanceProblem(linearized.network_model;
+        nodes = [:Bus7d, :Bus7q], eliminated_elements = [:c2], frequency_range = (
+            1, 100, 400)),
+    NodalImpedance());
+closed_impedance = compute(
+    PowerImpedanceProblem(linearized.network_model;
+        nodes = [:Bus7d, :Bus7q], frequency_range = (1, 100, 400)),
+    NodalImpedance());
+modes = compute(StabilityProblem(closed_impedance), EigenvalueAnalysis(fmin = 0.01,
+    fmax = 1000));</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Transformer has no open-circuit voltage ratings; voltage limits will use inferred bus voltage levels.
+└ @ PowerImpedance src/Network/Components/transformer/transformer.jl:351
+[ Info: LOCALLY_SOLVED
+[ Info: Power flow converged successfully.
+[ Info: Terminal operating values: Dict{Symbol, NamedTuple}(:c4 =&gt; (ac = ACPortValues(310.11427966104753, 0.016699063957847895, -600.0, -109.95402314921577), dc = DCPortValues(799.2978933929736, 602.7599223064049)), :c3 =&gt; (ac = ACPortValues(305.0706490001374, -0.09378461537852974, 606.1050966450451, 1.1201419404426858e-35), dc = DCPortValues(800.0, -603.289389138899)), :g5 =&gt; (ac = ACPortValues(310.2687007525359, -3.76525534247764e-39, -614.6696130189683, -38.93064927747772),), :g3 =&gt; (ac = ACPortValues(310.2687007525359, 1.0834579645164507e-37, -119.09548419738107, -78.42314238089487),), :sg1 =&gt; (ac = ACPortValues(308.9633614369963, 0.11284827472832169, -900.0, -55.05463778397682),), :g4 =&gt; (ac = ACPortValues(310.2687007525359, 2.0956860223253594e-37, -615.5347080381567, -39.094964049897214),), :c1 =&gt; (ac = ACPortValues(305.06069037660893, -0.09391788636858413, 606.9460591678313, -5.624581715434349e-34), dc = DCPortValues(800.0, -604.1223483803722)), :c2 =&gt; (ac = ACPortValues(310.2687007525359, 0.0003952774142535334, -600.0, 230.2671120042169), dc = DCPortValues(798.5938479943892, 603.0604885655936)))
+[ Info: Starting to solve for steady-state solution
+[ Info: SynchronousMachine steady-state solution found!
+[ Info: Starting to solve for steady-state solution
+[ Info: MMC steady-state solution found!
+[ Info: Starting to solve for steady-state solution
+[ Info: MMC steady-state solution found!
+[ Info: Starting to solve for steady-state solution
+[ Info: MMC steady-state solution found!
+[ Info: Starting to solve for steady-state solution
+[ Info: MMC steady-state solution found!</code></pre><p>The modal impedances peak near 1.13 Hz at about 27 and 25 ohms. The machine&#39;s rotor and excitation dynamics couple to the MMC controls through the AC lines and cable. The second mode has a broader peak near 4.6 Hz at 17 ohms.</p><pre><code class="language-julia hljs">modal_plot = Figure(size = (850, 400));
+axis = Axis(modal_plot[1, 1]; xlabel = &quot;Frequency (Hz)&quot;,
+    ylabel = &quot;Modal impedance magnitude (Ω)&quot;, xscale = log10, yscale = log10);
+for index in 1:2
+    lines!(axis, real.(closed_impedance.frequencies) ./ (2π),
+        abs.(modes.output.eigenvalues[:, index]); label = &quot;Mode $index&quot;);
+end
+axislegend(axis);
+modal_plot</code></pre><img src="7797ffad.png" alt="Example block output"/><p>At Bus 5, the second MMC includes filtered AC voltage support in its reactive-power reference.</p><pre><code class="language-julia hljs">converter_impedance5 = compute(
+    PowerImpedanceProblem(linearized.network_model;
+        nodes = [:Bus5d, :Bus5q], eliminated_elements = [:tl75, :tl54, :l5],
+            frequency_range = (
+            1, 100, 400)),
+    NodalImpedance());
+grid_impedance5 = compute(
+    PowerImpedanceProblem(linearized.network_model;
+        nodes = [:Bus5d, :Bus5q], eliminated_elements = [:c4], frequency_range = (
+            1, 100, 400)),
+    NodalImpedance());</code></pre><p>Each loop gain is the grid impedance multiplied by the converter admittance at that terminal. The eigenvalue trajectories have zero encirclements of -1 at both terminals. Their negative-real-axis crossings reach about -0.059 at Bus 7 and -0.144 at Bus 5.</p><pre><code class="language-julia hljs">nyquist = Figure(size = (1000, 450));
+for (column, grid, converter, title) in ((1, grid_impedance, converter_impedance, &quot;Bus 7&quot;),
+    (2, grid_impedance5, converter_impedance5, &quot;Bus 5&quot;))
+    ratio = similar(grid.response);
+    for index in axes(ratio, 3)
+        ratio[:, :, index] = grid.response[:, :, index] / converter.response[:, :, index];
+    end
+    loop_gain = FrequencyResponseResult(LoopGain(), :loopgain, ratio, grid.frequencies,
+        grid.nodes, linearized.network_model, (;));
+    stability = compute(StabilityProblem(loop_gain), GeneralizedNyquist());
+    nyquist_axis = Axis(nyquist[1, column]; title, xlabel = &quot;Real axis&quot;,
+        ylabel = &quot;Imaginary axis&quot;, aspect = DataAspect());
+    for (index, locus) in enumerate(eachcol(stability.output.eigenloci))
+        lines!(nyquist_axis, real.(locus), imag.(locus); color = Cycled(index));
+        lines!(nyquist_axis, real.(locus), -imag.(locus);
+            color = Cycled(index), linestyle = :dash);
+    end
+    scatter!(nyquist_axis, [-1.0], [0.0]; color = :red, marker = :xcross, markersize = 15);
+    xlims!(nyquist_axis, -2.5, 0.6);
+    ylims!(nyquist_axis, -1.5, 1.5);
+end
+nyquist</code></pre><img src="c2040617.png" alt="Example block output"/><p>Back to <a href="../">Examples</a></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../Connection_DSL/">« Connection DSL</a><a class="docs-footer-nextpage" href="../Energy_hub_MTDC/">Three-terminal DC energy hub »</a><div class="flexbox-break"></div><p class="footer-message"><a href="https://github.com/Electa-Git/PowerImpedance.jl">PowerImpedance.jl</a> v0.4.0 supported by the Etch Competence Hub of EnergyVille, financed by the Flemish Government.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 28 October 2026 23:04">Wednesday 28 October 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
